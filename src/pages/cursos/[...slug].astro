@@ -578,13 +578,13 @@ const forumThreadPrompt = sessionFirstName
         margin-bottom: 0.25rem;
       }
 
-      .sidebar--left :is(.lesson-list, .class-toc-list, .class-toc-children, .progress-list) > li {
-        padding-left: 0;
+      .sidebar--left .lesson-item {
+        padding-left: 0 !important;
       }
 
-      .sidebar--left :is(.lesson-list, .class-toc-list, .class-toc-children, .progress-list) > li::before {
-        content: none;
-        display: none;
+      .sidebar--left .lesson-item::before {
+        content: none !important;
+        display: none !important;
       }
       
       .lesson-link {
@@ -1101,7 +1101,7 @@ const forumThreadPrompt = sessionFirstName
         display: block;
         cursor: pointer;
         position: relative;
-        padding: 0.95rem 0 0.95rem 1.2rem;
+        padding: 0.95rem 0;
       }
 
       .content-fold-summary::-webkit-details-marker {
@@ -1109,22 +1109,8 @@ const forumThreadPrompt = sessionFirstName
       }
 
       .content-fold-summary::marker {
-        content: '';
-      }
-
-      .content-fold-summary::before {
-        content: '▸';
-        color: var(--c-fg-dim);
-        font-size: 0.8rem;
-        line-height: 1;
-        position: absolute;
-        left: 0;
-        top: 50%;
-        transform: translateY(-50%);
-      }
-
-      .content-fold[open] > .content-fold-summary::before {
-        content: '▾';
+        content: none;
+        font-size: 0;
       }
 
       .content-fold-summary h2 {
