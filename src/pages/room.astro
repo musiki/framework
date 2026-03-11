@@ -6,6 +6,7 @@ import ConferenceLayout from '../components/ConferenceLayout.astro';
 import GraphModal from '../components/GraphModal.astro';
 import Search from '../components/Search.astro';
 import { resolveLiveParticipantRole } from '../lib/live/access';
+import { getLiveRoomInviteByCode } from '../lib/live/invite';
 import { listRoomPresentationOptions } from '../lib/live/presentation-options';
 import { canonicalizeCourseId } from '../lib/course-alias';
 import { buildCourseHref } from '../lib/course-routing';
@@ -14,9 +15,35 @@ const session = (Astro.locals as App.Locals).session;
 
 const normalizeText = (value: unknown) => String(value ?? '').trim();
 
-const rawCourseId = normalizeText(Astro.url.searchParams.get('course'));
+const inviteCode = normalizeText(Astro.url.searchParams.get('invite')).toLowerCase();
+let inviteMode: 'none' | 'external' | 'invalid' = 'none';
+let inviteError = '';
+let liveInvite: Awaited<ReturnType<typeof getLiveRoomInviteByCode>> = null;
+
+if (inviteCode) {
+  try {
+    liveInvite = await getLiveRoomInviteByCode(inviteCode);
+    if (liveInvite && 'inviteType' in liveInvite && liveInvite.inviteType === 'external') {
+      inviteMode = 'external';
+    } else if (!liveInvite) {
+      inviteMode = 'invalid';
+      inviteError = 'La invitación externa no existe o ya venció.';
+    }
+  } catch (error) {
+    console.error('Room invite lookup failed:', error);
+    inviteMode = 'invalid';
+    inviteError = 'No fue posible cargar la invitación de la sala.';
+  }
+}
+
+const rawCourseId =
+  inviteMode === 'external'
+    ? ''
+    : normalizeText(liveInvite && 'courseId' in liveInvite ? liveInvite.courseId : '') ||
+      normalizeText(Astro.url.searchParams.get('course'));
 const activeCourseId = await canonicalizeCourseId(rawCourseId);
 const defaultRoom =
+  normalizeText(liveInvite && 'room' in liveInvite ? liveInvite.room : '') ||
   normalizeText(Astro.url.searchParams.get('room')) ||
   (activeCourseId ? `${activeCourseId}-stage` : 'musiki-stage');
 const defaultIdentity =
@@ -26,18 +53,28 @@ const defaultIdentity =
   normalizeText(session?.user?.name);
 const defaultName =
   normalizeText(Astro.url.searchParams.get('name')) || normalizeText(session?.user?.name);
-const defaultRole = await resolveLiveParticipantRole(session, activeCourseId);
+const defaultRole =
+  inviteMode === 'external'
+    ? 'student'
+    : await resolveLiveParticipantRole(session, activeCourseId);
 const defaultPresentation =
+  (inviteMode === 'external'
+    ? ''
+    : normalizeText(liveInvite && 'presentationHref' in liveInvite ? liveInvite.presentationHref : '')) ||
   normalizeText(Astro.url.searchParams.get('slides')) ||
   normalizeText(Astro.url.searchParams.get('presentation'));
 const livekitUrl = normalizeText(import.meta.env.LIVEKIT_URL);
-const courseHomeHref = activeCourseId ? buildCourseHref(activeCourseId, {}) : '/cursos';
-const presentationOptions = await listRoomPresentationOptions({
-  activeCourseId,
-  session,
-  supabaseUrl: import.meta.env.SUPABASE_URL,
-  supabaseKey: import.meta.env.SUPABASE_KEY,
-});
+const courseHomeHref = inviteMode === 'external'
+  ? '/'
+  : activeCourseId ? buildCourseHref(activeCourseId, {}) : '/cursos';
+const presentationOptions = inviteMode === 'external'
+  ? []
+  : await listRoomPresentationOptions({
+      activeCourseId,
+      session,
+      supabaseUrl: import.meta.env.SUPABASE_URL,
+      supabaseKey: import.meta.env.SUPABASE_KEY,
+    });
 ---
 
 <!doctype html>
@@ -59,6 +96,13 @@ const presentationOptions = await listRoomPresentationOptions({
         defaultName={defaultName}
         defaultRole={defaultRole}
         defaultPresentation={defaultPresentation}
+        inviteCode={inviteCode}
+        inviteError={inviteError}
+        inviteMode={inviteMode}
+        inviteLabel={
+          normalizeText(liveInvite && 'displayName' in liveInvite ? liveInvite.displayName : '') ||
+          'Acceso externo'
+        }
         presentationOptions={presentationOptions}
       />
     </main>

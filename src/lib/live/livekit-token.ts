@@ -2,6 +2,7 @@ import type { APIContext } from 'astro';
 import { AccessToken } from 'livekit-server-sdk';
 import { createSupabaseServerClient, ensureDbUserFromSession } from '../forum-server';
 import { canonicalizeCourseId } from '../course-alias';
+import { verifyLiveRoomInviteAccess } from './invite';
 import { resolveLiveManageAccess, resolveLiveParticipantRole } from './access';
 
 export type LiveKitParticipantRole = 'teacher' | 'student';
@@ -16,6 +17,7 @@ const json = (payload: unknown, status = 200) =>
   });
 
 const normalizeText = (value: unknown) => String(value ?? '').trim();
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 const normalizeRole = (value: unknown): LiveKitParticipantRole =>
   normalizeText(value).toLowerCase() === 'teacher' ? 'teacher' : 'student';
@@ -34,39 +36,75 @@ const createGuestIdentity = () => `guest-${crypto.randomUUID().slice(0, 8)}`;
 
 export const createLiveKitTokenResponse = async ({ request, locals }: APIContext) => {
   const url = new URL(request.url);
-  const room = normalizeText(url.searchParams.get('room'));
+  const session = (locals as any).session;
+  const inviteCode = normalizeText(url.searchParams.get('invite')).toLowerCase();
+  const externalName = normalizeText(url.searchParams.get('externalName'));
+  const externalEmail = normalizeText(url.searchParams.get('externalEmail')).toLowerCase();
+  const externalPassword = url.searchParams.get('externalPassword') || '';
+  const inviteVerification = inviteCode
+    ? await verifyLiveRoomInviteAccess({
+        code: inviteCode,
+        password: externalPassword,
+      })
+    : null;
+
+  if (inviteCode && !inviteVerification?.ok) {
+    return json({ error: inviteVerification?.reason || 'Invite not found or expired.' }, 403);
+  }
+
+  const activeInvite = inviteVerification?.invite || null;
+  const room = normalizeText(activeInvite?.room) || normalizeText(url.searchParams.get('room'));
 
   if (!room) {
     return json({ error: 'room is required' }, 400);
   }
 
-  const session = (locals as App.Locals).session;
   const requestedIdentity =
     url.searchParams.get('identity') ||
     url.searchParams.get('user') ||
     url.searchParams.get('username');
   const requestedName = url.searchParams.get('name');
-  const requestedCourse = normalizeText(url.searchParams.get('course'));
-  const requestedPageSlug = normalizeText(url.searchParams.get('pageSlug'));
+  const isExternalInvite = activeInvite?.inviteType === 'external';
+  const requestedCourse = isExternalInvite
+    ? ''
+    : normalizeText(activeInvite?.courseId) || normalizeText(url.searchParams.get('course'));
+  const requestedPageSlug = isExternalInvite
+    ? ''
+    : normalizeText(activeInvite?.pageSlug) || normalizeText(url.searchParams.get('pageSlug'));
 
   const sessionName = normalizeText(session?.user?.name);
   const sessionEmail = normalizeText(session?.user?.email);
   const normalizedCourseId = await canonicalizeCourseId(requestedCourse);
 
+  if (isExternalInvite) {
+    if (!externalName) {
+      return json({ error: 'externalName is required for external invites' }, 400);
+    }
+    if (!externalEmail || !EMAIL_REGEX.test(externalEmail)) {
+      return json({ error: 'externalEmail must be a valid email for external invites' }, 400);
+    }
+  }
+
   const identity =
     sanitizeIdentity(requestedIdentity) ||
+    sanitizeIdentity(isExternalInvite ? externalEmail : '') ||
     sanitizeIdentity(sessionEmail) ||
     sanitizeIdentity(sessionName) ||
     createGuestIdentity();
-  const name = normalizeText(requestedName) || sessionName || identity;
-  const role = await resolveLiveParticipantRole(session, requestedCourse);
+  const name =
+    normalizeText(isExternalInvite ? externalName : requestedName) ||
+    sessionName ||
+    identity;
+  const role = isExternalInvite
+    ? 'student'
+    : await resolveLiveParticipantRole(session, requestedCourse);
   let userId = '';
 
   try {
-    if (normalizedCourseId) {
+    if (!isExternalInvite && normalizedCourseId) {
       const access = await resolveLiveManageAccess(session, normalizedCourseId);
       userId = normalizeText(access.userId);
-    } else if (session?.user?.email) {
+    } else if (!isExternalInvite && session?.user?.email) {
       const supabase = createSupabaseServerClient();
       const dbUser = await ensureDbUserFromSession(supabase, session);
       userId = normalizeText(dbUser?.id);
@@ -87,7 +125,10 @@ export const createLiveKitTokenResponse = async ({ request, locals }: APIContext
     identity,
     name,
     metadata: JSON.stringify({
-      courseId: normalizedCourseId,
+      audience: isExternalInvite ? 'external' : 'member',
+      courseId: isExternalInvite ? '' : normalizedCourseId,
+      email: isExternalInvite ? externalEmail : sessionEmail,
+      inviteCode: inviteCode || '',
       pageSlug: requestedPageSlug,
       role,
       name,

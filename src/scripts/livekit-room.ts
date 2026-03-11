@@ -1149,6 +1149,23 @@ const connectionStateLabel = (state: ConnectionState) => {
 const safeErrorMessage = (error: unknown) =>
   error instanceof Error && error.message ? error.message : 'Unexpected LiveKit error.';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+
+const sanitizeClientIdentity = (value: unknown) =>
+  normalizeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 96);
+
+const createClientGuestIdentity = () => {
+  const randomSuffix =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `guest-${randomSuffix}`;
+};
+
 const getFirstName = (value: string) => normalizeText(value).split(/\s+/).filter(Boolean)[0] || normalizeText(value);
 
 const DIRECT_IMAGE_URL_REGEX =
@@ -3253,6 +3270,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   let livekitUrl = normalizeText(root.dataset.livekitUrl);
   const courseId = normalizeText(root.dataset.courseId);
+  const inviteMode = normalizeText(root.dataset.inviteMode).toLowerCase();
+  const inviteCode = normalizeText(root.dataset.inviteCode).toLowerCase();
+  const inviteError = normalizeText(root.dataset.inviteError);
+  const isExternalInviteMode = inviteMode === 'external';
+  const isInvalidInviteMode = inviteMode === 'invalid';
 
   const roomInput = root.querySelector('[data-room-input]');
   const identityInput = root.querySelector('[data-identity-input]');
@@ -3316,6 +3338,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const instrumentsToggleButton = root.querySelector('[data-action="instruments-toggle"]');
   const shortcutsModal = root.querySelector('[data-shortcuts-modal]');
   const shortcutsCloseButton = root.querySelector('[data-shortcuts-close]');
+  const externalInviteGate = root.querySelector('[data-external-invite-gate]');
+  const externalInviteCloseButton = root.querySelector('[data-external-invite-close]');
+  const externalInviteNameInput = root.querySelector('[data-external-invite-name]');
+  const externalInviteEmailInput = root.querySelector('[data-external-invite-email]');
+  const externalInvitePasswordInput = root.querySelector('[data-external-invite-password]');
+  const externalInviteGateStatus = root.querySelector('[data-external-invite-gate-status]');
+  const externalInviteJoinButton = root.querySelector('[data-action="external-invite-join"]');
+  const externalInviteTeacherPasswordInput = root.querySelector('[data-external-password-input]');
+  const externalInviteExpirySelect = root.querySelector('[data-external-expiry-select]');
+  const externalInviteLinkOutput = root.querySelector('[data-external-invite-link-output]');
+  const externalInviteStatus = root.querySelector('[data-external-invite-status]');
+  const externalInviteCreateButton = root.querySelector('[data-action="external-invite-create"]');
+  const externalInviteCopyButton = root.querySelector('[data-action="external-invite-copy"]');
+  const externalInviteRevokeButton = root.querySelector('[data-action="external-invite-revoke"]');
+  const studentInviteExpirySelect = root.querySelector('[data-student-expiry-select]');
+  const studentInviteLinkOutput = root.querySelector('[data-student-invite-link-output]');
+  const studentInviteStatus = root.querySelector('[data-student-invite-status]');
+  const studentInviteCreateButton = root.querySelector('[data-action="student-invite-create"]');
+  const studentInviteCopyButton = root.querySelector('[data-action="student-invite-copy"]');
+  const studentInviteRevokeButton = root.querySelector('[data-action="student-invite-revoke"]');
   const chatList = root.querySelector('[data-chat-list]');
   const chatInput = root.querySelector('[data-chat-input]');
   const chatSendButton = root.querySelector('[data-action="chat-send"]');
@@ -3478,8 +3520,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   root.dataset.mounted = 'true';
 
+  const serverDefaultRoom = normalizeText(roomInput.value);
+  const serverDefaultName = normalizeText(nameInput.value);
   const query = new URLSearchParams(window.location.search);
   const persistedSetup = readPersistedRoomSetup();
+  let externalInviteGuestName = '';
+  let externalInviteGuestEmail = '';
+  let externalInviteGuestPassword = '';
+  let currentExternalInviteUrl = '';
+  let currentExternalInviteCode = '';
+  let currentStudentInviteUrl = '';
+  let currentStudentInviteCode = '';
+  let inviteReloadTimeoutId = 0;
 
   if (!query.has('room') && normalizeText(persistedSetup.room)) {
     roomInput.value = normalizeText(persistedSetup.room);
@@ -3489,6 +3541,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
   if (!query.has('name') && normalizeText(persistedSetup.name)) {
     nameInput.value = normalizeText(persistedSetup.name);
+  }
+
+  if (isExternalInviteMode) {
+    roomInput.value = serverDefaultRoom;
+    roomInput.readOnly = true;
+    identityInput.readOnly = true;
+    identityInput.value = '';
+    if (!query.has('name')) {
+      nameInput.value = serverDefaultName;
+    }
+    presentationSelect.value = '';
+    if (sessionSetupDetails instanceof HTMLDetailsElement) {
+      sessionSetupDetails.open = false;
+    }
   }
 
   const presentationCourseIdByHrefKey = new Map<string, string>();
@@ -3878,10 +3944,401 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       throw new Error('Clipboard API is not available in this browser.');
     }
 
+    if (localRole === 'teacher' && currentStudentInviteUrl) {
+      await navigator.clipboard.writeText(currentStudentInviteUrl);
+      setStudentInviteStatusMessage('Link estudiantes copiado.');
+      setStatus('Link estudiantes copiado.');
+      return;
+    }
+
     const inviteUrl = new URL(window.location.href);
     ['identity', 'name', 'user', 'role'].forEach((key) => inviteUrl.searchParams.delete(key));
     await navigator.clipboard.writeText(inviteUrl.toString());
     setStatus('Invite link copied.');
+  };
+
+  const setExternalInviteStatusMessage = (message: string, isError = false) => {
+    if (!(externalInviteStatus instanceof HTMLElement)) return;
+    externalInviteStatus.textContent = message;
+    externalInviteStatus.dataset.error = isError ? 'true' : 'false';
+  };
+
+  const setStudentInviteStatusMessage = (message: string, isError = false) => {
+    if (!(studentInviteStatus instanceof HTMLElement)) return;
+    studentInviteStatus.textContent = message;
+    studentInviteStatus.dataset.error = isError ? 'true' : 'false';
+  };
+
+  const setExternalInviteGateMessage = (message: string, isError = false) => {
+    if (!(externalInviteGateStatus instanceof HTMLElement)) return;
+    externalInviteGateStatus.textContent = message;
+    externalInviteGateStatus.dataset.error = isError ? 'true' : 'false';
+  };
+
+  const resolveInviteExpiryIso = (value: unknown) => {
+    const minutes = Number.parseInt(normalizeText(value), 10);
+    if (!Number.isFinite(minutes) || minutes <= 0) return '';
+    return new Date(Date.now() + minutes * 60_000).toISOString();
+  };
+
+  const formatInviteExpiryLabel = (expiresAt: string) => {
+    const timestamp = Date.parse(normalizeText(expiresAt));
+    if (!Number.isFinite(timestamp)) return '';
+    return new Intl.DateTimeFormat('es-AR', {
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      month: '2-digit',
+    }).format(new Date(timestamp));
+  };
+
+  const buildInviteUrlFromCode = (code: string) => {
+    const normalizedCode = normalizeText(code).toLowerCase();
+    if (!normalizedCode) return '';
+    const url = new URL('/room', window.location.origin);
+    url.searchParams.set('invite', normalizedCode);
+    return url.toString();
+  };
+
+  const syncInviteExpirySelect = (inviteType: 'external' | 'student', expiresAt: string) => {
+    const select = inviteType === 'external' ? externalInviteExpirySelect : studentInviteExpirySelect;
+    if (!(select instanceof HTMLSelectElement)) return;
+    const normalizedExpiresAt = normalizeText(expiresAt);
+    if (!normalizedExpiresAt) {
+      select.value = '';
+      return;
+    }
+    const diffMinutes = Math.round((Date.parse(normalizedExpiresAt) - Date.now()) / 60_000);
+    if (Math.abs(diffMinutes - 60) <= 2) {
+      select.value = '60';
+      return;
+    }
+    if (Math.abs(diffMinutes - 1440) <= 15) {
+      select.value = '1440';
+      return;
+    }
+    if (Math.abs(diffMinutes - 10080) <= 120) {
+      select.value = '10080';
+      return;
+    }
+    select.value = '';
+  };
+
+  const syncInviteLinkOutput = (
+    inviteType: 'external' | 'student',
+    nextUrl = '',
+    nextCode = '',
+  ) => {
+    const normalizedUrl = normalizeText(nextUrl);
+    const normalizedCode = normalizeText(nextCode).toLowerCase();
+
+    if (inviteType === 'external') {
+      currentExternalInviteUrl = normalizedUrl;
+      currentExternalInviteCode = normalizedCode;
+      if (externalInviteLinkOutput instanceof HTMLInputElement) {
+        externalInviteLinkOutput.value = currentExternalInviteUrl;
+      }
+      if (externalInviteCopyButton instanceof HTMLButtonElement) {
+        externalInviteCopyButton.disabled = !currentExternalInviteUrl || localRole !== 'teacher';
+      }
+      if (externalInviteRevokeButton instanceof HTMLButtonElement) {
+        externalInviteRevokeButton.disabled = !currentExternalInviteCode || localRole !== 'teacher';
+      }
+      return;
+    }
+
+    currentStudentInviteUrl = normalizedUrl;
+    currentStudentInviteCode = normalizedCode;
+    if (studentInviteLinkOutput instanceof HTMLInputElement) {
+      studentInviteLinkOutput.value = currentStudentInviteUrl;
+    }
+    if (studentInviteCopyButton instanceof HTMLButtonElement) {
+      studentInviteCopyButton.disabled = !currentStudentInviteUrl || localRole !== 'teacher';
+    }
+    if (studentInviteRevokeButton instanceof HTMLButtonElement) {
+      studentInviteRevokeButton.disabled = !currentStudentInviteCode || localRole !== 'teacher';
+    }
+  };
+
+  const openExternalInviteGate = () => {
+    if (!(externalInviteGate instanceof HTMLElement)) return;
+    externalInviteGate.hidden = false;
+    window.requestAnimationFrame(() => {
+      if (externalInviteNameInput instanceof HTMLInputElement && !externalInviteNameInput.value.trim()) {
+        externalInviteNameInput.focus();
+        return;
+      }
+      if (externalInviteEmailInput instanceof HTMLInputElement && !externalInviteEmailInput.value.trim()) {
+        externalInviteEmailInput.focus();
+        return;
+      }
+      if (externalInvitePasswordInput instanceof HTMLInputElement) {
+        externalInvitePasswordInput.focus();
+      }
+    });
+  };
+
+  const closeExternalInviteGate = () => {
+    if (externalInviteGate instanceof HTMLElement) {
+      externalInviteGate.hidden = true;
+    }
+  };
+
+  const leaveExternalInviteFlow = () => {
+    window.location.assign('/');
+  };
+
+  const createInviteLink = async (inviteType: 'external' | 'student') => {
+    if (localRole !== 'teacher') {
+      if (inviteType === 'external') {
+        setExternalInviteStatusMessage('Solo teachers pueden generar invites externos.', true);
+      } else {
+        setStudentInviteStatusMessage('Solo teachers pueden generar invites para estudiantes.', true);
+      }
+      return;
+    }
+
+    const password = inviteType === 'external' && externalInviteTeacherPasswordInput instanceof HTMLInputElement
+      ? externalInviteTeacherPasswordInput.value
+      : '';
+    if (
+      inviteType === 'external' &&
+      !normalizeText(password) &&
+      !currentExternalInviteCode
+    ) {
+      setExternalInviteStatusMessage('Define un password antes de generar el link externo.', true);
+      if (externalInviteTeacherPasswordInput instanceof HTMLInputElement) {
+        externalInviteTeacherPasswordInput.focus();
+      }
+      return;
+    }
+
+    const roomName = roomInput.value.trim();
+    if (!roomName) {
+      setExternalInviteStatusMessage('La sala necesita un nombre antes de generar el invite.', true);
+      roomInput.focus();
+      return;
+    }
+
+    const expiresAt = resolveInviteExpiryIso(
+      inviteType === 'external'
+        ? externalInviteExpirySelect instanceof HTMLSelectElement
+          ? externalInviteExpirySelect.value
+          : ''
+        : studentInviteExpirySelect instanceof HTMLSelectElement
+          ? studentInviteExpirySelect.value
+          : '',
+    );
+    const activeCreateButton = inviteType === 'external'
+      ? externalInviteCreateButton
+      : studentInviteCreateButton;
+    const activeCopyButton = inviteType === 'external'
+      ? externalInviteCopyButton
+      : studentInviteCopyButton;
+
+    if (activeCreateButton instanceof HTMLButtonElement) {
+      activeCreateButton.disabled = true;
+    }
+    if (activeCopyButton instanceof HTMLButtonElement) {
+      activeCopyButton.disabled = true;
+    }
+
+    if (inviteType === 'external') {
+      setExternalInviteStatusMessage('Guardando invite externo...');
+    } else {
+      setStudentInviteStatusMessage('Guardando invite para estudiantes...');
+    }
+
+    try {
+      const selectedPresentationHref = normalizeText(presentationSelect.value) || presentation.getHref();
+      const response = await fetch('/api/live/invite', {
+        body: JSON.stringify({
+          code: inviteType === 'external' ? currentExternalInviteCode : currentStudentInviteCode,
+          courseId: getEffectiveCourseId(),
+          displayName: roomName,
+          expiresAt,
+          inviteType,
+          pageSlug: getCurrentPresentationPageSlug(),
+          password,
+          presentationHref: inviteType === 'student' ? normalizeText(selectedPresentationHref) : '',
+          room: roomName,
+        }),
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !normalizeText(payload?.inviteUrl)) {
+        throw new Error(
+          normalizeText(payload?.error) ||
+            (inviteType === 'external'
+              ? 'No fue posible generar el link externo.'
+              : 'No fue posible generar el link de estudiantes.'),
+        );
+      }
+
+      const inviteUrl = normalizeText(payload.inviteUrl) || buildInviteUrlFromCode(payload?.invite?.code);
+      const inviteCodeFromPayload = normalizeText(payload?.invite?.code);
+      syncInviteLinkOutput(inviteType, inviteUrl, inviteCodeFromPayload);
+      syncInviteExpirySelect(inviteType, normalizeText(payload?.invite?.expiresAt));
+      const expiryLabel = formatInviteExpiryLabel(normalizeText(payload?.invite?.expiresAt));
+      const successMessage = expiryLabel
+        ? `Link actualizado. Expira ${expiryLabel}.`
+        : 'Link actualizado sin vencimiento.';
+      if (inviteType === 'external') {
+        setExternalInviteStatusMessage(successMessage);
+      } else {
+        setStudentInviteStatusMessage(successMessage);
+      }
+    } catch (error) {
+      if (inviteType === 'external') {
+        setExternalInviteStatusMessage(safeErrorMessage(error), true);
+      } else {
+        setStudentInviteStatusMessage(safeErrorMessage(error), true);
+      }
+    } finally {
+      if (activeCreateButton instanceof HTMLButtonElement) {
+        activeCreateButton.disabled = false;
+      }
+      if (activeCopyButton instanceof HTMLButtonElement) {
+        activeCopyButton.disabled =
+          inviteType === 'external'
+            ? !currentExternalInviteUrl || localRole !== 'teacher'
+            : !currentStudentInviteUrl || localRole !== 'teacher';
+      }
+    }
+  };
+
+  const revokeInviteLink = async (inviteType: 'external' | 'student') => {
+    if (localRole !== 'teacher') return;
+
+    const currentCode = inviteType === 'external' ? currentExternalInviteCode : currentStudentInviteCode;
+    if (!currentCode) {
+      if (inviteType === 'external') {
+        setExternalInviteStatusMessage('No hay invite externo activo para revocar.', true);
+      } else {
+        setStudentInviteStatusMessage('No hay invite de estudiantes activo para revocar.', true);
+      }
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/live/invite', {
+        body: JSON.stringify({
+          action: 'revoke',
+          code: currentCode,
+          courseId: getEffectiveCourseId(),
+          inviteType,
+          room: roomInput.value.trim(),
+        }),
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          normalizeText(payload?.error) ||
+            (inviteType === 'external'
+              ? 'No fue posible revocar el invite externo.'
+              : 'No fue posible revocar el invite de estudiantes.'),
+        );
+      }
+
+      syncInviteLinkOutput(inviteType, '', '');
+      syncInviteExpirySelect(inviteType, '');
+      if (inviteType === 'external') {
+        setExternalInviteStatusMessage('Invite externo revocado.');
+      } else {
+        setStudentInviteStatusMessage('Invite de estudiantes revocado.');
+      }
+    } catch (error) {
+      if (inviteType === 'external') {
+        setExternalInviteStatusMessage(safeErrorMessage(error), true);
+      } else {
+        setStudentInviteStatusMessage(safeErrorMessage(error), true);
+      }
+    }
+  };
+
+  const loadInviteLink = async (inviteType: 'external' | 'student') => {
+    if (localRole !== 'teacher') return;
+
+    const roomName = roomInput.value.trim();
+    if (!roomName) {
+      syncInviteLinkOutput(inviteType, '', '');
+      return;
+    }
+
+    try {
+      const url = new URL('/api/live/invite', window.location.origin);
+      url.searchParams.set('inviteType', inviteType);
+      url.searchParams.set('room', roomName);
+      const effectiveCourseId = getEffectiveCourseId();
+      if (effectiveCourseId) {
+        url.searchParams.set('courseId', effectiveCourseId);
+      }
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(normalizeText(payload?.error) || 'No fue posible cargar el invite.');
+      }
+      const invite = payload?.invite;
+      const nextCode = normalizeText(invite?.code);
+      const nextUrl = buildInviteUrlFromCode(nextCode);
+      syncInviteLinkOutput(inviteType, nextUrl, nextCode);
+      syncInviteExpirySelect(inviteType, normalizeText(invite?.expiresAt));
+      const expiryLabel = formatInviteExpiryLabel(normalizeText(invite?.expiresAt));
+      const statusMessage = nextCode
+        ? expiryLabel
+          ? `Invite activo. Expira ${expiryLabel}.`
+          : 'Invite activo sin vencimiento.'
+        : inviteType === 'external'
+          ? 'No hay invite externo activo.'
+          : 'No hay invite de estudiantes activo.';
+      if (inviteType === 'external') {
+        setExternalInviteStatusMessage(statusMessage);
+      } else {
+        setStudentInviteStatusMessage(statusMessage);
+      }
+    } catch (error) {
+      if (inviteType === 'external') {
+        setExternalInviteStatusMessage(safeErrorMessage(error), true);
+      } else {
+        setStudentInviteStatusMessage(safeErrorMessage(error), true);
+      }
+    }
+  };
+
+  const copyInviteLinkByType = async (inviteType: 'external' | 'student') => {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error('Clipboard API is not available in this browser.');
+    }
+    const inviteUrl = inviteType === 'external' ? currentExternalInviteUrl : currentStudentInviteUrl;
+    if (!inviteUrl) {
+      throw new Error(
+        inviteType === 'external'
+          ? 'No external invite link is available yet.'
+          : 'No student invite link is available yet.',
+      );
+    }
+    await navigator.clipboard.writeText(inviteUrl);
+    if (inviteType === 'external') {
+      setExternalInviteStatusMessage('Link externo copiado.');
+      setStatus('Link externo copiado.');
+    } else {
+      setStudentInviteStatusMessage('Link estudiantes copiado.');
+      setStatus('Link estudiantes copiado.');
+    }
   };
 
   const setGraphVisible = (open: boolean, source: 'local' | 'remote' = 'local') => {
@@ -7425,6 +7882,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const writeQueryState = () => {
     const params = new URLSearchParams(window.location.search);
+    if (isExternalInviteMode) {
+      if (inviteCode) {
+        params.set('invite', inviteCode);
+      }
+      params.delete('course');
+      params.delete('room');
+      params.delete('identity');
+      params.delete('name');
+      params.delete('slides');
+      params.delete('presentation');
+      const nextQuery = params.toString();
+      const nextUrl = nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname;
+      window.history.replaceState({}, '', nextUrl);
+      return;
+    }
+
     const effectiveCourseId = getEffectiveCourseId();
     if (effectiveCourseId) {
       params.set('course', effectiveCourseId);
@@ -7847,6 +8320,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       room.state === ConnectionState.Connecting ||
       room.state === ConnectionState.Reconnecting ||
       room.state === ConnectionState.SignalReconnecting;
+    const inviteBlocked = isInvalidInviteMode;
     const livekitReady = true;
     const sessionLeader = canLeadSession();
 
@@ -7857,13 +8331,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       : `${participantCount} participantes`;
 
     if (connectButton instanceof HTMLButtonElement) {
-      connectButton.disabled = !livekitReady || connected || connecting;
+      connectButton.disabled = inviteBlocked || !livekitReady || connected || connecting;
     }
     if (disconnectButton instanceof HTMLButtonElement) {
       disconnectButton.disabled = !connected && !connecting;
     }
     if (connectToggleButton instanceof HTMLButtonElement) {
-      connectToggleButton.disabled = !livekitReady || connecting;
+      connectToggleButton.disabled = inviteBlocked || !livekitReady || connecting;
       connectToggleButton.dataset.connected = connected ? 'true' : 'false';
       connectToggleButton.dataset.connecting = connecting ? 'true' : 'false';
       connectToggleButton.setAttribute(
@@ -7892,6 +8366,30 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       presentationButton.disabled = connected
         ? (localRole === 'teacher' ? !sessionLeader : true)
         : false;
+    }
+    if (externalInviteCreateButton instanceof HTMLButtonElement) {
+      externalInviteCreateButton.disabled =
+        localRole !== 'teacher' || connecting;
+    }
+    if (externalInviteCopyButton instanceof HTMLButtonElement) {
+      externalInviteCopyButton.disabled =
+        localRole !== 'teacher' || !currentExternalInviteUrl || connecting;
+    }
+    if (externalInviteRevokeButton instanceof HTMLButtonElement) {
+      externalInviteRevokeButton.disabled =
+        localRole !== 'teacher' || !currentExternalInviteCode || connecting;
+    }
+    if (studentInviteCreateButton instanceof HTMLButtonElement) {
+      studentInviteCreateButton.disabled =
+        localRole !== 'teacher' || connecting;
+    }
+    if (studentInviteCopyButton instanceof HTMLButtonElement) {
+      studentInviteCopyButton.disabled =
+        localRole !== 'teacher' || !currentStudentInviteUrl || connecting;
+    }
+    if (studentInviteRevokeButton instanceof HTMLButtonElement) {
+      studentInviteRevokeButton.disabled =
+        localRole !== 'teacher' || !currentStudentInviteCode || connecting;
     }
     const hasAudioChoices = audioInputSelects.some((select) =>
       Array.from(select.options).some((option) => option.value),
@@ -8164,15 +8662,42 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     setControlState();
   };
 
-  const connectRoom = async () => {
+  const connectRoom = async (options: { fromExternalGate?: boolean } = {}) => {
     const roomName = roomInput.value.trim();
-    const identity = identityInput.value.trim();
-    const displayName = nameInput.value.trim() || identity;
+    const fallbackIdentity = isExternalInviteMode
+      ? sanitizeClientIdentity(externalInviteGuestEmail) ||
+        sanitizeClientIdentity(externalInviteGuestName) ||
+        createClientGuestIdentity()
+      : '';
+    const identity = identityInput.value.trim() || fallbackIdentity;
+    const displayName = nameInput.value.trim() || externalInviteGuestName || identity;
     localRole = normalizeRole(roleInput.value);
 
-    if (!roomName || !identity) {
+    if (isInvalidInviteMode) {
+      openExternalInviteGate();
+      setExternalInviteGateMessage(
+        inviteError || 'La invitación de esta sala no está disponible.',
+        true,
+      );
+      setStatus(inviteError || 'La invitación de esta sala no está disponible.');
+      return;
+    }
+
+    if (isExternalInviteMode && !options.fromExternalGate) {
+      openExternalInviteGate();
+      setExternalInviteGateMessage('Completa tus datos para entrar a la sala.', false);
+      setStatus('Completa el acceso externo antes de conectar.');
+      return;
+    }
+
+    if (!roomName || (!identity && !isExternalInviteMode)) {
       setStatus('Room and identity are required before connecting.');
       return;
+    }
+
+    if (isExternalInviteMode) {
+      identityInput.value = identity;
+      nameInput.value = displayName;
     }
 
     const shouldRestoreDisconnectedPreview = disconnectedCameraPreviewEnabled;
@@ -8197,13 +8722,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       tokenUrl.searchParams.set('room', roomName);
       tokenUrl.searchParams.set('identity', identity);
       tokenUrl.searchParams.set('name', displayName);
-      const pageSlug = getCurrentPresentationPageSlug();
-      const effectiveCourseId = getEffectiveCourseId();
-      if (effectiveCourseId) {
-        tokenUrl.searchParams.set('course', effectiveCourseId);
+      if (inviteCode) {
+        tokenUrl.searchParams.set('invite', inviteCode);
       }
-      if (pageSlug) {
-        tokenUrl.searchParams.set('pageSlug', pageSlug);
+      if (isExternalInviteMode) {
+        tokenUrl.searchParams.set('externalName', externalInviteGuestName);
+        tokenUrl.searchParams.set('externalEmail', externalInviteGuestEmail);
+        tokenUrl.searchParams.set('externalPassword', externalInviteGuestPassword);
+      } else {
+        const pageSlug = getCurrentPresentationPageSlug();
+        const effectiveCourseId = getEffectiveCourseId();
+        if (effectiveCourseId) {
+          tokenUrl.searchParams.set('course', effectiveCourseId);
+        }
+        if (pageSlug) {
+          tokenUrl.searchParams.set('pageSlug', pageSlug);
+        }
       }
 
       const tokenResponse = await fetch(tokenUrl, {
@@ -8229,6 +8763,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       localRole = normalizeRole(tokenPayload.role);
       syncRoleUi();
       persistSetupState();
+      if (isExternalInviteMode) {
+        closeExternalInviteGate();
+      }
 
       await room.connect(livekitUrl, tokenPayload.token);
       await room.startAudio().catch(() => undefined);
@@ -8262,6 +8799,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       await publishTeacherState();
       requestPresentationState();
     } catch (error) {
+      if (isExternalInviteMode) {
+        openExternalInviteGate();
+        setExternalInviteGateMessage(safeErrorMessage(error), true);
+      }
       if (shouldRestoreDisconnectedPreview && room.state === ConnectionState.Disconnected) {
         void enableDisconnectedCameraPreview().catch(() => {
           disableDisconnectedCameraPreview();
@@ -8508,6 +9049,117 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       void connectRoom();
+    });
+  }
+
+  const submitExternalInviteJoin = () => {
+    if (!isExternalInviteMode || isInvalidInviteMode) {
+      leaveExternalInviteFlow();
+      return;
+    }
+
+    const guestName = externalInviteNameInput instanceof HTMLInputElement
+      ? normalizeText(externalInviteNameInput.value)
+      : '';
+    const guestEmail = externalInviteEmailInput instanceof HTMLInputElement
+      ? normalizeText(externalInviteEmailInput.value).toLowerCase()
+      : '';
+    const guestPassword = externalInvitePasswordInput instanceof HTMLInputElement
+      ? externalInvitePasswordInput.value
+      : '';
+
+    if (!guestName) {
+      setExternalInviteGateMessage('Ingresa tu nombre para entrar a la sala.', true);
+      if (externalInviteNameInput instanceof HTMLInputElement) {
+        externalInviteNameInput.focus();
+      }
+      return;
+    }
+
+    if (!guestEmail || !EMAIL_REGEX.test(guestEmail)) {
+      setExternalInviteGateMessage('Ingresa un mail válido para el acceso externo.', true);
+      if (externalInviteEmailInput instanceof HTMLInputElement) {
+        externalInviteEmailInput.focus();
+      }
+      return;
+    }
+
+    if (!normalizeText(guestPassword)) {
+      setExternalInviteGateMessage('Ingresa el password definido para invitados externos.', true);
+      if (externalInvitePasswordInput instanceof HTMLInputElement) {
+        externalInvitePasswordInput.focus();
+      }
+      return;
+    }
+
+    externalInviteGuestName = guestName;
+    externalInviteGuestEmail = guestEmail;
+    externalInviteGuestPassword = guestPassword;
+    nameInput.value = guestName;
+    identityInput.value =
+      sanitizeClientIdentity(guestEmail) ||
+      sanitizeClientIdentity(guestName) ||
+      createClientGuestIdentity();
+    setExternalInviteGateMessage('Conectando...', false);
+    void connectRoom({ fromExternalGate: true });
+  };
+
+  if (externalInviteCreateButton instanceof HTMLButtonElement) {
+    externalInviteCreateButton.addEventListener('click', () => {
+      void createInviteLink('external');
+    });
+  }
+
+  if (externalInviteCopyButton instanceof HTMLButtonElement) {
+    externalInviteCopyButton.addEventListener('click', () => {
+      void copyInviteLinkByType('external').catch((error) => {
+        setExternalInviteStatusMessage(safeErrorMessage(error), true);
+      });
+    });
+  }
+
+  if (externalInviteRevokeButton instanceof HTMLButtonElement) {
+    externalInviteRevokeButton.addEventListener('click', () => {
+      void revokeInviteLink('external');
+    });
+  }
+
+  if (studentInviteCreateButton instanceof HTMLButtonElement) {
+    studentInviteCreateButton.addEventListener('click', () => {
+      void createInviteLink('student');
+    });
+  }
+
+  if (studentInviteCopyButton instanceof HTMLButtonElement) {
+    studentInviteCopyButton.addEventListener('click', () => {
+      void copyInviteLinkByType('student').catch((error) => {
+        setStudentInviteStatusMessage(safeErrorMessage(error), true);
+      });
+    });
+  }
+
+  if (studentInviteRevokeButton instanceof HTMLButtonElement) {
+    studentInviteRevokeButton.addEventListener('click', () => {
+      void revokeInviteLink('student');
+    });
+  }
+
+  if (externalInviteJoinButton instanceof HTMLButtonElement) {
+    externalInviteJoinButton.addEventListener('click', submitExternalInviteJoin);
+  }
+
+  [externalInviteNameInput, externalInviteEmailInput, externalInvitePasswordInput].forEach((input) => {
+    if (!(input instanceof HTMLInputElement)) return;
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      submitExternalInviteJoin();
+    });
+  });
+
+  if (externalInviteCloseButton instanceof HTMLButtonElement) {
+    externalInviteCloseButton.addEventListener('click', () => {
+      leaveExternalInviteFlow();
     });
   }
 
@@ -9874,6 +10526,27 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     input.addEventListener('input', persistSetupState);
   });
 
+  roomInput.addEventListener('input', () => {
+    if (currentExternalInviteUrl || currentStudentInviteUrl) {
+      syncInviteLinkOutput('external', '', '');
+      syncInviteLinkOutput('student', '', '');
+      if (localRole === 'teacher') {
+        setExternalInviteStatusMessage('La sala cambió. Revisa o regenera el invite externo.', false);
+        setStudentInviteStatusMessage('La sala cambió. Revisa o regenera el invite de estudiantes.', false);
+      }
+    }
+    if (inviteReloadTimeoutId) {
+      window.clearTimeout(inviteReloadTimeoutId);
+      inviteReloadTimeoutId = 0;
+    }
+    if (localRole === 'teacher') {
+      inviteReloadTimeoutId = window.setTimeout(() => {
+        void loadInviteLink('external');
+        void loadInviteLink('student');
+      }, 280);
+    }
+  });
+
   const handlePresentationLoad = () => {
     postToPresentation({ type: 'musiki:live-snapshot', snapshot: activeLiveSnapshot });
     syncPresentationSessionControl();
@@ -9918,6 +10591,25 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   void refreshDeviceOptions(false);
   syncLiveActivityTransport();
 
+  syncInviteLinkOutput('external', '', '');
+  syncInviteLinkOutput('student', '', '');
+  if (isExternalInviteMode) {
+    if (externalInviteNameInput instanceof HTMLInputElement && !externalInviteNameInput.value.trim()) {
+      externalInviteNameInput.value = normalizeText(nameInput.value);
+    }
+    openExternalInviteGate();
+    setExternalInviteGateMessage(
+      inviteError || 'Completa tus datos para entrar como invitado externo.',
+      isInvalidInviteMode,
+    );
+  }
+  if (localRole === 'teacher') {
+    setExternalInviteStatusMessage('Genera un link con password para invitados externos.');
+    setStudentInviteStatusMessage('Genera un link directo para estudiantes.');
+    void loadInviteLink('external');
+    void loadInviteLink('student');
+  }
+
   if (shouldRunHandTracking()) {
     void startHandTracking();
   }
@@ -9930,7 +10622,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   setStatus(
-    presentationSelect.value
+    isExternalInviteMode
+      ? 'Acceso externo listo para conectar.'
+      : presentationSelect.value
       ? 'Escena Reveal preparada.'
       : 'Configura la sala y conecta.',
   );
@@ -9958,6 +10652,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const teardown = () => {
     if (destroyed) return;
     destroyed = true;
+    if (inviteReloadTimeoutId) {
+      window.clearTimeout(inviteReloadTimeoutId);
+      inviteReloadTimeoutId = 0;
+    }
     if (pendingPresentationTask) {
       window.clearTimeout(pendingPresentationTask);
       pendingPresentationTask = 0;

@@ -962,6 +962,23 @@ const allUsersById = new Map<string, any>(
   (allUsers || []).map((user: any) => [String(user?.id || ''), user]),
 );
 
+const isTeacherCourseMember = (userIdInput: any, courseIdInput: any, enrollmentsInput: any[] = allEnrollments || []) => {
+  const userId = String(userIdInput || '').trim();
+  if (!userId) return false;
+
+  const userRole = normalizeRole(allUsersById.get(userId)?.role);
+  if (userRole === 'teacher') return true;
+
+  const courseId = canonicalizeCourseId(courseIdInput);
+  if (!courseId) return false;
+
+  return (enrollmentsInput || []).some((enrollment: any) =>
+    String(enrollment?.userId || '').trim() === userId &&
+    canonicalizeCourseId(enrollment?.courseId) === courseId &&
+    normalizeRole(enrollment?.roleInCourse) === 'teacher',
+  );
+};
+
 const teacherLiveSessions = isTeacher
   ? (allLiveClassSessions || []).filter((session: any) => {
       if (teacherManagedCourseIds.size === 0) return false;
@@ -3152,7 +3169,9 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
             </div>
 
             {allEnrollments && allSubmissions && allUsers && allAssignments && (() => {
-              const enrollmentSource = scopedTeacherEnrollments;
+              const enrollmentSource = scopedTeacherEnrollments.filter((enrollment: any) =>
+                !isTeacherCourseMember(enrollment?.userId, enrollment?.courseId, scopedTeacherEnrollments),
+              );
 
               const courseGroups = enrollmentSource.reduce((acc, enroll) => {
                 const courseId = canonicalizeCourseId(enroll?.courseId) || String(enroll?.courseId || '').trim();
@@ -3224,7 +3243,8 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                   const flatAssignments = lessonGroups.flatMap((lesson) => lesson.assignments);
                   const assignmentIdSet = new Set(flatAssignments.map((assignment) => assignment.id));
                   const scopedCourseSubmissionsAllYears = courseSubmissionsAllYears.filter((submission) =>
-                    assignmentIdSet.has(submission.assignmentId),
+                    assignmentIdSet.has(submission.assignmentId) &&
+                    !isTeacherCourseMember(submission?.userId, courseId, enrolls),
                   );
                   const yearSet = new Set([activeYear]);
                   scopedCourseSubmissionsAllYears.forEach((submission) => {

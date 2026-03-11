@@ -11,6 +11,10 @@ type Props = {
   defaultPresentation?: string;
   defaultRole?: 'teacher' | 'student';
   defaultRoom?: string;
+  inviteCode?: string;
+  inviteError?: string;
+  inviteLabel?: string;
+  inviteMode?: 'none' | 'external' | 'invalid';
   presentationOptions?: RoomPresentationOption[];
 };
 
@@ -24,6 +28,10 @@ const {
   defaultPresentation = '',
   defaultRole = 'student',
   defaultRoom = 'musiki-stage',
+  inviteCode = '',
+  inviteError = '',
+  inviteLabel = 'Acceso externo',
+  inviteMode = 'none',
   presentationOptions = [],
 } = Astro.props as Props;
 
@@ -56,6 +64,10 @@ if (
   data-instruments-allowed="true"
   data-recording-guide-suppressed="false"
   data-recording-guide-visible="false"
+  data-invite-code={inviteCode}
+  data-invite-error={inviteError}
+  data-invite-label={inviteLabel}
+  data-invite-mode={inviteMode}
   data-role={defaultRole}
   data-sidebar-collapsed="false"
 >
@@ -992,6 +1004,136 @@ if (
                   >
                     MUTE ALL
                   </button>
+
+                  <div class="conference-room-invite-controls">
+                    <div class="conference-session-controls-heading">INVITE EXTERNO</div>
+
+                    <div class="conference-field">
+                      <label for="conference-external-password-input">Password externos</label>
+                      <input
+                        id="conference-external-password-input"
+                        name="external-password"
+                        type="password"
+                        value=""
+                        autocomplete="new-password"
+                        data-external-password-input
+                      />
+                    </div>
+
+                    <div class="conference-field">
+                      <label for="conference-external-expiry-select">Vencimiento</label>
+                      <select
+                        id="conference-external-expiry-select"
+                        name="external-expiry"
+                        data-external-expiry-select
+                      >
+                        <option value="">Sin vencimiento</option>
+                        <option value="60">1 hora</option>
+                        <option value="1440">24 horas</option>
+                        <option value="10080">7 dias</option>
+                      </select>
+                    </div>
+
+                    <div class="conference-field">
+                      <label for="conference-external-invite-link-output">Link externo</label>
+                      <input
+                        id="conference-external-invite-link-output"
+                        name="external-invite-link"
+                        type="text"
+                        value=""
+                        readonly
+                        placeholder="Crea un link externo para esta sala"
+                        data-external-invite-link-output
+                      />
+                    </div>
+
+                    <div class="conference-session-action-row">
+                      <button
+                        type="button"
+                        class="conference-session-action"
+                        data-action="external-invite-create"
+                      >
+                        GUARDAR LINK
+                      </button>
+                      <button
+                        type="button"
+                        class="conference-session-action"
+                        data-action="external-invite-copy"
+                      >
+                        COPIAR LINK
+                      </button>
+                      <button
+                        type="button"
+                        class="conference-session-action"
+                        data-action="external-invite-revoke"
+                      >
+                        REVOCAR
+                      </button>
+                    </div>
+
+                    <p class="conference-session-note" data-external-invite-status>
+                      Genera un link con password para invitados externos sin login.
+                    </p>
+                  </div>
+
+                  <div class="conference-room-invite-controls">
+                    <div class="conference-session-controls-heading">INVITE ESTUDIANTES</div>
+
+                    <div class="conference-field">
+                      <label for="conference-student-expiry-select">Vencimiento</label>
+                      <select
+                        id="conference-student-expiry-select"
+                        name="student-expiry"
+                        data-student-expiry-select
+                      >
+                        <option value="">Sin vencimiento</option>
+                        <option value="60">1 hora</option>
+                        <option value="1440">24 horas</option>
+                        <option value="10080">7 dias</option>
+                      </select>
+                    </div>
+
+                    <div class="conference-field">
+                      <label for="conference-student-invite-link-output">Link estudiantes</label>
+                      <input
+                        id="conference-student-invite-link-output"
+                        name="student-invite-link"
+                        type="text"
+                        value=""
+                        readonly
+                        placeholder="Crea un acceso directo para estudiantes"
+                        data-student-invite-link-output
+                      />
+                    </div>
+
+                    <div class="conference-session-action-row conference-session-action-row--triple">
+                      <button
+                        type="button"
+                        class="conference-session-action"
+                        data-action="student-invite-create"
+                      >
+                        GUARDAR LINK
+                      </button>
+                      <button
+                        type="button"
+                        class="conference-session-action"
+                        data-action="student-invite-copy"
+                      >
+                        COPIAR LINK
+                      </button>
+                      <button
+                        type="button"
+                        class="conference-session-action"
+                        data-action="student-invite-revoke"
+                      >
+                        REVOCAR
+                      </button>
+                    </div>
+
+                    <p class="conference-session-note" data-student-invite-status>
+                      Link directo para estudiantes sin navegar por curso ni leccion.
+                    </p>
+                  </div>
                 </div>
               </div>
             </details>
@@ -1378,6 +1520,100 @@ if (
           </ul>
         </section>
       </div>
+    </div>
+  </div>
+
+  <div class="conference-invite-modal" data-external-invite-gate hidden={inviteMode === 'none'}>
+    <div
+      class="conference-invite-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="conference-invite-title"
+    >
+      <div class="conference-invite-head">
+        <div class="conference-invite-heading">
+          <strong id="conference-invite-title">
+            {inviteMode === 'invalid' ? 'Invitación no disponible' : 'Entrar a la sala'}
+          </strong>
+          <p>
+            {inviteMode === 'invalid'
+              ? inviteError || 'Esta invitación ya no está disponible.'
+              : inviteLabel}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="conference-icon-button conference-invite-close"
+          data-external-invite-close
+          aria-label="Cerrar acceso externo"
+          title="Cerrar"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+
+      {inviteMode === 'invalid' ? (
+        <div class="conference-invite-body">
+          <p class="conference-invite-note">
+            {inviteError || 'La invitación de esta sala venció o no existe.'}
+          </p>
+          <div class="conference-invite-actions">
+            <a href="/" class="conference-session-action">IR AL INICIO</a>
+          </div>
+        </div>
+      ) : (
+        <div class="conference-invite-body">
+          <div class="conference-field">
+            <label for="conference-external-invite-name">Nombre</label>
+            <input
+              id="conference-external-invite-name"
+              name="external-invite-name"
+              type="text"
+              value=""
+              autocomplete="name"
+              data-external-invite-name
+            />
+          </div>
+
+          <div class="conference-field">
+            <label for="conference-external-invite-email">Mail</label>
+            <input
+              id="conference-external-invite-email"
+              name="external-invite-email"
+              type="email"
+              value=""
+              autocomplete="email"
+              data-external-invite-email
+            />
+          </div>
+
+          <div class="conference-field">
+            <label for="conference-external-invite-password">Password</label>
+            <input
+              id="conference-external-invite-password"
+              name="external-invite-password"
+              type="password"
+              value=""
+              autocomplete="current-password"
+              data-external-invite-password
+            />
+          </div>
+
+          <p class="conference-invite-note" data-external-invite-gate-status>
+            Completa tus datos para entrar como invitado externo.
+          </p>
+
+          <div class="conference-invite-actions">
+            <button
+              type="button"
+              class="conference-session-action"
+              data-action="external-invite-join"
+            >
+              ENTRAR
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   </div>
 </section>
@@ -2745,6 +2981,34 @@ if (
     cursor: not-allowed;
   }
 
+  .conference-session-action-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .conference-session-action-row--triple {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .conference-room-invite-controls {
+    display: grid;
+    gap: 0.62rem;
+    padding-top: 0.16rem;
+  }
+
+  .conference-session-note {
+    margin: 0;
+    color: var(--conference-muted);
+    font-size: 0.64rem;
+    line-height: 1.35;
+  }
+
+  .conference-session-note[data-error='true'],
+  .conference-invite-note[data-error='true'] {
+    color: #ff8787;
+  }
+
   .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument {
     opacity: 0.52;
   }
@@ -3504,6 +3768,81 @@ if (
     color: var(--conference-fg);
   }
 
+  .conference-invite-modal[hidden] {
+    display: none !important;
+  }
+
+  .conference-invite-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 160;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2rem;
+    background: rgba(0, 0, 0, 0.76);
+    backdrop-filter: blur(10px);
+  }
+
+  .conference-invite-dialog {
+    width: min(460px, calc(100vw - 2rem));
+    border: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.96);
+    color: var(--conference-fg);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  }
+
+  .conference-invite-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.9rem;
+    padding: 0.95rem 1rem 0.8rem;
+    border-bottom: 1px solid var(--conference-line);
+  }
+
+  .conference-invite-heading {
+    display: grid;
+    gap: 0.24rem;
+  }
+
+  .conference-invite-heading strong {
+    font-size: 0.82rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .conference-invite-heading p {
+    margin: 0;
+    color: var(--conference-muted);
+    font-size: 0.72rem;
+    line-height: 1.45;
+  }
+
+  .conference-invite-close {
+    min-width: 36px;
+    padding: 0 0.55rem;
+    font-size: 1rem;
+  }
+
+  .conference-invite-body {
+    display: grid;
+    gap: 0.72rem;
+    padding: 0.95rem 1rem 1rem;
+  }
+
+  .conference-invite-note {
+    margin: 0;
+    color: var(--conference-muted);
+    font-size: 0.7rem;
+    line-height: 1.45;
+  }
+
+  .conference-invite-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
   .conference-shortcuts-head {
     position: sticky;
     top: 0;
@@ -3533,6 +3872,10 @@ if (
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0;
+  }
+
+  .conference-shell[data-invite-mode='external'] .conference-bar-group--presentation {
+    display: none;
   }
 
   .conference-shortcuts-section {
