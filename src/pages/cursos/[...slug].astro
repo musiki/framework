@@ -5380,6 +5380,7 @@ const forumThreadPrompt = sessionFirstName
 
         let latestPostRequestToken = 0;
         let forumMermaidPromise = null;
+        let sharedMermaidRenderSequence = 0;
         const FORUM_READ_PREFIX = 'forum:read:';
         let activeForumModalMedia = null;
 
@@ -6269,7 +6270,7 @@ a[node] -->|edge| b[hub]
           if (forumMermaidPromise) return forumMermaidPromise;
 
           forumMermaidPromise = new Promise((resolve) => {
-            const existing = document.querySelector('script[data-forum-mermaid-loader="true"]');
+            const existing = document.querySelector('script[data-musiki-mermaid-loader="true"]');
             if (existing) {
               existing.addEventListener('load', () => resolve(window.mermaid || null), { once: true });
               existing.addEventListener('error', () => resolve(null), { once: true });
@@ -6279,13 +6280,70 @@ a[node] -->|edge| b[hub]
             const script = document.createElement('script');
             script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
             script.defer = true;
-            script.dataset.forumMermaidLoader = 'true';
+            script.dataset.musikiMermaidLoader = 'true';
             script.onload = () => resolve(window.mermaid || null);
             script.onerror = () => resolve(null);
             document.head.appendChild(script);
           });
 
           return forumMermaidPromise;
+        }
+
+        function renderStaticMermaid(container, attempt = 0) {
+          const nodes = Array.from(container.querySelectorAll('.mermaid'))
+            .filter((node) => node instanceof HTMLElement)
+            .filter((node) => !node.closest('#lesson-forum'))
+            .filter(
+              (node) =>
+                node.dataset.mermaidRendered !== 'true' &&
+                node.dataset.mermaidRendering !== 'true',
+            );
+          if (nodes.length === 0) return;
+
+          ensureForumMermaid()
+            .then((mermaid) => {
+              if (!mermaid?.render) return;
+              try {
+                mermaid.initialize({
+                  startOnLoad: false,
+                  theme: 'default',
+                  securityLevel: 'loose',
+                  suppressErrorRendering: false,
+                });
+              } catch {}
+
+              const tasks = nodes.map(async (node) => {
+                const source = String(node.dataset.mermaidSource || node.textContent || '').trim();
+                if (!source) return;
+                node.dataset.mermaidSource = source;
+                node.dataset.mermaidRendering = 'true';
+                const renderId = `course-mermaid-${Date.now()}-${sharedMermaidRenderSequence += 1}`;
+                const result = await mermaid.render(renderId, source);
+                node.innerHTML = result?.svg || '';
+                if (typeof result?.bindFunctions === 'function') {
+                  result.bindFunctions(node);
+                }
+                delete node.dataset.mermaidRendering;
+                node.dataset.mermaidRendered = 'true';
+              });
+
+              Promise.all(tasks).catch((error) => {
+                nodes.forEach((node) => {
+                  delete node.dataset.mermaidRendering;
+                  delete node.dataset.mermaidRendered;
+                  const source = String(node.dataset.mermaidSource || node.textContent || '').trim();
+                  if (source) node.textContent = source;
+                });
+                if (attempt < 3) {
+                  window.setTimeout(() => renderStaticMermaid(container, attempt + 1), 180 * (attempt + 1));
+                } else {
+                  console.error('Course mermaid render error:', error);
+                }
+              });
+            })
+            .catch((error) => {
+              console.error('Course mermaid loader error:', error);
+            });
         }
 
         function renderForumMermaid(container) {
@@ -7564,6 +7622,15 @@ a[node] -->|edge| b[hub]
           await upgradeLegacyObsidianAudioLinks();
         } catch (error) {
           console.error('Legacy audio bootstrap error:', error);
+        }
+
+        try {
+          const contentArea = document.querySelector('.content-area');
+          if (contentArea instanceof HTMLElement) {
+            renderStaticMermaid(contentArea);
+          }
+        } catch (error) {
+          console.error('Course mermaid bootstrap error:', error);
         }
 
         try {

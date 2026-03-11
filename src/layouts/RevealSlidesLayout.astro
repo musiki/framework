@@ -1411,6 +1411,18 @@ const resolvedSlideTheme =
           return Promise.all(tasks).then(() => undefined);
         };
 
+        const hydrateRenderedLilyBlocks = (container = slidesRoot) => {
+          const blocks = Array.from(container.querySelectorAll('.lilypond-block, .lily-score'));
+          blocks.forEach((block) => {
+            if (!(block instanceof HTMLElement)) return;
+            const image = block.querySelector('img');
+            if (!(image instanceof HTMLImageElement)) return;
+            image.loading = 'eager';
+            image.decoding = 'async';
+            image.referrerPolicy = 'no-referrer';
+          });
+        };
+
         const hydrateSlideGrids = (container = slidesRoot) => {
           const grids = Array.from(container.querySelectorAll('grid'));
           if (grids.length === 0) return;
@@ -1493,6 +1505,7 @@ const resolvedSlideTheme =
         normalizeSlideEmbeds(slidesRoot);
         rewriteMermaidCodeBlocks(slidesRoot);
         void rewriteLilyCodeBlocks(slidesRoot);
+        hydrateRenderedLilyBlocks(slidesRoot);
 
         const ensureSlidesMermaid = () => {
           if (slidesMermaidPromise) return slidesMermaidPromise;
@@ -3075,6 +3088,7 @@ const resolvedSlideTheme =
             rewriteMermaidCodeBlocks(currentSlide);
             renderSlidesMermaid(currentSlide);
             void rewriteLilyCodeBlocks(currentSlide).then(() => {
+              hydrateRenderedLilyBlocks(currentSlide);
               deck.layout?.();
             });
           }
@@ -3087,6 +3101,7 @@ const resolvedSlideTheme =
             rewriteMermaidCodeBlocks(slidesRoot);
             renderSlidesMermaid(slidesRoot);
             await rewriteLilyCodeBlocks(slidesRoot);
+            hydrateRenderedLilyBlocks(slidesRoot);
             deck.layout?.();
             setTimeout(() => renderSlidesMermaid(slidesRoot), 360);
             refreshScrollableState();
