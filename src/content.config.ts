@@ -26,6 +26,7 @@ const content = defineCollection({
 		tag: z.string().or(z.array(z.string())).optional().nullable(),
 		title: z.string().optional().nullable(),
 		subtitle: z.string().optional().nullable(),
+		summary: z.string().optional().nullable(),
 		author: z.string().or(z.array(z.string())).optional().nullable(),
 		authors: z.string().or(z.array(z.string())).optional().nullable(),
 		category: z.string().or(z.array(z.string())).optional().nullable(),
@@ -41,6 +42,9 @@ const content = defineCollection({
 		isbn13: z.string().or(z.number()).optional().nullable(),
 		slug: z.string().optional().nullable(),
 		shortSlug: z.string().optional().nullable(),
+		theme: z.string().optional().nullable(),
+		slideTheme: z.string().optional().nullable(),
+		revealTheme: z.string().optional().nullable(),
 	}).passthrough(), // Allow any additional fields from Obsidian YAML
 });
 
@@ -81,6 +85,9 @@ const cursos = defineCollection({
 		public_path: z.string().optional().nullable(),
 		slug: z.string().optional().nullable(),
 		shortSlug: z.string().optional().nullable(),
+		theme: z.string().optional().nullable(),
+		slideTheme: z.string().optional().nullable(),
+		revealTheme: z.string().optional().nullable(),
 	}).passthrough(),
 });
 
