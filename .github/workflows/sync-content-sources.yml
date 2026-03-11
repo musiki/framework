@@ -52,6 +52,13 @@ jobs:
           if-no-files-found: warn
 
       - name: Trigger Vercel deploy hook
-        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL != '' && (github.event_name == 'repository_dispatch' || github.event.inputs.trigger_deploy == 'true') }}
+        if: ${{ github.event_name == 'repository_dispatch' || github.event.inputs.trigger_deploy == 'true' }}
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
-          curl -fsS -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
+          if [[ -z "${VERCEL_DEPLOY_HOOK_URL}" ]]; then
+            echo "VERCEL_DEPLOY_HOOK_URL not configured; skipping."
+            exit 0
+          fi
+
+          curl -fsS -X POST "${VERCEL_DEPLOY_HOOK_URL}"
