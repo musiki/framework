@@ -126,13 +126,15 @@ if (user?.email) {
 				enrolledCourses = canonicalCourseIds
 					.map((canonicalCourseId) => {
 						const meta = courseMetaById.get(canonicalCourseId);
+						if (!meta) return null;
 						return {
 							courseId: canonicalCourseId,
-							title: String(meta?.title || canonicalCourseId),
-							code: normalizeCourseCode(meta?.code || ''),
-							pathSegment: String(meta?.pathSegment || canonicalCourseId),
+							title: String(meta.title || canonicalCourseId),
+							code: normalizeCourseCode(meta.code || ''),
+							pathSegment: String(meta.pathSegment || canonicalCourseId),
 						};
 					})
+					.filter((course): course is HeaderCourseOption => Boolean(course))
 					.sort((left, right) => left.title.localeCompare(right.title, 'es'));
 			}
 		}
@@ -931,12 +933,12 @@ const withActiveCourse = (href: string) => {
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.26rem 0.56rem;
+		padding: 0.22rem 0.56rem;
 		text-decoration: none;
 		color: var(--c-fg);
 		border-radius: 6px;
 		border-bottom: none;
-		line-height: 1.1;
+		line-height: 1;
 	}
 	.course-dropdown-link:hover {
 		background: var(--c-bg-mute);
@@ -1203,13 +1205,16 @@ const withActiveCourse = (href: string) => {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		padding: 0.3em 0.4em;
+		padding: 1em 0.5em;
 		border: none;
 		border-radius: 0;
 		background: transparent;
 		color: var(--black);
 		cursor: pointer;
-		font-size: 0.9rem;
+		font: inherit;
+		line-height: 1;
+		border-bottom: 4px solid transparent;
+		white-space: nowrap;
 	}
 	.user-button:hover {
 		color: var(--accent);
@@ -1252,6 +1257,7 @@ const withActiveCourse = (href: string) => {
 		color: var(--c-fg);
 		text-decoration: none;
 		border-bottom: none;
+		font: inherit;
 	}
 	.user-dropdown a:hover {
 		background-color: var(--c-bg-mute);
@@ -1316,9 +1322,8 @@ const withActiveCourse = (href: string) => {
 			font-size: 0.92rem;
 		}
 		.user-button {
-			font-size: 0.82rem;
-			padding: 0.22rem 0.42rem;
-			gap: 0.28rem;
+			padding: 0.46em 0.34em;
+			gap: 0.32rem;
 		}
 		.user-button span {
 			max-width: 5.8rem;
@@ -1353,8 +1358,7 @@ const withActiveCourse = (href: string) => {
 			font-size: 0.95rem;
 		}
 		.user-button {
-			font-size: 0.82rem;
-			padding: 0.24rem 0.45rem;
+			padding: 0.45em 0.35em;
 			gap: 0.32rem;
 		}
 		.user-button span {
@@ -1441,8 +1445,7 @@ const withActiveCourse = (href: string) => {
 			flex: 0 0 auto;
 		}
 		.user-button {
-			font-size: 0.72rem;
-			padding: 0.18rem 0.38rem;
+			padding: 0.35em 0.28em;
 			gap: 0.24rem;
 		}
 		.user-button span {
