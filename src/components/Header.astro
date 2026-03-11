@@ -266,6 +266,18 @@ const withActiveCourse = (href: string) => {
 							</div>
 						) : null
 					}
+					<a
+						id="header-build-monitor"
+						class="header-build-monitor"
+						href="https://github.com/musiki/framework/actions/workflows/sync-content-sources.yml"
+						target="_blank"
+						rel="noreferrer"
+						title="Estado de sincronizacion del contenido"
+						aria-label="Estado de sincronizacion del contenido"
+						data-state="unknown"
+					>
+						<span class="header-build-monitor-dot" aria-hidden="true"></span>
+					</a>
 					{
 						showHeaderClassControls && (
 							<>
@@ -368,6 +380,7 @@ const withActiveCourse = (href: string) => {
 			__musikiHeaderKeydownHandler?: (event: KeyboardEvent) => void;
 			__musikiHeaderDocClickHandler?: (event: MouseEvent) => void;
 			__musikiHeaderResizeHandler?: () => void;
+			__musikiHeaderBuildMonitorTeardown?: () => void;
 		}
 	}
 
@@ -578,6 +591,84 @@ const withActiveCourse = (href: string) => {
 	}
 
 	document.addEventListener('astro:page-load', setupHeaderControls);
+</script>
+<script>
+	const setupHeaderBuildMonitor = () => {
+		const globalWindow = window as Window & {
+			__musikiHeaderBuildMonitorTeardown?: () => void;
+		};
+
+		if (typeof globalWindow.__musikiHeaderBuildMonitorTeardown === 'function') {
+			globalWindow.__musikiHeaderBuildMonitorTeardown();
+			globalWindow.__musikiHeaderBuildMonitorTeardown = undefined;
+		}
+
+		const monitor = document.getElementById('header-build-monitor');
+		if (!(monitor instanceof HTMLAnchorElement)) return;
+
+		const defaultHref = monitor.href;
+		let intervalId = 0;
+		let controller: AbortController | null = null;
+
+		const applyPayload = (payload: Record<string, unknown>) => {
+			const state = String(payload.state || 'unknown').trim() || 'unknown';
+			const title = String(payload.title || 'Estado de sincronizacion no disponible').trim();
+			const runUrl = String(payload.runUrl || defaultHref).trim() || defaultHref;
+
+			monitor.dataset.state = state;
+			monitor.href = runUrl;
+			monitor.title = title;
+			monitor.setAttribute('aria-label', title);
+		};
+
+		const applyFallback = () => {
+			applyPayload({
+				state: 'unknown',
+				title: 'Estado de sincronizacion no disponible',
+				runUrl: defaultHref,
+			});
+		};
+
+		const refresh = async () => {
+			if (controller) controller.abort();
+			controller = new AbortController();
+
+			try {
+				const response = await fetch('/api/internal/build-status', {
+					headers: { Accept: 'application/json' },
+					signal: controller.signal,
+				});
+
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}`);
+				}
+
+				const payload = await response.json();
+				applyPayload(payload);
+			} catch (error) {
+				if (error instanceof DOMException && error.name === 'AbortError') return;
+				applyFallback();
+			}
+		};
+
+		void refresh();
+		intervalId = window.setInterval(() => {
+			void refresh();
+		}, 20_000);
+
+		globalWindow.__musikiHeaderBuildMonitorTeardown = () => {
+			if (controller) controller.abort();
+			window.clearInterval(intervalId);
+		};
+	};
+
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', setupHeaderBuildMonitor, { once: true });
+	} else {
+		setupHeaderBuildMonitor();
+	}
+
+	document.addEventListener('astro:page-load', setupHeaderBuildMonitor);
 </script>
 <script>
 	import { subscribeToClassActivity } from '../lib/class-activity/client.mjs';
@@ -858,6 +949,53 @@ const withActiveCourse = (href: string) => {
 		font-weight: 700;
 		letter-spacing: 0.02em;
 		color: var(--c-fg-dim);
+	}
+	.header-build-monitor {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1rem;
+		height: 1rem;
+		padding: 0;
+		margin-right: 0.18rem;
+		border-bottom: none;
+		text-decoration: none;
+	}
+	.header-build-monitor-dot {
+		width: 0.45rem;
+		height: 0.45rem;
+		border-radius: 999px;
+		background: #8e8e93;
+		box-shadow: 0 0 0 0 rgba(142, 142, 147, 0.28);
+		transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+	}
+	.header-build-monitor[data-state='ok'] .header-build-monitor-dot {
+		background: #1aa36f;
+	}
+	.header-build-monitor[data-state='running'] .header-build-monitor-dot {
+		background: #d9822b;
+		animation: header-build-monitor-pulse 1.4s ease-in-out infinite;
+	}
+	.header-build-monitor[data-state='error'] .header-build-monitor-dot {
+		background: #d14343;
+	}
+	.header-build-monitor[data-state='idle'] .header-build-monitor-dot {
+		background: #4f83ff;
+	}
+	.header-build-monitor:hover .header-build-monitor-dot,
+	.header-build-monitor:focus-visible .header-build-monitor-dot {
+		transform: scale(1.18);
+	}
+	@keyframes header-build-monitor-pulse {
+		0%,
+		100% {
+			box-shadow: 0 0 0 0 rgba(217, 130, 43, 0.24);
+			opacity: 0.9;
+		}
+		50% {
+			box-shadow: 0 0 0 0.28rem rgba(217, 130, 43, 0.08);
+			opacity: 1;
+		}
 	}
 	.header-activity-led-btn {
 		border: none;
