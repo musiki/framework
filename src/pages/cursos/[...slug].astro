@@ -13,6 +13,7 @@ import {
   buildCourseHref,
   buildCourseLessonHref,
   buildCourseLessonPathIndex,
+  encodePathSegments,
   findLessonByCoursePath,
   getPreferredCoursePathSegment,
 } from '../../lib/course-routing';
@@ -50,10 +51,40 @@ const preferredCoursePathSegment = getPreferredCoursePathSegment(
 );
 const courseHref = buildCourseHref(canonicalCourseId, courseData);
 
+// Build lesson path index before auth redirects so legacy lesson URLs can
+// canonicalize to the frontmatter slug even for anonymous access.
+const allLessons = (await getCollection('cursos'))
+  .filter(entry => entry.id.startsWith(`${canonicalCourseId}/`) && !entry.id.endsWith('_index'))
+  .sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
+const lessonPathIndex = buildCourseLessonPathIndex(
+  canonicalCourseId,
+  courseData,
+  allLessons,
+);
+
+const requestedLessonPath = parts.slice(1).join('/');
+const preAuthLessonMatch =
+  parts.length > 1 && !isCourseForumPage
+    ? findLessonByCoursePath(requestedLessonPath, lessonPathIndex)
+    : null;
+const preAuthCanonicalLessonPath = preAuthLessonMatch?.shortPath || '';
+const preAuthCourseRedirect =
+  requestedCoursePathSegment !== preferredCoursePathSegment
+    ? `${courseHref}${isCourseForumPage ? '/foro' : ''}${Astro.url.search}`
+    : '';
+const preAuthLessonRedirect =
+  preAuthLessonMatch && (
+    requestedCoursePathSegment !== preferredCoursePathSegment
+    || requestedLessonPath !== preAuthCanonicalLessonPath
+  )
+    ? `${courseHref}/${encodePathSegments(preAuthCanonicalLessonPath)}${Astro.url.search}`
+    : '';
+const loginRedirectTarget = preAuthLessonRedirect || preAuthCourseRedirect || `/cursos/${encodeURIComponent(slug)}`;
+
 // Check if user has base access to course.
 const session = (Astro.locals as any).session;
 const isPublicCourse = Boolean(courseIndex.data.public);
-if (!session && !isPublicCourse) return Astro.redirect(`/login?redirect=/cursos/${encodeURIComponent(slug)}`);
+if (!session && !isPublicCourse) return Astro.redirect(`/login?redirect=${encodeURIComponent(loginRedirectTarget)}`);
 
 const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 const normalizeRole = (value: unknown) => String(value || '').trim().toLowerCase();
@@ -67,16 +98,6 @@ const hasCourseEnrollment = Boolean(sessionEnrollmentRole);
 if (session && !hasCourseEnrollment && !canManageLiveInteractions) {
   return Astro.redirect('/cursos');
 }
-
-// Get all lessons in this course
-const allLessons = (await getCollection('cursos'))
-  .filter(entry => entry.id.startsWith(`${canonicalCourseId}/`) && !entry.id.endsWith('_index'))
-  .sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
-const lessonPathIndex = buildCourseLessonPathIndex(
-  canonicalCourseId,
-  courseData,
-  allLessons,
-);
 
 // Group lessons by chapter
 const chapters = allLessons.reduce((acc, lesson) => {
@@ -97,7 +118,7 @@ if (parts.length === 1) {
   currentEntry = courseIndex;
 } else {
   // Show specific lesson
-  const lessonPath = parts.slice(1).join('/');
+  const lessonPath = requestedLessonPath;
   const lessonMatch = findLessonByCoursePath(lessonPath, lessonPathIndex);
   currentEntry = lessonMatch?.entry;
   resolvedLessonRoutePath = lessonMatch?.shortPath || '';
