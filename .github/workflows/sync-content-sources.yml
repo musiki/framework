@@ -56,7 +56,7 @@ jobs:
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
-          hook_url="$(printf '%s' "${VERCEL_DEPLOY_HOOK_URL}" | tr -d '\r\n')"
+          hook_url="$(printf '%s' "${VERCEL_DEPLOY_HOOK_URL}" | tr -d '[:space:]')"
 
           if [[ -z "${hook_url}" ]]; then
             echo "VERCEL_DEPLOY_HOOK_URL not configured."
