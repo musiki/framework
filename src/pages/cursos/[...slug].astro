@@ -380,6 +380,10 @@ const forumThreadPrompt = sessionFirstName
       .course-container[data-has-right-sidebar='false'] .course-sidebar-handle--right {
         display: none;
       }
+
+      .course-container[data-left-open='false'] .course-sidebar-handle--left {
+        display: inline-flex;
+      }
       
       .sidebar {
         position: sticky;
@@ -2440,6 +2444,14 @@ const forumThreadPrompt = sessionFirstName
 
           document.documentElement.classList.toggle('course-sidebars-open', overlayActive);
           document.body.classList.toggle('course-sidebars-open', overlayActive);
+
+          const leftHandle = root.querySelector('[data-sidebar-handle="left"]');
+          if (leftHandle instanceof HTMLButtonElement) {
+            const nextLabel = leftOpen ? 'Ocultar navegación del curso' : 'Mostrar navegación del curso';
+            leftHandle.textContent = leftOpen ? '←' : '→';
+            leftHandle.setAttribute('aria-label', nextLabel);
+            leftHandle.title = `${nextLabel} (⌘/Ctrl + \\)`;
+          }
 
           rightMaximizeButtons.forEach((button) => {
             if (!(button instanceof HTMLButtonElement)) return;
