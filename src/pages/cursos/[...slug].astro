@@ -3547,9 +3547,224 @@ const forumThreadPrompt = sessionFirstName
         }, 1000);
       }
 
-      async function saveSubmission({ evalId, answer, isCorrect, meta = {} }) {
+      function ensureEvalText(value) {
+        if (typeof value === 'string') return value.trim();
+        if (value === undefined || value === null) return '';
+        return String(value).trim();
+      }
+
+      function ensureEvalBool(value) {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'string') {
+          const normalized = value.trim().toLowerCase();
+          if (['true', 'si', 'sí', 'yes', 'clara', 'claro'].includes(normalized)) return true;
+          if (['false', 'no', 'unclear', 'difusa'].includes(normalized)) return false;
+        }
+        return false;
+      }
+
+      function clampEvalScore(value) {
+        return Math.min(10, Math.max(0, value));
+      }
+
+      function parseEvalScore(value) {
+        if (typeof value === 'number' && Number.isFinite(value)) return clampEvalScore(value);
+        if (typeof value === 'string') {
+          const match = value.match(/(\d+(?:[.,]\d+)?)\s*(?:\/\s*10)?/);
+          if (!match?.[1]) return null;
+          const parsed = Number(match[1].replace(',', '.'));
+          if (!Number.isFinite(parsed)) return null;
+          return clampEvalScore(parsed);
+        }
+        return null;
+      }
+
+      function ensureEvalPair(value) {
+        let items = [];
+        if (Array.isArray(value)) {
+          items = value.map((item) => ensureEvalText(item)).filter(Boolean);
+        } else if (typeof value === 'string') {
+          items = value
+            .split(/\n|;|\u2022|\-/g)
+            .map((item) => item.trim())
+            .filter(Boolean);
+        }
+        const out = items.slice(0, 2);
+        while (out.length < 2) out.push('');
+        return out;
+      }
+
+      function cleanupEvalJsonCandidate(text) {
+        if (typeof text !== 'string') return '';
+        return text
+          .trim()
+          .replace(/^```json/i, '')
+          .replace(/^```/i, '')
+          .replace(/```$/i, '')
+          .replace(/,\s*([}\]])/g, '$1')
+          .trim();
+      }
+
+      function parseEvalJsonLoosely(rawText) {
+        const cleaned = cleanupEvalJsonCandidate(rawText);
+        const firstBrace = cleaned.indexOf('{');
+        if (firstBrace === -1) return null;
+
+        const source = cleaned.slice(firstBrace);
+
+        const tryParse = (candidate) => {
+          try {
+            const parsed = JSON.parse(candidate);
+            return parsed && typeof parsed === 'object' ? parsed : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const direct = tryParse(source);
+        if (direct) return direct;
+
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+        let endIndex = -1;
+
+        for (let i = 0; i < source.length; i += 1) {
+          const ch = source[i];
+
+          if (inString) {
+            if (escaped) {
+              escaped = false;
+            } else if (ch === '\\') {
+              escaped = true;
+            } else if (ch === '"') {
+              inString = false;
+            }
+            continue;
+          }
+
+          if (ch === '"') {
+            inString = true;
+            continue;
+          }
+
+          if (ch === '{') depth += 1;
+          if (ch === '}') depth -= 1;
+
+          if (depth === 0) {
+            endIndex = i;
+            break;
+          }
+        }
+
+        if (endIndex !== -1) {
+          const balanced = cleanupEvalJsonCandidate(source.slice(0, endIndex + 1));
+          const parsedBalanced = tryParse(balanced);
+          if (parsedBalanced) return parsedBalanced;
+        }
+
+        if (depth > 0) {
+          const repaired = cleanupEvalJsonCandidate(`${source}${'}'.repeat(depth)}`);
+          const parsedRepaired = tryParse(repaired);
+          if (parsedRepaired) return parsedRepaired;
+        }
+
+        const lastBrace = source.lastIndexOf('}');
+        if (lastBrace !== -1) {
+          const sliced = cleanupEvalJsonCandidate(source.slice(0, lastBrace + 1));
+          const parsedSliced = tryParse(sliced);
+          if (parsedSliced) return parsedSliced;
+        }
+
+        return null;
+      }
+
+      function deriveAiScore({ tesisClara, fortalezas, debilidades, sugerencia }) {
+        let score = 5;
+        score += tesisClara ? 1.5 : -1;
+        score += fortalezas.filter(Boolean).length * 1.2;
+        score -= debilidades.filter(Boolean).length * 0.8;
+        if (sugerencia.length >= 30) score += 0.6;
+        return Math.round(clampEvalScore(score) * 10) / 10;
+      }
+
+      function normalizeAiEvaluation(rawEvaluation) {
+        const base = rawEvaluation && typeof rawEvaluation === 'object' ? rawEvaluation : {};
+        const recovered = parseEvalJsonLoosely(base.raw || rawEvaluation) || {};
+
+        const baseTesis = base.tesis && typeof base.tesis === 'object' ? base.tesis : {};
+        const recoveredTesis = recovered.tesis && typeof recovered.tesis === 'object' ? recovered.tesis : {};
+        const baseCal = base.calificacion && typeof base.calificacion === 'object' ? base.calificacion : {};
+        const recCal = recovered.calificacion && typeof recovered.calificacion === 'object' ? recovered.calificacion : {};
+
+        const resumen = ensureEvalText(base.resumen) || ensureEvalText(recovered.resumen);
+        const tesisClara = ensureEvalBool(baseTesis.clara ?? recoveredTesis.clara ?? base.tesis_clara ?? recovered.tesis_clara);
+        const tesisExplicacion =
+          ensureEvalText(baseTesis.explicacion) ||
+          ensureEvalText(recoveredTesis.explicacion) ||
+          ensureEvalText(base.tesis_explicacion) ||
+          ensureEvalText(recovered.tesis_explicacion);
+
+        const fortalezas = ensureEvalPair(base.fortalezas ?? recovered.fortalezas);
+        const debilidades = ensureEvalPair(base.debilidades ?? recovered.debilidades);
+        const sugerencia = ensureEvalText(base.sugerencia) || ensureEvalText(recovered.sugerencia);
+
+        let nota = parseEvalScore(baseCal.nota ?? recCal.nota ?? base.nota ?? recovered.nota);
+        if (nota === null) nota = parseEvalScore(sugerencia);
+        if (nota === null) {
+          nota = deriveAiScore({
+            tesisClara,
+            fortalezas,
+            debilidades,
+            sugerencia,
+          });
+        }
+
+        const justificacion =
+          ensureEvalText(baseCal.justificacion) ||
+          ensureEvalText(recCal.justificacion) ||
+          `Nota sugerida ${nota}/10 según criterios de la rúbrica.`;
+
+        return {
+          resumen,
+          tesis: {
+            clara: tesisClara,
+            explicacion: tesisExplicacion,
+          },
+          fortalezas,
+          debilidades,
+          sugerencia,
+          calificacion: {
+            nota,
+            justificacion,
+          },
+          raw: ensureEvalText(base.raw) || ensureEvalText(rawEvaluation),
+        };
+      }
+
+      function hasAiEvaluation(evaluation) {
+        if (!evaluation || typeof evaluation !== 'object') return false;
+        return Boolean(
+          ensureEvalText(evaluation.resumen)
+          || ensureEvalText(evaluation.sugerencia)
+          || parseEvalScore(evaluation?.calificacion?.nota) !== null
+          || ensureEvalPair(evaluation.fortalezas).some(Boolean)
+          || ensureEvalPair(evaluation.debilidades).some(Boolean),
+        );
+      }
+
+      async function saveSubmission({
+        evalId,
+        answer,
+        isCorrect,
+        meta = {},
+        score = null,
+        feedback = '',
+        markAsGraded = false,
+      }) {
         try {
           const { courseId, pageSlug } = getPageContext();
+          const numericScore = typeof score === 'number' && Number.isFinite(score) ? score : null;
           const response = await fetch('/api/eval/submit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3562,6 +3777,9 @@ const forumThreadPrompt = sessionFirstName
                 isCorrect,
                 ...(meta && typeof meta === 'object' ? meta : {}),
               },
+              score: numericScore,
+              feedback: ensureEvalText(feedback) || undefined,
+              markAsGraded: Boolean(markAsGraded) || numericScore !== null,
               courseId,
               pageSlug,
             }),
@@ -3823,6 +4041,339 @@ const forumThreadPrompt = sessionFirstName
           message.textContent = data.successLabel || 'Sección completada';
           feedback.style.display = 'block';
           setProgressCompletion(data.id, true);
+        });
+
+        wrapper.appendChild(container);
+        renderEvalMath(container);
+      }
+
+      function renderPatchAI(wrapper, data, position) {
+        const previousSubmission = getSubmission(data.id);
+        const previousPayload = getSubmissionPayload(previousSubmission);
+        const previousRecord = previousPayload && typeof previousPayload === 'object' ? previousPayload : {};
+        const previousAnswer = previousRecord.answer && typeof previousRecord.answer === 'object'
+          ? previousRecord.answer
+          : previousRecord;
+        const previousStudentPatch = ensureEvalText(
+          previousAnswer.studentPatch
+          || previousAnswer.student_patch
+          || previousRecord.answerText
+          || previousRecord.answerPreview,
+        );
+        const previousEvaluationSource =
+          previousAnswer.evaluation
+          || previousRecord.aiEvaluation
+          || previousRecord.evaluation
+          || null;
+        const previousEvaluation = hasAiEvaluation(previousEvaluationSource)
+          ? normalizeAiEvaluation(previousEvaluationSource)
+          : null;
+        const previousScore = previousEvaluation
+          ? parseEvalScore(previousEvaluation?.calificacion?.nota)
+          : null;
+        const passScore = Number.isFinite(Number(data.passScore))
+          ? Math.max(0, Number(data.passScore))
+          : 6;
+        const allowEdit = Boolean(data.allowEdit);
+        const wasCorrect = previousScore !== null ? previousScore >= passScore : isSubmissionCorrect(previousSubmission);
+
+        registerProgress(data, position, wasCorrect);
+
+        const container = document.createElement('div');
+        container.className = 'eval-block patch-ai-block';
+        container.dataset.evalId = data.id;
+        container.id = `eval-${data.id}`;
+
+        const prompt = document.createElement('h4');
+        prompt.className = 'eval-prompt';
+        prompt.textContent = data.prompt || data.title || 'Compara tu patch con la consigna y el patch de referencia.';
+        container.appendChild(prompt);
+
+        const meta = document.createElement('p');
+        meta.className = 'patch-ai-meta';
+        const providerLabel = ensureEvalText(data.provider || 'ollama') || 'ollama';
+        const modelLabel = ensureEvalText(data.model);
+        meta.textContent = [
+          `Proveedor: ${providerLabel}`,
+          modelLabel ? `Modelo: ${modelLabel}` : '',
+          `Aprobacion: ${passScore}/10`,
+        ].filter(Boolean).join(' · ');
+        container.appendChild(meta);
+
+        if (Array.isArray(data.checks) && data.checks.length > 0) {
+          const criteriaLabel = document.createElement('p');
+          criteriaLabel.className = 'patch-ai-criteria-label';
+          criteriaLabel.textContent = 'Criterios del bloque:';
+          container.appendChild(criteriaLabel);
+
+          const criteriaList = document.createElement('ul');
+          criteriaList.className = 'patch-ai-criteria';
+          data.checks.forEach((check) => {
+            const item = document.createElement('li');
+            item.textContent = String(check || '').trim();
+            if (item.textContent) criteriaList.appendChild(item);
+          });
+          if (criteriaList.childElementCount > 0) {
+            container.appendChild(criteriaList);
+          }
+        }
+
+        if (ensureEvalText(data.referencePatch)) {
+          const referenceDetails = document.createElement('details');
+          referenceDetails.className = 'patch-ai-reference';
+          if (!previousStudentPatch) referenceDetails.open = true;
+
+          const referenceSummary = document.createElement('summary');
+          referenceSummary.textContent = 'Ver patch guia';
+          referenceDetails.appendChild(referenceSummary);
+
+          const referencePre = document.createElement('pre');
+          referencePre.className = 'patch-ai-code';
+          referencePre.textContent = ensureEvalText(data.referencePatch);
+          referenceDetails.appendChild(referencePre);
+
+          container.appendChild(referenceDetails);
+        }
+
+        if (allowEdit) {
+          const editableHint = document.createElement('p');
+          editableHint.className = 'feedback-explanation';
+          editableHint.textContent = 'Puedes corregir el patch y reenviarlo.';
+          container.appendChild(editableHint);
+        }
+
+        const form = document.createElement('form');
+        form.className = 'patch-ai-form';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'patch-ai-textarea';
+        textarea.placeholder = ensureEvalText(data.placeholder) || 'Pega aqui el patch del alumno.';
+        textarea.spellcheck = false;
+        textarea.autocomplete = 'off';
+        textarea.autocapitalize = 'off';
+        textarea.setAttribute('autocorrect', 'off');
+        textarea.value = previousStudentPatch;
+        form.appendChild(textarea);
+
+        const submitButton = document.createElement('button');
+        submitButton.type = 'submit';
+        submitButton.className = 'eval-submit';
+        submitButton.textContent = previousSubmission && allowEdit
+          ? 'Reevaluar patch'
+          : (ensureEvalText(data.submitLabel) || 'Evaluar patch');
+        form.appendChild(submitButton);
+
+        container.appendChild(form);
+
+        const feedback = document.createElement('div');
+        feedback.className = 'eval-feedback patch-ai-feedback';
+        feedback.hidden = true;
+
+        const status = document.createElement('p');
+        status.className = 'feedback-message';
+        feedback.appendChild(status);
+
+        const explanation = document.createElement('p');
+        explanation.className = 'feedback-explanation';
+        feedback.appendChild(explanation);
+
+        const cards = document.createElement('div');
+        cards.className = 'patch-ai-cards';
+        feedback.appendChild(cards);
+
+        const rawDetails = document.createElement('details');
+        rawDetails.className = 'patch-ai-raw';
+        rawDetails.hidden = true;
+        const rawSummary = document.createElement('summary');
+        rawSummary.textContent = 'Ver salida cruda';
+        rawDetails.appendChild(rawSummary);
+        const rawPre = document.createElement('pre');
+        rawPre.className = 'patch-ai-code';
+        rawDetails.appendChild(rawPre);
+        feedback.appendChild(rawDetails);
+
+        container.appendChild(feedback);
+
+        const renderEvaluationCard = (title, body) => {
+          const text = ensureEvalText(body);
+          if (!text) return;
+          const card = document.createElement('article');
+          card.className = 'patch-ai-card';
+          const heading = document.createElement('h5');
+          heading.className = 'patch-ai-card-title';
+          heading.textContent = title;
+          const content = document.createElement('p');
+          content.className = 'patch-ai-card-body';
+          content.textContent = text;
+          card.append(heading, content);
+          cards.appendChild(card);
+        };
+
+        const paintEvaluation = (evaluation, providerName = '', modelName = '') => {
+          feedback.hidden = false;
+          cards.innerHTML = '';
+
+          const score = parseEvalScore(evaluation?.calificacion?.nota);
+          const scoreLabel = score !== null ? `${score}/10` : 'sin nota';
+          const passed = score !== null ? score >= passScore : false;
+          status.textContent = passed
+            ? `✅ Patch cercano al de referencia (${scoreLabel})`
+            : `⚠️ Patch todavia lejos del de referencia (${scoreLabel})`;
+          status.className = `feedback-message ${passed ? 'correct' : 'incorrect'}`;
+
+          explanation.textContent = [
+            ensureEvalText(evaluation?.calificacion?.justificacion),
+            providerName ? `Proveedor: ${providerName}` : '',
+            modelName ? `Modelo: ${modelName}` : '',
+          ].filter(Boolean).join(' · ');
+
+          renderEvaluationCard('Resumen', evaluation?.resumen);
+          renderEvaluationCard('Logica principal', ensureEvalBool(evaluation?.tesis?.clara) ? 'Clara' : 'No clara');
+          renderEvaluationCard('Lectura de la logica', evaluation?.tesis?.explicacion);
+          renderEvaluationCard('Fortalezas', ensureEvalPair(evaluation?.fortalezas).filter(Boolean).join(' | '));
+          renderEvaluationCard('Debilidades', ensureEvalPair(evaluation?.debilidades).filter(Boolean).join(' | '));
+          renderEvaluationCard('Sugerencia', evaluation?.sugerencia);
+
+          const rawText = ensureEvalText(evaluation?.raw);
+          rawPre.textContent = rawText || '(sin salida cruda)';
+          rawDetails.hidden = !rawText;
+        };
+
+        if (previousEvaluation) {
+          paintEvaluation(
+            previousEvaluation,
+            ensureEvalText(previousAnswer.provider || previousRecord.provider || data.provider || 'ollama'),
+            ensureEvalText(previousAnswer.model || previousRecord.model || data.model),
+          );
+
+          if (previousSubmission && !allowEdit) {
+            textarea.disabled = true;
+            submitButton.disabled = true;
+          }
+        }
+
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+
+          const studentPatch = ensureEvalText(textarea.value);
+          if (!studentPatch) {
+            alert('Pega el patch del alumno antes de evaluar.');
+            return;
+          }
+
+          const minChars = Number.isFinite(Number(data.minChars))
+            ? Math.max(0, Math.round(Number(data.minChars)))
+            : 0;
+          if (minChars > 0 && studentPatch.length < minChars) {
+            alert(`El patch debe tener al menos ${minChars} caracteres.`);
+            return;
+          }
+
+          submitButton.disabled = true;
+          submitButton.textContent = 'Evaluando patch...';
+          status.textContent = 'Enviando patch al backend de correccion...';
+          status.className = 'feedback-message';
+          explanation.textContent = '';
+          cards.innerHTML = '';
+          rawDetails.hidden = true;
+          rawPre.textContent = '';
+          feedback.hidden = false;
+
+          try {
+            const response = await fetch('/api/ai/correct', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                taskType: 'patch',
+                consigna: data.prompt || data.title || '',
+                referencePatch: ensureEvalText(data.referencePatch),
+                studentPatch,
+                criteriaPrompts: Array.isArray(data.checks) ? data.checks : [],
+                evaluationPrompt: ensureEvalText(data.evaluationPrompt),
+                provider: ensureEvalText(data.provider || 'ollama') || 'ollama',
+                model: ensureEvalText(data.model) || undefined,
+              }),
+            });
+
+            const responseData = await response.json().catch(() => ({}));
+            if (!response.ok || !responseData?.ok) {
+              status.textContent = responseData?.error || 'No se pudo evaluar el patch.';
+              status.className = 'feedback-message incorrect';
+              rawPre.textContent = JSON.stringify(responseData || {}, null, 2);
+              rawDetails.hidden = false;
+              submitButton.disabled = false;
+              submitButton.textContent = ensureEvalText(data.submitLabel) || 'Evaluar patch';
+              return;
+            }
+
+            const normalizedEvaluation = normalizeAiEvaluation(responseData.evaluation || {});
+            const providerName = ensureEvalText(responseData.provider || data.provider || 'ollama') || 'ollama';
+            const modelName = ensureEvalText(responseData.model || data.model);
+            const score = parseEvalScore(normalizedEvaluation?.calificacion?.nota);
+            const isCorrect = score !== null ? score >= passScore : false;
+
+            paintEvaluation(normalizedEvaluation, providerName, modelName);
+
+            const answerPayload = {
+              type: 'patch_ai',
+              consigna: ensureEvalText(data.prompt || data.title),
+              referencePatch: ensureEvalText(data.referencePatch),
+              studentPatch,
+              checks: Array.isArray(data.checks) ? data.checks : [],
+              evaluationPrompt: ensureEvalText(data.evaluationPrompt),
+              provider: providerName,
+              model: modelName,
+              evaluation: normalizedEvaluation,
+              correctedAt: new Date().toISOString(),
+            };
+
+            const feedbackText =
+              ensureEvalText(normalizedEvaluation?.calificacion?.justificacion)
+              || ensureEvalText(normalizedEvaluation?.sugerencia);
+
+            const saved = await saveSubmission({
+              evalId: data.id,
+              answer: answerPayload,
+              isCorrect,
+              score,
+              feedback: feedbackText,
+              markAsGraded: score !== null,
+              meta: {
+                type: 'patch_ai',
+                answerText: studentPatch.slice(0, 160),
+                answerPreview: studentPatch.slice(0, 320),
+                provider: providerName,
+                model: modelName,
+                passScore,
+                aiEvaluation: normalizedEvaluation,
+              },
+            });
+
+            if (!saved) {
+              alert('La evaluación salió bien, pero no se pudo guardar la entrega.');
+              submitButton.disabled = false;
+              submitButton.textContent = allowEdit
+                ? 'Reevaluar patch'
+                : (ensureEvalText(data.submitLabel) || 'Evaluar patch');
+              return;
+            }
+
+            setProgressCompletion(data.id, isCorrect);
+
+            if (!allowEdit) {
+              textarea.disabled = true;
+              submitButton.disabled = true;
+            } else {
+              submitButton.disabled = false;
+              submitButton.textContent = 'Reevaluar patch';
+            }
+          } catch (error) {
+            console.error('Error evaluating patch_ai block:', error);
+            status.textContent = 'Fallo de red o backend no disponible.';
+            status.className = 'feedback-message incorrect';
+            submitButton.disabled = false;
+            submitButton.textContent = ensureEvalText(data.submitLabel) || 'Evaluar patch';
+          }
         });
 
         wrapper.appendChild(container);
@@ -6319,7 +6870,7 @@ a[node] -->|edge| b[hub]
           return forumMermaidPromise;
         }
 
-        function renderStaticMermaid(container, attempt = 0) {
+        const courseStaticMermaidRenderer = (container, attempt = 0) => {
           const nodes = Array.from(container.querySelectorAll('.mermaid'))
             .filter((node) => node instanceof HTMLElement)
             .filter((node) => !node.closest('#lesson-forum'))
@@ -6365,7 +6916,7 @@ a[node] -->|edge| b[hub]
                   if (source) node.textContent = source;
                 });
                 if (attempt < 3) {
-                  window.setTimeout(() => renderStaticMermaid(container, attempt + 1), 180 * (attempt + 1));
+                  window.setTimeout(() => courseStaticMermaidRenderer(container, attempt + 1), 180 * (attempt + 1));
                 } else {
                   console.error('Course mermaid render error:', error);
                 }
@@ -6374,7 +6925,8 @@ a[node] -->|edge| b[hub]
             .catch((error) => {
               console.error('Course mermaid loader error:', error);
             });
-        }
+        };
+        (globalThis as any).__musikiCourseStaticMermaidRenderer = courseStaticMermaidRenderer;
 
         function renderForumMermaid(container) {
           const nodes = Array.from(container.querySelectorAll('.mermaid'));
@@ -7607,13 +8159,15 @@ a[node] -->|edge| b[hub]
 
       const mountCourseContent = async () => {
         const pageRoot = document.querySelector('[data-course-layout-root]');
+        const hasPendingEvalHydration = Array.from(document.querySelectorAll('.eval-block-wrapper'))
+          .some((wrapper) => wrapper instanceof HTMLElement && wrapper.childElementCount === 0);
         const bootKey = [
           window.location.pathname,
           window.location.search,
           pageRoot instanceof HTMLElement ? pageRoot.dataset.livePageSlug || '' : '',
         ].join('::');
 
-        if (window.__musikiCourseContentBootKey === bootKey) {
+        if (window.__musikiCourseContentBootKey === bootKey && !hasPendingEvalHydration) {
           return;
         }
 
@@ -7657,7 +8211,10 @@ a[node] -->|edge| b[hub]
         try {
           const contentArea = document.querySelector('.content-area');
           if (contentArea instanceof HTMLElement) {
-            renderStaticMermaid(contentArea);
+            const renderCourseMermaid = (globalThis as any).__musikiCourseStaticMermaidRenderer;
+            if (typeof renderCourseMermaid === 'function') {
+              renderCourseMermaid(contentArea);
+            }
           }
         } catch (error) {
           console.error('Course mermaid bootstrap error:', error);
@@ -7694,6 +8251,11 @@ a[node] -->|edge| b[hub]
 
             if (evalData.type === 'wordcloud') {
               renderWordcloud(wrapper, evalData, index);
+              return;
+            }
+
+            if (evalData.type === 'patch_ai') {
+              renderPatchAI(wrapper, evalData, index);
               return;
             }
 
@@ -8171,6 +8733,102 @@ a[node] -->|edge| b[hub]
       }
       .mcc-submit {
         min-width: 16rem;
+      }
+      .patch-ai-block {
+        border-style: solid;
+      }
+      .patch-ai-meta {
+        margin: -0.3rem 0 1rem;
+        color: var(--c-fg-dim);
+        font-size: 0.9rem;
+      }
+      .patch-ai-criteria-label {
+        margin: 0.2rem 0 0.4rem;
+        font-weight: 600;
+      }
+      .patch-ai-criteria {
+        margin: 0 0 1rem 1.2rem;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .patch-ai-reference {
+        margin: 0.85rem 0 1rem;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg);
+        overflow: hidden;
+      }
+      .patch-ai-reference summary,
+      .patch-ai-raw summary {
+        cursor: pointer;
+        padding: 0.75rem 0.9rem;
+        font-weight: 600;
+      }
+      .patch-ai-form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .patch-ai-textarea {
+        min-height: 18rem;
+        width: 100%;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        resize: vertical;
+      }
+      .patch-ai-textarea:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .patch-ai-feedback {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+      }
+      .patch-ai-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.75rem;
+      }
+      .patch-ai-card {
+        padding: 0.85rem 0.9rem;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg-mute);
+      }
+      .patch-ai-card-title {
+        margin: 0 0 0.45rem;
+        font-size: 0.82rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+      }
+      .patch-ai-card-body {
+        margin: 0;
+        line-height: 1.55;
+      }
+      .patch-ai-code {
+        margin: 0;
+        padding: 0.9rem;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        border-top: 1px solid var(--c-border);
+        background: color-mix(in srgb, var(--c-bg) 86%, black 14%);
+      }
+      .patch-ai-raw {
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg);
+        overflow: hidden;
       }
       .poll-block {
         border-style: solid;

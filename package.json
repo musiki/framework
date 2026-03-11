@@ -8,6 +8,7 @@
     "test": "node --test \"src/lib/live/*.test.mjs\"",
     "preflight": "bash scripts/preflight.sh",
     "content:pull": "node scripts/pull-sources.mjs",
+    "content:watch": "node scripts/watch-content.mjs",
     "content:assemble:dry": "node scripts/assemble-content.mjs",
     "content:assemble": "node scripts/assemble-content.mjs --apply",
     "repo:materia:new": "node scripts/scaffold-materia-repo.mjs",

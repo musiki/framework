@@ -835,6 +835,7 @@ const correctionConfigured = Boolean(import.meta.env.CORRECTION_API_URL && impor
         key,
         texto,
         rubrica,
+        requestBody = null,
         provider,
         model,
         runBtn,
@@ -844,7 +845,7 @@ const correctionConfigured = Boolean(import.meta.env.CORRECTION_API_URL && impor
         cardsEl,
         techEl,
       }) => {
-        if (!texto) {
+        if (!texto && !(requestBody && typeof requestBody === 'object')) {
           setStatus(statusEl, 'Debes completar los campos requeridos para evaluar.');
           return null;
         }
@@ -854,17 +855,24 @@ const correctionConfigured = Boolean(import.meta.env.CORRECTION_API_URL && impor
 
         try {
           const fullRubric = withGradeRubric(rubrica);
+          const body = requestBody && typeof requestBody === 'object'
+            ? {
+                ...requestBody,
+                model: model || requestBody.model || undefined,
+                provider: provider || requestBody.provider || 'ollama',
+              }
+            : {
+                texto,
+                rubrica: fullRubric || undefined,
+                model: model || undefined,
+                provider: provider || 'ollama',
+              };
           const response = await fetch('/api/ai/correct', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              texto,
-              rubrica: fullRubric || undefined,
-              model: model || undefined,
-              provider: provider || 'ollama',
-            }),
+            body: JSON.stringify(body),
           });
 
           const data = await response.json();
@@ -1107,23 +1115,17 @@ const correctionConfigured = Boolean(import.meta.env.CORRECTION_API_URL && impor
         }
 
         const customPrompts = parseLines(d2PromptsEl.value);
-        const rubricParts = [...PATCH_BASE_RUBRIC];
-        if (customPrompts.length > 0) {
-          rubricParts.push(`Criterios adicionales del docente: ${customPrompts.join(' | ')}`);
-        }
-
-        const composedText = [
-          'Evaluación de patch visual (Max/MSP o Pure Data).',
-          `Consigna del docente:\n${consigna}`,
-          `Patch de referencia (teacher):\n${referencePatch}`,
-          `Patch entregado por el alumno:\n${studentPatch}`,
-          'Nota de evaluación: la posición visual de objetos es secundaria; enfocar en tipos de objetos, conexiones y efecto lógico.',
-        ].join('\n\n');
 
         await runEvaluation({
           key: 'd2',
-          texto: composedText,
-          rubrica: rubricParts.join('; '),
+          requestBody: {
+            taskType: 'patch',
+            consigna,
+            referencePatch,
+            studentPatch,
+            criteriaPrompts: [...PATCH_BASE_RUBRIC, ...customPrompts],
+            evaluationPrompt: 'Ignora toda informacion de posicion de objetos y compara los patches como grafos de objetos y conexiones.',
+          },
           provider: d2ProviderEl.value,
           model: d2ModelEl.value,
           runBtn: d2RunBtn,

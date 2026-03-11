@@ -152,6 +152,12 @@ const toOptionTextList = (value: unknown): string[] => {
 
 const buildEvalSnapshot = (parsed: Record<string, unknown>): Record<string, unknown> => {
   const options = toOptionTextList((parsed as Record<string, unknown>).options);
+  const checks = toOptionTextList(
+    (parsed as Record<string, unknown>).checks
+      || (parsed as Record<string, unknown>).criteriaPrompts
+      || [],
+  );
+  const referencePatch = asText((parsed as Record<string, unknown>).referencePatch);
   return sortValue({
     id: asText((parsed as Record<string, unknown>).id),
     type: asText((parsed as Record<string, unknown>).type, 'unknown'),
@@ -166,6 +172,14 @@ const buildEvalSnapshot = (parsed: Record<string, unknown>): Record<string, unkn
     showResults: Boolean((parsed as Record<string, unknown>).showResults),
     timed: Boolean((parsed as Record<string, unknown>).timed),
     timerSeconds: Number((parsed as Record<string, unknown>).timerSeconds || 0) || 0,
+    referencePatchHash: referencePatch ? hashSnapshot(referencePatch) : '',
+    referencePatchChars: referencePatch.length,
+    evaluationPrompt: asText((parsed as Record<string, unknown>).evaluationPrompt),
+    checks,
+    provider: asText((parsed as Record<string, unknown>).provider),
+    model: asText((parsed as Record<string, unknown>).model),
+    passScore: Number((parsed as Record<string, unknown>).passScore || 0) || 0,
+    minChars: Number((parsed as Record<string, unknown>).minChars || 0) || 0,
   }) as Record<string, unknown>;
 };
 

@@ -27,6 +27,7 @@ export const config = {
   temperature: parseNumber(process.env.TEMPERATURE, 0.1),
   numPredict: parseNumber(process.env.NUM_PREDICT, 512),
   maxTextChars: parseNumber(process.env.MAX_TEXT_CHARS, 12000),
+  maxPromptChars: parseNumber(process.env.MAX_PROMPT_CHARS, 50000),
   rateLimitMax: parseNumber(process.env.RATE_LIMIT_MAX, 60),
   rateLimitWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
 };
@@ -37,4 +38,8 @@ if (config.port <= 0 || config.port > 65535) {
 
 if (config.maxTextChars < 200) {
   throw new Error('MAX_TEXT_CHARS must be at least 200');
+}
+
+if (config.maxPromptChars < config.maxTextChars) {
+  throw new Error('MAX_PROMPT_CHARS must be greater than or equal to MAX_TEXT_CHARS');
 }

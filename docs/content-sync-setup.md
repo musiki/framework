@@ -63,10 +63,40 @@ Nota de bootstrap:
 ## Comandos locales útiles (framework)
 
 - `npm run content:pull`
+- `npm run content:watch`
 - `npm run content:assemble:dry`
 - `npm run content:assemble`
 
 `content:assemble:dry` genera `.tmp/assembled-content` y el reporte `.tmp/assemble-report.json` sin tocar `src/content`.
+
+## Watch local de contenido
+
+Para evitar correr `content:pull` + `content:assemble` a mano en cada guardado, el framework ahora incluye:
+
+- `npm run content:watch`
+
+Este watcher:
+
+- se activa solo cuando lo lanzas manualmente
+- observa las fuentes locales configuradas con `localPath` en `config/sources.manifest.json`
+- reacciona a eventos de filesystem (save, rename, delete), no a cada tecla del editor
+- agrupa cambios rapidos con debounce de `1200ms` antes de correr sync
+- ejecuta `content:pull` y luego `content:assemble`
+- si llegan mas cambios mientras sync esta corriendo, encola una sola corrida adicional al final
+
+Flags utiles:
+
+- `npm run content:watch -- --no-initial` para no hacer el primer sync al arrancar
+- `npm run content:watch -- --debounce 2000` para esperar 2 segundos de silencio antes de sincronizar
+- `npm run content:watch -- --sources i1,cym` para vigilar solo algunas fuentes
+
+Workflow local recomendado:
+
+1. editar contenido en el repo de materia, por ejemplo `../i1/cursos/**`
+2. en otra terminal, correr `npm run content:watch`
+3. levantar Astro con `npm run dev`
+
+De ese modo `src/content` sigue siendo generado, pero la regeneracion queda automatizada mientras trabajas.
 
 Para Vercel:
 

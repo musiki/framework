@@ -92,17 +92,27 @@ app.post('/api/correct', {
   schema: {
     body: {
       type: 'object',
-      required: ['texto'],
       properties: {
-        texto: { type: 'string', minLength: 1 },
+        texto: { type: 'string' },
         rubrica: { type: 'string' },
         model: { type: 'string' },
+        promptOverride: { type: 'string' },
       },
       additionalProperties: false,
     },
   },
 }, async (request, reply) => {
-  const { texto, rubrica, model } = request.body;
+  const texto = typeof request.body?.texto === 'string' ? request.body.texto.trim() : '';
+  const rubrica = typeof request.body?.rubrica === 'string' ? request.body.rubrica : '';
+  const model = typeof request.body?.model === 'string' ? request.body.model.trim() : '';
+  const promptOverride = typeof request.body?.promptOverride === 'string' ? request.body.promptOverride.trim() : '';
+
+  if (!promptOverride && !texto) {
+    return reply.code(400).send({
+      ok: false,
+      error: 'texto or promptOverride is required',
+    });
+  }
 
   if (texto.length > config.maxTextChars) {
     return reply.code(413).send({
@@ -111,8 +121,15 @@ app.post('/api/correct', {
     });
   }
 
+  if (promptOverride.length > config.maxPromptChars) {
+    return reply.code(413).send({
+      ok: false,
+      error: `Prompt demasiado largo. Máximo ${config.maxPromptChars} caracteres.`,
+    });
+  }
+
   const selectedModel = model || config.ollamaModel;
-  const prompt = createCorrectionPrompt({ studentText: texto, rubricText: rubrica });
+  const prompt = promptOverride || createCorrectionPrompt({ studentText: texto, rubricText: rubrica });
 
   try {
     const ollamaResponse = await fetch(`${config.ollamaBaseUrl}/api/generate`, {

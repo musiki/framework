@@ -66,6 +66,78 @@ const cleanId = (rawId, fallbackId) => {
   return candidate || fallbackId;
 };
 
+const normalizeTripleQuotedEvalYaml = (rawBlock = '') => {
+  const lines = String(rawBlock).split(/\r?\n/g);
+  const normalized = [];
+
+  const normalizeBlockContent = (blockLines, baseIndent) => {
+    const expanded = blockLines.map((item) => String(item || '').replace(/\t/g, '  '));
+    const meaningful = expanded.filter((item) => item.trim().length > 0);
+    const minIndent = meaningful.reduce((acc, item) => {
+      const match = item.match(/^ */);
+      const indent = match ? match[0].length : 0;
+      return Math.min(acc, indent);
+    }, Number.POSITIVE_INFINITY);
+
+    const safeIndent = Number.isFinite(minIndent) ? minIndent : 0;
+    return expanded.map((item) => {
+      const next = safeIndent > 0 ? item.slice(safeIndent) : item;
+      return `${baseIndent}  ${next}`;
+    });
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const startMatch = line.match(/^(\s*)([A-Za-z][A-Za-z0-9_-]*)\s*(:|=)\s*"""(.*)$/);
+
+    if (!startMatch) {
+      normalized.push(line);
+      continue;
+    }
+
+    const [, indent, key, , rest] = startMatch;
+    const inlineCloseIndex = rest.indexOf('"""');
+
+    normalized.push(`${indent}${key}: |2`);
+
+    if (inlineCloseIndex !== -1) {
+      const inlineContent = rest.slice(0, inlineCloseIndex);
+      if (inlineContent.length > 0) {
+        normalized.push(...normalizeBlockContent([inlineContent], indent));
+      }
+      continue;
+    }
+
+    const blockLines = [];
+    if (rest.length > 0) blockLines.push(rest);
+
+    let closed = false;
+    while (index + 1 < lines.length) {
+      index += 1;
+      const current = lines[index];
+      const closeIndex = current.indexOf('"""');
+
+      if (closeIndex === -1) {
+        blockLines.push(current);
+        continue;
+      }
+
+      const beforeClose = current.slice(0, closeIndex);
+      if (beforeClose.length > 0) blockLines.push(beforeClose);
+      closed = true;
+      break;
+    }
+
+    if (blockLines.length > 0) {
+      normalized.push(...normalizeBlockContent(blockLines, indent));
+    }
+
+    if (!closed) break;
+  }
+
+  return normalized.join('\n');
+};
+
 const normalizeLooseEvalYaml = (rawBlock = '') =>
   String(rawBlock)
     .split(/\r?\n/g)
@@ -81,7 +153,7 @@ const loadEvalYaml = (blockValue) => {
   try {
     return yaml.load(blockValue);
   } catch (baseError) {
-    const normalized = normalizeLooseEvalYaml(blockValue);
+    const normalized = normalizeLooseEvalYaml(normalizeTripleQuotedEvalYaml(blockValue));
     if (normalized === blockValue) throw baseError;
     return yaml.load(normalized);
   }
@@ -257,6 +329,46 @@ const normalizeWordcloud = (raw, common) => {
   };
 };
 
+const normalizePatchAi = (raw, common) => {
+  const checks = toList(raw.checks || raw.criteriaPrompts || raw.criteria_prompts || raw.prompts)
+    .map((item) => asText(item))
+    .filter(Boolean);
+
+  return {
+    ...common,
+    type: 'patch_ai',
+    prompt: asText(raw.prompt || raw.question || raw.title || ''),
+    referencePatch: asText(
+      raw.referencePatch
+      || raw.reference_patch
+      || raw.patchGuide
+      || raw.patch_guide
+      || raw.guidePatch
+      || raw.patch_referencia
+      || raw.patchReferencia,
+    ),
+    evaluationPrompt: asText(
+      raw.evaluationPrompt
+      || raw.evaluatorPrompt
+      || raw.modelPrompt
+      || raw.aiPrompt
+      || raw.systemPrompt,
+    ),
+    checks,
+    provider: asText(raw.provider, 'ollama').toLowerCase() || 'ollama',
+    model: asText(raw.model),
+    passScore: asPositiveNumber(raw.passScore, 6),
+    minChars: asPositiveInteger(raw.minChars, 0),
+    placeholder: asText(
+      raw.placeholder
+      || raw.studentPlaceholder
+      || raw.student_placeholder
+      || 'Pega aqui el patch del alumno.',
+    ),
+    submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Evaluar patch'),
+  };
+};
+
 export function parseEvalBlock(blockValue, options = {}) {
   const { fallbackId = 'eval-item' } = options;
 
@@ -282,6 +394,7 @@ export function parseEvalBlock(blockValue, options = {}) {
   if (type === 'mcc') return normalizeMcc(parsed, common);
   if (type === 'poll') return normalizePoll(parsed, common);
   if (type === 'wordcloud') return normalizeWordcloud(parsed, common);
+  if (type === 'patch_ai') return normalizePatchAi(parsed, common);
 
   return {
     ...common,

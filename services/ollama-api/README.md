@@ -14,9 +14,12 @@ API Node.js/Fastify para corrección de textos con Ollama local.
 {
   "texto": "Texto del estudiante",
   "rubrica": "Opcional. Rúbrica custom",
-  "model": "Opcional. Ejemplo: llama3.2"
+  "model": "Opcional. Ejemplo: llama3.2",
+  "promptOverride": "Opcional. Prompt completo ya construido por el caller"
 }
 ```
+
+`promptOverride` permite casos como `patch_ai`, donde el frontend/API arma un prompt estructurado a partir del patch de referencia y el patch del alumno sin pasar por la plantilla genérica de corrección de texto.
 
 ## Response (shape)
 

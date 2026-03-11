@@ -1,7 +1,9 @@
 import type { APIRoute } from 'astro';
+import { buildPatchEvaluationPrompt } from '../../../lib/ai/patch-prompt';
 
 const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 65000);
 const maxTextChars = 12000;
+const maxPromptChars = Number(import.meta.env.CORRECTION_API_MAX_PROMPT_CHARS || 50000);
 const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
 const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 
@@ -57,6 +59,23 @@ const ensurePair = (value: unknown): string[] => {
   const out = items.slice(0, 2);
   while (out.length < 2) out.push('');
   return out;
+};
+
+const ensureStringList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => ensureText(item))
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n|;/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
 };
 
 const cleanupJsonCandidate = (text: unknown): string => {
@@ -249,6 +268,13 @@ ${studentText}
 """`;
 };
 
+type CorrectionRequest = {
+  texto?: string;
+  rubrica?: string;
+  model?: string;
+  promptOverride?: string;
+};
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
   const currentUser = session?.user;
@@ -268,23 +294,71 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const rubrica = ensureText(body.rubrica) || undefined;
   const model = ensureText(body.model) || undefined;
   const provider = ensureText(body.provider).toLowerCase() || 'ollama';
+  const taskType = ensureText(body.taskType || body.type).toLowerCase();
+  let requestPayload: CorrectionRequest = {
+    texto,
+    rubrica,
+    model,
+  };
 
-  if (!texto) {
-    return json({ error: 'texto is required' }, 400);
-  }
+  if (taskType === 'patch' || taskType === 'patch_ai') {
+    const consigna = ensureText(body.consigna || body.prompt);
+    const referencePatch = ensureText(body.referencePatch || body.reference_patch);
+    const studentPatch = ensureText(body.studentPatch || body.student_patch || body.texto);
+    const evaluationPrompt = ensureText(
+      body.evaluationPrompt
+      || body.evaluatorPrompt
+      || body.modelPrompt
+      || body.aiPrompt
+      || body.systemPrompt,
+    );
+    const criteriaPrompts = ensureStringList(
+      body.criteriaPrompts
+      || body.criteria_prompts
+      || body.checks
+      || body.prompts,
+    );
 
-  if (texto.length > maxTextChars) {
-    return json({ error: `texto too long (max ${maxTextChars} chars)` }, 413);
+    if (!consigna || !referencePatch || !studentPatch) {
+      return json({ error: 'consigna, referencePatch and studentPatch are required for patch task' }, 400);
+    }
+
+    const promptOverride = buildPatchEvaluationPrompt({
+      consigna,
+      referencePatch,
+      studentPatch,
+      criteriaPrompts,
+      evaluationPrompt,
+    });
+
+    if (promptOverride.length > maxPromptChars) {
+      return json({ error: `prompt too long (max ${maxPromptChars} chars)` }, 413);
+    }
+
+    requestPayload = {
+      texto: studentPatch,
+      rubrica: promptOverride,
+      promptOverride,
+      model,
+    };
+  } else {
+    if (!texto) {
+      return json({ error: 'texto is required' }, 400);
+    }
+
+    if (texto.length > maxTextChars) {
+      return json({ error: `texto too long (max ${maxTextChars} chars)` }, 413);
+    }
   }
 
   if (provider === 'deepseek') {
-    return handleDeepSeek({ texto, rubrica, model });
+    return handleDeepSeek(requestPayload);
   }
 
-  return handleOllama({ texto, rubrica, model });
+  return handleOllama(requestPayload);
 };
 
-async function handleOllama({ texto, rubrica, model }: { texto: string; rubrica?: string; model?: string }): Promise<Response> {
+async function handleOllama({ texto, rubrica, model, promptOverride }: CorrectionRequest): Promise<Response> {
   const correctionApiUrl = import.meta.env.CORRECTION_API_URL;
   const correctionApiToken = import.meta.env.CORRECTION_API_TOKEN;
 
@@ -309,7 +383,12 @@ async function handleOllama({ texto, rubrica, model }: { texto: string; rubrica?
         Authorization: `Bearer ${correctionApiToken}`,
       },
       signal: AbortSignal.timeout(timeoutMs),
-      body: JSON.stringify({ texto, rubrica, model }),
+      body: JSON.stringify({
+        texto,
+        rubrica,
+        model,
+        promptOverride,
+      }),
     });
 
     const responseText = await response.text();
@@ -356,7 +435,7 @@ async function handleOllama({ texto, rubrica, model }: { texto: string; rubrica?
   }
 }
 
-async function handleDeepSeek({ texto, rubrica, model }: { texto: string; rubrica?: string; model?: string }): Promise<Response> {
+async function handleDeepSeek({ texto, rubrica, model, promptOverride }: CorrectionRequest): Promise<Response> {
   const deepSeekApiKey = import.meta.env.DEEPSEEK_API_KEY;
   const deepSeekBaseUrl = ensureText(import.meta.env.DEEPSEEK_BASE_URL) || DEFAULT_DEEPSEEK_BASE_URL;
   const deepSeekModel = model || ensureText(import.meta.env.DEEPSEEK_MODEL) || DEFAULT_DEEPSEEK_MODEL;
@@ -373,7 +452,7 @@ async function handleDeepSeek({ texto, rubrica, model }: { texto: string; rubric
     );
   }
 
-  const prompt = createDeepSeekPrompt({ studentText: texto, rubricText: rubrica });
+  const prompt = ensureText(promptOverride) || createDeepSeekPrompt({ studentText: ensureText(texto), rubricText: rubrica });
 
   try {
     const response = await fetch(`${deepSeekBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
