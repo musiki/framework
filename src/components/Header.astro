@@ -211,9 +211,6 @@ const withActiveCourse = (href: string) => {
 							</svg>
 						</button>
 						<div class="course-dropdown" id="course-dropdown" role="menu">
-							<a href="/cursos" role="menuitem" class="course-dropdown-link">
-								<span class="course-dropdown-title">Cursos</span>
-							</a>
 							{enrolledCourses.map((course) => {
 								const isCurrent = normalizeCourseIdKey(course.courseId) === normalizeCourseIdKey(resolvedActiveCourseId);
 								const courseHref = `/cursos/${encodeCoursePath(course.pathSegment || course.courseId)}?course=${encodeURIComponent(course.courseId)}`;
@@ -934,11 +931,12 @@ const withActiveCourse = (href: string) => {
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.52rem 0.56rem;
+		padding: 0.26rem 0.56rem;
 		text-decoration: none;
 		color: var(--c-fg);
 		border-radius: 6px;
 		border-bottom: none;
+		line-height: 1.1;
 	}
 	.course-dropdown-link:hover {
 		background: var(--c-bg-mute);
@@ -947,7 +945,7 @@ const withActiveCourse = (href: string) => {
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
 	}
 	.course-dropdown-title {
-		font-size: 0.86rem;
+		font-size: 0.95rem;
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}

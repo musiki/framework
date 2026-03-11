@@ -39,10 +39,26 @@ const getLessonBaseSlug = (entry: CourseEntry) => {
   return toCoursePathSlug(preferred) || toCoursePathSlug(getEntryBasename(entry.id)) || getEntryBasename(entry.id);
 };
 
+const getLessonAliasSlugs = (entry: CourseEntry) => {
+  const data = (entry.data || {}) as Record<string, unknown>;
+  const explicitSlug = normalizeText(data.slug || data.shortSlug);
+  if (!explicitSlug) return [];
+
+  return Array.from(
+    new Set(
+      [
+        toCoursePathSlug(data.title),
+        toCoursePathSlug(getEntryBasename(entry.id)),
+      ].filter(Boolean),
+    ),
+  );
+};
+
 export type CourseLessonPathIndex = {
   coursePathSegment: string;
   entryByLegacyPath: Map<string, CourseEntry>;
   entryByShortPath: Map<string, CourseEntry>;
+  entryByAliasPath: Map<string, CourseEntry>;
   pathByEntryId: Map<string, string>;
 };
 
@@ -54,15 +70,24 @@ export const buildCourseLessonPathIndex = (
   const coursePathSegment = getPreferredCoursePathSegment(canonicalCourseId, courseData);
   const entryByLegacyPath = new Map<string, CourseEntry>();
   const entryByShortPath = new Map<string, CourseEntry>();
+  const entryByAliasPath = new Map<string, CourseEntry>();
   const pathByEntryId = new Map<string, string>();
 
   const baseSlugCounts = new Map<string, number>();
   const baseSlugByEntryId = new Map<string, string>();
+  const aliasSlugCounts = new Map<string, number>();
+  const aliasSlugsByEntryId = new Map<string, string[]>();
 
   for (const lesson of lessons) {
     const baseSlug = getLessonBaseSlug(lesson);
     baseSlugByEntryId.set(lesson.id, baseSlug);
     baseSlugCounts.set(baseSlug, (baseSlugCounts.get(baseSlug) || 0) + 1);
+
+    const aliasSlugs = getLessonAliasSlugs(lesson);
+    aliasSlugsByEntryId.set(lesson.id, aliasSlugs);
+    for (const aliasSlug of aliasSlugs) {
+      aliasSlugCounts.set(aliasSlug, (aliasSlugCounts.get(aliasSlug) || 0) + 1);
+    }
   }
 
   const usedShortPaths = new Set<string>();
@@ -92,12 +117,23 @@ export const buildCourseLessonPathIndex = (
     usedShortPaths.add(nextShortPath);
     entryByShortPath.set(nextShortPath, lesson);
     pathByEntryId.set(lesson.id, nextShortPath);
+
+    const aliasSlugs = aliasSlugsByEntryId.get(lesson.id) || [];
+    for (const aliasSlug of aliasSlugs) {
+      if (!aliasSlug) continue;
+      if (aliasSlug === nextShortPath) continue;
+      if (entryByLegacyPath.has(aliasSlug)) continue;
+      if (entryByShortPath.has(aliasSlug)) continue;
+      if ((aliasSlugCounts.get(aliasSlug) || 0) > 1) continue;
+      entryByAliasPath.set(aliasSlug, lesson);
+    }
   }
 
   return {
     coursePathSegment,
     entryByLegacyPath,
     entryByShortPath,
+    entryByAliasPath,
     pathByEntryId,
   };
 };
@@ -124,6 +160,15 @@ export const findLessonByCoursePath = (
       entry: byShort,
       shortPath: pathIndex.pathByEntryId.get(byShort.id) || normalizedRequestedPath,
       isLegacyPath: false,
+    };
+  }
+
+  const byAlias = pathIndex.entryByAliasPath.get(normalizedRequestedPath);
+  if (byAlias) {
+    return {
+      entry: byAlias,
+      shortPath: pathIndex.pathByEntryId.get(byAlias.id) || normalizedRequestedPath,
+      isLegacyPath: true,
     };
   }
 
