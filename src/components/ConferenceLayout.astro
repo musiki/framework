@@ -845,169 +845,181 @@ if (
     <div class="conference-sidebar-scroll">
       <section class="conference-sidebar-section conference-sidebar-section--meta">
         <div class="conference-meta-shell">
-          <div class="conference-meta-fields">
-            <div class="conference-field">
+          <div class="conference-meta-top">
+            <div class="conference-field conference-field--room">
               <label for="conference-room-input">Sala</label>
               <input id="conference-room-input" name="room" type="text" value={defaultRoom} data-room-input />
             </div>
 
-            <details class="conference-session-setup" aria-label="Session setup" data-session-setup>
-              <summary class="conference-session-setup-summary">
-                <span class="conference-sidebar-heading">SETUP SESSION</span>
-              </summary>
+            <div class="conference-self-preview-shell">
+              <div
+                class="conference-self-preview"
+                data-slot="identity-preview"
+                data-empty-label="Camera preview"
+              ></div>
+            </div>
+          </div>
 
-              <div class="conference-session-setup-body">
-                <div class="conference-field">
-                  <label for="conference-identity-input">Identity</label>
+          <details class="conference-session-setup" aria-label="Session setup" data-session-setup>
+            <summary class="conference-session-setup-summary">
+              <span class="conference-sidebar-heading">SETUP SESSION</span>
+            </summary>
+
+            <div class="conference-session-setup-body">
+              <div class="conference-field">
+                <label for="conference-identity-input">Identity</label>
+                <input
+                  id="conference-identity-input"
+                  name="identity"
+                  type="text"
+                  value={defaultIdentity}
+                  data-identity-input
+                />
+              </div>
+
+              <div class="conference-field">
+                <label for="conference-name-input">Nombre</label>
+                <div class="conference-name-row">
+                  <input id="conference-name-input" name="name" type="text" value={defaultName} data-name-input />
+                  <span class="conference-role-tag" data-role-label
+                    >{defaultRole === 'teacher' ? 'teacher' : 'student'}</span
+                  >
+                </div>
+                <input type="hidden" name="role" value={defaultRole} data-role-input />
+              </div>
+
+              <div class="conference-field">
+                <label for="conference-audio-input-select-sidebar">MIC IN</label>
+                <select
+                  id="conference-audio-input-select-sidebar"
+                  name="audio-input-sidebar"
+                  data-audio-input-select
+                  data-audio-input-select-sidebar
+                >
+                  <option value="">Selecciona un microfono</option>
+                </select>
+              </div>
+
+              <div class="conference-field">
+                <label for="conference-video-input-select-sidebar">CAM IN</label>
+                <select
+                  id="conference-video-input-select-sidebar"
+                  name="video-input-sidebar"
+                  data-video-input-select
+                  data-video-input-select-sidebar
+                >
+                  <option value="">Selecciona una camara</option>
+                </select>
+              </div>
+
+              <div class="conference-field">
+                <label for="conference-circle-zoom-input">Circle preview zoom</label>
+                <div class="conference-range-row">
                   <input
-                    id="conference-identity-input"
-                    name="identity"
-                    type="text"
-                    value={defaultIdentity}
-                    data-identity-input
+                    id="conference-circle-zoom-input"
+                    name="circle-preview-zoom"
+                    type="range"
+                    min="0.8"
+                    max="4"
+                    step="0.02"
+                    value="1"
+                    data-preview-zoom-input
                   />
+                  <output for="conference-circle-zoom-input" data-preview-zoom-output>1.00x</output>
                 </div>
+              </div>
 
-                <div class="conference-field">
-                  <label for="conference-name-input">Nombre</label>
-                  <div class="conference-name-row">
-                    <input id="conference-name-input" name="name" type="text" value={defaultName} data-name-input />
-                    <span class="conference-role-tag" data-role-label
-                      >{defaultRole === 'teacher' ? 'teacher' : 'student'}</span
-                    >
-                  </div>
-                  <input type="hidden" name="role" value={defaultRole} data-role-input />
-                </div>
+              <div class="conference-field conference-field--checkbox">
+                <label class="conference-checkbox-row" for="conference-show-circle-input">
+                  <input
+                    id="conference-show-circle-input"
+                    name="show-circle"
+                    type="checkbox"
+                    checked
+                    data-show-circle-input
+                  />
+                  <span>Show Circle</span>
+                </label>
+              </div>
 
-                <div class="conference-field">
-                  <label for="conference-audio-input-select-sidebar">MIC IN</label>
+              <div class="conference-field conference-field--checkbox">
+                <label class="conference-checkbox-row" for="conference-blur-background-input">
+                  <input
+                    id="conference-blur-background-input"
+                    name="blur-background"
+                    type="checkbox"
+                    data-preview-blur-input
+                  />
+                  <span>Blur Background</span>
+                </label>
+              </div>
+
+              <div class="conference-field conference-field--checkbox">
+                <label class="conference-checkbox-row" for="conference-invert-video-input">
+                  <input
+                    id="conference-invert-video-input"
+                    name="invert-video"
+                    type="checkbox"
+                    data-preview-invert-input
+                  />
+                  <span>Invert Video</span>
+                </label>
+              </div>
+
+              <div class="conference-field">
+                <label for="conference-recording-preset-select">Recording Preset</label>
+                <select
+                  id="conference-recording-preset-select"
+                  name="recording-preset"
+                  data-recording-preset-select
+                >
+                  <option value="landscape-1080">1080p</option>
+                  <option value="instagram-story">Instagram Story</option>
+                  <option value="tiktok">TikTok</option>
+                </select>
+              </div>
+
+              <div class="conference-session-controls" data-session-controls-field hidden>
+                <div class="conference-session-controls-heading">SESSION CONTROL</div>
+
+                <div class="conference-field" data-session-leader-field>
+                  <label for="conference-session-leader-select">DELEGAR SESION</label>
                   <select
-                    id="conference-audio-input-select-sidebar"
-                    name="audio-input-sidebar"
-                    data-audio-input-select
-                    data-audio-input-select-sidebar
+                    id="conference-session-leader-select"
+                    name="session-leader"
+                    data-session-leader-select
                   >
-                    <option value="">Selecciona un microfono</option>
+                    <option value="">Sin teachers conectados</option>
                   </select>
-                </div>
-
-                <div class="conference-field">
-                  <label for="conference-video-input-select-sidebar">CAM IN</label>
-                  <select
-                    id="conference-video-input-select-sidebar"
-                    name="video-input-sidebar"
-                    data-video-input-select
-                    data-video-input-select-sidebar
-                  >
-                    <option value="">Selecciona una camara</option>
-                  </select>
-                </div>
-
-                <div class="conference-field">
-                  <label for="conference-circle-zoom-input">Circle preview zoom</label>
-                  <div class="conference-range-row">
-                    <input
-                      id="conference-circle-zoom-input"
-                      name="circle-preview-zoom"
-                      type="range"
-                      min="0.8"
-                      max="4"
-                      step="0.02"
-                      value="1"
-                      data-preview-zoom-input
-                    />
-                    <output for="conference-circle-zoom-input" data-preview-zoom-output>1.00x</output>
-                  </div>
                 </div>
 
                 <div class="conference-field conference-field--checkbox">
-                  <label class="conference-checkbox-row" for="conference-show-circle-input">
+                  <label class="conference-checkbox-row" for="conference-session-allow-instruments-input">
                     <input
-                      id="conference-show-circle-input"
-                      name="show-circle"
+                      id="conference-session-allow-instruments-input"
+                      name="session-allow-instruments"
                       type="checkbox"
                       checked
-                      data-show-circle-input
+                      data-session-allow-instruments-input
                     />
-                    <span>Show Circle</span>
+                    <span>Allow instruments</span>
                   </label>
                 </div>
 
-                <div class="conference-field conference-field--checkbox">
-                  <label class="conference-checkbox-row" for="conference-blur-background-input">
-                    <input
-                      id="conference-blur-background-input"
-                      name="blur-background"
-                      type="checkbox"
-                      data-preview-blur-input
-                    />
-                    <span>Blur Background</span>
-                  </label>
-                </div>
+                <button
+                  type="button"
+                  class="conference-session-action"
+                  data-session-mute-all-button
+                  title="Mute all"
+                  aria-label="Mute all"
+                >
+                  MUTE ALL
+                </button>
 
-                <div class="conference-field conference-field--checkbox">
-                  <label class="conference-checkbox-row" for="conference-invert-video-input">
-                    <input
-                      id="conference-invert-video-input"
-                      name="invert-video"
-                      type="checkbox"
-                      data-preview-invert-input
-                    />
-                    <span>Invert Video</span>
-                  </label>
-                </div>
-
-                <div class="conference-field">
-                  <label for="conference-recording-preset-select">Recording Preset</label>
-                  <select
-                    id="conference-recording-preset-select"
-                    name="recording-preset"
-                    data-recording-preset-select
-                  >
-                    <option value="landscape-1080">1080p</option>
-                    <option value="instagram-story">Instagram Story</option>
-                    <option value="tiktok">TikTok</option>
-                  </select>
-                </div>
-
-                <div class="conference-session-controls" data-session-controls-field hidden>
-                  <div class="conference-session-controls-heading">SESSION CONTROL</div>
-
-                  <div class="conference-field" data-session-leader-field>
-                    <label for="conference-session-leader-select">DELEGAR SESION</label>
-                    <select
-                      id="conference-session-leader-select"
-                      name="session-leader"
-                      data-session-leader-select
-                    >
-                      <option value="">Sin teachers conectados</option>
-                    </select>
-                  </div>
-
-                  <div class="conference-field conference-field--checkbox">
-                    <label class="conference-checkbox-row" for="conference-session-allow-instruments-input">
-                      <input
-                        id="conference-session-allow-instruments-input"
-                        name="session-allow-instruments"
-                        type="checkbox"
-                        checked
-                        data-session-allow-instruments-input
-                      />
-                      <span>Allow instruments</span>
-                    </label>
-                  </div>
-
-                  <button
-                    type="button"
-                    class="conference-session-action"
-                    data-session-mute-all-button
-                  >
-                    MUTE ALL
-                  </button>
+                <details class="conference-room-invite-panel">
+                  <summary class="conference-room-invite-panel-summary">LINK EXTERNO</summary>
 
                   <div class="conference-room-invite-controls">
-                    <div class="conference-session-controls-heading">INVITE EXTERNO</div>
-
                     <div class="conference-field">
                       <label for="conference-external-password-input">Password externos</label>
                       <input
@@ -1050,24 +1062,30 @@ if (
                     <div class="conference-session-action-row">
                       <button
                         type="button"
-                        class="conference-session-action"
+                        class="conference-session-action conference-session-action--compact"
                         data-action="external-invite-create"
+                        title="Guardar link"
+                        aria-label="Guardar link"
                       >
-                        GUARDAR LINK
+                        G
                       </button>
                       <button
                         type="button"
-                        class="conference-session-action"
+                        class="conference-session-action conference-session-action--compact"
                         data-action="external-invite-copy"
+                        title="Copiar link"
+                        aria-label="Copiar link"
                       >
-                        COPIAR LINK
+                        C
                       </button>
                       <button
                         type="button"
-                        class="conference-session-action"
+                        class="conference-session-action conference-session-action--compact"
                         data-action="external-invite-revoke"
+                        title="Revocar link"
+                        aria-label="Revocar link"
                       >
-                        REVOCAR
+                        R
                       </button>
                     </div>
 
@@ -1075,77 +1093,75 @@ if (
                       Genera un link con password para invitados externos sin login.
                     </p>
                   </div>
+                </details>
 
-                  <div class="conference-room-invite-controls">
-                    <div class="conference-session-controls-heading">INVITE ESTUDIANTES</div>
+                <div class="conference-room-invite-controls">
+                  <div class="conference-session-controls-heading">INVITE ESTUDIANTES</div>
 
-                    <div class="conference-field">
-                      <label for="conference-student-expiry-select">Vencimiento</label>
-                      <select
-                        id="conference-student-expiry-select"
-                        name="student-expiry"
-                        data-student-expiry-select
-                      >
-                        <option value="">Sin vencimiento</option>
-                        <option value="60">1 hora</option>
-                        <option value="1440">24 horas</option>
-                        <option value="10080">7 dias</option>
-                      </select>
-                    </div>
-
-                    <div class="conference-field">
-                      <label for="conference-student-invite-link-output">Link estudiantes</label>
-                      <input
-                        id="conference-student-invite-link-output"
-                        name="student-invite-link"
-                        type="text"
-                        value=""
-                        readonly
-                        placeholder="Crea un acceso directo para estudiantes"
-                        data-student-invite-link-output
-                      />
-                    </div>
-
-                    <div class="conference-session-action-row conference-session-action-row--triple">
-                      <button
-                        type="button"
-                        class="conference-session-action"
-                        data-action="student-invite-create"
-                      >
-                        GUARDAR LINK
-                      </button>
-                      <button
-                        type="button"
-                        class="conference-session-action"
-                        data-action="student-invite-copy"
-                      >
-                        COPIAR LINK
-                      </button>
-                      <button
-                        type="button"
-                        class="conference-session-action"
-                        data-action="student-invite-revoke"
-                      >
-                        REVOCAR
-                      </button>
-                    </div>
-
-                    <p class="conference-session-note" data-student-invite-status>
-                      Link directo para estudiantes sin navegar por curso ni leccion.
-                    </p>
+                  <div class="conference-field">
+                    <label for="conference-student-expiry-select">Vencimiento</label>
+                    <select
+                      id="conference-student-expiry-select"
+                      name="student-expiry"
+                      data-student-expiry-select
+                    >
+                      <option value="">Sin vencimiento</option>
+                      <option value="60">1 hora</option>
+                      <option value="1440">24 horas</option>
+                      <option value="10080">7 dias</option>
+                    </select>
                   </div>
+
+                  <div class="conference-field">
+                    <label for="conference-student-invite-link-output">Link estudiantes</label>
+                    <input
+                      id="conference-student-invite-link-output"
+                      name="student-invite-link"
+                      type="text"
+                      value=""
+                      readonly
+                      placeholder="Crea un acceso directo para estudiantes"
+                      data-student-invite-link-output
+                    />
+                  </div>
+
+                  <div class="conference-session-action-row conference-session-action-row--triple">
+                    <button
+                      type="button"
+                      class="conference-session-action conference-session-action--compact"
+                      data-action="student-invite-create"
+                      title="Guardar link"
+                      aria-label="Guardar link"
+                    >
+                      G
+                    </button>
+                    <button
+                      type="button"
+                      class="conference-session-action conference-session-action--compact"
+                      data-action="student-invite-copy"
+                      title="Copiar link"
+                      aria-label="Copiar link"
+                    >
+                      C
+                    </button>
+                    <button
+                      type="button"
+                      class="conference-session-action conference-session-action--compact"
+                      data-action="student-invite-revoke"
+                      title="Revocar link"
+                      aria-label="Revocar link"
+                    >
+                      R
+                    </button>
+                  </div>
+
+                  <p class="conference-session-note" data-student-invite-status>
+                    Link directo para estudiantes sin navegar por curso ni leccion.
+                  </p>
                 </div>
               </div>
-            </details>
-          </div>
-
-          <div class="conference-self-preview-shell">
-            <div
-              class="conference-self-preview"
-              data-slot="identity-preview"
-              data-empty-label="Camera preview"
-            ></div>
-          </div>
+            </div>
+          </details>
         </div>
 
         <p class="conference-statusline" data-room-status>
@@ -1154,7 +1170,7 @@ if (
         <span class="conference-sr-only" data-room-state>Desconectado</span>
       </section>
 
-      <section class="conference-sidebar-section">
+      <section class="conference-sidebar-section conference-sidebar-section--chat">
         <div class="conference-sidebar-heading conference-sidebar-heading--chat">
           <span>CHAT</span>
           <button
@@ -1204,12 +1220,12 @@ if (
         </div>
       </section>
 
-      <section class="conference-sidebar-section">
+      <section class="conference-sidebar-section conference-sidebar-section--grid">
         <div class="conference-sidebar-heading">GRID VIEW</div>
         <div
           class="conference-slot conference-slot--sidebar"
           data-slot="students"
-          data-empty-label="Students"
+          data-empty-label=""
         ></div>
       </section>
     </div>
@@ -2174,6 +2190,15 @@ if (
     gap: 0.9rem;
   }
 
+  .conference-sidebar-section--meta {
+    padding-bottom: 0.42rem;
+  }
+
+  .conference-sidebar-section--chat {
+    gap: 0.22rem;
+    padding-top: 0.16rem;
+  }
+
   .conference-sidebar-section--mixer {
     position: relative;
     z-index: 2;
@@ -2201,21 +2226,25 @@ if (
 
   .conference-sidebar-section {
     display: grid;
-    gap: 0.75rem;
-    padding: 0.75rem 0.9rem 0.9rem;
+    gap: 0.48rem;
+    padding: 0.58rem 0.82rem 0.68rem;
     border-bottom: 1px solid var(--conference-line);
   }
 
   .conference-meta-shell {
     display: grid;
+    gap: 0.34rem;
+  }
+
+  .conference-meta-top {
+    display: grid;
     grid-template-columns: minmax(0, 1fr) 112px;
-    gap: 0.8rem;
+    gap: 0.52rem 0.72rem;
     align-items: start;
   }
 
-  .conference-meta-fields {
-    display: grid;
-    gap: 0.6rem;
+  .conference-self-preview-shell {
+    min-width: 0;
   }
 
   .conference-field {
@@ -2255,6 +2284,10 @@ if (
     box-shadow: none;
   }
 
+  .conference-sidebar .conference-field select {
+    font-size: 0.72rem;
+  }
+
   .conference-field input:focus,
   .conference-field select:focus,
   .conference-chat-compose textarea:focus,
@@ -2264,7 +2297,7 @@ if (
   }
 
   .conference-session-setup {
-    padding-top: 0.45rem;
+    padding-top: 0.04rem;
   }
 
   .conference-session-setup-summary {
@@ -2274,6 +2307,12 @@ if (
     cursor: pointer;
     list-style: none;
     color: var(--conference-fg);
+  }
+
+  .conference-session-setup-summary .conference-sidebar-heading {
+    width: 100%;
+    padding: 0;
+    border-bottom: 0;
   }
 
   .conference-session-setup-summary::-webkit-details-marker {
@@ -2299,8 +2338,8 @@ if (
 
   .conference-session-setup-body {
     display: grid;
-    gap: 0.72rem;
-    padding-top: 0.72rem;
+    gap: 0.58rem;
+    padding-top: 0.5rem;
   }
 
   .conference-range-row {
@@ -2956,17 +2995,26 @@ if (
   }
 
   .conference-session-action {
-    min-height: 1.85rem;
-    padding: 0.22rem 0.48rem;
+    min-height: 1.7rem;
+    padding: 0.18rem 0.38rem;
     border: 1px solid var(--conference-line-soft);
     background: transparent;
     color: var(--conference-fg);
     font: inherit;
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     cursor: pointer;
+  }
+
+  .conference-session-action--compact {
+    width: 1.68rem;
+    min-width: 1.68rem;
+    min-height: 1.68rem;
+    padding: 0;
+    justify-self: start;
+    place-self: start;
   }
 
   .conference-session-action:hover,
@@ -2984,7 +3032,7 @@ if (
   .conference-session-action-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.45rem;
+    gap: 0.34rem;
   }
 
   .conference-session-action-row--triple {
@@ -2993,8 +3041,47 @@ if (
 
   .conference-room-invite-controls {
     display: grid;
-    gap: 0.62rem;
-    padding-top: 0.16rem;
+    gap: 0.48rem;
+    padding-top: 0.08rem;
+  }
+
+  .conference-room-invite-panel {
+    display: grid;
+    gap: 0.28rem;
+    padding-top: 0.06rem;
+  }
+
+  .conference-room-invite-panel-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    list-style: none;
+    color: var(--conference-muted);
+    font-size: 0.58rem;
+    line-height: 1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .conference-room-invite-panel-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .conference-room-invite-panel-summary::before {
+    content: '';
+    width: 0.4rem;
+    height: 0.4rem;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    transform: rotate(-45deg);
+    transform-origin: center;
+    opacity: 0.72;
+    transition: transform 140ms ease;
+  }
+
+  .conference-room-invite-panel[open] .conference-room-invite-panel-summary::before {
+    transform: rotate(45deg);
   }
 
   .conference-session-note {
@@ -3031,10 +3118,6 @@ if (
     font-size: 0.78rem;
     white-space: nowrap;
     text-transform: lowercase;
-  }
-
-  .conference-self-preview-shell {
-    min-width: 0;
   }
 
   .conference-self-preview {
@@ -3074,14 +3157,14 @@ if (
   .conference-chat {
     min-height: 0;
     display: grid;
-    gap: 0.7rem;
+    gap: 0.14rem;
   }
 
   .conference-chat-list {
     margin: 0;
     padding: 0;
     list-style: none;
-    min-height: 12rem;
+    min-height: 10rem;
     max-height: 34vh;
     overflow-y: auto;
     display: grid;
@@ -3090,15 +3173,17 @@ if (
 
   :global(.conference-chat-item),
   :global(.conference-chat-empty) {
-    padding: 0.06rem 0;
-    border-bottom: ;
+    display: grid;
+    gap: 0.04rem;
+    padding: 0.08rem 0;
+    border-bottom: 1px solid var(--conference-line-soft);
   }
 
   :global(.conference-chat-header) {
     display: flex;
     align-items: baseline;
     gap: 0.28rem;
-    margin-bottom: 0.08rem;
+    margin-bottom: 0.02rem;
     color: rgba(245, 247, 251, 0.62) !important;
     font-size: 0.8rem !important;
     line-height: 1 !important;
@@ -3131,10 +3216,10 @@ if (
 
   :global(.conference-chat-item .conference-chat-text) {
     margin: 0 !important;
-    padding-left: 1rem;
+    padding-left: 0.94rem;
     color: rgba(245, 247, 251, 0.78) !important;
-    font-size: 0.97rem;
-    line-height: 1.22;
+    font-size: 0.9rem !important;
+    line-height: 1.04 !important;
     text-wrap: pretty;
   }
 
@@ -3149,20 +3234,20 @@ if (
 
   :global(.conference-chat-text ul),
   :global(.conference-chat-text ol) {
-    padding-left: 0.12rem;
+    padding-left: 0;
     margin-left: 0 !important;
   }
 
   :global(.conference-chat-text ul > li) {
-    padding-left: 1.26em;
-    margin: 0.04em 0;
-    line-height: 1.18;
+    padding-left: 1.28em;
+    margin: 0.02em 0;
+    line-height: 1.02;
   }
 
   :global(.conference-chat-text ul > li::before) {
-    left: 0;
-    top: 1rem;
-    font-size: 0.92em;
+    left: -0.5rem;
+    top: 0.74rem;
+    font-size: 0.84em;
   }
 
   :global(.conference-chat-text ul ul > li),
@@ -3218,20 +3303,23 @@ if (
 
   :global(.conference-chat-empty) {
     color: rgba(245, 247, 251, 0.5);
-    font-size: 0.83rem;
-    left: 1rem;
+    font-size: 0.56rem;
   }
 
   .conference-chat-compose {
     display: grid;
-    gap: 0.55rem;
+    gap: 0.18rem;
   }
 
   .conference-chat-compose textarea {
-    min-height: 3.8rem;
+    min-height: 3rem;
     resize: vertical;
-    font-size: 1.15rem;
-    line-height: 1;
+    font-size: 0.72rem;
+    line-height: 1.04;
+  }
+
+  .conference-chat-compose textarea::placeholder {
+    font-size: 0.56rem;
   }
 
   .conference-chat-actions {
@@ -3250,7 +3338,7 @@ if (
     cursor: pointer;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    font-size: 0.83rem;
+    font-size: 0.42rem;
   }
 
   .conference-chat-send:hover:not(:disabled) {
@@ -4023,6 +4111,12 @@ if (
     font-size: 0.49rem;
   }
 
+  :global(.conference-roster-empty) {
+    color: rgba(245, 247, 251, 0.5);
+    font-size: 0.48rem;
+    line-height: 1.08;
+  }
+
   .conference-live-activity {
     padding: 0 0.6rem;
     color: var(--conference-red);
@@ -4202,7 +4296,7 @@ if (
       transform: rotate(90deg);
     }
 
-    .conference-meta-shell {
+    .conference-meta-top {
       grid-template-columns: minmax(0, 1fr) 96px;
     }
   }
@@ -4225,7 +4319,7 @@ if (
       border-left: 1px solid var(--conference-line);
     }
 
-    .conference-meta-shell {
+    .conference-meta-top {
       grid-template-columns: minmax(0, 1fr) 88px;
       gap: 0.6rem;
     }
@@ -4336,7 +4430,7 @@ if (
       padding: 0.55rem 0.68rem 0.68rem;
     }
 
-    .conference-meta-shell {
+    .conference-meta-top {
       grid-template-columns: minmax(0, 1fr) 82px;
       gap: 0.5rem;
     }

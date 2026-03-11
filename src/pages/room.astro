@@ -36,6 +36,18 @@ if (inviteCode) {
   }
 }
 
+const hasSessionUser = Boolean(normalizeText(session?.user?.email));
+const isStudentInvite = Boolean(liveInvite && 'inviteType' in liveInvite && liveInvite.inviteType === 'student');
+const loginRedirectTarget = `${Astro.url.pathname}${Astro.url.search}`;
+
+if (!hasSessionUser && !inviteCode) {
+  return Astro.redirect(`/login?redirect=${encodeURIComponent(loginRedirectTarget)}`);
+}
+
+if (!hasSessionUser && isStudentInvite) {
+  return Astro.redirect(`/login?redirect=${encodeURIComponent(loginRedirectTarget)}`);
+}
+
 const rawCourseId =
   inviteMode === 'external'
     ? ''

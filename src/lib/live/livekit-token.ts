@@ -65,6 +65,7 @@ export const createLiveKitTokenResponse = async ({ request, locals }: APIContext
     url.searchParams.get('username');
   const requestedName = url.searchParams.get('name');
   const isExternalInvite = activeInvite?.inviteType === 'external';
+  const isStudentInvite = activeInvite?.inviteType === 'student';
   const requestedCourse = isExternalInvite
     ? ''
     : normalizeText(activeInvite?.courseId) || normalizeText(url.searchParams.get('course'));
@@ -74,7 +75,12 @@ export const createLiveKitTokenResponse = async ({ request, locals }: APIContext
 
   const sessionName = normalizeText(session?.user?.name);
   const sessionEmail = normalizeText(session?.user?.email);
+  const hasSessionUser = Boolean(sessionEmail);
   const normalizedCourseId = await canonicalizeCourseId(requestedCourse);
+
+  if (!hasSessionUser && !isExternalInvite) {
+    return json({ error: isStudentInvite ? 'Login required for student invite access' : 'Login required' }, 401);
+  }
 
   if (isExternalInvite) {
     if (!externalName) {

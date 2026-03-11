@@ -8196,27 +8196,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       const header = document.createElement('div');
       header.className = 'conference-chat-header';
-      header.style.cssText = 'color: rgba(245,247,251,.62); font-size: .6rem; line-height: 1;';
 
       const sender = document.createElement('span');
       sender.className = 'conference-chat-author';
       sender.textContent = getFirstName(message.name);
-      sender.style.cssText = 'color: rgba(245,247,251,.6); font-size: .58rem; font-weight: 700; font-style: normal;';
 
       const body = document.createElement('div');
       body.className = 'conference-chat-text';
-      body.style.cssText = 'color: rgba(245,247,251,.78); font-size: .76rem; line-height: 1.44;';
       setConferenceChatBody(body, message.text);
 
       const separator = document.createElement('span');
       separator.className = 'conference-chat-header-separator';
       separator.textContent = '·';
-      separator.style.cssText = 'color: rgba(245,247,251,.46); font-size: .54rem; opacity: .46;';
 
       const sentAt = document.createElement('time');
       sentAt.className = 'conference-chat-stamp';
       sentAt.dateTime = message.sentAt;
-      sentAt.style.cssText = 'color: rgba(245,247,251,.5); font-size: .47rem; font-style: italic; font-weight: 400; opacity: .5;';
       sentAt.textContent = new Date(message.sentAt).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
