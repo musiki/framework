@@ -113,6 +113,12 @@ const chapters = allLessons.reduce((acc, lesson) => {
   return acc;
 }, {} as Record<string, typeof allLessons>);
 
+const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapter]) =>
+  leftChapter
+    .replace(/-/g, ' ')
+    .localeCompare(rightChapter.replace(/-/g, ' '), 'es', { sensitivity: 'base' }),
+);
+
 // Determine what to show
 let currentEntry;
 let resolvedLessonRoutePath = '';
@@ -599,6 +605,11 @@ const forumThreadPrompt = sessionFirstName
         margin-bottom: 0.5rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
+      }
+
+      .sidebar--left .chapter-title {
+        font-size: 1rem;
+        font-weight: 650;
       }
       
       .lesson-list {
@@ -2212,7 +2223,7 @@ const forumThreadPrompt = sessionFirstName
           )}
         </div>
 
-        {Object.entries(chapters).map(([chapterName, lessons]) => (
+        {sortedChapters.map(([chapterName, lessons]) => (
           <div class="chapter">
             <div class="chapter-title">{chapterName.replace(/-/g, ' ')}</div>
             <ul class="lesson-list">
