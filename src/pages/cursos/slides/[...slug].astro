@@ -12,6 +12,7 @@ import {
   encodePathSegments,
   findLessonByCoursePath,
   getPreferredCoursePathSegment,
+  isCourseLessonEntryForCourse,
 } from '../../../lib/course-routing';
 
 const rawSlug = Astro.params.slug;
@@ -55,7 +56,7 @@ const canManageLiveInteractions = liveAccess.canManage;
 const hasCourseEnrollment = Boolean(sessionEnrollmentRole);
 
 const allLessons = (await getCollection('cursos'))
-  .filter((entry) => entry.id.startsWith(`${canonicalCourseId}/`) && !entry.id.endsWith('_index'))
+  .filter((entry) => isCourseLessonEntryForCourse(entry, canonicalCourseId))
   .sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
 const lessonPathIndex = buildCourseLessonPathIndex(
   canonicalCourseId,

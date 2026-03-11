@@ -15,7 +15,9 @@ import {
   buildCourseLessonPathIndex,
   encodePathSegments,
   findLessonByCoursePath,
+  getCourseEntryLegacyPath,
   getPreferredCoursePathSegment,
+  isCourseLessonEntryForCourse,
 } from '../../lib/course-routing';
 
 const rawSlug = Astro.params.slug;
@@ -54,7 +56,7 @@ const courseHref = buildCourseHref(canonicalCourseId, courseData);
 // Build lesson path index before auth redirects so legacy lesson URLs can
 // canonicalize to the frontmatter slug even for anonymous access.
 const allLessons = (await getCollection('cursos'))
-  .filter(entry => entry.id.startsWith(`${canonicalCourseId}/`) && !entry.id.endsWith('_index'))
+  .filter((entry) => isCourseLessonEntryForCourse(entry, canonicalCourseId))
   .sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
 const lessonPathIndex = buildCourseLessonPathIndex(
   canonicalCourseId,
@@ -141,7 +143,6 @@ if (parts.length === 1) {
     }
   }
 
-  const requestedLessonPath = parts.slice(1).join('/');
   if (requestedCoursePathSegment !== preferredCoursePathSegment || requestedLessonPath !== resolvedLessonRoutePath) {
     return Astro.redirect(`${courseHref}/${encodePathSegments(resolvedLessonRoutePath)}${Astro.url.search}`);
   }
@@ -165,7 +166,7 @@ const lessonSlug = isLessonPage
   ? (
     resolvedLessonRoutePath
     || lessonPathIndex.pathByEntryId.get(currentEntry.id)
-    || currentEntry.id.replace(`${canonicalCourseId}/`, '')
+    || getCourseEntryLegacyPath(currentEntry, canonicalCourseId)
   )
   : '';
 const rawPresentationTheme =
@@ -2089,7 +2090,7 @@ const forumThreadPrompt = sessionFirstName
                 );
                 const lessonPageSlug =
                   lessonPathIndex.pathByEntryId.get(lesson.id)
-                  || lesson.id.replace(`${canonicalCourseId}/`, '');
+                  || getCourseEntryLegacyPath(lesson, canonicalCourseId);
                 const isActive = currentEntry.id === lesson.id;
                 return (
                   <li class="lesson-item">

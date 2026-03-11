@@ -1,9 +1,15 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { CollectionEntry } from 'astro:content';
+import matter from 'gray-matter';
 import { getCourseFrontmatterId } from './course-metadata';
 
 type CourseEntry = CollectionEntry<'cursos'>;
 
 const normalizeText = (value: unknown) => String(value || '').trim();
+const normalizeFilePath = (value: unknown) => normalizeText(value).replace(/\\/g, '/');
+const stripMarkdownExtension = (value: string) => String(value || '').replace(/\.(md|mdx)$/i, '');
+const cachedExplicitSlugByFilePath = new Map<string, string>();
 
 export const toCoursePathSlug = (value: unknown) =>
   normalizeText(value)
@@ -20,9 +26,92 @@ export const encodePathSegments = (value: string) =>
     .map((segment) => encodeURIComponent(segment))
     .join('/');
 
-const getEntryBasename = (entryId: string) => {
+const getEntryIdBasename = (entryId: string) => {
   const parts = String(entryId || '').split('/').filter(Boolean);
   return parts[parts.length - 1] || '';
+};
+
+const getEntryFilePath = (entry: { filePath?: string } | null | undefined) =>
+  normalizeFilePath(entry?.filePath);
+
+const getEntryExplicitRouteSlug = (entry: CourseEntry) => {
+  const filePath = getEntryFilePath(entry);
+  if (!filePath) return '';
+
+  if (cachedExplicitSlugByFilePath.has(filePath)) {
+    return cachedExplicitSlugByFilePath.get(filePath) || '';
+  }
+
+  let explicitSlug = '';
+  try {
+    const source = fs.readFileSync(path.resolve(filePath), 'utf8');
+    const parsed = matter(source).data || {};
+    explicitSlug = normalizeText(parsed.slug || parsed.shortSlug);
+  } catch {
+    explicitSlug = '';
+  }
+
+  cachedExplicitSlugByFilePath.set(filePath, explicitSlug);
+  return explicitSlug;
+};
+
+const getEntrySourceBasename = (entry: CourseEntry) => {
+  const filePath = getEntryFilePath(entry);
+  if (filePath) {
+    return stripMarkdownExtension(filePath.split('/').filter(Boolean).pop() || '');
+  }
+  return getEntryIdBasename(entry.id);
+};
+
+export const isCourseIndexEntry = (
+  entry: Pick<CourseEntry, 'id'> & { filePath?: string },
+) => {
+  const filePath = getEntryFilePath(entry);
+  if (filePath) return /\/_index\.mdx?$/i.test(filePath);
+
+  const entryId = normalizeText(entry.id);
+  return entryId.endsWith('/_index') || entryId.endsWith('_index');
+};
+
+export const getCourseEntryCourseId = (
+  entry: Pick<CourseEntry, 'id'> & { filePath?: string },
+) => {
+  const filePath = getEntryFilePath(entry);
+  const filePathMatch = filePath.match(/(?:^|\/)src\/content\/cursos\/([^/]+)\//);
+  if (filePathMatch?.[1]) return filePathMatch[1];
+
+  const entryId = normalizeText(entry.id);
+  if (!entryId) return '';
+  if (entryId.endsWith('/_index')) return entryId.replace(/\/_index$/, '');
+  if (entryId.endsWith('_index')) return entryId.replace(/_index$/, '');
+  return entryId.split('/').filter(Boolean)[0] || '';
+};
+
+export const isCourseLessonEntryForCourse = (
+  entry: CourseEntry,
+  canonicalCourseId: string,
+) => {
+  if (!canonicalCourseId || isCourseIndexEntry(entry)) return false;
+
+  const filePath = getEntryFilePath(entry);
+  if (filePath) return filePath.startsWith(`src/content/cursos/${canonicalCourseId}/`);
+
+  return entry.id.startsWith(`${canonicalCourseId}/`);
+};
+
+export const getCourseEntryLegacyPath = (
+  entry: CourseEntry,
+  canonicalCourseId: string,
+) => {
+  const filePath = getEntryFilePath(entry);
+  const filePathPrefix = `src/content/cursos/${canonicalCourseId}/`;
+  if (filePath.startsWith(filePathPrefix)) {
+    return stripMarkdownExtension(filePath.slice(filePathPrefix.length));
+  }
+
+  return canonicalCourseId
+    ? entry.id.replace(`${canonicalCourseId}/`, '')
+    : normalizeText(entry.id);
 };
 
 export const getPreferredCoursePathSegment = (
@@ -35,20 +124,22 @@ export const getPreferredCoursePathSegment = (
 
 const getLessonBaseSlug = (entry: CourseEntry) => {
   const data = (entry.data || {}) as Record<string, unknown>;
-  const preferred = normalizeText(data.slug || data.shortSlug || data.title || getEntryBasename(entry.id));
-  return toCoursePathSlug(preferred) || toCoursePathSlug(getEntryBasename(entry.id)) || getEntryBasename(entry.id);
+  const sourceBasename = getEntrySourceBasename(entry);
+  const explicitSlug = getEntryExplicitRouteSlug(entry);
+  const preferred = normalizeText(explicitSlug || data.slug || data.shortSlug || data.title || sourceBasename);
+  return toCoursePathSlug(preferred) || toCoursePathSlug(sourceBasename) || sourceBasename;
 };
 
 const getLessonAliasSlugs = (entry: CourseEntry) => {
   const data = (entry.data || {}) as Record<string, unknown>;
-  const explicitSlug = normalizeText(data.slug || data.shortSlug);
+  const explicitSlug = normalizeText(getEntryExplicitRouteSlug(entry) || data.slug || data.shortSlug);
   if (!explicitSlug) return [];
 
   return Array.from(
     new Set(
       [
         toCoursePathSlug(data.title),
-        toCoursePathSlug(getEntryBasename(entry.id)),
+        toCoursePathSlug(getEntrySourceBasename(entry)),
       ].filter(Boolean),
     ),
   );
@@ -93,7 +184,7 @@ export const buildCourseLessonPathIndex = (
   const usedShortPaths = new Set<string>();
 
   for (const lesson of lessons) {
-    const legacyPath = lesson.id.replace(`${canonicalCourseId}/`, '');
+    const legacyPath = getCourseEntryLegacyPath(lesson, canonicalCourseId);
     if (legacyPath) {
       entryByLegacyPath.set(legacyPath, lesson);
     }
@@ -102,7 +193,7 @@ export const buildCourseLessonPathIndex = (
     let nextShortPath = baseSlug;
 
     if (usedShortPaths.has(nextShortPath) || (baseSlugCounts.get(baseSlug) || 0) > 1) {
-      const filenameSlug = toCoursePathSlug(getEntryBasename(lesson.id));
+      const filenameSlug = toCoursePathSlug(getEntrySourceBasename(lesson));
       if (filenameSlug && !usedShortPaths.has(filenameSlug)) {
         nextShortPath = filenameSlug;
       } else {

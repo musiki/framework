@@ -3,6 +3,9 @@ import {
   buildCourseHref,
   buildCourseLessonHref,
   buildCourseLessonPathIndex,
+  getCourseEntryCourseId,
+  isCourseIndexEntry,
+  isCourseLessonEntryForCourse,
 } from '../lib/course-routing';
 import { getContentCanonicalSlug } from '../lib/content-slug';
 
@@ -30,14 +33,16 @@ export async function GET() {
 
   const courseIndexById = new Map();
   cursos.forEach((item) => {
-    if (!item.id.endsWith('/_index') && !item.id.endsWith('_index')) return;
-    courseIndexById.set(item.id.replace(/\/_index$/, ''), item);
+    if (!isCourseIndexEntry(item)) return;
+    const courseId = getCourseEntryCourseId(item);
+    if (!courseId) return;
+    courseIndexById.set(courseId, item);
   });
 
   const lessonPathIndexByCourseId = new Map();
   courseIndexById.forEach((courseEntry, courseId) => {
     const lessons = cursos
-      .filter((item) => item.id.startsWith(`${courseId}/`) && !item.id.endsWith('/_index') && !item.id.endsWith('_index'))
+      .filter((item) => isCourseLessonEntryForCourse(item, courseId))
       .sort((a, b) => (Number(a.data?.order || 0) - Number(b.data?.order || 0)));
 
     lessonPathIndexByCourseId.set(
@@ -47,8 +52,8 @@ export async function GET() {
   });
 
   const courseItems = cursos.map((item) => {
-    const isCourseIndex = item.id.endsWith('/_index') || item.id.endsWith('_index');
-    const courseId = isCourseIndex ? item.id.replace(/\/_index$/, '') : '';
+    const isCourseIndex = isCourseIndexEntry(item);
+    const courseId = getCourseEntryCourseId(item);
     const filename = item.id.split('/').pop()?.replace(/\.[^/.]+$/, '');
     const title = item.data.title || filename || 'Untitled';
     const itemType = String(item.data.type || '').trim().toLowerCase();
