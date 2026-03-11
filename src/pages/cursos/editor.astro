@@ -1,0 +1,395 @@
+---
+export const prerender = false;
+
+import BaseHead from '../../components/BaseHead.astro';
+import Footer from '../../components/Footer.astro';
+import Header from '../../components/Header.astro';
+import {
+  buildDefaultCreatePath,
+  resolveCourseSource,
+  sanitizeRepoDirectoryPath,
+  sanitizeRepoMarkdownPath,
+} from '../../lib/content-admin';
+import { canonicalizeCourseId } from '../../lib/course-alias';
+import { getRepoFile, isGitHubAppConfigured } from '../../lib/github-app';
+import { resolveLiveManageAccess } from '../../lib/live/access';
+
+const session = (Astro.locals as any).session;
+if (!session?.user?.email) {
+  return Astro.redirect(`/login?redirect=${encodeURIComponent(`${Astro.url.pathname}${Astro.url.search}`)}`);
+}
+
+const rawCourseId = String(Astro.url.searchParams.get('course') || '').trim();
+const canonicalCourseId = await canonicalizeCourseId(rawCourseId);
+if (!canonicalCourseId) {
+  return Astro.redirect('/cursos');
+}
+
+const access = await resolveLiveManageAccess(session, canonicalCourseId);
+if (!access.canManage) {
+  return Astro.redirect(`/cursos/${encodeURIComponent(canonicalCourseId)}`);
+}
+
+const source = resolveCourseSource(canonicalCourseId);
+const githubAppConfigured = isGitHubAppConfigured();
+const mode = String(Astro.url.searchParams.get('mode') || 'edit').trim().toLowerCase() === 'create'
+  ? 'create'
+  : 'edit';
+const requestedPath = sanitizeRepoMarkdownPath(Astro.url.searchParams.get('path') || '');
+const requestedDir = sanitizeRepoDirectoryPath(Astro.url.searchParams.get('dir') || '');
+const returnTo = String(Astro.url.searchParams.get('returnTo') || `/cursos/${canonicalCourseId}`).trim();
+
+let targetPath = requestedPath || buildDefaultCreatePath(canonicalCourseId, requestedDir);
+let initialContent = `---
+type: lesson
+title: ""
+chapter: ""
+status:
+order:
+---
+
+# Nueva nota
+
+`;
+let initialSha = '';
+let editorError = '';
+
+if (!source?.repo) {
+  editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
+} else if (!githubAppConfigured) {
+  editorError = 'La GitHub App no está configurada todavía en el server.';
+} else if (mode === 'edit') {
+  if (!requestedPath) {
+    editorError = 'Falta el path de la nota a editar.';
+  } else {
+    try {
+      const remoteFile = await getRepoFile({
+        repoFullName: source.repo,
+        path: requestedPath,
+        ref: source.branch || 'main',
+      });
+
+      if (!remoteFile) {
+        editorError = 'La nota no existe en GitHub o no pudo resolverse.';
+      } else {
+        targetPath = remoteFile.path || requestedPath;
+        initialContent = remoteFile.content || '';
+        initialSha = remoteFile.sha || '';
+      }
+    } catch (error: any) {
+      editorError = error?.message || 'No se pudo cargar la nota desde GitHub.';
+    }
+  }
+}
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <BaseHead
+      title={mode === 'create' ? 'Crear nota' : 'Editar nota'}
+      description="Editor markdown mínimo para publicar notas docentes en el repo de materia."
+    />
+    <style>
+      .editor-shell {
+        width: min(1100px, calc(100vw - 2rem));
+        margin: calc(var(--musiki-header-height, 4.5rem) + 1rem) auto 2rem;
+        display: grid;
+        gap: 1rem;
+      }
+
+      .editor-card {
+        border: 1px solid var(--c-border);
+        border-radius: 14px;
+        background: var(--c-bg);
+        padding: 1rem 1rem 1.1rem;
+      }
+
+      .editor-kicker {
+        margin: 0 0 0.25rem 0;
+        font-size: 0.72rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+      }
+
+      .editor-title {
+        margin: 0;
+        font-size: 1.35rem;
+      }
+
+      .editor-subtitle {
+        margin: 0.45rem 0 0 0;
+        color: var(--c-fg-dim);
+        line-height: 1.5;
+      }
+
+      .editor-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.8rem;
+      }
+
+      .editor-field {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .editor-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--c-fg-dim);
+      }
+
+      .editor-input,
+      .editor-textarea {
+        width: 100%;
+        border: 1px solid var(--c-border);
+        border-radius: 10px;
+        background: var(--c-bg-mute);
+        color: var(--c-fg);
+        font: inherit;
+        padding: 0.7rem 0.8rem;
+      }
+
+      .editor-textarea {
+        min-height: 68dvh;
+        resize: vertical;
+        line-height: 1.55;
+        font-family: 'SFMono-Regular', 'Menlo', monospace;
+        font-size: 0.95rem;
+      }
+
+      .editor-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem;
+      }
+
+      .editor-action {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 7px;
+        border: 1px solid var(--c-border);
+        background: color-mix(in srgb, var(--c-bg) 88%, var(--c-bg-mute) 12%);
+        color: var(--c-fg);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      .editor-action--primary {
+        width: auto;
+        min-width: 2rem;
+        padding: 0 0.8rem;
+        cursor: pointer;
+      }
+
+      .editor-status {
+        min-height: 1.3rem;
+        font-size: 0.9rem;
+        color: var(--c-fg-dim);
+      }
+
+      .editor-status[data-tone='error'] {
+        color: #b3261e;
+      }
+
+      .editor-status[data-tone='success'] {
+        color: #14713e;
+      }
+
+      .editor-note {
+        margin: 0;
+        font-size: 0.9rem;
+        line-height: 1.5;
+        color: var(--c-fg-dim);
+      }
+
+      @media (max-width: 720px) {
+        .editor-shell {
+          width: min(100vw - 1rem, 1100px);
+          margin-top: calc(var(--musiki-header-height, 4.5rem) + 0.6rem);
+        }
+
+        .editor-card {
+          padding: 0.85rem;
+        }
+
+        .editor-textarea {
+          min-height: 58dvh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <Header courseId={canonicalCourseId} activeCourseId={canonicalCourseId} />
+    <main class="editor-shell">
+      <section class="editor-card">
+        <p class="editor-kicker">Editor docente</p>
+        <h1 class="editor-title">{mode === 'create' ? 'Crear nota' : 'Editar nota'}</h1>
+        <p class="editor-subtitle">
+          Publica markdown directo en <strong>{source?.repo || 'repo no configurado'}</strong>.
+          El source of truth sigue siendo GitHub; esto es sólo una vía más amable para escribir.
+        </p>
+      </section>
+
+      <section class="editor-card">
+        <div class="editor-meta">
+          <label class="editor-field">
+            <span class="editor-label">Curso</span>
+            <input class="editor-input" type="text" value={canonicalCourseId} readonly />
+          </label>
+          <label class="editor-field">
+            <span class="editor-label">Repo</span>
+            <input class="editor-input" type="text" value={source?.repo || ''} readonly />
+          </label>
+          <label class="editor-field">
+            <span class="editor-label">Branch</span>
+            <input class="editor-input" type="text" value={source?.branch || 'main'} readonly />
+          </label>
+        </div>
+      </section>
+
+      <section class="editor-card">
+        <form id="content-editor-form">
+          <input type="hidden" name="courseId" value={canonicalCourseId} />
+          <input type="hidden" name="mode" value={mode} />
+          <input type="hidden" name="sha" value={initialSha} />
+
+          <label class="editor-field">
+            <span class="editor-label">Path en repo</span>
+            <input
+              class="editor-input"
+              type="text"
+              name="targetPath"
+              value={targetPath}
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </label>
+
+          <label class="editor-field" style="margin-top: 0.8rem;">
+            <span class="editor-label">Commit message</span>
+            <input
+              class="editor-input"
+              type="text"
+              name="message"
+              value={mode === 'create' ? `create: ${targetPath}` : `edit: ${targetPath}`}
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </label>
+
+          <label class="editor-field" style="margin-top: 0.8rem;">
+            <span class="editor-label">Markdown</span>
+            <textarea
+              class="editor-textarea"
+              name="content"
+              spellcheck="false"
+              autocapitalize="off"
+              autocomplete="off"
+              autocorrect="off"
+            >{initialContent}</textarea>
+          </label>
+
+          <div class="editor-actions" style="margin-top: 0.9rem;">
+            <button
+              class="editor-action editor-action--primary"
+              type="submit"
+              title={mode === 'create' ? 'Crear nota en GitHub' : 'Guardar cambios en GitHub'}
+              aria-label={mode === 'create' ? 'Crear nota en GitHub' : 'Guardar cambios en GitHub'}
+              disabled={Boolean(editorError)}
+            >
+              {mode === 'create' ? 'C' : 'E'}
+            </button>
+            <a class="editor-action" href={returnTo} title="Volver" aria-label="Volver">X</a>
+            <span class="editor-status" id="editor-status" data-tone={editorError ? 'error' : 'idle'}>
+              {editorError}
+            </span>
+          </div>
+        </form>
+      </section>
+
+      <section class="editor-card">
+        <p class="editor-note">
+          Este primer corte publica directo al repo de materia. Si el push entra bien, el workflow del repo debería
+          despachar el sync hacia <code>framework</code> y Vercel. Tu Obsidian local verá el cambio cuando hagas pull.
+        </p>
+      </section>
+    </main>
+    <Footer />
+
+    <script>
+      const mountContentEditor = () => {
+        const form = document.getElementById('content-editor-form');
+        const statusNode = document.getElementById('editor-status');
+        if (!(form instanceof HTMLFormElement) || !(statusNode instanceof HTMLElement)) return;
+        if (form.dataset.bound === 'true') return;
+        form.dataset.bound = 'true';
+
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+
+          const submitter = form.querySelector('button[type="submit"]');
+          if (submitter instanceof HTMLButtonElement) {
+            submitter.disabled = true;
+          }
+
+          const payload = Object.fromEntries(new FormData(form).entries());
+          statusNode.dataset.tone = 'idle';
+          statusNode.textContent = 'Publicando en GitHub...';
+
+          try {
+            const response = await fetch('/api/content-admin/publish', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(result?.error || 'No se pudo publicar la nota.');
+            }
+
+            if (typeof result?.path === 'string' && result.path) {
+              const pathInput = form.elements.namedItem('targetPath');
+              if (pathInput instanceof HTMLInputElement) {
+                pathInput.value = result.path;
+              }
+            }
+
+            const shaInput = form.elements.namedItem('sha');
+            if (shaInput instanceof HTMLInputElement && typeof result?.fileSha === 'string') {
+              shaInput.value = result.fileSha;
+            }
+
+            statusNode.dataset.tone = 'success';
+            statusNode.innerHTML = result?.commitUrl
+              ? `Publicado. <a href="${result.commitUrl}" target="_blank" rel="noreferrer">Ver commit</a>`
+              : 'Publicado.';
+          } catch (error) {
+            statusNode.dataset.tone = 'error';
+            statusNode.textContent = error instanceof Error ? error.message : 'No se pudo publicar la nota.';
+          } finally {
+            if (submitter instanceof HTMLButtonElement) {
+              submitter.disabled = false;
+            }
+          }
+        });
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', mountContentEditor, { once: true });
+      } else {
+        mountContentEditor();
+      }
+      document.addEventListener('astro:page-load', mountContentEditor);
+    </script>
+  </body>
+</html>

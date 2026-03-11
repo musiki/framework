@@ -7,6 +7,7 @@ import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId, getCourseAliases } from '../../lib/course-alias';
+import { buildEditorHref, sourcePathFromFrameworkFilePath } from '../../lib/content-admin';
 import { createSupabaseServerClient } from '../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../lib/live/access';
 import {
@@ -197,6 +198,33 @@ const activeCourseCode = String(
   courseData?.code ||
   '',
 ).trim().toUpperCase();
+const currentEntrySourcePath =
+  sourcePathFromFrameworkFilePath((currentEntry as { filePath?: string } | null | undefined)?.filePath) ||
+  (
+    isLessonPage
+      ? `cursos/${canonicalCourseId}/${getCourseEntryLegacyPath(currentEntry, canonicalCourseId)}.md`
+      : `cursos/${canonicalCourseId}/_index.md`
+  );
+const currentEntrySourceDir = currentEntrySourcePath.includes('/')
+  ? currentEntrySourcePath.split('/').slice(0, -1).join('/')
+  : `cursos/${canonicalCourseId}`;
+const teacherCreateHref = canManageLiveInteractions
+  ? buildEditorHref({
+      courseId: canonicalCourseId,
+      mode: 'create',
+      dir: currentEntrySourceDir,
+      returnTo: `${Astro.url.pathname}${Astro.url.search}`,
+    })
+  : '';
+const teacherEditHref =
+  canManageLiveInteractions && currentEntrySourcePath
+    ? buildEditorHref({
+        courseId: canonicalCourseId,
+        mode: 'edit',
+        path: currentEntrySourcePath,
+        returnTo: `${Astro.url.pathname}${Astro.url.search}`,
+      })
+    : '';
 const courseForumHref = `${courseHref}/foro`;
 const forumShellHref = Astro.url.pathname;
 const lessonForumHref = isLessonPage
@@ -2127,6 +2155,8 @@ const forumThreadPrompt = sessionFirstName
       activeCourseCode={activeCourseCode}
       presentationHref={presentationHref}
       performativeRoomHref={performativeRoomHref}
+      teacherCreateHref={teacherCreateHref}
+      teacherEditHref={teacherEditHref}
     />
     <main
       class="course-container"

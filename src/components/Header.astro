@@ -16,6 +16,8 @@ const {
 	activeCourseCode = '',
 	presentationHref = '',
 	performativeRoomHref = '',
+	teacherCreateHref = '',
+	teacherEditHref = '',
 } = Astro.props as {
 	showPageInfoToggle?: boolean;
 	courseId?: string;
@@ -23,6 +25,8 @@ const {
 	activeCourseCode?: string;
 	presentationHref?: string;
 	performativeRoomHref?: string;
+	teacherCreateHref?: string;
+	teacherEditHref?: string;
 };
 const hasPresentationLink = typeof presentationHref === 'string' && presentationHref.trim().length > 0;
 const normalizedPresentationHref = hasPresentationLink ? presentationHref.trim() : '';
@@ -165,6 +169,9 @@ const resolvedActiveCourseId = normalizeCourseId(
 const resolvedActiveCourseLabel = resolvedActiveCourse?.title || '';
 const courseMenuLabel = resolvedActiveCourseLabel || 'Cursos';
 const showHeaderClassControls = Boolean(user && (resolvedActiveCourseId || hasPerformativeRoomLink));
+const normalizedTeacherCreateHref = typeof teacherCreateHref === 'string' ? teacherCreateHref.trim() : '';
+const normalizedTeacherEditHref = typeof teacherEditHref === 'string' ? teacherEditHref.trim() : '';
+const showTeacherEditorActions = Boolean(user && (normalizedTeacherCreateHref || normalizedTeacherEditHref));
 
 const withActiveCourse = (href: string) => {
 	if (!resolvedActiveCourseId) return href;
@@ -239,6 +246,36 @@ const withActiveCourse = (href: string) => {
 					>
 						Foro
 					</button>
+				) : null
+			}
+			{
+				showTeacherEditorActions ? (
+					<div class="header-editor-actions" aria-label="Acciones docentes">
+						{
+							normalizedTeacherCreateHref ? (
+								<a
+									href={normalizedTeacherCreateHref}
+									class="header-editor-btn"
+									title="Crear nota"
+									aria-label="Crear nota"
+								>
+									C
+								</a>
+							) : null
+						}
+						{
+							normalizedTeacherEditHref ? (
+								<a
+									href={normalizedTeacherEditHref}
+									class="header-editor-btn"
+									title="Editar nota"
+									aria-label="Editar nota"
+								>
+									E
+								</a>
+							) : null
+						}
+					</div>
 				) : null
 			}
 		</div>
@@ -983,6 +1020,32 @@ const withActiveCourse = (href: string) => {
 	.header-forum-toggle:hover {
 		color: var(--accent);
 	}
+	.header-editor-actions {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.26rem;
+		margin-left: 0.1rem;
+	}
+	.header-editor-btn {
+		width: 1.55rem;
+		height: 1.55rem;
+		border: 1px solid var(--c-border);
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--c-bg) 88%, var(--c-bg-mute) 12%);
+		color: var(--c-fg);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		text-decoration: none;
+		font-size: 0.76rem;
+		font-weight: 700;
+		line-height: 1;
+	}
+	.header-editor-btn:hover,
+	.header-editor-btn:focus-visible {
+		background: var(--c-bg-mute);
+		color: var(--accent);
+	}
 	.header-activity-led-btn {
 		border: none;
 		background: transparent;
@@ -1321,6 +1384,10 @@ const withActiveCourse = (href: string) => {
 			padding: 0.46em 0.34em;
 			font-size: 0.92rem;
 		}
+		.header-editor-btn {
+			width: 1.48rem;
+			height: 1.48rem;
+		}
 		.user-button {
 			padding: 0.46em 0.34em;
 			gap: 0.32rem;
@@ -1356,6 +1423,10 @@ const withActiveCourse = (href: string) => {
 		.header-forum-toggle {
 			padding: 0.45em 0.35em;
 			font-size: 0.95rem;
+		}
+		.header-editor-btn {
+			width: 1.46rem;
+			height: 1.46rem;
 		}
 		.user-button {
 			padding: 0.45em 0.35em;
@@ -1399,6 +1470,11 @@ const withActiveCourse = (href: string) => {
 		.header-forum-toggle {
 			padding: 0.35em 0.28em;
 			font-size: 0.82rem;
+		}
+		.header-editor-btn {
+			width: 1.36rem;
+			height: 1.36rem;
+			font-size: 0.72rem;
 		}
 		.social-links {
 			width: auto;
