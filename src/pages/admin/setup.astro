@@ -1,0 +1,198 @@
+---
+import BaseHead from '../../components/BaseHead.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { createClient } from '@supabase/supabase-js';
+
+// Check authentication
+const session = Astro.locals.session as any;
+const currentUser = session?.user;
+
+if (!currentUser?.email) {
+  return Astro.redirect('/login?redirect=/admin/setup');
+}
+
+// Initialize Supabase
+const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+
+// Get user from Supabase
+const { data: users } = await supabase.from('User').select('*').eq('email', currentUser.email);
+const dbUser = users?.[0];
+
+if (!dbUser) {
+  return Astro.redirect('/login?redirect=/admin/setup');
+}
+
+// Handle POST request to promote to teacher
+if (Astro.request.method === 'POST') {
+  try {
+    const { error } = await supabase.from('User')
+      .update({ role: 'teacher', updatedAt: new Date() })
+      .eq('id', dbUser.id);
+    
+    if (error) throw error;
+    return Astro.redirect('/dashboard');
+  } catch (error) {
+    console.error('Error promoting user:', error);
+  }
+}
+
+const isAlreadyTeacher = dbUser.role === 'teacher';
+---
+
+<html lang="es">
+  <head>
+    <BaseHead title="Admin Setup" description="Configuración de administrador" />
+    <meta charset="utf-8" />
+    <style>
+      .wrap {
+        max-width: 600px;
+        margin: 4rem auto;
+        padding: 2rem;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg);
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+      .user-info {
+        background: var(--c-bg-mute);
+        padding: 1.5rem;
+        border-radius: 6px;
+        margin-bottom: 2rem;
+      }
+      .user-info p {
+        margin: 0.5rem 0;
+        display: flex;
+        justify-content: space-between;
+      }
+      .user-info strong {
+        color: var(--c-fg);
+      }
+      .role-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+      }
+      .role-student {
+        background: #f3e5f5;
+        color: #7b1fa2;
+      }
+      .role-teacher {
+        background: #e3f2fd;
+        color: #1976d2;
+      }
+      .warning {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 2rem;
+      }
+      .success {
+        background: #d4edda;
+        border: 1px solid #4caf50;
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 2rem;
+        text-align: center;
+      }
+      .button-group {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+      }
+      button, .button {
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        font-size: 1rem;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+      }
+      .primary {
+        background: #1976d2;
+        color: white;
+        border: none;
+      }
+      .primary:hover {
+        background: #1565c0;
+      }
+      .secondary {
+        background: var(--c-bg-mute);
+        color: var(--c-fg);
+        border: 1px solid var(--c-border);
+      }
+      .secondary:hover {
+        background: var(--c-border);
+      }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main class="wrap">
+      <h1>🔧 Admin Setup</h1>
+      
+      <div class="user-info">
+        <p>
+          <strong>Nombre:</strong>
+          <span>{dbUser.name}</span>
+        </p>
+        <p>
+          <strong>Email:</strong>
+          <span>{dbUser.email}</span>
+        </p>
+        <p>
+          <strong>Rol Actual:</strong>
+          <span class:list={['role-badge', dbUser.role === 'teacher' ? 'role-teacher' : 'role-student']}>
+            {dbUser.role === 'teacher' ? '👨‍🏫 Teacher' : '👨‍🎓 Student'}
+          </span>
+        </p>
+      </div>
+
+      {isAlreadyTeacher ? (
+        <div class="success">
+          <h2>✅ Ya eres Teacher</h2>
+          <p>Tienes acceso completo al panel de administración.</p>
+        </div>
+      ) : (
+        <>
+          <div class="warning">
+            <h3>⚠️ Promoción a Teacher</h3>
+            <p>Al promocionarte a Teacher, tendrás acceso a:</p>
+            <ul>
+              <li>Panel de administración completo</li>
+              <li>Gestión de usuarios</li>
+              <li>Ver todas las inscripciones</li>
+              <li>Calificar entregas de estudiantes</li>
+            </ul>
+          </div>
+
+          <form method="POST">
+            <div class="button-group">
+              <button type="submit" class="primary">
+                🚀 Promocionar a Teacher
+              </button>
+              <a href="/dashboard" class="button secondary">
+                Cancelar
+              </a>
+            </div>
+          </form>
+        </>
+      )}
+
+      {isAlreadyTeacher && (
+        <div class="button-group" style="margin-top: 2rem;">
+          <a href="/dashboard" class="button primary">
+            Ir al Dashboard
+          </a>
+        </div>
+      )}
+    </main>
+    <Footer />
+  </body>
+</html>

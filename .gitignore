@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.tmp/
+
+# Astro
+.astro/
+.content-sources/
+src/content/cursos/**
+!src/content/cursos/
+!src/content/cursos/.gitkeep
+src/content/public/**
+!src/content/public/
+!src/content/public/.gitkeep
+src/content/.obsidian/
+
+# Environment variables
+.env
+.env*.local
+.vercel
+
+# Editor directories and files
+.history/
+.DS_Store
+.aiexclude
+.vscode/easycode.ignore

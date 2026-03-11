@@ -1,0 +1,1050 @@
+---
+import BaseHead from '../../../components/BaseHead.astro';
+import Header from '../../../components/Header.astro';
+import Footer from '../../../components/Footer.astro';
+import { createClient } from '@supabase/supabase-js';
+import { createSupabaseServerClient } from '../../../lib/forum-server';
+import { getResultIcon, getSubmissionAnswerText, getSubmissionResultState } from '../../../lib/submission-table';
+import { getEvalOptionMap } from '../../../lib/eval-option-map';
+import '../../../styles/theme.css';
+
+const { id } = Astro.params;
+
+// --- AUTHENTICATION & DATA FETCHING ---
+const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+const session = Astro.locals.session as any;
+const currentUser = session?.user;
+
+if (!currentUser) return Astro.redirect('/login');
+
+// Check if viewer is teacher
+const { data: viewer } = await supabase.from('User').select('role').eq('email', currentUser.email).single();
+if (viewer?.role !== 'teacher') return Astro.redirect('/dashboard');
+
+// Fetch Target User
+const { data: user, error: userError } = await supabase.from('User').select('*').eq('id', id).single();
+
+if (userError || !user) {
+  return Astro.redirect('/dashboard');
+}
+
+const normalizedUserRole = String(user.role || '').trim().toLowerCase() === 'teacher' ? 'teacher' : 'student';
+const userShortName = String(user.name || user.email || user.id).trim().split(/\s+/).filter(Boolean)[0] || 'usuario';
+
+// Fetch Enrollments
+const { data: enrollments } = await supabase.from('Enrollment').select('*').eq('userId', id);
+
+// Fetch Submissions
+const { data: submissions } = await supabase.from('Submission').select('*').eq('userId', id).order('submittedAt', { ascending: false });
+
+// Fetch Assignments to map IDs to names
+const { data: assignments } = await supabase.from('Assignment').select('*');
+const evalOptionMap = await getEvalOptionMap();
+const assignmentById = new Map<string, any>(
+  (assignments || []).map((assignment: any) => {
+    const fallbackOptions = evalOptionMap.get(assignment.id);
+    return [assignment.id, fallbackOptions ? { ...assignment, options: fallbackOptions } : assignment];
+  }),
+);
+for (const [evalId, options] of evalOptionMap.entries()) {
+  if (!assignmentById.has(evalId)) {
+    assignmentById.set(evalId, { id: evalId, options });
+  }
+}
+
+// Helper to get assignment info
+const getAssignmentInfo = (aid: string) => {
+  const a = assignments?.find(x => x.id === aid);
+  return a ? { slug: a.slug, courseId: a.courseId } : { slug: aid, courseId: 'Unknown' };
+};
+
+const getDateTimestamp = (value: unknown) => {
+  const parsed = new Date(String(value || ''));
+  if (Number.isNaN(parsed.getTime())) return 0;
+  return parsed.getTime();
+};
+
+const formatSubmissionDate = (value: string | null | undefined) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const decodeUriSafe = (value: string | null | undefined) => {
+  if (!value) return '';
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const formatDurationFromMs = (value: unknown) => {
+  const ms = Number(value || 0);
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+const getAttendanceDayKey = (session: any, attendance: any) => {
+  const value =
+    session?.startedAt
+    || attendance?.firstJoinedAt
+    || attendance?.lastEventAt
+    || attendance?.lastLeftAt
+    || attendance?.createdAt
+    || '';
+  const parsed = new Date(String(value || ''));
+  if (Number.isNaN(parsed.getTime())) return '';
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatAttendanceDayLabel = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return 'Sin fecha';
+  const [year, month, day] = String(value).split('-').map(Number);
+  const parsed = new Date(year, (month || 1) - 1, day || 1);
+  if (Number.isNaN(parsed.getTime())) return 'Sin fecha';
+  return parsed.toLocaleDateString('es-ES', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
+
+const computeAttendanceDurationMs = (attendance: any, session: any) => {
+  const startedAt = getDateTimestamp(attendance?.firstJoinedAt);
+  const endedAt =
+    getDateTimestamp(attendance?.lastLeftAt)
+    || getDateTimestamp(attendance?.lastEventAt)
+    || getDateTimestamp(session?.finishedAt)
+    || getDateTimestamp(session?.lastEventAt);
+
+  if (!startedAt || !endedAt || endedAt <= startedAt) return 0;
+  return endedAt - startedAt;
+};
+
+let userAttendance: any[] = [];
+let userLiveSessions: any[] = [];
+
+try {
+  const attendanceSupabase = createSupabaseServerClient({ requireServiceRole: true });
+  const { data: attendanceRows, error: attendanceError } = await attendanceSupabase
+    .from('LiveClassAttendance')
+    .select('*')
+    .eq('userId', id)
+    .order('lastEventAt', { ascending: false });
+
+  if (attendanceError) {
+    console.error('Error loading user attendance rows:', attendanceError);
+  } else {
+    userAttendance = attendanceRows || [];
+  }
+
+  const sessionIds = Array.from(new Set(userAttendance.map((row: any) => String(row?.sessionId || '').trim()).filter(Boolean)));
+  if (sessionIds.length > 0) {
+    const { data: sessionRows, error: sessionError } = await attendanceSupabase
+      .from('LiveClassSession')
+      .select('*')
+      .in('id', sessionIds)
+      .order('startedAt', { ascending: false });
+
+    if (sessionError) {
+      console.error('Error loading user live sessions:', sessionError);
+    } else {
+      userLiveSessions = sessionRows || [];
+    }
+  }
+} catch (error) {
+  console.error('Error initializing admin user attendance queries:', error);
+}
+
+const userSessionById = new Map<string, any>(
+  (userLiveSessions || []).map((session: any) => [String(session?.id || ''), session]),
+);
+
+const attendanceLogRows = (userAttendance || []).map((attendance: any) => {
+  const session = userSessionById.get(String(attendance?.sessionId || '')) || null;
+  const durationMs = computeAttendanceDurationMs(attendance, session);
+  const lessonPath = String(session?.pageSlug || attendance?.pageSlug || session?.roomName || 'Clase');
+  const dayKey = getAttendanceDayKey(session, attendance);
+  return {
+    ...attendance,
+    dayKey,
+    dayLabel: formatAttendanceDayLabel(dayKey),
+    pageSlug: String(session?.pageSlug || attendance?.pageSlug || ''),
+    lessonLabel: decodeUriSafe(lessonPath.split('/').pop() || lessonPath || 'Clase'),
+    courseId: String(session?.courseId || attendance?.courseId || '—'),
+    durationMs,
+    durationLabel: formatDurationFromMs(durationMs),
+    startedAtLabel: formatSubmissionDate(session?.startedAt),
+    firstJoinedLabel: formatSubmissionDate(attendance?.firstJoinedAt),
+    lastLeftLabel: formatSubmissionDate(attendance?.lastLeftAt),
+    lastSeenLabel: formatSubmissionDate(attendance?.lastEventAt),
+  };
+});
+
+const uniqueAttendanceSessionIds = new Set(
+  attendanceLogRows
+    .filter((row: any) => Number(row?.joinCount || 0) > 0)
+    .map((row: any) => String(row?.sessionId || '').trim())
+    .filter(Boolean),
+);
+
+const totalConnectedMs = attendanceLogRows.reduce((sum: number, row: any) => sum + Number(row?.durationMs || 0), 0);
+const totalJoinCount = attendanceLogRows.reduce((sum: number, row: any) => sum + Math.max(0, Number(row?.joinCount || 0)), 0);
+const averageConnectedMs = uniqueAttendanceSessionIds.size > 0 ? totalConnectedMs / uniqueAttendanceSessionIds.size : 0;
+
+const attendanceDayGroups = (() => {
+  const groups = new Map<string, any>();
+  attendanceLogRows.forEach((row: any) => {
+    const dayKey = String(row?.dayKey || '').trim();
+    const group = groups.get(dayKey) || {
+      dayKey,
+      dayLabel: row?.dayLabel || 'Sin fecha',
+      latestSeenAt: '',
+      rows: [],
+    };
+    group.rows.push(row);
+    if (getDateTimestamp(row?.lastEventAt || row?.lastLeftAt || row?.firstJoinedAt) >= getDateTimestamp(group.latestSeenAt)) {
+      group.latestSeenAt = String(row?.lastEventAt || row?.lastLeftAt || row?.firstJoinedAt || '');
+    }
+    groups.set(dayKey, group);
+  });
+
+  return Array.from(groups.values())
+    .map((group: any) => ({
+      ...group,
+      rows: [...group.rows].sort((left: any, right: any) =>
+        getDateTimestamp(right?.lastEventAt || right?.lastLeftAt || right?.firstJoinedAt)
+          - getDateTimestamp(left?.lastEventAt || left?.lastLeftAt || left?.firstJoinedAt),
+      ),
+    }))
+    .sort((left: any, right: any) => getDateTimestamp(right.latestSeenAt) - getDateTimestamp(left.latestSeenAt));
+})();
+---
+
+<html lang="es">
+  <head>
+    <BaseHead title={`Perfil: ${user.name}`} description="Detalles del usuario" />
+    <style>
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
+      .profile-header { background: var(--c-bg-mute); padding: 2rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 1.5rem; border: 1px solid var(--c-border); }
+      .avatar { width: 80px; height: 80px; background: var(--c-link); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: bold; }
+      .info h1 { margin: 0 0 0.5rem 0; font-size: 1.8rem; }
+      .meta { color: var(--c-fg-dim); font-size: 0.9rem; display: flex; gap: 1rem; }
+      .profile-role-tools {
+        margin-left: auto;
+        min-width: 260px;
+        display: grid;
+        gap: 0.6rem;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg);
+      }
+      .profile-role-label {
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+      }
+      .profile-role-row {
+        display: flex;
+        gap: 0.55rem;
+        align-items: center;
+      }
+      .profile-role-select {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 0.55rem 0.7rem;
+        border: 1px solid var(--c-border);
+        border-radius: 6px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font-size: 0.92rem;
+      }
+      .profile-role-save {
+        padding: 0.55rem 0.9rem;
+        border: 1px solid var(--c-border);
+        border-radius: 6px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .profile-role-save:hover {
+        border-color: var(--c-link);
+        color: var(--c-link);
+      }
+      .profile-role-save:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      .profile-role-note {
+        margin: 0;
+        font-size: 0.8rem;
+        color: var(--c-fg-dim);
+      }
+      .profile-role-status {
+        min-height: 1.1rem;
+        font-size: 0.78rem;
+        color: var(--c-fg-dim);
+      }
+      .profile-role-status.is-success {
+        color: #1f8f45;
+      }
+      .profile-role-status.is-error {
+        color: #c62828;
+      }
+      .badge { padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+      .role-student { background: #e8f5e9; color: #2e7d32; }
+      .role-teacher { background: #e3f2fd; color: #1565c0; }
+      
+      .section { margin-bottom: 3rem; }
+      .section h2 { border-bottom: 2px solid var(--c-border); padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
+      
+      .data-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+      .data-table th { text-align: left; padding: 0.75rem; background: var(--c-bg-mute); border-bottom: 2px solid var(--c-border); }
+      .data-table td { padding: 0.75rem; border-bottom: 1px solid var(--c-border); }
+      .attendance-stat-cluster { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+      .attendance-stat-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.28rem;
+        padding: 0.22rem 0.42rem;
+        border: 1px solid var(--c-border);
+        border-radius: 999px;
+        background: var(--c-bg);
+        font-size: 0.78rem;
+        cursor: help;
+        white-space: nowrap;
+      }
+      .status-graded { color: #2e7d32; font-weight: 500; }
+      .status-pending { color: #f57c00; font-weight: 500; }
+      .result-icon { font-size: 1rem; font-weight: 700; line-height: 1; display: inline-flex; align-items: center; justify-content: center; min-width: 1rem; }
+      .result-icon.correct { color: #1f8f45; }
+      .result-icon.incorrect { color: #c62828; }
+      .result-icon.pending { color: #8b9098; }
+      .quick-score-input {
+        width: 64px;
+        padding: 0.3rem 0.45rem;
+        text-align: center;
+        border: 1px solid var(--c-border);
+        border-radius: 6px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font-size: 0.86rem;
+      }
+      .quick-feedback-input {
+        width: min(100%, 320px);
+        padding: 0.35rem 0.5rem;
+        border: 1px solid var(--c-border);
+        border-radius: 6px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font-size: 0.84rem;
+      }
+      .quick-saving { border-color: #f59e0b !important; }
+      .quick-success { border-color: #16a34a !important; }
+      .quick-error { border-color: #dc2626 !important; }
+      .fold-shortcuts {
+        margin: 0 0 0.8rem 0;
+        padding: 0.6rem 0.7rem;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg-mute);
+        font-size: 0.82rem;
+      }
+      .fold-shortcuts kbd {
+        border: 1px solid var(--c-border);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 0.05rem 0.35rem;
+        font-size: 0.75rem;
+        background: var(--c-bg);
+      }
+      .fold-node {
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg);
+      }
+      .fold-node + .fold-node {
+        margin-top: 0.7rem;
+      }
+      .fold-header {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.55rem 0.65rem;
+        border: none;
+        background: var(--c-bg-mute);
+        color: var(--c-fg);
+        text-align: left;
+        cursor: pointer;
+        border-radius: 7px 7px 0 0;
+        font-size: 0.88rem;
+      }
+      .fold-node[data-fold-level="1"] > .fold-header {
+        font-weight: 700;
+      }
+      .fold-node[data-fold-level="2"] > .fold-header {
+        font-weight: 600;
+      }
+      .fold-children {
+        padding: 0.65rem;
+      }
+      .fold-node.is-collapsed > .fold-children {
+        display: none;
+      }
+      .fold-toggle-icon {
+        width: 1rem;
+        text-align: center;
+        font-size: 0.82rem;
+        color: var(--c-fg-dim);
+      }
+      .fold-node.is-collapsed .fold-toggle-icon {
+        transform: rotate(-90deg);
+      }
+      .fold-summary {
+        margin-left: auto;
+        font-size: 0.8rem;
+        color: var(--c-fg-dim);
+      }
+      .fold-level-2 {
+        margin-left: 0.4rem;
+      }
+      .fold-level-3 {
+        margin-left: 0.4rem;
+      }
+      .fold-level-4 {
+        margin-left: 0.4rem;
+      }
+      .fold-day-note {
+        font-size: 0.8rem;
+        color: var(--c-fg-dim);
+      }
+      
+      .back-link { display: inline-block; margin-bottom: 1rem; color: var(--c-link); text-decoration: none; }
+      .back-link:hover { text-decoration: underline; }
+      @media (max-width: 900px) {
+        .profile-header {
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+        .profile-role-tools {
+          width: 100%;
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main class="wrap">
+      <a href="/dashboard" class="back-link">← Volver al Panel</a>
+      
+      <div class="profile-header">
+        <div class="avatar">
+          {user.image ? <img src={user.image} alt={user.name} style="width:100%; height:100%; border-radius:50%; object-fit:cover;" /> : user.name.charAt(0).toUpperCase()}
+        </div>
+        <div class="info">
+          <h1>{user.name}</h1>
+          <div class="meta">
+            <span>📧 {user.email}</span>
+            <span>🆔 {user.id}</span>
+            <span class={`badge role-${normalizedUserRole}`} data-user-role-badge>{normalizedUserRole}</span>
+          </div>
+        </div>
+        <section class="profile-role-tools" aria-label="Editar rol del usuario">
+          <span class="profile-role-label">Rol global</span>
+          <div class="profile-role-row">
+            <select class="profile-role-select" data-role-select value={normalizedUserRole}>
+              <option value="student">student</option>
+              <option value="teacher">teacher</option>
+            </select>
+            <button
+              type="button"
+              class="profile-role-save"
+              data-role-save
+              data-user-id={user.id}
+              data-user-label={userShortName}
+            >
+              Guardar
+            </button>
+          </div>
+          <p class="profile-role-note">Teachers pueden promover o degradar otros usuarios desde esta vista.</p>
+          <div class="profile-role-status" data-role-status aria-live="polite"></div>
+        </section>
+      </div>
+
+      <div class="section">
+        <h2>📚 Cursos Inscritos</h2>
+        {enrollments && enrollments.length > 0 ? (
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID del Curso</th>
+                <th>Rol en Curso</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {enrollments.map((e: any) => (
+                <tr>
+                  <td><strong>{e.courseId}</strong></td>
+                  <td>{e.roleInCourse}</td>
+                  <td><span style="color: green;">Active</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p>Este usuario no está inscrito en ningún curso.</p>
+        )}
+      </div>
+
+      <div class="section">
+        <h2>📝 Historial de Entregas</h2>
+        {submissions && submissions.length > 0 ? (
+          <>
+            <p class="fold-shortcuts">
+              <strong>Atajos:</strong>
+              <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>↑</kbd> fold all,
+              <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>↓</kbd> unfold all,
+              <kbd>⌘</kbd> + <kbd>↑</kbd> fold un nivel,
+              <kbd>⌘</kbd> + <kbd>↓</kbd> unfold un nivel.
+            </p>
+
+            {(() => {
+              const groupedByCourse = submissions.reduce((acc: any, submission: any) => {
+                const info = getAssignmentInfo(submission.assignmentId);
+                const assignment = assignmentById.get(submission.assignmentId);
+                const assignmentSlug = String(assignment?.slug || info.slug || submission.assignmentId || '');
+                const rawParts = assignmentSlug.replace(/^\/+/, '').split('/').filter(Boolean);
+                const decodedParts = rawParts.map((part: string) => decodeUriSafe(part));
+                const courseId = decodeUriSafe(assignment?.courseId || info.courseId || decodedParts[0] || 'sin-curso');
+
+                let relativeParts = decodedParts;
+                if (courseId && relativeParts[0] === courseId) {
+                  relativeParts = relativeParts.slice(1);
+                } else if (relativeParts.length > 1) {
+                  relativeParts = relativeParts.slice(1);
+                }
+
+                const noteKey = relativeParts[relativeParts.length - 1] || decodeUriSafe(submission.assignmentId);
+                const folderKey = relativeParts[0] || 'general';
+                const h1Key = relativeParts.length > 2 ? relativeParts.slice(1, -1).join(' / ') : '';
+
+                if (!acc[courseId]) acc[courseId] = {};
+                if (!acc[courseId][folderKey]) {
+                  acc[courseId][folderKey] = { notes: {}, h1Groups: {} };
+                }
+
+                if (h1Key) {
+                  if (!acc[courseId][folderKey].h1Groups[h1Key]) {
+                    acc[courseId][folderKey].h1Groups[h1Key] = { notes: {} };
+                  }
+                  if (!acc[courseId][folderKey].h1Groups[h1Key].notes[noteKey]) {
+                    acc[courseId][folderKey].h1Groups[h1Key].notes[noteKey] = [];
+                  }
+                  acc[courseId][folderKey].h1Groups[h1Key].notes[noteKey].push(submission);
+                } else {
+                  if (!acc[courseId][folderKey].notes[noteKey]) {
+                    acc[courseId][folderKey].notes[noteKey] = [];
+                  }
+                  acc[courseId][folderKey].notes[noteKey].push(submission);
+                }
+
+                return acc;
+              }, {});
+
+              return Object.entries(groupedByCourse).map(([courseId, folderGroups]: [string, any]) => {
+                const courseSubmissions = Object.values(folderGroups).flatMap((folderGroup: any) => {
+                  const directNotes = Object.values(folderGroup.notes || {}).flat();
+                  const nestedH1 = Object.values(folderGroup.h1Groups || {}).flatMap((h1Group: any) =>
+                    Object.values(h1Group.notes || {}).flat(),
+                  );
+                  return [...directNotes, ...nestedH1];
+                }) as any[];
+                const coursePending = courseSubmissions.filter((submission: any) => !submission.gradedAt).length;
+
+                const renderNoteSection = (noteKey: string, noteSubmissions: any[], foldLevel: number) => {
+                  const notePending = noteSubmissions.filter((submission: any) => !submission.gradedAt).length;
+                  return (
+                    <section
+                      class:list={['fold-node', foldLevel === 3 ? 'fold-level-3' : '', foldLevel >= 4 ? 'fold-level-4' : '']}
+                      data-fold-level={foldLevel}
+                      data-fold-node
+                      data-fold-scope="user-corrections"
+                      style="margin-bottom: 0.5rem;"
+                    >
+                      <button type="button" class="fold-header" data-fold-toggle>
+                        <span class="fold-toggle-icon">▾</span>
+                        <span>📝 {decodeUriSafe(noteKey)}</span>
+                        <span class="fold-summary">{noteSubmissions.length} respuestas • {notePending} pendientes</span>
+                      </button>
+                      <div class="fold-children">
+                        <table class="data-table">
+                          <thead>
+                            <tr>
+                              <th>Tarea</th>
+                              <th>Entrega</th>
+                              <th>Respuesta</th>
+                              <th>Resultado</th>
+                              <th>Punto (x/10)</th>
+                              <th>Retroalimentación</th>
+                              <th>Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {noteSubmissions.map((s: any) => {
+                              const info = getAssignmentInfo(s.assignmentId);
+                              const assignment = assignmentById.get(s.assignmentId);
+                              const assignmentSlug = assignment?.slug || info.slug;
+                              const assignmentLabel = decodeUriSafe(assignmentSlug.split('/').pop() || assignmentSlug);
+                              const answerText = getSubmissionAnswerText(s, assignmentById);
+                              const resultState = getSubmissionResultState(s);
+
+                              return (
+                                <tr>
+                                  <td>{assignmentLabel}</td>
+                                  <td style="font-size: 0.85rem;">{formatSubmissionDate(s.submittedAt)}</td>
+                                  <td style="max-width: 320px; font-size: 0.84rem;">{answerText}</td>
+                                  <td style="text-align: center;">
+                                    <span class:list={['result-icon', resultState]}>{getResultIcon(resultState)}</span>
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="10"
+                                      step="0.1"
+                                      value={s.score !== null && s.score !== undefined ? s.score : ''}
+                                      placeholder="-"
+                                      class="quick-score-input"
+                                      data-submission-id={s.id}
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="text"
+                                      class="quick-feedback-input"
+                                      data-submission-id={s.id}
+                                      value={s.feedback || ''}
+                                      placeholder="Enter para guardar"
+                                    />
+                                  </td>
+                                  <td>
+                                    <a href={`/admin/grade/${s.id}`} style="color: var(--c-link);">Ver entrega</a>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  );
+                };
+
+                return (
+                  <section class="fold-node" data-fold-level="1" data-fold-node data-fold-scope="user-corrections" style="margin-bottom: 0.85rem;">
+                    <button type="button" class="fold-header" data-fold-toggle>
+                      <span class="fold-toggle-icon">▾</span>
+                      <span>📚 {decodeUriSafe(courseId)}</span>
+                      <span class="fold-summary">{courseSubmissions.length} entregas • {coursePending} pendientes</span>
+                    </button>
+                    <div class="fold-children">
+                      {Object.entries(folderGroups).map(([folderKey, folderGroup]: [string, any]) => {
+                        const folderSubmissions = [
+                          ...Object.values(folderGroup.notes || {}).flat(),
+                          ...Object.values(folderGroup.h1Groups || {}).flatMap((h1Group: any) =>
+                            Object.values(h1Group.notes || {}).flat(),
+                          ),
+                        ] as any[];
+                        const folderPending = folderSubmissions.filter((submission: any) => !submission.gradedAt).length;
+
+                        return (
+                          <section class="fold-node fold-level-2" data-fold-level="2" data-fold-node data-fold-scope="user-corrections" style="margin-bottom: 0.55rem;">
+                            <button type="button" class="fold-header" data-fold-toggle>
+                              <span class="fold-toggle-icon">▾</span>
+                              <span>📁 {decodeUriSafe(folderKey)}</span>
+                              <span class="fold-summary">{folderSubmissions.length} entregas • {folderPending} pendientes</span>
+                            </button>
+                            <div class="fold-children">
+                              {Object.entries(folderGroup.notes || {}).map(([noteKey, noteSubmissions]: [string, any]) =>
+                                renderNoteSection(noteKey, noteSubmissions as any[], 3),
+                              )}
+
+                              {Object.entries(folderGroup.h1Groups || {}).map(([h1Key, h1Group]: [string, any]) => {
+                                const h1Submissions = Object.values(h1Group.notes || {}).flat() as any[];
+                                const h1Pending = h1Submissions.filter((submission: any) => !submission.gradedAt).length;
+
+                                return (
+                                  <section class="fold-node fold-level-3" data-fold-level="3" data-fold-node data-fold-scope="user-corrections" style="margin-bottom: 0.5rem;">
+                                    <button type="button" class="fold-header" data-fold-toggle>
+                                      <span class="fold-toggle-icon">▾</span>
+                                      <span># {decodeUriSafe(h1Key)}</span>
+                                      <span class="fold-summary">{h1Submissions.length} respuestas • {h1Pending} pendientes</span>
+                                    </button>
+                                    <div class="fold-children">
+                                      {Object.entries(h1Group.notes || {}).map(([noteKey, noteSubmissions]: [string, any]) =>
+                                        renderNoteSection(noteKey, noteSubmissions as any[], 4),
+                                      )}
+                                    </div>
+                                  </section>
+                                );
+                              })}
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              });
+            })()}
+          </>
+        ) : (
+          <p>No hay entregas registradas.</p>
+        )}
+      </div>
+
+      <div class="section">
+        <h2>🛰️ Asistencias en Vivo</h2>
+        {attendanceLogRows.length > 0 ? (
+          <>
+            <div class="attendance-stat-cluster" style="margin-bottom: 1rem;">
+              <span class="attendance-stat-chip" title="Sesiones con ingreso registrado">
+                <span aria-hidden="true">🎬</span>
+                <strong>{uniqueAttendanceSessionIds.size}</strong>
+              </span>
+              <span class="attendance-stat-chip" title="Cantidad total de conexiones">
+                <span aria-hidden="true">↻</span>
+                <strong>{totalJoinCount}</strong>
+              </span>
+              <span class="attendance-stat-chip" title="Promedio de tiempo por sesión">
+                <span aria-hidden="true">∅</span>
+                <strong>{formatDurationFromMs(averageConnectedMs)}</strong>
+              </span>
+              <span class="attendance-stat-chip" title="Tiempo total conectado">
+                <span aria-hidden="true">⏱</span>
+                <strong>{formatDurationFromMs(totalConnectedMs)}</strong>
+              </span>
+            </div>
+
+            {attendanceDayGroups.map((group: any) => (
+              <section
+                class="fold-node fold-level-1"
+                data-fold-level="1"
+                data-fold-node
+                data-fold-scope="admin-user-attendance"
+                style="margin-bottom: 0.65rem;"
+              >
+                <button type="button" class="fold-header" data-fold-toggle>
+                  <span class="fold-toggle-icon">▾</span>
+                  <span>{group.dayLabel}</span>
+                  <span class="fold-summary">{group.rows.length} conexiones</span>
+                </button>
+                <div class="fold-children">
+                  <p class="fold-day-note">Log de conexiones del usuario para este día.</p>
+                  <table class="data-table" style="margin-top: 0.35rem;">
+                    <thead>
+                      <tr>
+                        <th>Curso</th>
+                        <th>Clase</th>
+                        <th>Inicio</th>
+                        <th>Ingresos</th>
+                        <th>Salidas</th>
+                        <th>Abortos</th>
+                        <th>Tiempo</th>
+                        <th>Última actividad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.rows.map((row: any) => (
+                        <tr>
+                          <td>{row.courseId || '—'}</td>
+                          <td title={row.pageSlug || ''}>{row.lessonLabel}</td>
+                          <td>{row.startedAtLabel}</td>
+                          <td>{row.joinCount || 0}</td>
+                          <td>{row.leaveCount || 0}</td>
+                          <td>{row.abortedCount || 0}</td>
+                          <td>{row.durationLabel}</td>
+                          <td>{row.lastSeenLabel}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))}
+          </>
+        ) : (
+          <p>Este usuario no registra conexiones en vivo.</p>
+        )}
+      </div>
+    </main>
+    <script>
+      function markQuickState(input, state) {
+        input.classList.remove('quick-saving', 'quick-success', 'quick-error');
+        if (state) input.classList.add(state);
+        if (state === 'quick-success' || state === 'quick-error') {
+          setTimeout(() => {
+            input.classList.remove('quick-success', 'quick-error');
+          }, 1200);
+        }
+      }
+
+      async function saveQuickSubmissionField({ submissionId, score, feedback, input }) {
+        if (!submissionId || !input) return;
+        markQuickState(input, 'quick-saving');
+
+        try {
+          const response = await fetch('/api/grade/quick-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              submissionId,
+              score,
+              feedback,
+            }),
+          });
+
+          if (!response.ok) {
+            markQuickState(input, 'quick-error');
+            return;
+          }
+
+          markQuickState(input, 'quick-success');
+        } catch (error) {
+          console.error('Error saving quick submission field:', error);
+          markQuickState(input, 'quick-error');
+        }
+      }
+
+      function initializeSubmissionQuickEditors() {
+        const feedbackInputs = document.querySelectorAll('.quick-feedback-input');
+        const scoreInputs = document.querySelectorAll('.quick-score-input');
+
+        feedbackInputs.forEach((input) => {
+          if (input.dataset.bound === 'true') return;
+          input.dataset.bound = 'true';
+
+          input.addEventListener('keydown', async (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            await saveQuickSubmissionField({
+              submissionId: input.dataset.submissionId,
+              feedback: input.value,
+              input,
+            });
+          });
+        });
+
+        scoreInputs.forEach((input) => {
+          if (input.dataset.bound === 'true') return;
+          input.dataset.bound = 'true';
+
+          const saveScore = async () => {
+            if (input.value === '') return;
+            const score = parseFloat(input.value);
+            if (Number.isNaN(score)) return;
+            await saveQuickSubmissionField({
+              submissionId: input.dataset.submissionId,
+              score,
+              input,
+            });
+          };
+
+          input.addEventListener('keydown', async (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            await saveScore();
+          });
+
+          input.addEventListener('blur', saveScore);
+        });
+      }
+
+      function initializeRoleEditor() {
+        const select = document.querySelector('[data-role-select]');
+        const button = document.querySelector('[data-role-save]');
+        const status = document.querySelector('[data-role-status]');
+        const badge = document.querySelector('[data-user-role-badge]');
+        if (!(select instanceof HTMLSelectElement) || !(button instanceof HTMLButtonElement) || !(status instanceof HTMLElement)) {
+          return;
+        }
+
+        const setStatus = (message, state = '') => {
+          status.textContent = message;
+          status.classList.remove('is-success', 'is-error');
+          if (state) status.classList.add(state);
+        };
+
+        const syncDirtyState = () => {
+          button.disabled = select.value === select.defaultValue;
+        };
+
+        syncDirtyState();
+        select.addEventListener('change', syncDirtyState);
+
+        button.addEventListener('click', async () => {
+          const userId = String(button.dataset.userId || '').trim();
+          const userLabel = String(button.dataset.userLabel || 'este usuario').trim();
+          const nextRole = String(select.value || '').trim().toLowerCase();
+          if (!userId || !nextRole) return;
+
+          const confirmed = window.confirm(`¿Cambiar el rol de ${userLabel} a "${nextRole}"?`);
+          if (!confirmed) return;
+
+          button.disabled = true;
+          setStatus('Guardando…');
+
+          try {
+            const response = await fetch(`/api/admin/users/${userId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role: nextRole }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload?.error || 'No se pudo actualizar el rol');
+            }
+
+            select.defaultValue = nextRole;
+            if (badge) {
+              badge.textContent = nextRole;
+              badge.classList.remove('role-student', 'role-teacher');
+              badge.classList.add(`role-${nextRole}`);
+            }
+            setStatus('Rol actualizado.', 'is-success');
+          } catch (error) {
+            console.error('Error updating user role:', error);
+            setStatus(error?.message || 'No se pudo actualizar el rol.', 'is-error');
+          } finally {
+            syncDirtyState();
+          }
+        });
+      }
+
+      const foldScope = 'user-corrections';
+      const foldState = { depth: 0, maxLevel: 1 };
+
+      function getFoldNodes() {
+        return Array.from(document.querySelectorAll(`[data-fold-node][data-fold-scope="${foldScope}"]`));
+      }
+
+      function applyFoldDepth() {
+        const foldNodes = getFoldNodes();
+        if (foldNodes.length === 0) return;
+
+        const collapseFromLevel = foldState.maxLevel - foldState.depth + 1;
+        foldNodes.forEach((node) => {
+          const level = Number(node.dataset.foldLevel || 0);
+          const shouldCollapse = foldState.depth > 0 && level >= collapseFromLevel;
+          node.classList.toggle('is-collapsed', shouldCollapse);
+        });
+      }
+
+      function setFoldDepth(nextDepth) {
+        const bounded = Math.max(0, Math.min(foldState.maxLevel, nextDepth));
+        foldState.depth = bounded;
+        applyFoldDepth();
+      }
+
+      function initializeCorrectionsFolding() {
+        const foldNodes = getFoldNodes();
+        if (foldNodes.length === 0) return false;
+
+        foldState.maxLevel = foldNodes.reduce((max, node) => {
+          const level = Number(node.dataset.foldLevel || 0);
+          return Math.max(max, level);
+        }, 1);
+
+        foldNodes.forEach((node) => {
+          if (node.dataset.foldBound === 'true') return;
+          node.dataset.foldBound = 'true';
+
+          const toggle = node.querySelector('[data-fold-toggle]');
+          if (!toggle) return;
+
+          toggle.addEventListener('click', () => {
+            node.classList.toggle('is-collapsed');
+          });
+        });
+
+        applyFoldDepth();
+        return true;
+      }
+
+      function handleFoldShortcuts(event) {
+        if (!event.metaKey) return;
+        if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+
+        const target = event.target;
+        if (target instanceof HTMLElement) {
+          const tag = target.tagName.toLowerCase();
+          if (target.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select') {
+            return;
+          }
+        }
+
+        if (!initializeCorrectionsFolding()) return;
+
+        if (event.shiftKey && event.key === 'ArrowUp') {
+          event.preventDefault();
+          setFoldDepth(foldState.maxLevel);
+          return;
+        }
+
+        if (event.shiftKey && event.key === 'ArrowDown') {
+          event.preventDefault();
+          setFoldDepth(0);
+          return;
+        }
+
+        if (!event.shiftKey && event.key === 'ArrowUp') {
+          event.preventDefault();
+          setFoldDepth(foldState.depth + 1);
+          return;
+        }
+
+        if (!event.shiftKey && event.key === 'ArrowDown') {
+          event.preventDefault();
+          setFoldDepth(foldState.depth - 1);
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        initializeSubmissionQuickEditors();
+        initializeRoleEditor();
+        initializeCorrectionsFolding();
+        document.addEventListener('keydown', handleFoldShortcuts);
+      });
+    </script>
+    <Footer />
+  </body>
+</html>

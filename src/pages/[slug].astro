@@ -1,0 +1,118 @@
+---
+export const prerender = false;
+
+import { getCollection, render } from 'astro:content';
+import WikiLayout from '../layouts/WikiLayout.astro';
+import RevealSlidesLayout from '../layouts/RevealSlidesLayout.astro';
+import { buildCourseLessonHref } from '../lib/course-routing';
+import {
+  getContentFilenameSlug,
+  getContentFrontmatterSlug,
+  getContentTitleSlug,
+  normalizeContentSlug,
+} from '../lib/content-slug';
+
+const { slug } = Astro.params;
+const isSlidesView = Astro.url.searchParams.get('view') === 'slides';
+const targetSlug = normalizeContentSlug(decodeURIComponent(slug || ''));
+
+// Get all content entries
+const allContent = await getCollection('content');
+
+const findUniqueMatch = <T,>(items: T[]) => (items.length === 1 ? items[0] : null);
+
+// Prefer explicit frontmatter slug when present.
+let entry = findUniqueMatch(
+  allContent.filter((item) => getContentFrontmatterSlug(item) === targetSlug),
+);
+
+// Fallback by unique filename slug.
+if (!entry) {
+  entry = findUniqueMatch(
+    allContent.filter((item) => getContentFilenameSlug(item) === targetSlug),
+  );
+}
+
+// Fallback by unique title slug (e.g. /generatividad-y-complejidad)
+if (!entry) {
+  entry = findUniqueMatch(
+    allContent.filter((item) => getContentTitleSlug(item) === targetSlug),
+  );
+}
+
+// Legacy fallback: if an old flat slug points to a course lesson, redirect to /cursos/...
+if (!entry) {
+  const allCourseContent = await getCollection('cursos');
+  const courseLessons = allCourseContent.filter(
+    (item) => !item.id.endsWith('/_index') && !item.id.endsWith('_index'),
+  );
+
+  const byFilename = courseLessons.filter((item) => getContentFilenameSlug(item) === targetSlug);
+  let redirectLesson = findUniqueMatch(byFilename);
+  if (!redirectLesson) {
+    redirectLesson = findUniqueMatch(
+      courseLessons.filter((item) => getContentTitleSlug(item) === targetSlug),
+    );
+  }
+
+  if (redirectLesson) {
+    const courseId = redirectLesson.id.split('/')[0] || '';
+    const courseIndexEntry = allCourseContent.find((item) => item.id === `${courseId}/_index`);
+    return Astro.redirect(
+      buildCourseLessonHref(courseId, (courseIndexEntry?.data || {}) as Record<string, unknown>, redirectLesson),
+    );
+  }
+
+  return Astro.redirect('/404');
+}
+
+// Render the content
+const { Content } = await render(entry);
+
+// Resolve title: Frontmatter > Filename
+const title = entry.data.title || entry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
+const description = entry.data.summary || entry.data.description || entry.data.subtitle || '';
+const tags = Array.isArray(entry.data.tags)
+  ? entry.data.tags
+  : entry.data.tags
+    ? String(entry.data.tags).split(',').map((tag) => tag.trim()).filter(Boolean)
+    : undefined;
+const defaultSlideTheme = 'zztt';
+const slideThemeFromData =
+  (entry.data as Record<string, unknown>).slideTheme ||
+  (entry.data as Record<string, unknown>).revealTheme ||
+  (entry.data as Record<string, unknown>).theme;
+const slideTheme = typeof slideThemeFromData === 'string' && slideThemeFromData.trim()
+  ? slideThemeFromData.trim()
+  : defaultSlideTheme;
+const rawPresentationTheme =
+  (entry.data as Record<string, unknown>).theme ||
+  (entry.data as Record<string, unknown>).slideTheme ||
+  (entry.data as Record<string, unknown>).revealTheme;
+const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
+const presentationHref = hasPresentationTheme ? `${Astro.url.pathname}?view=slides` : '';
+---
+
+{
+  isSlidesView ? (
+    <RevealSlidesLayout
+      title={title}
+      description={description}
+      slideTheme={slideTheme}
+    >
+      <Content />
+    </RevealSlidesLayout>
+  ) : (
+    <>
+      <WikiLayout
+        title={title}
+        description={description}
+        id={entry.id}
+        tags={tags}
+        presentationHref={presentationHref}
+      >
+        <Content />
+      </WikiLayout>
+    </>
+  )
+}

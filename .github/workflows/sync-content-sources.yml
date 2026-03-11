@@ -1,0 +1,57 @@
+name: Sync Content Sources
+
+on:
+  repository_dispatch:
+    types: [content-source-updated]
+  workflow_dispatch:
+    inputs:
+      trigger_deploy:
+        description: "Trigger a Vercel deploy hook after validating the content assembly"
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout platform repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pull source repositories
+        run: npm run content:pull -- --clean
+        env:
+          CONTENT_SOURCE_READ_TOKEN: ${{ secrets.CONTENT_SOURCE_READ_TOKEN }}
+
+      - name: Assemble src/content (dry run)
+        run: npm run content:assemble:dry
+
+      - name: Upload assemble report
+        uses: actions/upload-artifact@v4
+        with:
+          name: assemble-report
+          path: .tmp/assemble-report.json
+          if-no-files-found: warn
+
+      - name: Trigger Vercel deploy hook
+        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL != '' && (github.event_name == 'repository_dispatch' || github.event.inputs.trigger_deploy == 'true') }}
+        run: |
+          curl -fsS -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"

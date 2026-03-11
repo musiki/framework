@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "i1",
+      "enabled": true,
+      "repo": "musiki/i1",
+      "branch": "main",
+      "contentRoot": ".",
+      "localPath": "../i1"
+    },
+    {
+      "id": "i2",
+      "enabled": false,
+      "repo": "musiki/i2",
+      "branch": "main",
+      "contentRoot": ".",
+      "localPath": "../i2"
+    },
+    {
+      "id": "cym",
+      "enabled": false,
+      "repo": "musiki/cym",
+      "branch": "main",
+      "contentRoot": ".",
+      "localPath": "../cym"
+    },
+    {
+      "id": "s123",
+      "enabled": false,
+      "repo": "musiki/s123",
+      "branch": "main",
+      "contentRoot": ".",
+      "localPath": "../s123"
+    }
+  ],
+  "assembly": {
+    "coursesDir": "cursos",
+    "publicDir": "public",
+    "promoteFromCourses": true,
+    "requiredVisibilityForPublic": "public",
+    "requiredPublicStatus": "approved",
+    "excludeTypesFromPublic": [
+      "assignment",
+      "eval",
+      "lesson-presentation",
+      "app-dataviewjs"
+    ]
+  }
+}

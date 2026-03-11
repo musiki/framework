@@ -1,0 +1,4342 @@
+{
+  "nodes": [
+    {
+      "id": "bibliografía/Boris Groys_Arte y flujo",
+      "name": "Arte y flujo",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://cajanegraeditora.com.ar/wp-content/uploads/2018/12/Groys_2_alta-1.jpg"
+    },
+    {
+      "id": "bibliografía/Eduardo Kac_Signs of Life",
+      "name": "Signs of Life",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=yrEzAQAAIAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/El Azar y la Necesidad",
+      "name": "El azar y la necesidad",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=GlV_bwAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Eric Sadin_La humanidad aumentada",
+      "name": "La humanidad aumentada",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://cajanegraeditora.com.ar/wp-content/uploads/2018/12/SADIN_alta-1.jpg"
+    },
+    {
+      "id": "bibliografía/Esteban Castromán_Tecnopoéticas argentinas",
+      "name": "Tecnopoéticas argentinas",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://proyectoidis.org/wp-content/uploads/2017/04/KozakFP_alta.jpg"
+    },
+    {
+      "id": "bibliografía/Guerrini Gustavino Suarez_Usos de la ciencia en el arte argentino contemporáneo",
+      "name": "Usos de la ciencia en el arte argentino contemporáneo",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://m.media-amazon.com/images/I/31skqBtN-jL.jpg"
+    },
+    {
+      "id": "bibliografía/Jane Bennet_Vibrant Matter",
+      "name": "Vibrant Matter",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=Vok4FxXvZioC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/John D Barrow_El libro de la nada",
+      "name": "El libro de la nada",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=FvXUCuveqbUC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Los condenados de la pantalla",
+      "name": "Los condenados de la pantalla",
+      "type": "document",
+      "group": "bibliografía",
+      "img": ""
+    },
+    {
+      "id": "bibliografía/Matt Pearson_Generative Art",
+      "name": "Generative Art",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=D9ChSgAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Myriam Robayo Pedraza_La canción social como expresión de inconformismo",
+      "name": "La canción social como expresión de inconformismo",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://i1.rgstatic.net/publication/288684470_La_cancion_social_como_expresion_de_inconformismo_social_y_politico_en_el_siglo_XX/links/5698139808ae34f3cf1f3a6b/largepreview.png"
+    },
+    {
+      "id": "bibliografía/Nick Montfort_Exploratory Programming for the Arts and Humanities",
+      "name": "Exploratory Programming for the Arts and Humanities",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=jxjvCwAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Nick Montfort_The Future",
+      "name": "The Future",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=cN5BDwAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Philip Ball_Shapes",
+      "name": "Shapes",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=-gFREAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Stephan Olariu Albert Y Zomaya_Handbook of Bioinspired Algorithms and Applications",
+      "name": "Handbook of Bioinspired Algorithms and Applications",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=hE9sBgAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Steyerl_Los condenados de la pantalla",
+      "name": "Los condenados de la pantalla",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://cajanegraeditora.com.ar/wp-content/uploads/2018/12/tapa_HITO_alta.jpg"
+    },
+    {
+      "id": "bibliografía/Susanne Kennedy",
+      "name": "Susanne Kennedy",
+      "type": "document",
+      "group": "bibliografía",
+      "img": ""
+    },
+    {
+      "id": "bibliografía/Tim Ingold_Eine kurze Geschichte der Linien",
+      "name": "Eine kurze Geschichte der Linien",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://i.imgur.com/8KLo5uR.png"
+    },
+    {
+      "id": "bibliografía/Together in Music",
+      "name": "Together in Music",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=U9FGEAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Usos de la ciencia en el arte argentino contemporáneo",
+      "name": "Usos de la ciencia en el arte argentino contemporáneo",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://contentv2.tap-commerce.com/cover/large/9789871274147_1.jpg?id_com=1113"
+    },
+    {
+      "id": "bibliografía/Xuan Thuan Trinh_The Secret Melody",
+      "name": "The Secret Melody",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=LZTvAAAAMAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+    },
+    {
+      "id": "bibliografía/Yasmin B Kafai Quinn Burke_Connected Code",
+      "name": "Connected Code",
+      "type": "document",
+      "group": "bibliografía",
+      "img": "https://books.google.com/books/content?id=LA38DwAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+    },
+    {
+      "id": "casos/consola atómica/caso Consola Atómica",
+      "name": "caso Consola Atómica",
+      "type": "document",
+      "group": "casos",
+      "img": ""
+    },
+    {
+      "id": "casos/el cielo/caso El Cielo",
+      "name": "caso El Cielo",
+      "type": "document",
+      "group": "casos",
+      "img": ""
+    },
+    {
+      "id": "casos/feedback/autoesfera acústica de retroreferencia",
+      "name": "autoesfera acústica de retroreferencia",
+      "type": "document",
+      "group": "casos",
+      "img": ""
+    },
+    {
+      "id": "casos/lírica lorenz/lírica lorenz",
+      "name": "lírica lorenz",
+      "type": "document",
+      "group": "casos",
+      "img": ""
+    },
+    {
+      "id": "casos/vida simulada en Jupiter/instrumentos musicales de jupiter",
+      "name": "instrumentos musicales de jupiter",
+      "type": "document",
+      "group": "casos",
+      "img": ""
+    },
+    {
+      "id": "casos/vida simulada en Jupiter/lenguaje simbólico en Jupiter",
+      "name": "lenguaje simbólico en Jupiter",
+      "type": "document",
+      "group": "casos",
+      "img": ""
+    },
+    {
+      "id": "casos/vida simulada en Jupiter/ontogenia simulada en Jupiter",
+      "name": "ontogenia simulada en Jupiter",
+      "type": "document",
+      "group": "casos",
+      "img": ""
+    },
+    {
+      "id": "clases públicas/c-cym06-generatividad y complejidad 1",
+      "name": "generatividad y complejidad",
+      "type": "document",
+      "group": "clases públicas",
+      "img": ""
+    },
+    {
+      "id": "tag:class",
+      "name": "class",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "coloquial/Hace falta salir del software exclusivo de la música europea",
+      "name": "Hace falta salir del software exclusivo de la música europea",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://cult.news/app/uploads/2024/06/Stephane-Roth-e1717834667162.jpg"
+    },
+    {
+      "id": "tag:curaduría",
+      "name": "curaduría",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "coloquial/Las cabezas van a rodar, horror forma y la música de Kelley Shee Heads Will Roll han",
+      "name": "Las cabezas van a rodar, horror forma y la música de Kelley Shee Heads Will Roll han",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://van-magazine.com/wp-content/uploads/2024/09/kelley-sheehan-1200x675.jpg"
+    },
+    {
+      "id": "tag:s21",
+      "name": "s21",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "coloquial/Música Generativa",
+      "name": "Música Generativa",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://i.imgur.com/JXLBJJv.png"
+    },
+    {
+      "id": "tag:generatividad",
+      "name": "generatividad",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "coloquial/Susanne Kennedy en Volksbuhne",
+      "name": "Susanne Kennedy en Volksbuhne",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://www.draff.net/uploads/4/1/3/2/4132256/coming-society-suzanne-kennedy-julian-r-der_orig.jpg"
+    },
+    {
+      "id": "tag:performance",
+      "name": "performance",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:teatral",
+      "name": "teatral",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:teatroexpandido",
+      "name": "teatroexpandido",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "coloquial/Tecnología digital, cibernética y capitalismo, Yuk Hui",
+      "name": "Tecnología digital, cibernética y capitalismo, Yuk Hui",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiMqNCLdqEQ1srs1fkXJvyhh-tfP-iN1kN4-w0Fx_4KGRfom56tYC60xl12C7zVnTt-AVs2GGMoZyYalAbc_aUvmJ8FL2BKzKxpKE-B7RZyFr-sPWUsRqomzbj9yapP2cJB8ZGHbBAO8Caw9R7XqNwD47yhizfVinetO_Lu2vmHgMrOox24RkQCY236Y7Y/s1600/Capture-d%C3%A9cran-2020-08-31-%C3%A0-17.58.56-1.png"
+    },
+    {
+      "id": "coloquial/Transindividuación",
+      "name": "Transindividuación",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://i.imgur.com/5xaKwfE.png"
+    },
+    {
+      "id": "tag:neolutheria",
+      "name": "neolutheria",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "coloquial/un objeto mas allá de la música",
+      "name": "un objeto mas allá de la música",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://van-magazine.com/wp-content/uploads/2021/05/wall_landscape_large-1200x805-1.jpeg"
+    },
+    {
+      "id": "coloquial/una entrevista con Trevor Wishart",
+      "name": "una entrevista con Trevor Wishart",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://i.imgur.com/g5qYUZA.png"
+    },
+    {
+      "id": "tag:músicaelectrónica",
+      "name": "músicaelectrónica",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "coloquial/Écouter, observer, hacker-ed",
+      "name": "Écouter, observer, hacker-ed",
+      "type": "document",
+      "group": "coloquial",
+      "img": "https://festivalmusica.fr/storage/thumbnails/data/720-/Simon-Steen-AndersenClarsSvankjaer-1.jpg?1654596080"
+    },
+    {
+      "id": "conceptos/Boltzmann Machines",
+      "name": "Boltzmann Machines",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/biomasa",
+      "name": "biomasa",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/cismogénesis",
+      "name": "cismogénesis",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/cosmogonía",
+      "name": "cosmogonía",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/emanación",
+      "name": "emanación",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/epimorfismo",
+      "name": "epimorfismo",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/genealogía angélica",
+      "name": "genealogía angélica",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/hipotiposis",
+      "name": "hipotiposis",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/ontogenia recapitula filogenia",
+      "name": "ontogenia recapitula filogenia",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/organología generalizada",
+      "name": "organología generalizada",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/realismo agencial",
+      "name": "realismo agencial",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/régimen escópico",
+      "name": "régimen escópico",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/tetartoscience",
+      "name": "tetartoscience",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "conceptos/upcycling",
+      "name": "upcycling",
+      "type": "document",
+      "group": "conceptos",
+      "img": ""
+    },
+    {
+      "id": "espacios/Akademie der bildenden Künste Wien",
+      "name": "Akademie der bildenden Künste Wien",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/eifaZm7.png"
+    },
+    {
+      "id": "espacios/Ars Electronica",
+      "name": "Ars Electronica",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/gn4HQ3C.png"
+    },
+    {
+      "id": "espacios/Bell Labs",
+      "name": "Bell Labs",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/G8NrVUz.png"
+    },
+    {
+      "id": "tag:espacio",
+      "name": "espacio",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "espacios/CAYC",
+      "name": "CAYC",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/X8Z1YKl.png"
+    },
+    {
+      "id": "espacios/HEK House of Electronics Arts Basel",
+      "name": "HEK House of Electronics Arts Basel",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/Tai8BZu.png"
+    },
+    {
+      "id": "espacios/MIT Medialab",
+      "name": "MIT Medialab",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/afCc9qP.png"
+    },
+    {
+      "id": "espacios/ZKM Center for Art and Media Karlsruhe",
+      "name": "ZKM Center for Art and Media Karlsruhe",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/CuHfBq9.png"
+    },
+    {
+      "id": "espacios/Zero1",
+      "name": "Zero1",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/z5QbI6C.png"
+    },
+    {
+      "id": "espacios/cheLA",
+      "name": "cheLA",
+      "type": "document",
+      "group": "espacios",
+      "img": "https://i.imgur.com/Lo4Yvwv.png"
+    },
+    {
+      "id": "eventos/2972453",
+      "name": "2972453",
+      "type": "document",
+      "group": "eventos",
+      "img": "https://i.imgur.com/VwvXzsM.png"
+    },
+    {
+      "id": "tag:systemarts",
+      "name": "systemarts",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "eventos/Cybernetic Serendipity",
+      "name": "Cybernetic Serendipity",
+      "type": "document",
+      "group": "eventos",
+      "img": "https://64.media.tumblr.com/e4ceac36c56d0f6d2fbb8b9807d39798/tumblr_inline_p8ctkjEqZD1qgygll_500.jpg"
+    },
+    {
+      "id": "tag:eventos",
+      "name": "eventos",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:exhibicioneshistóricas",
+      "name": "exhibicioneshistóricas",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "eventos/EAT Experiments in Art and Technology",
+      "name": "EAT Experiments in Art and Technology",
+      "type": "document",
+      "group": "eventos",
+      "img": "https://i.imgur.com/acKPwHg.png"
+    },
+    {
+      "id": "eventos/Electronics Arts Intermix",
+      "name": "Electronics Arts Intermix",
+      "type": "document",
+      "group": "eventos",
+      "img": "https://i.imgur.com/CpirdDN.png"
+    },
+    {
+      "id": "tag:electronicsarts",
+      "name": "electronicsarts",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "eventos/Exploring the Decentralized Web",
+      "name": "Exploring the Decentralized Web",
+      "type": "document",
+      "group": "eventos",
+      "img": "https://i.imgur.com/TuhFW4s.png"
+    },
+    {
+      "id": "tag:internetmusic",
+      "name": "internetmusic",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "eventos/La memoria de los materiales",
+      "name": "La memoria de los materiales",
+      "type": "document",
+      "group": "eventos",
+      "img": "https://arthaus.ar/wp-content/uploads/2023/10/slider_02.png"
+    },
+    {
+      "id": "tag:artesvisuales",
+      "name": "artesvisuales",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:instalación",
+      "name": "instalación",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:argentina",
+      "name": "argentina",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "eventos/Visual Music",
+      "name": "Visual Music",
+      "type": "document",
+      "group": "eventos",
+      "img": "https://i.imgur.com/PyXOUbV.png"
+    },
+    {
+      "id": "glosario/DOM",
+      "name": "DOM",
+      "type": "document",
+      "group": "glosario",
+      "img": ""
+    },
+    {
+      "id": "glosario/PWA",
+      "name": "PWA",
+      "type": "document",
+      "group": "glosario",
+      "img": ""
+    },
+    {
+      "id": "glosario/PaaS",
+      "name": "PaaS",
+      "type": "document",
+      "group": "glosario",
+      "img": ""
+    },
+    {
+      "id": "glosario/URI",
+      "name": "URI",
+      "type": "document",
+      "group": "glosario",
+      "img": ""
+    },
+    {
+      "id": "tag:glosario",
+      "name": "glosario",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "glosario/try",
+      "name": "try",
+      "type": "document",
+      "group": "glosario",
+      "img": ""
+    },
+    {
+      "id": "imc/Cosmic Observatory Background Explorer",
+      "name": "Cosmic Observatory Background Explorer",
+      "type": "document",
+      "group": "imc",
+      "img": "https://i.imgur.com/PPSBGwp.png"
+    },
+    {
+      "id": "tag:imc",
+      "name": "imc",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "imc/oloid",
+      "name": "oloid",
+      "type": "document",
+      "group": "imc",
+      "img": "https://www.paul-schatz.ch/images/gif/Sphaeren-turbula.gif"
+    },
+    {
+      "id": "obras/A-Volve",
+      "name": "A-Volve",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/0PyBPoj.png"
+    },
+    {
+      "id": "tag:vidaartificial",
+      "name": "vidaartificial",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/Atmosphères",
+      "name": "Atmosphères",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/9DqOJ7C.png"
+    },
+    {
+      "id": "tag:músicaescrita",
+      "name": "músicaescrita",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/Boid Simulation",
+      "name": "Boid Simulation",
+      "type": "document",
+      "group": "obras",
+      "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Boids_OpenGL_example.webm/500px--Boids_OpenGL_example.webm.jpg"
+    },
+    {
+      "id": "tag:complejidad",
+      "name": "complejidad",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:sistemascomplejos",
+      "name": "sistemascomplejos",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/CO2GLE",
+      "name": "CO2GLE",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/e1ohsOq.png"
+    },
+    {
+      "id": "tag:energía",
+      "name": "energía",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/Fragile Territories",
+      "name": "Fragile Territories",
+      "type": "document",
+      "group": "obras",
+      "img": "https://roberthenke.com/files_images/installations/fragile-territories/FragileTerritoriesRennesPreOpening.jpg"
+    },
+    {
+      "id": "tag:musicavisual",
+      "name": "musicavisual",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/Locus Solus",
+      "name": "Locus Solus",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/SPChx14.png)"
+    },
+    {
+      "id": "tag:instalación/recorrido",
+      "name": "instalación/recorrido",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/Nommos Alpha",
+      "name": "Nommos Alpha",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/4ekNKBW.png"
+    },
+    {
+      "id": "tag:mathmusic",
+      "name": "mathmusic",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:symbolicmusic",
+      "name": "symbolicmusic",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/Oscillon",
+      "name": "Oscillon",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/j9ggkFr.png"
+    },
+    {
+      "id": "tag:vectorsynthesis",
+      "name": "vectorsynthesis",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:luz",
+      "name": "luz",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:pioneer",
+      "name": "pioneer",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/Rainforest IV",
+      "name": "Rainforest IV",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/oBUjFDy.png"
+    },
+    {
+      "id": "obras/Sun Thinking",
+      "name": "Sun Thinking",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/mPIEYFd.png"
+    },
+    {
+      "id": "tag:netart",
+      "name": "netart",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/Very Nervous System",
+      "name": "Very Nervous System",
+      "type": "document",
+      "group": "obras",
+      "img": "https://www.fondation-langlois.org/html/inc/corners/cropCorners.php?src=media/CRD/public/d00004229.jpg&radius=10&lettre=&width=410&height=275&type=img"
+    },
+    {
+      "id": "tag:interactividad",
+      "name": "interactividad",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/evolved criatures",
+      "name": "evolved criatures",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/qgZbWUJ.png"
+    },
+    {
+      "id": "obras/papilarnie III",
+      "name": "papilarnie III",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/Cjm2bqz.png"
+    },
+    {
+      "id": "tag:visual",
+      "name": "visual",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/stranger visions",
+      "name": "stranger visions",
+      "type": "document",
+      "group": "obras",
+      "img": "https://i.imgur.com/AC5Fygo.png"
+    },
+    {
+      "id": "tag:bioart",
+      "name": "bioart",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "obras/whoosh",
+      "name": "whoosh",
+      "type": "document",
+      "group": "obras",
+      "img": "https://images.squarespace-cdn.com/content/v1/5a69e4138a02c7764a647892/1649512285690-UV0Y06TCQU54AL6DZZWB/W567_1186183-Kay-Churcher---Whoosh.jpg?format=1000w"
+    },
+    {
+      "id": "operativos/escritura icónica/00 ei scratch",
+      "name": "00 ei scratch",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/01 entidades y operadores",
+      "name": "01 entidades y operadores",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/Teoría de Sistemas Complejos en Música",
+      "name": "Teoría de Sistemas Complejos en Música",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/de mathjax a knowledge graphs",
+      "name": "de mathjax a knowledge graphs",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/dict for latex-discord",
+      "name": "dict for latex-discord",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/ejemplos",
+      "name": "ejemplos",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/escritura icónica M0C",
+      "name": "escritura icónica M0C",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/icónica filosófica",
+      "name": "icónica filosófica",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/matriz 1",
+      "name": "matriz 1",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/moaie",
+      "name": "moaie",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/prompt o instructions para agentes",
+      "name": "prompt o instructions para agentes",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/símbolos matemáticos",
+      "name": "símbolos matemáticos",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/escritura icónica/test agente",
+      "name": "test agente",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/ingeniería inversa/Ingenieria inversa",
+      "name": "Ingenieria inversa",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/método científico/Método científico",
+      "name": "Método científico",
+      "type": "document",
+      "group": "operativos",
+      "img": "https://plato.stanford.edu/entries/descartes-method/fg-tennis.png"
+    },
+    {
+      "id": "tag:ciencia",
+      "name": "ciencia",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:métodocientífico",
+      "name": "métodocientífico",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "operativos/método científico/axioma",
+      "name": "axioma",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/método científico/ciencia",
+      "name": "ciencia",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/método científico/concepto",
+      "name": "concepto",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/método científico/enunciado",
+      "name": "enunciado",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/método científico/hipótesis",
+      "name": "hipótesis",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/método científico/ley",
+      "name": "ley",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/método científico/tesis",
+      "name": "tesis",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/método científico/valores epistémicos y estéticos",
+      "name": "valores epistémicos y estéticos",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/accionismo",
+      "name": "accionismo",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/adaptación de la observación",
+      "name": "adaptación de la observación",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/alegoría",
+      "name": "alegoría",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/aporía",
+      "name": "aporía",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/astringencia",
+      "name": "astringencia",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/austeridad",
+      "name": "austeridad",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/catalexis",
+      "name": "catalexis",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "tag:retórica",
+      "name": "retórica",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "operativos/operativos artísticos/causticidad",
+      "name": "causticidad",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/creatividad combinatoria",
+      "name": "creatividad combinatoria",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/descontextua",
+      "name": "descontextua",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/desmaterialización",
+      "name": "desmaterialización",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/desplazamiento",
+      "name": "desplazamiento",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/ecfrasis",
+      "name": "ecfrasis",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/efímero",
+      "name": "efímero",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/extrañamiento",
+      "name": "extrañamiento",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/fruición",
+      "name": "fruición",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/hipotiposis",
+      "name": "hipotiposis",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/intervencionismo",
+      "name": "intervencionismo",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/metáfora",
+      "name": "metáfora",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/proposopeyeutica",
+      "name": "proposopeyeutica",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/proposopeyéutica",
+      "name": "proposopeyéutica",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/relacionismo",
+      "name": "relacionismo",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/retombeé",
+      "name": "retombeé",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/sinéctica",
+      "name": "sinéctica",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/subversión",
+      "name": "subversión",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/trans-",
+      "name": "trans-",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/transgresión",
+      "name": "transgresión",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "operativos/operativos artísticos/transubstanciación",
+      "name": "transubstanciación",
+      "type": "document",
+      "group": "operativos",
+      "img": ""
+    },
+    {
+      "id": "personas/Allison Parrish",
+      "name": "Allison Parrish",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/zt2xiVh.png"
+    },
+    {
+      "id": "personas/Assemble Studio",
+      "name": "Assemble Studio",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/RoaCnfN.png"
+    },
+    {
+      "id": "tag:arterelacional",
+      "name": "arterelacional",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Ben Laposky",
+      "name": "Ben Laposky",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/3qS8fi1.png"
+    },
+    {
+      "id": "tag:arteelectrónico",
+      "name": "arteelectrónico",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:osciloscopio",
+      "name": "osciloscopio",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:generative",
+      "name": "generative",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Bernard Stiegler",
+      "name": "Bernard Stiegler",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/DZgLHBr.png"
+    },
+    {
+      "id": "personas/Cecila Arditto",
+      "name": "Cecila Arditto",
+      "type": "document",
+      "group": "personas",
+      "img": "https://wordpress.ceciliaarditto.com/wp-content/uploads/2021/03/Cecilia-Arditto-Photo-by-Daniel-Nicolas-photographer-name-required-HIGH.jpg"
+    },
+    {
+      "id": "tag:composer",
+      "name": "composer",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:objetualidad",
+      "name": "objetualidad",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:música",
+      "name": "música",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:armonía-expandida",
+      "name": "armonía-expandida",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Craig Reynols",
+      "name": "Craig Reynols",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/pfMfG5b.png"
+    },
+    {
+      "id": "tag:artistcoders",
+      "name": "artistcoders",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/David Rokeby",
+      "name": "David Rokeby",
+      "type": "document",
+      "group": "personas",
+      "img": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSoaG_qG11O-xdKwpsMRge6v6PmXQzsOFXACA&s"
+    },
+    {
+      "id": "personas/Dennis Smalley",
+      "name": "Dennis Smalley",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/NOvprug.png"
+    },
+    {
+      "id": "tag:espectromorfología",
+      "name": "espectromorfología",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:108B",
+      "name": "108B",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Dick Raaijmakers",
+      "name": "Dick Raaijmakers",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/SZX82V7.png"
+    },
+    {
+      "id": "personas/Douglas Barret",
+      "name": "Douglas Barret",
+      "type": "document",
+      "group": "personas",
+      "img": ""
+    },
+    {
+      "id": "personas/Frank Rosenblatt",
+      "name": "Frank Rosenblatt",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/PmTAKOS.png"
+    },
+    {
+      "id": "tag:ai",
+      "name": "ai",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:ai-masters",
+      "name": "ai-masters",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Geoffrey Hinton",
+      "name": "Geoffrey Hinton",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/2gpiqsE.png"
+    },
+    {
+      "id": "personas/Georg Cantor",
+      "name": "Georg Cantor",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/5IBF7z4.png"
+    },
+    {
+      "id": "tag:matemática",
+      "name": "matemática",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/George Legrady",
+      "name": "George Legrady",
+      "type": "document",
+      "group": "personas",
+      "img": "https://www.impactmania.com/im/wp-content/uploads/2019/01/George-Legrady_UCSB_impactmania.jpg"
+    },
+    {
+      "id": "personas/Gustav Metzger",
+      "name": "Gustav Metzger",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/3QX6ZYf.png"
+    },
+    {
+      "id": "personas/György Ligeti",
+      "name": "György Ligeti",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/zFdAHYG.png"
+    },
+    {
+      "id": "personas/Hans Haake",
+      "name": "Hans Haake",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/fbdXnfv.png"
+    },
+    {
+      "id": "personas/Hito Steyerl",
+      "name": "Hito Steyerl",
+      "type": "document",
+      "group": "personas",
+      "img": "https://www.artnews.com/wp-content/uploads/2019/07/hs14-0019-presspage-e1563470016999.jpg"
+    },
+    {
+      "id": "tag:philosophy",
+      "name": "philosophy",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Hugh Le Caine",
+      "name": "Hugh Le Caine",
+      "type": "document",
+      "group": "personas",
+      "img": ""
+    },
+    {
+      "id": "personas/Iannis Xenakis",
+      "name": "Iannis Xenakis",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/FD90JyD.png"
+    },
+    {
+      "id": "tag:stocastics",
+      "name": "stocastics",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Jean-Robert Sedano et Solveig de Ory",
+      "name": "Jean-Robert Sedano et Solveig de Ory",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/zDEcUTO.png"
+    },
+    {
+      "id": "tag:interface",
+      "name": "interface",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Jim Campbell",
+      "name": "Jim Campbell",
+      "type": "document",
+      "group": "personas",
+      "img": "https://d16kd6gzalkogb.cloudfront.net/artist_images/Jim-Campbell-artist.jpg"
+    },
+    {
+      "id": "tag:leds",
+      "name": "leds",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:light",
+      "name": "light",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Juan Sorrentino",
+      "name": "Juan Sorrentino",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/GZKvz0B.png"
+    },
+    {
+      "id": "personas/Karl Sims",
+      "name": "Karl Sims",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/BKEAPfy.png"
+    },
+    {
+      "id": "tag:simulation",
+      "name": "simulation",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Klaus Schwab",
+      "name": "Klaus Schwab",
+      "type": "document",
+      "group": "personas",
+      "img": ""
+    },
+    {
+      "id": "personas/Lauren McCarthy",
+      "name": "Lauren McCarthy",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/gMMjbQ6.png"
+    },
+    {
+      "id": "tag:p5",
+      "name": "p5",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:posthumanismo",
+      "name": "posthumanismo",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Leonard Baum",
+      "name": "Leonard Baum",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/8poOkNo.png"
+    },
+    {
+      "id": "tag:speechrecognition",
+      "name": "speechrecognition",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Manfred Mohr",
+      "name": "Manfred Mohr",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/Lf0Cvvi.png"
+    },
+    {
+      "id": "personas/Mario Bunge",
+      "name": "Mario Bunge",
+      "type": "document",
+      "group": "personas",
+      "img": "https://www.biografiasyvidas.com/biografia/b/fotos/bunge.jpg"
+    },
+    {
+      "id": "tag:philosophy/science",
+      "name": "philosophy/science",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Maryanne Amacher",
+      "name": "Maryanne Amacher",
+      "type": "document",
+      "group": "personas",
+      "img": "https://monoskop.org/images/thumb/a/a7/Maryanne_Amacher_1985.jpg/350px-Maryanne_Amacher_1985.jpg"
+    },
+    {
+      "id": "tag:psicoacústica",
+      "name": "psicoacústica",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Max Bense",
+      "name": "Max Bense",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/hKy6z8z.png"
+    },
+    {
+      "id": "personas/Nicolas Schoffer",
+      "name": "Nicolas Schoffer",
+      "type": "document",
+      "group": "personas",
+      "img": "https://i.imgur.com/BTDbida.png"
+    },
+    {
+      "id": "tag:cibernética",
+      "name": "cibernética",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:#wiener",
+      "name": "#wiener",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/United Visual Artists (UVA)",
+      "name": "United Visual Artists (UVA)",
+      "type": "document",
+      "group": "personas",
+      "img": "https://images.squarespace-cdn.com/content/v1/5cfd3effe02806000151e559/1702905078035-D4OAJ0SI9GAVWE1Q3BDB/OurTime_01_byJackHemms.jpg"
+    },
+    {
+      "id": "personas/Yotam Mann",
+      "name": "Yotam Mann",
+      "type": "document",
+      "group": "personas",
+      "img": "https://yotammann.info/images/projects/dylan-blue-2-small.jpg"
+    },
+    {
+      "id": "tag:webaudio",
+      "name": "webaudio",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "personas/Yuval Noah Harari",
+      "name": "Yuval Noah Harari",
+      "type": "document",
+      "group": "personas",
+      "img": "https://momentmag.com/wp-content/uploads/2017/06/YH-2017.jpg"
+    },
+    {
+      "id": "sistemas paramétricos/Agregación limitada por difusión",
+      "name": "Agregación limitada por difusión",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/Movimiento browniano",
+      "name": "Movimiento browniano",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/Probabilistic Graphical Models",
+      "name": "Probabilistic Graphical Models",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/agregación difusión de Gray-Scott",
+      "name": "agregación difusión de Gray-Scott",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "tag:operativos/sistemasparamétricos",
+      "name": "operativos/sistemasparamétricos",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "sistemas paramétricos/distribución probabilística",
+      "name": "distribución probabilística",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/inestabilidad de kelvin-helmholz/inestabilidad de Kelvin-Helmholz",
+      "name": "inestabilidad de Kelvin-Helmholz",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/morfógenos",
+      "name": "morfógenos",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/máquinas de Boltzmann",
+      "name": "máquinas de Boltzmann",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/paramétricos MOC",
+      "name": "paramétricos MOC",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/patrones de Turing",
+      "name": "patrones de Turing",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/proceso de Wiener",
+      "name": "proceso de Wiener",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "sistemas paramétricos/transformaciones energéticas",
+      "name": "transformaciones energéticas",
+      "type": "document",
+      "group": "sistemas paramétricos",
+      "img": ""
+    },
+    {
+      "id": "topoi/Aroma",
+      "name": "Aroma",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/HlIhaza.png"
+    },
+    {
+      "id": "tag:topoi",
+      "name": "topoi",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:aroma",
+      "name": "aroma",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Arte de datos",
+      "name": "Arte de datos",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/sJHYoML.png"
+    },
+    {
+      "id": "tag:dataart",
+      "name": "dataart",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Arte participativo",
+      "name": "Arte participativo",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://www.deselys-psicologo.com/wp-content/uploads/2016/08/5776854365_411da97e9c_b.jpg"
+    },
+    {
+      "id": "tag:",
+      "name": "",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Arte relacional",
+      "name": "Arte relacional",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://freight.cargo.site/t/original/i/930742521ab1b384e718a4bdf3ac0915c48f27cc6c3cd088499339ebab0d0463/a3.jpg"
+    },
+    {
+      "id": "topoi/Augmented Cognition",
+      "name": "Augmented Cognition",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/G9QGKHP.png"
+    },
+    {
+      "id": "topoi/Azar",
+      "name": "Azar",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://noosphere.princeton.edu/images/movie256_b.gif"
+    },
+    {
+      "id": "tag:azar",
+      "name": "azar",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:generativad",
+      "name": "generativad",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:cym",
+      "name": "cym",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Energía",
+      "name": "Energía",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/J3FZ1Ba.png"
+    },
+    {
+      "id": "tag:física",
+      "name": "física",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Espacio",
+      "name": "Espacio",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://deutsch.ucsd.edu/m/DIANA_DEUTSCH-06_Andre_Delhaye.jpg"
+    },
+    {
+      "id": "tag:spatial",
+      "name": "spatial",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:music",
+      "name": "music",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Filosofía histórica",
+      "name": "Filosofía histórica",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://www.bostonreview.net/wp-content/uploads/2022/10/9a25319a0fea8859c3bf6bf09ae16310.png"
+    },
+    {
+      "id": "topoi/Filosofías del Siglo XXI",
+      "name": "Filosofías del Siglo XXI",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/BMjgaea.png"
+    },
+    {
+      "id": "tag:filosofía",
+      "name": "filosofía",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Forma Musical",
+      "name": "Forma Musical",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/r0lTWQM.png"
+    },
+    {
+      "id": "tag:forma musical",
+      "name": "forma musical",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Generatividad",
+      "name": "Generatividad",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/RJ1rh0h.gif"
+    },
+    {
+      "id": "topoi/Historia de la tecnología",
+      "name": "Historia de la tecnología",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/fo4nKCu.png"
+    },
+    {
+      "id": "topoi/Humanos",
+      "name": "Humanos",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://images.newscientist.com/wp-content/uploads/2020/07/18154423/human_evolutionc0146466.jpg?width=1200"
+    },
+    {
+      "id": "tag:humanos",
+      "name": "humanos",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Instalaciones",
+      "name": "Instalaciones",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/9Un32mo.png"
+    },
+    {
+      "id": "topoi/Interfaces",
+      "name": "Interfaces",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://www.researchgate.net/publication/26874064/figure/fig2/AS:601663815553035@1520459240110/Diagrammatic-summary-of-General-Tau-Theory-The-markers-on-the-hands-of-the-female.png"
+    },
+    {
+      "id": "tag:20-materia",
+      "name": "20-materia",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:nuevaorganología",
+      "name": "nuevaorganología",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Internetmusic",
+      "name": "Internetmusic",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://net-art.org/sites/default/files/styles/large/public/2019-06/Schermafbeelding%202019-06-26%20om%2019.52.47.png?itok=Ihy0TpOb"
+    },
+    {
+      "id": "topoi/Intervencion del espacio público",
+      "name": "Intervencion del espacio público",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://obj.shine.cn/files/2020/09/28/108901e5-0e34-4d99-ad3a-3bcfe47c55b1_0.jpg?x-image-process=style/style-watermark"
+    },
+    {
+      "id": "tag:espacio público",
+      "name": "espacio público",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Introducción a la psicoacústica",
+      "name": "Introducción a la psicoacústica",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://c8.alamy.com/compit/2g7me18/bianco-e-nero-sfondo-illusione-ottica-illustrazione-vettoriale-2g7me18.jpg"
+    },
+    {
+      "id": "topoi/La reología del arte",
+      "name": "La reología del arte",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQK5ZYBAt0sYuWTCcXyFde9U5vbAmHNpQBrbabOyo_tD-Eg-XC9Ta0Ycua9mgyVY2WnN2c&usqp=CAU"
+    },
+    {
+      "id": "tag:code",
+      "name": "code",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:js",
+      "name": "js",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:tonejs",
+      "name": "tonejs",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Livecoding",
+      "name": "Livecoding",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i0.wp.com/grayarea.org/wp-content/uploads/2022/02/shaderworkshopmove3-1.gif?resize=980%2C551&ssl=1"
+    },
+    {
+      "id": "tag:coding",
+      "name": "coding",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:live-coding",
+      "name": "live-coding",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Matemáticas Especulativas",
+      "name": "Matemáticas Especulativas",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/Música Visual",
+      "name": "Música Visual",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://mir-s3-cdn-cf.behance.net/project_modules/max_1200/01033765677435.5afc69e398f54.gif"
+    },
+    {
+      "id": "tag:musica visual",
+      "name": "musica visual",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Música y Política",
+      "name": "Música y Política",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://schott-production.s3.eu-central-1.amazonaws.com/media/Allgemein/Blog/Blog_Bilder_847_420_px_1000_500_px__3.png"
+    },
+    {
+      "id": "topoi/Racionalizacion_(videojuegos)",
+      "name": "Racionalizacion_(videojuegos)",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://d3i71xaburhd42.cloudfront.net/a250d1234a74d0679f4504bf8bc96da50c924014/3-Figure2-1.png"
+    },
+    {
+      "id": "tag:videojuegos",
+      "name": "videojuegos",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:capitalismo",
+      "name": "capitalismo",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:sociologia",
+      "name": "sociologia",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/Sistemas complejos",
+      "name": "Sistemas complejos",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://annex.exploratorium.edu/complexity/CompLexicon/sfi.gif"
+    },
+    {
+      "id": "topoi/Sistemas de Universos",
+      "name": "Sistemas de Universos",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/Spectromorphology",
+      "name": "Spectromorphology",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.ytimg.com/vi/M4PqgwXzZiA/maxresdefault.jpg"
+    },
+    {
+      "id": "topoi/arqueología de medios/arqueología de medios",
+      "name": "arqueología de medios",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/KM4UToe.png"
+    },
+    {
+      "id": "topoi/arquitectura",
+      "name": "arquitectura",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/arquitetura aural/Introducción a la Psicoacústica",
+      "name": "Introducción a la Psicoacústica",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/arquitetura aural/arquitectura Aural MOC",
+      "name": "arquitectura Aural MOC",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/arte de sistemas",
+      "name": "arte de sistemas",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/ddd",
+      "name": "ddd",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/energía/energía del gesto musical",
+      "name": "energía del gesto musical",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/energía/energía y distancia",
+      "name": "energía y distancia",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/energía/tiempo y energía de megaobras",
+      "name": "tiempo y energía de megaobras",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/física/Física",
+      "name": "Física",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.pinimg.com/originals/b4/5e/8c/b45e8c3a5994edbf3cce6643308925e2.gif"
+    },
+    {
+      "id": "topoi/física/Geometría y Experiencia",
+      "name": "Geometría y Experiencia",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/física/Radiación del cuerpo negro",
+      "name": "Radiación del cuerpo negro",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/física/Un punto de vista heurístico acerca de la conversión y creación de Luz",
+      "name": "Un punto de vista heurístico acerca de la conversión y creación de Luz",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/física/teoría de Maxwell",
+      "name": "teoría de Maxwell",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Autómatas",
+      "name": "Autómatas",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Azar",
+      "name": "Azar",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Emergencia",
+      "name": "Emergencia",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Fractales",
+      "name": "Fractales",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Hibridación (AR)",
+      "name": "Hibridación (AR)",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/La conciencia social del arte generativo.",
+      "name": "La conciencia social del arte generativo.",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "tag:artículos",
+      "name": "artículos",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/Palíndromos",
+      "name": "Palíndromos",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Patrones geométricos",
+      "name": "Patrones geométricos",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Projekte generativer Ästhetik",
+      "name": "Projekte generativer Ästhetik",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Recursion",
+      "name": "Recursion",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/Simulación (VR)",
+      "name": "Simulación (VR)",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/artistas procedurales",
+      "name": "artistas procedurales",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/generatividad MOC",
+      "name": "generatividad MOC",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/BERT",
+      "name": "BERT",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/Eck59pm.png"
+    },
+    {
+      "id": "tag:masked-language-model",
+      "name": "masked-language-model",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:encoder-only",
+      "name": "encoder-only",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:bidirectional",
+      "name": "bidirectional",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:pretraining",
+      "name": "pretraining",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/Dendral",
+      "name": "Dendral",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://expertsystem101.weebly.com/uploads/1/4/4/4/14440874/3807268_orig.png?1"
+    },
+    {
+      "id": "tag:expert-system",
+      "name": "expert-system",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:chemistry",
+      "name": "chemistry",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:rule-based",
+      "name": "rule-based",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/Eliza",
+      "name": "Eliza",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://upload.wikimedia.org/wikipedia/commons/7/79/ELIZA_conversation.png"
+    },
+    {
+      "id": "tag:nlp",
+      "name": "nlp",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:pattern-matching",
+      "name": "pattern-matching",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:conversational",
+      "name": "conversational",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/Fuzzi Logic",
+      "name": "Fuzzi Logic",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://www.researchgate.net/publication/241848738/figure/fig3/AS:298636664688646@1448211938001/Membership-function-of-a-fuzzy-set.png"
+    },
+    {
+      "id": "tag:uncertainty",
+      "name": "uncertainty",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:fuzzy-sets",
+      "name": "fuzzy-sets",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:control",
+      "name": "control",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/GOFAI systems",
+      "name": "GOFAI systems",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/5KDFty7.png"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/GPT-2",
+      "name": "GPT-2",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/4AYmqm9.png"
+    },
+    {
+      "id": "tag:autoregressive",
+      "name": "autoregressive",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:decoder-only",
+      "name": "decoder-only",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:open-domain",
+      "name": "open-domain",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:foundationmodel",
+      "name": "foundationmodel",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/General Problem Solver (GPS)",
+      "name": "General Problem Solver (GPS)",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://www.researchgate.net/publication/3297100/figure/fig8/AS:349393413787653@1460313289814/Schematic-diagram-of-General-Problem-Solver.png"
+    },
+    {
+      "id": "tag:planning",
+      "name": "planning",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:heuristic",
+      "name": "heuristic",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:symbolic",
+      "name": "symbolic",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/Logic Theorist",
+      "name": "Logic Theorist",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://miro.medium.com/v2/resize:fit:1200/0*_4_srVg7c4fox65V.jpg"
+    },
+    {
+      "id": "tag:theorem-proving",
+      "name": "theorem-proving",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/Mikolov RNNLM",
+      "name": "Mikolov RNNLM",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/1kl1qBN.png"
+    },
+    {
+      "id": "tag:rnnlm",
+      "name": "rnnlm",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:mikolov",
+      "name": "mikolov",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:2007",
+      "name": 2007,
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:embeddings",
+      "name": "embeddings",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:recurrent",
+      "name": "recurrent",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:retro-ai",
+      "name": "retro-ai",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:precursor-llm",
+      "name": "precursor-llm",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/Mycin",
+      "name": "Mycin",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://aithefuture.wordpress.com/wp-content/uploads/2018/05/null.png"
+    },
+    {
+      "id": "tag:medical",
+      "name": "medical",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/NNLM NPLM de Bengio",
+      "name": "NNLM NPLM de Bengio",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/CtEl1fy.png"
+    },
+    {
+      "id": "tag:nnlm",
+      "name": "nnlm",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:nplm",
+      "name": "nplm",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:bengio",
+      "name": "bengio",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:2003",
+      "name": 2003,
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/Prolog",
+      "name": "Prolog",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://avatars.githubusercontent.com/u/6884283?s=400&v=4"
+    },
+    {
+      "id": "tag:logic-programming",
+      "name": "logic-programming",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:declarative",
+      "name": "declarative",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/Shrdlu",
+      "name": "Shrdlu",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://miro.medium.com/v2/resize:fit:1200/1*9SSiU_gEgpTabqzu00823A.png"
+    },
+    {
+      "id": "tag:robotics",
+      "name": "robotics",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/dialogGPT",
+      "name": "dialogGPT",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/mP7LA8s.png"
+    },
+    {
+      "id": "tag:GPT-based",
+      "name": "GPT-based",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:dialogue",
+      "name": "dialogue",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:fine-tuned",
+      "name": "fine-tuned",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/modelos de lenguaje/n-gram",
+      "name": "n-gram",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://i.imgur.com/rCWWE8a.png"
+    },
+    {
+      "id": "tag:statistical",
+      "name": "statistical",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:shallow",
+      "name": "shallow",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:probabilistic",
+      "name": "probabilistic",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/generatividad/recursión MOC",
+      "name": "recursión MOC",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/hiperrealidad/El metaverso es un territorio disputado",
+      "name": "El metaverso es un territorio disputado",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/hiperrealidad/hiperreal",
+      "name": "hiperreal",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/hiperrealidad/hiperrealidad",
+      "name": "hiperrealidad",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://www.viar360.com/wp-content/uploads/2019/04/tiltbrush-VRart-2.png"
+    },
+    {
+      "id": "tag:virtualidad",
+      "name": "virtualidad",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:vr",
+      "name": "vr",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:realidad",
+      "name": "realidad",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/internet/web 3.0 glosario y knowledge graphs",
+      "name": "web 3.0 glosario y knowledge graphs",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/modelos de universos",
+      "name": "modelos de universos",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://media.tenor.com/2jV0hjUDz6QAAAAM/galaxy-stars.gif"
+    },
+    {
+      "id": "tag:universo",
+      "name": "universo",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:historiadelaciencia",
+      "name": "historiadelaciencia",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:astronomia",
+      "name": "astronomia",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/teoría crítica de la tecnología/Cuarta Revolución Industrial",
+      "name": "Cuarta Revolución Industrial",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://www.telefonica.com/es/wp-content/uploads/sites/4/2022/10/industria-4.jpg?w=1200"
+    },
+    {
+      "id": "tag:revoluciónindustrial",
+      "name": "revoluciónindustrial",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "topoi/teoría crítica de la tecnología/teoría crítica MOC",
+      "name": "teoría crítica MOC",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/0 cosmos química inicial",
+      "name": "0 cosmos química inicial",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/ADN",
+      "name": "ADN",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/ARN",
+      "name": "ARN",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/Hidden Markov Models (HMM)",
+      "name": "Hidden Markov Models (HMM)",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/Momento de aparición de objetos tecnológicos",
+      "name": "Momento de aparición de objetos tecnológicos",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/Niveles de cognición",
+      "name": "Niveles de cognición",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/Untitled",
+      "name": "Untitled",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/Vida artificial",
+      "name": "Vida artificial",
+      "type": "document",
+      "group": "topoi",
+      "img": "https://upload.wikimedia.org/wikipedia/commons/6/64/Trefoil_knot_conways_game_of_life.gif?20200305165956"
+    },
+    {
+      "id": "topoi/vida artificial/autopoiesis",
+      "name": "autopoiesis",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/contracción por gradientes térmicos",
+      "name": "contracción por gradientes térmicos",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/emergencia de la vida",
+      "name": "emergencia de la vida",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/espíritu invisible",
+      "name": "espíritu invisible",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/filogenia",
+      "name": "filogenia",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/intro a genética",
+      "name": "intro a genética",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/l-systems",
+      "name": "l-systems",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/n-agente vida",
+      "name": "n-agente vida",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/n-audio-alpaca",
+      "name": "n-audio-alpaca",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/no-autopoiesis",
+      "name": "no-autopoiesis",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/ontogenia",
+      "name": "ontogenia",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/reducción fenomenológica",
+      "name": "reducción fenomenológica",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/tolinas",
+      "name": "tolinas",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    },
+    {
+      "id": "topoi/vida artificial/ácidos",
+      "name": "ácidos",
+      "type": "document",
+      "group": "topoi",
+      "img": ""
+    }
+  ],
+  "links": [
+    {
+      "source": "casos/lírica lorenz/lírica lorenz",
+      "target": "obras/Atmosphères",
+      "type": "link"
+    },
+    {
+      "source": "casos/vida simulada en Jupiter/ontogenia simulada en Jupiter",
+      "target": "topoi/vida artificial/ontogenia",
+      "type": "link"
+    },
+    {
+      "source": "casos/vida simulada en Jupiter/ontogenia simulada en Jupiter",
+      "target": "topoi/vida artificial/filogenia",
+      "type": "link"
+    },
+    {
+      "source": "casos/vida simulada en Jupiter/ontogenia simulada en Jupiter",
+      "target": "topoi/vida artificial/tolinas",
+      "type": "link"
+    },
+    {
+      "source": "casos/vida simulada en Jupiter/ontogenia simulada en Jupiter",
+      "target": "topoi/vida artificial/Niveles de cognición",
+      "type": "link"
+    },
+    {
+      "source": "casos/vida simulada en Jupiter/ontogenia simulada en Jupiter",
+      "target": "topoi/vida artificial/Momento de aparición de objetos tecnológicos",
+      "type": "link"
+    },
+    {
+      "source": "casos/vida simulada en Jupiter/ontogenia simulada en Jupiter",
+      "target": "topoi/vida artificial/contracción por gradientes térmicos",
+      "type": "link"
+    },
+    {
+      "source": "clases públicas/c-cym06-generatividad y complejidad 1",
+      "target": "tag:class",
+      "type": "tag"
+    },
+    {
+      "source": "clases públicas/c-cym06-generatividad y complejidad 1",
+      "target": "espacios/CAYC",
+      "type": "link"
+    },
+    {
+      "source": "clases públicas/c-cym06-generatividad y complejidad 1",
+      "target": "personas/Manfred Mohr",
+      "type": "link"
+    },
+    {
+      "source": "clases públicas/c-cym06-generatividad y complejidad 1",
+      "target": "sistemas paramétricos/distribución probabilística",
+      "type": "link"
+    },
+    {
+      "source": "clases públicas/c-cym06-generatividad y complejidad 1",
+      "target": "sistemas paramétricos/máquinas de Boltzmann",
+      "type": "link"
+    },
+    {
+      "source": "coloquial/Hace falta salir del software exclusivo de la música europea",
+      "target": "tag:curaduría",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/Las cabezas van a rodar, horror forma y la música de Kelley Shee Heads Will Roll han",
+      "target": "tag:s21",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/Las cabezas van a rodar, horror forma y la música de Kelley Shee Heads Will Roll han",
+      "target": "operativos/operativos artísticos/catalexis",
+      "type": "link"
+    },
+    {
+      "source": "coloquial/Música Generativa",
+      "target": "tag:generatividad",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/Susanne Kennedy en Volksbuhne",
+      "target": "tag:performance",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/Susanne Kennedy en Volksbuhne",
+      "target": "tag:teatral",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/Susanne Kennedy en Volksbuhne",
+      "target": "tag:teatroexpandido",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/Transindividuación",
+      "target": "tag:neolutheria",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/un objeto mas allá de la música",
+      "target": "tag:s21",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/una entrevista con Trevor Wishart",
+      "target": "tag:músicaelectrónica",
+      "type": "tag"
+    },
+    {
+      "source": "coloquial/Écouter, observer, hacker-ed",
+      "target": "tag:s21",
+      "type": "tag"
+    },
+    {
+      "source": "conceptos/cosmogonía",
+      "target": "topoi/Matemáticas Especulativas",
+      "type": "link"
+    },
+    {
+      "source": "conceptos/emanación",
+      "target": "topoi/Filosofía histórica",
+      "type": "link"
+    },
+    {
+      "source": "conceptos/organología generalizada",
+      "target": "personas/Bernard Stiegler",
+      "type": "link"
+    },
+    {
+      "source": "conceptos/tetartoscience",
+      "target": "personas/Mario Bunge",
+      "type": "link"
+    },
+    {
+      "source": "conceptos/tetartoscience",
+      "target": "conceptos/organología generalizada",
+      "type": "link"
+    },
+    {
+      "source": "espacios/Bell Labs",
+      "target": "tag:espacio",
+      "type": "tag"
+    },
+    {
+      "source": "espacios/CAYC",
+      "target": "eventos/2972453",
+      "type": "link"
+    },
+    {
+      "source": "eventos/2972453",
+      "target": "tag:systemarts",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/2972453",
+      "target": "espacios/CAYC",
+      "type": "link"
+    },
+    {
+      "source": "eventos/Cybernetic Serendipity",
+      "target": "tag:generatividad",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/Cybernetic Serendipity",
+      "target": "tag:eventos",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/Cybernetic Serendipity",
+      "target": "tag:exhibicioneshistóricas",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/EAT Experiments in Art and Technology",
+      "target": "tag:eventos",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/Electronics Arts Intermix",
+      "target": "tag:eventos",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/Electronics Arts Intermix",
+      "target": "tag:electronicsarts",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/Exploring the Decentralized Web",
+      "target": "tag:internetmusic",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/Exploring the Decentralized Web",
+      "target": "tag:eventos",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/La memoria de los materiales",
+      "target": "tag:artesvisuales",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/La memoria de los materiales",
+      "target": "tag:instalación",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/La memoria de los materiales",
+      "target": "tag:argentina",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/La memoria de los materiales",
+      "target": "tag:eventos",
+      "type": "tag"
+    },
+    {
+      "source": "eventos/La memoria de los materiales",
+      "target": "personas/Juan Sorrentino",
+      "type": "link"
+    },
+    {
+      "source": "glosario/URI",
+      "target": "tag:glosario",
+      "type": "tag"
+    },
+    {
+      "source": "imc/Cosmic Observatory Background Explorer",
+      "target": "tag:imc",
+      "type": "tag"
+    },
+    {
+      "source": "imc/oloid",
+      "target": "tag:imc",
+      "type": "tag"
+    },
+    {
+      "source": "obras/A-Volve",
+      "target": "tag:vidaartificial",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Atmosphères",
+      "target": "tag:músicaescrita",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Atmosphères",
+      "target": "topoi/física/Geometría y Experiencia",
+      "type": "link"
+    },
+    {
+      "source": "obras/Atmosphères",
+      "target": "casos/lírica lorenz/lírica lorenz",
+      "type": "link"
+    },
+    {
+      "source": "obras/Boid Simulation",
+      "target": "tag:complejidad",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Boid Simulation",
+      "target": "tag:sistemascomplejos",
+      "type": "tag"
+    },
+    {
+      "source": "obras/CO2GLE",
+      "target": "tag:energía",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Fragile Territories",
+      "target": "tag:musicavisual",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Locus Solus",
+      "target": "tag:instalación/recorrido",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Nommos Alpha",
+      "target": "tag:mathmusic",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Nommos Alpha",
+      "target": "tag:symbolicmusic",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Oscillon",
+      "target": "tag:vectorsynthesis",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Oscillon",
+      "target": "tag:luz",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Oscillon",
+      "target": "tag:pioneer",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Rainforest IV",
+      "target": "tag:instalación",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Sun Thinking",
+      "target": "tag:netart",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Sun Thinking",
+      "target": "tag:energía",
+      "type": "tag"
+    },
+    {
+      "source": "obras/Very Nervous System",
+      "target": "tag:interactividad",
+      "type": "tag"
+    },
+    {
+      "source": "obras/evolved criatures",
+      "target": "tag:generatividad",
+      "type": "tag"
+    },
+    {
+      "source": "obras/evolved criatures",
+      "target": "tag:vidaartificial",
+      "type": "tag"
+    },
+    {
+      "source": "obras/papilarnie III",
+      "target": "tag:visual",
+      "type": "tag"
+    },
+    {
+      "source": "obras/stranger visions",
+      "target": "tag:bioart",
+      "type": "tag"
+    },
+    {
+      "source": "obras/whoosh",
+      "target": "tag:instalación",
+      "type": "tag"
+    },
+    {
+      "source": "operativos/método científico/Método científico",
+      "target": "tag:ciencia",
+      "type": "tag"
+    },
+    {
+      "source": "operativos/método científico/Método científico",
+      "target": "tag:métodocientífico",
+      "type": "tag"
+    },
+    {
+      "source": "operativos/operativos artísticos/catalexis",
+      "target": "tag:retórica",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Assemble Studio",
+      "target": "tag:arterelacional",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Ben Laposky",
+      "target": "tag:arteelectrónico",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Ben Laposky",
+      "target": "tag:osciloscopio",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Ben Laposky",
+      "target": "tag:generative",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Ben Laposky",
+      "target": "tag:luz",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Ben Laposky",
+      "target": "tag:vectorsynthesis",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Ben Laposky",
+      "target": "tag:pioneer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Cecila Arditto",
+      "target": "tag:composer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Cecila Arditto",
+      "target": "tag:objetualidad",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Cecila Arditto",
+      "target": "tag:música",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Cecila Arditto",
+      "target": "tag:armonía-expandida",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Cecila Arditto",
+      "target": "tag:teatral",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Cecila Arditto",
+      "target": "tag:argentina",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Craig Reynols",
+      "target": "tag:artistcoders",
+      "type": "tag"
+    },
+    {
+      "source": "personas/David Rokeby",
+      "target": "tag:pioneer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Dennis Smalley",
+      "target": "tag:composer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Dennis Smalley",
+      "target": "tag:espectromorfología",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Dennis Smalley",
+      "target": "tag:108B",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Frank Rosenblatt",
+      "target": "tag:generatividad",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Frank Rosenblatt",
+      "target": "tag:ai",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Frank Rosenblatt",
+      "target": "tag:ai-masters",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Geoffrey Hinton",
+      "target": "tag:ai",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Georg Cantor",
+      "target": "tag:matemática",
+      "type": "tag"
+    },
+    {
+      "source": "personas/George Legrady",
+      "target": "tag:pioneer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/György Ligeti",
+      "target": "tag:músicaescrita",
+      "type": "tag"
+    },
+    {
+      "source": "personas/György Ligeti",
+      "target": "operativos/escritura icónica/Teoría de Sistemas Complejos en Música",
+      "type": "link"
+    },
+    {
+      "source": "personas/Hito Steyerl",
+      "target": "tag:philosophy",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Hito Steyerl",
+      "target": "espacios/Akademie der bildenden Künste Wien",
+      "type": "link"
+    },
+    {
+      "source": "personas/Iannis Xenakis",
+      "target": "tag:stocastics",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Iannis Xenakis",
+      "target": "tag:composer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Iannis Xenakis",
+      "target": "topoi/Sistemas complejos",
+      "type": "link"
+    },
+    {
+      "source": "personas/Iannis Xenakis",
+      "target": "topoi/generatividad/Emergencia",
+      "type": "link"
+    },
+    {
+      "source": "personas/Jean-Robert Sedano et Solveig de Ory",
+      "target": "tag:instalación",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Jean-Robert Sedano et Solveig de Ory",
+      "target": "tag:interface",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Jean-Robert Sedano et Solveig de Ory",
+      "target": "tag:luz",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Jean-Robert Sedano et Solveig de Ory",
+      "target": "tag:arterelacional",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Jim Campbell",
+      "target": "tag:leds",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Jim Campbell",
+      "target": "tag:light",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Jim Campbell",
+      "target": "tag:instalación",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Jim Campbell",
+      "target": "tag:pioneer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Juan Sorrentino",
+      "target": "tag:artesvisuales",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Juan Sorrentino",
+      "target": "tag:argentina",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Karl Sims",
+      "target": "tag:pioneer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Karl Sims",
+      "target": "tag:vidaartificial",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Karl Sims",
+      "target": "tag:simulation",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Karl Sims",
+      "target": "topoi/generatividad/Simulación (VR)",
+      "type": "link"
+    },
+    {
+      "source": "personas/Lauren McCarthy",
+      "target": "tag:p5",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Lauren McCarthy",
+      "target": "tag:artistcoders",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Lauren McCarthy",
+      "target": "tag:posthumanismo",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Leonard Baum",
+      "target": "tag:generatividad",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Leonard Baum",
+      "target": "tag:speechrecognition",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Manfred Mohr",
+      "target": "tag:pioneer",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Manfred Mohr",
+      "target": "tag:generative",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Mario Bunge",
+      "target": "tag:philosophy/science",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Maryanne Amacher",
+      "target": "tag:psicoacústica",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Nicolas Schoffer",
+      "target": "tag:cibernética",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Nicolas Schoffer",
+      "target": "tag:#wiener",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Nicolas Schoffer",
+      "target": "operativos/operativos artísticos/desmaterialización",
+      "type": "link"
+    },
+    {
+      "source": "personas/Yotam Mann",
+      "target": "tag:webaudio",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Yotam Mann",
+      "target": "tag:internetmusic",
+      "type": "tag"
+    },
+    {
+      "source": "personas/Yotam Mann",
+      "target": "tag:artistcoders",
+      "type": "tag"
+    },
+    {
+      "source": "sistemas paramétricos/Movimiento browniano",
+      "target": "tag:matemática",
+      "type": "tag"
+    },
+    {
+      "source": "sistemas paramétricos/Movimiento browniano",
+      "target": "sistemas paramétricos/proceso de Wiener",
+      "type": "link"
+    },
+    {
+      "source": "sistemas paramétricos/agregación difusión de Gray-Scott",
+      "target": "tag:operativos/sistemasparamétricos",
+      "type": "tag"
+    },
+    {
+      "source": "sistemas paramétricos/paramétricos MOC",
+      "target": "sistemas paramétricos/Movimiento browniano",
+      "type": "link"
+    },
+    {
+      "source": "sistemas paramétricos/patrones de Turing",
+      "target": "sistemas paramétricos/morfógenos",
+      "type": "link"
+    },
+    {
+      "source": "sistemas paramétricos/patrones de Turing",
+      "target": "sistemas paramétricos/agregación difusión de Gray-Scott",
+      "type": "link"
+    },
+    {
+      "source": "topoi/Aroma",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Aroma",
+      "target": "tag:aroma",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Arte de datos",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Arte de datos",
+      "target": "tag:dataart",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Arte participativo",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Arte participativo",
+      "target": "tag:",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Augmented Cognition",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Augmented Cognition",
+      "target": "tag:",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Azar",
+      "target": "tag:azar",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Azar",
+      "target": "tag:generativad",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Azar",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Azar",
+      "target": "tag:cym",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Azar",
+      "target": "bibliografía/El Azar y la Necesidad",
+      "type": "link"
+    },
+    {
+      "source": "topoi/Energía",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Energía",
+      "target": "tag:física",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Espacio",
+      "target": "tag:spatial",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Espacio",
+      "target": "tag:music",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Espacio",
+      "target": "tag:espacio",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Espacio",
+      "target": "tag:psicoacústica",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Espacio",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Filosofía histórica",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Filosofía histórica",
+      "target": "tag:",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Filosofías del Siglo XXI",
+      "target": "tag:filosofía",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Filosofías del Siglo XXI",
+      "target": "tag:posthumanismo",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Forma Musical",
+      "target": "tag:forma musical",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Generatividad",
+      "target": "tag:generatividad",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Historia de la tecnología",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Humanos",
+      "target": "tag:humanos",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Instalaciones",
+      "target": "tag:instalación",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Instalaciones",
+      "target": "tag:artesvisuales",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Interfaces",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Interfaces",
+      "target": "tag:20-materia",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Interfaces",
+      "target": "tag:nuevaorganología",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Intervencion del espacio público",
+      "target": "tag:espacio público",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Intervencion del espacio público",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Introducción a la psicoacústica",
+      "target": "tag:psicoacústica",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Introducción a la psicoacústica",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Introducción a la psicoacústica",
+      "target": "personas/Maryanne Amacher",
+      "type": "link"
+    },
+    {
+      "source": "topoi/La reología del arte",
+      "target": "tag:code",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/La reología del arte",
+      "target": "tag:js",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/La reología del arte",
+      "target": "tag:tonejs",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Livecoding",
+      "target": "tag:coding",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Livecoding",
+      "target": "tag:live-coding",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Livecoding",
+      "target": "tag:cym",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Livecoding",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Música Visual",
+      "target": "tag:musica visual",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Música Visual",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Música y Política",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Racionalizacion_(videojuegos)",
+      "target": "tag:videojuegos",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Racionalizacion_(videojuegos)",
+      "target": "tag:capitalismo",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Racionalizacion_(videojuegos)",
+      "target": "tag:sociologia",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Racionalizacion_(videojuegos)",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Sistemas complejos",
+      "target": "tag:complejidad",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/Sistemas complejos",
+      "target": "personas/Craig Reynols",
+      "type": "link"
+    },
+    {
+      "source": "topoi/Sistemas complejos",
+      "target": "obras/Boid Simulation",
+      "type": "link"
+    },
+    {
+      "source": "topoi/arqueología de medios/arqueología de medios",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/física/Física",
+      "target": "tag:ciencia",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/física/Física",
+      "target": "tag:topoi",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/física/Geometría y Experiencia",
+      "target": "tag:física",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/física/Radiación del cuerpo negro",
+      "target": "tag:física",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/física/Radiación del cuerpo negro",
+      "target": "topoi/física/teoría de Maxwell",
+      "type": "link"
+    },
+    {
+      "source": "topoi/física/Un punto de vista heurístico acerca de la conversión y creación de Luz",
+      "target": "tag:física",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/física/Un punto de vista heurístico acerca de la conversión y creación de Luz",
+      "target": "topoi/física/teoría de Maxwell",
+      "type": "link"
+    },
+    {
+      "source": "topoi/física/teoría de Maxwell",
+      "target": "tag:física",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/física/teoría de Maxwell",
+      "target": "topoi/física/Radiación del cuerpo negro",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/La conciencia social del arte generativo.",
+      "target": "tag:generatividad",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/La conciencia social del arte generativo.",
+      "target": "tag:artículos",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/La conciencia social del arte generativo.",
+      "target": "espacios/Bell Labs",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/La conciencia social del arte generativo.",
+      "target": "topoi/generatividad/Projekte generativer Ästhetik",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/La conciencia social del arte generativo.",
+      "target": "sistemas paramétricos/patrones de Turing",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/generatividad MOC",
+      "target": "personas/Frank Rosenblatt",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/generatividad MOC",
+      "target": "topoi/vida artificial/Hidden Markov Models (HMM)",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/generatividad MOC",
+      "target": "personas/Leonard Baum",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/generatividad MOC",
+      "target": "conceptos/Boltzmann Machines",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/generatividad MOC",
+      "target": "personas/Geoffrey Hinton",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/generatividad MOC",
+      "target": "sistemas paramétricos/Probabilistic Graphical Models",
+      "type": "link"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/BERT",
+      "target": "tag:masked-language-model",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/BERT",
+      "target": "tag:encoder-only",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/BERT",
+      "target": "tag:bidirectional",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/BERT",
+      "target": "tag:pretraining",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Dendral",
+      "target": "tag:expert-system",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Dendral",
+      "target": "tag:chemistry",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Dendral",
+      "target": "tag:rule-based",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Eliza",
+      "target": "tag:nlp",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Eliza",
+      "target": "tag:pattern-matching",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Eliza",
+      "target": "tag:conversational",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Fuzzi Logic",
+      "target": "tag:uncertainty",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Fuzzi Logic",
+      "target": "tag:fuzzy-sets",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Fuzzi Logic",
+      "target": "tag:control",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/GPT-2",
+      "target": "tag:autoregressive",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/GPT-2",
+      "target": "tag:decoder-only",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/GPT-2",
+      "target": "tag:open-domain",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/GPT-2",
+      "target": "tag:foundationmodel",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/General Problem Solver (GPS)",
+      "target": "tag:planning",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/General Problem Solver (GPS)",
+      "target": "tag:heuristic",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/General Problem Solver (GPS)",
+      "target": "tag:symbolic",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Logic Theorist",
+      "target": "tag:symbolic",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Logic Theorist",
+      "target": "tag:heuristic",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Logic Theorist",
+      "target": "tag:theorem-proving",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mikolov RNNLM",
+      "target": "tag:rnnlm",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mikolov RNNLM",
+      "target": "tag:mikolov",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mikolov RNNLM",
+      "target": "tag:2007",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mikolov RNNLM",
+      "target": "tag:embeddings",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mikolov RNNLM",
+      "target": "tag:recurrent",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mikolov RNNLM",
+      "target": "tag:retro-ai",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mikolov RNNLM",
+      "target": "tag:precursor-llm",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mycin",
+      "target": "tag:expert-system",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mycin",
+      "target": "tag:medical",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Mycin",
+      "target": "tag:rule-based",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/NNLM NPLM de Bengio",
+      "target": "tag:nnlm",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/NNLM NPLM de Bengio",
+      "target": "tag:nplm",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/NNLM NPLM de Bengio",
+      "target": "tag:bengio",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/NNLM NPLM de Bengio",
+      "target": "tag:2003",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/NNLM NPLM de Bengio",
+      "target": "tag:embeddings",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/NNLM NPLM de Bengio",
+      "target": "tag:precursor-llm",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/NNLM NPLM de Bengio",
+      "target": "tag:retro-ai",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Prolog",
+      "target": "tag:logic-programming",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Prolog",
+      "target": "tag:declarative",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Shrdlu",
+      "target": "tag:nlp",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Shrdlu",
+      "target": "tag:planning",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/Shrdlu",
+      "target": "tag:robotics",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/dialogGPT",
+      "target": "tag:conversational",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/dialogGPT",
+      "target": "tag:autoregressive",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/dialogGPT",
+      "target": "tag:GPT-based",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/dialogGPT",
+      "target": "tag:decoder-only",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/dialogGPT",
+      "target": "tag:dialogue",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/dialogGPT",
+      "target": "tag:fine-tuned",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/n-gram",
+      "target": "tag:statistical",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/n-gram",
+      "target": "tag:shallow",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/generatividad/modelos de lenguaje/n-gram",
+      "target": "tag:probabilistic",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/hiperrealidad/hiperrealidad",
+      "target": "tag:virtualidad",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/hiperrealidad/hiperrealidad",
+      "target": "tag:vr",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/hiperrealidad/hiperrealidad",
+      "target": "tag:realidad",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/modelos de universos",
+      "target": "tag:universo",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/modelos de universos",
+      "target": "tag:física",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/modelos de universos",
+      "target": "tag:historiadelaciencia",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/modelos de universos",
+      "target": "tag:astronomia",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/teoría crítica de la tecnología/Cuarta Revolución Industrial",
+      "target": "tag:revoluciónindustrial",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/teoría crítica de la tecnología/Cuarta Revolución Industrial",
+      "target": "personas/Klaus Schwab",
+      "type": "link"
+    },
+    {
+      "source": "topoi/teoría crítica de la tecnología/Cuarta Revolución Industrial",
+      "target": "personas/Yuval Noah Harari",
+      "type": "link"
+    },
+    {
+      "source": "topoi/teoría crítica de la tecnología/teoría crítica MOC",
+      "target": "topoi/arqueología de medios/arqueología de medios",
+      "type": "link"
+    },
+    {
+      "source": "topoi/vida artificial/Vida artificial",
+      "target": "tag:vidaartificial",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/vida artificial/Vida artificial",
+      "target": "tag:generative",
+      "type": "tag"
+    },
+    {
+      "source": "topoi/vida artificial/Vida artificial",
+      "target": "obras/A-Volve",
+      "type": "link"
+    },
+    {
+      "source": "topoi/vida artificial/Vida artificial",
+      "target": "topoi/vida artificial/espíritu invisible",
+      "type": "link"
+    },
+    {
+      "source": "topoi/vida artificial/autopoiesis",
+      "target": "topoi/vida artificial/no-autopoiesis",
+      "type": "link"
+    },
+    {
+      "source": "topoi/vida artificial/contracción por gradientes térmicos",
+      "target": "topoi/vida artificial/tolinas",
+      "type": "link"
+    },
+    {
+      "source": "topoi/vida artificial/espíritu invisible",
+      "target": "topoi/vida artificial/reducción fenomenológica",
+      "type": "link"
+    },
+    {
+      "source": "topoi/vida artificial/intro a genética",
+      "target": "topoi/vida artificial/ADN",
+      "type": "link"
+    },
+    {
+      "source": "topoi/vida artificial/intro a genética",
+      "target": "topoi/vida artificial/ARN",
+      "type": "link"
+    }
+  ]
+}

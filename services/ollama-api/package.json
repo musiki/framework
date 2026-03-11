@@ -1,0 +1,22 @@
+{
+  "name": "@cymp/ollama-correction-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Fastify API for academic text correction using local Ollama",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "NODE_ENV=production node src/server.js",
+    "lint": "node --check src/server.js && node --check src/config.js && node --check src/parser.js && node --check src/prompt.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.1.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.6.1"
+  }
+}

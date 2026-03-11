@@ -1,0 +1,4166 @@
+---
+import type { RoomPresentationOption } from '../lib/live/presentation-options';
+
+type Props = {
+  livekitUrl?: string;
+  courseId?: string;
+  courseHomeHref?: string;
+  defaultIdentity?: string;
+  defaultLayout?: 'grid' | 'teacher' | 'presentation' | 'screenshare';
+  defaultName?: string;
+  defaultPresentation?: string;
+  defaultRole?: 'teacher' | 'student';
+  defaultRoom?: string;
+  presentationOptions?: RoomPresentationOption[];
+};
+
+const {
+  livekitUrl = '',
+  courseId = '',
+  courseHomeHref = '/cursos',
+  defaultIdentity = '',
+  defaultLayout = 'presentation',
+  defaultName = '',
+  defaultPresentation = '',
+  defaultRole = 'student',
+  defaultRoom = 'musiki-stage',
+  presentationOptions = [],
+} = Astro.props as Props;
+
+const normalizedPresentationOptions = Array.isArray(presentationOptions)
+  ? [...presentationOptions]
+  : [];
+
+if (
+  defaultPresentation &&
+  !normalizedPresentationOptions.some((option) => option.value === defaultPresentation)
+) {
+  normalizedPresentationOptions.unshift({
+    courseId: '',
+    label: defaultPresentation,
+    lessonId: '',
+    theme: '',
+    value: defaultPresentation,
+  });
+}
+---
+
+<section
+  class="conference-shell"
+  data-conference-root
+  data-livekit-url={livekitUrl}
+  data-course-id={courseId}
+  data-gravity-ball="false"
+  data-gravity-ball-stage-visible="true"
+  data-instruments-open="false"
+  data-instruments-allowed="true"
+  data-recording-guide-suppressed="false"
+  data-recording-guide-visible="false"
+  data-role={defaultRole}
+  data-sidebar-collapsed="false"
+>
+  <aside class="conference-instruments-sidebar" data-instruments-sidebar>
+    <div class="conference-instruments-layout">
+      <div class="conference-instruments-scroll">
+        <section class="conference-sidebar-section conference-sidebar-section--instrument">
+          <div class="conference-sidebar-heading">FM SYNTH</div>
+
+        <div class="conference-field conference-field--checkbox conference-field--hand-controls">
+          <label class="conference-checkbox-row" for="conference-hand-track-input">
+            <input
+              id="conference-hand-track-input"
+              name="hand-track"
+              type="checkbox"
+              data-hand-track-input
+            />
+            <span>Hand track</span>
+          </label>
+          <label class="conference-ramp-row" for="conference-hand-ramp-input">
+            <span>Ramp</span>
+            <input
+              id="conference-hand-ramp-input"
+              name="hand-ramp"
+              type="number"
+              min="10"
+              max="4000"
+              step="10"
+              value="500"
+              data-hand-ramp-input
+            />
+            <span>ms</span>
+          </label>
+          <button
+            type="button"
+            class="conference-ramp-reset"
+            data-synth-mapping-reset
+            title="Reset mapping"
+            aria-label="Reset mapping"
+          >
+            R
+          </button>
+        </div>
+
+        <div class="conference-synth-meters">
+          <div class="conference-synth-meter">
+            <label for="conference-synth-carrier-input">Carrier</label>
+            <div class="conference-synth-meter-row">
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="carrier:min" aria-label="Capture carrier minimum"></button>
+              <input
+                id="conference-synth-carrier-input"
+                type="range"
+                min="20"
+                max="1600"
+                step="1"
+                value="220"
+                data-synth-carrier-input
+                disabled
+              />
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="carrier:max" aria-label="Capture carrier maximum"></button>
+              <output for="conference-synth-carrier-input" data-synth-carrier-output>220 Hz</output>
+            </div>
+          </div>
+
+          <div class="conference-synth-meter">
+            <label for="conference-synth-modulator-input">Modulator</label>
+            <div class="conference-synth-meter-row">
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="modulator:min" aria-label="Capture modulator minimum"></button>
+              <input
+                id="conference-synth-modulator-input"
+                type="range"
+                min="30"
+                max="1600"
+                step="1"
+                value="110"
+                data-synth-modulator-input
+                disabled
+              />
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="modulator:max" aria-label="Capture modulator maximum"></button>
+              <output for="conference-synth-modulator-input" data-synth-modulator-output>110 Hz</output>
+            </div>
+          </div>
+
+          <div class="conference-synth-meter">
+            <label for="conference-synth-gain-input">Thumb gain</label>
+            <div class="conference-synth-meter-row">
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="gain:min" aria-label="Capture gain minimum"></button>
+              <input
+                id="conference-synth-gain-input"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0"
+                data-synth-gain-input
+                disabled
+              />
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="gain:max" aria-label="Capture gain maximum"></button>
+              <output for="conference-synth-gain-input" data-synth-gain-output>0.00</output>
+            </div>
+          </div>
+
+          <div class="conference-synth-meter">
+            <label for="conference-synth-cutoff-input">Index cutoff</label>
+            <div class="conference-synth-meter-row">
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="cutoff:min" aria-label="Capture cutoff minimum"></button>
+              <input
+                id="conference-synth-cutoff-input"
+                type="range"
+                min="120"
+                max="8000"
+                step="1"
+                value="800"
+                data-synth-cutoff-input
+                disabled
+              />
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="cutoff:max" aria-label="Capture cutoff maximum"></button>
+              <output for="conference-synth-cutoff-input" data-synth-cutoff-output>800 Hz</output>
+            </div>
+          </div>
+
+          <div class="conference-synth-meter">
+            <label for="conference-synth-resonance-input">Ring resonance</label>
+            <div class="conference-synth-meter-row">
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="resonance:min" aria-label="Capture resonance minimum"></button>
+              <input
+                id="conference-synth-resonance-input"
+                type="range"
+                min="0.5"
+                max="20"
+                step="0.1"
+                value="1"
+                data-synth-resonance-input
+                disabled
+              />
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="resonance:max" aria-label="Capture resonance maximum"></button>
+              <output for="conference-synth-resonance-input" data-synth-resonance-output>1.0 Q</output>
+            </div>
+          </div>
+
+          <div class="conference-synth-meter">
+            <label for="conference-synth-waveform-input">Middle wave</label>
+            <div class="conference-synth-meter-row">
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="waveformMorph:min" aria-label="Capture waveform minimum"></button>
+              <input
+                id="conference-synth-waveform-input"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0"
+                data-synth-waveform-input
+                disabled
+              />
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="waveformMorph:max" aria-label="Capture waveform maximum"></button>
+              <output for="conference-synth-waveform-input" data-synth-waveform-output>SIN</output>
+            </div>
+          </div>
+
+          <div class="conference-synth-meter">
+            <label for="conference-synth-distortion-input" class="conference-synth-meter-label">
+              <span>Pinky distortion</span>
+              <span class="conference-synth-formula-shell" tabindex="0" aria-label="Distortion formula">
+                ƒ
+                <span class="conference-synth-formula-tooltip" role="note">
+                  <math display="inline">
+                    <mfrac>
+                      <mrow>
+                        <mo>(</mo><mn>3</mn><mo>+</mo><mn>20</mn><mo>)</mo>
+                        <mo>&middot;</mo><mi>x</mi><mo>&middot;</mo><mn>57</mn>
+                        <mo>&middot;</mo>
+                        <mfrac><mn>3</mn><mn>180</mn></mfrac>
+                      </mrow>
+                      <mrow>
+                        <mn>3</mn><mo>+</mo><mn>20</mn><mo>&middot;</mo>
+                        <mo>|</mo><mi>x</mi><mo>|</mo>
+                      </mrow>
+                    </mfrac>
+                  </math>
+                </span>
+              </span>
+            </label>
+            <div class="conference-synth-meter-row">
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="distortion:min" aria-label="Capture distortion minimum"></button>
+              <input
+                id="conference-synth-distortion-input"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0"
+                data-synth-distortion-input
+                disabled
+              />
+              <button type="button" class="conference-synth-map-button" data-synth-map-capture="distortion:max" aria-label="Capture distortion maximum"></button>
+              <output for="conference-synth-distortion-input" data-synth-distortion-output>0%</output>
+            </div>
+          </div>
+        </div>
+        </section>
+
+        <section class="conference-sidebar-section conference-sidebar-section--instrument">
+          <div class="conference-sidebar-heading">GRAVITY BALL</div>
+
+          <div class="conference-field conference-field--checkbox conference-field--hand-controls">
+            <label class="conference-checkbox-row" for="conference-gravity-ball-input">
+              <input
+                id="conference-gravity-ball-input"
+                name="gravity-ball"
+                type="checkbox"
+                data-gravity-ball-input
+              />
+              <span>Gravity ball</span>
+            </label>
+
+            <label class="conference-ramp-row" for="conference-gravity-ball-gravity-input">
+              <span>Gravity</span>
+              <input
+                id="conference-gravity-ball-gravity-input"
+                name="gravity-ball-gravity"
+                type="number"
+                min="1.62"
+                max="14.7"
+                step="0.01"
+                value="9.8"
+                data-gravity-ball-gravity-input
+              />
+              <span>m/s²</span>
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <section class="conference-sidebar-section conference-sidebar-section--instrument conference-sidebar-section--mixer">
+        <div class="conference-sidebar-heading">MIXER</div>
+        <div class="conference-mixer">
+          <div class="conference-mixer-channel">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="synth" title="Double click to reset CH1">
+              <strong>CH1</strong>
+            </div>
+            <div class="conference-mixer-knob-stack">
+              <div
+                class="conference-mixer-knob-control"
+                data-mixer-synth-pan-knob
+                role="slider"
+                tabindex="0"
+                aria-label="FM pan"
+                aria-valuemin="-1"
+                aria-valuemax="1"
+                aria-valuenow="0"
+              >
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-pan-input"
+                data-mixer-synth-pan
+              />
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter" data-mixer-meter="synth" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+                class="conference-mixer-fader"
+                data-mixer-synth-gain
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              data-mixer-synth-mute
+              aria-label="Mute FM channel"
+              title="Mute FM"
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+          </div>
+
+          <div class="conference-mixer-channel">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="ball" title="Double click to reset B">
+              <strong>CH2</strong>
+            </div>
+            <div class="conference-mixer-knob-stack">
+              <div
+                class="conference-mixer-knob-control"
+                data-mixer-ball-pan-knob
+                role="slider"
+                tabindex="0"
+                aria-label="Ball pan"
+                aria-valuemin="-1"
+                aria-valuemax="1"
+                aria-valuenow="0"
+              >
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-pan-input"
+                data-mixer-ball-pan
+              />
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter" data-mixer-meter="ball" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+                class="conference-mixer-fader"
+                data-mixer-ball-gain
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              data-mixer-ball-mute
+              aria-label="Mute ball channel"
+              title="Mute ball"
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+          </div>
+
+          <div class="conference-mixer-channel">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="incoming" title="Double click to reset IN">
+              <strong>IN</strong>
+            </div>
+            <div class="conference-mixer-knob-stack">
+              <div
+                class="conference-mixer-knob-control"
+                data-mixer-incoming-pan-knob
+                role="slider"
+                tabindex="0"
+                aria-label="Incoming pan"
+                aria-valuemin="-1"
+                aria-valuemax="1"
+                aria-valuenow="0"
+              >
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-pan-input"
+                data-mixer-incoming-pan
+              />
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter" data-mixer-meter="incoming" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+                class="conference-mixer-fader"
+                data-mixer-incoming-gain
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              data-mixer-incoming-mute
+              aria-label="Mute incoming channel"
+              title="Mute incoming"
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+          </div>
+
+          <div class="conference-mixer-channel">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="master" title="Double click to reset Master">
+              <strong>M</strong>
+            </div>
+            <div class="conference-mixer-knob-stack">
+              <div
+                class="conference-mixer-knob-control"
+                data-mixer-master-pan-knob
+                role="slider"
+                tabindex="0"
+                aria-label="Master pan"
+                aria-valuemin="-1"
+                aria-valuemax="1"
+                aria-valuenow="0"
+              >
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-pan-input"
+                data-mixer-master-pan
+              />
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter" data-mixer-meter="master" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+                class="conference-mixer-fader"
+                data-mixer-master-gain
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              data-mixer-master-mute
+              aria-label="Mute master channel"
+              title="Mute master"
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+          </div>
+
+          <div class="conference-mixer-channel conference-mixer-channel--video">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="video" title="Double click to reset Video">
+              <strong>V</strong>
+            </div>
+
+            <div class="conference-video-mixer-grid">
+              <div class="conference-video-mixer-control">
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+                  data-mixer-video-luma-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="Video luma"
+                  aria-valuemin="-1"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-luma />
+                <span class="conference-video-mixer-label" data-mixer-reset-control="video:luma" title="Double click to reset Luma">Luma</span>
+              </div>
+
+              <div class="conference-video-mixer-control">
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+                  data-mixer-video-tint-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="Video tint"
+                  aria-valuemin="-1"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-tint />
+                <span class="conference-video-mixer-label" data-mixer-reset-control="video:tint" title="Double click to reset Tint">Tint</span>
+              </div>
+
+              <div class="conference-video-mixer-control">
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+                  data-mixer-video-saturation-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="Video saturation"
+                  aria-valuemin="-1"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-saturation />
+                <span class="conference-video-mixer-label" data-mixer-reset-control="video:saturation" title="Double click to reset Saturation">Sat</span>
+              </div>
+
+              <div class="conference-video-mixer-control">
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+                  data-mixer-video-contrast-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="Video contrast"
+                  aria-valuemin="-1"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-contrast />
+                <span class="conference-video-mixer-label" data-mixer-reset-control="video:contrast" title="Double click to reset Contrast">Cont</span>
+              </div>
+
+              <div class="conference-video-mixer-control conference-video-mixer-control--wide">
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+                  data-mixer-video-brightness-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="Video brightness"
+                  aria-valuemin="-1"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-brightness />
+                <span class="conference-video-mixer-label" data-mixer-reset-control="video:brightness" title="Double click to reset Brightness">Bright</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="conference-mixer-fx">
+          <article class="conference-mixer-fx-card">
+            <div class="conference-mixer-fx-head">
+              <h4>REVERB</h4>
+              <span class="conference-mixer-fx-badge">FX</span>
+            </div>
+
+            <label class="conference-mixer-fx-control" for="conference-synth-reverb-time-input">
+              <span class="conference-mixer-fx-label-row">
+                <span>Time</span>
+                <output for="conference-synth-reverb-time-input" data-synth-reverb-time-output>3.0s</output>
+              </span>
+              <input
+                id="conference-synth-reverb-time-input"
+                type="range"
+                min="0.4"
+                max="8"
+                step="0.1"
+                value="3"
+                data-synth-reverb-time-input
+              />
+            </label>
+
+            <label class="conference-mixer-fx-control" for="conference-synth-reverb-mix-input">
+              <span class="conference-mixer-fx-label-row">
+                <span>Mix</span>
+                <output for="conference-synth-reverb-mix-input" data-synth-reverb-mix-output>50%</output>
+              </span>
+              <input
+                id="conference-synth-reverb-mix-input"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.5"
+                data-synth-reverb-mix-input
+              />
+            </label>
+          </article>
+
+          <div class="conference-mixer-fx-pair">
+            <article class="conference-mixer-fx-card">
+              <div class="conference-mixer-fx-head">
+                <h4>COMP</h4>
+                <button
+                  type="button"
+                  class="conference-mixer-fx-led-toggle"
+                  data-synth-comp-toggle
+                  aria-label="Toggle compressor"
+                  title="Compressor"
+                >
+                  <span class="conference-mixer-led" aria-hidden="true"></span>
+                </button>
+              </div>
+
+              <div class="conference-mixer-fx-grid conference-mixer-fx-grid--stacked">
+                <label class="conference-mixer-fx-control" for="conference-synth-comp-threshold-input">
+                  <span class="conference-mixer-fx-label-row">
+                    <span>Thresh</span>
+                    <output for="conference-synth-comp-threshold-input" data-synth-comp-threshold-output>-18 dB</output>
+                  </span>
+                  <input
+                    id="conference-synth-comp-threshold-input"
+                    type="range"
+                    min="-48"
+                    max="0"
+                    step="1"
+                    value="-18"
+                    data-synth-comp-threshold-input
+                  />
+                </label>
+
+                <label class="conference-mixer-fx-control" for="conference-synth-comp-ratio-input">
+                  <span class="conference-mixer-fx-label-row">
+                    <span>Ratio</span>
+                    <output for="conference-synth-comp-ratio-input" data-synth-comp-ratio-output>3.0</output>
+                  </span>
+                  <input
+                    id="conference-synth-comp-ratio-input"
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="0.1"
+                    value="3"
+                    data-synth-comp-ratio-input
+                  />
+                </label>
+
+                <label class="conference-mixer-fx-control" for="conference-synth-comp-attack-input">
+                  <span class="conference-mixer-fx-label-row">
+                    <span>Attack</span>
+                    <output for="conference-synth-comp-attack-input" data-synth-comp-attack-output>0.003s</output>
+                  </span>
+                  <input
+                    id="conference-synth-comp-attack-input"
+                    type="range"
+                    min="0.001"
+                    max="0.2"
+                    step="0.001"
+                    value="0.003"
+                    data-synth-comp-attack-input
+                  />
+                </label>
+
+                <label class="conference-mixer-fx-control" for="conference-synth-comp-release-input">
+                  <span class="conference-mixer-fx-label-row">
+                    <span>Release</span>
+                    <output for="conference-synth-comp-release-input" data-synth-comp-release-output>0.25s</output>
+                  </span>
+                  <input
+                    id="conference-synth-comp-release-input"
+                    type="range"
+                    min="0.02"
+                    max="1"
+                    step="0.01"
+                    value="0.25"
+                    data-synth-comp-release-input
+                  />
+                </label>
+
+                <label class="conference-mixer-fx-control conference-mixer-fx-control--wide" for="conference-synth-comp-knee-input">
+                  <span class="conference-mixer-fx-label-row">
+                    <span>Knee</span>
+                    <output for="conference-synth-comp-knee-input" data-synth-comp-knee-output>12 dB</output>
+                  </span>
+                  <input
+                    id="conference-synth-comp-knee-input"
+                    type="range"
+                    min="0"
+                    max="40"
+                    step="0.5"
+                    value="12"
+                    data-synth-comp-knee-input
+                  />
+                </label>
+              </div>
+            </article>
+
+            <article class="conference-mixer-fx-card">
+              <div class="conference-mixer-fx-head">
+                <h4>LIMITER</h4>
+                <button
+                  type="button"
+                  class="conference-mixer-fx-led-toggle"
+                  data-synth-limiter-toggle
+                  aria-label="Toggle limiter"
+                  title="Limiter"
+                >
+                  <span class="conference-mixer-led" aria-hidden="true"></span>
+                </button>
+              </div>
+
+              <div class="conference-mixer-fx-grid conference-mixer-fx-grid--stacked">
+                <label class="conference-mixer-fx-control" for="conference-synth-limiter-threshold-input">
+                  <span class="conference-mixer-fx-label-row">
+                    <span>Thresh</span>
+                    <output for="conference-synth-limiter-threshold-input" data-synth-limiter-threshold-output>-1 dB</output>
+                  </span>
+                  <input
+                    id="conference-synth-limiter-threshold-input"
+                    type="range"
+                    min="-12"
+                    max="0"
+                    step="0.5"
+                    value="-1"
+                    data-synth-limiter-threshold-input
+                  />
+                </label>
+
+                <label class="conference-mixer-fx-control" for="conference-synth-limiter-release-input">
+                  <span class="conference-mixer-fx-label-row">
+                    <span>Release</span>
+                    <output for="conference-synth-limiter-release-input" data-synth-limiter-release-output>0.05s</output>
+                  </span>
+                  <input
+                    id="conference-synth-limiter-release-input"
+                    type="range"
+                    min="0.01"
+                    max="0.5"
+                    step="0.01"
+                    value="0.05"
+                    data-synth-limiter-release-input
+                  />
+                </label>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <section class="conference-stage-frame">
+    <section class="conference-stage" data-stage data-layout={defaultLayout}>
+      <section class="conference-stage-panel conference-stage-panel--presentation" data-panel="presentation">
+        <div class="conference-stage-label">Presentation</div>
+        <div class="conference-presentation">
+          <iframe
+            title="Presentation stage"
+            data-presentation-frame
+            hidden
+            loading="lazy"
+            allowfullscreen
+          ></iframe>
+          <div class="conference-empty conference-empty--presentation" data-presentation-placeholder>
+            Select a lesson with theme to load Reveal.
+          </div>
+        </div>
+      </section>
+
+      <section class="conference-stage-panel conference-stage-panel--focus" data-panel="teacher">
+        <div class="conference-stage-label">Speaker</div>
+        <div
+          class="conference-slot conference-slot--focus"
+          data-slot="teacher"
+          data-empty-label="Speaker camera"
+        ></div>
+      </section>
+
+      <section class="conference-stage-panel conference-stage-panel--screen" data-panel="screen">
+        <div class="conference-stage-label">Share Screen</div>
+        <div
+          class="conference-slot conference-slot--screen"
+          data-slot="screen"
+          data-empty-label="Screen share"
+        ></div>
+      </section>
+
+      <section class="conference-stage-panel conference-stage-panel--grid" data-panel="grid">
+        <div class="conference-stage-label">Grid</div>
+        <div
+          class="conference-slot conference-slot--grid"
+          data-slot="grid"
+          data-empty-label="Participants grid"
+        ></div>
+      </section>
+    </section>
+    <div class="conference-recording-guide" data-recording-guide aria-hidden="true"></div>
+    <div class="conference-reactions-layer" data-reactions-layer aria-hidden="true"></div>
+    <canvas class="conference-gravity-ball-overlay" data-gravity-ball-canvas aria-hidden="true"></canvas>
+    <canvas class="conference-hand-overlay conference-hand-overlay--stage" data-stage-hand-overlay aria-hidden="true"></canvas>
+  </section>
+
+  <aside class="conference-sidebar">
+    <div class="conference-sidebar-scroll">
+      <section class="conference-sidebar-section conference-sidebar-section--meta">
+        <div class="conference-meta-shell">
+          <div class="conference-meta-fields">
+            <div class="conference-field">
+              <label for="conference-room-input">Sala</label>
+              <input id="conference-room-input" name="room" type="text" value={defaultRoom} data-room-input />
+            </div>
+
+            <details class="conference-session-setup" aria-label="Session setup" data-session-setup>
+              <summary class="conference-session-setup-summary">
+                <span class="conference-sidebar-heading">SETUP SESSION</span>
+              </summary>
+
+              <div class="conference-session-setup-body">
+                <div class="conference-field">
+                  <label for="conference-identity-input">Identity</label>
+                  <input
+                    id="conference-identity-input"
+                    name="identity"
+                    type="text"
+                    value={defaultIdentity}
+                    data-identity-input
+                  />
+                </div>
+
+                <div class="conference-field">
+                  <label for="conference-name-input">Nombre</label>
+                  <div class="conference-name-row">
+                    <input id="conference-name-input" name="name" type="text" value={defaultName} data-name-input />
+                    <span class="conference-role-tag" data-role-label
+                      >{defaultRole === 'teacher' ? 'teacher' : 'student'}</span
+                    >
+                  </div>
+                  <input type="hidden" name="role" value={defaultRole} data-role-input />
+                </div>
+
+                <div class="conference-field">
+                  <label for="conference-audio-input-select-sidebar">MIC IN</label>
+                  <select
+                    id="conference-audio-input-select-sidebar"
+                    name="audio-input-sidebar"
+                    data-audio-input-select
+                    data-audio-input-select-sidebar
+                  >
+                    <option value="">Selecciona un microfono</option>
+                  </select>
+                </div>
+
+                <div class="conference-field">
+                  <label for="conference-video-input-select-sidebar">CAM IN</label>
+                  <select
+                    id="conference-video-input-select-sidebar"
+                    name="video-input-sidebar"
+                    data-video-input-select
+                    data-video-input-select-sidebar
+                  >
+                    <option value="">Selecciona una camara</option>
+                  </select>
+                </div>
+
+                <div class="conference-field">
+                  <label for="conference-circle-zoom-input">Circle preview zoom</label>
+                  <div class="conference-range-row">
+                    <input
+                      id="conference-circle-zoom-input"
+                      name="circle-preview-zoom"
+                      type="range"
+                      min="0.8"
+                      max="4"
+                      step="0.02"
+                      value="1"
+                      data-preview-zoom-input
+                    />
+                    <output for="conference-circle-zoom-input" data-preview-zoom-output>1.00x</output>
+                  </div>
+                </div>
+
+                <div class="conference-field conference-field--checkbox">
+                  <label class="conference-checkbox-row" for="conference-show-circle-input">
+                    <input
+                      id="conference-show-circle-input"
+                      name="show-circle"
+                      type="checkbox"
+                      checked
+                      data-show-circle-input
+                    />
+                    <span>Show Circle</span>
+                  </label>
+                </div>
+
+                <div class="conference-field conference-field--checkbox">
+                  <label class="conference-checkbox-row" for="conference-blur-background-input">
+                    <input
+                      id="conference-blur-background-input"
+                      name="blur-background"
+                      type="checkbox"
+                      data-preview-blur-input
+                    />
+                    <span>Blur Background</span>
+                  </label>
+                </div>
+
+                <div class="conference-field conference-field--checkbox">
+                  <label class="conference-checkbox-row" for="conference-invert-video-input">
+                    <input
+                      id="conference-invert-video-input"
+                      name="invert-video"
+                      type="checkbox"
+                      data-preview-invert-input
+                    />
+                    <span>Invert Video</span>
+                  </label>
+                </div>
+
+                <div class="conference-field">
+                  <label for="conference-recording-preset-select">Recording Preset</label>
+                  <select
+                    id="conference-recording-preset-select"
+                    name="recording-preset"
+                    data-recording-preset-select
+                  >
+                    <option value="landscape-1080">1080p</option>
+                    <option value="instagram-story">Instagram Story</option>
+                    <option value="tiktok">TikTok</option>
+                  </select>
+                </div>
+
+                <div class="conference-session-controls" data-session-controls-field hidden>
+                  <div class="conference-session-controls-heading">SESSION CONTROL</div>
+
+                  <div class="conference-field" data-session-leader-field>
+                    <label for="conference-session-leader-select">DELEGAR SESION</label>
+                    <select
+                      id="conference-session-leader-select"
+                      name="session-leader"
+                      data-session-leader-select
+                    >
+                      <option value="">Sin teachers conectados</option>
+                    </select>
+                  </div>
+
+                  <div class="conference-field conference-field--checkbox">
+                    <label class="conference-checkbox-row" for="conference-session-allow-instruments-input">
+                      <input
+                        id="conference-session-allow-instruments-input"
+                        name="session-allow-instruments"
+                        type="checkbox"
+                        checked
+                        data-session-allow-instruments-input
+                      />
+                      <span>Allow instruments</span>
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    class="conference-session-action"
+                    data-session-mute-all-button
+                  >
+                    MUTE ALL
+                  </button>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="conference-self-preview-shell">
+            <div
+              class="conference-self-preview"
+              data-slot="identity-preview"
+              data-empty-label="Camera preview"
+            ></div>
+          </div>
+        </div>
+
+        <p class="conference-statusline" data-room-status>
+          Configura la sala y conecta.
+        </p>
+        <span class="conference-sr-only" data-room-state>Desconectado</span>
+      </section>
+
+      <section class="conference-sidebar-section">
+        <div class="conference-sidebar-heading conference-sidebar-heading--chat">
+          <span>CHAT</span>
+          <button
+            type="button"
+            class="conference-hand-button"
+            data-action="raise-hand"
+            aria-label="Levantar la mano"
+            title="Levantar la mano (M)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+              <path
+                d="M8.2 11.2V5.9a1.2 1.2 0 1 1 2.4 0v4.3h.8V4.8a1.2 1.2 0 1 1 2.4 0v5.4h.8V6.1a1.2 1.2 0 1 1 2.4 0v5.3h.8V8.3a1.2 1.2 0 1 1 2.4 0v6.2c0 3.3-2.7 6-6 6h-1.4c-1.8 0-3.5-.8-4.6-2.2L5 14.8a1.5 1.5 0 0 1 2.4-1.8l.8 1.1V11.2Z"
+                fill="currentColor"
+              />
+            </svg>
+            <span class="conference-sr-only">Raise hand</span>
+          </button>
+        </div>
+        <div class="conference-chat">
+          <ul class="conference-chat-list" data-chat-list>
+            <li class="conference-chat-empty">No hay mensajes todavia.</li>
+          </ul>
+          <div class="conference-chat-compose">
+            <textarea rows="3" name="chat" placeholder="Escribe un mensaje" data-chat-input></textarea>
+            <div class="conference-chat-actions">
+              <button type="button" class="conference-chat-send" data-action="chat-send" disabled>
+                Send
+              </button>
+              <button
+                type="button"
+                class="conference-chat-download"
+                data-action="chat-download"
+                aria-label="Descargar chat"
+                title="Descargar chat"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+                  <path
+                    d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
+                    fill="currentColor"
+                  />
+                </svg>
+                <span class="conference-sr-only">Download chat</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="conference-sidebar-section">
+        <div class="conference-sidebar-heading">GRID VIEW</div>
+        <div
+          class="conference-slot conference-slot--sidebar"
+          data-slot="students"
+          data-empty-label="Students"
+        ></div>
+      </section>
+    </div>
+  </aside>
+
+  <button
+    type="button"
+    class="conference-sidebar-toggle"
+    data-action="sidebar-toggle"
+    aria-label="Plegar sidebar"
+    title="Plegar sidebar (Cmd/Ctrl + Shift + /)"
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+      <path
+        d="M15.4 6.6 10 12l5.4 5.4-1.4 1.4L7.2 12l6.8-6.8 1.4 1.4Z"
+        fill="currentColor"
+      />
+    </svg>
+    <span class="conference-sr-only">Toggle sidebar</span>
+  </button>
+
+  <footer class="conference-bottombar">
+    <div class="conference-bar-group conference-bar-group--session">
+      <button
+        type="button"
+        class="conference-connect-button"
+        data-action="connect-toggle"
+        aria-label="Conectar a la sala"
+        title="Conectar"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-connect-arrow conference-connect-arrow--in">
+          <path d="M4 12h12.2l-3.6-3.6 1.4-1.4L20 13l-6 6-1.4-1.4 3.6-3.6H4z" fill="currentColor"></path>
+        </svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-connect-arrow conference-connect-arrow--out">
+          <path d="M20 12H7.8l3.6 3.6-1.4 1.4L4 11l6-6 1.4 1.4L7.8 10H20z" fill="currentColor"></path>
+        </svg>
+        <span class="conference-sr-only">Connect</span>
+      </button>
+
+      <div class="conference-count-shell">
+        <button type="button" class="conference-count-button" aria-label="Participantes conectados">
+          <span class="conference-count" data-participant-count data-compact="true">0</span>
+        </button>
+        <div class="conference-roster-popup">
+          <ul class="conference-roster" data-participant-list>
+            <li class="conference-roster-empty">Todavia no hay participantes en la sala.</li>
+          </ul>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="conference-live-activity"
+        data-live-activity-button
+        aria-label="Abrir interacción en vivo"
+        title="Abrir interacción en vivo"
+        hidden
+      >
+        <span class="conference-live-led" aria-hidden="true"></span>
+        <span class="conference-live-timer" data-live-activity-timer>--:--</span>
+      </button>
+    </div>
+
+    <div class="conference-bar-group conference-bar-group--instrument">
+      <button
+        type="button"
+        class="conference-layout-button conference-instruments-button"
+        data-action="instruments-toggle"
+        aria-label="Instruments"
+        title="Instruments"
+      >
+        I
+      </button>
+    </div>
+
+    <div class="conference-bar-group conference-bar-group--layout">
+      <button type="button" class="conference-layout-button" data-layout-choice="teacher">F</button>
+      <button type="button" class="conference-layout-button" data-layout-choice="screenshare">S</button>
+      <button type="button" class="conference-layout-button" data-layout-choice="presentation">P</button>
+      <button type="button" class="conference-layout-button" data-layout-choice="grid">G</button>
+      <select class="conference-sr-only" data-layout-input aria-hidden="true" tabindex="-1">
+        <option value="teacher" selected={defaultLayout === 'teacher'}>Focus</option>
+        <option value="screenshare" selected={defaultLayout === 'screenshare'}>Share</option>
+        <option value="presentation" selected={defaultLayout === 'presentation'}>Presentation</option>
+        <option value="grid" selected={defaultLayout === 'grid'}>Grid</option>
+      </select>
+    </div>
+
+    <div class="conference-bar-group conference-bar-group--controls">
+      <div class="conference-device-stack">
+        <button
+          type="button"
+          class="conference-icon-button"
+          data-action="microphone"
+          aria-label="Activar o silenciar microfono"
+          title="Microphone. Shift + click para elegir dispositivo."
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+            <path
+              d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V7A3.5 3.5 0 1 0 8.5 7v5a3.5 3.5 0 0 0 3.5 3.5Zm-6-3a1 1 0 1 1 2 0 4 4 0 1 0 8 0 1 1 0 1 1 2 0 6 6 0 0 1-5 5.91V21h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.59A6 6 0 0 1 6 12.5Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span class="conference-mic-meter" data-mic-meter hidden></span>
+          <span class="conference-sr-only">Microphone</span>
+        </button>
+        <div class="conference-device-panel" data-audio-input-panel hidden>
+          <label for="conference-audio-input-select">Microphone</label>
+          <select id="conference-audio-input-select" name="audio-input" data-audio-input-select>
+            <option value="">Selecciona un microfono</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="conference-device-stack">
+        <button
+          type="button"
+          class="conference-icon-button"
+          data-action="camera"
+          aria-label="Activar o apagar camara"
+          title="Camera. Shift + click para elegir dispositivo."
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+            <path
+              d="M4 7.5A2.5 2.5 0 0 1 6.5 5h7A2.5 2.5 0 0 1 16 7.5v1.13l2.76-1.85A1.5 1.5 0 0 1 21 8.03v7.94a1.5 1.5 0 0 1-2.24 1.25L16 15.37v1.13A2.5 2.5 0 0 1 13.5 19h-7A2.5 2.5 0 0 1 4 16.5v-9Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span class="conference-sr-only">Camera</span>
+        </button>
+        <div class="conference-device-panel" data-video-input-panel hidden>
+          <label for="conference-video-input-select">Camera</label>
+          <select id="conference-video-input-select" name="video-input" data-video-input-select>
+            <option value="">Selecciona una camara</option>
+          </select>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        class="conference-share-button"
+        data-action="screen-share"
+        title="Compartir pantalla"
+      >
+        SHARE
+      </button>
+    </div>
+
+    <div class="conference-bar-group conference-bar-group--presentation">
+      <label class="conference-sr-only" for="conference-presentation-select">Presentacion</label>
+      <select id="conference-presentation-select" name="presentation" data-presentation-select>
+        <option value="">none</option>
+        {normalizedPresentationOptions.map((option) => (
+          <option
+            value={option.value}
+            data-course-id={option.courseId}
+            data-lesson-id={option.lessonId}
+            selected={option.value === defaultPresentation}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div class="conference-bar-group conference-bar-group--exit">
+      <span class="conference-session-timer" data-session-timer>00:00:00</span>
+      <button
+        type="button"
+        class="conference-record-button"
+        data-action="record"
+        aria-label="Grabar transmision"
+        title="Grabar transmision"
+      >
+        <span class="conference-record-dot" aria-hidden="true"></span>
+      </button>
+      <button
+        type="button"
+        class="conference-icon-button conference-fullscreen-button"
+        data-action="fullscreen"
+        aria-label="Pantalla completa"
+        title="Pantalla completa"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+          <path
+            d="M4 9V4h5v2H6v3H4Zm10-5h6v6h-2V6h-4V4ZM4 20v-6h2v4h4v2H4Zm14-2v-4h2v6h-6v-2h4Z"
+            fill="currentColor"
+          />
+        </svg>
+        <span class="conference-sr-only">Fullscreen</span>
+      </button>
+      <button
+        type="button"
+        class="conference-icon-button conference-shortcuts-button"
+        data-action="shortcuts-help"
+        aria-label="Atajos"
+        title="Atajos"
+      >
+        <span aria-hidden="true">?</span>
+        <span class="conference-sr-only">Atajos</span>
+      </button>
+      <a href={courseHomeHref} class="conference-exit-button" aria-label="Volver" title="Volver">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-exit-icon">
+          <path
+            d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2.6"
+          />
+        </svg>
+        <span class="conference-sr-only">Volver</span>
+      </a>
+    </div>
+  </footer>
+
+  <template data-template="participant-card">
+    <article class="conference-tile conference-tile--participant">
+      <div class="conference-tile-media" data-card-media></div>
+      <div class="conference-empty conference-empty--tile" data-card-placeholder></div>
+      <span class="conference-tile-hand" data-card-hand hidden>✋</span>
+      <footer class="conference-tile-meta">
+        <strong data-card-name>Participant</strong>
+      </footer>
+    </article>
+  </template>
+
+  <template data-template="screen-card">
+    <article class="conference-tile conference-tile--screen">
+      <div class="conference-tile-media" data-screen-media></div>
+      <footer class="conference-tile-meta">
+        <strong data-screen-name>Screen share</strong>
+        <span>Shared display</span>
+      </footer>
+    </article>
+  </template>
+
+  <div class="conference-shortcuts-modal" data-shortcuts-modal hidden>
+    <div
+      class="conference-shortcuts-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="conference-shortcuts-title"
+    >
+      <div class="conference-shortcuts-head">
+        <strong id="conference-shortcuts-title">Shortcuts</strong>
+        <button
+          type="button"
+          class="conference-icon-button conference-shortcuts-close"
+          data-shortcuts-close
+          aria-label="Cerrar atajos"
+          title="Cerrar"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+
+      <div class="conference-shortcuts-grid">
+        <section class="conference-shortcuts-section">
+          <h3>Reveal</h3>
+          <ul>
+            <li><kbd>O</kbd> overview</li>
+            <li><kbd>K</kbd> / <kbd>L</kbd> previous / next slide</li>
+            <li><kbd>S</kbd> speaker view</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>G</kbd> go to slide</li>
+            <li><kbd>P</kbd> laser / marker</li>
+            <li><kbd>G</kbd> graph</li>
+          </ul>
+        </section>
+
+        <section class="conference-shortcuts-section">
+          <h3>Layout</h3>
+          <ul>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> / <kbd>4</kbd> full / share / presentation / grid</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>5</kbd> / <kbd>6</kbd> / <kbd>7</kbd> circle / invert / delegar sesion</li>
+          </ul>
+        </section>
+
+        <section class="conference-shortcuts-section">
+          <h3>Room</h3>
+          <ul>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>\</kbd> instruments</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>\</kbd> sidebar</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>J</kbd> join / leave</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>F</kbd> / <kbd>I</kbd> fullscreen / copy invite</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>R</kbd> / <kbd>T</kbd> rec / screenshot</li>
+          </ul>
+        </section>
+
+        <section class="conference-shortcuts-section">
+          <h3>Media</h3>
+          <ul>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>S</kbd> / <kbd>V</kbd> / <kbd>N</kbd> share / camera / next camera</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>V</kbd> / <kbd>N</kbd> camera / next camera</li>
+            <li><kbd>Space</kbd> hold mic</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>M</kbd> mute all</li>
+          </ul>
+        </section>
+
+        <section class="conference-shortcuts-section">
+          <h3>Interaction</h3>
+          <ul>
+            <li><kbd>H</kbd> / <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>Y</kbd> raise / lower hand</li>
+            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>C</kbd> focus chat</li>
+            <li><kbd>⇧</kbd> + <kbd>4</kbd> / <kbd>5</kbd> / <kbd>6</kbd> / <kbd>7</kbd> / <kbd>8</kbd> / <kbd>9</kbd> clap / thumb / heart / joy / wow / tada</li>
+            <li><kbd>⇧</kbd> + <kbd>?</kbd> search</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { mountLiveKitRoom } from '../scripts/livekit-room.ts';
+
+  let teardown = null;
+
+  const mount = () => {
+    const root = document.querySelector('[data-conference-root]');
+    if (!(root instanceof HTMLElement)) return;
+
+    if (typeof teardown === 'function') {
+      teardown();
+      teardown = null;
+    }
+
+    try {
+      teardown = mountLiveKitRoom(root);
+    } catch (error) {
+      console.error('Conference room mount failed:', error);
+      root.dataset.mounted = 'false';
+      const status = root.querySelector('[data-room-status]');
+      if (status instanceof HTMLElement) {
+        status.textContent = error instanceof Error ? error.message : 'No fue posible iniciar la sala.';
+      }
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount, { once: true });
+  } else {
+    mount();
+  }
+
+  document.addEventListener('astro:page-load', mount);
+  window.addEventListener('pagehide', () => {
+    if (typeof teardown === 'function') teardown();
+    teardown = null;
+  });
+</script>
+
+<style>
+  :global(body.room-page) {
+    margin: 0;
+    background: #000;
+    color: #f5f7fb;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  :global(body.room-page > main) {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  :global(body.room-page.room-page--immersive) {
+    overflow: hidden;
+  }
+
+  .conference-shell {
+    --conference-bar-height: 42px;
+    --conference-sidebar-size: clamp(300px, 22vw, 420px);
+    --conference-instruments-size: clamp(320px, 24vw, 400px);
+    --conference-local-video-flip: 1;
+    --conference-self-preview-zoom: 1;
+    --conference-circle-preview-zoom: 1;
+    --conference-line: rgba(255, 255, 255, 0.12);
+    --conference-line-soft: rgba(255, 255, 255, 0.06);
+    --conference-fg: #f5f7fb;
+    --conference-muted: rgba(245, 247, 251, 0.58);
+    --conference-dim: rgba(245, 247, 251, 0.32);
+    --conference-accent: #2a87ff;
+    --conference-green: #25cf6b;
+    --conference-red: #ff4d4d;
+    position: relative;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--conference-sidebar-size);
+    background: #000;
+    color: var(--conference-fg);
+    overflow: hidden;
+    padding-bottom: var(--conference-bar-height);
+  }
+
+  .conference-shell[data-show-circle='false'] .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+    display: none;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus:has(.conference-tile[data-show-circle='false']) {
+    display: none;
+  }
+
+  .conference-shell[data-sidebar-collapsed='true'] {
+    --conference-sidebar-size: 0px;
+  }
+
+  .conference-shell[data-immersive='true'] {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    width: 100dvw;
+    height: 100vh;
+    height: 100dvh;
+    z-index: 999;
+  }
+
+  .conference-stage-frame,
+  .conference-sidebar {
+    min-width: 0;
+    min-height: 0;
+    height: calc(100vh - var(--conference-bar-height));
+    height: calc(100dvh - var(--conference-bar-height));
+  }
+
+  .conference-instruments-sidebar {
+    position: absolute;
+    inset: 0 auto var(--conference-bar-height) 0;
+    z-index: 18;
+    width: var(--conference-instruments-size);
+    min-width: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.98);
+    transform: translateX(-100%);
+    transition: transform 160ms ease;
+  }
+
+  .conference-shell[data-instruments-open='true'] .conference-instruments-sidebar {
+    transform: translateX(0);
+  }
+
+  .conference-instruments-layout {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .conference-instruments-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: transparent;
+  }
+
+  .conference-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+
+  .conference-stage-panel {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    min-width: 0;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    background: transparent;
+    border-right: 1px solid var(--conference-line);
+    border-bottom: 1px solid var(--conference-line);
+  }
+
+  .conference-stage-panel--presentation,
+  .conference-stage-panel--focus,
+  .conference-stage-panel--screen,
+  .conference-stage-panel--grid {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--presentation,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen,
+  .conference-stage[data-layout='grid'] .conference-stage-panel--grid {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--presentation,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen,
+  .conference-stage[data-layout='grid'] .conference-stage-panel--grid {
+    inset: 0;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--presentation {
+    grid-template-rows: 1fr;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--presentation .conference-stage-label {
+    display: none;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+    inset: auto 1rem 1rem auto;
+    width: clamp(101px, 13vw, 158px);
+    aspect-ratio: 1;
+    display: block;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-right: 1px solid rgba(255, 255, 255, 0.24);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 999px;
+    overflow: hidden;
+    z-index: 4;
+    background: rgba(0, 0, 0, 0.92);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-stage-label,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--screen {
+    display: none;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus {
+    grid-template-rows: 1fr;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-stage-label,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus::before {
+    display: none;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile-media,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-media-frame {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus {
+    position: absolute;
+    inset: 0;
+    display: block;
+    overflow: hidden;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > .conference-tile {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > *,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media > .conference-media-frame,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media > .conference-media-frame > video {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile {
+    grid-template-rows: 1fr;
+    border: 0;
+    background: #000;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile-meta {
+    position: absolute;
+    inset: auto 0 0 0;
+    border-top: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.8) 100%);
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen {
+    grid-template-rows: 1fr;
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-stage-label {
+    display: none;
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile--screen,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile-media,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-media-frame {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen {
+    position: absolute;
+    inset: 0;
+    display: block;
+    overflow: hidden;
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > .conference-tile--screen {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > *,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media > .conference-media-frame,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media > .conference-media-frame > video {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile--screen {
+    grid-template-rows: 1fr;
+    border: 0;
+    background: #000;
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile-meta {
+    display: none;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-slot--focus {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-slot--focus::before {
+    display: none;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--presentation,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--screen,
+  .conference-stage[data-layout='teacher'] .conference-stage-panel--grid,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--presentation,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--focus,
+  .conference-stage[data-layout='screenshare'] .conference-stage-panel--grid,
+  .conference-stage[data-layout='grid'] .conference-stage-panel--presentation,
+  .conference-stage[data-layout='grid'] .conference-stage-panel--focus,
+  .conference-stage[data-layout='grid'] .conference-stage-panel--screen {
+    display: none;
+  }
+
+  .conference-stage-label,
+  .conference-sidebar-heading {
+    padding: 0.45rem 0.75rem;
+    color: var(--conference-muted);
+    font-size: 0.66rem;
+    line-height: 1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--conference-line);
+  }
+
+  .conference-sidebar-heading--chat {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .conference-hand-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: rgba(245, 247, 251, 0.36);
+    cursor: pointer;
+    transition: color 440ms ease, opacity 140ms ease;
+  }
+
+  .conference-hand-button .conference-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .conference-hand-button:hover,
+  .conference-hand-button:focus-visible {
+    color: rgba(245, 247, 251, 0.62);
+    outline: none;
+  }
+
+  .conference-hand-button[data-active='true'] {
+    color: rgba(245, 247, 251, 0.78);
+  }
+
+  .conference-slot,
+  .conference-presentation,
+  .conference-self-preview {
+    min-height: 0;
+    position: relative;
+    display: grid;
+    place-items: stretch;
+    overflow: hidden;
+    background: #000;
+  }
+
+  .conference-slot::before,
+  .conference-self-preview::before {
+    content: attr(data-empty-label);
+    position: absolute;
+    left: 0.8rem;
+    bottom: 0.7rem;
+    color: var(--conference-dim);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .conference-slot:has(.conference-tile)::before,
+  .conference-slot:has(.conference-media-frame)::before,
+  .conference-self-preview:has(.conference-media-frame)::before {
+    content: '';
+  }
+
+  .conference-slot--grid {
+    padding: 0.8rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-auto-rows: minmax(187px, 1fr);
+    gap: 0.8rem;
+    align-content: start;
+    overflow: auto;
+  }
+
+  .conference-slot--sidebar {
+    min-height: 15rem;
+    max-height: 30vh;
+    padding: 0.2rem 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    align-content: start;
+    overflow: auto;
+  }
+
+  .conference-presentation iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #000;
+  }
+
+  .conference-empty {
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    color: var(--conference-dim);
+    text-align: center;
+    line-height: 1.45;
+  }
+
+  .conference-empty--tile {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .conference-empty[hidden],
+  .conference-presentation > iframe[hidden],
+  .conference-presentation > .conference-empty--presentation[hidden] {
+    display: none !important;
+  }
+
+  .conference-sidebar {
+    border-left: 1px solid var(--conference-line);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .conference-shell[data-sidebar-collapsed='true'] .conference-sidebar {
+    border-left-color: transparent;
+  }
+
+  .conference-sidebar-toggle {
+    position: absolute;
+    top: 50%;
+    right: calc(var(--conference-sidebar-size) - 11px);
+    transform: translateY(-50%);
+    z-index: 8;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 64px;
+    padding: 0;
+    border: 1px solid var(--conference-line);
+    border-right: 0;
+    background: rgba(0, 0, 0, 0.92);
+    color: var(--conference-muted);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    transition: right 160ms ease, color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  }
+
+  .conference-shell[data-sidebar-collapsed='true'] .conference-sidebar-toggle {
+    right: 0.4rem;
+    width: 28px;
+    height: 72px;
+    border-right: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.98);
+    color: var(--conference-fg);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 8px 20px rgba(0, 0, 0, 0.32);
+  }
+
+  .conference-shell[data-sidebar-collapsed='true'] .conference-sidebar-toggle .conference-icon {
+    transform: rotate(180deg);
+  }
+
+  .conference-sidebar-toggle:hover,
+  .conference-sidebar-toggle:focus-visible {
+    color: var(--conference-fg);
+    border-color: rgba(255, 255, 255, 0.22);
+    outline: none;
+  }
+
+  .conference-sidebar-scroll {
+    height: 100%;
+    overflow-y: auto;
+    background: transparent;
+    overscroll-behavior: contain;
+  }
+
+  .conference-sidebar-section--instrument {
+    gap: 0.9rem;
+  }
+
+  .conference-sidebar-section--mixer {
+    position: relative;
+    z-index: 2;
+    gap: 0.58rem;
+    min-height: 0;
+    max-height: none;
+    border-top: 1px solid var(--conference-line);
+    border-bottom: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .conference-sidebar-section {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem 0.9rem;
+    border-bottom: 1px solid var(--conference-line);
+  }
+
+  .conference-meta-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    gap: 0.8rem;
+    align-items: start;
+  }
+
+  .conference-meta-fields {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .conference-field {
+    display: grid;
+    gap: 0.28rem;
+  }
+
+  .conference-field label {
+    color: var(--conference-muted);
+    font-size: 0.66rem;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .conference-field input,
+  .conference-field select,
+  .conference-chat-compose textarea,
+  .conference-chat-compose button,
+  .conference-bottombar select,
+  .conference-device-panel select {
+    font: inherit;
+  }
+
+  .conference-field input:not([type='range']):not([type='checkbox']),
+  .conference-field select,
+  .conference-chat-compose textarea,
+  .conference-bottombar select,
+  .conference-device-panel select {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--conference-line);
+    background: transparent;
+    color: var(--conference-fg);
+    padding: 0.28rem 0 0.32rem;
+    outline: none;
+    box-shadow: none;
+  }
+
+  .conference-field input:focus,
+  .conference-field select:focus,
+  .conference-chat-compose textarea:focus,
+  .conference-bottombar select:focus,
+  .conference-device-panel select:focus {
+    border-bottom-color: var(--conference-accent);
+  }
+
+  .conference-session-setup {
+    padding-top: 0.45rem;
+  }
+
+  .conference-session-setup-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    list-style: none;
+    color: var(--conference-fg);
+  }
+
+  .conference-session-setup-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .conference-session-setup-summary::before {
+    content: '';
+    width: 0.42rem;
+    height: 0.42rem;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    transform: rotate(-45deg);
+    transform-origin: center;
+    opacity: 0.72;
+    margin-top: 0.08rem;
+    transition: transform 140ms ease;
+  }
+
+  .conference-session-setup[open] .conference-session-setup-summary::before {
+    transform: rotate(45deg);
+  }
+
+  .conference-session-setup-body {
+    display: grid;
+    gap: 0.72rem;
+    padding-top: 0.72rem;
+  }
+
+  .conference-range-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .conference-range-row input[type='range'] {
+    width: 100%;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    height: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: transparent;
+  }
+
+  .conference-range-row input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.88);
+    background: #02050b;
+    box-shadow: none;
+  }
+
+  .conference-range-row input[type='range']::-moz-range-thumb {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.88);
+    background: #02050b;
+    box-shadow: none;
+  }
+
+  .conference-range-row output {
+    color: var(--conference-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .conference-synth-meters {
+    display: grid;
+    gap: 0.72rem;
+  }
+
+  .conference-synth-meter {
+    display: grid;
+    gap: 0.34rem;
+  }
+
+  .conference-synth-meter label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.34rem;
+    color: var(--conference-muted);
+    font-size: 0.64rem;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .conference-synth-meter-label {
+    justify-content: space-between;
+  }
+
+  .conference-synth-formula-shell {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    color: var(--conference-accent);
+    font-size: 0.58rem;
+    line-height: 1;
+    cursor: help;
+    outline: none;
+  }
+
+  .conference-synth-formula-tooltip {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.36rem);
+    min-width: 12rem;
+    padding: 0.38rem 0.48rem;
+    border: 1px solid rgba(143, 227, 255, 0.16);
+    background: rgba(0, 0, 0, 0.92);
+    color: var(--conference-fg);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(0.2rem);
+    transition: opacity 140ms ease, transform 140ms ease;
+    z-index: 6;
+  }
+
+  .conference-synth-formula-shell:hover .conference-synth-formula-tooltip,
+  .conference-synth-formula-shell:focus-visible .conference-synth-formula-tooltip {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .conference-synth-formula-tooltip math {
+    font-size: 0.76rem;
+  }
+
+  .conference-synth-meter-row {
+    display: grid;
+    grid-template-columns: 0.7rem minmax(0, 1fr) 0.7rem auto;
+    gap: 0.38rem;
+    align-items: center;
+  }
+
+  .conference-synth-map-button {
+    width: 0.58rem;
+    height: 0.58rem;
+    padding: 0;
+    border: 1px solid rgba(143, 227, 255, 0.18);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color 140ms ease, background-color 140ms ease;
+  }
+
+  .conference-synth-map-button:hover,
+  .conference-synth-map-button:focus-visible {
+    border-color: rgba(143, 227, 255, 0.5);
+    background: rgba(143, 227, 255, 0.08);
+    outline: none;
+  }
+
+  .conference-synth-meter-row input[type='range'] {
+    width: 100%;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    height: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: transparent;
+    pointer-events: none;
+    opacity: 0.88;
+  }
+
+  .conference-synth-meter-row input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.88);
+    background: #02050b;
+    box-shadow: none;
+  }
+
+  .conference-synth-meter-row input[type='range']::-moz-range-thumb {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.88);
+    background: #02050b;
+    box-shadow: none;
+  }
+
+  .conference-synth-meter-row output {
+    color: var(--conference-muted);
+    font-size: 0.7rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .conference-mixer {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(72px, 0.72fr);
+    gap: 0.45rem;
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  .conference-mixer-channel {
+    display: grid;
+    justify-items: center;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 0.28rem;
+    min-height: 0;
+    padding: 0.28rem 0.22rem 0.22rem;
+    border: 0;
+    background: transparent;
+  }
+
+  .conference-mixer-channel--video {
+    align-items: stretch;
+    justify-items: stretch;
+    grid-template-rows: auto 1fr;
+    min-width: 0;
+  }
+
+  .conference-mixer-channel-label {
+    display: grid;
+    gap: 0.1rem;
+    justify-items: center;
+    color: var(--conference-muted);
+    font-size: 0.56rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  .conference-mixer-channel-label strong {
+    color: var(--conference-fg);
+    font-size: 0.6rem;
+  }
+
+  .conference-mixer-fader {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 0;
+  }
+
+  .conference-mixer-fader::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.92);
+    background: #02050b;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.24);
+  }
+
+  .conference-mixer-fader::-moz-range-thumb {
+    width: 16px;
+    height: 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.92);
+    background: #02050b;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.24);
+  }
+
+  .conference-mixer-fader-shell {
+    position: relative;
+    width: 18px;
+    height: 5.2rem;
+    display: grid;
+    place-items: center;
+  }
+
+  .conference-mixer-vumeter {
+    --conference-meter-level: 0;
+    position: absolute;
+    inset: 0.05rem 0.35rem;
+    border: 0;
+    background:
+      linear-gradient(
+        to top,
+        rgba(69, 211, 132, 0.04) 0%,
+        rgba(69, 211, 132, 0.04) 58%,
+        rgba(255, 216, 77, 0.04) 58%,
+        rgba(255, 216, 77, 0.04) 82%,
+        rgba(255, 92, 92, 0.04) 82%,
+        rgba(255, 92, 92, 0.04) 100%
+      );
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .conference-mixer-vumeter::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(
+        to top,
+        rgba(69, 211, 132, 0.96) 0%,
+        rgba(69, 211, 132, 0.96) 58%,
+        rgba(255, 216, 77, 0.96) 58%,
+        rgba(255, 216, 77, 0.96) 82%,
+        rgba(255, 92, 92, 0.96) 82%,
+        rgba(255, 92, 92, 0.96) 100%
+      );
+    transform: scaleY(var(--conference-meter-level));
+    transform-origin: bottom center;
+    box-shadow: 0 0 10px rgba(143, 227, 255, 0.18);
+  }
+
+  .conference-mixer-led {
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(69, 211, 132, 0.96);
+    box-shadow: 0 0 8px rgba(69, 211, 132, 0.42);
+    transition: opacity 140ms ease, box-shadow 140ms ease;
+  }
+
+  .conference-mixer-led--mute {
+    display: grid;
+    place-items: center;
+    color: #05080d;
+    font-size: 0.3rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .conference-mixer-channel-toggle,
+  .conference-mixer-fx-led-toggle {
+    border: 0;
+    background: transparent;
+    color: var(--conference-fg);
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .conference-mixer-fx-led-toggle {
+    width: 8px;
+    height: 8px;
+    display: inline-grid;
+    place-items: center;
+    justify-self: end;
+  }
+
+  .conference-mixer-channel-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 12px;
+  }
+
+  .conference-mixer-channel-toggle[data-active='false'] .conference-mixer-led,
+  .conference-mixer-fx-led-toggle[data-active='false'] .conference-mixer-led {
+    opacity: 0.2;
+    box-shadow: none;
+  }
+
+  .conference-mixer-knob-stack {
+    display: grid;
+    justify-items: center;
+    gap: 0.12rem;
+  }
+
+  .conference-mixer-pan-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .conference-mixer-knob-control {
+    --angle: 0deg;
+    position: relative;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    background: transparent;
+    cursor: ns-resize;
+    touch-action: none;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .conference-mixer-knob-control::before {
+    content: 'L/R';
+    position: absolute;
+    left: 50%;
+    bottom: -0.62rem;
+    transform: translateX(-50%);
+    color: var(--conference-muted);
+    font-size: 0.42rem;
+    line-height: 1;
+    letter-spacing: 0.12em;
+  }
+
+  .conference-mixer-knob-control--plain::before {
+    content: none;
+  }
+
+  .conference-mixer-knob-control--video {
+    width: 22px;
+    height: 22px;
+    justify-self: center;
+  }
+
+  .conference-mixer-knob-control--video .conference-mixer-knob-indicator {
+    height: 6px;
+  }
+
+  .conference-video-mixer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.34rem 0.28rem;
+    align-content: start;
+    min-height: 0;
+  }
+
+  .conference-video-mixer-control {
+    display: grid;
+    justify-items: center;
+    gap: 0.14rem;
+    min-width: 0;
+  }
+
+  .conference-video-mixer-control--wide {
+    grid-column: 1 / -1;
+  }
+
+  .conference-video-mixer-label {
+    color: var(--conference-muted);
+    font-size: 0.42rem;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .conference-mixer-knob-control:hover,
+  .conference-mixer-knob-control:focus-visible {
+    border-color: rgba(143, 227, 255, 0.34);
+    outline: none;
+  }
+
+  .conference-mixer-knob-indicator {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2px;
+    height: 9px;
+    border-radius: 999px;
+    background: var(--conference-accent);
+    transform: translate(-50%, -100%) rotate(var(--angle));
+    transform-origin: 50% 100%;
+    box-shadow: 0 0 8px rgba(143, 227, 255, 0.42);
+  }
+
+  .conference-mixer-fx {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .conference-mixer-fx-pair {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .conference-mixer-fx-card {
+    flex: 1 1 0;
+    padding: 10px;
+    border: 0;
+    background: transparent;
+  }
+
+  .conference-mixer-fx-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 3px 0;
+  }
+
+  .conference-mixer-fx-head h4 {
+    margin: 0;
+    color: var(--conference-accent);
+    font-size: 0.58rem;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .conference-mixer-fx-badge {
+    color: rgba(255, 226, 107, 0.78);
+    font-size: 0.5rem;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .conference-mixer-fx-grid {
+    display: grid;
+    gap: 0.28rem;
+  }
+
+  .conference-mixer-fx-grid--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.34rem;
+  }
+
+  .conference-mixer-fx-grid--stacked {
+    grid-template-columns: 1fr;
+    gap: 0.34rem;
+  }
+
+  .conference-mixer-fx-control--wide {
+    grid-column: 1 / -1;
+  }
+
+  .conference-mixer-fx-control {
+    display: grid;
+    gap: 0.16rem;
+    margin-top: 0.34rem;
+  }
+
+  .conference-mixer-fx-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: var(--conference-muted);
+    font-size: 0.52rem;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .conference-mixer-fx-label-row output {
+    color: var(--conference-fg);
+    font-size: 0.5rem;
+    line-height: 1;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+  }
+
+  .conference-mixer-fx-control input[type='range'] {
+    width: 100%;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    height: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: transparent;
+  }
+
+  .conference-mixer-fx-control input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.88);
+    background: #02050b;
+    box-shadow: none;
+  }
+
+  .conference-mixer-fx-control input[type='range']::-moz-range-thumb {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.88);
+    background: #02050b;
+    box-shadow: none;
+  }
+
+  .conference-field--checkbox {
+    gap: 0.38rem;
+  }
+
+  .conference-field--hand-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.42rem;
+    flex-wrap: nowrap;
+  }
+
+  .conference-checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.58rem;
+    color: var(--conference-fg);
+    font-size: 0.76rem;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    cursor: pointer;
+  }
+
+  .conference-checkbox-row input[type='checkbox'] {
+    margin: 0;
+    accent-color: var(--conference-accent);
+  }
+
+  .conference-ramp-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.36rem;
+    color: var(--conference-muted);
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .conference-ramp-row input[type='number'] {
+    width: 4rem;
+    min-height: 1.5rem;
+    padding: 0.1rem 0.28rem;
+    border: 1px solid var(--conference-line-soft);
+    background: transparent;
+    color: var(--conference-fg);
+    font: inherit;
+  }
+
+  .conference-ramp-reset {
+    width: 1.5rem;
+    height: 1.5rem;
+    min-height: 1.5rem;
+    padding: 0;
+    border: 1px solid var(--conference-line-soft);
+    background: transparent;
+    color: var(--conference-muted);
+    font: inherit;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .conference-ramp-reset:hover,
+  .conference-ramp-reset:focus-visible {
+    border-color: rgba(143, 227, 255, 0.5);
+    color: var(--conference-fg);
+    outline: none;
+  }
+
+  .conference-session-controls {
+    display: grid;
+    gap: 0.72rem;
+    padding-top: 0.24rem;
+    border-top: 1px solid var(--conference-line-soft);
+  }
+
+  .conference-session-controls-heading {
+    color: var(--conference-muted);
+    font-size: 0.58rem;
+    line-height: 1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .conference-session-action {
+    min-height: 1.85rem;
+    padding: 0.22rem 0.48rem;
+    border: 1px solid var(--conference-line-soft);
+    background: transparent;
+    color: var(--conference-fg);
+    font: inherit;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .conference-session-action:hover,
+  .conference-session-action:focus-visible {
+    border-color: rgba(143, 227, 255, 0.5);
+    color: var(--conference-fg);
+    outline: none;
+  }
+
+  .conference-session-action:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument {
+    opacity: 0.52;
+  }
+
+  .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-checkbox-row,
+  .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-ramp-row,
+  .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-synth-meter label {
+    color: var(--conference-muted);
+  }
+
+  .conference-name-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem;
+    align-items: end;
+  }
+
+  .conference-role-tag {
+    color: var(--conference-muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    text-transform: lowercase;
+  }
+
+  .conference-self-preview-shell {
+    min-width: 0;
+  }
+
+  .conference-self-preview {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--conference-line-soft);
+  }
+
+  .conference-self-preview,
+  .conference-self-preview .conference-media-frame,
+  .conference-self-preview .conference-media-frame > video {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .conference-self-preview .conference-media-frame > video {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    object-position: 50% 70% !important;
+    transform: scale(var(--conference-local-preview-zoom, 1)) !important;
+    transform-origin: center center;
+  }
+
+  .conference-statusline {
+    margin: 0;
+    color: var(--conference-muted);
+    font-size: 0.76rem;
+    line-height: 1.4;
+  }
+
+  .conference-chat {
+    min-height: 0;
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .conference-chat-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-height: 12rem;
+    max-height: 34vh;
+    overflow-y: auto;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .conference-chat-item,
+  .conference-chat-empty {
+    padding: 0.38rem 0;
+    border-bottom: 1px solid var(--conference-line-soft);
+  }
+
+  .conference-chat-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.28rem;
+    margin-bottom: 0.2rem;
+    color: rgba(245, 247, 251, 0.62) !important;
+    font-size: 0.6rem !important;
+    line-height: 1 !important;
+  }
+
+  .conference-chat-list .conference-chat-item .conference-chat-author {
+    display: inline;
+    color: rgba(245, 247, 251, 0.6) !important;
+    font-size: 0.58rem !important;
+    font-weight: 700 !important;
+    font-style: normal !important;
+    letter-spacing: 0.01em;
+  }
+
+  .conference-chat-header-separator {
+    display: inline;
+    color: rgba(245, 247, 251, 0.46) !important;
+    font-size: 0.54rem !important;
+    opacity: 0.46 !important;
+  }
+
+  .conference-chat-list .conference-chat-item .conference-chat-stamp {
+    display: inline;
+    color: rgba(245, 247, 251, 0.5) !important;
+    font-size: 0.47rem !important;
+    font-style: italic !important;
+    font-weight: 400 !important;
+    opacity: 0.5 !important;
+  }
+
+  .conference-chat-list .conference-chat-item .conference-chat-text {
+    color: rgba(245, 247, 251, 0.78) !important;
+    font-size: 0.76rem;
+    line-height: 1.44;
+    text-wrap: pretty;
+  }
+
+  .conference-chat-line + .conference-chat-line {
+    margin-top: 0.18rem;
+  }
+
+  .conference-chat-link {
+    color: var(--conference-accent);
+    text-decoration: none;
+    word-break: break-word;
+  }
+
+  .conference-chat-link:hover {
+    text-decoration: underline;
+  }
+
+  .conference-chat-link--media,
+  .conference-chat-media {
+    display: block;
+    max-width: min(100%, 18rem);
+    margin-top: 0.18rem;
+  }
+
+  .conference-chat-link--media img,
+  .conference-chat-media video {
+    display: block;
+    width: 100%;
+    max-height: 12rem;
+    object-fit: contain;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .conference-chat-media--audio {
+    width: 100%;
+  }
+
+  .conference-chat-empty {
+    color: rgba(245, 247, 251, 0.5);
+    font-size: 0.72rem;
+  }
+
+  .conference-chat-compose {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .conference-chat-compose textarea {
+    min-height: 3.8rem;
+    resize: vertical;
+  }
+
+  .conference-chat-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .conference-chat-send {
+    justify-self: start;
+    border: 0;
+    background: transparent;
+    color: var(--conference-muted);
+    padding: 0;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+  }
+
+  .conference-chat-send:hover:not(:disabled) {
+    color: var(--conference-fg);
+  }
+
+  .conference-chat-download {
+    border: 0;
+    background: transparent;
+    color: var(--conference-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .conference-chat-download:hover:not(:disabled) {
+    color: var(--conference-fg);
+  }
+
+  .conference-chat-download:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .conference-chat-send:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .conference-tile {
+    min-height: 0;
+    position: relative;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    background: #020202;
+    border: 1px solid var(--conference-line-soft);
+    overflow: hidden;
+  }
+
+  .conference-slot--grid .conference-tile,
+  .conference-slot--sidebar .conference-tile {
+    aspect-ratio: 4 / 3;
+  }
+
+  .conference-tile--participant {
+    grid-template-rows: 1fr;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile-media,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-empty--tile {
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    border: 0;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile {
+    grid-template-rows: 1fr;
+    background: transparent;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame video {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
+    object-position: 50% 68% !important;
+    transform: none !important;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame > video,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile-media {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .conference-tile-media,
+  .conference-media-frame {
+    min-height: 0;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+
+  .conference-media-frame > video,
+  .conference-media-frame > audio,
+  .conference-media-frame > img,
+  .conference-media-frame > canvas,
+  .conference-tile-media > video,
+  .conference-tile-media > img,
+  .conference-tile-media > canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover;
+    object-position: center;
+    background: #000;
+  }
+
+  .conference-hand-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    width: 100%;
+    height: 100%;
+    background: transparent !important;
+    pointer-events: none;
+    opacity: 0;
+    mix-blend-mode: screen;
+    transition: opacity 160ms ease;
+  }
+
+  .conference-shell[data-hand-track='true'] .conference-hand-overlay {
+    opacity: 1;
+  }
+
+  .conference-gravity-ball-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    width: 100%;
+    height: 100%;
+    background: transparent !important;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .conference-shell[data-gravity-ball='true'][data-gravity-ball-stage-visible='true'] .conference-gravity-ball-overlay {
+    opacity: 1;
+  }
+
+  .conference-recording-guide {
+    position: absolute;
+    z-index: 8;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    border: 1px dashed color-mix(in srgb, var(--conference-accent) 78%, transparent);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.34);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 140ms ease;
+  }
+
+  .conference-shell[data-recording-guide-visible='true'][data-recording-guide-suppressed='false'] .conference-recording-guide {
+    opacity: 0.92;
+  }
+
+  .conference-stage-frame {
+    position: relative;
+  }
+
+  .conference-hand-overlay--stage {
+    inset: 0;
+  }
+
+  .conference-reactions-layer {
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    position: absolute;
+    z-index: 8;
+  }
+
+  .conference-reaction-burst {
+    align-items: center;
+    animation: conference-reaction-burst 1.5s ease-out forwards;
+    color: rgba(255, 255, 255, 0.96);
+    display: inline-flex;
+    font-size: 2rem;
+    gap: 0.35rem;
+    left: 50%;
+    line-height: 1;
+    position: absolute;
+    text-shadow: 0 0 12px rgba(0, 0, 0, 0.55);
+    top: 62%;
+    transform: translate(-50%, 0);
+    white-space: nowrap;
+  }
+
+  .conference-reaction-burst-name {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  @keyframes conference-reaction-burst {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, 16px) scale(0.88);
+    }
+
+    12% {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+    }
+
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -88px) scale(1.08);
+    }
+  }
+
+  @media (max-width: 720px) {
+    .conference-mixer-fx-pair {
+      flex-direction: column;
+    }
+  }
+
+  .conference-media-frame--screen video {
+    object-fit: contain;
+  }
+
+  .conference-self-preview .conference-media-frame--local-preview,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .conference-self-preview .conference-media-frame--local-preview > video,
+  .conference-media-frame--local-preview > video {
+    position: relative !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+    object-position: 50% 62% !important;
+    background: #000;
+    transform: scaleX(var(--conference-local-video-flip, 1)) scale(var(--conference-self-preview-zoom, 1)) !important;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame > video {
+    position: relative !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+    object-position: 50% 62% !important;
+    background: #000;
+    transform: scale(var(--conference-participant-preview-zoom, var(--conference-circle-preview-zoom, 1))) !important;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame--local-camera > video {
+    transform: scaleX(var(--conference-local-video-flip, 1)) scale(var(--conference-participant-preview-zoom, var(--conference-circle-preview-zoom, 1))) !important;
+  }
+
+  .conference-media-frame--local-camera > video,
+  .conference-stage[data-layout='teacher'] .conference-media-frame--local-camera > video,
+  .conference-slot--grid .conference-media-frame--local-camera > video {
+    position: absolute;
+    inset: 0;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
+    object-position: 50% 58% !important;
+    transform: scaleX(var(--conference-local-video-flip, 1)) !important;
+    background: #000;
+  }
+
+  .conference-tile-meta {
+    display: grid;
+    gap: 0.08rem;
+    padding: 0.4rem 0.45rem;
+    border-top: 1px solid var(--conference-line-soft);
+    background: rgba(0, 0, 0, 0.88);
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile-meta {
+    display: none;
+  }
+
+  .conference-tile--participant .conference-tile-meta {
+    position: absolute;
+    inset: auto 0 0 0;
+    display: flex;
+    align-items: flex-end;
+    min-height: 2rem;
+    padding: 0.5rem 0.6rem 0.45rem;
+    border-top: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.76) 100%);
+    pointer-events: none;
+  }
+
+  .conference-tile-hand {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.5rem;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3rem;
+    min-height: 3rem;
+    font-size: 2rem;
+    line-height: 1;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+    pointer-events: none;
+  }
+
+  .conference-tile-hand[hidden] {
+    display: none !important;
+  }
+
+  .conference-tile-meta strong {
+    color: var(--conference-fg);
+    font-size: 0.76rem;
+    font-weight: 600;
+  }
+
+  .conference-bottombar {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 80;
+    min-height: var(--conference-bar-height);
+    display: grid;
+    grid-template-columns: auto auto auto auto minmax(180px, 1fr) auto;
+    align-items: stretch;
+    border-top: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.98);
+  }
+
+  .conference-bar-group {
+    min-width: 0;
+    display: flex;
+    align-items: stretch;
+    border-right: 1px solid var(--conference-line);
+  }
+
+  .conference-bar-group--presentation {
+    padding: 0 0.65rem;
+  }
+
+  .conference-bar-group--presentation select {
+    min-width: min(100%, 24rem);
+    border-bottom: 0;
+    align-self: stretch;
+    color: var(--conference-muted);
+  }
+
+  .conference-bar-group--exit {
+    border-right: 0;
+    justify-content: flex-end;
+  }
+
+  .conference-connect-button,
+  .conference-icon-button,
+  .conference-layout-button,
+  .conference-share-button,
+  .conference-exit-button,
+  .conference-record-button,
+  .conference-count-button,
+  .conference-live-activity {
+    border: 0;
+    background: transparent;
+    color: var(--conference-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .conference-connect-button {
+    min-width: 58px;
+    padding: 0 0.9rem;
+    color: var(--conference-green);
+  }
+
+  .conference-connect-button[data-connected='true'] {
+    color: var(--conference-red);
+  }
+
+  .conference-connect-arrow {
+    width: 18px;
+    height: 18px;
+    display: block;
+  }
+
+  .conference-connect-arrow--out {
+    display: none;
+  }
+
+  .conference-connect-button[data-connected='true'] .conference-connect-arrow--in {
+    display: none;
+  }
+
+  .conference-connect-button[data-connected='true'] .conference-connect-arrow--out {
+    display: block;
+  }
+
+  .conference-connect-button:hover:not(:disabled),
+  .conference-icon-button:hover:not(:disabled),
+  .conference-layout-button:hover:not(:disabled),
+  .conference-share-button:hover:not(:disabled),
+  .conference-record-button:hover:not(:disabled),
+  .conference-exit-button:hover,
+  .conference-count-button:hover,
+  .conference-live-activity:hover {
+    color: var(--conference-fg);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .conference-connect-button:disabled,
+  .conference-icon-button:disabled,
+  .conference-layout-button:disabled,
+  .conference-share-button:disabled,
+  .conference-record-button:disabled,
+  .conference-live-activity:disabled {
+    opacity: 0.36;
+    cursor: not-allowed;
+  }
+
+  .conference-icon-button,
+  .conference-layout-button,
+  .conference-share-button,
+  .conference-record-button,
+  .conference-exit-button {
+    position: relative;
+    min-width: 40px;
+    padding: 0 0.72rem;
+  }
+
+  .conference-exit-button {
+    min-width: 46px;
+    padding: 0 0.8rem;
+  }
+
+  .conference-shortcuts-button {
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+
+  .conference-layout-button,
+  .conference-share-button,
+  .conference-exit-button,
+  .conference-live-timer {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .conference-icon {
+    width: 15px;
+    height: 15px;
+    display: block;
+  }
+
+  .conference-exit-icon {
+    width: 19px;
+    height: 19px;
+    display: block;
+  }
+
+  .conference-shortcuts-modal[hidden] {
+    display: none !important;
+  }
+
+  .conference-shortcuts-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 140;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2rem;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(10px);
+  }
+
+  .conference-shortcuts-dialog {
+    width: min(780px, calc(100vw - 2rem));
+    max-height: min(78vh, 760px);
+    overflow: auto;
+    border: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.96);
+    color: var(--conference-fg);
+  }
+
+  .conference-shortcuts-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.8rem 0.95rem;
+    border-bottom: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.96);
+  }
+
+  .conference-shortcuts-head strong {
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .conference-shortcuts-close {
+    min-width: 36px;
+    padding: 0 0.55rem;
+    font-size: 1rem;
+  }
+
+  .conference-shortcuts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+  }
+
+  .conference-shortcuts-section {
+    padding: 0.9rem 0.95rem 1rem;
+    border-right: 1px solid var(--conference-line-soft);
+    border-bottom: 1px solid var(--conference-line-soft);
+  }
+
+  .conference-shortcuts-section:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .conference-shortcuts-section h3 {
+    margin: 0 0 0.55rem;
+    color: var(--conference-fg);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .conference-shortcuts-section ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.34rem;
+  }
+
+  .conference-shortcuts-section li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    color: var(--conference-muted);
+    font-size: 0.72rem;
+    line-height: 1.18;
+  }
+
+  .conference-shortcuts-section kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.15rem;
+    padding: 0.04rem 0.3rem;
+    border: 1px solid var(--conference-line);
+    font: inherit;
+    font-size: 0.62rem;
+    line-height: 1;
+    color: var(--conference-fg);
+    background: transparent;
+  }
+
+  .conference-mic-meter {
+    --conference-mic-level: 0;
+    position: absolute;
+    left: 0.44rem;
+    right: 0.44rem;
+    bottom: 0.34rem;
+    height: 2px;
+    border-radius: 999px;
+    background: rgba(37, 207, 107, 0.14);
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .conference-mic-meter::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--conference-green);
+    transform: scaleX(var(--conference-mic-level));
+    transform-origin: left center;
+    opacity: 0.96;
+  }
+
+  .conference-count-shell {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+  }
+
+  .conference-count-button {
+    min-width: 36px;
+    padding: 0 0.55rem;
+  }
+
+  .conference-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--conference-fg);
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .conference-roster-popup {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 1px);
+    min-width: 240px;
+    max-width: 320px;
+    max-height: 40vh;
+    overflow-y: auto;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.98);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 140ms ease;
+  }
+
+  .conference-count-shell:hover .conference-roster-popup,
+  .conference-count-shell:focus-within .conference-roster-popup {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .conference-roster {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.24rem;
+  }
+
+  .conference-roster-item,
+  .conference-roster-empty {
+    display: grid;
+    gap: 0.04rem;
+    padding: 0.18rem 0;
+    border-bottom: 1px solid var(--conference-line-soft);
+    line-height: 1.12;
+  }
+
+  .conference-roster-item span:first-child {
+    color: var(--conference-fg);
+    font-size: 0.76rem;
+  }
+
+  .conference-roster-item span:last-child {
+    color: var(--conference-muted);
+    font-size: 0.58rem;
+  }
+
+  .conference-live-activity {
+    padding: 0 0.6rem;
+    color: var(--conference-red);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .conference-session-timer {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 5.9rem;
+    padding: 0 0.7rem;
+    color: var(--conference-muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .conference-record-button {
+    color: var(--conference-muted);
+  }
+
+  .conference-record-button[data-recording='true'] {
+    color: var(--conference-red);
+    background: rgba(255, 77, 77, 0.08);
+  }
+
+  .conference-fullscreen-button[data-active='true'] {
+    color: var(--conference-fg);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .conference-record-dot {
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  .conference-record-button[data-recording='true'] .conference-record-dot {
+    animation: conference-record-pulse 1.15s ease-in-out infinite;
+    box-shadow:
+      0 0 0 0 rgba(255, 77, 77, 0.38),
+      0 0 10px rgba(255, 77, 77, 0.45);
+  }
+
+  @keyframes conference-record-pulse {
+    0% {
+      transform: scale(1);
+      box-shadow:
+        0 0 0 0 rgba(255, 77, 77, 0.38),
+        0 0 10px rgba(255, 77, 77, 0.45);
+    }
+    60% {
+      transform: scale(1.08);
+      box-shadow:
+        0 0 0 6px rgba(255, 77, 77, 0),
+        0 0 14px rgba(255, 77, 77, 0.62);
+    }
+    100% {
+      transform: scale(1);
+      box-shadow:
+        0 0 0 0 rgba(255, 77, 77, 0),
+        0 0 10px rgba(255, 77, 77, 0.45);
+    }
+  }
+
+  .conference-live-led {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 0 2px rgba(255, 77, 77, 0.24);
+  }
+
+  .conference-layout-button[data-active='true'],
+  .conference-share-button[data-enabled='true'],
+  .conference-icon-button[data-enabled='true'],
+  .conference-instruments-button[data-active='true'] {
+    color: var(--conference-accent);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .conference-icon-button[data-open='true'] {
+    color: var(--conference-fg);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .conference-device-stack {
+    position: relative;
+    display: flex;
+  }
+
+  .conference-device-panel {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 1px);
+    min-width: 15rem;
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.65rem 0.8rem 0.8rem;
+    background: #000;
+    border: 1px solid var(--conference-line);
+    z-index: 90;
+  }
+
+  .conference-device-panel[hidden],
+  .conference-live-activity[hidden] {
+    display: none !important;
+  }
+
+  .conference-device-panel label {
+    color: var(--conference-muted);
+    font-size: 0.66rem;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .conference-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 1080px) {
+    .conference-shell {
+      grid-template-columns: 1fr;
+      --conference-sidebar-size: min(36vh, 320px);
+      grid-template-rows: minmax(0, 1fr) var(--conference-sidebar-size);
+    }
+
+    .conference-stage-frame {
+      height: calc(100vh - var(--conference-sidebar-size) - var(--conference-bar-height));
+      height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));
+    }
+
+    .conference-sidebar {
+      height: var(--conference-sidebar-size);
+      border-left: 0;
+      border-top: 1px solid var(--conference-line);
+    }
+
+    .conference-instruments-sidebar {
+      inset: 0 auto calc(var(--conference-sidebar-size) + var(--conference-bar-height)) 0;
+      width: min(82vw, var(--conference-instruments-size));
+    }
+
+    .conference-sidebar-toggle {
+      top: auto;
+      bottom: calc(var(--conference-sidebar-size) + var(--conference-bar-height) - 11px);
+      right: 0.75rem;
+      width: 40px;
+      height: 22px;
+      border-right: 1px solid var(--conference-line);
+      border-bottom: 0;
+      transform: none;
+    }
+
+    .conference-shell[data-sidebar-collapsed='true'] .conference-sidebar-toggle {
+      right: 0.75rem;
+      bottom: calc(var(--conference-bar-height) + 0.35rem);
+    }
+
+    .conference-sidebar-toggle .conference-icon {
+      transform: rotate(-90deg);
+    }
+
+    .conference-shell[data-sidebar-collapsed='true'] .conference-sidebar-toggle .conference-icon {
+      transform: rotate(90deg);
+    }
+
+    .conference-meta-shell {
+      grid-template-columns: minmax(0, 1fr) 96px;
+    }
+  }
+
+  @media (max-width: 900px) and (orientation: landscape) {
+    .conference-shell {
+      --conference-sidebar-size: min(34vw, 320px);
+      grid-template-columns: minmax(0, 1fr) var(--conference-sidebar-size);
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .conference-stage-frame,
+    .conference-sidebar {
+      height: calc(100vh - var(--conference-bar-height));
+      height: calc(100dvh - var(--conference-bar-height));
+    }
+
+    .conference-sidebar {
+      border-top: 0;
+      border-left: 1px solid var(--conference-line);
+    }
+
+    .conference-meta-shell {
+      grid-template-columns: minmax(0, 1fr) 88px;
+      gap: 0.6rem;
+    }
+
+    .conference-sidebar-section {
+      padding: 0.6rem 0.72rem 0.72rem;
+    }
+
+    .conference-slot--sidebar {
+      min-height: 10rem;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+      width: clamp(86px, 13.5vw, 119px);
+      inset: auto 0.8rem 0.8rem auto;
+    }
+
+    .conference-bar-group--presentation select {
+      min-width: min(100%, 15rem);
+    }
+
+    .conference-device-panel {
+      min-width: min(14rem, calc(100vw - 2rem));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .conference-shell {
+      grid-template-rows: minmax(0, 1fr);
+      padding-bottom: 0;
+    }
+
+    .conference-stage-frame,
+    .conference-sidebar {
+      height: auto;
+    }
+
+    .conference-sidebar {
+      display: none;
+    }
+
+    .conference-instruments-sidebar {
+      inset: 0 auto var(--conference-bar-height) 0;
+      width: min(88vw, var(--conference-instruments-size));
+    }
+
+    .conference-sidebar-toggle {
+      display: none;
+    }
+
+    .conference-bottombar {
+      position: static;
+      grid-template-columns: 1fr;
+    }
+
+    .conference-bar-group {
+      border-right: 0;
+      border-top: 1px solid var(--conference-line);
+      flex-wrap: wrap;
+    }
+
+    .conference-bar-group--presentation {
+      padding: 0.2rem 0.65rem;
+    }
+
+    .conference-bar-group--presentation select {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .conference-device-panel {
+      right: 0;
+      left: auto;
+      min-width: min(18rem, calc(100vw - 2rem));
+    }
+  }
+
+  @media (max-width: 500px) {
+    .conference-shell {
+      --conference-bar-height: 44px;
+      --conference-sidebar-size: clamp(180px, 34dvh, 260px);
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(0, 1fr) var(--conference-sidebar-size);
+      padding-bottom: var(--conference-bar-height);
+    }
+
+    .conference-stage-frame {
+      height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));
+    }
+
+    .conference-sidebar {
+      display: block;
+      height: var(--conference-sidebar-size);
+      border-left: 0;
+      border-top: 1px solid var(--conference-line);
+    }
+
+    .conference-instruments-sidebar {
+      inset: 0 0 var(--conference-bar-height) 0;
+      width: 100vw;
+      width: 100dvw;
+      border-right: 0;
+    }
+
+    .conference-sidebar-section {
+      gap: 0.55rem;
+      padding: 0.55rem 0.68rem 0.68rem;
+    }
+
+    .conference-meta-shell {
+      grid-template-columns: minmax(0, 1fr) 82px;
+      gap: 0.5rem;
+    }
+
+    .conference-self-preview {
+      aspect-ratio: 1;
+    }
+
+    .conference-statusline {
+      font-size: 0.7rem;
+    }
+
+    .conference-chat-list {
+      min-height: 0;
+      max-height: 16dvh;
+    }
+
+    .conference-slot--sidebar {
+      min-height: 8rem;
+      max-height: none;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.45rem;
+    }
+
+    .conference-slot--grid {
+      padding: 0.45rem;
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      grid-auto-rows: minmax(112px, 1fr);
+      gap: 0.45rem;
+    }
+
+    .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+      width: clamp(79px, 22.5vw, 101px);
+      inset: auto 0.72rem 0.72rem auto;
+    }
+
+    .conference-bottombar {
+      display: flex;
+      align-items: stretch;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .conference-bottombar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .conference-bar-group {
+      flex: 0 0 auto;
+      border-right: 1px solid var(--conference-line);
+      border-top: 0;
+    }
+
+    .conference-bar-group--presentation {
+      padding: 0 0.45rem;
+      min-width: 9.5rem;
+    }
+
+    .conference-bar-group--presentation select {
+      min-width: 8.5rem;
+      width: 100%;
+    }
+
+    .conference-connect-button {
+      min-width: 50px;
+      padding: 0 0.7rem;
+    }
+
+    .conference-icon-button,
+    .conference-layout-button,
+    .conference-share-button,
+    .conference-record-button,
+    .conference-exit-button {
+      min-width: 34px;
+      padding: 0 0.48rem;
+    }
+
+    .conference-count-button {
+      min-width: 32px;
+      padding: 0 0.4rem;
+    }
+
+    .conference-layout-button,
+    .conference-share-button,
+    .conference-exit-button,
+    .conference-live-timer,
+    .conference-session-timer {
+      font-size: 0.66rem;
+      letter-spacing: 0.1em;
+    }
+
+    .conference-session-timer {
+      min-width: 4.9rem;
+      padding: 0 0.45rem;
+    }
+
+    .conference-roster-popup {
+      left: auto;
+      right: 0;
+      min-width: min(220px, calc(100vw - 1rem));
+      max-width: calc(100vw - 1rem);
+    }
+
+    .conference-device-panel {
+      left: auto;
+      right: 0;
+      min-width: min(15rem, calc(100vw - 1rem));
+    }
+
+    .conference-shortcuts-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .conference-shortcuts-section {
+      border-right: 0;
+    }
+  }
+</style>
+<style is:global>
+  .conference-tile-media > .conference-media-frame,
+  .conference-self-preview > .conference-media-frame,
+  .conference-media-frame {
+    position: relative;
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden;
+  }
+
+  .conference-media-frame > video,
+  .conference-media-frame > audio,
+  .conference-media-frame > img,
+  .conference-media-frame > canvas {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile,
+  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile > .conference-tile-media,
+  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile > .conference-tile-media > .conference-media-frame,
+  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile > .conference-tile-media > .conference-media-frame > video {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .conference-stage[data-layout='screenshare'] .conference-slot--screen > .conference-tile--screen,
+  .conference-stage[data-layout='screenshare'] .conference-slot--screen > .conference-tile--screen > .conference-tile-media,
+  .conference-stage[data-layout='screenshare'] .conference-slot--screen > .conference-tile--screen > .conference-tile-media > .conference-media-frame,
+  .conference-stage[data-layout='screenshare'] .conference-slot--screen > .conference-tile--screen > .conference-tile-media > .conference-media-frame > video {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile > .conference-tile-media > .conference-media-frame > video,
+  .conference-slot--grid .conference-media-frame--local-camera > video,
+  .conference-media-frame--local-camera > video {
+    object-fit: cover !important;
+    object-position: 50% 58% !important;
+    transform: scaleX(var(--conference-local-video-flip, 1)) !important;
+  }
+
+  .conference-media-frame--screen > video {
+    object-fit: contain !important;
+  }
+
+  .conference-self-preview .conference-media-frame--local-preview,
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .conference-self-preview .conference-media-frame--local-preview > video,
+  .conference-media-frame--local-preview > video {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+    object-position: 50% 62% !important;
+    transform: scaleX(var(--conference-local-video-flip, 1)) scale(var(--conference-self-preview-zoom, 1)) !important;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame > video {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+    object-position: 50% 62% !important;
+    transform: scale(var(--conference-participant-preview-zoom, var(--conference-circle-preview-zoom, 1))) !important;
+  }
+
+  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame--local-camera > video {
+    transform: scaleX(var(--conference-local-video-flip, 1)) scale(var(--conference-participant-preview-zoom, var(--conference-circle-preview-zoom, 1))) !important;
+  }
+
+  .conference-media-backdrop {
+    position: absolute !important;
+    inset: -10% !important;
+    width: 120% !important;
+    height: 120% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
+    object-position: 50% 58% !important;
+    filter: blur(18px) saturate(0.88);
+    opacity: 0.78;
+    transform: scaleX(var(--conference-local-video-flip, 1)) scale(1.08) !important;
+    transform-origin: center center;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .conference-media-frame--with-backdrop > video:not(.conference-media-backdrop) {
+    position: relative !important;
+    z-index: 1;
+  }
+</style>

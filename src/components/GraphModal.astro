@@ -1,0 +1,544 @@
+---
+// Graph Modal Component - Press 'g' to toggle
+const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
+---
+
+<div id="graph-modal" class="graph-modal">
+  <div id="graph-canvas"></div>
+  <div class="graph-hud">
+    <div class="graph-legend">
+      <div><span class="legend-doc"></span> Documents</div>
+      <div><span class="legend-tag"></span> Tags</div>
+      <div><span class="legend-current"></span> Current</div>
+    </div>
+    <div class="graph-hud-right">
+      <div id="node-preview" class="node-preview">
+        <img id="preview-img" src="" alt="" />
+        <div id="preview-title"></div>
+      </div>
+      <button id="graph-center" title="Center on current page">⊙</button>
+      <button id="graph-close" title="Close">✕</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
+
+<script define:vars={{ currentSlug }}>
+  let graphData = null;
+  let graphInstance = null;
+  const highlightNodes = new Set();
+  const highlightLinks = new Set();
+  let hoverNode = null;
+  const labelOpacity = new Map(); // Track opacity for each node
+  let lastZoomState = false; // Track if labels should be shown
+
+  // Load graph data
+  async function initGraph() {
+    if (!graphData) {
+      const response = await fetch('/graph-data.json');
+      graphData = await response.json();
+      
+      // Cross-link node objects for highlighting
+      graphData.links.forEach(link => {
+        const a = graphData.nodes.find(n => n.id === link.source);
+        const b = graphData.nodes.find(n => n.id === link.target);
+        if (a && b) {
+          !a.neighbors && (a.neighbors = []);
+          !b.neighbors && (b.neighbors = []);
+          a.neighbors.push(b);
+          b.neighbors.push(a);
+          
+          !a.links && (a.links = []);
+          !b.links && (b.links = []);
+          a.links.push(link);
+          b.links.push(link);
+        }
+      });
+    }
+    
+    return graphData;
+  }
+
+  // Show/hide modal
+  async function setModalOpen(open, source = 'local') {
+    const modal = document.getElementById('graph-modal');
+    if (!modal) return;
+
+    if (open && !graphInstance) {
+      await renderGraph();
+    }
+
+    modal.classList.toggle('visible', open);
+    modal.classList.toggle('hidden', !open);
+    modal.dataset.open = open ? 'true' : 'false';
+
+    window.dispatchEvent(new CustomEvent('graph:statechange', {
+      detail: { open, source },
+    }));
+  }
+
+  function toggleModal(source = 'local') {
+    const modal = document.getElementById('graph-modal');
+    const isVisible = modal?.classList.contains('visible');
+    void setModalOpen(!isVisible, source);
+  }
+
+  // Get current theme colors
+  function getThemeColors() {
+    const isDark = document.documentElement.classList.contains('dark');
+    return isDark ? {
+      document: '#4f83ff',
+      tag: '#34d399',
+      current: '#f87171',
+      link: '#6b7280',
+      tagLink: '#059669',
+      highlight: '#fbbf24',
+      hover: '#f87171',
+      labelColor: '#e0e0e0',
+      background: '#000'
+    } : {
+      document: '#2563eb',
+      tag: '#059669',
+      current: '#dc2626',
+      link: '#9ca3af',
+      tagLink: '#10b981',
+      highlight: '#f59e0b',
+      hover: '#dc2626',
+      labelColor: '#4a4a4a',
+      background: '#fff'
+    };
+  }
+
+  // Render the graph
+  async function renderGraph() {
+    const data = await initGraph();
+    const container = document.getElementById('graph-canvas');
+    
+    // Clear container
+    container.innerHTML = '';
+    
+    let colors = getThemeColors();
+    
+    const NODE_R = 3.2;
+    
+    graphInstance = ForceGraph()(container)
+      .graphData(data)
+      .backgroundColor(colors.background)
+      .nodeId('id')
+      .nodeLabel('name')
+      .nodeRelSize(NODE_R)
+      .nodeColor(node => {
+        if (node.id === currentSlug) return colors.current;
+        if (highlightNodes.has(node)) return colors.highlight;
+        return node.type === 'tag' ? colors.tag : colors.document;
+      })
+      .nodeVal(node => {
+        if (node.id === currentSlug) return 12;
+        return node.type === 'tag' ? 3 : 6;
+      })
+      .linkColor(link => {
+        if (highlightLinks.has(link)) return colors.highlight;
+        return link.type === 'tag' ? colors.tagLink : colors.link;
+      })
+      .linkWidth(link => highlightLinks.has(link) ? 3 : (link.type === 'tag' ? 1.5 : 1.5))
+      .linkDirectionalParticles(link => highlightLinks.has(link) ? 4 : 0)
+      .linkDirectionalParticleWidth(link => highlightLinks.has(link) ? 3 : 0)
+      .linkLineDash(link => link.type === 'tag' && [4, 6])
+      .d3AlphaDecay(0.02)
+      .d3VelocityDecay(0.3)
+      .autoPauseRedraw(false)
+      .nodeCanvasObjectMode(node => highlightNodes.has(node) ? 'before' : undefined)
+      .nodeCanvasObject((node, ctx, globalScale) => {
+        // Draw highlight ring if node is highlighted
+        if (highlightNodes.has(node)) {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, NODE_R * (node.id === currentSlug ? 3 : 2.5), 0, 2 * Math.PI, false);
+          ctx.fillStyle = node === hoverNode ? colors.hover : colors.highlight;
+          ctx.fill();
+        }
+      })
+      .nodeLabel((node, globalScale) => {
+        // Show labels only when zoomed in (scale > 0.8 = 80% zoom)
+        if (globalScale > 0.8) {
+          return node.name;
+        }
+        return '';
+      })
+      .nodeCanvasObjectMode(() => 'after')
+      .nodeCanvasObject((node, ctx, globalScale) => {
+        // Determine if labels should be shown at this zoom level
+        const shouldShowLabels = globalScale > 0.8;
+        
+        // Initialize opacity if not exists
+        if (!labelOpacity.has(node.id)) {
+          labelOpacity.set(node.id, shouldShowLabels ? 1 : 0);
+        }
+        
+        // Get current opacity
+        let opacity = labelOpacity.get(node.id);
+        
+        // Animate opacity towards target (0 or 1) over 1 second
+        const fadeSpeed = 0.016; // Approximately 1 second at 60fps
+        if (shouldShowLabels && opacity < 1) {
+          opacity = Math.min(1, opacity + fadeSpeed);
+          labelOpacity.set(node.id, opacity);
+        } else if (!shouldShowLabels && opacity > 0) {
+          opacity = Math.max(0, opacity - fadeSpeed);
+          labelOpacity.set(node.id, opacity);
+        }
+        
+        // Draw label with opacity
+        if (opacity > 0) {
+          const label = node.name;
+          const fontSize = 12 / globalScale;
+          ctx.font = `${fontSize}px Sans-Serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.globalAlpha = opacity;
+          ctx.fillStyle = colors.labelColor;
+          ctx.fillText(label, node.x, node.y + NODE_R * 2.5);
+          ctx.globalAlpha = 1; // Reset alpha
+        }
+      })
+      .onNodeHover(node => {
+        highlightNodes.clear();
+        highlightLinks.clear();
+        
+        if (node) {
+          highlightNodes.add(node);
+          if (node.neighbors) {
+            node.neighbors.forEach(neighbor => highlightNodes.add(neighbor));
+          }
+          if (node.links) {
+            node.links.forEach(link => highlightLinks.add(link));
+          }
+        }
+        
+        hoverNode = node || null;
+        container.style.cursor = node ? 'pointer' : 'default';
+        
+        // Update preview
+        const preview = document.getElementById('node-preview');
+        const previewImg = document.getElementById('preview-img');
+        const previewTitle = document.getElementById('preview-title');
+        
+        if (node && node.type === 'document') {
+          previewTitle.textContent = node.name;
+          if (node.img) {
+            previewImg.src = node.img;
+            previewImg.style.display = 'block';
+          } else {
+            previewImg.style.display = 'none';
+          }
+          preview.classList.add('visible');
+        } else {
+          preview.classList.remove('visible');
+        }
+      })
+      .onLinkHover(link => {
+        highlightNodes.clear();
+        highlightLinks.clear();
+        
+        if (link) {
+          highlightLinks.add(link);
+          const source = data.nodes.find(n => n.id === link.source.id || n.id === link.source);
+          const target = data.nodes.find(n => n.id === link.target.id || n.id === link.target);
+          if (source) highlightNodes.add(source);
+          if (target) highlightNodes.add(target);
+        }
+      })
+      .onNodeClick((node, event) => {
+        // Shift+Click to center and zoom on node
+        if (event.shiftKey) {
+          graphInstance.centerAt(node.x, node.y, 1000);
+          graphInstance.zoom(8, 2000);
+        } else {
+          // Regular click to navigate
+          if (node.type === 'document') {
+            window.location.href = '/' + node.id;
+          } else if (node.type === 'tag') {
+            const tag = node.id.replace('tag:', '');
+            window.location.href = '/' + encodeURIComponent(tag);
+          }
+        }
+      });
+    
+    // Center on current node if it exists
+    setTimeout(() => {
+      const currentNode = data.nodes.find(n => n.id === currentSlug);
+      if (currentNode && graphInstance) {
+        graphInstance.centerAt(currentNode.x, currentNode.y, 1000);
+        graphInstance.zoom(2, 1000);
+      }
+    }, 1000);
+    
+    // Animate dashed lines for tag links
+    const dashLen = 4;
+    const gapLen = 6;
+    const st = +new Date();
+    const dashAnimateTime = 800; // time to animate a single dash cycle
+    
+    (function animateDashes() {
+      const t = ((+new Date() - st) % dashAnimateTime) / dashAnimateTime;
+      const lineDash = t < 0.5 
+        ? [0, gapLen * t * 2, dashLen, gapLen * (1 - t * 2)] 
+        : [dashLen * (t - 0.5) * 2, gapLen, dashLen * (1 - (t - 0.5) * 2), 0];
+      
+      graphInstance.linkLineDash(link => link.type === 'tag' && lineDash);
+      requestAnimationFrame(animateDashes);
+    })();
+    
+    // Listen for theme changes
+    const observer = new MutationObserver(() => {
+      colors = getThemeColors();
+      // Force graph redraw to update all colors including background
+      graphInstance
+        .backgroundColor(colors.background)
+        .nodeColor(node => {
+          if (node.id === currentSlug) return colors.current;
+          if (highlightNodes.has(node)) return colors.highlight;
+          return node.type === 'tag' ? colors.tag : colors.document;
+        })
+        .linkColor(link => {
+          if (highlightLinks.has(link)) return colors.highlight;
+          return link.type === 'tag' ? colors.tagLink : colors.link;
+        });
+    });
+    
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+  }
+
+  // Center on current page
+  async function centerOnCurrent() {
+    if (!graphData) await initGraph();
+    if (graphInstance && graphData) {
+      const currentNode = graphData.nodes.find(n => n.id === currentSlug);
+      if (currentNode) {
+        graphInstance.centerAt(currentNode.x, currentNode.y, 1000);
+        graphInstance.zoom(2, 1000);
+      }
+    }
+  }
+
+  const handleGraphShortcut = (e) => {
+    if (e.defaultPrevented) return;
+    // Only trigger if not typing in an input field
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    
+    if (e.key.toLowerCase() === 'g') {
+      e.preventDefault();
+      toggleModal();
+    } else if (e.key === 'Escape') {
+      const modal = document.getElementById('graph-modal');
+      if (modal.classList.contains('visible')) {
+        toggleModal();
+      }
+    }
+  };
+
+  const handleGraphToggleRequest = () => {
+    toggleModal('remote-toggle');
+  };
+
+  const handleGraphSetRequest = (event) => {
+    const nextOpen = Boolean(event?.detail?.open);
+    void setModalOpen(nextOpen, event?.detail?.source || 'remote');
+  };
+
+  const handleGraphOpenRequest = () => {
+    void setModalOpen(true, 'remote');
+  };
+
+  const handleGraphCloseRequest = () => {
+    void setModalOpen(false, 'remote');
+  };
+
+  // Event listeners
+  document.addEventListener('keydown', handleGraphShortcut);
+  window.addEventListener('graph:toggle', handleGraphToggleRequest);
+  window.addEventListener('graph:set', handleGraphSetRequest);
+  window.addEventListener('graph:open', handleGraphOpenRequest);
+  window.addEventListener('graph:close', handleGraphCloseRequest);
+
+  document.getElementById('graph-close')?.addEventListener('click', () => {
+    void setModalOpen(false, 'local');
+  });
+  document.getElementById('graph-center')?.addEventListener('click', centerOnCurrent);
+  
+  document.getElementById('graph-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'graph-modal') {
+      void setModalOpen(false, 'local');
+    }
+  });
+
+  document.addEventListener(
+    'astro:before-swap',
+    () => {
+      document.removeEventListener('keydown', handleGraphShortcut);
+      window.removeEventListener('graph:toggle', handleGraphToggleRequest);
+      window.removeEventListener('graph:set', handleGraphSetRequest);
+      window.removeEventListener('graph:open', handleGraphOpenRequest);
+      window.removeEventListener('graph:close', handleGraphCloseRequest);
+    },
+    { once: true }
+  );
+</script>
+
+<style>
+  .graph-modal {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 300ms ease;
+  }
+
+  .graph-modal.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .graph-modal.hidden {
+    display: none;
+  }
+
+  #graph-canvas {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .graph-hud {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 1rem 2rem;
+  }
+
+  .graph-hud-right {
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+  }
+
+  .node-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+    opacity: 0;
+    transition: opacity 1s ease;
+    pointer-events: none;
+    max-width: 200px;
+  }
+
+  .node-preview.visible {
+    opacity: 1;
+  }
+
+  .node-preview img {
+    width: 120px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+    display: none;
+  }
+
+  .node-preview #preview-title {
+    color: #888;
+    font-size: 0.85rem;
+    text-align: right;
+    line-height: 1.3;
+  }
+
+  .graph-legend {
+    display: flex;
+    gap: 1.5rem;
+    color: rgb(220 220 220);
+    font-size: 0.85rem;
+  }
+
+  .graph-legend > div {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .graph-legend span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .legend-doc {
+    background: #4f83ff;
+  }
+
+  .legend-tag {
+    background: #34d399;
+  }
+
+  .legend-current {
+    background: #f87171;
+  }
+
+  .graph-hud-right button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: all 0.2s;
+  }
+
+  .graph-hud-right button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  /* Dark mode */
+  :global(.dark) .graph-modal {
+    background: rgb(10 10 10);
+  }
+
+  /* Light mode */
+  :global(:not(.dark)) .graph-modal {
+    background: rgb(250 250 250);
+  }
+
+
+  :global(:not(.dark)) .graph-legend {
+    color: rgb(60 60 60);
+  }
+
+  :global(:not(.dark)) .graph-hud-right button {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: rgb(30 30 30);
+  }
+
+  :global(:not(.dark)) .graph-hud-right button:hover {
+    background: rgba(0, 0, 0, 0.1);
+    border-color: rgba(0, 0, 0, 0.2);
+  }
+</style>

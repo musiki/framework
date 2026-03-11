@@ -1,0 +1,228 @@
+<div id="zz-search-modal" class="hidden">
+  <div class="search-wrap">
+    <input type="text" id="zz-search-input" placeholder="Search..." autocomplete="off" />
+    <ul id="zz-search-results"></ul>
+  </div>
+</div>
+
+<style>
+  #zz-search-modal {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(5px);
+    z-index: 20000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #zz-search-modal.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .search-wrap {
+    width: 80%;
+    max-width: 800px;
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+  }
+  #zz-search-input {
+    font-size: 3rem;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #555;
+    color: white;
+    width: 100%;
+    outline: none;
+    text-align: center;
+    padding-bottom: 0.5rem;
+    font-family: inherit;
+  }
+  #zz-search-results {
+    list-style: none;
+    padding: 0;
+    margin-top: 2rem;
+    overflow-y: auto;
+  }
+  :global(#zz-search-results li) {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #333;
+    padding-bottom: 1rem;
+  }
+  :global(#zz-search-results a) {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+  :global(#zz-search-results h3) {
+    margin: 0 0 0.5rem 0;
+    color: #fff;
+    font-size: 1.2rem;
+  }
+  :global(#zz-search-results p) {
+    color: #aaa;
+    font-size: 1rem;
+    margin: 0;
+    line-height: 1.4;
+  }
+  :global(.search-highlight) {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.2);
+    font-weight: bold;
+    padding: 0 2px;
+  }
+</style>
+
+<script>
+  let searchData = null;
+  const commands = [
+    { keys: ['home', 'inicio'], url: '/', title: 'Inicio' },
+    { keys: ['dash', 'board'], url: '/dashboard', title: 'Dashboard' },
+    { keys: ['about', 'acerca'], url: '/about', title: 'Acerca de' },
+  ];
+
+  function initSearch() {
+    const modal = document.getElementById('zz-search-modal');
+    const input = document.getElementById('zz-search-input');
+    const resultsContainer = document.getElementById('zz-search-results');
+
+    if (!modal || !input || !resultsContainer) return;
+
+    window.openSearch = async () => {
+      modal.classList.add('visible');
+      input.focus();
+      if (!searchData) {
+        try {
+          const res = await fetch('/search.json');
+          searchData = await res.json();
+        } catch (e) {
+          console.error('Failed to load search index', e);
+        }
+      }
+    };
+
+    window.closeSearch = () => {
+      modal.classList.remove('visible');
+      input.value = '';
+      resultsContainer.innerHTML = '';
+    };
+
+    modal.onclick = (e) => {
+      if (e.target === modal) window.closeSearch();
+    };
+
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const first = resultsContainer.querySelector('a');
+        if (first) first.click();
+      }
+    };
+
+    input.oninput = (e) => {
+      const query = e.target.value.toLowerCase();
+      if (query.length < 2) {
+        resultsContainer.innerHTML = '';
+        return;
+      }
+
+      const commandResults = commands.filter(cmd => 
+        cmd.keys.some(k => k.includes(query))
+      ).map(cmd => ({
+        title: cmd.title,
+        slug: cmd.url,
+        content: null,
+        type: 'Special'
+      }));
+
+      let contentResults = [];
+      if (searchData) {
+        contentResults = searchData.filter(item => {
+          return (item.title && item.title.toLowerCase().includes(query)) || 
+                 (item.content && item.content.toLowerCase().includes(query));
+        });
+      }
+
+      const results = [...commandResults, ...contentResults];
+
+      resultsContainer.innerHTML = results.slice(0, 10).map(item => {
+        let snippet = '';
+        if (item.content) {
+          const lowerContent = item.content.toLowerCase();
+          const idx = lowerContent.indexOf(query);
+          if (idx !== -1) {
+            const start = Math.max(0, idx - 40);
+            const end = Math.min(item.content.length, idx + query.length + 40);
+            snippet = item.content.substring(start, end);
+            const regex = new RegExp(`(${query})`, 'gi');
+            snippet = '...' + snippet.replace(regex, '<span class="search-highlight">$1</span>') + '...';
+          } else {
+             snippet = item.content.substring(0, 80) + '...';
+          }
+        } else if (item.type === 'Special') {
+          snippet = '<span style="opacity:0.7; font-style:italic;">Jump to page</span>';
+        }
+
+        const dvBullet = item.hasDataview 
+          ? '<span style="display:inline-block;width:6px;height:6px;background:violet;border-radius:50%;margin-left:8px;vertical-align:middle;" title="Contains Dataview"></span>' 
+          : '';
+        
+        return `
+          <li>
+            <a href="${item.slug}" data-title="${String(item.title || '').replace(/"/g, '&quot;')}">
+              <h3>${item.title}${dvBullet} <small style="opacity:0.5; font-size:0.8em">(${item.type})</small></h3>
+              <p>${snippet}</p>
+            </a>
+          </li>
+        `;
+      }).join('');
+    };
+
+    resultsContainer.onclick = async (e) => {
+      const link = e.target.closest('a');
+      if (!link) return;
+      const handler = window.handleSearchNavigation;
+      if (typeof handler !== 'function') return;
+
+      e.preventDefault();
+
+      try {
+        const handled = await handler({
+          href: link.getAttribute('href') || '',
+          title: link.getAttribute('data-title') || '',
+        });
+
+        if (handled !== false) {
+          window.closeSearch();
+        }
+      } catch (error) {
+        console.error('Room search navigation failed', error);
+      }
+    };
+  }
+
+  const handleGlobalKeydown = (e) => {
+    const modal = document.getElementById('zz-search-modal');
+    if (e.key === 'Escape' && modal && modal.classList.contains('visible')) window.closeSearch();
+    // Shift + ? (which is just ?)
+    if (e.key === '?' && !e.target.matches('input, textarea, [contenteditable]')) {
+      e.preventDefault();
+      window.openSearch();
+    }
+  };
+
+  document.addEventListener('astro:page-load', () => {
+    initSearch();
+    document.removeEventListener('keydown', handleGlobalKeydown);
+    document.addEventListener('keydown', handleGlobalKeydown);
+  });
+  
+  // Init on first load as well
+  initSearch();
+  document.removeEventListener('keydown', handleGlobalKeydown);
+  document.addEventListener('keydown', handleGlobalKeydown);
+</script>

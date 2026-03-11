@@ -1,0 +1,21 @@
+[Unit]
+Description=Ollama Correction API (Fastify)
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_GROUP__
+WorkingDirectory=__APP_PATH__
+EnvironmentFile=__APP_PATH__/.env
+ExecStart=/usr/bin/env node __APP_PATH__/src/server.js
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

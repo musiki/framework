@@ -1,0 +1,68 @@
+---
+export const prerender = false;
+
+import BaseHead from '../components/BaseHead.astro';
+import ConferenceLayout from '../components/ConferenceLayout.astro';
+import GraphModal from '../components/GraphModal.astro';
+import Search from '../components/Search.astro';
+import { resolveLiveParticipantRole } from '../lib/live/access';
+import { listRoomPresentationOptions } from '../lib/live/presentation-options';
+import { canonicalizeCourseId } from '../lib/course-alias';
+import { buildCourseHref } from '../lib/course-routing';
+
+const session = (Astro.locals as App.Locals).session;
+
+const normalizeText = (value: unknown) => String(value ?? '').trim();
+
+const rawCourseId = normalizeText(Astro.url.searchParams.get('course'));
+const activeCourseId = await canonicalizeCourseId(rawCourseId);
+const defaultRoom =
+  normalizeText(Astro.url.searchParams.get('room')) ||
+  (activeCourseId ? `${activeCourseId}-stage` : 'musiki-stage');
+const defaultIdentity =
+  normalizeText(Astro.url.searchParams.get('identity')) ||
+  normalizeText(Astro.url.searchParams.get('user')) ||
+  normalizeText(session?.user?.email) ||
+  normalizeText(session?.user?.name);
+const defaultName =
+  normalizeText(Astro.url.searchParams.get('name')) || normalizeText(session?.user?.name);
+const defaultRole = await resolveLiveParticipantRole(session, activeCourseId);
+const defaultPresentation =
+  normalizeText(Astro.url.searchParams.get('slides')) ||
+  normalizeText(Astro.url.searchParams.get('presentation'));
+const livekitUrl = normalizeText(import.meta.env.LIVEKIT_URL);
+const courseHomeHref = activeCourseId ? buildCourseHref(activeCourseId, {}) : '/cursos';
+const presentationOptions = await listRoomPresentationOptions({
+  activeCourseId,
+  session,
+  supabaseUrl: import.meta.env.SUPABASE_URL,
+  supabaseKey: import.meta.env.SUPABASE_KEY,
+});
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <BaseHead
+      title="Sala Performativa"
+      description="LiveKit + Astro sin React para videoconferencia, layouts y escena de presentacion."
+    />
+  </head>
+  <body class="room-page">
+    <main>
+      <ConferenceLayout
+        livekitUrl={livekitUrl}
+        courseId={activeCourseId}
+        courseHomeHref={courseHomeHref}
+        defaultRoom={defaultRoom}
+        defaultIdentity={defaultIdentity}
+        defaultName={defaultName}
+        defaultRole={defaultRole}
+        defaultPresentation={defaultPresentation}
+        presentationOptions={presentationOptions}
+      />
+    </main>
+    <Search />
+    <GraphModal />
+  </body>
+</html>

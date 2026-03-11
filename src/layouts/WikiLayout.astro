@@ -1,0 +1,634 @@
+---
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+
+type Props = CollectionEntry<'content'>['data'] & { id?: string; tags?: string[] };
+const { title, description, heroImage, id: contentId, presentationHref = '' } = Astro.props as Props & {
+  presentationHref?: string;
+};
+type CommitHistoryEntry = {
+  author: string;
+  email: string;
+  date: string;
+  sha: string;
+  shortSha: string;
+  url: string | null;
+};
+
+// Compute last update info during build
+let uploaderAuthor = 'Unknown';
+let uploaderDate = 'Unknown';
+let lastAuthor = 'Unknown';
+let lastDate = 'Unknown';
+let commitSha = 'Unknown';
+let repoOwner = process.env.VERCEL_GIT_REPO_OWNER || 'unknown';
+let repoSlug = process.env.VERCEL_GIT_REPO_SLUG || 'unknown';
+let historyEntries: CommitHistoryEntry[] = [];
+const contentRoot = path.join(process.cwd(), 'src/content');
+let slugPathCache: Map<string, string> | null = null;
+
+const formatDate = (iso: string) => {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return 'Unknown';
+  return parsed.toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' });
+};
+const shellEscape = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+const toSlugPart = (value: unknown) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const listMarkdownFiles = (dirPath: string): string[] => {
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  const output: string[] = [];
+  for (const entry of entries) {
+    const absPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      output.push(...listMarkdownFiles(absPath));
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (!/\.(md|mdx)$/i.test(entry.name)) continue;
+    output.push(absPath);
+  }
+  return output;
+};
+
+const ensureSlugPathCache = () => {
+  if (slugPathCache) return slugPathCache;
+  const cache = new Map<string, string>();
+  for (const absPath of listMarkdownFiles(contentRoot)) {
+    const relPath = path.relative(contentRoot, absPath).replace(/\\/g, '/');
+    const withoutExt = relPath.replace(/\.(md|mdx)$/i, '');
+    const slugKey = withoutExt
+      .split('/')
+      .map((part) => toSlugPart(part))
+      .filter(Boolean)
+      .join('/');
+    if (!slugKey || cache.has(slugKey)) continue;
+    cache.set(slugKey, absPath);
+  }
+  slugPathCache = cache;
+  return cache;
+};
+
+const resolveContentPath = (rawId: string) => {
+  const normalized = rawId.replace(/\\/g, '/').trim();
+  const directCandidates = normalized.match(/\.(md|mdx)$/i)
+    ? [normalized]
+    : [normalized, `${normalized}.md`, `${normalized}.mdx`];
+
+  for (const relPath of directCandidates) {
+    const absPath = path.join(contentRoot, relPath);
+    if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+      return absPath;
+    }
+  }
+
+  const slugKey = normalized
+    .replace(/\.(md|mdx)$/i, '')
+    .split('/')
+    .map((part) => toSlugPart(part))
+    .filter(Boolean)
+    .join('/');
+  if (slugKey) {
+    const bySlug = ensureSlugPathCache().get(slugKey);
+    if (bySlug && fs.existsSync(bySlug)) return bySlug;
+  }
+
+  return null;
+};
+
+try {
+  if (typeof contentId === 'string' && contentId.trim()) {
+    const filePath = resolveContentPath(contentId);
+    if (!filePath) {
+      console.warn(`Could not resolve content file for id="${contentId}"`);
+    } else {
+      const escapedPath = shellEscape(filePath);
+      const historyRaw = execSync(
+        `git log --follow --format="%an|%ae|%cI|%H" -- ${escapedPath}`
+      )
+        .toString()
+        .trim();
+
+      const commits = historyRaw
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => {
+          const [name = '', email = '', date = '', sha = ''] = line.split('|');
+          return { name, email, date, sha };
+        });
+
+      if (commits.length > 0) {
+        const newest = commits[0];
+        commitSha = newest.sha || 'Unknown';
+        lastAuthor = newest.name || newest.email || 'Unknown';
+        lastDate = formatDate(newest.date);
+
+        const oldest = commits[commits.length - 1];
+        uploaderAuthor = oldest.name || oldest.email || 'Unknown';
+        uploaderDate = formatDate(oldest.date);
+
+        historyEntries = commits.map((commit) => {
+          const safeSha = commit.sha || '';
+          const canLink = safeSha && repoOwner !== 'unknown' && repoSlug !== 'unknown';
+          return {
+            author: commit.name || commit.email || 'Unknown',
+            email: commit.email || '',
+            date: formatDate(commit.date),
+            sha: safeSha || 'Unknown',
+            shortSha: safeSha ? safeSha.slice(0, 7) : 'Unknown',
+            url: canLink ? `https://github.com/${repoOwner}/${repoSlug}/commit/${safeSha}` : null,
+          };
+        });
+      }
+    }
+  }
+} catch (e) {
+  console.warn(`Failed to get git info for ${contentId || 'unknown id'}: ${e.message}`);
+}
+const commitUrl =
+  commitSha !== 'Unknown' && repoOwner !== 'unknown' && repoSlug !== 'unknown'
+    ? `https://github.com/${repoOwner}/${repoSlug}/commit/${commitSha}`
+    : null;
+---
+
+<html lang="es" class="scroll-smooth">
+  <head>
+    <BaseHead title={title} description={description} />
+
+    <!-- Mermaid -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" defer></script>
+    <script is:inline>
+      const initMermaid = () => {
+        if (window.mermaid?.run) {
+          window.mermaid.initialize({ startOnLoad: false, theme: 'default' });
+          window.mermaid.run({ querySelector: '.mermaid' });
+        }
+      };
+      document.addEventListener('DOMContentLoaded', initMermaid);
+      document.addEventListener('astro:page-load', initMermaid);
+    </script>
+
+    <!-- Lenis smooth scroll (very light ~9kb) -->
+    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/dist/lenis.min.js" defer></script>
+
+    <style is:global>
+      /* Fade-in animation for sections */
+      .fade-in-section {
+        opacity: 1;
+        transform: none;
+      }
+
+      .fade-in-section.is-visible {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* Minimal title – left aligned, uses existing variables */
+      .article-header {
+        padding: 2rem 0 1.5rem;
+        margin-bottom: 2rem;
+      }
+
+      .article-header h1 {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: rgb(var(--black));
+        margin: 0;
+        text-align: left;
+      }
+
+      .dark .article-header h1 {
+        color: rgb(var(--black));
+      }
+
+      .article-header p.description {
+        margin-top: 0.75rem;
+        color: rgb(var(--gray));
+        font-size: 1.15rem;
+        line-height: 1.5;
+      }
+
+      .dark .article-header p.description {
+        color: rgb(var(--gray));
+      }
+
+      /* Main layout with sidebar */
+      main {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        width: 100%;
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 clamp(1rem, 2vw, 1.5rem) 4rem;
+        gap: 2rem;
+      }
+
+      /* Improve spacing in prose while keeping your font/line-height */
+      .prose {
+        font-size: clamp(1rem, 0.98rem + 0.22vw, 1.06rem);
+        line-height: 1.78;
+      }
+
+      .prose h2, .prose h3, .prose h4 {
+        color: rgb(var(--black));
+        margin-top: calc(2.6rem + 1.2em);
+        margin-bottom: 0.95rem;
+      }
+
+      .prose > * {
+        max-width: 74ch;
+      }
+
+      .prose > :is(pre, .code-wrapper, .mermaid, table, figure, .callout) {
+        max-width: 100%;
+      }
+
+      .dark .prose h2, .dark .prose h3, .dark .prose h4 {
+        color: rgb(var(--black));
+      }
+
+      /* Better blockquote contrast in both modes */
+      blockquote {
+        border-left-color: var(--accent);
+        background: rgba(var(--gray-light), 0.25);
+      }
+
+      .dark blockquote {
+        background: rgba(var(--gray-dark), 0.18);
+      }
+
+      /* Callouts already look good – just tiny contrast tweak */
+      .callout {
+        border-radius: 0;
+      }
+
+      /* Code copy button – match your style */
+      .copy-btn {
+        background: rgba(var(--gray-light), 0.6);
+        color: rgb(var(--gray-dark));
+        border: 1px solid rgba(var(--gray), 0.4);
+      }
+
+      .dark .copy-btn {
+        background: rgba(var(--gray-dark), 0.5);
+        color: rgb(var(--gray));
+        border-color: rgba(var(--gray), 0.35);
+      }
+
+      .copy-btn.copied {
+        background: var(--accent);
+        color: white;
+      }
+
+      /* Infobox sidebar */
+      #infobox-sidebar {
+        position: sticky;
+        top: 4rem;
+        align-self: start;
+        width: 280px;
+        max-width: 280px;
+        min-width: 0;
+        background: rgba(var(--gray-light), 0.15);
+        border-left: 1px solid rgba(var(--gray), 0.3);
+        padding: 1.5rem;
+        overflow: hidden;
+        opacity: 1;
+        transition: transform 0.25s ease, opacity 0.2s ease, width 0.25s ease, max-width 0.25s ease, padding 0.25s ease;
+        transform: translateX(0);
+      }
+
+      #infobox-sidebar.hidden {
+        width: 0;
+        max-width: 0;
+        padding: 0;
+        border-left-color: transparent;
+        opacity: 0;
+        transform: translateX(14px);
+        pointer-events: none;
+      }
+
+      .dark #infobox-sidebar {
+        background: rgba(var(--gray-dark), 0.25);
+        border-left-color: rgba(var(--gray), 0.3);
+      }
+
+      #infobox-sidebar h3 {
+        font-size: 1.1rem;
+        margin: 0 0 1rem;
+        color: rgb(var(--black));
+      }
+
+      .dark #infobox-sidebar h3 {
+        color: rgb(var(--black));
+      }
+
+      #infobox-sidebar dl {
+        margin: 0;
+      }
+
+      #infobox-sidebar dt {
+        font-weight: bold;
+        color: rgb(var(--gray));
+      }
+
+      .dark #infobox-sidebar dt {
+        color: rgb(var(--gray));
+      }
+
+      #infobox-sidebar dd {
+        margin: 0 0 0.75rem;
+      }
+
+      #infobox-sidebar a {
+        color: var(--accent);
+      }
+
+      .history-section {
+        margin-top: 1rem;
+        border-top: 1px solid rgba(var(--gray), 0.25);
+        padding-top: 0.8rem;
+      }
+
+      .history-section summary {
+        cursor: pointer;
+        font-weight: bold;
+        color: rgb(var(--gray));
+        margin-bottom: 0.6rem;
+      }
+
+      .history-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: min(42vh, 320px);
+        overflow-y: auto;
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .history-item {
+        padding-bottom: 0.7rem;
+        border-bottom: 1px dashed rgba(var(--gray), 0.25);
+      }
+
+      .history-item:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+
+      .history-author {
+        display: block;
+        font-weight: 600;
+      }
+
+      .history-date,
+      .history-meta {
+        display: block;
+        font-size: 0.9rem;
+        color: rgb(var(--gray));
+      }
+
+      .history-meta {
+        margin-top: 0.15rem;
+      }
+
+      @media (max-width: 1024px) {
+        main { grid-template-columns: 1fr; }
+        #infobox-sidebar {
+          position: fixed;
+          top: 4.2rem;
+          right: 0;
+          height: calc(100vh - 4.2rem);
+          max-height: calc(100vh - 4.2rem);
+          width: min(88vw, 320px);
+          max-width: min(88vw, 320px);
+          overflow-y: auto;
+          z-index: 1200;
+          background: rgba(var(--gray-light), 0.97);
+          box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
+          transform: translateX(100%);
+          opacity: 0;
+          pointer-events: none;
+        }
+        #infobox-sidebar.hidden {
+          width: min(88vw, 320px);
+          max-width: min(88vw, 320px);
+          padding: 1.5rem;
+          border-left-color: rgba(var(--gray), 0.3);
+          transform: translateX(100%);
+          opacity: 0;
+          pointer-events: none;
+        }
+        #infobox-sidebar:not(.hidden) {
+          transform: translateX(0);
+          opacity: 1;
+          pointer-events: auto;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <Header showPageInfoToggle={true} presentationHref={presentationHref} />
+
+    <main>
+      <article>
+        {heroImage && (
+          <div class="mb-8">
+            <Image
+              width={1020}
+              height={510}
+              src={heroImage}
+              alt=""
+              class="rounded-none shadow-sm w-full"
+            />
+          </div>
+        )}
+
+        <header class="article-header fade-in-section">
+          <h1>{title}</h1>
+          {description && <p class="description">{description}</p>}
+        </header>
+
+        <div class="prose fade-in-section">
+          <slot />
+        </div>
+      </article>
+
+      <!-- Foldable right sidebar infobox -->
+      <aside id="infobox-sidebar" class="fade-in-section hidden">
+        <h3>Info</h3>
+        <dl>
+          <dt>Subido por:</dt>
+          <dd>{uploaderAuthor}</dd>
+          <dt>Fecha de carga:</dt>
+          <dd>{uploaderDate}</dd>
+          <dt>Ultima actualizacion:</dt>
+          <dd>{lastDate}</dd>
+          <dt>Ultimo autor:</dt>
+          <dd>{lastAuthor}</dd>
+          <dt>Commit:</dt>
+          <dd>
+            {commitUrl ? (
+              <a href={commitUrl} target="_blank" rel="noopener noreferrer">{commitSha.slice(0, 7)}</a>
+            ) : (
+              <span>{commitSha === 'Unknown' ? 'Unknown' : commitSha.slice(0, 7)}</span>
+            )}
+          </dd>
+          <!-- Add more auto info here, e.g., from frontmatter -->
+        {Astro.props.tags && (
+            <>
+              <dt>Tags:</dt>
+              <dd>{Astro.props.tags.join(', ')}</dd>
+            </>
+          )}
+        </dl>
+
+        <details class="history-section">
+          <summary>History ({historyEntries.length})</summary>
+          {historyEntries.length > 0 ? (
+            <ol class="history-list">
+              {historyEntries.map((entry) => (
+                <li class="history-item">
+                  <span class="history-author">{entry.author}</span>
+                  <span class="history-date">{entry.date}</span>
+                  <span class="history-meta">
+                    {entry.url ? (
+                      <a href={entry.url} target="_blank" rel="noopener noreferrer">{entry.shortSha}</a>
+                    ) : (
+                      <span>{entry.shortSha}</span>
+                    )}
+                    {entry.email ? ` - ${entry.email}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p class="history-date">Sin historial de commits.</p>
+          )}
+        </details>
+      </aside>
+    </main>
+
+    <Footer />
+
+    <!-- Scripts -->
+    <script>
+      // ────────────────────────────────────────────────
+      // Lenis smooth scrolling
+      // ────────────────────────────────────────────────
+      const initLenis = () => {
+        const LenisCtor = window.Lenis;
+        if (typeof LenisCtor !== 'function') {
+          console.warn('Lenis is not available, skipping smooth scroll.');
+          return;
+        }
+
+        const lenis = new LenisCtor({
+          duration: 1.1,
+          easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+          smoothWheel: true,
+          smoothTouch: false,
+        });
+
+        const raf = (time) => {
+          lenis.raf(time);
+          requestAnimationFrame(raf);
+        };
+        requestAnimationFrame(raf);
+      };
+
+      initLenis();
+
+      // ────────────────────────────────────────────────
+      // IntersectionObserver fade-in
+      // ────────────────────────────────────────────────
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('is-visible');
+              observer.unobserve(entry.target); // one-time animation
+            }
+          });
+        },
+        { threshold: 0.1, rootMargin: '0px 0px -10% 0px' }
+      );
+
+      document.querySelectorAll('.fade-in-section').forEach((el) => {
+        observer.observe(el);
+      });
+
+      // Re-observe after Astro page load / view transition
+      document.addEventListener('astro:page-load', () => {
+        document.querySelectorAll('.fade-in-section:not(.is-visible)').forEach((el) => {
+          observer.observe(el);
+        });
+      });
+
+      // ────────────────────────────────────────────────
+      // Sidebar toggle from header button + Shift + \
+      // ────────────────────────────────────────────────
+      const toggleInfoSidebar = () => {
+        const sidebar = document.getElementById('infobox-sidebar');
+        if (sidebar) sidebar.classList.toggle('hidden');
+      };
+
+      window.addEventListener('wiki:toggle-info', toggleInfoSidebar);
+      document.addEventListener(
+        'astro:before-swap',
+        () => window.removeEventListener('wiki:toggle-info', toggleInfoSidebar),
+        { once: true }
+      );
+
+      document.addEventListener('keydown', (e) => {
+        if (e.shiftKey && e.key === '\\') {
+          toggleInfoSidebar();
+        }
+      });
+
+      // ────────────────────────────────────────────────
+      // Copy buttons (your previous logic kept)
+      // ────────────────────────────────────────────────
+      function addCopyButtons() {
+        document.querySelectorAll('pre').forEach((pre) => {
+          if (pre.parentNode.classList.contains('code-wrapper')) return;
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'code-wrapper relative';
+          pre.parentNode.insertBefore(wrapper, pre);
+          wrapper.appendChild(pre);
+
+          const btn = document.createElement('button');
+          btn.className =
+            'copy-btn absolute top-3 right-3 px-2.5 py-1 text-xs rounded transition-all';
+          btn.textContent = 'Copiar';
+          btn.onclick = () => {
+            navigator.clipboard.writeText(pre.innerText.trim());
+            btn.textContent = 'Copiado';
+            setTimeout(() => {
+              btn.textContent = 'Copiar';
+            }, 1800);
+          };
+          wrapper.appendChild(btn);
+        });
+      }
+
+      document.addEventListener('DOMContentLoaded', addCopyButtons);
+      document.addEventListener('astro:page-load', addCopyButtons);
+    </script>
+  </body>
+</html>

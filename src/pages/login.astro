@@ -1,0 +1,65 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import { SignIn } from "auth-astro/components";
+
+const session = (Astro.locals as any).session;
+
+const toSafeRedirect = (value: unknown): string => {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (!text) return "";
+    if (!text.startsWith("/") || text.startsWith("//")) return "";
+    if (text.startsWith("/login")) return "";
+    if (text.startsWith("/api/auth")) return "";
+    return text;
+};
+
+const requestedRedirect = toSafeRedirect(Astro.url.searchParams.get("redirect"));
+const callbackPath = requestedRedirect || "/dashboard";
+
+if (session?.user?.email) {
+    return Astro.redirect(callbackPath);
+}
+---
+<html lang="es">
+<head>
+    <BaseHead title="Login" description="Inicia sesión para acceder a tus cursos." />
+    <style>
+        .wrap { max-width: 400px; margin: 4rem auto; padding: 2rem; border: 1px solid var(--c-border); border-radius: 8px; }
+        h1 { text-align: center; }
+        .provider-login {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .provider-login a, .provider-login button {
+            display: block;
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--c-border);
+            text-align: center;
+            border-radius: 6px;
+            text-decoration: none;
+            background: var(--c-bg);
+            color: var(--c-fg);
+            cursor: pointer;
+            font-size: 1rem;
+        }
+         .provider-login a:hover, .provider-login button:hover {
+            background-color: var(--c-bg-mute);
+        }
+    </style>
+</head>
+<body>
+    <Header />
+    <main class="wrap">
+        <h1>Iniciar Sesión</h1>
+        <div class="provider-login">
+            <SignIn provider="google" options={{ callbackUrl: callbackPath }}>Continuar con Google</SignIn>
+        </div>
+    </main>
+    <Footer />
+</body>
+</html>

@@ -1,0 +1,3666 @@
+---
+export const prerender = false;
+
+import { getCollection } from 'astro:content';
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+import {
+  createSupabaseServerClient,
+  ensureDbUserFromSession,
+  getForumCourseAccess,
+} from '../lib/forum-server';
+import { canonicalizeCourseId, getCourseAliases } from '../lib/course-alias';
+import { getCourseFrontmatterId } from '../lib/course-metadata';
+
+type CourseMeta = {
+  courseId: string;
+  title: string;
+  code: string;
+};
+
+type ScopeStats = {
+  messageCount: number;
+  threadCount: number;
+  lastActivityAt: string | null;
+};
+
+type SidebarItem = {
+  id: string;
+  title: string;
+  href: string;
+  scopeKey: string;
+  totalMessages: number;
+  lastActivityAt: string | null;
+  isActive: boolean;
+};
+
+function normalizeBoardSlug(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function pickNewestTimestamp(current: string | null, candidate: string | null): string | null {
+  if (!current) return candidate;
+  if (!candidate) return current;
+  const currentTs = new Date(current).getTime();
+  const candidateTs = new Date(candidate).getTime();
+  if (Number.isNaN(currentTs)) return candidate;
+  if (Number.isNaN(candidateTs)) return current;
+  return candidateTs > currentTs ? candidate : current;
+}
+
+const session = (Astro.locals as any).session;
+if (!session?.user?.email) {
+  return Astro.redirect('/login?redirect=/foro');
+}
+
+const allCourseEntries = await getCollection('cursos');
+const courses = allCourseEntries
+  .filter((entry) => entry.id.endsWith('/_index') || entry.id.endsWith('_index'))
+  .map((entry) => ({
+    courseId: entry.id.replace('/_index', ''),
+    title: String(entry.data?.title || entry.id.replace('/_index', '')),
+    code: getCourseFrontmatterId(
+      (entry.data || {}) as Record<string, unknown>,
+      entry.id.replace('/_index', ''),
+    ),
+  })) as CourseMeta[];
+
+const supabase = createSupabaseServerClient({ requireServiceRole: true });
+const dbUser = await ensureDbUserFromSession(supabase, session);
+if (!dbUser) {
+  return Astro.redirect('/login?redirect=/foro');
+}
+
+const accessibleCourseChecks = await Promise.all(
+  courses.map(async (course) => {
+    try {
+      const access = await getForumCourseAccess(supabase, dbUser, course.courseId);
+      if (!access.canRead) return null;
+      return course;
+    } catch {
+      return null;
+    }
+  }),
+);
+
+const accessibleCourses = accessibleCourseChecks.filter(Boolean) as CourseMeta[];
+const requestUrl = new URL(Astro.request.url);
+const courseParam = await canonicalizeCourseId(String(requestUrl.searchParams.get('course') || '').trim());
+const requestedView = String(requestUrl.searchParams.get('view') || '').trim().toLowerCase();
+const requestedScope = String(requestUrl.searchParams.get('scope') || '').trim();
+const requestedThreadId = String(requestUrl.searchParams.get('thread') || '').trim();
+const activeCourse =
+  accessibleCourses.find((course) => course.courseId === courseParam) ||
+  accessibleCourses[0] ||
+  null;
+
+let mainForumItems: SidebarItem[] = [];
+let classForumItems: SidebarItem[] = [];
+let forumListError = '';
+let activeForumView: 'board' | 'lesson' = 'board';
+let activeForumScope = 'general';
+let activeForumScopeKey = '';
+let activeForumLabel = 'General';
+let activeForumDescription = 'Foro general del curso.';
+let activeCourseCanModerate = false;
+
+if (activeCourse) {
+  const courseId = activeCourse.courseId;
+  const courseAliases = await getCourseAliases(courseId);
+  const activeCourseAccess = await getForumCourseAccess(supabase, dbUser, courseId);
+  activeCourseCanModerate = Boolean(activeCourseAccess.isTeacher);
+  const buildForumHref = (view: 'board' | 'lesson', scope: string) =>
+    `/foro?course=${encodeURIComponent(courseId)}&view=${encodeURIComponent(view)}&scope=${encodeURIComponent(scope)}`;
+  const lessonEntries = allCourseEntries
+    .filter(
+      (entry) =>
+        entry.id.startsWith(`${courseId}/`) &&
+        !entry.id.endsWith('/_index') &&
+        !entry.id.endsWith('_index'),
+    )
+    .sort((a, b) => (Number(a.data?.order || 0) - Number(b.data?.order || 0)));
+
+  const lessons = lessonEntries.map((entry) => ({
+    lessonSlug: entry.id.replace(`${courseId}/`, ''),
+    title: String(entry.data?.title || entry.id.replace(`${courseId}/`, '')),
+  }));
+
+  let boardsRaw: any[] = [];
+  let threadsRaw: any[] = [];
+  let postsRaw: any[] = [];
+
+  try {
+    const { data: boardData, error: boardError } = await supabase
+      .from('ForumBoard')
+      .select('slug, title, isDefault, isArchived')
+      .in('courseId', courseAliases.length > 0 ? courseAliases : [courseId])
+      .eq('isArchived', false)
+      .order('isDefault', { ascending: false })
+      .order('title', { ascending: true });
+
+    if (boardError) throw boardError;
+    boardsRaw = Array.isArray(boardData) ? boardData : [];
+
+    const { data: threadData, error: threadError } = await supabase
+      .from('ForumThread')
+      .select('id, lessonSlug, createdAt, updatedAt')
+      .in('courseId', courseAliases.length > 0 ? courseAliases : [courseId])
+      .limit(2000);
+
+    if (threadError) throw threadError;
+    threadsRaw = Array.isArray(threadData) ? threadData : [];
+
+    const threadIds = threadsRaw
+      .map((thread) => String(thread?.id || '').trim())
+      .filter(Boolean);
+
+    if (threadIds.length > 0) {
+      const { data: postData, error: postError } = await supabase
+        .from('ForumPost')
+        .select('threadId, createdAt')
+        .in('threadId', threadIds)
+        .neq('status', 'deleted');
+
+      if (postError) throw postError;
+      postsRaw = Array.isArray(postData) ? postData : [];
+    }
+  } catch (error: any) {
+    console.error('Forum sidebar load error:', error?.message || error);
+    forumListError = 'No se pudo cargar el estado del foro.';
+  }
+
+  const threadStatsById = new Map<string, { messageCount: number; lastActivityAt: string | null }>();
+  for (const thread of threadsRaw) {
+    const threadId = String(thread?.id || '').trim();
+    if (!threadId) continue;
+    threadStatsById.set(threadId, {
+      messageCount: 0,
+      lastActivityAt: pickNewestTimestamp(
+        String(thread?.createdAt || '') || null,
+        String(thread?.updatedAt || '') || null,
+      ),
+    });
+  }
+
+  for (const post of postsRaw) {
+    const threadId = String(post?.threadId || '').trim();
+    if (!threadId || !threadStatsById.has(threadId)) continue;
+    const current = threadStatsById.get(threadId);
+    if (!current) continue;
+    current.messageCount += 1;
+    current.lastActivityAt = pickNewestTimestamp(
+      current.lastActivityAt,
+      String(post?.createdAt || '') || null,
+    );
+    threadStatsById.set(threadId, current);
+  }
+
+  const scopeStats = new Map<string, ScopeStats>();
+  for (const thread of threadsRaw) {
+    const threadId = String(thread?.id || '').trim();
+    const scopeKey = String(thread?.lessonSlug || '').trim();
+    if (!threadId || !scopeKey) continue;
+
+    const threadStats = threadStatsById.get(threadId) || {
+      messageCount: 0,
+      lastActivityAt: pickNewestTimestamp(
+        String(thread?.createdAt || '') || null,
+        String(thread?.updatedAt || '') || null,
+      ),
+    };
+
+    const currentScope = scopeStats.get(scopeKey) || {
+      messageCount: 0,
+      threadCount: 0,
+      lastActivityAt: null,
+    };
+    currentScope.messageCount += threadStats.messageCount;
+    currentScope.threadCount += 1;
+    currentScope.lastActivityAt = pickNewestTimestamp(
+      currentScope.lastActivityAt,
+      threadStats.lastActivityAt,
+    );
+    scopeStats.set(scopeKey, currentScope);
+  }
+
+  const boardBySlug = new Map<string, any>();
+  for (const board of boardsRaw) {
+    const slug = normalizeBoardSlug(board?.slug);
+    if (!slug) continue;
+    boardBySlug.set(slug, {
+      slug,
+      title: String(board?.title || slug),
+      isDefault: Boolean(board?.isDefault),
+    });
+  }
+
+  if (!boardBySlug.has('general')) {
+    boardBySlug.set('general', {
+      slug: 'general',
+      title: 'General',
+      isDefault: true,
+    });
+  }
+
+  const boards = Array.from(boardBySlug.values()).sort((a, b) => {
+    if (a.slug === 'general') return -1;
+    if (b.slug === 'general') return 1;
+    return a.title.localeCompare(b.title, 'es');
+  });
+
+  const lessonBySlug = new Map(lessons.map((lesson) => [lesson.lessonSlug, lesson]));
+  const boardBySlugForSelection = new Map(boards.map((board) => [normalizeBoardSlug(board.slug), board]));
+  const normalizedRequestedBoard = normalizeBoardSlug(requestedScope || 'general');
+
+  if (requestedView === 'lesson' && lessonBySlug.has(requestedScope)) {
+    activeForumView = 'lesson';
+    activeForumScope = requestedScope;
+    activeForumLabel = String(lessonBySlug.get(requestedScope)?.title || 'Clase');
+    activeForumDescription = 'Discusión específica de esta clase.';
+    activeForumScopeKey = `lesson:${courseId}:${requestedScope}`;
+  } else {
+    activeForumView = 'board';
+    activeForumScope = boardBySlugForSelection.has(normalizedRequestedBoard)
+      ? normalizedRequestedBoard
+      : 'general';
+    activeForumLabel = String(boardBySlugForSelection.get(activeForumScope)?.title || 'General');
+    activeForumDescription = activeForumScope === 'general'
+      ? 'Foro general del curso.'
+      : 'Foro alternativo del curso.';
+    activeForumScopeKey = `board:${courseId}:${activeForumScope}`;
+  }
+
+  mainForumItems = boards.map((board) => {
+    const scope = `@board:${normalizeBoardSlug(board.slug)}`;
+    const stats = scopeStats.get(scope) || {
+      messageCount: 0,
+      threadCount: 0,
+      lastActivityAt: null,
+    };
+    return {
+      id: `board:${board.slug}`,
+      title: board.title,
+      href: buildForumHref('board', normalizeBoardSlug(board.slug)),
+      scopeKey: `board:${courseId}:${normalizeBoardSlug(board.slug)}`,
+      totalMessages: stats.messageCount,
+      lastActivityAt: stats.lastActivityAt,
+      isActive: activeForumView === 'board' && activeForumScope === normalizeBoardSlug(board.slug),
+    };
+  });
+
+  classForumItems = lessons.map((lesson) => {
+    const stats = scopeStats.get(lesson.lessonSlug) || {
+      messageCount: 0,
+      threadCount: 0,
+      lastActivityAt: null,
+    };
+    return {
+      id: `lesson:${lesson.lessonSlug}`,
+      title: lesson.title,
+      href: buildForumHref('lesson', lesson.lessonSlug),
+      scopeKey: `lesson:${courseId}:${lesson.lessonSlug}`,
+      totalMessages: stats.messageCount,
+      lastActivityAt: stats.lastActivityAt,
+      isActive: activeForumView === 'lesson' && activeForumScope === lesson.lessonSlug,
+    };
+  });
+}
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <BaseHead title="Foro" description="Navegador global de foros por curso y clase" />
+    <style>
+      .forum-shell {
+        width: 100%;
+        margin: 0;
+        padding: 0.85rem clamp(0.75rem, 1.5vw, 1.4rem) 1.35rem;
+        display: grid;
+        gap: clamp(0.9rem, 1.3vw, 1.25rem);
+        grid-template-columns: clamp(248px, 20vw, 316px) minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .forum-sidebar {
+        border: 1px solid var(--c-border);
+        border-radius: 14px;
+        padding: 1rem 0.95rem 1.1rem;
+        background: var(--c-bg);
+        position: sticky;
+        top: 0.7rem;
+        height: calc(100dvh - 7.25rem);
+        overflow-y: auto;
+        min-width: 0;
+      }
+
+      .forum-sidebar-top {
+        margin-bottom: 1rem;
+      }
+
+      .forum-sidebar-top label {
+        display: block;
+        margin-bottom: 0.35rem;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+      }
+
+      .forum-course-select {
+        width: 100%;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        padding: 0.5rem 0.6rem;
+      }
+
+      .forum-sidebar-title {
+        margin: 0.9rem 0 0.45rem 0;
+        color: var(--c-fg-dim);
+        font-size: 0.76rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-variant: all-small-caps;
+      }
+
+      .forum-divider {
+        border: 0;
+        border-top: 1px solid var(--c-border);
+        margin: 0.9rem 0;
+      }
+
+      .forum-nav-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.3rem;
+      }
+
+      .forum-nav-link {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.65rem;
+        border-radius: 10px;
+        border: 1px solid color-mix(in srgb, var(--c-border) 78%, transparent);
+        background: color-mix(in srgb, var(--c-bg) 86%, var(--c-bg-mute) 14%);
+        padding: 0.48rem 0.58rem;
+        text-decoration: none;
+        color: var(--c-fg);
+      }
+
+      .forum-nav-link:hover {
+        text-decoration: none;
+        border-color: color-mix(in srgb, var(--accent) 35%, var(--c-border) 65%);
+      }
+
+      .forum-nav-link.is-active {
+        border-color: color-mix(in srgb, var(--accent) 50%, var(--c-border) 50%);
+        background: color-mix(in srgb, var(--accent) 11%, var(--c-bg));
+      }
+
+      .forum-nav-label {
+        min-width: 0;
+        font-size: 0.87rem;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
+
+      .forum-nav-counts {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-shrink: 0;
+      }
+
+      .forum-count-total,
+      .forum-count-unread {
+        min-width: 2ch;
+        text-align: right;
+        font-size: 0.76rem;
+        font-weight: 700;
+      }
+
+      .forum-count-total {
+        color: #1f8f4d;
+      }
+
+      .forum-count-unread {
+        color: #c53631;
+      }
+
+      .forum-count-unread.is-zero {
+        opacity: 0.4;
+      }
+
+      .forum-main {
+        border: 1px solid var(--c-border);
+        border-radius: 14px;
+        padding: 1rem 1.05rem 1.1rem;
+        background: var(--c-bg);
+        min-width: 0;
+      }
+
+      .forum-main-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.9rem;
+        margin-bottom: 0.95rem;
+      }
+
+      .forum-main h1 {
+        margin: 0 0 0.3rem 0;
+        font-size: 1.35rem;
+      }
+
+      .forum-main p {
+        margin: 0;
+        color: var(--c-fg-dim);
+      }
+
+      .forum-scope-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.45rem 0.7rem;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--c-border) 72%);
+        background: color-mix(in srgb, var(--accent) 10%, var(--c-bg));
+        color: var(--accent);
+        font-size: 0.78rem;
+        line-height: 1.1;
+        text-align: center;
+      }
+
+      .forum-panel-help {
+        margin-top: 0.9rem;
+        border: 1px dashed var(--c-border);
+        border-radius: 10px;
+        padding: 0.75rem 0.8rem;
+        color: var(--c-fg-dim);
+        font-size: 0.88rem;
+        line-height: 1.45;
+      }
+
+      .forum-error {
+        margin-top: 0.8rem;
+        border-radius: 8px;
+        border: 1px solid #e0a8a5;
+        background: #fbe8e7;
+        color: #9a2c29;
+        padding: 0.55rem 0.65rem;
+        font-size: 0.84rem;
+      }
+
+      .forum-reader-grid {
+        --forum-avatar-size: 32px;
+        display: grid;
+        grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+        gap: 0.95rem;
+        margin-top: 1rem;
+        height: min(70dvh, 48rem);
+      }
+
+      .forum-reader-panel {
+        border: 1px solid color-mix(in srgb, var(--c-border) 84%, transparent);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--c-bg) 92%, var(--c-bg-mute) 8%);
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+        display: grid;
+      }
+
+      .forum-reader-panel--threads {
+        grid-template-rows: auto auto minmax(0, 1fr);
+      }
+
+      .forum-reader-panel--posts {
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+
+      .forum-reader-panel-head {
+        padding: 0.9rem 0.95rem 0.75rem;
+        border-bottom: 1px solid color-mix(in srgb, var(--c-border) 84%, transparent);
+        background: color-mix(in srgb, var(--c-bg) 82%, var(--c-bg-mute) 18%);
+      }
+
+      .forum-reader-panel-head h2 {
+        margin: 0 0 0.18rem 0;
+        font-size: 1rem;
+      }
+
+      .forum-reader-panel-head p {
+        margin: 0;
+        font-size: 0.84rem;
+      }
+
+      .forum-reader-status {
+        margin: 0.8rem 0.95rem 0;
+        padding: 0.65rem 0.72rem;
+        border-radius: 10px;
+        border: 1px solid color-mix(in srgb, var(--c-border) 84%, transparent);
+        font-size: 0.84rem;
+      }
+
+      .forum-reader-status[data-tone='error'] {
+        border-color: #e0a8a5;
+        background: #fbe8e7;
+        color: #9a2c29;
+      }
+
+      .forum-reader-status[data-tone='info'] {
+        background: color-mix(in srgb, var(--accent) 8%, var(--c-bg));
+        color: var(--c-fg);
+      }
+
+      .forum-reader-status[hidden] {
+        display: none;
+      }
+
+      .forum-reader-thread-list,
+      .forum-reader-post-list {
+        padding: 0.8rem 0.95rem 0.95rem;
+        display: grid;
+        gap: 0.7rem;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        align-content: start;
+      }
+
+      .forum-reader-empty {
+        margin: 0;
+        border: 1px dashed color-mix(in srgb, var(--c-border) 84%, transparent);
+        border-radius: 10px;
+        padding: 0.9rem;
+        color: var(--c-fg-dim);
+        font-size: 0.88rem;
+      }
+
+      .forum-reader-thread {
+        width: 100%;
+        border: 1px solid color-mix(in srgb, var(--c-border) 84%, transparent);
+        border-radius: 10px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        padding: 0.7rem 0.78rem;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .forum-reader-thread:hover {
+        border-color: color-mix(in srgb, var(--accent) 34%, var(--c-border) 66%);
+        background: color-mix(in srgb, var(--accent) 6%, var(--c-bg));
+      }
+
+      .forum-reader-thread.is-active {
+        border-color: color-mix(in srgb, var(--accent) 48%, var(--c-border) 52%);
+        background: color-mix(in srgb, var(--accent) 10%, var(--c-bg));
+      }
+
+      .forum-reader-thread:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+        outline-offset: 2px;
+      }
+
+      .forum-reader-thread-title {
+        display: block;
+        margin: 0 0 0.32rem 0;
+        font-size: 0.92rem;
+        font-weight: 600;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      }
+
+      .forum-reader-thread-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.55rem;
+        font-size: 0.76rem;
+        color: var(--c-fg-dim);
+      }
+
+      .forum-reader-thread-count {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-weight: 700;
+        color: #1f8f4d;
+        flex: 0 0 auto;
+      }
+
+      .forum-reader-post {
+        border-radius: 12px;
+        background: transparent;
+      }
+
+      .forum-reader-date-separator {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0.35rem 0;
+        color: var(--c-fg-dim);
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .forum-reader-date-separator::before,
+      .forum-reader-date-separator::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: color-mix(in srgb, var(--c-border) 82%, transparent);
+      }
+
+      .forum-reader-message-group {
+        display: grid;
+        grid-template-columns: var(--forum-avatar-size) minmax(0, 1fr);
+        column-gap: 0.75rem;
+        padding: 0.1rem 0.1rem 0.2rem;
+      }
+
+      .forum-reader-message-group + .forum-reader-message-group {
+        margin-top: 0.6rem;
+      }
+
+      .forum-reader-message-group.is-reply {
+        margin-left: calc(min(var(--forum-reply-depth, 1), 2) * 1rem);
+        padding-left: 0.7rem;
+        border-left: 2px solid color-mix(in srgb, var(--c-border) 76%, transparent);
+      }
+
+      .forum-reader-message-avatar-cell {
+        padding-top: 0.2rem;
+      }
+
+      .forum-reader-avatar {
+        width: var(--forum-avatar-size);
+        height: var(--forum-avatar-size);
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #0f1720;
+        background: linear-gradient(135deg, #c6d7ff 0%, #8bb8ff 100%);
+        border: 1px solid color-mix(in srgb, #8bb8ff 45%, white 55%);
+      }
+
+      .forum-reader-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .forum-reader-message-stack {
+        min-width: 0;
+        display: grid;
+      }
+
+      .forum-reader-message {
+        padding: 0.48rem 0.7rem 0.52rem;
+        border-radius: 10px;
+        transition: background 140ms ease;
+      }
+
+      .forum-reader-message + .forum-reader-message {
+        margin-top: 0.12rem;
+      }
+
+      @media (hover: hover) {
+        .forum-reader-message:hover {
+          background: rgba(0, 0, 0, 0.03);
+        }
+      }
+
+      .forum-reader-message-body {
+        min-width: 0;
+      }
+
+      .forum-reader-message-header {
+        display: grid;
+        justify-items: start;
+        gap: 0.08rem;
+        margin-bottom: 0.12rem;
+      }
+
+      .forum-reader-message-username {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: var(--c-fg);
+        line-height: 1.1;
+      }
+
+      .forum-reader-message-username.is-teacher {
+        color: color-mix(in srgb, #2f6fff 78%, var(--c-fg) 22%);
+      }
+
+      .forum-reader-message-timestamp {
+        font-size: 0.49rem;
+        color: var(--c-fg-dim);
+        opacity: 0.5;
+        line-height: 1.1;
+        letter-spacing: 0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .forum-reader-message-content {
+        max-width: 72ch;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        color: var(--c-fg);
+      }
+
+      .forum-reader-message-content > :first-child {
+        margin-top: 0;
+      }
+
+      .forum-reader-message-content > :last-child {
+        margin-bottom: 0;
+      }
+
+      .forum-reader-message-content :where(p, ul, ol, pre, blockquote, table, .callout, .mermaid, .katex-display, .lily-score) {
+        margin-top: 0.45rem;
+        margin-bottom: 0.45rem;
+      }
+
+      .forum-reader-message-content :where(pre, table, blockquote, .mermaid, .katex-display, .lily-score) {
+        max-width: 100%;
+        overflow-x: auto;
+      }
+
+      .forum-reader-message-content pre {
+        padding: 0.75rem;
+        border-radius: 10px;
+        border: 1px solid color-mix(in srgb, var(--c-border) 84%, transparent);
+        background: color-mix(in srgb, var(--c-bg-mute) 70%, var(--c-bg) 30%);
+      }
+
+      .forum-reader-message-content blockquote {
+        margin-left: 0;
+        padding-left: 0.8rem;
+        border-left: 3px solid color-mix(in srgb, var(--accent) 34%, var(--c-border) 66%);
+        color: var(--c-fg-dim);
+      }
+
+      .forum-reader-message-content code {
+        font-size: 0.92em;
+      }
+
+      .forum-reader-post-list {
+        min-width: 0;
+      }
+
+      #forum-reader-root {
+        --forum-bg-main: color-mix(in srgb, var(--c-bg-mute, #eef2f5) 84%, #f2f5f7 16%);
+        --forum-bg-panel: rgba(128, 128, 128, 0.109);
+        --forum-bg-subtle: color-mix(in srgb, var(--c-bg-mute, #eef2f5) 70%, var(--c-bg, #ffffff) 30%);
+        --forum-text-primary: var(--c-fg, #1c1f23);
+        --forum-text-secondary: var(--c-fg-dim, #6b7480);
+        --forum-border-soft: color-mix(in srgb, var(--c-border, #d9e0e7) 84%, transparent);
+        --forum-border-strong: color-mix(in srgb, var(--c-border, #d9e0e7) 92%, var(--c-fg-dim, #6b7480) 8%);
+        --forum-accent: var(--accent);
+        --forum-role-instructor: color-mix(in srgb, var(--accent) 78%, #2f5d8c 22%);
+        --forum-role-op: #2e8b57;
+        margin-top: 1rem;
+        border: 1px solid var(--forum-border-soft);
+        border-radius: 14px;
+        background: var(--forum-bg-main);
+        padding: 1rem;
+      }
+
+      #forum-reader-root .forum-grid {
+        display: grid;
+        grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+        gap: 1rem;
+      }
+
+      #forum-reader-root .forum-panel {
+        border: 1px solid var(--forum-border-soft);
+        border-radius: 10px;
+        background: var(--forum-bg-panel);
+        padding: 0.9rem;
+      }
+
+      #forum-reader-root .forum-thread-column,
+      #forum-reader-root .forum-thread-stage {
+        min-height: min(72dvh, 52rem);
+      }
+
+      #forum-reader-root .forum-thread-stage {
+        display: grid;
+        align-content: start;
+        gap: 0.85rem;
+      }
+
+      #forum-reader-root .forum-thread-stage-head {
+        display: grid;
+        gap: 0.3rem;
+      }
+
+      #forum-reader-root .forum-panel-title {
+        margin: 0;
+        font-size: 0.98rem;
+      }
+
+      #forum-reader-root .forum-thread-panel-copy {
+        margin: 0 0 0.7rem 0;
+        color: var(--forum-text-secondary);
+        font-size: 0.84rem;
+        line-height: 1.45;
+      }
+
+      #forum-reader-root .forum-form {
+        display: grid;
+        gap: 0.6rem;
+        margin-bottom: 0.85rem;
+      }
+
+      #forum-reader-root .forum-form[hidden] {
+        display: none;
+      }
+
+      #forum-reader-root .forum-field,
+      #forum-reader-root .forum-textarea {
+        width: 100%;
+        border: 1px solid var(--forum-border-strong);
+        background: var(--forum-bg-panel);
+        color: var(--forum-text-primary);
+        border-radius: 8px;
+        padding: 0.58rem 0.7rem;
+        font-size: 0.91rem;
+      }
+
+      #forum-reader-root .forum-field:focus-visible,
+      #forum-reader-root .forum-textarea:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--forum-accent) 34%, transparent);
+        outline-offset: 1px;
+      }
+
+      #forum-reader-root .forum-textarea {
+        resize: vertical;
+        min-height: 84px;
+        line-height: 1.6;
+      }
+
+      #forum-reader-root .forum-textarea.is-upload-target {
+        outline: 2px dashed color-mix(in srgb, var(--forum-accent) 46%, transparent);
+        outline-offset: 1px;
+        background: color-mix(in srgb, var(--forum-accent) 6%, var(--forum-bg-panel));
+      }
+
+      #forum-reader-root .forum-textarea.is-uploading {
+        cursor: progress;
+        opacity: 0.88;
+      }
+
+      #forum-reader-root .forum-form-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      #forum-reader-root .forum-secondary-btn {
+        border: 1px solid var(--forum-border-strong);
+        background: var(--forum-bg-panel);
+        color: var(--forum-text-primary);
+        border-radius: 7px;
+        padding: 0.46rem 0.74rem;
+        font-size: 0.81rem;
+        cursor: pointer;
+      }
+
+      #forum-reader-root .forum-secondary-btn[hidden] {
+        display: none;
+      }
+
+      #forum-reader-root .forum-thread-list,
+      #forum-reader-root .forum-post-list {
+        display: grid;
+        gap: 0.58rem;
+        overflow: auto;
+        overflow-x: hidden;
+      }
+
+      #forum-reader-root .forum-thread-list {
+        max-height: min(56dvh, 34rem);
+      }
+
+      #forum-reader-root .forum-post-list {
+        max-height: min(56dvh, 36rem);
+        padding-right: 0.1rem;
+      }
+
+      #forum-reader-root .forum-thread-item {
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--forum-border-soft);
+        border-radius: 8px;
+        background: var(--forum-bg-panel);
+        color: var(--forum-text-primary);
+        padding: 0.62rem 0.74rem;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+
+      #forum-reader-root .forum-thread-item.active {
+        border-color: color-mix(in srgb, var(--forum-accent) 42%, var(--forum-border-strong));
+        background: color-mix(in srgb, var(--forum-accent) 8%, var(--forum-bg-panel));
+      }
+
+      #forum-reader-root .forum-thread-title {
+        display: block;
+        font-weight: 600;
+        font-size: 0.9rem;
+        line-height: 1.35;
+      }
+
+      #forum-reader-root .forum-thread-meta {
+        margin-top: 0.35rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.7rem;
+        font-size: 0.76rem;
+        color: var(--forum-text-secondary);
+      }
+
+      #forum-reader-root .forum-post {
+        border: 1px solid var(--forum-border-soft);
+        background: var(--forum-bg-panel);
+        border-radius: 9px;
+        display: grid;
+        grid-template-columns: 128px minmax(0, 1fr);
+        gap: 0.95rem;
+        padding: 0.78rem;
+        --forum-post-body-size: 0.95rem;
+        --forum-post-meta-size: 0.66rem;
+      }
+
+      #forum-reader-root .forum-post-op {
+        border-left: 4px solid var(--forum-role-op);
+        padding-left: 0.58rem;
+      }
+
+      #forum-reader-root .forum-post-reply {
+        border-left: 2px solid var(--forum-border-soft);
+      }
+
+      #forum-reader-root .forum-post-identity {
+        display: grid;
+        align-content: flex-start;
+        gap: 0.28rem;
+      }
+
+      #forum-reader-root .forum-post-avatar {
+        width: 12px;
+        height: 12px;
+        aspect-ratio: 1 / 1;
+        border-radius: 999px;
+        border: 1px solid var(--forum-border-soft);
+        background: var(--forum-bg-subtle);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.42rem;
+        font-weight: 600;
+        color: var(--forum-text-primary);
+        vertical-align: middle;
+        object-fit: cover;
+        object-position: center;
+        overflow: hidden;
+        clip-path: circle(50% at 50% 50%);
+        flex-shrink: 0;
+        line-height: 1;
+      }
+
+      #forum-reader-root .forum-post-name {
+        font-size: var(--forum-post-meta-size);
+        line-height: 1.2;
+        font-weight: 600;
+      }
+
+      #forum-reader-root .forum-post-main {
+        min-width: 0;
+      }
+
+      #forum-reader-root .forum-post-header {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 0.38rem;
+        font-size: var(--forum-post-meta-size);
+      }
+
+      #forum-reader-root .forum-post-date {
+        color: var(--forum-text-secondary);
+        font-size: var(--forum-post-meta-size);
+      }
+
+      #forum-reader-root .forum-post-body {
+        display: block;
+        font-size: var(--forum-post-body-size);
+        line-height: 1.62;
+        color: var(--forum-text-primary);
+        max-width: 100%;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      #forum-reader-root .forum-post-body > :first-child {
+        margin-top: 0;
+      }
+
+      #forum-reader-root .forum-post-body > :last-child {
+        margin-bottom: 0;
+      }
+
+      #forum-reader-root .forum-post-body :where(p, ul, ol, pre, blockquote, table, .callout, .mermaid, .katex-display, .lily-score) {
+        margin: 0 0 0.7rem 0;
+        max-width: 100%;
+      }
+
+      #forum-reader-root .forum-post-body pre {
+        overflow: auto;
+        background: var(--forum-bg-subtle);
+        border: 1px solid var(--forum-border-soft);
+        border-radius: 7px;
+        padding: 0.62rem;
+        max-width: 100%;
+      }
+
+      #forum-reader-root .forum-post-body code {
+        font-size: 0.84em;
+      }
+
+      #forum-reader-root .forum-post-body blockquote {
+        border-left: 3px solid var(--forum-border-strong);
+        padding-left: 0.7rem;
+        color: var(--forum-text-secondary);
+      }
+
+      #forum-reader-root .forum-post-body table {
+        width: 100%;
+        display: block;
+        overflow-x: auto;
+        max-width: 100%;
+        border-collapse: collapse;
+      }
+
+      #forum-reader-root .forum-post-body th,
+      #forum-reader-root .forum-post-body td {
+        border: 1px solid var(--forum-border-soft);
+        padding: 0.35rem 0.45rem;
+        text-align: left;
+      }
+
+      #forum-reader-root .forum-post-body .mermaid {
+        overflow-x: auto;
+      }
+
+      #forum-reader-root .forum-post-body :where(img, video, audio, a[data-forum-media-link='true'], .mermaid) {
+        cursor: zoom-in;
+      }
+
+      .forum-media-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 120;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 1.25rem;
+      }
+
+      .forum-media-modal[hidden] {
+        display: none;
+      }
+
+      .forum-media-modal-stage {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: min(96vw, 92rem);
+        max-height: 92vh;
+      }
+
+      .forum-media-modal-close {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        z-index: 1;
+        border: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.82);
+        font: inherit;
+        font-size: 1.8rem;
+        line-height: 1;
+        padding: 0.35rem 0.45rem;
+        cursor: pointer;
+      }
+
+      .forum-media-modal-content {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        max-height: 92vh;
+      }
+
+      .forum-media-modal-viewport {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 100%;
+        max-width: min(96vw, 92rem);
+        max-height: 88vh;
+        overflow: hidden;
+        cursor: grab;
+        touch-action: none;
+      }
+
+      .forum-media-modal-viewport.is-dragging {
+        cursor: grabbing;
+      }
+
+      .forum-media-modal-content img,
+      .forum-media-modal-content video {
+        display: block;
+        max-width: 100%;
+        max-height: 88vh;
+        width: auto;
+        height: auto;
+        user-select: none;
+        -webkit-user-drag: none;
+        transform-origin: center center;
+        will-change: transform;
+      }
+
+      .forum-media-modal-content .mermaid {
+        display: block;
+        max-width: none;
+        transform-origin: center center;
+        will-change: transform;
+      }
+
+      .forum-media-modal-content .mermaid svg {
+        display: block;
+        max-width: none;
+        height: auto;
+      }
+
+      .forum-media-modal-content img[data-forum-svg='true'] {
+        background: #fff;
+      }
+
+      :global(.dark) .forum-media-modal-content img[data-forum-svg='true'] {
+        background: #000;
+        filter: invert(1) hue-rotate(180deg);
+      }
+
+      .forum-media-modal-content audio {
+        width: min(92vw, 44rem);
+        max-width: 100%;
+      }
+
+      #forum-reader-root .forum-post-actions {
+        margin-top: 0.58rem;
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+      }
+
+      #forum-reader-root .forum-edit-form {
+        margin-top: 0.55rem;
+      }
+
+      #forum-reader-root .forum-edit-textarea {
+        min-height: 11.6rem;
+      }
+
+      #forum-reader-root .forum-reply-target {
+        margin: 0;
+        padding: 0.5rem 0.6rem;
+        border: 1px dashed var(--forum-border-strong);
+        border-radius: 7px;
+        background: var(--forum-bg-panel);
+        font-size: 0.8rem;
+      }
+
+      #forum-reader-root .forum-empty {
+        margin: 0;
+        padding: 0.7rem;
+        border: 1px dashed var(--forum-border-soft);
+        border-radius: 7px;
+        color: var(--forum-text-secondary);
+        font-size: 0.85rem;
+        background: var(--forum-bg-panel);
+      }
+
+      #forum-reader-root .forum-status {
+        margin: 0 0 0.8rem 0;
+        font-size: 0.83rem;
+        padding: 0.55rem 0.6rem;
+        border-radius: 7px;
+        border: 1px solid var(--forum-border-soft);
+        background: var(--forum-bg-panel);
+      }
+
+      #forum-reader-root .forum-status[hidden] {
+        display: none;
+      }
+
+      #forum-reader-root .forum-status.error {
+        border-color: #f44336;
+        color: #b3261e;
+      }
+
+      @media (max-width: 1024px) {
+        .forum-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .forum-sidebar {
+          position: static;
+          height: auto;
+          overflow: visible;
+        }
+
+        .forum-reader-grid {
+          grid-template-columns: 1fr;
+          min-height: auto;
+        }
+
+        .forum-main-header {
+          flex-direction: column;
+        }
+
+        .forum-reader-panel {
+          height: min(54dvh, 34rem);
+        }
+
+        .forum-reader-grid {
+          --forum-avatar-size: 30px;
+        }
+
+        .forum-reader-message-group {
+          column-gap: 0.65rem;
+        }
+
+        .forum-reader-message-content {
+          max-width: 65ch;
+        }
+
+        #forum-reader-root .forum-grid {
+          grid-template-columns: 1fr;
+        }
+
+        #forum-reader-root .forum-thread-column,
+        #forum-reader-root .forum-thread-stage {
+          min-height: auto;
+        }
+
+        #forum-reader-root .forum-post {
+          grid-template-columns: 1fr;
+          gap: 0.7rem;
+        }
+
+        #forum-reader-root .forum-post-identity {
+          grid-template-columns: auto 1fr;
+          align-items: center;
+          column-gap: 0.65rem;
+          row-gap: 0.2rem;
+        }
+      }
+
+      @media (max-width: 900px) and (orientation: landscape) {
+        .forum-reader-message-content {
+          max-width: 60ch;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .forum-shell {
+          padding: 0.65rem;
+        }
+
+        .forum-reader-thread-meta {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.22rem;
+        }
+
+        .forum-reader-grid {
+          --forum-avatar-size: 26px;
+        }
+
+        .forum-reader-panel {
+          height: min(48dvh, 30rem);
+        }
+
+        .forum-reader-message-group {
+          grid-template-columns: var(--forum-avatar-size) minmax(0, 1fr);
+          column-gap: 0.5rem;
+        }
+
+        .forum-reader-message-group.is-reply {
+          margin-left: calc(min(var(--forum-reply-depth, 1), 2) * 0.5rem);
+          padding-left: 0.5rem;
+        }
+
+        .forum-reader-message {
+          padding: 0.44rem 0.5rem 0.48rem;
+        }
+
+        .forum-reader-message-username {
+          font-size: 0.66rem;
+        }
+
+        .forum-reader-message-timestamp,
+        .forum-reader-date-separator {
+          font-size: 0.46rem;
+        }
+
+        .forum-reader-message-content {
+          font-size: 0.9rem;
+          max-width: none;
+        }
+
+        #forum-reader-root {
+          padding: 0.75rem;
+        }
+
+        #forum-reader-root .forum-thread-meta {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.2rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <Header
+      courseId={activeCourse?.courseId || ''}
+      activeCourseId={activeCourse?.courseId || ''}
+      activeCourseCode={activeCourse?.code || ''}
+    />
+    <main class="forum-shell">
+      <aside class="forum-sidebar">
+        <div class="forum-sidebar-top">
+          <form method="get">
+            <label for="forum-course-select">Curso</label>
+            <select
+              id="forum-course-select"
+              name="course"
+              class="forum-course-select"
+              onchange="this.form.requestSubmit()"
+              disabled={accessibleCourses.length === 0}
+            >
+              {accessibleCourses.length === 0 ? (
+                <option value="">Sin cursos con acceso</option>
+              ) : (
+                accessibleCourses.map((course) => (
+                  <option value={course.courseId} selected={activeCourse?.courseId === course.courseId}>
+                    {course.title}
+                  </option>
+                ))
+              )}
+            </select>
+          </form>
+        </div>
+
+        <h3 class="forum-sidebar-title">MAIN</h3>
+        <ul class="forum-nav-list">
+          {mainForumItems.length === 0 ? (
+            <li class="forum-nav-link">
+              <span class="forum-nav-label">No hay foros principales</span>
+            </li>
+          ) : (
+            mainForumItems.map((item) => (
+              <li>
+                <a
+                  href={item.href}
+                  class:list={['forum-nav-link', { 'is-active': item.isActive }]}
+                  data-forum-scope-key={item.scopeKey}
+                  data-forum-total={item.totalMessages}
+                  data-forum-last-activity={item.lastActivityAt || ''}
+                  aria-current={item.isActive ? 'page' : undefined}
+                >
+                  <span class="forum-nav-label">{item.title}</span>
+                  <span class="forum-nav-counts">
+                    <span class="forum-count-total" title="mensajes totales">{item.totalMessages}</span>
+                    <span class="forum-count-unread" title="mensajes no leídos">0</span>
+                  </span>
+                </a>
+              </li>
+            ))
+          )}
+        </ul>
+
+        <hr class="forum-divider" />
+
+        <h3 class="forum-sidebar-title">ON CLASSES</h3>
+        <ul class="forum-nav-list">
+          {classForumItems.length === 0 ? (
+            <li class="forum-nav-link">
+              <span class="forum-nav-label">No hay foros de clase</span>
+            </li>
+          ) : (
+            classForumItems.map((item) => (
+              <li>
+                <a
+                  href={item.href}
+                  class:list={['forum-nav-link', { 'is-active': item.isActive }]}
+                  data-forum-scope-key={item.scopeKey}
+                  data-forum-total={item.totalMessages}
+                  data-forum-last-activity={item.lastActivityAt || ''}
+                  aria-current={item.isActive ? 'page' : undefined}
+                >
+                  <span class="forum-nav-label">{item.title}</span>
+                  <span class="forum-nav-counts">
+                    <span class="forum-count-total" title="mensajes totales">{item.totalMessages}</span>
+                    <span class="forum-count-unread" title="mensajes no leídos">0</span>
+                  </span>
+                </a>
+              </li>
+            ))
+          )}
+        </ul>
+      </aside>
+
+      <section class="forum-main">
+        <div class="forum-main-header">
+          <div>
+            <h1>Foro</h1>
+            {activeCourse ? (
+              <p>
+                Lectura dedicada de hilos para <strong>{activeCourse.title}</strong>.
+              </p>
+            ) : (
+              <p>No tienes cursos con acceso a foro en este momento.</p>
+            )}
+          </div>
+          {activeCourse && <div class="forum-scope-badge">{activeForumLabel}</div>}
+        </div>
+        <div class="forum-panel-help">
+          Verde: total de mensajes por foro. Rojo: mensajes no leídos desde tu última lectura.
+        </div>
+        {forumListError && <p class="forum-error">{forumListError}</p>}
+
+        {activeCourse && (
+          <section
+            id="forum-reader-root"
+            data-course-id={activeCourse.courseId}
+            data-can-moderate={activeCourseCanModerate ? 'true' : 'false'}
+            data-view={activeForumView}
+            data-scope={activeForumScope}
+            data-scope-key={activeForumScopeKey}
+            data-scope-label={activeForumLabel}
+            data-scope-description={activeForumDescription}
+            data-initial-thread-id={requestedThreadId}
+          >
+            <p id="forum-status" class="forum-status" hidden></p>
+            <div class="forum-grid">
+              <section class="forum-panel forum-thread-column">
+                <details id="forum-new-thread" class="forum-fold forum-new-thread" hidden>
+                  <summary class="forum-fold-summary">Crear hilo</summary>
+                  <form id="forum-new-thread-form" class="forum-form">
+                    <input id="forum-thread-title" class="forum-field" type="text" maxlength="140" placeholder="Título del hilo" required />
+                    <textarea id="forum-thread-body" class="forum-textarea" maxlength="4000" placeholder="Escribe el primer mensaje..." required></textarea>
+                    <div class="forum-form-actions">
+                      <button
+                        type="submit"
+                        class="forum-action-btn forum-action-h"
+                        data-tooltip="Publicar hilo"
+                        aria-label="Publicar hilo"
+                        title="Publicar hilo"
+                      >H</button>
+                    </div>
+                  </form>
+                </details>
+
+                <div id="forum-thread-list" class="forum-thread-list">
+                  <p class="forum-empty">Cargando hilos...</p>
+                </div>
+
+                {activeForumView === 'board' && (
+                  <details id="forum-new-board-details" class="forum-fold" hidden>
+                    <summary class="forum-fold-summary">Crear foro</summary>
+                    <form id="forum-new-board-form" class="forum-form">
+                      <input id="forum-board-title" class="forum-field" type="text" maxlength="90" placeholder="Título" required />
+                      <input id="forum-board-description" class="forum-field" type="text" maxlength="260" placeholder="Descripción opcional" />
+                      <div class="forum-form-actions">
+                        <button
+                          type="submit"
+                          class="forum-secondary-btn forum-action-btn forum-action-f"
+                          data-tooltip="Crear foro alternativo"
+                          aria-label="Crear foro alternativo"
+                          title="Crear foro alternativo"
+                        >F</button>
+                      </div>
+                    </form>
+                  </details>
+                )}
+              </section>
+
+              <section id="forum-thread-stage" class="forum-panel forum-thread-stage">
+                <div class="forum-thread-stage-head">
+                  <h2 id="forum-thread-heading" class="forum-panel-title">Mensajes</h2>
+                  <p id="forum-thread-summary" class="forum-thread-panel-copy">Selecciona un hilo para leerlo y responder desde esta misma página.</p>
+                </div>
+                <div id="forum-post-list" class="forum-post-list">
+                  <p class="forum-empty">Selecciona un hilo para ver los mensajes.</p>
+                </div>
+
+                <form id="forum-reply-form" class="forum-form" hidden>
+                  <p id="forum-reply-target" class="forum-reply-target" hidden></p>
+                  <input id="forum-parent-post-id" type="hidden" />
+                  <textarea id="forum-reply-body" class="forum-textarea" maxlength="4000" placeholder="Responder al hilo..." required></textarea>
+                  <div class="forum-form-actions">
+                    <button
+                      type="submit"
+                      class="forum-action-btn forum-action-p"
+                      data-tooltip="Publicar respuesta"
+                      aria-label="Publicar respuesta"
+                      title="Publicar respuesta"
+                    >P</button>
+                    <button
+                      type="button"
+                      id="forum-cancel-reply"
+                      class="forum-secondary-btn forum-action-btn forum-action-c"
+                      data-tooltip="Cancelar respuesta"
+                      aria-label="Cancelar respuesta"
+                      title="Cancelar respuesta"
+                      hidden
+                    >C</button>
+                  </div>
+                </form>
+              </section>
+            </div>
+          </section>
+        )}
+      </section>
+    </main>
+    <div id="forum-media-modal" class="forum-media-modal" hidden aria-hidden="true">
+      <div class="forum-media-modal-stage" role="dialog" aria-modal="true" aria-label="Media ampliado">
+        <button
+          id="forum-media-modal-close"
+          class="forum-media-modal-close"
+          type="button"
+          aria-label="Cerrar media ampliado"
+          title="Cerrar"
+        >×</button>
+        <div id="forum-media-modal-content" class="forum-media-modal-content"></div>
+      </div>
+    </div>
+    <Footer />
+
+    <script is:inline>
+      const FORUM_READ_PREFIX = 'forum:read:';
+
+      function parseForumReadState(value) {
+        if (!value) return null;
+        try {
+          return JSON.parse(value);
+        } catch {
+          return null;
+        }
+      }
+
+      function computeUnreadCount(totalMessages, storedState) {
+        const total = Number(totalMessages);
+        if (!Number.isFinite(total) || total <= 0) return 0;
+
+        if (!storedState || typeof storedState !== 'object') {
+          return total;
+        }
+
+        const seen = Number(storedState.messageTotal);
+        if (!Number.isFinite(seen) || seen < 0) return total;
+        return Math.max(0, total - seen);
+      }
+
+      function refreshForumUnreadBadges() {
+        const links = document.querySelectorAll('[data-forum-scope-key]');
+        links.forEach((link) => {
+          const scopeKey = link.getAttribute('data-forum-scope-key') || '';
+          const total = Number(link.getAttribute('data-forum-total') || '0');
+          const unreadNode = link.querySelector('.forum-count-unread');
+          if (!scopeKey || !unreadNode) return;
+
+          const storedRaw = localStorage.getItem(FORUM_READ_PREFIX + scopeKey);
+          const storedState = parseForumReadState(storedRaw);
+          const unread = computeUnreadCount(total, storedState);
+
+          unreadNode.textContent = String(unread);
+          unreadNode.classList.toggle('is-zero', unread === 0);
+        });
+      }
+
+      function formatForumDate(value) {
+        if (!value) return 'Sin fecha';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return 'Sin fecha';
+        return new Intl.DateTimeFormat('es', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(date);
+      }
+
+      function formatForumMessageTime(value) {
+        if (!value) return 'Sin fecha';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return 'Sin fecha';
+
+        const options = {
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        };
+
+        if (date.getFullYear() !== new Date().getFullYear()) {
+          options.year = 'numeric';
+        }
+
+        return new Intl.DateTimeFormat('es', options)
+          .format(date)
+          .replace(',', ' ·');
+      }
+
+      function getForumDayKey(value) {
+        const date = new Date(value || '');
+        if (Number.isNaN(date.getTime())) return '';
+        return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+      }
+
+      function formatForumDayLabel(value) {
+        const date = new Date(value || '');
+        if (Number.isNaN(date.getTime())) return 'Sin fecha';
+
+        const now = new Date();
+        const todayKey = getForumDayKey(now.toISOString());
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yesterdayKey = getForumDayKey(yesterday.toISOString());
+        const dateKey = getForumDayKey(value);
+
+        if (dateKey === todayKey) return 'Hoy';
+        if (dateKey === yesterdayKey) return 'Ayer';
+
+        return new Intl.DateTimeFormat('es', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+        }).format(date);
+      }
+
+      function normalizeForumBoardSlug(value) {
+        return String(value || '').trim().toLowerCase() || 'general';
+      }
+
+      function getForumAvatarInitials(value) {
+        const parts = String(value || '')
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2);
+        if (parts.length === 0) return '?';
+        return parts.map((part) => part[0]?.toUpperCase() || '').join('');
+      }
+
+      function createForumReaderAvatar(name, imageUrl) {
+        const avatar = document.createElement('div');
+        avatar.className = 'forum-reader-avatar';
+
+        const normalizedImageUrl = String(imageUrl || '').trim();
+        if (normalizedImageUrl) {
+          const img = document.createElement('img');
+          img.src = normalizedImageUrl;
+          img.alt = `Avatar de ${name || 'usuario'}`;
+          avatar.appendChild(img);
+          return avatar;
+        }
+
+        avatar.textContent = getForumAvatarInitials(name);
+        return avatar;
+      }
+
+      function getPostTimestamp(post) {
+        return String(post?.createdAt || post?.updatedAt || '');
+      }
+
+      function resolveReplyDepth(post, postsById, depthCache) {
+        if (!post?.id) return 0;
+        if (depthCache.has(post.id)) return depthCache.get(post.id) || 0;
+
+        const parentId = String(post.parentPostId || '').trim();
+        if (!parentId || !postsById.has(parentId)) {
+          depthCache.set(post.id, 0);
+          return 0;
+        }
+
+        const parentDepth = resolveReplyDepth(postsById.get(parentId), postsById, depthCache);
+        const depth = Math.min(parentDepth + 1, 2);
+        depthCache.set(post.id, depth);
+        return depth;
+      }
+
+      function shouldGroupForumPosts(group, post, depth, timestamp) {
+        if (!group) return false;
+        if (group.authorUserId !== post.authorUserId) return false;
+        if (group.depth !== depth) return false;
+
+        const groupDate = new Date(group.lastTimestamp).getTime();
+        const nextDate = new Date(timestamp).getTime();
+        if (Number.isNaN(groupDate) || Number.isNaN(nextDate)) return false;
+        if (getForumDayKey(group.lastTimestamp) !== getForumDayKey(timestamp)) return false;
+
+        return nextDate - groupDate <= 5 * 60 * 1000;
+      }
+
+      function ensureForumMermaid() {
+        if (window.mermaid?.run) {
+          return Promise.resolve(window.mermaid);
+        }
+
+        if (window.__musikiForumReaderMermaidPromise) {
+          return window.__musikiForumReaderMermaidPromise;
+        }
+
+        window.__musikiForumReaderMermaidPromise = new Promise((resolve) => {
+          const existing = document.querySelector('script[data-forum-reader-mermaid-loader="true"]');
+          if (existing) {
+            existing.addEventListener('load', () => resolve(window.mermaid || null), { once: true });
+            existing.addEventListener('error', () => resolve(null), { once: true });
+            return;
+          }
+
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+          script.defer = true;
+          script.dataset.forumReaderMermaidLoader = 'true';
+          script.onload = () => resolve(window.mermaid || null);
+          script.onerror = () => resolve(null);
+          document.head.appendChild(script);
+        });
+
+        return window.__musikiForumReaderMermaidPromise;
+      }
+
+      function renderForumMermaid(container) {
+        const nodes = Array.from(container.querySelectorAll('.mermaid'));
+        if (nodes.length === 0) return;
+
+        ensureForumMermaid()
+          .then((mermaid) => {
+            if (!mermaid?.run) return;
+            try {
+              mermaid.initialize({ startOnLoad: false, theme: 'default' });
+              mermaid.run({ nodes });
+            } catch (error) {
+              console.error('Forum reader mermaid render error:', error);
+            }
+          })
+          .catch((error) => {
+            console.error('Forum reader mermaid loader error:', error);
+          });
+      }
+
+      function updateThreadQuery(threadId) {
+        const nextUrl = new URL(window.location.href);
+        if (threadId) {
+          nextUrl.searchParams.set('thread', threadId);
+        } else {
+          nextUrl.searchParams.delete('thread');
+        }
+        window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+      }
+
+      function syncActiveSidebarTotals(scopeKey, totalMessages) {
+        if (!scopeKey) return;
+        const links = document.querySelectorAll(`[data-forum-scope-key="${scopeKey}"]`);
+        links.forEach((link) => {
+          link.setAttribute('data-forum-total', String(totalMessages));
+          const totalNode = link.querySelector('.forum-count-total');
+          if (totalNode) totalNode.textContent = String(totalMessages);
+        });
+      }
+
+      function markForumScopeAsRead(scopeKey, totalMessages) {
+        if (!scopeKey) return;
+        localStorage.setItem(
+          FORUM_READ_PREFIX + scopeKey,
+          JSON.stringify({
+            messageTotal: Math.max(0, Number(totalMessages) || 0),
+            lastReadAt: new Date().toISOString(),
+          }),
+        );
+        refreshForumUnreadBadges();
+      }
+
+      async function mountForumReader() {
+        const root = document.getElementById('forum-reader-root');
+        if (!root) {
+          refreshForumUnreadBadges();
+          return;
+        }
+
+        const courseId = root.dataset.courseId || '';
+        const canModerate = root.dataset.canModerate === 'true';
+        const scopeKey = root.dataset.scopeKey || '';
+        const view = root.dataset.view === 'lesson' ? 'lesson' : 'board';
+        const scope = root.dataset.scope || '';
+        const initialThreadId = root.dataset.initialThreadId || '';
+
+        const statusEl = document.getElementById('forum-status');
+        const threadListEl = document.getElementById('forum-thread-list');
+        const newThreadContainer = document.getElementById('forum-new-thread');
+        const newThreadForm = document.getElementById('forum-new-thread-form');
+        const threadTitleInput = document.getElementById('forum-thread-title');
+        const threadBodyInput = document.getElementById('forum-thread-body');
+        const threadStageEl = document.getElementById('forum-thread-stage');
+        const threadHeading = document.getElementById('forum-thread-heading');
+        const threadSummary = document.getElementById('forum-thread-summary');
+        const postListEl = document.getElementById('forum-post-list');
+        const replyForm = document.getElementById('forum-reply-form');
+        const replyBodyInput = document.getElementById('forum-reply-body');
+        const parentPostInput = document.getElementById('forum-parent-post-id');
+        const replyTargetEl = document.getElementById('forum-reply-target');
+        const cancelReplyBtn = document.getElementById('forum-cancel-reply');
+        const newBoardDetails = document.getElementById('forum-new-board-details');
+        const newBoardForm = document.getElementById('forum-new-board-form');
+        const boardTitleInput = document.getElementById('forum-board-title');
+        const boardDescriptionInput = document.getElementById('forum-board-description');
+        const mediaModalEl = document.getElementById('forum-media-modal');
+        const mediaModalContentEl = document.getElementById('forum-media-modal-content');
+        const mediaModalCloseBtn = document.getElementById('forum-media-modal-close');
+
+        if (
+          !statusEl ||
+          !threadListEl ||
+          !newThreadForm ||
+          !threadTitleInput ||
+          !threadBodyInput ||
+          !threadStageEl ||
+          !threadHeading ||
+          !threadSummary ||
+          !postListEl ||
+          !replyForm ||
+          !replyBodyInput ||
+          !parentPostInput ||
+          !replyTargetEl ||
+          !cancelReplyBtn ||
+          !courseId ||
+          !scope
+        ) {
+          refreshForumUnreadBadges();
+          return;
+        }
+
+        const forumState = {
+          courseId,
+          canModerate,
+          mode: view,
+          lessonSlug: view === 'lesson' ? scope : '',
+          boardSlug: view === 'board' ? normalizeForumBoardSlug(scope) : 'general',
+          boards: [],
+          threads: [],
+          selectedThreadId: initialThreadId,
+          canWrite: false,
+          canManageBoards: false,
+        };
+
+        let activeForumModalMedia = null;
+
+        const isDirectForumMediaUrl = (value) =>
+          /\.(png|jpe?g|gif|webp|svg|mp4|webm|mov|m4v|mp3|wav|ogg|m4a)(?:$|[?#])/i.test(String(value || '').trim());
+
+        const getForumMediaSource = (element) => {
+          if (element instanceof HTMLImageElement) return element.currentSrc || element.src || '';
+          if (element instanceof HTMLVideoElement || element instanceof HTMLAudioElement) {
+            return element.currentSrc || element.getAttribute('src') || element.querySelector('source')?.src || '';
+          }
+          if (element instanceof HTMLAnchorElement) return element.href || '';
+          return '';
+        };
+
+        const extractForumMediaTarget = (target) => {
+          if (!(target instanceof Element)) return null;
+          const mermaidEl = target.closest('.forum-post-body .mermaid');
+          if (mermaidEl instanceof HTMLElement) {
+            return {
+              kind: 'diagram',
+              node: mermaidEl.cloneNode(true),
+            };
+          }
+
+          const mediaEl = target.closest('.forum-post-body img, .forum-post-body video, .forum-post-body audio, .forum-post-body a[href]');
+          if (!mediaEl) return null;
+          if (mediaEl instanceof HTMLAnchorElement && !isDirectForumMediaUrl(mediaEl.href)) return null;
+
+          const src = getForumMediaSource(mediaEl);
+          if (!src) return null;
+
+          if (mediaEl instanceof HTMLImageElement || /\.(png|jpe?g|gif|webp|svg)(?:$|[?#])/i.test(src)) {
+            return { kind: 'image', src, alt: mediaEl.getAttribute('alt') || '' };
+          }
+          if (mediaEl instanceof HTMLVideoElement || /\.(mp4|webm|mov|m4v)(?:$|[?#])/i.test(src)) {
+            return { kind: 'video', src };
+          }
+          if (mediaEl instanceof HTMLAudioElement || /\.(mp3|wav|ogg|m4a)(?:$|[?#])/i.test(src)) {
+            return { kind: 'audio', src };
+          }
+          return null;
+        };
+
+        const closeForumMediaModal = () => {
+          if (!(mediaModalEl instanceof HTMLElement) || !(mediaModalContentEl instanceof HTMLElement)) return;
+          if (activeForumModalMedia instanceof HTMLMediaElement) {
+            activeForumModalMedia.pause();
+            activeForumModalMedia.removeAttribute('src');
+            activeForumModalMedia.load();
+          }
+          activeForumModalMedia = null;
+          mediaModalContentEl.replaceChildren();
+          mediaModalEl.hidden = true;
+          mediaModalEl.setAttribute('aria-hidden', 'true');
+          document.documentElement.style.overflow = '';
+        };
+
+        const enableForumMediaZoom = (viewport, target) => {
+          if (!(viewport instanceof HTMLElement) || !(target instanceof HTMLElement)) return;
+
+          let scale = 1;
+          let offsetX = 0;
+          let offsetY = 0;
+          let pointerId = null;
+          let dragOriginX = 0;
+          let dragOriginY = 0;
+          let startOffsetX = 0;
+          let startOffsetY = 0;
+
+          const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+          const applyTransform = () => {
+            if (scale <= 1) {
+              offsetX = 0;
+              offsetY = 0;
+            }
+            target.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+          };
+          const setScale = (nextScale) => {
+            scale = clamp(nextScale, 1, 8);
+            applyTransform();
+          };
+
+          viewport.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            setScale(scale + (event.deltaY < 0 ? 0.24 : -0.24));
+          }, { passive: false });
+
+          target.addEventListener('dblclick', (event) => {
+            event.preventDefault();
+            setScale(scale < 2 ? scale + 1 : 1);
+          });
+
+          viewport.addEventListener('pointerdown', (event) => {
+            if (scale <= 1) return;
+            pointerId = event.pointerId;
+            dragOriginX = event.clientX;
+            dragOriginY = event.clientY;
+            startOffsetX = offsetX;
+            startOffsetY = offsetY;
+            viewport.classList.add('is-dragging');
+            viewport.setPointerCapture(pointerId);
+          });
+
+          viewport.addEventListener('pointermove', (event) => {
+            if (pointerId !== event.pointerId) return;
+            offsetX = startOffsetX + (event.clientX - dragOriginX);
+            offsetY = startOffsetY + (event.clientY - dragOriginY);
+            applyTransform();
+          });
+
+          const stopDragging = (event) => {
+            if (pointerId !== event.pointerId) return;
+            try {
+              viewport.releasePointerCapture(pointerId);
+            } catch {}
+            pointerId = null;
+            viewport.classList.remove('is-dragging');
+          };
+
+          viewport.addEventListener('pointerup', stopDragging);
+          viewport.addEventListener('pointercancel', stopDragging);
+
+          applyTransform();
+        };
+
+        const openForumMediaModal = (payload) => {
+          if (!(mediaModalEl instanceof HTMLElement) || !(mediaModalContentEl instanceof HTMLElement)) return;
+          if (!payload || (!payload.src && payload.kind !== 'diagram')) return;
+
+          let node = null;
+          if (payload.kind === 'image') {
+            const image = document.createElement('img');
+            image.src = payload.src;
+            image.alt = payload.alt || '';
+            image.loading = 'eager';
+            image.decoding = 'async';
+            node = image;
+          } else if (payload.kind === 'video') {
+            const video = document.createElement('video');
+            video.src = payload.src;
+            video.controls = true;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.preload = 'metadata';
+            node = video;
+          } else if (payload.kind === 'audio') {
+            const audio = document.createElement('audio');
+            audio.src = payload.src;
+            audio.controls = true;
+            audio.autoplay = true;
+            audio.preload = 'metadata';
+            node = audio;
+          } else if (payload.kind === 'diagram' && payload.node instanceof HTMLElement) {
+            node = payload.node;
+          }
+
+          if (!node) return;
+
+          if (payload.kind === 'image' && /\.svg(?:$|[?#])/i.test(payload.src)) {
+            node.dataset.forumSvg = 'true';
+          }
+
+          if (payload.kind === 'image' || payload.kind === 'video' || payload.kind === 'diagram') {
+            const viewport = document.createElement('div');
+            viewport.className = 'forum-media-modal-viewport';
+            viewport.appendChild(node);
+            mediaModalContentEl.replaceChildren(viewport);
+            enableForumMediaZoom(viewport, node);
+          } else {
+            mediaModalContentEl.replaceChildren(node);
+          }
+          activeForumModalMedia = node instanceof HTMLMediaElement ? node : null;
+          mediaModalEl.hidden = false;
+          mediaModalEl.setAttribute('aria-hidden', 'false');
+          document.documentElement.style.overflow = 'hidden';
+        };
+
+        let latestPostRequestToken = 0;
+
+        const setForumStatus = (message = '', tone = 'info') => {
+          if (!message) {
+            statusEl.hidden = true;
+            statusEl.textContent = '';
+            statusEl.classList.remove('error');
+            return;
+          }
+
+          statusEl.hidden = false;
+          statusEl.textContent = message;
+          statusEl.classList.toggle('error', tone === 'error');
+        };
+
+        const getSelectedThread = () =>
+          forumState.threads.find((thread) => String(thread?.id || '') === String(forumState.selectedThreadId || '')) || null;
+
+        const getForumScopePayload = () => (
+          forumState.mode === 'board'
+            ? { boardSlug: forumState.boardSlug }
+            : { lessonSlug: forumState.lessonSlug }
+        );
+
+        const getForumScopeMessageTotal = () =>
+          forumState.threads.reduce((sum, thread) => {
+            const messageCount = Number(thread?.messageCount);
+            if (Number.isFinite(messageCount) && messageCount >= 0) return sum + messageCount;
+            const postCount = Number(thread?.postCount);
+            if (Number.isFinite(postCount) && postCount >= 0) return sum + postCount;
+            return sum;
+          }, 0);
+
+        const syncThreadMeta = () => {
+          const activeThread = getSelectedThread();
+          threadHeading.textContent = activeThread?.title || 'Mensajes';
+          threadSummary.textContent = activeThread
+            ? `${activeThread.createdByName || 'Usuario'} · ${Math.max(0, Number(activeThread.messageCount || activeThread.postCount || 0))} mensajes`
+            : 'Selecciona un hilo para leerlo y responder desde esta misma página.';
+        };
+
+        const setThreadLoadingState = () => {
+          postListEl.innerHTML = '<p class="forum-empty">Cargando mensajes...</p>';
+        };
+
+        const clearReplyTarget = () => {
+          parentPostInput.value = '';
+          replyTargetEl.textContent = '';
+          replyTargetEl.hidden = true;
+          cancelReplyBtn.hidden = true;
+          replyBodyInput.placeholder = 'Responder al hilo...';
+        };
+
+        const setReplyTarget = (postId, authorName) => {
+          parentPostInput.value = postId;
+          replyTargetEl.hidden = false;
+          replyTargetEl.textContent = `Responder a ${authorName || 'usuario'}`;
+          cancelReplyBtn.hidden = false;
+          replyBodyInput.placeholder = `Responder a ${authorName || 'usuario'}...`;
+          replyBodyInput.focus();
+        };
+
+        const updateReplyFormVisibility = (canReply) => {
+          if (!forumState.selectedThreadId || !canReply) {
+            replyForm.hidden = true;
+            clearReplyTarget();
+            return;
+          }
+
+          replyForm.hidden = false;
+        };
+
+        const buildScopeUrl = (nextView, nextScope, threadId = '') => {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set('course', courseId);
+          nextUrl.searchParams.set('view', nextView);
+          nextUrl.searchParams.set('scope', nextScope);
+          if (threadId) {
+            nextUrl.searchParams.set('thread', threadId);
+          } else {
+            nextUrl.searchParams.delete('thread');
+          }
+          return nextUrl;
+        };
+
+        const escapeHtml = (value) =>
+          String(value || '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+
+        const getForumBodyHtml = (post) => {
+          if (typeof post?.bodyHtml === 'string' && post.bodyHtml.trim().length > 0) {
+            return post.bodyHtml;
+          }
+
+          const plain = escapeHtml(post?.body || '').replaceAll('\n', '<br />');
+          return `<p>${plain}</p>`;
+        };
+
+        const setForumBodyContent = (container, post) => {
+          const forumBodyHasRenderableMedia = (root) => {
+            if (!(root instanceof HTMLElement)) return false;
+            return Boolean(
+              root.querySelector(
+                'img, audio, video, iframe, svg, .mermaid, .katex, .lily-score, .obsidian-media-embed-card',
+              ),
+            );
+          };
+
+          const normalizeForumBodyNode = (root) => {
+            if (!(root instanceof HTMLElement)) return;
+            root.style.color = 'var(--forum-text-primary, var(--c-fg, #1c1f23))';
+            root.style.opacity = '1';
+            root.style.visibility = 'visible';
+
+            root.querySelectorAll('[hidden]').forEach((node) => {
+              if (node instanceof HTMLElement) {
+                node.hidden = false;
+                node.removeAttribute('hidden');
+              }
+            });
+
+            root.querySelectorAll('*').forEach((node) => {
+              if (!(node instanceof HTMLElement)) return;
+              if (node.closest('svg, .mermaid, .katex, .lily-score')) return;
+              if (node.style.display === 'none') node.style.display = '';
+              if (node.style.visibility === 'hidden') node.style.visibility = 'visible';
+              if (node.style.opacity === '0') node.style.opacity = '1';
+              if (!node.style.color) node.style.color = 'inherit';
+            });
+          };
+
+          container.replaceChildren();
+
+          const nextHtml = getForumBodyHtml(post);
+          try {
+            const range = document.createRange();
+            range.selectNode(container);
+            const fragment = range.createContextualFragment(nextHtml);
+            if (fragment.childNodes.length > 0) {
+              container.appendChild(fragment);
+            }
+          } catch {
+            container.innerHTML = nextHtml;
+          }
+
+          if (!String(container.textContent || '').trim() && !forumBodyHasRenderableMedia(container)) {
+            const plainFallback = String(post?.body || '').trim();
+            const paragraph = document.createElement('p');
+            paragraph.innerHTML = plainFallback
+              ? escapeHtml(plainFallback).replaceAll('\n', '<br />')
+              : 'Sin contenido.';
+            container.replaceChildren(paragraph);
+          }
+
+          normalizeForumBodyNode(container);
+
+          container.querySelectorAll('a[href]').forEach((anchor) => {
+            if (!(anchor instanceof HTMLAnchorElement)) return;
+            if (!isDirectForumMediaUrl(anchor.href)) return;
+            anchor.dataset.forumMediaLink = 'true';
+          });
+        };
+
+        const replaceForumTextareaSelection = (textarea, nextText, start, end, cursorStart, cursorEnd = cursorStart) => {
+          const value = textarea.value || '';
+          textarea.value = `${value.slice(0, start)}${nextText}${value.slice(end)}`;
+          textarea.setSelectionRange(cursorStart, cursorEnd);
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        const FORUM_EDITOR_CURSOR_TOKEN = '<cursor here>';
+        const FORUM_EDITOR_TEMPLATES = {
+          lilypond: {
+            title: 'Insertar bloque LilyPond',
+            icon:
+              '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.75 2v7.1"/><path d="M10.75 2 5.25 3.4v7.35"/><path d="M10.75 5.1 5.25 6.5"/><ellipse cx="4.1" cy="11.8" rx="1.85" ry="1.35"/><ellipse cx="9.6" cy="10.35" rx="1.85" ry="1.35"/></svg>',
+            snippet:
+              '```lily\n'
+              + '\\version "2.24.0" % Specify your LilyPond version\n'
+              + '\\paper { \n'
+              + 'tagline = ##f  \n'
+              + 'paper-height=#(* 2 cm) \n'
+              + 'paper-width=#(* 10 cm)  \n'
+              + 'system-count=#1 }\n\n'
+              + '\\score {\n'
+              + `\\new Staff \\relative{c'4 ${FORUM_EDITOR_CURSOR_TOKEN}}\n`
+              + '}\n'
+              + '```',
+            cursorToken: FORUM_EDITOR_CURSOR_TOKEN,
+          },
+          mermaid: {
+            title: 'Insertar bloque Mermaid',
+            icon:
+              '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2" width="3.5" height="2.5" rx="0.45"/><rect x="10.75" y="2" width="3.5" height="2.5" rx="0.45"/><rect x="6.25" y="11.5" width="3.5" height="2.5" rx="0.45"/><path d="M5.25 3.25h5.5"/><path d="M12.5 4.5v2.05c0 .55-.45 1-1 1H8"/><path d="M3.5 4.5v2.05c0 .55.45 1 1 1H8"/><path d="M8 7.55v3.95"/></svg>',
+            snippet: `\`\`\`mermaid
+graph LR
+a[node] -->|edge| b[hub]
+\`\`\``,
+            cursorSearch: 'node',
+          },
+        };
+
+        const insertForumTemplate = (textarea, template) => {
+          if (!textarea || !template?.snippet) return;
+
+          const start = textarea.selectionStart ?? 0;
+          const end = textarea.selectionEnd ?? start;
+          let snippet = template.snippet;
+          let cursorOffset = snippet.length;
+          let selectionLength = 0;
+
+          if (template.cursorToken && snippet.includes(template.cursorToken)) {
+            cursorOffset = snippet.indexOf(template.cursorToken);
+            snippet = snippet.replace(template.cursorToken, '');
+          } else if (template.cursorSearch && snippet.includes(template.cursorSearch)) {
+            cursorOffset = snippet.indexOf(template.cursorSearch);
+            selectionLength = template.cursorSearch.length;
+          }
+
+          replaceForumTextareaSelection(
+            textarea,
+            snippet,
+            start,
+            end,
+            start + cursorOffset,
+            start + cursorOffset + selectionLength,
+          );
+          textarea.focus();
+        };
+
+        const createForumTemplateButton = (textarea, templateKey) => {
+          const template = FORUM_EDITOR_TEMPLATES[templateKey];
+          if (!template) return null;
+
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'forum-action-btn forum-action-f forum-editor-action-btn';
+          button.title = template.title;
+          button.setAttribute('aria-label', template.title);
+          button.dataset.tooltip = template.title;
+          button.innerHTML = template.icon;
+          button.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+          });
+          button.addEventListener('click', () => insertForumTemplate(textarea, template));
+          return button;
+        };
+
+        const ensureForumDropzone = (textarea) => {
+          if (!textarea) return null;
+          const existingParent = textarea.parentElement;
+          if (existingParent && existingParent.classList.contains('forum-editor-dropzone')) {
+            return existingParent;
+          }
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'forum-editor-dropzone';
+
+          const overlay = document.createElement('div');
+          overlay.className = 'forum-editor-dropzone-overlay';
+          overlay.setAttribute('aria-hidden', 'true');
+
+          const label = document.createElement('span');
+          label.className = 'forum-editor-dropzone-label';
+          label.textContent = 'Drop file';
+          overlay.appendChild(label);
+
+          textarea.parentNode?.insertBefore(wrapper, textarea);
+          wrapper.appendChild(textarea);
+          wrapper.appendChild(overlay);
+          return wrapper;
+        };
+
+        const createForumUploadButton = (textarea) => {
+          if (!textarea) return null;
+
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.multiple = true;
+          input.hidden = true;
+          input.accept = '.png,.jpg,.jpeg,.gif,.webp,.svg,.avif,.mp3,.wav,.ogg,.m4a,.aac,.flac,.mp4,.m4v,.mov,.webm,.ogv,image/*,audio/*,video/*';
+
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'forum-action-btn forum-action-f forum-editor-action-btn';
+          button.title = 'Insertar archivo';
+          button.setAttribute('aria-label', 'Insertar archivo');
+          button.dataset.tooltip = 'Insertar archivo';
+          button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.15 8.95 10.9 4.2a2.1 2.1 0 0 1 2.95 2.95L8.1 12.9A3.3 3.3 0 1 1 3.45 8.25l5.35-5.35"/><path d="M5.7 11.05 11 5.75"/></svg>';
+          button.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+          });
+          button.addEventListener('click', () => {
+            input.click();
+          });
+          input.addEventListener('change', async () => {
+            const files = Array.from(input.files || []);
+            if (files.length > 0) {
+              await handleForumMediaUpload(textarea, files, 'selector');
+            }
+            input.value = '';
+          });
+
+          button._forumFileInput = input;
+          return button;
+        };
+
+        const mountForumEditorActions = (textarea, explicitActions = null) => {
+          if (!textarea || textarea.dataset.forumEditorActionsEnhanced === 'true') return;
+
+          const actions = explicitActions instanceof HTMLElement
+            ? explicitActions
+            : textarea.closest('form, .forum-edit-form')?.querySelector('.forum-form-actions');
+          if (!(actions instanceof HTMLElement)) return;
+
+          textarea.dataset.forumEditorActionsEnhanced = 'true';
+
+          const spacer = document.createElement('span');
+          spacer.className = 'forum-editor-action-spacer';
+          spacer.setAttribute('aria-hidden', 'true');
+
+          const lilypondButton = createForumTemplateButton(textarea, 'lilypond');
+          const mermaidButton = createForumTemplateButton(textarea, 'mermaid');
+          const uploadButton = createForumUploadButton(textarea);
+
+          if (spacer) actions.prepend(spacer);
+          if (uploadButton?._forumFileInput) actions.appendChild(uploadButton._forumFileInput);
+          if (uploadButton) actions.prepend(uploadButton);
+          if (mermaidButton) actions.prepend(mermaidButton);
+          if (lilypondButton) actions.prepend(lilypondButton);
+        };
+
+        const attachForumTypingHelpers = (textarea) => {
+          if (!textarea || textarea.dataset.forumTypingEnhanced === 'true') return;
+          textarea.dataset.forumTypingEnhanced = 'true';
+
+          const openerPairs = {
+            '(': ')',
+            '[': ']',
+            '{': '}',
+            '"': '"',
+            "'": "'",
+            '`': '`',
+          };
+          const closers = new Set(Object.values(openerPairs));
+
+          textarea.addEventListener('keydown', (event) => {
+            const start = textarea.selectionStart ?? 0;
+            const end = textarea.selectionEnd ?? 0;
+            const value = textarea.value || '';
+
+            if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+              event.preventDefault();
+              replaceForumTextareaSelection(textarea, '  ', start, end, start + 2);
+              return;
+            }
+
+            if (
+              event.key === 'Enter' &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.altKey &&
+              !event.shiftKey &&
+              start === end
+            ) {
+              const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+              const line = value.slice(lineStart, start);
+              if (/^```[A-Za-z0-9_+-]*\s*$/.test(line)) {
+                event.preventDefault();
+                replaceForumTextareaSelection(textarea, '\n\n```', start, end, start + 1);
+                return;
+              }
+            }
+
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+            if (closers.has(event.key) && start === end && value.slice(start, start + 1) === event.key) {
+              event.preventDefault();
+              textarea.setSelectionRange(start + 1, start + 1);
+              return;
+            }
+
+            const closer = openerPairs[event.key];
+            if (!closer) return;
+
+            if ((event.key === '"' || event.key === "'") && start === end) {
+              const prevChar = value.slice(Math.max(0, start - 1), start);
+              const nextChar = value.slice(start, start + 1);
+              if (/[A-Za-z0-9_]/.test(prevChar) || /[A-Za-z0-9_]/.test(nextChar)) return;
+            }
+
+            event.preventDefault();
+            const selection = value.slice(start, end);
+            const wrapped = `${event.key}${selection}${closer}`;
+            if (selection) {
+              replaceForumTextareaSelection(textarea, wrapped, start, end, start + 1, start + 1 + selection.length);
+              return;
+            }
+
+            replaceForumTextareaSelection(textarea, wrapped, start, end, start + 1);
+          });
+        };
+
+        const getForumUploadKind = (file) => {
+          if (!(file instanceof File)) return '';
+          const mime = String(file.type || '').toLowerCase();
+          if (mime.startsWith('image/')) return 'image';
+          if (mime.startsWith('audio/')) return 'audio';
+          if (mime.startsWith('video/')) return 'video';
+          const fileName = String(file.name || '').toLowerCase();
+          if (/\.(png|jpe?g|gif|webp|svg|avif)$/i.test(fileName)) return 'image';
+          if (/\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(fileName)) return 'audio';
+          if (/\.(mp4|m4v|mov|webm|ogv)$/i.test(fileName)) return 'video';
+          return '';
+        };
+
+        const extractForumUploadFiles = (fileLikeCollection, itemLikeCollection = null) => {
+          const directFiles = Array.from(fileLikeCollection || []).filter((file) => {
+            return getForumUploadKind(file) !== '';
+          });
+          if (directFiles.length > 0) return directFiles;
+
+          return Array.from(itemLikeCollection || [])
+            .map((item) => {
+              if (!item || item.kind !== 'file' || typeof item.getAsFile !== 'function') return null;
+              return item.getAsFile();
+            })
+            .filter((file) => {
+              return getForumUploadKind(file) !== '';
+            });
+        };
+
+        const uploadForumMediaFile = async (file) => {
+          const uploadForm = new FormData();
+          uploadForm.append('file', file, file.name || 'forum-upload');
+
+          const response = await fetch('/api/forum/upload-image', {
+            method: 'POST',
+            body: uploadForm,
+          });
+
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(payload?.error || 'No se pudo subir el archivo.');
+          }
+
+          const mediaUrl = typeof payload?.url === 'string' ? payload.url.trim() : '';
+          const kind = typeof payload?.kind === 'string' ? payload.kind.trim() : getForumUploadKind(file);
+          if (!mediaUrl) {
+            throw new Error('El servidor no devolvió una URL de archivo.');
+          }
+
+          return { url: mediaUrl, kind };
+        };
+
+        const insertForumMediaEmbeds = (textarea, mediaEntries) => {
+          if (!textarea || !Array.isArray(mediaEntries) || mediaEntries.length === 0) return;
+
+          const start = textarea.selectionStart ?? 0;
+          const end = textarea.selectionEnd ?? start;
+          const currentValue = textarea.value || '';
+          const previousChar = start > 0 ? currentValue.slice(start - 1, start) : '';
+          const nextChar = end < currentValue.length ? currentValue.slice(end, end + 1) : '';
+
+          let snippet = mediaEntries.map((entry) => `![](${entry.url})`).join('\n');
+          if (previousChar && previousChar !== '\n') snippet = `\n${snippet}`;
+          if (nextChar && nextChar !== '\n') snippet = `${snippet}\n`;
+
+          replaceForumTextareaSelection(textarea, snippet, start, end, start + snippet.length);
+          textarea.focus();
+        };
+
+        const describeForumUploadBatch = (files) => {
+          let imageCount = 0;
+          let audioCount = 0;
+          let videoCount = 0;
+          for (const file of files) {
+            const kind = getForumUploadKind(file);
+            if (kind === 'image') imageCount += 1;
+            if (kind === 'audio') audioCount += 1;
+            if (kind === 'video') videoCount += 1;
+          }
+
+          const labels = [];
+          if (imageCount > 0) labels.push(imageCount === 1 ? 'imagen' : `${imageCount} imágenes`);
+          if (audioCount > 0) labels.push(audioCount === 1 ? 'audio' : `${audioCount} audios`);
+          if (videoCount > 0) labels.push(videoCount === 1 ? 'video' : `${videoCount} videos`);
+          return labels.join(' y ') || 'archivo';
+        };
+
+        const handleForumMediaUpload = async (textarea, files, sourceLabel) => {
+          const uploadFiles = extractForumUploadFiles(files);
+          if (!textarea || uploadFiles.length === 0) return false;
+
+          const uploadLabel = describeForumUploadBatch(uploadFiles);
+          textarea.closest('.forum-editor-dropzone')?.classList.add('is-uploading');
+          textarea.classList.add('is-uploading');
+          setStatus(`Subiendo ${uploadLabel} desde ${sourceLabel}...`, 'info');
+
+          try {
+            const uploadedEntries = [];
+            for (const file of uploadFiles) {
+              const uploaded = await uploadForumMediaFile(file);
+              uploadedEntries.push(uploaded);
+            }
+
+            insertForumMediaEmbeds(textarea, uploadedEntries);
+            setStatus(
+              uploadFiles.length === 1 ? 'Archivo insertado.' : `${uploadFiles.length} archivos insertados.`,
+              'info',
+            );
+            return true;
+          } catch (error) {
+            console.error('Forum media upload client error:', error);
+            setStatus(error?.message || 'No se pudo subir el archivo.', 'error');
+            return true;
+          } finally {
+            textarea.closest('.forum-editor-dropzone')?.classList.remove('is-uploading');
+            textarea.closest('.forum-editor-dropzone')?.classList.remove('is-upload-target');
+            textarea.classList.remove('is-uploading');
+            textarea.classList.remove('is-upload-target');
+          }
+        };
+
+        const attachForumEditor = (textarea) => {
+          if (!textarea || textarea.dataset.forumEditorEnhanced === 'true') return;
+          textarea.dataset.forumEditorEnhanced = 'true';
+          const dropzone = ensureForumDropzone(textarea);
+          let dragDepth = 0;
+          textarea.spellcheck = false;
+          textarea.autocomplete = 'off';
+          textarea.autocapitalize = 'off';
+          textarea.setAttribute('autocorrect', 'off');
+          attachForumTypingHelpers(textarea);
+          textarea.classList.add('forum-editor-input');
+          mountForumEditorActions(textarea);
+
+          textarea.addEventListener('paste', async (event) => {
+            const uploadFiles = extractForumUploadFiles(
+              event.clipboardData?.files,
+              event.clipboardData?.items,
+            );
+            if (uploadFiles.length === 0) return;
+
+            event.preventDefault();
+            await handleForumMediaUpload(textarea, uploadFiles, 'portapapeles');
+          });
+
+          textarea.addEventListener('dragover', (event) => {
+            const uploadFiles = extractForumUploadFiles(
+              event.dataTransfer?.files,
+              event.dataTransfer?.items,
+            );
+            if (uploadFiles.length === 0) return;
+
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+            if (dropzone) dropzone.classList.add('is-upload-target');
+            textarea.classList.add('is-upload-target');
+          });
+
+          textarea.addEventListener('dragenter', (event) => {
+            const uploadFiles = extractForumUploadFiles(
+              event.dataTransfer?.files,
+              event.dataTransfer?.items,
+            );
+            if (uploadFiles.length === 0) return;
+
+            event.preventDefault();
+            dragDepth += 1;
+            if (dropzone) dropzone.classList.add('is-upload-target');
+            textarea.classList.add('is-upload-target');
+          });
+
+          textarea.addEventListener('dragleave', () => {
+            dragDepth = Math.max(0, dragDepth - 1);
+            if (dragDepth === 0) {
+              if (dropzone) dropzone.classList.remove('is-upload-target');
+              textarea.classList.remove('is-upload-target');
+            }
+          });
+
+          textarea.addEventListener('drop', async (event) => {
+            const uploadFiles = extractForumUploadFiles(
+              event.dataTransfer?.files,
+              event.dataTransfer?.items,
+            );
+            if (uploadFiles.length === 0) return;
+
+            event.preventDefault();
+            dragDepth = 0;
+            if (dropzone) dropzone.classList.remove('is-upload-target');
+            textarea.classList.remove('is-upload-target');
+            await handleForumMediaUpload(textarea, uploadFiles, 'arrastre');
+          });
+        };
+
+        const isForumPostEdited = (post) => {
+          if (!post?.createdAt || !post?.updatedAt) return false;
+          const createdAt = new Date(post.createdAt);
+          const updatedAt = new Date(post.updatedAt);
+          if (Number.isNaN(createdAt.getTime()) || Number.isNaN(updatedAt.getTime())) return false;
+          return Math.abs(updatedAt.getTime() - createdAt.getTime()) > 1000;
+        };
+
+        const getForumInitials = (name) => {
+          const cleaned = String(name || '').trim();
+          if (!cleaned) return 'U';
+          const parts = cleaned.split(/\s+/).filter(Boolean);
+          if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+          return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+        };
+
+        const createForumAvatar = (authorName, authorImage) => {
+          const createFallback = () => {
+            const fallback = document.createElement('span');
+            fallback.className = 'forum-post-avatar';
+            fallback.textContent = getForumInitials(authorName);
+            return fallback;
+          };
+
+          const imageUrl = typeof authorImage === 'string' ? authorImage.trim() : '';
+          if (!imageUrl) return createFallback();
+
+          const img = document.createElement('img');
+          img.className = 'forum-post-avatar';
+          img.src = imageUrl;
+          img.alt = '';
+          img.loading = 'lazy';
+          img.decoding = 'async';
+          img.referrerPolicy = 'no-referrer';
+          img.addEventListener('error', () => {
+            img.replaceWith(createFallback());
+          }, { once: true });
+          return img;
+        };
+
+        const renderPosts = (posts, canReply, canVote) => {
+          postListEl.innerHTML = '';
+          syncThreadMeta();
+          updateReplyFormVisibility(canReply);
+
+          if (!forumState.selectedThreadId) {
+            const empty = document.createElement('p');
+            empty.className = 'forum-empty';
+            empty.textContent = 'Selecciona un hilo para ver los mensajes.';
+            postListEl.appendChild(empty);
+            return;
+          }
+
+          const visiblePosts = Array.isArray(posts)
+            ? posts.filter((post) => String(post?.status || '').toLowerCase() !== 'deleted')
+            : [];
+
+          if (visiblePosts.length === 0) {
+            const empty = document.createElement('p');
+            empty.className = 'forum-empty';
+            empty.textContent = 'Este hilo todavía no tiene mensajes.';
+            postListEl.appendChild(empty);
+            return;
+          }
+
+          const postsById = new Map(visiblePosts.map((post) => [post.id, post]));
+          const childrenByParent = new Map();
+
+          visiblePosts.forEach((post) => {
+            const parentKey = post.parentPostId && postsById.has(post.parentPostId) ? post.parentPostId : 'root';
+            if (!childrenByParent.has(parentKey)) childrenByParent.set(parentKey, []);
+            childrenByParent.get(parentKey).push(post);
+          });
+
+          const fragment = document.createDocumentFragment();
+          const rootPosts = childrenByParent.get('root') || [];
+          const opPostId = rootPosts[0]?.id || visiblePosts[0]?.id || '';
+
+          const appendChildren = (parentId, depth) => {
+            const children = childrenByParent.get(parentId) || [];
+            children.forEach((post) => {
+              const card = document.createElement('article');
+              card.className = 'forum-post';
+              if (depth > 0) {
+                card.classList.add('forum-post-reply');
+                card.style.marginLeft = `${Math.min(depth, 2) * 0.72}rem`;
+              }
+              if (post.id === opPostId) {
+                card.classList.add('forum-post-op');
+              }
+              const normalizedRole = String(post.authorRole || '').trim().toLowerCase();
+              if (normalizedRole === 'teacher') {
+                card.classList.add('forum-post-role-instructor');
+              } else if (normalizedRole === 'student') {
+                card.classList.add('forum-post-role-student');
+              }
+
+              const identity = document.createElement('aside');
+              identity.className = 'forum-post-identity';
+              const authorName = post.authorName || 'Usuario';
+              identity.appendChild(createForumAvatar(authorName, post.authorImage));
+
+              const author = document.createElement('span');
+              author.className = 'forum-post-name';
+              author.textContent = authorName;
+              identity.appendChild(author);
+
+              const main = document.createElement('div');
+              main.className = 'forum-post-main';
+
+              const header = document.createElement('div');
+              header.className = 'forum-post-header';
+              const date = document.createElement('span');
+              date.className = 'forum-post-date';
+              const createdLabel = formatForumDate(post.createdAt);
+              date.textContent = isForumPostEdited(post)
+                ? `${createdLabel} • editado ${formatForumDate(post.updatedAt)}`
+                : createdLabel;
+              header.appendChild(date);
+              main.appendChild(header);
+
+              const body = document.createElement('div');
+              body.className = 'forum-post-body';
+              setForumBodyContent(body, post);
+              main.appendChild(body);
+
+              const canEditPost = Boolean(post.canEdit || forumState.canModerate);
+              const canDeletePost = Boolean(post.canDelete || forumState.canModerate);
+              const canVotePost = Boolean(canVote);
+
+              if (canReply || canEditPost || canDeletePost || canVotePost) {
+                const actions = document.createElement('div');
+                actions.className = 'forum-post-actions';
+
+                let replyButton = null;
+                let reactionButtons = [];
+
+                if (canReply) {
+                  replyButton = document.createElement('button');
+                  replyButton.type = 'button';
+                  replyButton.className = 'forum-post-reply-btn forum-action-btn forum-action-r';
+                  replyButton.textContent = 'R';
+                  replyButton.dataset.tooltip = 'Responder';
+                  replyButton.title = 'Responder';
+                  replyButton.setAttribute('aria-label', 'Responder');
+                  replyButton.addEventListener('click', () => {
+                    setReplyTarget(post.id, post.authorName || 'usuario');
+                  });
+                  actions.appendChild(replyButton);
+                }
+
+                if (canVotePost) {
+                  const reactionGroup = document.createElement('div');
+                  reactionGroup.className = 'forum-post-reactions';
+                  const reactionDefs = [
+                    { value: 1, key: 'useful', icon: '👍', label: 'Útil', className: 'forum-post-reaction-useful' },
+                    { value: 2, key: 'clarifies', icon: '💡', label: 'Aclara', className: 'forum-post-reaction-clarifies' },
+                    { value: 3, key: 'reference', icon: '📎', label: 'Referencia valiosa', className: 'forum-post-reaction-reference' },
+                  ];
+
+                  const initialCounts = post && typeof post.reactionCounts === 'object' ? post.reactionCounts : null;
+                  const reactionCounts = {
+                    useful: Math.max(0, Number(initialCounts?.useful) || 0),
+                    clarifies: Math.max(0, Number(initialCounts?.clarifies) || 0),
+                    reference: Math.max(0, Number(initialCounts?.reference) || 0),
+                  };
+
+                  let currentMyReaction = Number(post?.myReaction ?? post?.myVote ?? 0);
+                  if (![1, 2, 3].includes(currentMyReaction)) currentMyReaction = 0;
+
+                  const reactionCountEls = {};
+                  const buttonByReactionValue = new Map();
+
+                  const applyReactionState = () => {
+                    reactionDefs.forEach((def) => {
+                      const button = buttonByReactionValue.get(def.value);
+                      if (!button) return;
+                      const isActive = currentMyReaction === def.value;
+                      button.classList.toggle('is-active', isActive);
+                      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                      const countEl = reactionCountEls[def.key];
+                      if (countEl) {
+                        countEl.textContent = String(Math.max(0, Number(reactionCounts[def.key]) || 0));
+                      }
+                    });
+                  };
+
+                  const submitReaction = async (nextReaction) => {
+                    reactionButtons.forEach((button) => {
+                      button.disabled = true;
+                    });
+
+                    try {
+                      const response = await fetch(`/api/forum/posts/${encodeURIComponent(post.id)}/vote`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ value: nextReaction }),
+                      });
+                      const payload = await response.json().catch(() => ({}));
+                      if (!response.ok) {
+                        throw new Error(payload?.error || 'No se pudo registrar la reacción.');
+                      }
+
+                      const payloadCounts = payload?.reactionCounts;
+                      if (payloadCounts && typeof payloadCounts === 'object') {
+                        reactionCounts.useful = Math.max(0, Number(payloadCounts.useful) || 0);
+                        reactionCounts.clarifies = Math.max(0, Number(payloadCounts.clarifies) || 0);
+                        reactionCounts.reference = Math.max(0, Number(payloadCounts.reference) || 0);
+                      }
+
+                      const nextMyReaction = Number(payload?.myReaction ?? payload?.myVote ?? 0);
+                      currentMyReaction = [1, 2, 3].includes(nextMyReaction) ? nextMyReaction : 0;
+                      applyReactionState();
+                    } catch (error) {
+                      console.error('Forum reaction error:', error);
+                      setForumStatus(error?.message || 'No se pudo registrar la reacción.', 'error');
+                    } finally {
+                      reactionButtons.forEach((button) => {
+                        button.disabled = false;
+                      });
+                    }
+                  };
+
+                  reactionDefs.forEach((def) => {
+                    const reactionItem = document.createElement('div');
+                    reactionItem.className = 'forum-post-reaction-item';
+
+                    const reactionButton = document.createElement('button');
+                    reactionButton.type = 'button';
+                    reactionButton.className = `forum-post-reaction-btn forum-action-btn ${def.className}`;
+                    reactionButton.textContent = def.icon;
+                    reactionButton.dataset.tooltip = def.label;
+                    reactionButton.title = def.label;
+                    reactionButton.setAttribute('aria-label', def.label);
+                    reactionButton.setAttribute('aria-pressed', 'false');
+                    reactionButton.addEventListener('click', () => {
+                      submitReaction(currentMyReaction === def.value ? 0 : def.value);
+                    });
+
+                    const countEl = document.createElement('span');
+                    countEl.className = 'forum-post-reaction-count';
+                    reactionCountEls[def.key] = countEl;
+
+                    buttonByReactionValue.set(def.value, reactionButton);
+                    reactionButtons.push(reactionButton);
+
+                    reactionItem.appendChild(reactionButton);
+                    reactionItem.appendChild(countEl);
+                    reactionGroup.appendChild(reactionItem);
+                  });
+
+                  applyReactionState();
+                  actions.appendChild(reactionGroup);
+                }
+
+                let editButton = null;
+                let deleteButton = null;
+                let editContainer = null;
+                let editTextarea = null;
+                let saveEditButton = null;
+                let cancelEditButton = null;
+
+                const setEditMode = (isEditing) => {
+                  if (!editContainer || !editTextarea || !editButton) return;
+                  editContainer.hidden = !isEditing;
+                  body.hidden = isEditing;
+                  editButton.hidden = isEditing;
+                  if (replyButton) replyButton.disabled = isEditing;
+                  reactionButtons.forEach((button) => {
+                    button.disabled = isEditing;
+                  });
+                  if (deleteButton) deleteButton.disabled = isEditing;
+
+                  if (isEditing) {
+                    editTextarea.value = post.body || '';
+                    editTextarea.focus();
+                    editTextarea.setSelectionRange(editTextarea.value.length, editTextarea.value.length);
+                  }
+                };
+
+                if (canEditPost) {
+                  editButton = document.createElement('button');
+                  editButton.type = 'button';
+                  editButton.className = 'forum-post-edit-btn forum-action-btn forum-action-e';
+                  editButton.textContent = 'E';
+                  editButton.dataset.tooltip = 'Editar';
+                  editButton.title = 'Editar';
+                  editButton.setAttribute('aria-label', 'Editar');
+                  editButton.addEventListener('click', () => {
+                    setEditMode(true);
+                  });
+                  actions.appendChild(editButton);
+
+                  editContainer = document.createElement('div');
+                  editContainer.className = 'forum-edit-form';
+                  editContainer.hidden = true;
+
+                  editTextarea = document.createElement('textarea');
+                  editTextarea.className = 'forum-textarea forum-edit-textarea';
+                  editTextarea.maxLength = 4000;
+                  editTextarea.placeholder = 'Edita tu mensaje...';
+                  editTextarea.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Enter') return;
+                    if (!(event.metaKey || event.ctrlKey)) return;
+                    event.preventDefault();
+                    if (saveEditButton) saveEditButton.click();
+                  });
+                  editContainer.appendChild(editTextarea);
+                  attachForumEditor(editTextarea);
+
+                  const editActions = document.createElement('div');
+                  editActions.className = 'forum-form-actions';
+
+                  saveEditButton = document.createElement('button');
+                  saveEditButton.type = 'button';
+                  saveEditButton.className = 'forum-secondary-btn';
+                  saveEditButton.textContent = 'Guardar';
+                  saveEditButton.addEventListener('click', async () => {
+                    if (!editTextarea) return;
+                    const nextBody = editTextarea.value.trim();
+                    if (!nextBody) {
+                      setForumStatus('El mensaje no puede quedar vacío.', 'error');
+                      return;
+                    }
+
+                    if (saveEditButton) saveEditButton.disabled = true;
+                    if (cancelEditButton) cancelEditButton.disabled = true;
+
+                    try {
+                      const response = await fetch(`/api/forum/posts/${encodeURIComponent(post.id)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ body: nextBody }),
+                      });
+                      const payload = await response.json().catch(() => ({}));
+                      if (!response.ok) {
+                        throw new Error(payload?.error || 'No se pudo editar el mensaje.');
+                      }
+
+                      setForumStatus('Mensaje actualizado.', 'info');
+                      await loadPosts(forumState.selectedThreadId);
+                    } catch (error) {
+                      console.error('Forum post edit error:', error);
+                      setForumStatus(error?.message || 'No se pudo editar el mensaje.', 'error');
+                    } finally {
+                      if (saveEditButton) saveEditButton.disabled = false;
+                      if (cancelEditButton) cancelEditButton.disabled = false;
+                    }
+                  });
+                  editActions.appendChild(saveEditButton);
+
+                  cancelEditButton = document.createElement('button');
+                  cancelEditButton.type = 'button';
+                  cancelEditButton.className = 'forum-secondary-btn';
+                  cancelEditButton.textContent = 'Cancelar';
+                  cancelEditButton.addEventListener('click', () => {
+                    setEditMode(false);
+                  });
+                  editActions.appendChild(cancelEditButton);
+                  editContainer.appendChild(editActions);
+                }
+
+                if (canDeletePost) {
+                  deleteButton = document.createElement('button');
+                  deleteButton.type = 'button';
+                  deleteButton.className = 'forum-post-delete-btn forum-action-btn forum-action-b';
+                  deleteButton.textContent = 'B';
+                  deleteButton.dataset.tooltip = 'Borrar';
+                  deleteButton.title = 'Borrar';
+                  deleteButton.setAttribute('aria-label', 'Borrar');
+                  deleteButton.addEventListener('click', async () => {
+                    if (!confirm('¿Seguro que quieres borrar este mensaje?')) return;
+
+                    if (deleteButton) deleteButton.disabled = true;
+                    if (editButton) editButton.disabled = true;
+                    if (replyButton) replyButton.disabled = true;
+
+                    try {
+                      const response = await fetch(`/api/forum/posts/${encodeURIComponent(post.id)}`, {
+                        method: 'DELETE',
+                      });
+                      const payload = await response.json().catch(() => ({}));
+                      if (!response.ok) {
+                        throw new Error(payload?.error || 'No se pudo borrar el mensaje.');
+                      }
+
+                      setForumStatus('Mensaje borrado.', 'info');
+                      await loadThreads({ preserveSelection: true });
+                    } catch (error) {
+                      console.error('Forum post delete error:', error);
+                      setForumStatus(error?.message || 'No se pudo borrar el mensaje.', 'error');
+                    } finally {
+                      if (deleteButton) deleteButton.disabled = false;
+                      if (editButton) editButton.disabled = false;
+                      if (replyButton) replyButton.disabled = false;
+                    }
+                  });
+                  actions.appendChild(deleteButton);
+                }
+
+                main.appendChild(actions);
+                if (editContainer) {
+                  main.appendChild(editContainer);
+                }
+              }
+
+              card.appendChild(identity);
+              card.appendChild(main);
+              fragment.appendChild(card);
+              appendChildren(post.id, depth + 1);
+            });
+          };
+
+          appendChildren('root', 0);
+          postListEl.appendChild(fragment);
+          renderForumMermaid(postListEl);
+        };
+
+        const renderThreadList = () => {
+          syncThreadMeta();
+          threadListEl.innerHTML = '';
+
+          if (forumState.selectedThreadId && !forumState.threads.some((thread) => thread.id === forumState.selectedThreadId)) {
+            forumState.selectedThreadId = '';
+          }
+
+          if (forumState.threads.length === 0) {
+            const empty = document.createElement('p');
+            empty.className = 'forum-empty';
+            empty.textContent = forumState.mode === 'board'
+              ? 'Todavía no hay hilos en este foro.'
+              : 'Todavía no hay hilos en esta lección.';
+            threadListEl.appendChild(empty);
+            updateThreadQuery('');
+            return;
+          }
+
+          forumState.threads.forEach((thread) => {
+            const isActive = thread.id === forumState.selectedThreadId;
+            const item = document.createElement('article');
+            item.className = 'forum-thread-item';
+            if (isActive) item.classList.add('active');
+
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'forum-thread-toggle';
+            toggle.setAttribute('aria-expanded', isActive ? 'true' : 'false');
+
+            const top = document.createElement('div');
+            top.className = 'forum-thread-top';
+
+            const title = document.createElement('span');
+            title.className = 'forum-thread-title';
+            title.textContent = thread.title;
+
+            const messageCount = Number.isFinite(thread.messageCount)
+              ? Math.max(0, Number(thread.messageCount))
+              : (Number.isFinite(thread.postCount) ? Math.max(0, Number(thread.postCount)) : 0);
+            const replyCount = Number.isFinite(thread.replyCount)
+              ? Math.max(0, Number(thread.replyCount))
+              : Math.max(messageCount - 1, 0);
+
+            const caret = document.createElement('span');
+            caret.className = 'forum-thread-caret';
+            caret.textContent = isActive ? '▾' : '▸';
+
+            const counts = document.createElement('span');
+            counts.className = 'forum-thread-counts';
+
+            const messageChip = document.createElement('span');
+            messageChip.className = 'forum-thread-count forum-thread-count-messages';
+            messageChip.textContent = String(messageCount);
+            messageChip.dataset.tooltip = 'mensajes';
+            messageChip.title = 'mensajes';
+            counts.appendChild(messageChip);
+
+            const replyChip = document.createElement('span');
+            replyChip.className = 'forum-thread-count forum-thread-count-replies';
+            replyChip.textContent = String(replyCount);
+            replyChip.dataset.tooltip = 'respuestas';
+            replyChip.title = 'respuestas';
+            counts.appendChild(replyChip);
+
+            const trailing = document.createElement('span');
+            trailing.className = 'forum-thread-trailing';
+
+            top.appendChild(title);
+            top.appendChild(trailing);
+
+            const divider = document.createElement('hr');
+            divider.className = 'forum-thread-divider';
+
+            const meta = document.createElement('div');
+            meta.className = 'forum-thread-meta';
+            const author = document.createElement('span');
+            author.className = 'forum-thread-author';
+            author.textContent = thread.createdByName || 'Usuario';
+            const stats = document.createElement('span');
+            stats.className = 'forum-thread-date';
+            stats.textContent = formatForumDate(thread.lastActivityAt || thread.updatedAt || thread.createdAt);
+            meta.appendChild(author);
+            meta.appendChild(stats);
+
+            toggle.appendChild(top);
+            toggle.appendChild(divider);
+            toggle.appendChild(meta);
+            toggle.addEventListener('click', async () => {
+              const nextThreadId = forumState.selectedThreadId === thread.id ? '' : thread.id;
+              forumState.selectedThreadId = nextThreadId;
+              clearReplyTarget();
+              renderThreadList();
+
+              if (nextThreadId) {
+                updateThreadQuery(nextThreadId);
+                setThreadLoadingState();
+                await loadPosts(nextThreadId);
+                return;
+              }
+
+              updateThreadQuery('');
+              renderPosts([], false, false);
+            });
+
+            const canEditThread = Boolean(thread.canEdit || forumState.canModerate);
+            const canDeleteThread = Boolean(thread.canDelete || forumState.canModerate);
+            let threadEditButton = null;
+            let threadDeleteButton = null;
+
+            const setThreadActionState = (isDisabled) => {
+              if (threadEditButton) threadEditButton.disabled = isDisabled;
+              if (threadDeleteButton) threadDeleteButton.disabled = isDisabled;
+            };
+
+            const threadActions = document.createElement('div');
+            threadActions.className = 'forum-thread-actions';
+            threadActions.hidden = !canEditThread && !canDeleteThread;
+
+            if (canEditThread) {
+              threadEditButton = document.createElement('button');
+              threadEditButton.type = 'button';
+              threadEditButton.className = 'forum-thread-edit-btn forum-action-btn forum-action-e';
+              threadEditButton.textContent = 'E';
+              threadEditButton.dataset.tooltip = 'Editar hilo';
+              threadEditButton.title = 'Editar hilo';
+              threadEditButton.setAttribute('aria-label', 'Editar hilo');
+              threadEditButton.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const nextTitle = window.prompt('Editar título del hilo', thread.title || '');
+                if (nextTitle === null) return;
+
+                const cleanedTitle = nextTitle.trim();
+                if (cleanedTitle.length < 3) {
+                  setForumStatus('El título del hilo debe tener al menos 3 caracteres.', 'error');
+                  return;
+                }
+
+                setThreadActionState(true);
+                try {
+                  const response = await fetch(`/api/forum/threads/${encodeURIComponent(thread.id)}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: cleanedTitle }),
+                  });
+                  const payload = await response.json().catch(() => ({}));
+                  if (!response.ok) {
+                    throw new Error(payload?.error || 'No se pudo editar el hilo.');
+                  }
+
+                  setForumStatus('Hilo actualizado.', 'info');
+                  await loadThreads({ preserveSelection: true });
+                } catch (error) {
+                  console.error('Forum thread edit error:', error);
+                  setForumStatus(error?.message || 'No se pudo editar el hilo.', 'error');
+                } finally {
+                  setThreadActionState(false);
+                }
+              });
+              threadActions.appendChild(threadEditButton);
+            }
+
+            if (canDeleteThread) {
+              threadDeleteButton = document.createElement('button');
+              threadDeleteButton.type = 'button';
+              threadDeleteButton.className = 'forum-thread-delete-btn forum-action-btn forum-action-b';
+              threadDeleteButton.textContent = 'B';
+              threadDeleteButton.dataset.tooltip = 'Borrar hilo';
+              threadDeleteButton.title = 'Borrar hilo';
+              threadDeleteButton.setAttribute('aria-label', 'Borrar hilo');
+              threadDeleteButton.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (!confirm('¿Seguro que quieres borrar este hilo completo?')) return;
+
+                setThreadActionState(true);
+                try {
+                  const response = await fetch(`/api/forum/threads/${encodeURIComponent(thread.id)}`, {
+                    method: 'DELETE',
+                  });
+                  const payload = await response.json().catch(() => ({}));
+                  if (!response.ok) {
+                    throw new Error(payload?.error || 'No se pudo borrar el hilo.');
+                  }
+
+                  clearReplyTarget();
+                  setForumStatus('Hilo borrado.', 'info');
+                  await loadThreads({ preserveSelection: true });
+                } catch (error) {
+                  console.error('Forum thread delete error:', error);
+                  setForumStatus(error?.message || 'No se pudo borrar el hilo.', 'error');
+                } finally {
+                  setThreadActionState(false);
+                }
+              });
+              threadActions.appendChild(threadDeleteButton);
+            }
+
+            trailing.appendChild(counts);
+            if (!threadActions.hidden) {
+              trailing.appendChild(threadActions);
+            }
+            trailing.appendChild(caret);
+
+            item.appendChild(toggle);
+            threadListEl.appendChild(item);
+          });
+        };
+
+        const loadPosts = async (threadId) => {
+          if (!threadId) {
+            renderPosts([], false, false);
+            return;
+          }
+
+          const requestToken = ++latestPostRequestToken;
+          try {
+            const response = await fetch(`/api/forum/threads/${encodeURIComponent(threadId)}/posts`);
+            const payload = await response.json().catch(() => ({}));
+
+            if (requestToken !== latestPostRequestToken) return;
+            if (!response.ok) {
+              throw new Error(payload?.error || 'No se pudieron cargar los mensajes del hilo.');
+            }
+
+            renderPosts(payload.posts || [], Boolean(payload.canReply), Boolean(payload.canVote));
+          } catch (error) {
+            console.error('Forum load posts error:', error);
+            renderPosts([], false, false);
+            setForumStatus(error?.message || 'No se pudieron cargar los mensajes del hilo.', 'error');
+          }
+        };
+
+        const loadBoards = async ({ preferredSlug = '' } = {}) => {
+          if (forumState.mode !== 'board') return;
+
+          const url = new URL('/api/forum/boards', window.location.origin);
+          url.searchParams.set('courseId', forumState.courseId);
+          const response = await fetch(url.toString());
+          const payload = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            throw new Error(payload?.error || 'No se pudieron cargar los foros del curso.');
+          }
+
+          forumState.boards = Array.isArray(payload.boards) ? payload.boards : [];
+          forumState.canManageBoards = Boolean(payload.canManageBoards);
+          if (newBoardForm) {
+            newBoardForm.hidden = !forumState.canManageBoards;
+          }
+          if (newBoardDetails instanceof HTMLElement) {
+            newBoardDetails.hidden = !forumState.canManageBoards;
+          }
+
+          const slugs = forumState.boards
+            .map((board) => normalizeForumBoardSlug(board?.slug))
+            .filter(Boolean);
+          const targetSlug = normalizeForumBoardSlug(preferredSlug || forumState.boardSlug);
+          if (targetSlug && slugs.includes(targetSlug)) {
+            forumState.boardSlug = targetSlug;
+          } else {
+            forumState.boardSlug = slugs[0] || 'general';
+          }
+        };
+
+        const loadThreads = async ({ preserveSelection = true } = {}) => {
+          const url = new URL('/api/forum/threads', window.location.origin);
+          url.searchParams.set('courseId', forumState.courseId);
+          const scopePayload = getForumScopePayload();
+          if (scopePayload.lessonSlug) url.searchParams.set('lessonSlug', scopePayload.lessonSlug);
+          if (scopePayload.boardSlug) url.searchParams.set('boardSlug', scopePayload.boardSlug);
+
+          const previousThreadId = forumState.selectedThreadId;
+
+          try {
+            const response = await fetch(url.toString());
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload?.error || 'No se pudieron cargar los hilos del foro.');
+            }
+
+            forumState.threads = Array.isArray(payload.threads) ? payload.threads : [];
+            forumState.canWrite = Boolean(payload.canWrite);
+            newThreadForm.hidden = !forumState.canWrite;
+            if (newThreadContainer) newThreadContainer.hidden = !forumState.canWrite;
+
+            if (preserveSelection && previousThreadId && forumState.threads.some((thread) => thread.id === previousThreadId)) {
+              forumState.selectedThreadId = previousThreadId;
+            } else {
+              forumState.selectedThreadId = forumState.threads[0]?.id || '';
+            }
+
+            const totalMessages = getForumScopeMessageTotal();
+            syncActiveSidebarTotals(scopeKey, totalMessages);
+            renderThreadList();
+
+            if (forumState.selectedThreadId) {
+              setThreadLoadingState();
+              await loadPosts(forumState.selectedThreadId);
+              updateThreadQuery(forumState.selectedThreadId);
+            } else {
+              renderPosts([], false, false);
+              updateThreadQuery('');
+            }
+
+            if (!forumState.canWrite) {
+              setForumStatus('Puedes leer este foro, pero necesitas inscripción para publicar.', 'info');
+            } else {
+              setForumStatus('');
+            }
+
+            markForumScopeAsRead(scopeKey, totalMessages);
+          } catch (error) {
+            console.error('Forum load threads error:', error);
+            forumState.threads = [];
+            forumState.selectedThreadId = '';
+            forumState.canWrite = false;
+            newThreadForm.hidden = true;
+            if (newThreadContainer) newThreadContainer.hidden = true;
+            renderThreadList();
+            renderPosts([], false, false);
+            setForumStatus(error?.message || 'No se pudieron cargar los hilos del foro.', 'error');
+          } finally {
+            refreshForumUnreadBadges();
+          }
+        };
+
+        attachForumEditor(threadBodyInput);
+        attachForumEditor(replyBodyInput);
+
+        const bindSubmitShortcut = (input, form) => {
+          if (!input || !form) return;
+          input.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            if (!(event.metaKey || event.ctrlKey)) return;
+            event.preventDefault();
+            form.requestSubmit();
+          });
+        };
+
+        bindSubmitShortcut(threadBodyInput, newThreadForm);
+        bindSubmitShortcut(replyBodyInput, replyForm);
+
+        if (postListEl instanceof HTMLElement && postListEl.dataset.mediaPreviewBound !== 'true') {
+          postListEl.dataset.mediaPreviewBound = 'true';
+          postListEl.addEventListener('dblclick', (event) => {
+            const payload = extractForumMediaTarget(event.target);
+            if (!payload) return;
+            event.preventDefault();
+            openForumMediaModal(payload);
+          });
+        }
+
+        if (mediaModalCloseBtn instanceof HTMLButtonElement && mediaModalCloseBtn.dataset.bound !== 'true') {
+          mediaModalCloseBtn.dataset.bound = 'true';
+          mediaModalCloseBtn.addEventListener('click', closeForumMediaModal);
+        }
+
+        if (mediaModalEl instanceof HTMLElement && mediaModalEl.dataset.bound !== 'true') {
+          mediaModalEl.dataset.bound = 'true';
+          mediaModalEl.addEventListener('click', (event) => {
+            if (event.target === mediaModalEl) {
+              closeForumMediaModal();
+            }
+          });
+        }
+
+        if (document.body.dataset.forumMediaEscapeBound !== 'true') {
+          document.body.dataset.forumMediaEscapeBound = 'true';
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && mediaModalEl instanceof HTMLElement && !mediaModalEl.hidden) {
+              closeForumMediaModal();
+            }
+          });
+        }
+
+        if (newBoardForm && boardTitleInput && boardDescriptionInput) {
+          newBoardForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!forumState.canManageBoards) return;
+
+            const title = boardTitleInput.value.trim();
+            const description = boardDescriptionInput.value.trim();
+            if (title.length < 3) {
+              setForumStatus('El nombre del foro alternativo debe tener al menos 3 caracteres.', 'error');
+              return;
+            }
+
+            const submitButton = newBoardForm.querySelector('button[type="submit"]');
+            if (submitButton) submitButton.disabled = true;
+
+            try {
+              const response = await fetch('/api/forum/boards', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  courseId: forumState.courseId,
+                  title,
+                  description,
+                }),
+              });
+
+              const payload = await response.json().catch(() => ({}));
+              if (!response.ok) {
+                throw new Error(payload?.error || 'No se pudo crear el foro alternativo.');
+              }
+
+              const newSlug = normalizeForumBoardSlug(payload?.board?.slug || '');
+              window.location.href = buildScopeUrl('board', newSlug || 'general').toString();
+            } catch (error) {
+              console.error('Forum create board error:', error);
+              setForumStatus(error?.message || 'No se pudo crear el foro alternativo.', 'error');
+            } finally {
+              if (submitButton) submitButton.disabled = false;
+            }
+          });
+        }
+
+        newThreadForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!forumState.canWrite) return;
+
+          const title = threadTitleInput.value.trim();
+          const body = threadBodyInput.value.trim();
+          if (title.length < 3) {
+            setForumStatus('El título debe tener al menos 3 caracteres.', 'error');
+            return;
+          }
+          if (!body) {
+            setForumStatus('Escribe el primer mensaje del hilo.', 'error');
+            return;
+          }
+
+          const submitButton = newThreadForm.querySelector('button[type="submit"]');
+          if (submitButton) submitButton.disabled = true;
+
+          try {
+            const response = await fetch('/api/forum/threads', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                courseId: forumState.courseId,
+                ...getForumScopePayload(),
+                title,
+                body,
+              }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload?.error || 'No se pudo crear el hilo.');
+            }
+
+            threadTitleInput.value = '';
+            threadBodyInput.value = '';
+            if (newThreadContainer instanceof HTMLDetailsElement) {
+              newThreadContainer.open = false;
+            }
+            setForumStatus('Hilo publicado.', 'info');
+            await loadThreads({ preserveSelection: false });
+          } catch (error) {
+            console.error('Forum create thread error:', error);
+            setForumStatus(error?.message || 'No se pudo crear el hilo.', 'error');
+          } finally {
+            if (submitButton) submitButton.disabled = false;
+          }
+        });
+
+        cancelReplyBtn.addEventListener('click', () => {
+          clearReplyTarget();
+        });
+
+        replyForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!forumState.selectedThreadId) return;
+
+          const replyBody = replyBodyInput.value.trim();
+          if (!replyBody) {
+            setForumStatus('Escribe una respuesta antes de publicar.', 'error');
+            return;
+          }
+
+          const submitButton = replyForm.querySelector('button[type="submit"]');
+          if (submitButton) submitButton.disabled = true;
+
+          try {
+            const response = await fetch(`/api/forum/threads/${encodeURIComponent(forumState.selectedThreadId)}/posts`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                body: replyBody,
+                parentPostId: parentPostInput.value || null,
+              }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload?.error || 'No se pudo publicar la respuesta.');
+            }
+
+            replyBodyInput.value = '';
+            clearReplyTarget();
+            setForumStatus('Respuesta publicada.', 'info');
+            await loadThreads({ preserveSelection: true });
+          } catch (error) {
+            console.error('Forum create post error:', error);
+            setForumStatus(error?.message || 'No se pudo publicar la respuesta.', 'error');
+          } finally {
+            if (submitButton) submitButton.disabled = false;
+          }
+        });
+
+        if (forumState.mode === 'board') {
+          try {
+            await loadBoards({ preferredSlug: forumState.boardSlug });
+          } catch (error) {
+            setForumStatus(error?.message || 'No se pudo cargar la lista de foros del curso.', 'error');
+            newThreadForm.hidden = true;
+            if (newThreadContainer) newThreadContainer.hidden = true;
+            refreshForumUnreadBadges();
+            return;
+          }
+        }
+
+        await loadThreads({ preserveSelection: false });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', mountForumReader, { once: true });
+      } else {
+        mountForumReader();
+      }
+
+      document.addEventListener('astro:page-load', mountForumReader);
+      window.addEventListener('storage', refreshForumUnreadBadges);
+    </script>
+  </body>
+</html>

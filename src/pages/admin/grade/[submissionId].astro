@@ -1,0 +1,391 @@
+---
+import BaseHead from '../../../components/BaseHead.astro';
+import Header from '../../../components/Header.astro';
+import Footer from '../../../components/Footer.astro';
+import { createClient } from '@supabase/supabase-js';
+
+// Check authentication
+const session = (Astro.locals as any).session;
+const currentUser = session?.user;
+
+if (!currentUser?.email) {
+  return Astro.redirect('/login?redirect=' + Astro.url.pathname);
+}
+
+// Initialize Supabase
+const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+
+// Get current user from DB to verify they're a teacher
+const { data: currentDbUser, error: teacherError } = await supabase.from('User').select('id, role').eq('email', currentUser.email).single();
+
+if (teacherError || !currentDbUser || currentDbUser.role !== 'teacher') {
+  return Astro.redirect('/dashboard');
+}
+
+// Get the submission
+const submissionId = Astro.params.submissionId;
+const { data: submission, error: subError } = await supabase.from('Submission').select('*').eq('id', submissionId!).single();
+
+if (subError || !submission) {
+  return new Response('Submission not found', { status: 404 });
+}
+
+// Get the assignment details
+const { data: assignment, error: assignError } = await supabase.from('Assignment').select('*').eq('id', submission.assignmentId).single();
+
+// Get the student
+const { data: student, error: studentError } = await supabase.from('User').select('*').eq('id', submission.userId).single();
+
+if (studentError || !student) {
+  return new Response('Student for this submission not found', { status: 404 });
+}
+
+// Handle grading POST
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    const scoreValue = formData.get('score');
+    const score = scoreValue !== null ? parseFloat(scoreValue as string) : null;
+    const feedback = formData.get('feedback') as string;
+    
+    const { error: updateError } = await supabase.from('Submission')
+      .update({
+        score: score,
+        feedback: feedback || null,
+        gradedAt: new Date(),
+      })
+      .eq('id', submissionId!);
+    
+    if (updateError) throw updateError;
+
+    return Astro.redirect(`/admin/grade/${submissionId}?saved=true`);
+  } catch (error) {
+    console.error('Error grading:', error);
+  }
+}
+
+const saved = Astro.url.searchParams.get('saved') === 'true';
+---
+
+<html lang="es">
+  <head>
+    <BaseHead title="Calificar Entrega" description="Calificar entrega de estudiante" />
+    <style>
+      .wrap {
+        max-width: 900px;
+        margin: 2rem auto;
+        padding: 2rem;
+      }
+      .back-link {
+        color: var(--c-link);
+        text-decoration: none;
+        margin-bottom: 2rem;
+        display: inline-block;
+      }
+      .back-link:hover {
+        text-decoration: underline;
+      }
+      .submission-header {
+        background: var(--c-bg-mute);
+        padding: 2rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+      }
+      .student-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+      .student-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        border: 2px solid var(--c-border);
+      }
+      .student-name {
+        font-size: 1.3rem;
+        font-weight: 600;
+      }
+      .assignment-title {
+        font-size: 1.1rem;
+        color: var(--c-fg-dim);
+        margin-top: 0.5rem;
+      }
+      .metadata {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--c-border);
+      }
+      .metadata-item {
+        font-size: 0.9rem;
+      }
+      .metadata-label {
+        color: var(--c-fg-dim);
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+      .metadata-value {
+        font-weight: 600;
+      }
+      .submission-content {
+        background: var(--c-bg);
+        border: 1px solid var(--c-border);
+        padding: 2rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+      }
+      .section-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--c-border);
+      }
+      .answer-display {
+        background: var(--c-bg-mute);
+        padding: 1rem;
+        border-radius: 6px;
+        margin: 1rem 0;
+      }
+      .answer-display pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      .grading-form {
+        background: var(--c-bg);
+        border: 1px solid var(--c-border);
+        padding: 2rem;
+        border-radius: 8px;
+      }
+      .form-group {
+        margin-bottom: 1.5rem;
+      }
+      .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+      .form-group input[type="number"] {
+        width: 120px;
+        padding: 0.5rem;
+        font-size: 1rem;
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        background: var(--c-bg-mute);
+        color: var(--c-fg);
+      }
+      .form-group textarea {
+        width: 100%;
+        min-height: 120px;
+        padding: 0.75rem;
+        font-size: 0.95rem;
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        background: var(--c-bg-mute);
+        color: var(--c-fg);
+        font-family: inherit;
+        resize: vertical;
+      }
+      .button-group {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+      .btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        text-align: center;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: white;
+        border: none;
+      }
+      .btn-primary:hover {
+        opacity: 0.9;
+      }
+      .btn-secondary {
+        background: var(--c-bg-mute);
+        color: var(--c-fg);
+        border: 1px solid var(--c-border);
+      }
+      .btn-secondary:hover {
+        background: var(--c-border);
+      }
+      .success-message {
+        background: #d4edda;
+        color: #155724;
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 2rem;
+        border: 1px solid #c3e6cb;
+      }
+      .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+      }
+      .status-graded {
+        background: #d4edda;
+        color: #155724;
+      }
+      .status-pending {
+        background: #fff3cd;
+        color: #856404;
+      }
+      .correct {
+        color: #4caf50;
+        font-weight: 600;
+      }
+      .incorrect {
+        color: #f44336;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main class="wrap">
+      <a href="/dashboard" class="back-link">← Volver al dashboard</a>
+      
+      {saved && (
+        <div class="success-message">
+          ✅ Calificación guardada exitosamente
+        </div>
+      )}
+      
+      <div class="submission-header">
+        <div class="student-info">
+          {student.image && (
+            <img src={student.image} alt={student.name} class="student-avatar" />
+          )}
+          <div>
+            <div class="student-name">{student.name}</div>
+            <div style="font-size: 0.9rem; color: var(--c-fg-dim);">{student.email}</div>
+          </div>
+        </div>
+        
+        <div class="assignment-title">
+          📝 {assignment?.id || submission.assignmentId}
+        </div>
+        
+        <div class="metadata">
+          <div class="metadata-item">
+            <span class="metadata-label">Estado</span>
+            <span class:list={['status-badge', submission.gradedAt ? 'status-graded' : 'status-pending']}>
+              {submission.gradedAt ? '✓ Calificada' : '⏳ Pendiente'}
+            </span>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">Fecha de entrega</span>
+            <span class="metadata-value">
+              {new Date(submission.submittedAt).toLocaleDateString('es-ES', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </span>
+          </div>
+          <div class="metadata-item">
+            <span class="metadata-label">Intentos</span>
+            <span class="metadata-value">{submission.attempts}</span>
+          </div>
+          {submission.score !== null && (
+            <div class="metadata-item">
+              <span class="metadata-label">Calificación actual</span>
+              <span class="metadata-value">{submission.score}/10</span>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div class="submission-content">
+        <h2 class="section-title">Respuesta del Estudiante</h2>
+        
+        <div class="answer-display">
+          {submission.payload ? (
+            <pre>{JSON.stringify(submission.payload, null, 2)}</pre>
+          ) : (
+            <p style="color: var(--c-fg-dim); font-style: italic;">No hay datos de respuesta registrados para esta entrega.</p>
+          )}
+        </div>
+        
+        {typeof submission.payload === 'object' && submission.payload !== null && 'isCorrect' in submission.payload && (
+          <p>
+            Resultado automático: 
+            <span class:list={submission.payload.isCorrect ? 'correct' : 'incorrect'}>
+              {submission.payload.isCorrect ? '✅ Correcta' : '❌ Incorrecta'}
+            </span>
+          </p>
+        )}
+        
+        {submission.feedback && (
+          <>
+            <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">Retroalimentación anterior:</h3>
+            <div style="background: var(--c-bg-mute); padding: 1rem; border-radius: 6px; font-style: italic;">
+              {submission.feedback}
+            </div>
+          </>
+        )}
+      </div>
+      
+      <div class="grading-form">
+        <h2 class="section-title">
+          {submission.gradedAt ? 'Actualizar Calificación' : 'Calificar Entrega'}
+        </h2>
+        
+        <form method="POST">
+          <div class="form-group">
+            <label for="score">
+              Calificación (0-10)
+              <span style="color: var(--c-fg-dim); font-weight: normal; margin-left: 0.5rem;">
+                *Máximo: {assignment?.weight || 1} punto{(assignment?.weight || 1) > 1 ? 's' : ''}
+              </span>
+            </label>
+            <input 
+              type="number" 
+              id="score" 
+              name="score" 
+              min="0" 
+              max="10" 
+              step="0.1"
+              value={submission.score !== null ? submission.score : ''}
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <label for="feedback">
+              Retroalimentación (opcional)
+            </label>
+            <textarea 
+              id="feedback" 
+              name="feedback"
+              placeholder="Proporciona comentarios constructivos para el estudiante..."
+            >{submission.feedback || ''}</textarea>
+          </div>
+          
+          <div class="button-group">
+            <button type="submit" class="btn btn-primary">
+              {submission.gradedAt ? '💾 Actualizar Calificación' : '✅ Guardar Calificación'}
+            </button>
+            <a href="/dashboard" class="btn btn-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </main>
+    <Footer />
+  </body>
+</html>

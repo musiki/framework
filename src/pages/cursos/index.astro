@@ -1,0 +1,402 @@
+---
+import { getCollection } from 'astro:content';
+import BaseHead from '../../components/BaseHead.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { createClient } from '@supabase/supabase-js';
+import { buildCourseHref } from '../../lib/course-routing';
+
+// Get all courses (files named _index.md in cursos collection)
+const allCourseFiles = await getCollection('cursos');
+const asStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
+};
+
+const normalizeCourseYear = (yearValue: unknown, legacyLevel: unknown): string => {
+  if (typeof yearValue === 'number' && Number.isFinite(yearValue)) {
+    return `${yearValue}° año`;
+  }
+
+  if (typeof yearValue === 'string' && yearValue.trim()) {
+    return yearValue.trim();
+  }
+
+  if (typeof legacyLevel === 'string' && legacyLevel.trim()) {
+    const normalized = legacyLevel.trim().toLowerCase();
+    if (normalized === 'beginner') return '1er año';
+    if (normalized === 'intermediate') return '2do año';
+    if (normalized === 'advanced') return '3er año';
+    return legacyLevel.trim();
+  }
+
+  return '';
+};
+
+const courses = allCourseFiles
+  .filter(entry => entry.id.endsWith('_index'))
+  .map(entry => ({
+    id: entry.id.replace('/_index', ''),
+    href: buildCourseHref(entry.id.replace('/_index', ''), (entry.data || {}) as Record<string, unknown>),
+    ...entry.data,
+    instructors: asStringArray((entry.data as any).instructors ?? (entry.data as any).instructor),
+    year: normalizeCourseYear((entry.data as any).year, (entry.data as any).level),
+  }));
+
+const session = (Astro.locals as any).session;
+const currentUser = session?.user;
+
+// Get user enrollment status
+let userEnrollments: string[] = [];
+if (currentUser?.email) {
+  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+  const { data: user } = await supabase.from('User').select('id').eq('email', currentUser.email).single();
+  
+  if (user) {
+    const { data: enrollments } = await supabase.from('Enrollment').select('courseId').eq('userId', user.id);
+    if (enrollments) {
+      userEnrollments = enrollments.map((e: any) => e.courseId);
+    }
+  }
+}
+---
+
+<!doctype html>
+<html lang="es">
+	<head>
+		<BaseHead title="Cursos" description="Explora nuestros cursos de arte, música y tecnología" />
+		<style>
+			.course-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+				gap: 1.5rem;
+				margin-top: 2rem;
+			}
+			.course-card {
+				display: flex;
+				flex-direction: column;
+				height: 100%;
+				border: 1px solid var(--c-border);
+				border-radius: 12px;
+				overflow: hidden;
+				background: var(--c-bg);
+				transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+			}
+			.course-card:hover {
+				border-color: var(--accent);
+				box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+				transform: translateY(-2px);
+			}
+			.course-image {
+				width: 100%;
+				height: 170px;
+				overflow: hidden;
+			}
+			.course-image img {
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+			}
+			.course-content {
+				padding: 1.15rem;
+				display: flex;
+				flex-direction: column;
+				flex: 1;
+				min-height: 0;
+			}
+			.course-title {
+				margin: 0 0 0.45rem 0;
+				font-size: 1.08rem;
+				line-height: 1.3;
+			}
+			.course-description {
+				margin: 0;
+				font-size: 0.9rem;
+				color: var(--c-fg-dim);
+				line-height: 1.45;
+				display: -webkit-box;
+				-webkit-line-clamp: 3;
+				-webkit-box-orient: vertical;
+				overflow: hidden;
+			}
+			.course-meta {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 0.5rem;
+				margin-top: 0.9rem;
+			}
+			.meta-item {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.35rem;
+				min-width: 0;
+				padding: 0.38rem 0.5rem;
+				border: 1px solid var(--c-border);
+				border-radius: 8px;
+				background: var(--c-bg-mute);
+				font-size: 0.78rem;
+				color: var(--c-fg-dim);
+			}
+			.meta-label {
+				font-weight: 600;
+				color: var(--c-fg);
+			}
+			.meta-value {
+				min-width: 0;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+			.meta-item.meta-docentes {
+				grid-column: 1 / -1;
+				align-items: flex-start;
+			}
+			.meta-item.meta-docentes .meta-value {
+				white-space: normal;
+				overflow: visible;
+				text-overflow: initial;
+				line-height: 1.35;
+			}
+			.course-status {
+				font-weight: 600;
+			}
+			.course-status.is-enrolled {
+				color: #1f7a1f;
+			}
+			.course-status.not-enrolled {
+				color: var(--c-fg-dim);
+			}
+			.course-tags {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.5rem;
+				margin-top: 0.95rem;
+			}
+			.tag {
+				background: var(--c-bg-mute);
+				padding: 0.25rem 0.5rem;
+				border-radius: 999px;
+				font-size: 0.78rem;
+				border: 1px solid var(--c-border);
+			}
+			.no-access {
+				opacity: 0.72;
+			}
+			.course-actions {
+				margin-top: auto;
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.5rem;
+				padding-top: 1rem;
+			}
+			@media (max-width: 640px) {
+				.course-grid {
+					grid-template-columns: 1fr;
+				}
+				.course-meta {
+					grid-template-columns: 1fr;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<Header />
+		<main class="container">
+			<h1>Catálogo de Cursos</h1>
+			<p>Explora nuestros cursos sobre arte, música y tecnología. {session ? 'Inscríbete para acceder al contenido.' : 'Inicia sesión para inscribirte.'}</p>
+			
+			<div class="course-grid">
+				{courses.map((course) => (
+					<article class="course-card" class:list={{ 'no-access': !course.public && !session }}>
+						{course.coverImage && (
+							<div class="course-image">
+								<img src={course.coverImage} alt={course.title} />
+							</div>
+						)}
+						
+						<div class="course-content">
+							<h2 class="course-title">{course.title}</h2>
+							<p class="course-description">{course.description}</p>
+						
+							<div class="course-meta">
+								<span class="meta-item">
+									<span class="meta-label">Estado</span>
+									<span
+										class:list={[
+											'course-status',
+											userEnrollments.includes(course.id) ? 'is-enrolled' : 'not-enrolled',
+										]}
+										title={userEnrollments.includes(course.id) ? 'Inscrito' : 'No inscrito'}
+									>
+										{userEnrollments.includes(course.id) ? 'Inscrito' : 'No inscrito'}
+									</span>
+								</span>
+								{!course.public && (
+									<span class="meta-item" title="Requiere inscripción">
+										<span class="meta-label">Acceso</span>
+										<span class="meta-value">Solo inscritos</span>
+									</span>
+								)}
+								{course.instructors && course.instructors.length > 0 && (
+									<span class="meta-item meta-docentes" title={course.instructors.join(', ')}>
+										<span class="meta-label">{course.instructors.length > 1 ? 'Docentes' : 'Docente'}</span>
+										<span class="meta-value">{course.instructors.join(', ')}</span>
+									</span>
+								)}
+								{course.duration && (
+									<span class="meta-item">
+										<span class="meta-label">Duración</span>
+										<span class="meta-value">{course.duration}</span>
+									</span>
+								)}
+								{course.year && (
+									<span class="meta-item">
+										<span class="meta-label">Año</span>
+										<span class="meta-value">{course.year}</span>
+									</span>
+								)}
+							</div>
+							
+							{course.tags && course.tags.length > 0 && (
+								<div class="course-tags">
+									{course.tags.map((tag: string) => (
+										<span class="tag">{tag}</span>
+									))}
+								</div>
+							)}
+							
+							<div class="course-actions">
+								{!session ? (
+									<a href="/login" class="button">
+										Inicia sesión para inscribirte
+									</a>
+								) : userEnrollments.includes(course.id) ? (
+									<a href={course.href} class="button">
+										Ver curso
+									</a>
+								) : (
+									<>
+										<button 
+											class="button enroll-btn" 
+											data-course-id={course.id}
+											data-course-title={course.title}
+										>
+											Inscribirse
+										</button>
+										{course.public && (
+											<a href={course.href} class="button secondary">
+												Vista previa
+											</a>
+										)}
+									</>
+								)}
+							</div>
+						</div>
+					</article>
+				))}
+			</div>
+			
+			{courses.length === 0 && (
+				<p style="text-align: center; margin-top: 3rem; color: var(--c-fg-dim);">
+					No hay cursos disponibles por el momento.
+				</p>
+			)}
+		</main>
+		<Footer />
+		
+		<script>
+			document.querySelectorAll('.enroll-btn').forEach(btn => {
+				btn.addEventListener('click', async (e) => {
+					const button = e.target as HTMLButtonElement;
+					const courseId = button.dataset.courseId;
+					const courseTitle = button.dataset.courseTitle;
+					
+					if (!courseId) return;
+					
+					// Disable button and show loading
+					button.disabled = true;
+					button.textContent = 'Inscribiendo...';
+					
+					try {
+						const response = await fetch(`/api/enroll/${courseId}`, {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+							},
+						});
+						
+						const data = await response.json();
+						
+						if (response.ok) {
+							// Show success message
+							button.textContent = 'Inscrito';
+							button.style.background = '#4caf50';
+							
+							// Reload page after short delay to update UI
+							setTimeout(() => {
+								window.location.reload();
+							}, 1000);
+						} else {
+							throw new Error(data.error || 'Error al inscribirse');
+						}
+					} catch (error) {
+						console.error('Enrollment error:', error);
+						button.textContent = 'Error';
+						button.disabled = false;
+						setTimeout(() => {
+							button.textContent = 'Inscribirse';
+						}, 2000);
+					}
+				});
+			});
+		</script>
+	</body>
+</html>
+
+<style>
+	.container {
+		max-width: 1200px;
+		margin: 0 auto;
+		padding: 2rem;
+	}
+	.button {
+		display: inline-block;
+		padding: 0.6rem 1.2rem;
+		background: #1f5f8b;
+		color: white;
+		text-decoration: none;
+		border-radius: 10px;
+		transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+		font-size: 0.9rem;
+		font-weight: 600;
+		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.2);
+		border: none;
+		cursor: pointer;
+	}
+	.button:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+		background: #194f73;
+	}
+	.button:disabled {
+		opacity: 0.7;
+		cursor: not-allowed;
+	}
+	.button.secondary {
+		background: var(--c-bg-mute);
+		color: var(--c-fg);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	}
+	.button.secondary:hover {
+		background: var(--c-border);
+	}
+</style>

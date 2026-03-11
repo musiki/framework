@@ -1,0 +1,303 @@
+---
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+
+import matter from 'gray-matter';
+
+import '../styles/theme.css';
+
+// ---------- Utils ----------
+function norm(s) {
+  return String(s)
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quita acentos
+    .replace(/\\/g, '/')                              // backslash -> slash
+    .replace(/\s+/g, ' ')                             // colapsa espacios
+    .trim();
+}
+function encodePath(p) {
+  return encodeURI(p);
+}
+
+// --- LÓGICA PÚBLICA DE CARGA DE DATOS ---
+// Cargar TODO `src/content` con Vite glob para que HMR detecte cambios .md/.mdx en dev.
+const CONTENT_GLOB_PREFIX = '/src/content/';
+const rawContentFiles = import.meta.glob('/src/content/**/*.{md,mdx}', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>;
+
+// Helper to create clean slugs
+function createCleanSlug(filename) {
+  return filename
+    .replace(/\.(md|mdx)$/i, '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+}
+
+// 3. Procesar solo los archivos a los que el usuario tiene acceso
+const entries = await Promise.all(
+  Object.entries(rawContentFiles).map(async ([filePath, raw]) => {
+    const rel = filePath.startsWith(CONTENT_GLOB_PREFIX)
+      ? filePath.slice(CONTENT_GLOB_PREFIX.length)
+      : filePath.replace(/^\/+/, '');
+    const posix = rel.split('\\').join('/');
+    const fullSlug = posix.replace(/\.(md|mdx)$/i, '');
+    const segs = fullSlug.split('/');
+    const filename = segs[segs.length - 1];
+    
+    // Create clean slug from just the filename
+    const slug = createCleanSlug(filename);
+
+    const fm = matter(raw);
+
+    const hasDataview = raw.includes('```dataview');
+
+    // Aquí puedes añadir lógica para leer el YAML y decidir si es un 'assignment'
+    // y sincronizarlo con la tabla `Assignment` en la DB si es necesario.
+    // Por ejemplo, `isAssignment: true` en el frontmatter.
+
+    return {
+      slug,
+      root: segs[0],
+      title: fm.data.title || filename,
+      img: fm.data.img || fm.data.coverUrl || fm.data.image || fm.data.photo || '',
+      tags: Array.isArray(fm.data.tags)
+        ? fm.data.tags
+        : (fm.data.tags ? String(fm.data.tags).split(',').map((s) => s.trim()) : []),
+      hasDataview,
+    };
+  })
+);
+
+// Filtrar nulos y archivos a los que no se tiene acceso
+const validEntries = entries.filter(Boolean);
+
+// Agrupar por carpeta raíz
+const groupedEntries = validEntries.reduce((acc, entry) => {
+  const { root } = entry;
+  (acc[root] ||= []).push(entry);
+  return acc;
+}, {});
+---
+
+<html lang="es">
+  <head>
+    <BaseHead title="musiki26 | Ciencia y Musica | UNTREF" description="Repositorio de contenidos publicos y plataforma de aprendizaje." />
+    <meta charset="utf-8" />
+    <style>
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 1rem; }
+      .group-title {
+        margin-top: 3rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+      }
+      .folder-toggle {
+        background: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        text-align: left;
+        color: inherit;
+        justify-content: space-between;
+        font: inherit;
+      }
+      .folder-toggle:hover {
+        color: var(--c-link);
+      }
+      .folder-toggle h3 {
+        margin: 0;
+        flex: 1;
+      }
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 1rem;
+        align-items: stretch;
+      }
+      .card {
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--c-bg);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      .card-main-link {
+        text-decoration: none;
+        color: var(--c-fg);
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 100%;
+      }
+      .card:hover { border-color: var(--c-link); }
+      .card img { 
+        width: 100%; 
+        height: 140px; 
+        object-fit: cover; 
+        display: block;
+        flex-shrink: 0;
+      }
+      .card-body { 
+        padding: 0.5rem 0.75rem; 
+        flex: 1; 
+        display: flex; 
+        flex-direction: column;
+        min-height: 0;
+      }
+      .title { 
+        margin: 0; 
+        font-size: 1rem; 
+        font-weight: 600;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+        min-height: calc(1.3em * 2);
+      }
+      .meta { 
+        font-size: .8rem; 
+        color: var(--c-subtle); 
+        margin: .25rem 0;
+        line-height: 1.4;
+      }
+      .meta a { color: var(--c-link); }
+      .tags { 
+        display: flex; 
+        gap: .25rem; 
+        flex-wrap: wrap; 
+        margin-top: auto;
+        padding: 0.5rem 0.75rem 0.65rem;
+        border-top: 1px solid var(--c-border);
+      }
+      .tag { 
+        font-size: .7rem; 
+        padding: .1rem .4rem; 
+        border: 1px solid var(--c-border); 
+        border-radius: 6px;
+        text-decoration: none;
+        display: inline-block;
+      }
+      .wikilink-missing { color: #b00; }
+      
+      .chevron { transition: transform 0.2s; }
+      .folder-section.collapsed .gallery { display: none; }
+      .folder-section.collapsed .chevron { transform: rotate(-90deg); }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main class="wrap">
+      <div class="page-header">
+        <h1>musiki26</h1>
+      </div>
+      <section class="purpose">
+        <p>
+          musiki26 es una plataforma educativa de la catedra Ciencia y Musica (UNTREF)
+          para publicar contenidos, materiales de clase y cursos, con acceso por inicio de
+          sesion para estudiantes y docentes.
+        </p>
+        <p class="purpose-links">
+          <a href="/privacy">Politica de privacidad</a>
+          <span aria-hidden="true"> | </span>
+          <a href="/terms">Terminos del servicio</a>
+        </p>
+      </section>
+
+      {Object.entries(groupedEntries).map(([folder, entriesInFolder]) => (
+        <section class="folder-section" data-folder={folder}>
+          <div class="group-title">
+            <button class="folder-toggle" aria-expanded="true" title="Toggle section">
+              <h3>{folder}</h3>
+              <svg class="chevron" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+          </div>
+          <div class="gallery">
+            {entriesInFolder.map(e => (
+              <article class="card" data-root={e.root}>
+                <a href={`/${e.slug}`} class="card-main-link">
+                  {e.img && <img src={e.img} alt={e.title} />}
+                  <div class="card-body">
+                    <h4 class="title">
+                      {e.title}
+                      {e.hasDataview && <span style="display:inline-block;width:6px;height:6px;background:violet;border-radius:50%;margin-left:6px;vertical-align:middle;" title="Contains Dataview"></span>}
+                    </h4>
+                  </div>
+                </a>
+                {e.tags.length > 0 && (
+                  <div class="tags">
+                    {e.tags.map(t => <a href={`/tags/${encodeURIComponent(t)}`} class="tag">{t}</a>)}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+    </main>
+    <Footer />
+  </body>
+  <script is:inline>
+    (function() {
+      const state = JSON.parse(localStorage.getItem('folder-state') || '{}');
+      document.querySelectorAll('.folder-section').forEach(sec => {
+        const folder = sec.dataset.folder;
+        const toggle = sec.querySelector('.folder-toggle');
+        
+        if (state[folder] === false) {
+          sec.classList.add('collapsed');
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        toggle.onclick = () => {
+          const isCollapsed = sec.classList.toggle('collapsed');
+          toggle.setAttribute('aria-expanded', !isCollapsed);
+          state[folder] = !isCollapsed;
+          localStorage.setItem('folder-state', JSON.stringify(state));
+        };
+      });
+    })();
+  </script>
+  <style>
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .page-header h1 {
+      margin: 0;
+    }
+    .purpose {
+      margin-bottom: 1.5rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--c-border);
+      border-radius: 10px;
+      background: var(--c-bg-mute);
+    }
+    .purpose p {
+      margin: 0;
+      line-height: 1.5;
+    }
+    .purpose-links {
+      margin-top: 0.4rem !important;
+      font-size: 0.95rem;
+    }
+  </style>
+</html>

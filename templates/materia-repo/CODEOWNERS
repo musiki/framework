@@ -1,0 +1,11 @@
+# Public notes require teaching and editorial review.
+/public/ __TEACHERS_TEAM__ __EDITORIAL_TEAM__
+
+# Course-private and draft material stay with the teaching team.
+/cursos/ __TEACHERS_TEAM__
+/draft/ __TEACHERS_TEAM__
+
+# Repo automation and governance stay with developers.
+/.github/workflows/ __DEVS_TEAM__
+/CODEOWNERS __DEVS_TEAM__
+/README.md __DEVS_TEAM__

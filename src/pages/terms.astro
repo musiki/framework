@@ -1,0 +1,81 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<html lang="es">
+  <head>
+    <BaseHead
+      title="Terminos del Servicio | musiki26"
+      description="Terminos del servicio de musiki26, plataforma educativa de Ciencia y Musica UNTREF."
+    />
+  </head>
+  <body>
+    <Header />
+    <main class="wrap">
+      <h1>Terminos del Servicio</h1>
+      <p>
+        Al usar musiki26 aceptas estos terminos para el uso de la plataforma educativa.
+      </p>
+      <h2>Uso permitido</h2>
+      <p>
+        El sitio esta destinado a fines academicos, docentes y de investigacion.
+        No esta permitido usar la plataforma para actividades ilegales, abuso de
+        cuentas o acceso no autorizado.
+      </p>
+      <h2>Cuentas y acceso</h2>
+      <p>
+        El acceso se realiza mediante inicio de sesion con Google. Cada usuario es
+        responsable del uso de su cuenta y de mantener segura su sesion.
+      </p>
+      <h2>Contenidos</h2>
+      <p>
+        Los contenidos del sitio pueden incluir materiales propios y de terceros.
+        Deben respetarse derechos de autor, licencias y condiciones de uso de cada recurso.
+      </p>
+      <h2>Disponibilidad del servicio</h2>
+      <p>
+        Se realizan esfuerzos razonables para mantener la plataforma disponible, pero
+        pueden existir interrupciones por mantenimiento o fallas tecnicas.
+      </p>
+      <h2>Modificaciones</h2>
+      <p>
+        Estos terminos pueden actualizarse para reflejar cambios funcionales, legales o
+        institucionales. Ultima actualizacion: 2026-02-26.
+      </p>
+      <p class="links">
+        <a href="/">Inicio</a>
+        <span aria-hidden="true"> | </span>
+        <a href="/privacy">Politica de privacidad</a>
+      </p>
+    </main>
+    <Footer />
+  </body>
+  <style>
+    .wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    h1 {
+      margin-bottom: 0.75rem;
+    }
+    h2 {
+      margin-top: 1.25rem;
+      margin-bottom: 0.35rem;
+      font-size: 1.05rem;
+    }
+    p {
+      line-height: 1.55;
+      margin: 0;
+    }
+    p + p {
+      margin-top: 0.65rem;
+    }
+    .links {
+      margin-top: 1.25rem;
+    }
+  </style>
+</html>
+

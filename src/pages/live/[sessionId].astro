@@ -1,0 +1,997 @@
+---
+export const prerender = false;
+
+import BaseHead from '../../components/BaseHead.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+
+const routeSessionId = decodeURIComponent(Astro.params.sessionId || '').trim();
+if (!routeSessionId) {
+  return Astro.redirect('/');
+}
+
+const queryCourseId = String(Astro.url.searchParams.get('courseId') || '').trim();
+const session = (Astro.locals as any).session;
+const studentId = String(session?.user?.email || '').trim();
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <BaseHead title="Interacción en vivo" description="Respuesta y resultados en tiempo real" />
+    <style>
+      .live-shell {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: clamp(1rem, 2.5vw, 2rem);
+      }
+
+      .live-card {
+        border: 1px solid var(--c-border);
+        border-radius: 12px;
+        padding: clamp(1rem, 2.2vw, 1.5rem);
+        background: var(--c-bg);
+      }
+
+      .live-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.8rem;
+        margin-bottom: 0.9rem;
+      }
+
+      .live-header h1 {
+        margin: 0;
+        font-size: clamp(1.15rem, 2.5vw, 1.6rem);
+        line-height: 1.2;
+      }
+
+      .live-status {
+        margin: 0;
+        color: var(--c-fg-dim);
+        font-size: 0.9rem;
+      }
+
+      .live-countdown {
+        border: 1px solid var(--c-border);
+        border-radius: 999px;
+        padding: 0.28rem 0.6rem;
+        font-size: 0.85rem;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        background: var(--c-bg-mute);
+      }
+
+      .live-countdown.is-closing {
+        border-color: #b3261e;
+        font-weight: 700;
+      }
+
+      .live-form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        margin-top: 1rem;
+      }
+
+      .live-wordcloud-suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      .live-wordcloud-chip {
+        border: 1px solid var(--c-border);
+        border-radius: 999px;
+        padding: 0.34rem 0.68rem;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font: inherit;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+
+      .live-wordcloud-chip.is-active {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .live-word-input {
+        width: 100%;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        padding: 0.62rem 0.7rem;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font: inherit;
+      }
+
+      .live-word-hint {
+        margin: 0.2rem 0 0;
+        font-size: 0.8rem;
+        color: var(--c-fg-dim);
+      }
+
+      .live-option {
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        padding: 0.7rem 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+
+      .live-option input {
+        margin: 0;
+      }
+
+      .live-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        margin-top: 0.8rem;
+      }
+
+      .live-button,
+      .live-link {
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        padding: 0.5rem 0.8rem;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .live-button[disabled] {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .live-feedback {
+        margin-top: 0.8rem;
+        padding: 0.7rem;
+        border-radius: 8px;
+        border: 1px solid var(--c-border);
+        background: var(--c-bg-mute);
+        font-size: 0.9rem;
+      }
+
+      .live-results {
+        margin-top: 1.1rem;
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .live-wordcloud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem 0.8rem;
+        align-items: baseline;
+      }
+
+      .live-word-term {
+        line-height: 1.1;
+      }
+
+      .live-word-summary {
+        margin: 0.55rem 0 0;
+        color: var(--c-fg-dim);
+        font-size: 0.82rem;
+      }
+
+      .live-result-row {
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        padding: 0.45rem 0.55rem;
+        background: var(--c-bg-mute);
+      }
+
+      .live-result-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.6rem;
+        font-size: 0.85rem;
+      }
+
+      .live-result-track {
+        margin-top: 0.35rem;
+        width: 100%;
+        height: 0.4rem;
+        border-radius: 999px;
+        overflow: hidden;
+        background: color-mix(in srgb, var(--c-border) 45%, transparent);
+      }
+
+      .live-result-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #1f8f45, #36bd63);
+      }
+
+      .live-meta {
+        margin-top: 0.7rem;
+        font-size: 0.8rem;
+        color: var(--c-fg-dim);
+      }
+
+      @media (max-width: 720px) {
+        .live-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <Header courseId={queryCourseId} />
+    <main class="live-shell">
+      <section
+        id="live-root"
+        class="live-card"
+        data-session-id={routeSessionId}
+        data-course-id={queryCourseId}
+        data-student-id={studentId}
+      >
+        <div class="live-header">
+          <div>
+            <h1>Interacción en vivo</h1>
+            <p class="live-status" data-live-status>Cargando estado...</p>
+          </div>
+          <div class="live-countdown" data-live-countdown hidden>--:--</div>
+        </div>
+
+        <div data-live-prompt></div>
+
+        <form class="live-form" data-live-form hidden></form>
+
+        <div class="live-actions">
+          <button class="live-button" type="button" data-live-submit hidden>Enviar respuesta</button>
+          <a class="live-link" href="/" data-live-back>Volver</a>
+        </div>
+
+        <div class="live-feedback" data-live-feedback hidden></div>
+
+        <div class="live-results" data-live-results hidden></div>
+
+        <p class="live-meta" data-live-meta></p>
+      </section>
+    </main>
+    <Footer />
+
+    <script>
+      import { subscribeToLive } from '../../lib/live/client.mjs';
+      import { formatCountdown, getRemainingMs } from '../../lib/live/countdown.mjs';
+
+      const ensureClientId = () => {
+        try {
+          const key = 'live:client-id';
+          const existing = window.localStorage.getItem(key);
+          if (existing) return existing;
+          const created = crypto.randomUUID();
+          window.localStorage.setItem(key, created);
+          return created;
+        } catch {
+          return crypto.randomUUID();
+        }
+      };
+
+      const liveRoot = document.getElementById('live-root');
+      if (!(liveRoot instanceof HTMLElement)) {
+        throw new Error('Live root not found');
+      }
+
+      const routeSessionId = String(liveRoot.dataset.sessionId || '').trim();
+      const fallbackCourseId = String(liveRoot.dataset.courseId || '').trim();
+      const studentId = String(liveRoot.dataset.studentId || '').trim().toLowerCase();
+      const clientId = ensureClientId();
+
+      const statusNode = liveRoot.querySelector('[data-live-status]');
+      const countdownNode = liveRoot.querySelector('[data-live-countdown]');
+      const promptNode = liveRoot.querySelector('[data-live-prompt]');
+      const formNode = liveRoot.querySelector('[data-live-form]');
+      const submitButton = liveRoot.querySelector('[data-live-submit]');
+      const feedbackNode = liveRoot.querySelector('[data-live-feedback]');
+      const resultsNode = liveRoot.querySelector('[data-live-results]');
+      const metaNode = liveRoot.querySelector('[data-live-meta]');
+      const backLink = liveRoot.querySelector('[data-live-back]');
+
+      let state = {
+        active: false,
+        sessionId: routeSessionId,
+        courseId: fallbackCourseId,
+        pageSlug: '',
+        interactionId: '',
+        type: 'poll',
+        prompt: '',
+        options: [],
+        anonymous: true,
+        allowMultiple: false,
+        endsAt: null,
+        totalResponses: 0,
+        optionCounts: {},
+        wordCounts: {},
+      };
+      let draftWordInput = '';
+      let selectedWordSuggestionId = '';
+      let selectedOptionIds = [];
+      let hydratedInteractionId = '';
+
+      const storageKey = (interactionId) => `live:submitted:${interactionId}`;
+      const answerDraftKey = (interactionId) => `live:answer:${interactionId}`;
+      const markSubmitted = (interactionId) => {
+        if (!interactionId) return;
+        window.localStorage.setItem(storageKey(interactionId), 'true');
+      };
+      const isSubmitted = (interactionId) => {
+        if (!interactionId) return false;
+        return window.localStorage.getItem(storageKey(interactionId)) === 'true';
+      };
+      const readStoredAnswer = (interactionId) => {
+        if (!interactionId) return null;
+        try {
+          const raw = window.localStorage.getItem(answerDraftKey(interactionId));
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          return parsed && typeof parsed === 'object' ? parsed : null;
+        } catch {
+          return null;
+        }
+      };
+      const writeStoredAnswer = (interactionId, payload) => {
+        if (!interactionId) return;
+        try {
+          window.localStorage.setItem(answerDraftKey(interactionId), JSON.stringify(payload || {}));
+        } catch {
+          // Ignore storage restrictions.
+        }
+      };
+
+      const setFeedback = (message, isError = false) => {
+        if (!(feedbackNode instanceof HTMLElement)) return;
+        if (!message) {
+          feedbackNode.hidden = true;
+          feedbackNode.textContent = '';
+          feedbackNode.dataset.error = 'false';
+          return;
+        }
+        feedbackNode.hidden = false;
+        feedbackNode.textContent = message;
+        feedbackNode.dataset.error = isError ? 'true' : 'false';
+      };
+
+      const sanitizeWordCounts = (rawCounts) => {
+        if (!rawCounts || typeof rawCounts !== 'object' || Array.isArray(rawCounts)) return {};
+        return Object.entries(rawCounts).reduce((acc, [rawWord, rawValue]) => {
+          const word = String(rawWord || '').trim().replace(/\s+/g, ' ');
+          if (!word) return acc;
+          const numeric = Number(rawValue);
+          if (!Number.isFinite(numeric) || numeric <= 0) return acc;
+          acc[word] = Math.max(1, Math.round(numeric));
+          return acc;
+        }, {});
+      };
+
+      const persistEvalSubmission = async ({ answerPayload, metaPayload = {}, snapshot }) => {
+        const evalId = String(snapshot?.interactionId || state.interactionId || '').trim();
+        if (!evalId) return { ok: false, reason: 'missing evalId' };
+
+        const submissionType = String(
+          answerPayload?.type || snapshot?.type || state.type || 'poll',
+        ).trim();
+        const normalizedAnswer = answerPayload && typeof answerPayload === 'object'
+          ? answerPayload
+          : {};
+        const payload = {
+          ...normalizedAnswer,
+          type: submissionType || 'poll',
+          mode: 'submission',
+          sessionId: String(snapshot?.sessionId || state.sessionId || normalizedAnswer.sessionId || ''),
+          submittedAt: new Date().toISOString(),
+          source: 'live-route',
+        };
+
+        try {
+          const response = await fetch('/api/eval/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              evalId,
+              answer: payload,
+              isCorrect: true,
+              payload: {
+                ...payload,
+                ...(metaPayload && typeof metaPayload === 'object' ? metaPayload : {}),
+              },
+              courseId: String(snapshot?.courseId || state.courseId || fallbackCourseId || ''),
+              pageSlug: String(snapshot?.pageSlug || state.pageSlug || '').trim(),
+              ensureEnrollment: true,
+            }),
+          });
+
+          return { ok: response.ok };
+        } catch {
+          return { ok: false, reason: 'network' };
+        }
+      };
+
+      const renderResults = () => {
+        if (!(resultsNode instanceof HTMLElement)) return;
+
+        const hasSubmitted = isSubmitted(state.interactionId);
+        if (!state.active || !hasSubmitted || !Array.isArray(state.options) || state.options.length === 0) {
+          if (state.type !== 'wordcloud') {
+            resultsNode.hidden = true;
+            resultsNode.innerHTML = '';
+            return;
+          }
+        }
+
+        if (state.type === 'wordcloud') {
+          const wordCounts = sanitizeWordCounts(state.wordCounts);
+          const entries = Object.entries(wordCounts).sort((a, b) => {
+            if (b[1] !== a[1]) return b[1] - a[1];
+            return a[0].localeCompare(b[0], 'es');
+          });
+          if (entries.length === 0) {
+            resultsNode.hidden = true;
+            resultsNode.innerHTML = '';
+            return;
+          }
+
+          const maxCount = Math.max(...entries.map(([, count]) => count), 1);
+          const minCount = Math.min(...entries.map(([, count]) => count), maxCount);
+          const total = Math.max(0, Number(state.totalResponses || 0));
+
+          const cloud = document.createElement('div');
+          cloud.className = 'live-wordcloud';
+          entries.forEach(([word, count], index) => {
+            const ratio = maxCount === minCount
+              ? 1
+              : (count - minCount) / (maxCount - minCount);
+            const sizeRem = 1 + ratio * 1.95;
+            const hue = (index * 47 + 23) % 360;
+
+            const chip = document.createElement('span');
+            chip.className = 'live-word-term';
+            chip.textContent = word;
+            chip.style.fontSize = `${sizeRem.toFixed(2)}rem`;
+            chip.style.color = `hsl(${hue}deg 75% 58%)`;
+            chip.style.fontWeight = ratio > 0.6 ? '700' : '500';
+            chip.title = total > 0
+              ? `${word}: ${count} (${Math.round((count / total) * 100)}%)`
+              : `${word}: ${count}`;
+            cloud.appendChild(chip);
+          });
+
+          const summary = document.createElement('p');
+          summary.className = 'live-word-summary';
+          summary.textContent = total > 0
+            ? `${total} aportes · ${entries.length} términos`
+            : `${entries.length} términos`;
+
+          resultsNode.innerHTML = '';
+          resultsNode.append(cloud, summary);
+          resultsNode.hidden = false;
+          return;
+        }
+
+        const total = Number(state.totalResponses || 0);
+        resultsNode.innerHTML = '';
+
+        state.options.forEach((option) => {
+          const optionId = String(option?.id || '');
+          const count = Number(state.optionCounts?.[optionId] || 0);
+          const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+
+          const row = document.createElement('div');
+          row.className = 'live-result-row';
+
+          const meta = document.createElement('div');
+          meta.className = 'live-result-meta';
+          meta.innerHTML = `<strong>${option?.text || optionId}</strong><span>${count} (${pct}%)</span>`;
+
+          const track = document.createElement('div');
+          track.className = 'live-result-track';
+          const fill = document.createElement('div');
+          fill.className = 'live-result-fill';
+          fill.style.width = `${pct}%`;
+          track.appendChild(fill);
+
+          row.append(meta, track);
+          resultsNode.appendChild(row);
+        });
+
+        resultsNode.hidden = false;
+      };
+
+      const renderForm = () => {
+        if (!(formNode instanceof HTMLFormElement)) return;
+
+        const allowAnswer = state.active && state.sessionId === routeSessionId;
+        if (!allowAnswer) {
+          formNode.hidden = true;
+          formNode.innerHTML = '';
+          if (submitButton instanceof HTMLButtonElement) submitButton.hidden = true;
+          return;
+        }
+
+        formNode.hidden = false;
+        formNode.innerHTML = '';
+
+        if (state.type === 'wordcloud') {
+          const options = Array.isArray(state.options) ? state.options : [];
+          const suggestionsWrap = document.createElement('div');
+          suggestionsWrap.className = 'live-wordcloud-suggestions';
+
+          const syncActiveChip = () => {
+            const chips = Array.from(suggestionsWrap.querySelectorAll('.live-wordcloud-chip'));
+            chips.forEach((chip) => {
+              const optionId = String(chip.dataset.optionId || '');
+              chip.classList.toggle('is-active', optionId === selectedWordSuggestionId);
+            });
+          };
+
+          options.forEach((option) => {
+            const optionId = String(option?.id || '').trim();
+            const optionText = String(option?.text || option?.label || '').trim();
+            if (!optionId && !optionText) return;
+
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'live-wordcloud-chip';
+            chip.dataset.optionId = optionId;
+            chip.textContent = optionText || optionId;
+            chip.addEventListener('click', () => {
+              if (chip.disabled) return;
+              selectedWordSuggestionId = optionId;
+              draftWordInput = optionText || optionId;
+              if (wordInput instanceof HTMLInputElement) {
+                wordInput.value = draftWordInput;
+              }
+              if (state.interactionId) {
+                writeStoredAnswer(state.interactionId, {
+                  type: 'wordcloud',
+                  text: draftWordInput,
+                  suggestionId: selectedWordSuggestionId,
+                });
+              }
+              syncActiveChip();
+              submitCurrentResponse();
+            });
+            suggestionsWrap.appendChild(chip);
+          });
+
+          if (options.length > 0) {
+            formNode.appendChild(suggestionsWrap);
+          }
+
+          const wordInput = document.createElement('input');
+          wordInput.type = 'text';
+          wordInput.className = 'live-word-input';
+          wordInput.maxLength = 120;
+          wordInput.autocomplete = 'off';
+          wordInput.placeholder = 'Escribe una palabra o frase corta';
+          wordInput.value = draftWordInput;
+          wordInput.addEventListener('input', () => {
+            draftWordInput = String(wordInput.value || '');
+            const normalized = draftWordInput.trim();
+            const matchingOption = options.find(
+              (option) => String(option?.text || option?.label || '').trim() === normalized,
+            );
+            selectedWordSuggestionId = matchingOption ? String(matchingOption?.id || '') : '';
+            if (state.interactionId) {
+              writeStoredAnswer(state.interactionId, {
+                type: 'wordcloud',
+                text: draftWordInput,
+                suggestionId: selectedWordSuggestionId,
+              });
+            }
+            syncActiveChip();
+          });
+          wordInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            submitCurrentResponse();
+          });
+          formNode.appendChild(wordInput);
+
+          const hint = document.createElement('p');
+          hint.className = 'live-word-hint';
+          hint.textContent = 'Apretar Enter para enviar';
+          formNode.appendChild(hint);
+
+          if (draftWordInput.trim()) {
+            const matchingOption = options.find(
+              (option) => String(option?.text || option?.label || '').trim() === draftWordInput.trim(),
+            );
+            selectedWordSuggestionId = matchingOption ? String(matchingOption?.id || '') : selectedWordSuggestionId;
+          }
+          syncActiveChip();
+
+          if (submitButton instanceof HTMLButtonElement) {
+            submitButton.hidden = true;
+            submitButton.disabled = false;
+            submitButton.textContent = 'Enviar respuesta';
+          }
+          return;
+        }
+
+        const inputType = state.allowMultiple ? 'checkbox' : 'radio';
+        const selectedName = `live-${state.interactionId || state.sessionId}`;
+
+        state.options.forEach((option, index) => {
+          const id = `live-opt-${index + 1}`;
+          const label = document.createElement('label');
+          label.className = 'live-option';
+
+          const input = document.createElement('input');
+          input.type = inputType;
+          input.name = selectedName;
+          input.value = String(option.id || '');
+          input.id = id;
+          input.checked = selectedOptionIds.includes(input.value);
+          input.addEventListener('change', () => {
+            if (state.allowMultiple) {
+              selectedOptionIds = Array.from(formNode.querySelectorAll('input:checked'))
+                .map((node) => String(node.value));
+            } else {
+              selectedOptionIds = input.checked ? [input.value] : [];
+            }
+            if (state.interactionId) {
+              writeStoredAnswer(state.interactionId, {
+                type: 'poll',
+                selected: selectedOptionIds,
+              });
+            }
+          });
+
+          const text = document.createElement('span');
+          text.textContent = String(option.text || option.id || id);
+
+          label.append(input, text);
+          formNode.appendChild(label);
+        });
+
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.hidden = false;
+          submitButton.disabled = false;
+          submitButton.textContent = isSubmitted(state.interactionId)
+            ? 'Actualizar respuesta'
+            : 'Enviar respuesta';
+        }
+      };
+
+      const renderCountdown = () => {
+        if (!(countdownNode instanceof HTMLElement)) return;
+        const remaining = getRemainingMs(state.endsAt, Date.now());
+        if (remaining === null || !state.active) {
+          countdownNode.hidden = true;
+          countdownNode.classList.remove('is-closing');
+          countdownNode.textContent = '--:--';
+          return;
+        }
+
+        countdownNode.hidden = false;
+        countdownNode.textContent = formatCountdown(remaining);
+        countdownNode.classList.toggle('is-closing', remaining <= 10_000);
+      };
+
+      const render = () => {
+        if (promptNode instanceof HTMLElement) {
+          promptNode.innerHTML = state.prompt
+            ? `<h2>${state.prompt}</h2>`
+            : '<h2>Interacción en vivo</h2>';
+        }
+
+        if (statusNode instanceof HTMLElement) {
+          if (!state.active) {
+            statusNode.textContent = 'La interacción no está activa o ya finalizó.';
+          } else if (state.endsAt) {
+            statusNode.textContent = 'Interacción activa con tiempo limitado.';
+          } else {
+            statusNode.textContent = 'Interacción activa.';
+          }
+        }
+
+        if (metaNode instanceof HTMLElement) {
+          const details = [];
+          details.push(`Session: ${routeSessionId}`);
+          if (state.courseId) details.push(`Curso: ${state.courseId}`);
+          details.push(`Respuestas: ${state.totalResponses || 0}`);
+          metaNode.textContent = details.join(' · ');
+        }
+
+        if (backLink instanceof HTMLAnchorElement) {
+          if (state.courseId) {
+            backLink.href = `/cursos/${encodeURIComponent(state.courseId)}`;
+            backLink.textContent = 'Volver al curso';
+          } else {
+            backLink.href = '/';
+            backLink.textContent = 'Volver';
+          }
+        }
+
+        renderCountdown();
+        renderForm();
+        renderResults();
+      };
+
+      const applySnapshot = (payload) => {
+        if (!payload || typeof payload !== 'object') return;
+
+        if (!payload.active) {
+          const payloadSessionId = String(payload.sessionId || '').trim();
+          if (payloadSessionId && payloadSessionId !== routeSessionId) return;
+
+          state = {
+            ...state,
+            active: false,
+            endsAt: null,
+            sessionId: payloadSessionId || state.sessionId || routeSessionId,
+            courseId: String(payload.courseId || state.courseId || fallbackCourseId),
+            pageSlug: String(payload.pageSlug || state.pageSlug || ''),
+            interactionId: String(payload.interactionId || state.interactionId || ''),
+            type: String(payload.type || state.type || 'poll'),
+            prompt: String(payload.prompt || state.prompt || ''),
+            options: Array.isArray(payload.options) ? payload.options : state.options,
+            anonymous: typeof payload.anonymous === 'boolean' ? Boolean(payload.anonymous) : state.anonymous,
+            allowMultiple:
+              typeof payload.allowMultiple === 'boolean'
+                ? Boolean(payload.allowMultiple)
+                : state.allowMultiple,
+            totalResponses: Number(payload.totalResponses ?? state.totalResponses ?? 0),
+            optionCounts:
+              payload.optionCounts && typeof payload.optionCounts === 'object'
+                ? payload.optionCounts
+                : state.optionCounts,
+            wordCounts:
+              payload.wordCounts && typeof payload.wordCounts === 'object'
+                ? payload.wordCounts
+                : state.wordCounts,
+          };
+          render();
+          return;
+        }
+
+        if (String(payload.sessionId || '') !== routeSessionId) {
+          return;
+        }
+
+        state = {
+          ...state,
+          active: true,
+          sessionId: String(payload.sessionId || routeSessionId),
+          courseId: String(payload.courseId || state.courseId || fallbackCourseId),
+          pageSlug: String(payload.pageSlug || state.pageSlug || ''),
+          interactionId: String(payload.interactionId || ''),
+          type: String(payload.type || 'poll'),
+          prompt: String(payload.prompt || ''),
+          options: Array.isArray(payload.options) ? payload.options : [],
+          anonymous: Boolean(payload.anonymous),
+          allowMultiple: Boolean(payload.allowMultiple),
+          endsAt: payload.endsAt || null,
+          totalResponses: Number(payload.totalResponses || 0),
+          optionCounts: payload.optionCounts && typeof payload.optionCounts === 'object'
+            ? payload.optionCounts
+            : {},
+          wordCounts: payload.wordCounts && typeof payload.wordCounts === 'object'
+            ? payload.wordCounts
+            : {},
+        };
+
+        const interactionId = String(state.interactionId || '').trim();
+        if (interactionId && hydratedInteractionId !== interactionId) {
+          hydratedInteractionId = interactionId;
+          const storedAnswer = readStoredAnswer(interactionId);
+          if (state.type === 'wordcloud') {
+            draftWordInput = String(storedAnswer?.text || '').trim();
+            selectedWordSuggestionId = String(storedAnswer?.suggestionId || '').trim();
+            selectedOptionIds = [];
+          } else {
+            const selected = Array.isArray(storedAnswer?.selected)
+              ? storedAnswer.selected.map((entry) => String(entry || '').trim()).filter(Boolean)
+              : [];
+            selectedOptionIds = selected;
+            draftWordInput = '';
+            selectedWordSuggestionId = '';
+          }
+        }
+
+        if (state.type !== 'wordcloud') {
+          if (selectedOptionIds.length === 0 && isSubmitted(state.interactionId)) {
+            const storedAnswer = readStoredAnswer(state.interactionId);
+            if (Array.isArray(storedAnswer?.selected)) {
+              selectedOptionIds = storedAnswer.selected
+                .map((entry) => String(entry || '').trim())
+                .filter(Boolean);
+            }
+          }
+        } else if (!Array.isArray(state.options)
+          || !state.options.some((option) => String(option?.id || '') === selectedWordSuggestionId)) {
+          selectedWordSuggestionId = '';
+        }
+
+        render();
+      };
+
+      const fetchSnapshot = async () => {
+        try {
+          const response = await fetch(`/api/live/active?sessionId=${encodeURIComponent(routeSessionId)}`);
+          if (!response.ok) return;
+          const payload = await response.json().catch(() => null);
+          if (payload) applySnapshot(payload);
+        } catch {
+          // ignore transient errors
+        }
+      };
+
+      const submitCurrentResponse = async () => {
+        if (!state.active || !state.sessionId) return;
+        if (submitButton instanceof HTMLButtonElement && submitButton.disabled) return;
+
+        let answerPayload = null;
+        let answerMeta = {};
+        let selected = [];
+        let selectedTexts = [];
+
+        if (state.type === 'wordcloud') {
+          const answerText = String(draftWordInput || '').trim();
+          if (!answerText) {
+            setFeedback('Escribe una palabra para responder.', true);
+            return;
+          }
+          answerPayload = {
+            text: answerText,
+            suggestionId: selectedWordSuggestionId || '',
+          };
+          answerMeta = {
+            answerText,
+            answerWord: answerText,
+            suggestionId: selectedWordSuggestionId || '',
+            type: 'wordcloud',
+            mode: 'submission',
+          };
+          if (state.interactionId) {
+            writeStoredAnswer(state.interactionId, {
+              type: 'wordcloud',
+              text: answerText,
+              suggestionId: selectedWordSuggestionId || '',
+            });
+          }
+        } else {
+          selected = Array.from(formNode.querySelectorAll('input:checked')).map((node) => String(node.value));
+          if (selected.length === 0) {
+            setFeedback('Selecciona al menos una opción.', true);
+            return;
+          }
+          selectedOptionIds = [...selected];
+          selectedTexts = selected
+            .map((optionId) => state.options.find((option) => String(option.id || '') === optionId)?.text || '')
+            .filter(Boolean);
+          answerPayload = state.allowMultiple ? selected : selected[0];
+          answerMeta = {
+            answerIndexes: selected,
+            answerOptions: selectedTexts,
+            answerText: selectedTexts.join(' | '),
+            selectionMode: state.allowMultiple ? 'multiple' : 'single',
+            type: 'poll',
+            mode: 'submission',
+          };
+          if (state.interactionId) {
+            writeStoredAnswer(state.interactionId, {
+              type: 'poll',
+              selected: selectedOptionIds,
+            });
+          }
+        }
+
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.disabled = true;
+        }
+        setFeedback('Enviando respuesta...');
+
+        try {
+          const response = await fetch('/api/live/respond', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId: state.sessionId,
+              answer: answerPayload,
+              clientId,
+            }),
+          });
+
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const msg = payload?.error || 'No se pudo enviar la respuesta.';
+            setFeedback(String(msg), true);
+            if (submitButton instanceof HTMLButtonElement) {
+              submitButton.disabled = false;
+            }
+            return;
+          }
+
+          markSubmitted(state.interactionId);
+          setFeedback('Respuesta registrada. Puedes actualizarla mientras la interacción siga activa.');
+          if (submitButton instanceof HTMLButtonElement) {
+            submitButton.textContent = 'Actualizar respuesta';
+            submitButton.disabled = false;
+          }
+          if (payload?.snapshot) applySnapshot(payload.snapshot);
+
+          const persisted = await persistEvalSubmission({
+            answerPayload: {
+              ...(state.type === 'wordcloud'
+                ? {
+                    type: 'wordcloud',
+                    text: String(draftWordInput || '').trim(),
+                    suggestionId: selectedWordSuggestionId || '',
+                  }
+                : {
+                    type: 'poll',
+                    answerIndexes: selected,
+                    answerOptions: selectedTexts,
+                  }),
+              sessionId: state.sessionId,
+              submittedAt: new Date().toISOString(),
+            },
+            metaPayload: answerMeta,
+            snapshot: payload?.snapshot || state,
+          });
+
+          if (!persisted.ok) {
+            setFeedback('Respuesta enviada en vivo, pero no se pudo persistir en el log.', true);
+          }
+
+          renderResults();
+          renderForm();
+        } catch (error) {
+          setFeedback('Error de red al enviar respuesta.', true);
+          if (submitButton instanceof HTMLButtonElement) {
+            submitButton.disabled = false;
+          }
+        }
+      };
+
+      if (submitButton instanceof HTMLButtonElement && formNode instanceof HTMLFormElement) {
+        submitButton.addEventListener('click', submitCurrentResponse);
+      }
+
+      fetchSnapshot();
+
+      const unsubscribe = subscribeToLive({
+        courseId: fallbackCourseId,
+        onEvent: (eventName, payload) => {
+          if (eventName === 'live.snapshot' || eventName === 'live.started' || eventName === 'live.updated') {
+            applySnapshot(payload);
+            return;
+          }
+
+          if (eventName === 'live.ended' && String(payload?.sessionId || '') === routeSessionId) {
+            state = {
+              ...state,
+              active: false,
+              endsAt: null,
+            };
+            setFeedback('La interacción fue cerrada por el docente.');
+            render();
+          }
+        },
+      });
+
+      const tickId = window.setInterval(renderCountdown, 1000);
+
+      window.addEventListener('beforeunload', () => {
+        unsubscribe();
+        window.clearInterval(tickId);
+      });
+
+      render();
+    </script>
+  </body>
+</html>

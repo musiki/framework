@@ -1,0 +1,134 @@
+---
+export const prerender = false;
+
+import { getCollection, getEntry, render } from 'astro:content';
+import RevealSlidesLayout from '../../../layouts/RevealSlidesLayout.astro';
+import { canonicalizeCourseId } from '../../../lib/course-alias';
+import { resolveLiveManageAccess } from '../../../lib/live/access';
+import {
+  buildCourseHref,
+  buildCourseLessonPathIndex,
+  buildCourseSlideLessonHref,
+  findLessonByCoursePath,
+  getPreferredCoursePathSegment,
+} from '../../../lib/course-routing';
+
+const rawSlug = Astro.params.slug;
+if (!rawSlug) return Astro.redirect('/cursos');
+
+const slug = rawSlug
+  .split('/')
+  .map((segment) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return segment;
+    }
+  })
+  .join('/');
+
+const parts = slug.split('/');
+const requestedCoursePathSegment = parts[0];
+const isCourseForumPage = parts.length === 2 && parts[1] === 'foro';
+const canonicalCourseId = await canonicalizeCourseId(requestedCoursePathSegment);
+
+const courseIndex = canonicalCourseId
+  ? await getEntry('cursos', `${canonicalCourseId}/_index`)
+  : null;
+if (!courseIndex) return Astro.redirect('/cursos');
+const courseSlug = canonicalCourseId;
+const courseData = (courseIndex.data || {}) as Record<string, unknown>;
+const preferredCoursePathSegment = getPreferredCoursePathSegment(
+  canonicalCourseId,
+  courseData,
+);
+const courseHref = buildCourseHref(canonicalCourseId, courseData);
+
+const session = (Astro.locals as any).session;
+const hasAccess = courseIndex.data.public || session;
+if (!hasAccess) return Astro.redirect('/login');
+
+const liveAccess = await resolveLiveManageAccess(session, canonicalCourseId || requestedCoursePathSegment);
+const sessionEnrollmentRole = String(liveAccess.enrollmentRole || '').trim();
+const canManageLiveInteractions = liveAccess.canManage;
+const hasCourseEnrollment = Boolean(sessionEnrollmentRole);
+
+const allLessons = (await getCollection('cursos'))
+  .filter((entry) => entry.id.startsWith(`${canonicalCourseId}/`) && !entry.id.endsWith('_index'))
+  .sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
+const lessonPathIndex = buildCourseLessonPathIndex(
+  canonicalCourseId,
+  courseData,
+  allLessons,
+);
+
+let currentEntry;
+if (parts.length === 1 || isCourseForumPage) {
+  currentEntry = courseIndex;
+} else {
+  const lessonPath = parts.slice(1).join('/');
+  const lessonMatch = findLessonByCoursePath(lessonPath, lessonPathIndex);
+  currentEntry = lessonMatch?.entry;
+  if (!currentEntry) {
+    return Astro.redirect(courseHref);
+  }
+
+  const visibility = currentEntry.data.visibility;
+  if (visibility === 'enrolled-only') {
+    if (!session) {
+      return Astro.redirect(`/login?redirect=/cursos/${encodeURIComponent(slug)}`);
+    }
+
+    if (!canManageLiveInteractions && !hasCourseEnrollment) {
+      return Astro.redirect(courseHref);
+    }
+  }
+
+  if (
+    requestedCoursePathSegment !== preferredCoursePathSegment ||
+    lessonPath !== (lessonMatch?.shortPath || '')
+  ) {
+    return Astro.redirect(
+      `${buildCourseSlideLessonHref(
+        canonicalCourseId,
+        courseData,
+        currentEntry,
+        lessonPathIndex,
+      )}${Astro.url.search}`,
+    );
+  }
+}
+
+if ((parts.length === 1 || isCourseForumPage) && requestedCoursePathSegment !== preferredCoursePathSegment) {
+  return Astro.redirect(`/cursos/slides/${encodeURIComponent(preferredCoursePathSegment)}${Astro.url.search}`);
+}
+
+const { Content } = await render(currentEntry);
+
+const title = currentEntry.data.title || courseIndex.data.title || 'Slides';
+const description =
+  currentEntry.data.summary ||
+  currentEntry.data.description ||
+  courseIndex.data.summary ||
+  courseIndex.data.description ||
+  '';
+const defaultSlideTheme = 'zztt';
+const slideThemeFromData =
+  (currentEntry.data as Record<string, unknown>).slideTheme ||
+  (currentEntry.data as Record<string, unknown>).revealTheme ||
+  (currentEntry.data as Record<string, unknown>).theme;
+const slideTheme =
+  typeof slideThemeFromData === 'string' && slideThemeFromData.trim()
+    ? slideThemeFromData.trim()
+    : defaultSlideTheme;
+---
+
+<RevealSlidesLayout
+  title={title}
+  description={description}
+  slideTheme={slideTheme}
+  canManageLive={canManageLiveInteractions}
+  canonicalCourseId={canonicalCourseId}
+>
+  <Content />
+</RevealSlidesLayout>

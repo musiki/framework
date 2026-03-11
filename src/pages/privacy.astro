@@ -1,0 +1,83 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<html lang="es">
+  <head>
+    <BaseHead
+      title="Politica de Privacidad | musiki26"
+      description="Politica de privacidad de musiki26, plataforma educativa de Ciencia y Musica UNTREF."
+    />
+  </head>
+  <body>
+    <Header />
+    <main class="wrap">
+      <h1>Politica de Privacidad</h1>
+      <p>
+        musiki26 es una plataforma educativa vinculada a la catedra Ciencia y Musica (UNTREF).
+      </p>
+      <h2>Datos que procesamos</h2>
+      <p>
+        Para iniciar sesion usamos Google OAuth y recibimos datos basicos de perfil
+        (nombre, correo electronico e imagen de cuenta) para autenticar usuarios y
+        habilitar acceso a contenidos y funciones del sitio.
+      </p>
+      <h2>Uso de la informacion</h2>
+      <p>
+        Los datos se usan exclusivamente para operar la plataforma, gestionar sesiones,
+        mostrar perfil de usuario y administrar cursos/foros internos.
+      </p>
+      <h2>Comparticion de datos</h2>
+      <p>
+        No vendemos ni comercializamos datos personales. Los datos solo se comparten
+        con proveedores tecnicos necesarios para el funcionamiento del servicio
+        (autenticacion, hosting y base de datos).
+      </p>
+      <h2>Conservacion y derechos</h2>
+      <p>
+        Conservamos los datos mientras la cuenta permanezca activa o sea necesaria para
+        fines academicos y operativos. Si queres solicitar correccion o eliminacion de
+        datos, contacta al equipo docente responsable del sitio.
+      </p>
+      <h2>Actualizaciones</h2>
+      <p>
+        Esta politica puede actualizarse para reflejar cambios tecnicos o regulatorios.
+        Ultima actualizacion: 2026-02-26.
+      </p>
+      <p class="links">
+        <a href="/">Inicio</a>
+        <span aria-hidden="true"> | </span>
+        <a href="/terms">Terminos del servicio</a>
+      </p>
+    </main>
+    <Footer />
+  </body>
+  <style>
+    .wrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    h1 {
+      margin-bottom: 0.75rem;
+    }
+    h2 {
+      margin-top: 1.25rem;
+      margin-bottom: 0.35rem;
+      font-size: 1.05rem;
+    }
+    p {
+      line-height: 1.55;
+      margin: 0;
+    }
+    p + p {
+      margin-top: 0.65rem;
+    }
+    .links {
+      margin-top: 1.25rem;
+    }
+  </style>
+</html>
+
