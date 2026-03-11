@@ -426,8 +426,10 @@ const forumThreadPrompt = sessionFirstName
         min-height: 0;
         min-width: 0;
         width: 100%;
+        overflow-x: hidden;
         overflow-y: auto;
         overscroll-behavior: contain;
+        overscroll-behavior-x: none;
         scrollbar-gutter: stable;
         border: 1px solid var(--c-border);
         border-radius: 12px;
@@ -448,6 +450,7 @@ const forumThreadPrompt = sessionFirstName
         justify-self: stretch;
         top: var(--course-shell-top);
         height: calc(100dvh - var(--course-shell-top) - var(--course-shell-bottom-gap));
+        touch-action: pan-y;
       }
 
       .course-container[data-left-open='false'] .sidebar--left {
@@ -622,12 +625,22 @@ const forumThreadPrompt = sessionFirstName
       }
 
       .sidebar--left .lesson-item {
+        margin-bottom: 0;
         padding-left: 0 !important;
       }
 
       .sidebar--left .lesson-item::before {
         content: none !important;
         display: none !important;
+      }
+
+      .sidebar--left .lesson-list {
+        display: grid;
+        gap: 0.08rem;
+      }
+
+      .sidebar--left .lesson-link {
+        padding: 0.3rem 0.45rem;
       }
       
       .lesson-link {
@@ -1091,6 +1104,8 @@ const forumThreadPrompt = sessionFirstName
         border-radius: 12px;
         padding: clamp(1.15rem, 2.2vw, 2.5rem);
         background: var(--c-bg);
+        width: min(100%, clamp(42rem, 54vw, 60rem));
+        justify-self: center;
         height: calc(100dvh - 7.4rem);
         min-height: 0;
         overflow-y: auto;
@@ -1244,6 +1259,9 @@ const forumThreadPrompt = sessionFirstName
         display: grid;
         grid-template-rows: auto minmax(0, 1fr);
         min-height: 0;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: hidden;
       }
 
       .lesson-forum-header {
@@ -1289,6 +1307,9 @@ const forumThreadPrompt = sessionFirstName
         grid-template-columns: 1fr;
         gap: 0.75rem;
         min-height: 0;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: hidden;
       }
 
       .forum-panel {
@@ -1302,6 +1323,9 @@ const forumThreadPrompt = sessionFirstName
         border-radius: 0;
         background: transparent;
         padding: 0.8rem 0 0 0;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: hidden;
       }
 
       .sidebar--right .forum-panel + .forum-panel {
@@ -1925,6 +1949,7 @@ const forumThreadPrompt = sessionFirstName
         }
 
         .content-area {
+          width: 100%;
           height: auto;
           min-height: calc(100dvh - 8.4rem);
           overflow: visible;
@@ -1984,9 +2009,15 @@ const forumThreadPrompt = sessionFirstName
 
       @media (max-width: 500px) {
         .sidebar {
+          top: var(--musiki-header-height, 4.5rem);
+          right: 0;
+          bottom: 0;
+          left: 0;
           width: 100vw;
+          width: 100dvw;
           max-width: none;
-          inset: 0;
+          height: auto;
+          min-height: calc(100dvh - var(--musiki-header-height, 4.5rem));
           padding: 0.9rem 0.9rem 1.1rem;
         }
 

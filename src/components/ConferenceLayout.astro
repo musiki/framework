@@ -1096,73 +1096,72 @@ if (
                       Genera un link con password para invitados externos sin login.
                     </p>
                   </div>
+                  <div class="conference-room-invite-controls">
+                    <div class="conference-session-controls-heading">INVITE ESTUDIANTES</div>
+
+                    <div class="conference-field">
+                      <label for="conference-student-expiry-select">Vencimiento</label>
+                      <select
+                        id="conference-student-expiry-select"
+                        name="student-expiry"
+                        data-student-expiry-select
+                      >
+                        <option value="">Sin vencimiento</option>
+                        <option value="60">1 hora</option>
+                        <option value="1440">24 horas</option>
+                        <option value="10080">7 dias</option>
+                      </select>
+                    </div>
+
+                    <div class="conference-field">
+                      <label for="conference-student-invite-link-output">Link estudiantes</label>
+                      <input
+                        id="conference-student-invite-link-output"
+                        name="student-invite-link"
+                        class="conference-invite-link-output"
+                        type="text"
+                        value=""
+                        readonly
+                        placeholder="Crea un acceso directo para estudiantes"
+                        data-student-invite-link-output
+                      />
+                    </div>
+
+                    <div class="conference-session-action-row conference-session-action-row--triple">
+                      <button
+                        type="button"
+                        class="conference-session-action conference-session-action--compact"
+                        data-action="student-invite-create"
+                        title="Guardar link"
+                        aria-label="Guardar link"
+                      >
+                        G
+                      </button>
+                      <button
+                        type="button"
+                        class="conference-session-action conference-session-action--compact"
+                        data-action="student-invite-copy"
+                        title="Copiar link"
+                        aria-label="Copiar link"
+                      >
+                        C
+                      </button>
+                      <button
+                        type="button"
+                        class="conference-session-action conference-session-action--compact"
+                        data-action="student-invite-revoke"
+                        title="Revocar link"
+                        aria-label="Revocar link"
+                      >
+                        R
+                      </button>
+                    </div>
+
+                    <p class="conference-session-note" data-student-invite-status>
+                      Link directo para estudiantes sin navegar por curso ni leccion.
+                    </p>
+                  </div>
                 </details>
-
-                <div class="conference-room-invite-controls">
-                  <div class="conference-session-controls-heading">INVITE ESTUDIANTES</div>
-
-                  <div class="conference-field">
-                    <label for="conference-student-expiry-select">Vencimiento</label>
-                    <select
-                      id="conference-student-expiry-select"
-                      name="student-expiry"
-                      data-student-expiry-select
-                    >
-                      <option value="">Sin vencimiento</option>
-                      <option value="60">1 hora</option>
-                      <option value="1440">24 horas</option>
-                      <option value="10080">7 dias</option>
-                    </select>
-                  </div>
-
-                  <div class="conference-field">
-                    <label for="conference-student-invite-link-output">Link estudiantes</label>
-                    <input
-                      id="conference-student-invite-link-output"
-                      name="student-invite-link"
-                      class="conference-invite-link-output"
-                      type="text"
-                      value=""
-                      readonly
-                      placeholder="Crea un acceso directo para estudiantes"
-                      data-student-invite-link-output
-                    />
-                  </div>
-
-                  <div class="conference-session-action-row conference-session-action-row--triple">
-                    <button
-                      type="button"
-                      class="conference-session-action conference-session-action--compact"
-                      data-action="student-invite-create"
-                      title="Guardar link"
-                      aria-label="Guardar link"
-                    >
-                      G
-                    </button>
-                    <button
-                      type="button"
-                      class="conference-session-action conference-session-action--compact"
-                      data-action="student-invite-copy"
-                      title="Copiar link"
-                      aria-label="Copiar link"
-                    >
-                      C
-                    </button>
-                    <button
-                      type="button"
-                      class="conference-session-action conference-session-action--compact"
-                      data-action="student-invite-revoke"
-                      title="Revocar link"
-                      aria-label="Revocar link"
-                    >
-                      R
-                    </button>
-                  </div>
-
-                  <p class="conference-session-note" data-student-invite-status>
-                    Link directo para estudiantes sin navegar por curso ni leccion.
-                  </p>
-                </div>
               </div>
             </div>
           </details>
@@ -1550,6 +1549,9 @@ if (
       aria-modal="true"
       aria-labelledby="conference-invite-title"
     >
+      <div class="conference-invite-brand" aria-hidden="true">
+        <img src="/logo-musiki.png" alt="" class="conference-invite-brand-logo" />
+      </div>
       <div class="conference-invite-head">
         <div class="conference-invite-heading">
           <strong id="conference-invite-title">
@@ -1708,6 +1710,9 @@ if (
     --conference-bar-height: 42px;
     --conference-sidebar-size: clamp(300px, 22vw, 420px);
     --conference-instruments-size: clamp(320px, 24vw, 400px);
+    --conference-font-caption: 0.62rem;
+    --conference-font-body: 0.72rem;
+    --conference-font-title: 0.82rem;
     --conference-local-video-flip: 1;
     --conference-self-preview-zoom: 1;
     --conference-circle-preview-zoom: 1;
@@ -2007,7 +2012,7 @@ if (
   .conference-sidebar-heading {
     padding: 0.45rem 0.75rem;
     color: var(--conference-muted);
-    font-size: 0.66rem;
+    font-size: var(--conference-font-caption);
     line-height: 1;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -2068,7 +2073,7 @@ if (
     left: 0.8rem;
     bottom: 0.7rem;
     color: var(--conference-dim);
-    font-size: 0.72rem;
+    font-size: var(--conference-font-body);
     letter-spacing: 0.02em;
     pointer-events: none;
     z-index: 0;
@@ -2258,7 +2263,7 @@ if (
 
   .conference-field label {
     color: var(--conference-muted);
-    font-size: 0.66rem;
+    font-size: var(--conference-font-caption);
     line-height: 1;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -2286,10 +2291,11 @@ if (
     padding: 0.28rem 0 0.32rem;
     outline: none;
     box-shadow: none;
+    font-size: var(--conference-font-body);
   }
 
   .conference-sidebar .conference-field select {
-    font-size: 0.72rem;
+    font-size: var(--conference-font-body);
   }
 
   .conference-field input:focus,
@@ -2992,7 +2998,7 @@ if (
 
   .conference-session-controls-heading {
     color: var(--conference-muted);
-    font-size: 0.58rem;
+    font-size: var(--conference-font-caption);
     line-height: 1;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -3049,8 +3055,12 @@ if (
     padding-top: 0.08rem;
   }
 
+  .conference-invite-link-output {
+    font-size: calc(var(--conference-font-body) * 0.9) !important;
+  }
+
   .conference-invite-link-output::placeholder {
-    font-size: 0.42rem;
+    font-size: calc(var(--conference-font-body) * 0.8);
     line-height: 1.1;
     letter-spacing: 0.01em;
   }
@@ -3068,7 +3078,7 @@ if (
     cursor: pointer;
     list-style: none;
     color: var(--conference-muted);
-    font-size: 0.58rem;
+    font-size: var(--conference-font-caption);
     line-height: 1;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -3097,7 +3107,7 @@ if (
   .conference-session-note {
     margin: 0;
     color: var(--conference-muted);
-    font-size: 0.64rem;
+    font-size: var(--conference-font-body);
     line-height: 1.35;
   }
 
@@ -3900,6 +3910,18 @@ if (
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
   }
 
+  .conference-invite-brand {
+    display: flex;
+    justify-content: center;
+    padding: 0.95rem 1rem 0.1rem;
+  }
+
+  .conference-invite-brand-logo {
+    display: block;
+    width: min(116px, 42vw);
+    height: auto;
+  }
+
   .conference-invite-head {
     display: flex;
     align-items: flex-start;
@@ -3915,7 +3937,7 @@ if (
   }
 
   .conference-invite-heading strong {
-    font-size: 0.82rem;
+    font-size: var(--conference-font-title);
     letter-spacing: 0.18em;
     text-transform: uppercase;
   }
@@ -3923,7 +3945,7 @@ if (
   .conference-invite-heading p {
     margin: 0;
     color: var(--conference-muted);
-    font-size: 0.72rem;
+    font-size: var(--conference-font-body);
     line-height: 1.45;
   }
 
@@ -3942,7 +3964,7 @@ if (
   .conference-invite-note {
     margin: 0;
     color: var(--conference-muted);
-    font-size: 0.7rem;
+    font-size: var(--conference-font-body);
     line-height: 1.45;
   }
 

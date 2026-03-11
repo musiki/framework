@@ -9415,7 +9415,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
         try {
           await enableDisconnectedCameraPreview();
-          setStatus('Preview de camara actualizado.');
           setControlState();
         } catch (error) {
           disableDisconnectedCameraPreview();
