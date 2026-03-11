@@ -2013,6 +2013,94 @@ const forumThreadPrompt = sessionFirstName
         overflow: hidden;
       }
     </style>
+    <style is:global>
+    .sidebar--left .lesson-item {
+      padding-left: 0 !important;
+      position: static !important;
+    }
+
+    .sidebar--left .lesson-item::before {
+      content: none !important;
+      display: none !important;
+    }
+
+    .sidebar--left .class-toc-summary {
+      list-style: none !important;
+      display: block !important;
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      padding-left: 0 !important;
+    }
+
+    .sidebar--left .class-toc-summary::-webkit-details-marker {
+      display: none !important;
+    }
+
+    .sidebar--left .class-toc-summary::marker {
+      content: none !important;
+      font-size: 0 !important;
+    }
+
+    .content-area .content-fold-summary {
+      list-style: none !important;
+      display: block !important;
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      padding: 0.95rem 0 !important;
+    }
+
+    .content-area .content-fold-summary::-webkit-details-marker {
+      display: none !important;
+    }
+
+    .content-area .content-fold-summary::marker {
+      content: none !important;
+      font-size: 0 !important;
+    }
+
+    .content-area .content-fold-summary::before,
+    .content-area .content-fold[open] > .content-fold-summary::before {
+      content: none !important;
+      display: none !important;
+    }
+
+    .content-area .content-fold-summary h2 {
+      margin: 0 !important;
+      line-height: 1.24 !important;
+      min-width: 0;
+      display: block !important;
+    }
+
+    [data-musiki-no-list-marker='true'] {
+      position: static !important;
+      padding-left: 0 !important;
+      list-style: none !important;
+    }
+
+    [data-musiki-no-list-marker='true']::before,
+    [data-musiki-no-list-marker='true']::marker {
+      content: none !important;
+      display: none !important;
+    }
+
+    [data-musiki-no-summary-marker='true'] {
+      display: block !important;
+      list-style: none !important;
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      padding-left: 0 !important;
+    }
+
+    [data-musiki-no-summary-marker='true']::-webkit-details-marker {
+      display: none !important;
+    }
+
+    [data-musiki-no-summary-marker='true']::before,
+    [data-musiki-no-summary-marker='true']::marker {
+      content: none !important;
+      display: none !important;
+    }
+    </style>
   </head>
   <body>
     <Header
@@ -4924,9 +5012,28 @@ const forumThreadPrompt = sessionFirstName
         return roots;
       }
 
+      function applyNoListMarker(element) {
+        if (!(element instanceof HTMLElement)) return;
+        element.dataset.musikiNoListMarker = 'true';
+        element.style.setProperty('list-style', 'none');
+        element.style.setProperty('padding-left', '0');
+        element.style.setProperty('position', 'static');
+      }
+
+      function applyNoSummaryMarker(element) {
+        if (!(element instanceof HTMLElement)) return;
+        element.dataset.musikiNoSummaryMarker = 'true';
+        element.style.setProperty('display', 'block');
+        element.style.setProperty('list-style', 'none');
+        element.style.setProperty('appearance', 'none');
+        element.style.setProperty('-webkit-appearance', 'none');
+        element.style.setProperty('padding-left', '0');
+      }
+
       function createTocNodeElement(node) {
         const item = document.createElement('li');
         item.className = 'lesson-item class-toc-item';
+        applyNoListMarker(item);
 
         const link = document.createElement('a');
         link.className = `class-toc-link level-${node.level}`;
@@ -4952,6 +5059,7 @@ const forumThreadPrompt = sessionFirstName
 
         const summary = document.createElement('summary');
         summary.className = 'class-toc-summary';
+        applyNoSummaryMarker(summary);
         summary.appendChild(link);
         details.appendChild(summary);
 
@@ -5025,6 +5133,7 @@ const forumThreadPrompt = sessionFirstName
 
           const summary = document.createElement('summary');
           summary.className = 'content-fold-summary';
+          applyNoSummaryMarker(summary);
           const body = document.createElement('div');
           body.className = 'content-fold-body';
 
