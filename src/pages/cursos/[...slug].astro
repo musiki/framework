@@ -2071,6 +2071,24 @@ const forumThreadPrompt = sessionFirstName
       display: block !important;
     }
 
+    .content-area .content-fold-summary:hover,
+    .content-area .content-fold-summary:hover *,
+    .sidebar--left .class-toc-summary:hover,
+    .sidebar--left .class-toc-summary:hover * {
+      cursor:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M8 11 3 5h10Z' fill='%23d4d700'/%3E%3C/svg%3E") 8 8,
+        s-resize !important;
+    }
+
+    .content-area .content-fold[open] > .content-fold-summary:hover,
+    .content-area .content-fold[open] > .content-fold-summary:hover *,
+    .sidebar--left .class-toc-branch[open] > .class-toc-summary:hover,
+    .sidebar--left .class-toc-branch[open] > .class-toc-summary:hover * {
+      cursor:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M8 5 13 11H3Z' fill='%23d4d700'/%3E%3C/svg%3E") 8 8,
+        n-resize !important;
+    }
+
     [data-musiki-no-list-marker='true'] {
       position: static !important;
       padding-left: 0 !important;
