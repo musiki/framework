@@ -174,14 +174,74 @@ const commitUrl =
     <!-- Mermaid -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" defer></script>
     <script is:inline>
-      const initMermaid = () => {
-        if (window.mermaid?.run) {
-          window.mermaid.initialize({ startOnLoad: false, theme: 'default' });
-          window.mermaid.run({ querySelector: '.mermaid' });
+      let wikiMermaidConfigured = false;
+      let wikiMermaidRenderSequence = 0;
+
+      const normalizeMermaidSource = (value) =>
+        String(value || '')
+          .replace(/\r\n?/g, '\n')
+          .trim();
+
+      const renderWikiMermaid = (attempt = 0) => {
+        const api = window.mermaid;
+        if (!api?.render) {
+          if (attempt < 8) {
+            window.setTimeout(() => renderWikiMermaid(attempt + 1), 90 * (attempt + 1));
+          }
+          return;
         }
+
+        if (!wikiMermaidConfigured) {
+          api.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose',
+            suppressErrorRendering: false,
+          });
+          wikiMermaidConfigured = true;
+        }
+
+        const nodes = Array.from(document.querySelectorAll('.mermaid'))
+          .filter((node) => node instanceof HTMLElement);
+        if (nodes.length === 0) return;
+
+        const renderTasks = nodes.map(async (node) => {
+          const source = normalizeMermaidSource(node.dataset.mermaidSource || node.textContent || '');
+          if (!source) return;
+          if (
+            node.dataset.mermaidRendered === 'true' &&
+            node.dataset.mermaidSource === source
+          ) {
+            return;
+          }
+
+          node.dataset.mermaidSource = source;
+          node.textContent = source;
+
+          const renderId = `wiki-mermaid-${Date.now()}-${wikiMermaidRenderSequence += 1}`;
+          const result = await api.render(renderId, source);
+          node.innerHTML = result?.svg || '';
+          if (typeof result?.bindFunctions === 'function') {
+            result.bindFunctions(node);
+          }
+          node.dataset.mermaidRendered = 'true';
+        });
+
+        Promise.all(renderTasks).catch((error) => {
+          console.error('Wiki mermaid render error:', error);
+          nodes.forEach((node) => {
+            delete node.dataset.mermaidRendered;
+            const source = normalizeMermaidSource(node.dataset.mermaidSource || node.textContent || '');
+            if (source) node.textContent = source;
+          });
+          if (attempt < 3) {
+            window.setTimeout(() => renderWikiMermaid(attempt + 1), 180 * (attempt + 1));
+          }
+        });
       };
-      document.addEventListener('DOMContentLoaded', initMermaid);
-      document.addEventListener('astro:page-load', initMermaid);
+
+      document.addEventListener('DOMContentLoaded', () => renderWikiMermaid());
+      document.addEventListener('astro:page-load', () => renderWikiMermaid());
     </script>
 
     <!-- Lenis smooth scroll (very light ~9kb) -->
