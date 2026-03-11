@@ -1177,6 +1177,12 @@ const DIRECT_VIDEO_URL_REGEX =
 const KNOWN_IMAGE_HOST_REGEX =
   /(imagedelivery\.net|cdn\.shopify\.com|images\.unsplash\.com|res\.cloudinary\.com)/i;
 const URL_TOKEN_REGEX = /(https?:\/\/[^\s<]+)/gi;
+const CHAT_EMOTICON_REGEX = /:\)|:\(|:>/g;
+const CHAT_EMOTICON_MAP: Record<string, { glyph: string; label: string }> = {
+  ':)': { glyph: '☺︎', label: 'sonrisa' },
+  ':(': { glyph: '☹︎', label: 'triste' },
+  ':>': { glyph: '☻', label: 'sonrisa lateral' },
+};
 
 const isLikelyImageUrl = (value: string) =>
   DIRECT_IMAGE_URL_REGEX.test(value) || KNOWN_IMAGE_HOST_REGEX.test(value);
@@ -4000,6 +4006,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     return url.toString();
   };
 
+  const normalizeInviteUrl = (rawUrl: unknown, code: unknown = '') => {
+    const normalizedCode = normalizeText(code).toLowerCase();
+    if (normalizedCode) {
+      return buildInviteUrlFromCode(normalizedCode);
+    }
+
+    const normalizedRawUrl = normalizeText(rawUrl);
+    if (!normalizedRawUrl) return '';
+
+    try {
+      const parsed = new URL(normalizedRawUrl, window.location.origin);
+      const normalized = new URL(`${parsed.pathname}${parsed.search}${parsed.hash}`, window.location.origin);
+      return normalized.toString();
+    } catch {
+      return normalizedRawUrl;
+    }
+  };
+
   const syncInviteExpirySelect = (inviteType: 'external' | 'student', expiresAt: string) => {
     const select = inviteType === 'external' ? externalInviteExpirySelect : studentInviteExpirySelect;
     if (!(select instanceof HTMLSelectElement)) return;
@@ -4029,7 +4053,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     nextUrl = '',
     nextCode = '',
   ) => {
-    const normalizedUrl = normalizeText(nextUrl);
+    const normalizedUrl = normalizeInviteUrl(nextUrl, nextCode);
     const normalizedCode = normalizeText(nextCode).toLowerCase();
 
     if (inviteType === 'external') {
@@ -4180,8 +4204,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         );
       }
 
-      const inviteUrl = normalizeText(payload.inviteUrl) || buildInviteUrlFromCode(payload?.invite?.code);
       const inviteCodeFromPayload = normalizeText(payload?.invite?.code);
+      const inviteUrl = normalizeInviteUrl(payload?.inviteUrl, inviteCodeFromPayload);
       syncInviteLinkOutput(inviteType, inviteUrl, inviteCodeFromPayload);
       syncInviteExpirySelect(inviteType, normalizeText(payload?.invite?.expiresAt));
       const expiryLabel = formatInviteExpiryLabel(normalizeText(payload?.invite?.expiresAt));
@@ -8093,7 +8117,34 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const appendConferenceTextNode = (container: HTMLElement, text: string) => {
     if (!text) return;
-    container.appendChild(document.createTextNode(text));
+    let lastIndex = 0;
+
+    text.replace(CHAT_EMOTICON_REGEX, (match, offset) => {
+      const chunk = text.slice(lastIndex, offset);
+      if (chunk) {
+        container.appendChild(document.createTextNode(chunk));
+      }
+
+      const emojiConfig = CHAT_EMOTICON_MAP[match];
+      if (emojiConfig) {
+        const emoji = document.createElement('span');
+        emoji.className = 'conference-chat-emoji';
+        emoji.textContent = emojiConfig.glyph;
+        emoji.title = emojiConfig.label;
+        emoji.setAttribute('aria-label', emojiConfig.label);
+        container.appendChild(emoji);
+      } else {
+        container.appendChild(document.createTextNode(match));
+      }
+
+      lastIndex = offset + match.length;
+      return match;
+    });
+
+    const trailing = text.slice(lastIndex);
+    if (trailing) {
+      container.appendChild(document.createTextNode(trailing));
+    }
   };
 
   const appendConferenceUrlNode = (container: HTMLElement, rawUrl: string) => {

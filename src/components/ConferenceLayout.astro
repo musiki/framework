@@ -1017,9 +1017,11 @@ if (
                 </button>
 
                 <details class="conference-room-invite-panel">
-                  <summary class="conference-room-invite-panel-summary">LINK EXTERNO</summary>
+                  <summary class="conference-room-invite-panel-summary">INVITAR</summary>
 
                   <div class="conference-room-invite-controls">
+                    <div class="conference-session-controls-heading">INVITE USERS</div>
+
                     <div class="conference-field">
                       <label for="conference-external-password-input">Password externos</label>
                       <input
@@ -1047,14 +1049,15 @@ if (
                     </div>
 
                     <div class="conference-field">
-                      <label for="conference-external-invite-link-output">Link externo</label>
+                      <label for="conference-external-invite-link-output">Link users</label>
                       <input
                         id="conference-external-invite-link-output"
                         name="external-invite-link"
+                        class="conference-invite-link-output"
                         type="text"
                         value=""
                         readonly
-                        placeholder="Crea un link externo para esta sala"
+                        placeholder="Crea un link para invitados"
                         data-external-invite-link-output
                       />
                     </div>
@@ -1117,6 +1120,7 @@ if (
                     <input
                       id="conference-student-invite-link-output"
                       name="student-invite-link"
+                      class="conference-invite-link-output"
                       type="text"
                       value=""
                       readonly
@@ -3045,6 +3049,12 @@ if (
     padding-top: 0.08rem;
   }
 
+  .conference-invite-link-output::placeholder {
+    font-size: 0.42rem;
+    line-height: 1.1;
+    letter-spacing: 0.01em;
+  }
+
   .conference-room-invite-panel {
     display: grid;
     gap: 0.28rem;
@@ -3246,7 +3256,7 @@ if (
 
   :global(.conference-chat-text ul > li::before) {
     left: -0.5rem;
-    top: 0.74rem;
+    top: calc(0.18em + 5px);
     font-size: 0.84em;
   }
 
@@ -3279,6 +3289,16 @@ if (
   :global(.conference-chat-link:hover) {
     color: color-mix(in srgb, var(--conference-green) 78%, #f3ff7a 22%);
     text-decoration: underline;
+  }
+
+  :global(.conference-chat-emoji) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0.04em;
+    font-size: 0.94em;
+    line-height: 1;
+    vertical-align: -0.04em;
   }
 
   :global(.conference-chat-link--media),
@@ -3319,7 +3339,7 @@ if (
   }
 
   .conference-chat-compose textarea::placeholder {
-    font-size: 0.56rem;
+    font-size: 0.62rem;
   }
 
   .conference-chat-actions {
@@ -3338,7 +3358,7 @@ if (
     cursor: pointer;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    font-size: 0.42rem;
+    font-size: 0.38rem;
   }
 
   .conference-chat-send:hover:not(:disabled) {

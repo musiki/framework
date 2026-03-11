@@ -19,6 +19,49 @@ const json = (payload: unknown, status = 200) =>
   });
 
 const normalizeText = (value: unknown) => String(value ?? '').trim();
+const LOCALHOST_HOST_RE = /^(localhost|127(?:\.\d+){3}|0\.0\.0\.0)$/i;
+
+const normalizeOriginCandidate = (value: unknown) => {
+  const normalized = normalizeText(value);
+  if (!normalized) return '';
+  const withProtocol =
+    normalized.startsWith('http://') || normalized.startsWith('https://')
+      ? normalized
+      : `https://${normalized}`;
+
+  try {
+    const parsed = new URL(withProtocol);
+    return LOCALHOST_HOST_RE.test(parsed.hostname) ? '' : parsed.origin;
+  } catch {
+    return '';
+  }
+};
+
+const resolvePublicRequestUrl = (request: Request) => {
+  const incoming = new URL(request.url);
+  if (!LOCALHOST_HOST_RE.test(incoming.hostname)) return incoming;
+
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  if (forwardedHost) {
+    const host = forwardedHost.split(',')[0].trim();
+    const proto = (forwardedProto?.split(',')[0].trim() || 'https').replace(/:$/, '');
+    return new URL(`${proto}://${host}${incoming.pathname}${incoming.search}`);
+  }
+
+  const fallbackOrigin =
+    normalizeOriginCandidate(import.meta.env.SITE_URL) ||
+    normalizeOriginCandidate(import.meta.env.AUTH_URL) ||
+    normalizeOriginCandidate(import.meta.env.NEXTAUTH_URL) ||
+    normalizeOriginCandidate(import.meta.env.VERCEL_PROJECT_PRODUCTION_URL) ||
+    normalizeOriginCandidate(import.meta.env.VERCEL_URL ? `https://${import.meta.env.VERCEL_URL}` : '');
+
+  if (fallbackOrigin) {
+    return new URL(`${fallbackOrigin}${incoming.pathname}${incoming.search}`);
+  }
+
+  return incoming;
+};
 
 const normalizeHref = (value: unknown, requestUrl: URL) => {
   const raw = normalizeText(value);
@@ -34,7 +77,7 @@ const normalizeHref = (value: unknown, requestUrl: URL) => {
 };
 
 export const GET: APIRoute = async ({ request, locals }) => {
-  const requestUrl = new URL(request.url);
+  const requestUrl = resolvePublicRequestUrl(request);
   const code = normalizeText(requestUrl.searchParams.get('code'));
 
   try {
@@ -76,7 +119,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
-  const requestUrl = new URL(request.url);
+  const requestUrl = resolvePublicRequestUrl(request);
   const body = await request.json().catch(() => null);
   const payload = (body || {}) as Record<string, unknown>;
   const action = normalizeText(payload.action).toLowerCase() || 'create';
