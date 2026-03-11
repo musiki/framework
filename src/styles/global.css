@@ -820,6 +820,22 @@ ol ol ol ol > li::marker {
   overflow-x: auto;
 }
 
+.lilypond-block {
+  margin: 1.5rem 0;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.lilypond-block img,
+.lily-score img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
 /* Forum dynamic DOM (created client-side in cursos/[...slug].astro)
    Astro component-scoped styles do not always hit these nodes, so keep
    critical presentation rules global and explicit. */

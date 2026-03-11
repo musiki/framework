@@ -1,6 +1,5 @@
 import { visit } from 'unist-util-visit';
-
-const REMOTE_LILYPOND_RENDER_URL = 'http://85.31.234.141:4543/render';
+import { renderRemoteLilypond } from '../lib/lilypond-remote.mjs';
 
 function escapeHtmlAttribute(value) {
   return String(value ?? '')
@@ -8,39 +7,6 @@ function escapeHtmlAttribute(value) {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-}
-
-async function renderRemoteLilypond(source, { timeoutMs }) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(REMOTE_LILYPOND_RENDER_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: source,
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Remote LilyPond render failed with ${response.status}`);
-    }
-
-    const payload = await response.json().catch(() => null);
-    const url = typeof payload?.url === 'string' ? payload.url.trim() : '';
-    if (!url || !/^https?:\/\//i.test(url)) {
-      throw new Error('Remote LilyPond render returned no url');
-    }
-
-    return url;
-  } catch (error) {
-    console.error('[remark-remote-lilypond] Render error:', error);
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 export default function remarkRemoteLilypond(options = {}) {

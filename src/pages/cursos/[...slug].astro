@@ -1983,11 +1983,11 @@ const forumThreadPrompt = sessionFirstName
           max-width: 100%;
         }
 
-        .content-area :is(pre, table, .mermaid, .lily-score, .obsidian-media-embed, img, svg, iframe) {
+        .content-area :is(pre, table, .mermaid, .lily-score, .lilypond-block, .obsidian-media-embed, img, svg, iframe) {
           max-width: 100%;
         }
 
-        .content-area :is(pre, table, .mermaid, .lily-score) {
+        .content-area :is(pre, table, .mermaid, .lily-score, .lilypond-block) {
           overflow-x: auto;
         }
 
@@ -2076,7 +2076,7 @@ const forumThreadPrompt = sessionFirstName
     .sidebar--left .class-toc-summary:hover,
     .sidebar--left .class-toc-summary:hover * {
       cursor:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M32 44 12 20h40Z' fill='%23000000'/%3E%3C/svg%3E") 32 32,
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 22 6 10h20Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
         s-resize !important;
     }
 
@@ -2085,7 +2085,7 @@ const forumThreadPrompt = sessionFirstName
     .sidebar--left .class-toc-branch[open] > .class-toc-summary:hover,
     .sidebar--left .class-toc-branch[open] > .class-toc-summary:hover * {
       cursor:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M32 20 52 44H12Z' fill='%23000000'/%3E%3C/svg%3E") 32 32,
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 10 26 22H6Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
         n-resize !important;
     }
 
@@ -5564,9 +5564,13 @@ const forumThreadPrompt = sessionFirstName
           document.documentElement.style.overflow = 'hidden';
         };
 
-        function syncBoardQueryParam(historyMode = 'replace') {
+        function syncBoardQueryParam(historyMode = 'replace', { anchorForum = false } = {}) {
           const nextUrl = new URL(window.location.href);
-          nextUrl.hash = 'lesson-forum';
+          const currentHash = String(window.location.hash || '').trim();
+          nextUrl.hash =
+            anchorForum || currentHash === '#lesson-forum'
+              ? 'lesson-forum'
+              : currentHash.replace(/^#/, '');
           if (forumState.mode !== 'board') {
             nextUrl.searchParams.delete('board');
           } else {
@@ -7134,7 +7138,9 @@ a[node] -->|edge| b[hub]
           }
 
           forumState.selectedThreadId = '';
-          syncBoardQueryParam(pushHistory ? 'push' : 'replace');
+          syncBoardQueryParam(pushHistory ? 'push' : 'replace', {
+            anchorForum: pushHistory,
+          });
           await loadThreads({ preserveSelection: false });
         }
 

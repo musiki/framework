@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
+import { renderRemoteLilypond } from '../../../lib/lilypond-remote.mjs';
 
 const LILY_DIR = path.join(process.cwd(), 'public', 'lily');
 const MAX_SOURCE_BYTES = 64 * 1024;
@@ -93,6 +94,23 @@ export const POST: APIRoute = async ({ request }) => {
         hash,
         url: svgUrl,
         generated: false,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+  }
+
+  const remoteUrl = await renderRemoteLilypond(source, { timeoutMs: 10_000 });
+  if (remoteUrl) {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        hash,
+        url: remoteUrl,
+        generated: true,
+        remote: true,
       }),
       {
         status: 200,

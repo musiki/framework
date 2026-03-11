@@ -14,6 +14,7 @@ import remarkEvalBlocks from './src/plugins/remark-eval-blocks.mjs'
 import remarkDataviewLite from './src/plugins/remark-dataview-lite.mjs'
 import remarkWikiLink from './src/plugins/remark-wiki-link.mjs'
 import remarkLily from './src/plugins/remark-lily.mjs'
+import remarkRemoteLilypond from './src/plugins/remark-remote-lilypond.mjs'
 
 import auth from 'auth-astro';
 import vercel from '@astrojs/vercel';
@@ -89,6 +90,7 @@ export default defineConfig({
       remarkEvalBlocks,       // procesa bloques eval
       remarkDataviewLite,     // procesa bloques dataview
       remarkWikiLink,         // procesa wiki links [[Link]]
+      [remarkRemoteLilypond, { enabled: true, timeoutMs: 10_000 }], // intenta renderer remoto primero
       remarkLily,             // procesa bloques lilypond
     ],
     rehypePlugins: [
