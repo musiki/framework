@@ -56,15 +56,25 @@ jobs:
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
-          if [[ -z "${VERCEL_DEPLOY_HOOK_URL}" ]]; then
+          hook_url="$(printf '%s' "${VERCEL_DEPLOY_HOOK_URL}" | tr -d '\r\n')"
+
+          if [[ -z "${hook_url}" ]]; then
             echo "VERCEL_DEPLOY_HOOK_URL not configured."
             exit 1
           fi
 
           response_file="$(mktemp)"
+          error_file="$(mktemp)"
           http_code="$(
-            curl -sS -o "${response_file}" -w '%{http_code}' -X POST "${VERCEL_DEPLOY_HOOK_URL}"
+            curl -sS -o "${response_file}" -w '%{http_code}' -X POST "${hook_url}" 2>"${error_file}"
           )"
+          curl_exit=$?
+
+          if [[ "${curl_exit}" -ne 0 ]]; then
+            echo "curl failed with exit code ${curl_exit}"
+            cat "${error_file}"
+            exit "${curl_exit}"
+          fi
 
           echo "Vercel deploy hook HTTP ${http_code}"
           cat "${response_file}"
