@@ -7,7 +7,20 @@ import { SignIn } from "auth-astro/components";
 const session = (Astro.locals as any).session;
 
 const toSafeRedirect = (value: unknown): string => {
-    const text = typeof value === "string" ? value.trim() : "";
+    let text = typeof value === "string" ? value.trim() : "";
+    if (!text) return "";
+
+    for (let attempts = 0; attempts < 2; attempts += 1) {
+        if (!/%[0-9a-f]{2}/i.test(text)) break;
+        try {
+            const decoded = decodeURIComponent(text);
+            if (!decoded || decoded === text) break;
+            text = decoded.trim();
+        } catch {
+            break;
+        }
+    }
+
     if (!text) return "";
     if (!text.startsWith("/") || text.startsWith("//")) return "";
     if (text.startsWith("/login")) return "";

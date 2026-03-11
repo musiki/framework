@@ -605,9 +605,46 @@ const withActiveCourse = (href: string) => {
 		let intervalId = 0;
 		let controller: AbortController | null = null;
 
+		const formatLocalTimestamp = (value: unknown) => {
+			if (!value) return '';
+
+			const date = new Date(String(value));
+			if (Number.isNaN(date.getTime())) return '';
+
+			try {
+				return new Intl.DateTimeFormat(undefined, {
+					year: 'numeric',
+					month: '2-digit',
+					day: '2-digit',
+					hour: '2-digit',
+					minute: '2-digit',
+					timeZoneName: 'short',
+				}).format(date);
+			} catch {
+				return date.toLocaleString();
+			}
+		};
+
+		const buildLocalSyncTitle = (payload: Record<string, unknown>) => {
+			const state = String(payload.state || 'unknown').trim() || 'unknown';
+			const runNumber = payload.runNumber;
+			const timestamp = formatLocalTimestamp(payload.updatedAt || payload.createdAt || payload.fetchedAt);
+			const suffix = [runNumber ? `run ${runNumber}` : '', timestamp].filter(Boolean).join(' · ');
+			const details = suffix ? ` · ${suffix}` : '';
+
+			if (state === 'running') return `Sincronización de contenidos en curso${details}`;
+			if (state === 'ok') return `Última sincronización correcta${details}`;
+			if (state === 'error') return `Última sincronización con error${details}`;
+			if (state === 'idle') return `Sincronización sin cambios${details}`;
+			return '';
+		};
+
 		const applyPayload = (payload: Record<string, unknown>) => {
 			const state = String(payload.state || 'unknown').trim() || 'unknown';
-			const title = String(payload.title || defaultTitle).trim() || defaultTitle;
+			const title =
+				buildLocalSyncTitle(payload)
+				|| String(payload.title || defaultTitle).trim()
+				|| defaultTitle;
 
 			brandLink.dataset.buildState = state;
 			brandLink.title = title;

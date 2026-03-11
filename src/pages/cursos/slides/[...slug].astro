@@ -9,6 +9,7 @@ import {
   buildCourseHref,
   buildCourseLessonPathIndex,
   buildCourseSlideLessonHref,
+  encodePathSegments,
   findLessonByCoursePath,
   getPreferredCoursePathSegment,
 } from '../../../lib/course-routing';
@@ -46,7 +47,7 @@ const courseHref = buildCourseHref(canonicalCourseId, courseData);
 
 const session = (Astro.locals as any).session;
 const hasAccess = courseIndex.data.public || session;
-if (!hasAccess) return Astro.redirect('/login');
+if (!hasAccess) return Astro.redirect(`/login?redirect=${encodeURIComponent(`${Astro.url.pathname}${Astro.url.search}`)}`);
 
 const liveAccess = await resolveLiveManageAccess(session, canonicalCourseId || requestedCoursePathSegment);
 const sessionEnrollmentRole = String(liveAccess.enrollmentRole || '').trim();
@@ -76,7 +77,7 @@ if (parts.length === 1 || isCourseForumPage) {
   const visibility = currentEntry.data.visibility;
   if (visibility === 'enrolled-only') {
     if (!session) {
-      return Astro.redirect(`/login?redirect=/cursos/${encodeURIComponent(slug)}`);
+      return Astro.redirect(`/login?redirect=${encodeURIComponent(`${Astro.url.pathname}${Astro.url.search}`)}`);
     }
 
     if (!canManageLiveInteractions && !hasCourseEnrollment) {
@@ -100,7 +101,7 @@ if (parts.length === 1 || isCourseForumPage) {
 }
 
 if ((parts.length === 1 || isCourseForumPage) && requestedCoursePathSegment !== preferredCoursePathSegment) {
-  return Astro.redirect(`/cursos/slides/${encodeURIComponent(preferredCoursePathSegment)}${Astro.url.search}`);
+  return Astro.redirect(`/cursos/slides/${encodePathSegments(preferredCoursePathSegment)}${Astro.url.search}`);
 }
 
 const { Content } = await render(currentEntry);

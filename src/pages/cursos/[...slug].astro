@@ -79,7 +79,10 @@ const preAuthLessonRedirect =
   )
     ? `${courseHref}/${encodePathSegments(preAuthCanonicalLessonPath)}${Astro.url.search}`
     : '';
-const loginRedirectTarget = preAuthLessonRedirect || preAuthCourseRedirect || `/cursos/${encodeURIComponent(slug)}`;
+const loginRedirectTarget =
+  preAuthLessonRedirect
+  || preAuthCourseRedirect
+  || `${Astro.url.pathname}${Astro.url.search}`;
 
 // Check if user has base access to course.
 const session = (Astro.locals as any).session;
@@ -128,7 +131,8 @@ if (parts.length === 1) {
   const visibility = currentEntry.data.visibility;
   if (visibility === 'enrolled-only') {
     if (!session) {
-      return Astro.redirect(`/login?redirect=/cursos/${slug}`);
+      const lessonLoginRedirectTarget = `${courseHref}/${encodePathSegments(resolvedLessonRoutePath || lessonPath)}${Astro.url.search}`;
+      return Astro.redirect(`/login?redirect=${encodeURIComponent(lessonLoginRedirectTarget)}`);
     }
 
     // Teacher can access without explicit enrollment.
@@ -139,7 +143,7 @@ if (parts.length === 1) {
 
   const requestedLessonPath = parts.slice(1).join('/');
   if (requestedCoursePathSegment !== preferredCoursePathSegment || requestedLessonPath !== resolvedLessonRoutePath) {
-    return Astro.redirect(`${courseHref}/${encodeURIComponent(resolvedLessonRoutePath)}${Astro.url.search}`);
+    return Astro.redirect(`${courseHref}/${encodePathSegments(resolvedLessonRoutePath)}${Astro.url.search}`);
   }
 }
 
@@ -157,7 +161,13 @@ const currentEntryStatus = String(currentEntry.data.status || '').trim().toLower
 const lessonDescription =
   String(currentEntry.data.summary || currentEntry.data.description || '').trim() ||
   String(courseIndex.data.summary || courseIndex.data.description || '').trim();
-const lessonSlug = isLessonPage ? currentEntry.id.replace(`${canonicalCourseId}/`, '') : '';
+const lessonSlug = isLessonPage
+  ? (
+    resolvedLessonRoutePath
+    || lessonPathIndex.pathByEntryId.get(currentEntry.id)
+    || currentEntry.id.replace(`${canonicalCourseId}/`, '')
+  )
+  : '';
 const rawPresentationTheme =
   (currentEntry.data as Record<string, unknown>).theme ||
   (currentEntry.data as Record<string, unknown>).slideTheme ||
@@ -189,8 +199,13 @@ const activeCourseCode = String(
 const courseForumHref = `${courseHref}/foro`;
 const forumShellHref = Astro.url.pathname;
 const lessonForumHref = isLessonPage
-  ? `${courseHref}/${encodeURIComponent(resolvedLessonRoutePath)}`
+  ? `${courseHref}/${encodePathSegments(resolvedLessonRoutePath)}`
   : '';
+const loginCtaTarget = isLessonPage
+  ? lessonForumHref
+  : isCourseForumPage
+    ? `${courseHref}/foro`
+    : courseHref;
 const hasRequestedBoardScope = Astro.url.searchParams.has('board');
 const initialSidebarBoardSlug = (
   String(Astro.url.searchParams.get('board') || 'general')
@@ -884,6 +899,10 @@ const forumThreadPrompt = sessionFirstName
 
       .class-toc-summary::-webkit-details-marker {
         display: none;
+      }
+
+      .class-toc-summary::marker {
+        content: "";
       }
 
       .class-toc-children {
@@ -2068,7 +2087,9 @@ const forumThreadPrompt = sessionFirstName
                   lesson,
                   lessonPathIndex,
                 );
-                const lessonPageSlug = lesson.id.replace(`${canonicalCourseId}/`, '');
+                const lessonPageSlug =
+                  lessonPathIndex.pathByEntryId.get(lesson.id)
+                  || lesson.id.replace(`${canonicalCourseId}/`, '');
                 const isActive = currentEntry.id === lesson.id;
                 return (
                   <li class="lesson-item">
@@ -2318,7 +2339,7 @@ const forumThreadPrompt = sessionFirstName
             ) : (
               <div class="forum-login-cta">
                 Inicia sesión para ver y participar del foro.
-                <a href={`/login?redirect=${encodeURIComponent(`${courseHref}${isLessonPage ? `/${resolvedLessonRoutePath}` : isCourseForumPage ? '/foro' : ''}`)}`} class="nav-button" style="margin-left: 0.6rem;">Iniciar sesión</a>
+                <a href={`/login?redirect=${encodeURIComponent(loginCtaTarget)}`} class="nav-button" style="margin-left: 0.6rem;">Iniciar sesión</a>
               </div>
             )}
           </section>
@@ -4907,18 +4928,10 @@ const forumThreadPrompt = sessionFirstName
         link.addEventListener('click', (event) => {
           event.preventDefault();
           event.stopPropagation();
-
-          const target = document.getElementById(node.id);
-          if (target) {
-            target.scrollIntoView({
-              behavior: 'smooth',
-              block: 'start',
-            });
-          }
-
-          const nextUrl = new URL(window.location.href);
-          nextUrl.hash = node.id;
-          window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+          navigateToContentHash(node.id, {
+            behavior: 'smooth',
+            updateHistory: true,
+          });
         });
 
         if (!Array.isArray(node.children) || node.children.length === 0) {
@@ -5045,6 +5058,67 @@ const forumThreadPrompt = sessionFirstName
         getContentFoldNodes().forEach((node) => {
           node.open = nextOpen;
         });
+      }
+
+      function openHeadingAncestors(target) {
+        let current = target?.parentElement || null;
+        while (current) {
+          if (current instanceof HTMLDetailsElement) {
+            current.open = true;
+          }
+          current = current.parentElement;
+        }
+      }
+
+      function resolveHeadingScrollAnchor(target) {
+        if (!(target instanceof HTMLElement)) return null;
+        const summary = target.closest('.content-fold-summary');
+        return summary instanceof HTMLElement ? summary : target;
+      }
+
+      function navigateToContentHash(targetId, options = {}) {
+        const normalizedTargetId = String(targetId || '').replace(/^#/, '').trim();
+        if (!normalizedTargetId) return false;
+
+        const target = document.getElementById(normalizedTargetId);
+        if (!(target instanceof HTMLElement)) return false;
+
+        const behavior = options.behavior === 'smooth' ? 'smooth' : 'auto';
+        const updateHistory = options.updateHistory !== false;
+        openHeadingAncestors(target);
+
+        const performScroll = () => {
+          const anchor = resolveHeadingScrollAnchor(target);
+          if (!(anchor instanceof HTMLElement)) return;
+
+          const scroller = getPrimaryScroller();
+          if (scroller instanceof HTMLElement && scroller.contains(anchor)) {
+            const scrollerRect = scroller.getBoundingClientRect();
+            const anchorRect = anchor.getBoundingClientRect();
+            const top = Math.max(
+              0,
+              scroller.scrollTop + (anchorRect.top - scrollerRect.top) - 18,
+            );
+            scroller.scrollTo({
+              top,
+              behavior,
+            });
+          } else {
+            anchor.scrollIntoView({
+              behavior,
+              block: 'start',
+            });
+          }
+
+          if (updateHistory) {
+            const nextUrl = new URL(window.location.href);
+            nextUrl.hash = normalizedTargetId;
+            window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+          }
+        };
+
+        window.requestAnimationFrame(performScroll);
+        return true;
       }
 
       function buildClassToc() {
@@ -7538,6 +7612,12 @@ a[node] -->|edge| b[hub]
           window.requestAnimationFrame(() => {
             scrollToForum('auto');
             window.requestAnimationFrame(updateScrollShortcutVisibility);
+          });
+        } else if (window.location.hash) {
+          window.requestAnimationFrame(() => {
+            if (navigateToContentHash(window.location.hash, { behavior: 'auto', updateHistory: false })) {
+              window.requestAnimationFrame(updateScrollShortcutVisibility);
+            }
           });
         }
 
