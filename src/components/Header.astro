@@ -812,7 +812,9 @@ const withActiveCourse = (href: string) => {
 	}
 	.brand-link[data-build-state='running'] .brand-logo {
 		animation: header-brand-sync-pulse 1.5s ease-in-out infinite;
-		filter: drop-shadow(0 0 0.34rem rgba(217, 130, 43, 0.38));
+		filter:
+			drop-shadow(0 0 0.42rem rgba(0, 184, 255, 0.72))
+			drop-shadow(0 0 0.95rem rgba(0, 184, 255, 0.26));
 	}
 	.brand-link[data-build-state='error'] .brand-logo {
 		filter: drop-shadow(0 0 0.32rem rgba(209, 67, 67, 0.38));
