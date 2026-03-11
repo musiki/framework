@@ -577,6 +577,15 @@ const forumThreadPrompt = sessionFirstName
       .lesson-item {
         margin-bottom: 0.25rem;
       }
+
+      .sidebar--left :is(.lesson-list, .class-toc-list, .class-toc-children, .progress-list) > li {
+        padding-left: 0;
+      }
+
+      .sidebar--left :is(.lesson-list, .class-toc-list, .class-toc-children, .progress-list) > li::before {
+        content: none;
+        display: none;
+      }
       
       .lesson-link {
         display: flex;
@@ -1089,11 +1098,10 @@ const forumThreadPrompt = sessionFirstName
 
       .content-fold-summary {
         list-style: none;
-        display: flex;
-        align-items: center;
-        gap: 0.55rem;
+        display: block;
         cursor: pointer;
-        padding: 0.95rem 0;
+        position: relative;
+        padding: 0.95rem 0 0.95rem 1.2rem;
       }
 
       .content-fold-summary::-webkit-details-marker {
@@ -1109,8 +1117,10 @@ const forumThreadPrompt = sessionFirstName
         color: var(--c-fg-dim);
         font-size: 0.8rem;
         line-height: 1;
-        flex: 0 0 auto;
-        transform: translateY(0.06rem);
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
       }
 
       .content-fold[open] > .content-fold-summary::before {
@@ -1119,9 +1129,8 @@ const forumThreadPrompt = sessionFirstName
 
       .content-fold-summary h2 {
         margin: 0 !important;
-        line-height: inherit;
+        line-height: 1.24;
         min-width: 0;
-        flex: 1 1 auto;
       }
 
       .content-fold-body {
@@ -2416,9 +2425,8 @@ const forumThreadPrompt = sessionFirstName
 
         const syncShellOffsets = () => {
           const rootRect = root.getBoundingClientRect();
-          const viewportTop = Math.max(0, Math.round(rootRect.top));
           const viewportBottomGap = Math.max(0, Math.round(window.innerHeight - rootRect.bottom));
-          root.style.setProperty('--course-shell-top', `${viewportTop}px`);
+          root.style.removeProperty('--course-shell-top');
           root.style.setProperty('--course-shell-bottom-gap', `${viewportBottomGap}px`);
         };
 
