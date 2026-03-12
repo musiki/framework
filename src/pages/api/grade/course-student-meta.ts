@@ -49,8 +49,8 @@ const normalizeGrupo = (value: unknown) => {
   if (!raw) return '';
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return '';
-  const normalized = Math.max(0, Math.trunc(parsed));
-  return String(normalized);
+  const normalized = Math.min(99, Math.max(0, Math.trunc(parsed)));
+  return String(normalized).padStart(2, '0');
 };
 
 async function ensureMetaAssignment(
@@ -101,12 +101,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     const body = await request.json().catch(() => ({}));
+    const hasTurno = Object.prototype.hasOwnProperty.call(body || {}, 'turno');
+    const hasConcepto = Object.prototype.hasOwnProperty.call(body || {}, 'concepto');
+    const hasGrupo = Object.prototype.hasOwnProperty.call(body || {}, 'grupo');
     const courseId = normalizeCourseId(body?.courseId);
     const studentId = cleanString(body?.studentId);
     const year = normalizeYear(body?.year);
-    const turno = normalizeTurno(body?.turno);
-    const concepto = normalizeConcepto(body?.concepto);
-    const grupo = normalizeGrupo(body?.grupo);
 
     if (!courseId || !studentId) {
       return json({ error: 'courseId and studentId are required' }, 400);
@@ -132,6 +132,36 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const assignmentId = `${META_ASSIGNMENT_PREFIX}:${encodeURIComponent(courseId)}:${year}`;
     await ensureMetaAssignment(supabase, assignmentId, courseId, year);
 
+    const { data: existingSubmission, error: existingError } = await supabase
+      .from('Submission')
+      .select('id, attempts')
+      .eq('userId', studentId)
+      .eq('assignmentId', assignmentId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+
+    let existingPayload: Record<string, any> = {};
+    if (existingSubmission?.id) {
+      const { data: existingPayloadRow, error: existingPayloadError } = await supabase
+        .from('Submission')
+        .select('payload')
+        .eq('id', existingSubmission.id)
+        .maybeSingle();
+      if (existingPayloadError) throw existingPayloadError;
+      existingPayload =
+        existingPayloadRow?.payload && typeof existingPayloadRow.payload === 'object'
+          ? existingPayloadRow.payload
+          : {};
+    }
+
+    const turno = hasTurno ? normalizeTurno(body?.turno) : normalizeTurno(existingPayload?.turno);
+    const concepto = hasConcepto
+      ? normalizeConcepto(body?.concepto)
+      : normalizeConcepto(existingPayload?.concepto || existingPayload?.concept);
+    const grupo = hasGrupo
+      ? normalizeGrupo(body?.grupo)
+      : normalizeGrupo(existingPayload?.grupo || existingPayload?.group);
+
     const metaPayload = {
       __metaKind: META_KIND,
       courseId,
@@ -144,14 +174,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
       updatedBy: access.userId || '',
       updatedByEmail: cleanString(session?.user?.email),
     };
-
-    const { data: existingSubmission, error: existingError } = await supabase
-      .from('Submission')
-      .select('id, attempts')
-      .eq('userId', studentId)
-      .eq('assignmentId', assignmentId)
-      .maybeSingle();
-    if (existingError) throw existingError;
 
     if (existingSubmission?.id) {
       const attempts = Number(existingSubmission.attempts || 0);
@@ -195,4 +217,3 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: error?.message || 'Failed to update metadata' }, 500);
   }
 };
-

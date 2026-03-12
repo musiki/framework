@@ -273,13 +273,19 @@ hr {
 	display: block;
 	text-align: center;
 }
+@media (max-width: 968px) {
+	main {
+		padding-inline: 0;
+	}
+}
+
 @media (max-width: 720px) {
 	body {
 		font-size: 1rem;
 		line-height: 1.68;
 	}
 	main {
-		padding: 1rem;
+		padding-block: 1rem;
 	}
 	:where(article, .prose, .content-area) :where(h1, h2, h3, h4) {
 		margin-top: calc(2rem + 1.2em);

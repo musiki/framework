@@ -1407,7 +1407,53 @@ const withActiveCourse = (href: string) => {
 		}
 	}
 
+	@media (max-width: 900px) {
+		nav {
+			gap: 0.06rem 0.24rem;
+		}
+		h2 {
+			order: 1;
+			flex: 0 0 auto;
+		}
+		.internal-links {
+			order: 2;
+			width: auto;
+			flex: 1 1 auto;
+			justify-content: flex-start;
+			overflow-x: auto;
+			overscroll-behavior-x: contain;
+			scrollbar-width: none;
+			white-space: nowrap;
+			margin-top: 0;
+			padding-bottom: 0;
+		}
+		.internal-links::-webkit-scrollbar {
+			display: none;
+		}
+		.course-menu-trigger {
+			padding: 0.42em 0.32em;
+		}
+		.course-menu-trigger-label {
+			max-width: min(10.6rem, 40vw);
+		}
+		nav a,
+		.header-forum-toggle {
+			padding: 0.42em 0.32em;
+			font-size: 0.9rem;
+		}
+		.social-links {
+			order: 3;
+			flex: 0 0 100%;
+			justify-content: flex-end;
+			margin-left: 0;
+			padding-top: 0.06rem;
+		}
+	}
+
 	@media (max-width: 720px) {
+		nav {
+			gap: 0.06rem 0.2rem;
+		}
 		.social-links {
 			display: flex;
 			width: auto;
@@ -1418,21 +1464,23 @@ const withActiveCourse = (href: string) => {
 		.internal-links {
 			gap: 0 0.08rem;
 			margin-top: 0;
+			flex: 1 1 auto;
+			min-width: 0;
 		}
 		.course-menu-trigger {
-			padding: 0.45em 0.35em;
-			font-size: 0.95rem;
+			padding: 0.4em 0.3em;
+			font-size: 0.88rem;
 		}
 		.course-menu-trigger-label {
-			max-width: min(9.2rem, 42vw);
+			max-width: min(8.4rem, 40vw);
 		}
 		nav a {
-			padding: 0.45em 0.35em;
-			font-size: 0.95rem;
+			padding: 0.4em 0.3em;
+			font-size: 0.88rem;
 		}
 		.header-forum-toggle {
-			padding: 0.45em 0.35em;
-			font-size: 0.95rem;
+			padding: 0.4em 0.3em;
+			font-size: 0.88rem;
 		}
 		.header-editor-btn {
 			width: 1.2rem;
@@ -1460,13 +1508,20 @@ const withActiveCourse = (href: string) => {
 			height: 34px;
 		}
 		.internal-links {
-			width: 100%;
+			width: auto;
 			justify-content: flex-start;
 			gap: 0 0.08rem;
-			flex: 1 0 100%;
+			flex: 1 1 auto;
 			min-width: 0;
 			margin-top: 0;
 			padding-bottom: 0;
+			overflow-x: auto;
+			overscroll-behavior-x: contain;
+			scrollbar-width: none;
+			white-space: nowrap;
+		}
+		.internal-links::-webkit-scrollbar {
+			display: none;
 		}
 		.course-menu-trigger {
 			padding: 0.35em 0.28em;

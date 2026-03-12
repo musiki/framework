@@ -76,10 +76,31 @@ async function ensureMetaAssignment(
 }
 
 const normalizeManualCountInput = (value: unknown) => {
-  const raw = cleanString(String(value ?? '').replace(',', '.'));
+  const raw = cleanString(String(value ?? '').replace(',', '.')).toLowerCase();
   if (!raw) {
     return {
       hasValue: false,
+      count: 0,
+    };
+  }
+
+  if (raw === '/' || raw === '1' || raw === '✔') {
+    return {
+      hasValue: true,
+      count: 1,
+    };
+  }
+
+  if (raw === '-' || raw === '~' || raw === '0.5' || raw === '.5') {
+    return {
+      hasValue: true,
+      count: 0.5,
+    };
+  }
+
+  if (raw === 'x' || raw === '0' || raw === '✖') {
+    return {
+      hasValue: true,
       count: 0,
     };
   }

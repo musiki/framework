@@ -28,11 +28,14 @@ if (userError || !user) {
   return Astro.redirect('/dashboard');
 }
 
-const normalizedUserRole = String(user.role || '').trim().toLowerCase() === 'teacher' ? 'teacher' : 'student';
 const userShortName = String(user.name || user.email || user.id).trim().split(/\s+/).filter(Boolean)[0] || 'usuario';
 
 // Fetch Enrollments
 const { data: enrollments } = await supabase.from('Enrollment').select('*').eq('userId', id);
+const globalUserRole = String(user.role || '').trim().toLowerCase() === 'teacher' ? 'teacher' : 'student';
+const hasTeacherCourseEnrollment = Array.isArray(enrollments)
+  && enrollments.some((enrollment: any) => String(enrollment?.roleInCourse || '').trim().toLowerCase() === 'teacher');
+const normalizedUserRole = globalUserRole === 'teacher' || hasTeacherCourseEnrollment ? 'teacher' : 'student';
 
 // Fetch Submissions
 const { data: submissions } = await supabase.from('Submission').select('*').eq('userId', id).order('submittedAt', { ascending: false });
@@ -473,13 +476,20 @@ const attendanceDayGroups = (() => {
           <div class="meta">
             <span>📧 {user.email}</span>
             <span>🆔 {user.id}</span>
-            <span class={`badge role-${normalizedUserRole}`} data-user-role-badge>{normalizedUserRole}</span>
+            <span
+              class={`badge role-${normalizedUserRole}`}
+              data-user-role-badge
+              data-course-teacher={hasTeacherCourseEnrollment ? 'true' : 'false'}
+              title={hasTeacherCourseEnrollment && globalUserRole !== 'teacher' ? 'Teacher por rol en curso' : 'Rol efectivo'}
+            >
+              {normalizedUserRole}
+            </span>
           </div>
         </div>
         <section class="profile-role-tools" aria-label="Editar rol del usuario">
           <span class="profile-role-label">Rol global</span>
           <div class="profile-role-row">
-            <select class="profile-role-select" data-role-select value={normalizedUserRole}>
+            <select class="profile-role-select" data-role-select value={globalUserRole}>
               <option value="student">student</option>
               <option value="teacher">teacher</option>
             </select>
@@ -493,7 +503,10 @@ const attendanceDayGroups = (() => {
               Guardar
             </button>
           </div>
-          <p class="profile-role-note">Teachers pueden promover o degradar otros usuarios desde esta vista.</p>
+          <p class="profile-role-note">
+            Teachers pueden promover o degradar otros usuarios desde esta vista.
+            {hasTeacherCourseEnrollment && globalUserRole !== 'teacher' ? ' Este usuario además figura como teacher en al menos un curso.' : ''}
+          </p>
           <div class="profile-role-status" data-role-status aria-live="polite"></div>
         </section>
       </div>
@@ -936,9 +949,11 @@ const attendanceDayGroups = (() => {
 
             select.defaultValue = nextRole;
             if (badge) {
-              badge.textContent = nextRole;
+              const hasCourseTeacher = badge.dataset.courseTeacher === 'true';
+              const effectiveRole = nextRole === 'teacher' || hasCourseTeacher ? 'teacher' : 'student';
+              badge.textContent = effectiveRole;
               badge.classList.remove('role-student', 'role-teacher');
-              badge.classList.add(`role-${nextRole}`);
+              badge.classList.add(`role-${effectiveRole}`);
             }
             setStatus('Rol actualizado.', 'is-success');
           } catch (error) {

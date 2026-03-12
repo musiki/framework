@@ -844,6 +844,12 @@ const submissionMachine = {
 - [ ] Submission list view
 - [ ] Grading queue
 
+Nota de arquitectura:
+
+- El rediseño actual del dashboard ya no se piensa como tabla manual unica.
+- La referencia vigente para planning es [docs/dashboard-tabulator-rfc.md](/Users/zztt/projects/26-musiki/framework/docs/dashboard-tabulator-rfc.md).
+- Decision tomada: `Tabulator` + tabs por proyeccion (`Overview`, `Gradebook`, `Attendance`, `Comments`, `Admin`).
+
 ### Fase 3: Advanced Evaluations
 **Duración**: 3-4 semanas
 

@@ -1,0 +1,119 @@
+import {
+  asDashboardNumber,
+  buildSearchBlob,
+  fieldKeyFromId,
+  splitDashboardName,
+  type DashboardGridProjection,
+} from './shared';
+
+interface GradebookProjectionInput {
+  activeCourseId: string;
+  activeYear: string;
+  teacherCourseGradeGroups: any[];
+}
+
+export function buildGradebookProjection({
+  activeCourseId,
+  activeYear,
+  teacherCourseGradeGroups,
+}: GradebookProjectionInput): DashboardGridProjection {
+  if (!activeCourseId) {
+    return {
+      columns: [],
+      rows: [],
+      emptyMessage: 'Selecciona un curso para ver el gradebook.',
+    };
+  }
+
+  const activeCourseGroup = (teacherCourseGradeGroups || []).find(
+    (group: any) => String(group?.courseId || '') === String(activeCourseId || ''),
+  );
+  const activeYearGroup = (activeCourseGroup?.yearGroups || []).find(
+    (group: any) => String(group?.year || '') === String(activeYear || ''),
+  );
+  const lessonGroups = Array.isArray(activeCourseGroup?.lessonGroups) ? activeCourseGroup.lessonGroups : [];
+
+  const assignmentColumns = lessonGroups.map((lesson: any, lessonIndex: number) => ({
+    title: String(lesson?.lessonLabel || 'Clase'),
+    columns: (lesson?.assignments || []).map((assignment: any) => ({
+      title: String(assignment?.label || assignment?.id || 'Eval'),
+      field: fieldKeyFromId('eval', assignment?.id),
+      minWidth: 88,
+      hozAlign: 'center' as const,
+      headerHozAlign: 'center' as const,
+      kind: 'grade-score',
+      cssClass: lessonIndex % 2 === 0 ? 'dashboard-grade-col-even' : 'dashboard-grade-col-odd',
+    })),
+  }));
+
+  const rows = (activeYearGroup?.rows || [])
+    .map((row: any) => {
+      const { firstName, lastName } = splitDashboardName(row?.name || row?.email || row?.studentId);
+      const record: Record<string, any> = {
+        id: String(row?.studentId || ''),
+        studentId: String(row?.studentId || ''),
+        firstName,
+        lastName,
+        name: String(row?.name || row?.email || row?.studentId || 'Estudiante'),
+        email: String(row?.email || row?.studentId || ''),
+        turno: String(row?.turnoValue || '—'),
+        grupo: String(row?.groupValue || '—') || '—',
+        attendanceCount: Number(row?.attendanceCount || 0),
+        conceptValue: String(row?.conceptValue || '') || '—',
+        average: asDashboardNumber(row?.average),
+        __gradeState: {},
+      };
+
+      lessonGroups.forEach((lesson: any) => {
+        (lesson?.assignments || []).forEach((assignment: any) => {
+          const field = fieldKeyFromId('eval', assignment?.id);
+          const cell = row?.cells?.[assignment?.id] || null;
+          record[field] =
+            cell?.score !== null && cell?.score !== undefined && cell?.score !== ''
+              ? asDashboardNumber(cell.score)
+              : null;
+          record.__gradeState[field] = {
+            statusLabel: String(cell?.statusLabel || ''),
+            assignmentId: String(assignment?.id || ''),
+          };
+        });
+      });
+
+      record.__search = buildSearchBlob([
+        record.name,
+        record.email,
+        record.turno,
+        record.grupo,
+        record.conceptValue,
+        record.attendanceCount,
+        row?.average,
+        ...lessonGroups.map((lesson: any) => lesson?.lessonLabel),
+        ...lessonGroups.flatMap((lesson: any) =>
+          (lesson?.assignments || []).map((assignment: any) => assignment?.label || assignment?.id),
+        ),
+      ]);
+
+      return record;
+    })
+    .sort((left: any, right: any) => {
+      const lastNameDiff = String(left.lastName || '').localeCompare(String(right.lastName || ''), 'es');
+      if (lastNameDiff !== 0) return lastNameDiff;
+      return String(left.firstName || '').localeCompare(String(right.firstName || ''), 'es');
+    });
+
+  return {
+    columns: [
+      { title: 'Nombre', field: 'firstName', frozen: true, minWidth: 140 },
+      { title: 'Apellido', field: 'lastName', frozen: true, minWidth: 150 },
+      { title: 'Email', field: 'email', minWidth: 220 },
+      { title: 'Prom.', field: 'average', width: 92, hozAlign: 'center', headerHozAlign: 'center', kind: 'score' },
+      { title: 'Concepto', field: 'conceptValue', width: 104, hozAlign: 'center', headerHozAlign: 'center' },
+      { title: 'Turno', field: 'turno', width: 74, hozAlign: 'center', headerHozAlign: 'center', kind: 'turno' },
+      { title: 'Grupo', field: 'grupo', width: 84, hozAlign: 'center', headerHozAlign: 'center', kind: 'grupo' },
+      { title: 'Asist.', field: 'attendanceCount', width: 88, hozAlign: 'center', headerHozAlign: 'center', kind: 'metric' },
+      ...assignmentColumns,
+    ],
+    rows,
+    emptyMessage: 'No hay evaluaciones visibles para el curso y año seleccionados.',
+  };
+}

@@ -22,6 +22,15 @@ import {
 } from '../lib/eval-catalog';
 import { getCourseFrontmatterId } from '../lib/course-metadata';
 import { normalizeActivityPageSlug } from '../lib/class-activity/model.mjs';
+import { buildAttendanceProjection } from '../lib/dashboard/attendance-projection';
+import { listDashboardAnnotations } from '../lib/dashboard/annotation-store';
+import { buildAdminProjection } from '../lib/dashboard/admin-projection';
+import { buildCommentsProjection } from '../lib/dashboard/comments-projection';
+import { buildGradebookProjection } from '../lib/dashboard/gradebook-projection';
+import { buildOverviewProjection } from '../lib/dashboard/overview-projection';
+import { toDashboardProjectionJson } from '../lib/dashboard/shared';
+import { getRoleBadgeLabel } from '../lib/dashboard-role';
+import 'tabulator-tables/dist/css/tabulator.min.css';
 import '../styles/theme.css';
 
 // --- AUTHENTICATION ---
@@ -36,7 +45,6 @@ const dashboardUrl = new URL(Astro.request.url);
 const requestedCourseParam = String(dashboardUrl.searchParams.get('course') || '').trim();
 const requestedYearParam = String(dashboardUrl.searchParams.get('year') || '').trim();
 const requestedTabParam = String(dashboardUrl.searchParams.get('tab') || '').trim().toLowerCase();
-const requestedDeliveryViewParam = String(dashboardUrl.searchParams.get('deliveryView') || '').trim().toLowerCase();
 
 // Initialize Supabase
 const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
@@ -45,7 +53,6 @@ const sessionEmail = String(currentUser.email || '').trim();
 const normalizedSessionEmail = sessionEmail.toLowerCase();
 
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
-const getRoleBadgeLabel = (value) => normalizeRole(value) === 'teacher' ? 'Teacher' : 'Student';
 
 async function resolveDashboardUserByEmail(email, normalizedEmail) {
   const { data, error } = await supabase
@@ -136,12 +143,9 @@ const hasTeacherRole = (matchedUsers.length > 0 ? matchedUsers : [dbUser]).some(
   (row) => normalizeRole(row?.role) === 'teacher'
 );
 const isTeacher = hasTeacherRole || hasTeacherEnrollment;
-const initialTeacherDashboardTab = isTeacher && ['users', 'deliveries', 'attendance'].includes(requestedTabParam)
+const initialTeacherDashboardTab = isTeacher && ['overview', 'gradebook', 'attendance', 'comments', 'admin'].includes(requestedTabParam)
   ? requestedTabParam
-  : 'users';
-const initialTeacherDeliveryView = ['recent', 'course', 'log'].includes(requestedDeliveryViewParam)
-  ? requestedDeliveryViewParam
-  : 'recent';
+  : 'overview';
 
 if (isTeacher && normalizeRole(dbUser?.role) !== 'teacher') {
   const teacherRow = matchedUsers.find((row) => normalizeRole(row?.role) === 'teacher');
@@ -572,21 +576,26 @@ const formatAttendanceGridDayLabel = (value: string) => {
   });
 };
 
-const ATTENDANCE_VALUE_HELP = 'Escala: 1 presente • 0.5 media falta • 0 o vacío falta';
+const ATTENDANCE_VALUE_HELP = 'Input: / o 1 -> ✔ • -, ~ o 0.5 -> ~ • x o 0 -> ✖';
 
 const normalizeAttendanceValue = (value: unknown) => {
-  const raw = normalizeText(String(value ?? '').replace(',', '.'));
+  const raw = normalizeText(String(value ?? '').replace(',', '.')).toLowerCase();
   if (!raw) return 0;
+  if (raw === '/' || raw === '1' || raw === '✔') return 1;
+  if (raw === '-' || raw === '~' || raw === '0.5' || raw === '.5') return 0.5;
+  if (raw === 'x' || raw === '0' || raw === '✖') return 0;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return 0;
   const clamped = Math.max(0, Math.min(1, parsed));
   return Math.round(clamped * 2) / 2;
 };
 
-const formatAttendanceValue = (value: unknown) => {
+const formatAttendanceValue = (value: unknown, options: { isFuture?: boolean } = {}) => {
   const normalized = normalizeAttendanceValue(value);
-  if (normalized <= 0) return '';
-  return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1).replace(/\.0$/, '');
+  if (options.isFuture && normalized <= 0) return '';
+  if (normalized >= 1) return '✔';
+  if (normalized > 0) return '~';
+  return '✖';
 };
 
 const formatAbsenceValue = (value: unknown) => {
@@ -647,6 +656,41 @@ const buildAttendanceScheduleColumns = (startDateValue: string, endDateValue: st
     endDate: formatDateOnly(normalizedEnd),
     columns,
   };
+};
+
+const buildCourseLessonGroups = (assignmentsByPage: Record<string, any[]>) =>
+  Object.entries(assignmentsByPage || {})
+    .sort(([left], [right]) => String(left).localeCompare(String(right), 'es'))
+    .map(([lessonSlug, lessonAssignments]) => {
+      const sortedAssignments = [...(Array.isArray(lessonAssignments) ? lessonAssignments : [])].sort((left: any, right: any) => {
+        const leftLabel = decodeUriSafe(String(left?.id || '')).toLowerCase();
+        const rightLabel = decodeUriSafe(String(right?.id || '')).toLowerCase();
+        return leftLabel.localeCompare(rightLabel, 'es');
+      });
+
+      return {
+        lessonSlug: String(lessonSlug || ''),
+        lessonLabel: decodeUriSafe(String(lessonSlug || '')),
+        assignments: sortedAssignments,
+      };
+    });
+
+const groupCourseAssignmentsByPage = (courseAssignments: any[], courseId: string) => {
+  const groups: Record<string, any[]> = {};
+
+  (Array.isArray(courseAssignments) ? courseAssignments : []).forEach((assignment: any) => {
+    const assignmentSlug = String(assignment?.slug || assignment?.id || '').replace(/^\/+|\/+$/g, '');
+    const slugParts = assignmentSlug.split('/').filter(Boolean);
+    const slugCourseId = canonicalizeCourseId(slugParts[0] || '');
+    const pageSlug = slugCourseId === courseId
+      ? slugParts.slice(1).join('/')
+      : assignmentSlug;
+    const pageKey = pageSlug || 'other';
+    if (!groups[pageKey]) groups[pageKey] = [];
+    groups[pageKey].push(assignment);
+  });
+
+  return groups;
 };
 
 const getSubmissionMetaKind = (submission: any) => {
@@ -1782,6 +1826,12 @@ const attendanceGridRows = (() => {
         const absenceValue = column.dateKey <= todayAttendanceDateKey
           ? Math.max(0, 1 - effectiveValue)
           : 0;
+        const isFuture = column.dateKey > todayAttendanceDateKey;
+        const liveLabel = formatAttendanceValue(liveValue, { isFuture }) || '—';
+        const manualLabel = hasManualOverride
+          ? formatAttendanceValue(manualValue, { isFuture }) || '—'
+          : 'auto';
+        const effectiveLabel = formatAttendanceValue(effectiveValue, { isFuture }) || '—';
 
         absenceUnits += absenceValue;
 
@@ -1793,11 +1843,9 @@ const attendanceGridRows = (() => {
           effectiveValue,
           absenceValue,
           displayValue: hasManualOverride
-            ? formatAttendanceValue(manualValue)
-            : formatAttendanceValue(liveValue),
-          title: `Room: ${formatAttendanceValue(liveValue) || '0'} • Override: ${
-            hasManualOverride ? formatAttendanceValue(manualValue) || '0' : 'auto'
-          } • Final: ${formatAttendanceValue(effectiveValue) || '0'} • ${ATTENDANCE_VALUE_HELP}`,
+            ? formatAttendanceValue(manualValue, { isFuture })
+            : formatAttendanceValue(liveValue, { isFuture }),
+          title: `Room: ${liveLabel} • Override: ${manualLabel} • Final: ${effectiveLabel} • ${ATTENDANCE_VALUE_HELP}`,
         };
       });
 
@@ -1838,6 +1886,294 @@ const attendanceLogSearchRows = attendanceLogRows.map((row: any) => ({
     .filter(Boolean)
     .join(' '),
 }));
+
+const teacherCourseGradeGroups = (() => {
+  if (!(isTeacher && allEnrollments && allSubmissions && allUsers && allAssignments)) return [] as any[];
+
+  const enrollmentSource = scopedTeacherEnrollments.filter((enrollment: any) =>
+    !isTeacherCourseMember(enrollment?.userId, enrollment?.courseId, scopedTeacherEnrollments),
+  );
+
+  const courseGroups = enrollmentSource.reduce((acc: Record<string, any[]>, enroll: any) => {
+    const courseId = canonicalizeCourseId(enroll?.courseId) || String(enroll?.courseId || '').trim();
+    if (!courseId) return acc;
+    if (!acc[courseId]) acc[courseId] = [];
+    acc[courseId].push(enroll);
+    return acc;
+  }, {});
+
+  const usersById = new Map((allUsers || []).map((user: any) => [user.id, user]));
+
+  return Object.entries(courseGroups)
+    .sort(([left], [right]) => String(left).localeCompare(String(right), 'es'))
+    .map(([courseId, enrolls]) => {
+      const courseSubmissionsAllYears = scopedTeacherSubmissions.filter((submission: any) => {
+        const meta = resolveSubmissionMeta(submission);
+        const submissionCourseId = canonicalizeCourseId(meta?.courseIdRaw || meta?.courseId || '');
+        return submissionCourseId === courseId;
+      });
+
+      const courseAssignmentsMap = new Map<string, any>();
+
+      (liveEvalEntriesByCourseId[courseId] || []).forEach((entry: any) => {
+        const assignmentId = String(entry?.evalId || '').trim();
+        if (!assignmentId) return;
+        courseAssignmentsMap.set(assignmentId, {
+          id: assignmentId,
+          courseId,
+          slug: String(entry?.entryId || ''),
+        });
+      });
+
+      courseSubmissionsAllYears.forEach((submission: any) => {
+        const assignmentId = String(submission?.assignmentId || '').trim();
+        const meta = resolveSubmissionMeta(submission);
+        if (
+          !assignmentId
+          || courseAssignmentsMap.has(assignmentId)
+          || !liveEvalEntryById.has(assignmentId)
+          || isSystemMetaAssignmentRef(meta.assignmentSlug || assignmentId)
+        ) return;
+        courseAssignmentsMap.set(assignmentId, {
+          id: assignmentId,
+          courseId,
+          slug: meta.assignmentSlug || `${courseId}/${assignmentId}`,
+        });
+      });
+
+      const courseAssignments = Array.from(courseAssignmentsMap.values()).sort((left: any, right: any) => {
+        const leftKey = String(left?.slug || left?.id || '');
+        const rightKey = String(right?.slug || right?.id || '');
+        return leftKey.localeCompare(rightKey, 'es');
+      });
+
+      const assignmentsByPage = groupCourseAssignmentsByPage(courseAssignments, courseId);
+      const lessonGroups = buildCourseLessonGroups(assignmentsByPage).map((lesson: any) => ({
+        lessonSlug: String(lesson?.lessonSlug || ''),
+        lessonLabel: String(lesson?.lessonLabel || ''),
+        assignments: (lesson?.assignments || []).map((assignment: any) => {
+          const assignmentId = String(assignment?.id || '');
+          return {
+            id: assignmentId,
+            label: decodeUriSafe(assignmentId.split('/').pop() || assignmentId),
+          };
+        }),
+      }));
+
+      const flatAssignments = lessonGroups.flatMap((lesson: any) => lesson.assignments || []);
+      const assignmentIdSet = new Set(flatAssignments.map((assignment: any) => String(assignment?.id || '')).filter(Boolean));
+      const visibleSubmissions = courseSubmissionsAllYears.filter((submission: any) =>
+        assignmentIdSet.has(String(submission?.assignmentId || ''))
+        && !isTeacherCourseMember(submission?.userId, courseId, enrolls),
+      );
+
+      const yearSet = new Set([activeYear]);
+      visibleSubmissions.forEach((submission: any) => {
+        yearSet.add(getSubmissionYear(submission));
+      });
+      const years = Array.from(yearSet).sort((left, right) => {
+        const numericDiff = Number(right) - Number(left);
+        if (!Number.isNaN(numericDiff) && numericDiff !== 0) return numericDiff;
+        return String(right).localeCompare(String(left), 'es');
+      });
+
+      const currentStudents = (enrolls || [])
+        .filter((enrollment: any) => normalizeRole(enrollment?.roleInCourse) === 'student')
+        .map((enrollment: any) => usersById.get(enrollment.userId))
+        .filter(Boolean);
+
+      if (currentStudents.length === 0 && visibleSubmissions.length === 0) return null;
+
+      const enrollmentsByStudent = new Map(
+        (enrolls || [])
+          .filter((enrollment: any) => normalizeRole(enrollment?.roleInCourse) === 'student')
+          .map((enrollment: any) => [enrollment.userId, enrollment]),
+      );
+
+      const yearGroups = years
+        .map((year) => {
+          const yearSubmissions = visibleSubmissions.filter((submission: any) => getSubmissionYear(submission) === year);
+          const submissionMap = new Map<string, any>();
+          yearSubmissions.forEach((submission: any) => {
+            submissionMap.set(`${submission.userId}::${submission.assignmentId}`, submission);
+          });
+
+          const yearStudentIds = new Set(currentStudents.map((student: any) => String(student?.id || '')));
+          yearSubmissions.forEach((submission: any) => {
+            const studentId = String(submission?.userId || '');
+            if (studentId) yearStudentIds.add(studentId);
+          });
+
+          const students = Array.from(yearStudentIds)
+            .map((studentId) => usersById.get(studentId))
+            .filter(Boolean)
+            .sort((left: any, right: any) =>
+              String(left?.name || left?.email || '').localeCompare(
+                String(right?.name || right?.email || ''),
+                'es',
+              ),
+            );
+
+          if (students.length === 0) return null;
+
+          const yearPending = yearSubmissions.filter((submission: any) => !isSubmissionReviewed(submission)).length;
+          const rows = students.map((student: any) => {
+            const panelKey = `${courseId}__${year}__${student.id}`
+              .replace(/[^a-zA-Z0-9_-]/g, '_')
+              .slice(0, 140);
+            const scores = flatAssignments
+              .map((assignment: any) => {
+                const submission = submissionMap.get(`${student.id}::${assignment.id}`);
+                if (!submission) return null;
+                if (submission.score === null || submission.score === undefined) return null;
+                const value = Number(submission.score);
+                return Number.isNaN(value) ? null : value;
+              })
+              .filter((value: number | null) => value !== null) as number[];
+            const average = scores.length > 0
+              ? (scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(1)
+              : '-';
+            const studentEnrollment = enrollmentsByStudent.get(student.id);
+            const metaKey = `${normalizeTextLower(courseId)}::${year}::${student.id}`;
+            const savedMeta = courseStudentMetaByKey.get(metaKey);
+            const attendanceCount = attendanceDayCountByStudentKey.get(metaKey)?.size || 0;
+            const turnoRaw = normalizeText(savedMeta?.turno || studentEnrollment?.turno || student?.turno || '').toUpperCase();
+            const turnoValue = ['M', 'T', 'N'].includes(turnoRaw) ? turnoRaw : 'M';
+            const groupValue = normalizeText(
+              savedMeta?.grupo
+                || studentEnrollment?.group
+                || studentEnrollment?.grupo
+                || student?.group
+                || student?.grupo
+                || '',
+            );
+            const conceptValue = normalizeText(
+              savedMeta?.concepto
+                || studentEnrollment?.concept
+                || studentEnrollment?.concepto
+                || '',
+            );
+            const rowSearch = [
+              courseId,
+              year,
+              student?.name,
+              student?.email,
+              turnoValue,
+              String(attendanceCount),
+              groupValue,
+              conceptValue,
+              ...lessonGroups.map((lesson: any) => lesson.lessonLabel),
+              ...flatAssignments.map((assignment: any) => assignment.id),
+            ]
+              .map((value) => normalizeTextLower(value))
+              .filter(Boolean)
+              .join(' ');
+
+            const cells = Object.fromEntries(
+              flatAssignments.map((assignment: any) => {
+                const submission = submissionMap.get(`${student.id}::${assignment.id}`);
+                if (!submission) return [assignment.id, null];
+                const statusLabel = isSubmissionReviewed(submission)
+                  ? 'calificada'
+                  : 'pendiente';
+                return [assignment.id, {
+                  submissionId: submission.id,
+                  assignmentId: assignment.id,
+                  score: submission.score !== null && submission.score !== undefined ? submission.score : '',
+                  statusLabel,
+                }];
+              }),
+            );
+
+            return {
+              studentId: student.id,
+              name: student?.name || student?.email || student?.id,
+              email: student?.email || student?.id,
+              panelKey,
+              average,
+              turnoValue,
+              groupValue,
+              conceptValue,
+              attendanceCount,
+              rowSearch,
+              cells,
+            };
+          });
+
+          return {
+            year,
+            yearPending,
+            rows,
+            search: `${normalizeTextLower(courseId)} ${normalizeTextLower(year)}`,
+          };
+        })
+        .filter(Boolean);
+
+      return {
+        courseId,
+        hasAssignments: flatAssignments.length > 0,
+        lessonGroups,
+        yearGroups,
+      };
+    })
+    .filter(Boolean);
+})();
+
+const teacherRecentSubmissionGroups = (() => {
+  if (!isTeacher) return [] as any[];
+
+  const groupedByType = recentTeacherSubmissions.reduce((acc: Record<string, any>, submission: any) => {
+    const meta = resolveSubmissionMeta(submission);
+    const noteTypeKey = meta.noteType || 'unknown';
+
+    if (!acc[noteTypeKey]) {
+      acc[noteTypeKey] = {
+        key: noteTypeKey,
+        label: meta.noteTypeLabel,
+        order: meta.noteTypeOrder,
+        submissions: [],
+      };
+    }
+
+    const submitter = (allUsers || []).find((user: any) => user.id === submission?.userId);
+    const answerText = getSubmissionAnswerText(submission, assignmentById);
+    const rowSearch = [
+      submitter?.name,
+      submitter?.email,
+      meta.assignmentLabel,
+      meta.assignmentSlug,
+      meta.courseId,
+      meta.noteTypeLabel,
+      meta.evalType,
+      answerText,
+      submission?.feedback,
+    ]
+      .map((value) => normalizeTextLower(value))
+      .filter(Boolean)
+      .join(' ');
+
+    acc[noteTypeKey].submissions.push({
+      submission,
+      meta,
+      submitterName: submitter?.name || 'Usuario desconocido',
+      answerText,
+      evalPreviewAttr: toEvalPreviewAttr(meta.evalPreview),
+      resultState: getSubmissionResultState(submission),
+      rowSearch,
+    });
+    return acc;
+  }, {});
+
+  return Object.values(groupedByType || {})
+    .sort((left: any, right: any) => {
+      if (left.order !== right.order) return left.order - right.order;
+      return String(left.label).localeCompare(String(right.label), 'es');
+    })
+    .map((group: any) => ({
+      ...group,
+      pendingByType: (group.submissions || []).filter((entry: any) => !isSubmissionReviewed(entry.submission)).length,
+    }));
+})();
 
 const buildSubmissionLogRows = (submissions: any[], options: { includeUser: boolean }) => {
   const includeUser = Boolean(options?.includeUser);
@@ -1942,13 +2278,105 @@ const dashboardLogData = {
   },
 };
 const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\\u003c');
+
+let teacherDashboardAnnotations = [] as any[];
+if (isTeacher && activeCourseId) {
+  try {
+    const annotationSupabase = createSupabaseServerClient({ requireServiceRole: true });
+    const loadedAnnotations = await listDashboardAnnotations(annotationSupabase, {
+      courseId: activeCourseId,
+      year: activeYear,
+    });
+    teacherDashboardAnnotations = loadedAnnotations
+      .filter((annotation) =>
+        annotation.visibility === 'teachers'
+        || String(annotation.authorUserId || '') === String(dbUser?.id || ''),
+      )
+      .map((annotation) => ({
+        ...annotation,
+        metadata: {
+          ...(annotation.metadata || {}),
+          updatedAtLabel: formatSubmissionDate(annotation.updatedAt || annotation.createdAt),
+        },
+      }));
+  } catch (error: any) {
+    const relationMissing =
+      ['42P01', 'PGRST205'].includes(String(error?.code || ''))
+      || String(error?.message || '').toLowerCase().includes('gradebookannotation');
+    if (!relationMissing) {
+      console.error('Error loading teacher dashboard annotations:', error);
+    }
+  }
+}
+
+const teacherOverviewProjection = isTeacher
+  ? buildOverviewProjection({
+      activeCourseId,
+      activeYear,
+      attendanceRows: attendanceGridRows,
+      attendanceSummaryRows: attendanceUserSummaryRows,
+      submissions: scopedTeacherSubmissions,
+      todayDateKey: todayAttendanceDateKey,
+      teacherCourseGradeGroups,
+    })
+  : { columns: [], rows: [], emptyMessage: '' };
+
+const teacherGradebookProjection = isTeacher
+  ? buildGradebookProjection({
+      activeCourseId,
+      activeYear,
+      teacherCourseGradeGroups,
+    })
+  : { columns: [], rows: [], emptyMessage: '' };
+
+const teacherAttendanceProjection = isTeacher
+  ? buildAttendanceProjection({
+      attendanceGridRows,
+      attendanceLogRows: attendanceLogRows,
+      attendanceScheduleGrid,
+      todayDateKey: todayAttendanceDateKey,
+    })
+  : {
+      summary: { columns: [], rows: [], emptyMessage: '' },
+      log: { columns: [], rows: [], emptyMessage: '' },
+    };
+
+const teacherCommentsProjection = isTeacher
+  ? buildCommentsProjection({
+      annotations: teacherDashboardAnnotations,
+    })
+  : { columns: [], rows: [], emptyMessage: '' };
+
+const teacherAdminProjection = isTeacher
+  ? buildAdminProjection({
+      activeCourseId,
+      allUsers: allUsers || [],
+      allEnrollments: allEnrollments || [],
+      allSubmissions: allSubmissions || [],
+      allLiveClassAttendance: allLiveClassAttendance || [],
+    })
+  : { columns: [], rows: [], emptyMessage: '' };
+
+const teacherTabulatorMetaJson = toDashboardProjectionJson({
+  userId: String(dbUser?.id || ''),
+  courseId: activeCourseId,
+  year: activeYear,
+  initialTeacherTab: initialTeacherDashboardTab,
+  supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.SUPABASE_URL,
+  supabaseKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '',
+});
+const teacherOverviewProjectionJson = toDashboardProjectionJson(teacherOverviewProjection);
+const teacherGradebookProjectionJson = toDashboardProjectionJson(teacherGradebookProjection);
+const teacherAttendanceProjectionJson = toDashboardProjectionJson(teacherAttendanceProjection);
+const teacherCommentsProjectionJson = toDashboardProjectionJson(teacherCommentsProjection);
+const teacherAdminProjectionJson = toDashboardProjectionJson(teacherAdminProjection);
+const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboardAnnotations);
 ---
 
 <html lang="es">
   <head>
     <BaseHead title={isTeacher ? "Panel de Administración" : "Panel de Estudiante"} description="Plataforma de aprendizaje" />
     <meta charset="utf-8" />
-    <script src="https://cdn.zinggrid.com/zinggrid.min.js" defer></script>
     <style is:inline>
       .wrap {
         width: 100%;
@@ -1958,8 +2386,8 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
       }
       .dashboard-shell {
         display: grid;
-        grid-template-columns: clamp(248px, 19vw, 312px) minmax(0, 1fr);
-        gap: 1rem;
+        grid-template-columns: clamp(176px, 13vw, 218px) minmax(0, 1fr);
+        gap: 0;
         align-items: start;
         min-height: calc(100dvh - 7rem);
       }
@@ -1971,17 +2399,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         overflow-y: auto;
         border: 1px solid var(--c-border);
         background: var(--c-bg);
-        padding: 1rem;
-      }
-      .dashboard-sidebar-title {
-        margin: 0 0 0.3rem 0;
-        font-size: 1.25rem;
-      }
-      .dashboard-sidebar-copy {
-        margin: 0 0 1rem 0;
-        color: var(--c-fg-dim);
-        font-size: 0.88rem;
-        line-height: 1.45;
+        padding: 0.78rem;
       }
       .dashboard-sidebar-nav {
         display: grid;
@@ -2113,22 +2531,17 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         color: var(--c-fg-dim);
       }
       .attendance-config-input,
-      .attendance-config-apply,
       .attendance-manual-input,
       .attendance-log-search {
         border: 1px solid var(--c-border);
-        border-radius: 6px;
-        background: var(--c-bg);
+        border-radius: 0;
+        background: transparent;
         color: var(--c-fg);
         font: inherit;
       }
       .attendance-config-input,
       .attendance-log-search {
         padding: 0.45rem 0.55rem;
-      }
-      .attendance-config-apply {
-        padding: 0.46rem 0.72rem;
-        cursor: pointer;
       }
       .attendance-grid-wrap {
         margin-bottom: 1rem;
@@ -2223,8 +2636,8 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         text-align: center;
         font-size: 0.74rem;
         border: 1px solid var(--c-border);
-        border-radius: 4px;
-        background: var(--c-bg);
+        border-radius: 0;
+        background: transparent;
         color: var(--c-fg);
       }
       .attendance-manual-input::placeholder {
@@ -2324,6 +2737,13 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
       .icon-btn-danger:hover {
         border-color: #dc2626;
         color: #dc2626;
+      }
+      .text-btn-danger {
+        border-color: #dc2626;
+        color: #dc2626;
+      }
+      .text-btn-danger:hover {
+        background: rgba(220, 38, 38, 0.08);
       }
       .status-pending { color: #f57c00; }
       .status-graded { color: #388e3c; }
@@ -2431,6 +2851,12 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
       .teacher-course-card h3 {
         margin: 0 0 0.45rem 0;
         font-size: 1rem;
+      }
+      .teacher-dashboard-panels {
+        min-width: 0;
+      }
+      .student-dashboard-panels {
+        min-width: 0;
       }
       .teacher-course-meta {
         margin: 0;
@@ -2766,6 +3192,792 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         font-size: 0.85rem;
         color: var(--c-fg-dim);
       }
+      .teacher-panel {
+        min-width: 0;
+      }
+      .teacher-grid-shell {
+        display: grid;
+        gap: 0.55rem;
+      }
+      .teacher-grid-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+      }
+      .dashboard-grid-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+      }
+      .dashboard-admin-actions {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.22rem;
+        width: 100%;
+      }
+      .teacher-grid-note {
+        margin: 0;
+        color: var(--c-fg-dim);
+        font-size: 0.84rem;
+      }
+      .attendance-config-state {
+        min-height: 1rem;
+      }
+      .attendance-config-state[data-state="saving"] {
+        color: #f59e0b;
+      }
+      .attendance-config-state[data-state="saved"] {
+        color: #16a34a;
+      }
+      .attendance-config-state[data-state="error"] {
+        color: #dc2626;
+      }
+      .dashboard-grid-search,
+      .dashboard-grid-btn {
+        border: 1px solid var(--c-border);
+        border-radius: 0;
+        background: transparent;
+        color: var(--c-fg);
+        font: inherit;
+      }
+      .dashboard-grid-search {
+        min-width: min(420px, 100%);
+        padding: 0.32rem 0.45rem;
+      }
+      .dashboard-grid-btn {
+        padding: 0.3rem 0.48rem;
+        cursor: pointer;
+      }
+      .dashboard-grid-btn--primary {
+        border-color: var(--c-link);
+        color: var(--c-link);
+      }
+      .dashboard-grid-btn:hover {
+        border-color: var(--c-link);
+        color: var(--c-link);
+      }
+      .dashboard-grid-icon-btn {
+        width: 1.72rem;
+        height: 1.72rem;
+        border: 1px solid var(--c-border);
+        border-radius: 0;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        text-decoration: none;
+        padding: 0;
+        transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+      }
+      .dashboard-grid-icon-btn svg {
+        width: 0.88rem;
+        height: 0.88rem;
+      }
+      .dashboard-grid-icon-btn:hover {
+        border-color: var(--c-link);
+        color: var(--c-link);
+      }
+      .dashboard-grid-icon-btn:disabled,
+      .dashboard-grid-icon-btn[data-state="saving"] {
+        opacity: 0.55;
+        cursor: wait;
+      }
+      .dashboard-grid-icon-btn--danger:hover,
+      .dashboard-grid-icon-btn--danger[data-state="error"] {
+        border-color: #dc2626;
+        color: #dc2626;
+      }
+      .dashboard-inline-select-wrap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+      .dashboard-inline-input-wrap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+      .dashboard-inline-select {
+        width: 100%;
+        min-width: 6.1rem;
+        max-width: 7.6rem;
+        min-height: 1.75rem;
+        border: 1px solid var(--c-border);
+        border-radius: 0;
+        background-color: transparent;
+        color: var(--c-fg);
+        font: inherit;
+        font-size: 0.74rem;
+        line-height: 1.2;
+        padding: 0.18rem 1.45rem 0.18rem 0.42rem;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image:
+          linear-gradient(45deg, transparent 50%, currentColor 50%),
+          linear-gradient(135deg, currentColor 50%, transparent 50%);
+        background-position:
+          calc(100% - 0.72rem) calc(50% - 0.12rem),
+          calc(100% - 0.48rem) calc(50% - 0.12rem);
+        background-size: 0.24rem 0.24rem, 0.24rem 0.24rem;
+        background-repeat: no-repeat;
+        transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+      }
+      .dashboard-inline-select--turno {
+        min-width: 3.2rem;
+        max-width: 3.6rem;
+        padding-right: 1.2rem;
+        text-align: center;
+      }
+      .dashboard-inline-input {
+        width: 100%;
+        min-width: 3rem;
+        max-width: 3.6rem;
+        min-height: 1.75rem;
+        border: 1px solid var(--c-border);
+        border-radius: 0;
+        background-color: transparent;
+        color: var(--c-fg);
+        font: inherit;
+        font-size: 0.74rem;
+        line-height: 1.2;
+        padding: 0.18rem 0.3rem;
+        text-align: center;
+        transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+      }
+      .dashboard-inline-input:hover,
+      .dashboard-inline-input:focus {
+        border-color: var(--c-link);
+        outline: none;
+      }
+      .dashboard-inline-input[data-state="saving"] {
+        border-color: #f59e0b;
+        color: #f59e0b;
+      }
+      .dashboard-inline-input[data-state="error"] {
+        border-color: #dc2626;
+        color: #dc2626;
+      }
+      .dashboard-inline-input:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .dashboard-inline-select:hover,
+      .dashboard-inline-select:focus {
+        border-color: var(--c-link);
+        outline: none;
+      }
+      .dashboard-inline-select[data-state="saving"] {
+        border-color: #f59e0b;
+        color: #f59e0b;
+      }
+      .dashboard-inline-select[data-state="error"] {
+        border-color: #dc2626;
+        color: #dc2626;
+      }
+      .dashboard-inline-select:disabled,
+      .dashboard-inline-select[data-state="disabled"] {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .dashboard-cell--selected {
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-link) 60%, transparent);
+      }
+      .dashboard-tabulator {
+        min-height: 460px;
+        border: 1px solid var(--c-border);
+        background: var(--c-bg);
+        border-radius: 0;
+        overflow: visible;
+      }
+      .dashboard-tabulator .tabulator {
+        border: none;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font-size: 0.84rem;
+        width: 100%;
+      }
+      .dashboard-tabulator .tabulator-header {
+        border-bottom: 1px solid var(--c-border);
+        background: var(--c-bg);
+      }
+      .dashboard-tabulator .tabulator-col,
+      .dashboard-tabulator .tabulator-row,
+      .dashboard-tabulator .tabulator-cell,
+      .dashboard-tabulator .tabulator-footer,
+      .dashboard-tabulator .tabulator-tableholder {
+        border-color: var(--c-border);
+      }
+      .dashboard-tabulator .tabulator-col {
+        background: var(--c-bg) !important;
+        color: var(--c-fg);
+      }
+      .dashboard-tabulator .tabulator-col-title,
+      .dashboard-tabulator .tabulator-col-content,
+      .dashboard-tabulator .tabulator-row,
+      .dashboard-tabulator .tabulator-cell {
+        color: var(--c-fg);
+      }
+      .dashboard-tabulator .tabulator-frozen,
+      .dashboard-tabulator .tabulator-frozen-left,
+      .dashboard-tabulator .tabulator-frozen-right {
+        background: var(--c-bg) !important;
+      }
+      .dashboard-tabulator .tabulator-col.tabulator-col-group {
+        background: var(--c-bg) !important;
+      }
+      .dashboard-tabulator .tabulator-col.tabulator-col-group .tabulator-col-group-cols {
+        background: var(--c-bg) !important;
+      }
+      .dashboard-tabulator .tabulator-col.tabulator-sortable:hover {
+        background: color-mix(in srgb, var(--c-link) 6%, transparent);
+      }
+      .dashboard-tabulator .tabulator-row {
+        background: var(--c-bg) !important;
+      }
+      .dashboard-tabulator .tabulator-row:hover {
+        background: color-mix(in srgb, var(--c-link) 2%, var(--c-bg) 98%);
+      }
+      .dashboard-tabulator .tabulator-cell {
+        padding: 0.18rem 0.22rem;
+        background: var(--c-bg) !important;
+      }
+      .dashboard-tabulator .tabulator-col-content {
+        padding: 0.24rem 0.22rem;
+      }
+      .dashboard-tabulator .tabulator-tableholder {
+        background: var(--c-bg) !important;
+      }
+      .dashboard-tabulator .tabulator-table {
+        background: var(--c-bg) !important;
+        width: 100%;
+      }
+      .dashboard-tabulator .tabulator-menu,
+      .dashboard-tabulator .tabulator-popup {
+        border: 1px solid var(--c-border);
+        background: var(--c-bg);
+        color: var(--c-fg);
+        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+      }
+      .dashboard-tabulator .tabulator-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.82rem;
+      }
+      .dashboard-tabulator .tabulator-menu-item:hover {
+        background: color-mix(in srgb, var(--c-link) 10%, var(--c-bg) 90%);
+      }
+      .dashboard-tabulator .tabulator-menu-item-disabled {
+        opacity: 0.45;
+      }
+      .dashboard-tabulator .tabulator-footer {
+        position: sticky;
+        bottom: 0;
+        z-index: 4;
+        background: color-mix(in srgb, var(--c-bg) 94%, transparent);
+        color: var(--c-fg);
+        border-top: 1px solid var(--c-border);
+      }
+      .dashboard-tabulator .tabulator-page {
+        border: 1px solid var(--c-border);
+        background: transparent;
+        color: var(--c-fg);
+        border-radius: 0;
+      }
+      .dashboard-tabulator .tabulator-page.active {
+        border-color: var(--c-link);
+        color: var(--c-link);
+      }
+      .dashboard-tabulator .tabulator-editing {
+        background: color-mix(in srgb, var(--c-link) 8%, var(--c-bg) 92%);
+      }
+      .dashboard-tabulator input,
+      .dashboard-tabulator textarea,
+      .dashboard-tabulator select {
+        background: var(--c-bg);
+        color: var(--c-fg);
+      }
+      .dashboard-muted {
+        color: var(--c-fg-dim);
+        font-size: 0.78rem;
+      }
+      .dashboard-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.1rem;
+        padding: 0.18rem 0.42rem;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 600;
+        line-height: 1;
+      }
+      .dashboard-pill--score {
+        background: color-mix(in srgb, var(--c-link) 16%, transparent);
+        color: color-mix(in srgb, var(--c-link) 78%, var(--c-fg) 22%);
+      }
+      .dashboard-pill--percent-high {
+        background: rgba(34, 197, 94, 0.14);
+        color: #166534;
+      }
+      .dashboard-pill--percent-mid {
+        background: rgba(245, 158, 11, 0.16);
+        color: #92400e;
+      }
+      .dashboard-pill--percent-low {
+        background: rgba(239, 68, 68, 0.16);
+        color: #991b1b;
+      }
+      .dashboard-progress {
+        display: inline-grid;
+        grid-template-columns: minmax(2.9rem, 1fr) auto;
+        align-items: center;
+        gap: 0.38rem;
+        width: 100%;
+      }
+      .dashboard-progress__track {
+        position: relative;
+        display: block;
+        width: 100%;
+        min-width: 2.9rem;
+        height: 0.48rem;
+        border: 1px solid var(--c-border);
+        background: color-mix(in srgb, var(--c-bg) 84%, var(--c-fg-dim) 16%);
+        overflow: hidden;
+      }
+      .dashboard-progress__fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        display: block;
+        background: currentColor;
+      }
+      .dashboard-progress__label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        line-height: 1;
+        white-space: nowrap;
+      }
+      .dashboard-progress--high {
+        color: #166534;
+      }
+      .dashboard-progress--mid {
+        color: #92400e;
+      }
+      .dashboard-progress--low {
+        color: #991b1b;
+      }
+      .dashboard-pill--absence {
+        background: transparent;
+        color: var(--c-fg);
+        min-width: 1.25rem;
+        padding-inline: 0.18rem;
+      }
+      .dashboard-pill--absence-warning {
+        background: rgba(245, 158, 11, 0.18);
+        color: #92400e;
+      }
+      .dashboard-pill--absence-critical {
+        background: rgba(239, 68, 68, 0.18);
+        color: #991b1b;
+      }
+      .dashboard-pill--risk {
+        min-width: 3rem;
+      }
+      .dashboard-pill--risk-bajo {
+        background: rgba(34, 197, 94, 0.16);
+        color: #166534;
+      }
+      .dashboard-pill--risk-medio {
+        background: rgba(245, 158, 11, 0.18);
+        color: #92400e;
+      }
+      .dashboard-pill--risk-alto {
+        background: rgba(239, 68, 68, 0.18);
+        color: #991b1b;
+      }
+      .dashboard-annotation-shell {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 100%;
+        min-height: 1.8rem;
+        padding: 0.04rem 0.08rem;
+        border-radius: 0;
+        color: inherit;
+      }
+      .dashboard-annotation-shell__content {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 100%;
+        color: inherit;
+      }
+      .dashboard-annotation-shell--red {
+        background: rgba(239, 68, 68, 0.16);
+      }
+      .dashboard-annotation-shell--coral {
+        background: rgba(251, 113, 133, 0.17);
+      }
+      .dashboard-annotation-shell--orange {
+        background: rgba(249, 115, 22, 0.16);
+      }
+      .dashboard-annotation-shell--yellow {
+        background: rgba(250, 204, 21, 0.19);
+      }
+      .dashboard-annotation-shell--lime {
+        background: rgba(132, 204, 22, 0.18);
+      }
+      .dashboard-annotation-shell--green {
+        background: rgba(34, 197, 94, 0.16);
+      }
+      .dashboard-annotation-shell--cyan {
+        background: rgba(6, 182, 212, 0.16);
+      }
+      .dashboard-annotation-shell--blue {
+        background: rgba(59, 130, 246, 0.16);
+      }
+      .dashboard-annotation-dot {
+        position: absolute;
+        right: -0.08rem;
+        top: -0.18rem;
+        min-width: 0.95rem;
+        height: 0.95rem;
+        padding: 0 0.16rem;
+        border-radius: 999px;
+        background: var(--c-link);
+        color: white;
+        font-size: 0.6rem;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+      .dashboard-annotation-color-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.42rem;
+        padding: 0.14rem 0.46rem;
+        border-radius: 999px;
+        border: 1px solid var(--c-border);
+        background: var(--c-bg);
+      }
+      .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color {
+        width: 0.72rem;
+        height: 0.72rem;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        display: inline-block;
+        flex: 0 0 auto;
+      }
+      .dashboard-annotation-color-pill--red .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color--red {
+        background: #ef4444;
+      }
+      .dashboard-annotation-color-pill--coral .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color--coral {
+        background: #fb7185;
+      }
+      .dashboard-annotation-color-pill--orange .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color--orange {
+        background: #f97316;
+      }
+      .dashboard-annotation-color-pill--yellow .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color--yellow {
+        background: #facc15;
+      }
+      .dashboard-annotation-color-pill--lime .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color--lime {
+        background: #84cc16;
+      }
+      .dashboard-annotation-color-pill--green .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color--green {
+        background: #22c55e;
+      }
+      .dashboard-annotation-color-pill--cyan .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color--cyan {
+        background: #06b6d4;
+      }
+      .dashboard-annotation-color-pill--blue .dashboard-annotation-color-pill__swatch,
+      .dashboard-menu-color--blue {
+        background: #3b82f6;
+      }
+      .dashboard-menu-shortcut {
+        margin-left: auto;
+        color: var(--c-fg-dim);
+        font-size: 0.72rem;
+      }
+      .dashboard-annotation-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 2600;
+      }
+      .dashboard-annotation-modal[hidden] {
+        display: none !important;
+      }
+      .dashboard-annotation-modal__backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.42);
+      }
+      .dashboard-annotation-modal__dialog {
+        position: relative;
+        z-index: 1;
+        width: min(560px, calc(100vw - 2rem));
+        margin: 8vh auto 0;
+        border: 1px solid var(--c-border);
+        border-radius: 0;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+        padding: 1rem;
+        display: grid;
+        gap: 0.8rem;
+      }
+      .dashboard-annotation-modal__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.8rem;
+      }
+      .dashboard-annotation-modal__header h3 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      .dashboard-annotation-modal__meta,
+      .dashboard-annotation-modal__hint {
+        margin: 0.18rem 0 0 0;
+        color: var(--c-fg-dim);
+        font-size: 0.82rem;
+      }
+      .dashboard-annotation-modal__close {
+        border: none;
+        background: transparent;
+        color: var(--c-fg-dim);
+        font-size: 1.5rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+      }
+      .dashboard-annotation-modal__field {
+        display: grid;
+        gap: 0.32rem;
+        font-size: 0.82rem;
+        color: var(--c-fg-dim);
+      }
+      .dashboard-annotation-modal__field textarea,
+      .dashboard-annotation-modal__field select {
+        border: 1px solid var(--c-border);
+        border-radius: 0;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font: inherit;
+        padding: 0.58rem 0.65rem;
+      }
+      .dashboard-annotation-modal__grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.7rem;
+      }
+      .dashboard-annotation-modal__actions {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+      }
+      .dashboard-annotation-modal__actions-spacer {
+        flex: 1 1 auto;
+      }
+      .dashboard-attendance-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.5rem;
+        padding: 0.1rem 0.15rem;
+        border-radius: 0;
+        font-weight: 600;
+        line-height: 1;
+      }
+      .dashboard-date-cell {
+        color: var(--c-fg);
+        font-size: 0.78rem;
+        white-space: nowrap;
+      }
+      .dashboard-attendance-chip--present {
+        background: rgba(34, 197, 94, 0.14);
+        color: #166534;
+      }
+      .dashboard-attendance-chip--partial {
+        background: rgba(245, 158, 11, 0.18);
+        color: #92400e;
+      }
+      .dashboard-attendance-chip--empty {
+        background: rgba(148, 163, 184, 0.14);
+        color: var(--c-fg-dim);
+      }
+      .dashboard-attendance-chip--future {
+        background: transparent;
+        color: var(--c-fg-dim);
+      }
+      .dashboard-attendance-chip--manual {
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-link) 55%, transparent);
+      }
+      .dashboard-tabulator .dashboard-attendance-month-group .tabulator-col-title {
+        font-size: 0.76rem;
+        letter-spacing: 0.02em;
+        text-transform: none;
+      }
+      .dashboard-tabulator .dashboard-attendance-day-col .tabulator-col-title {
+        font-size: 0.74rem;
+        font-weight: 600;
+      }
+      .dashboard-tabulator .dashboard-attendance-day-col .tabulator-col-content,
+      .dashboard-tabulator .dashboard-attendance-day-col {
+        justify-content: center;
+      }
+      .dashboard-tabulator [tabulator-field^="day_"] {
+        text-align: center;
+        padding: 0.08rem 0 !important;
+      }
+      .dashboard-tabulator [tabulator-field^="day_"] .dashboard-annotation-shell {
+        min-height: 1.62rem;
+        padding: 0;
+      }
+      .dashboard-tabulator [tabulator-field^="day_"] .dashboard-attendance-chip {
+        min-width: 1.42rem;
+        min-height: 1.32rem;
+        padding: 0.04rem 0;
+      }
+      .dashboard-cell--range-selected {
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-link) 46%, transparent);
+        background: color-mix(in srgb, var(--c-link) 10%, transparent) !important;
+      }
+      .dashboard-cell--range-anchor {
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-link) 64%, transparent);
+      }
+      :root.dark .dashboard-grid-search,
+      :root.dark .dashboard-grid-btn,
+      :root.dark .dashboard-grid-icon-btn,
+      :root.dark .dashboard-inline-select,
+      :root.dark .dashboard-inline-input {
+        background-color: transparent;
+        color: var(--c-fg);
+      }
+      :root.dark .dashboard-tabulator .tabulator,
+      :root.dark .dashboard-tabulator .tabulator-header,
+      :root.dark .dashboard-tabulator .tabulator-col,
+      :root.dark .dashboard-tabulator .tabulator-row,
+      :root.dark .dashboard-tabulator .tabulator-cell,
+      :root.dark .dashboard-tabulator .tabulator-tableholder,
+      :root.dark .dashboard-tabulator .tabulator-table {
+        background: var(--c-bg) !important;
+      }
+      :root.dark .dashboard-tabulator .tabulator-col-title,
+      :root.dark .dashboard-tabulator .tabulator-col-content,
+      :root.dark .dashboard-tabulator .tabulator-row,
+      :root.dark .dashboard-tabulator .tabulator-cell {
+        color: var(--c-fg) !important;
+      }
+      :root.dark .dashboard-tabulator .tabulator-menu,
+      :root.dark .dashboard-tabulator .tabulator-popup,
+      :root.dark .dashboard-tabulator input,
+      :root.dark .dashboard-tabulator textarea,
+      :root.dark .dashboard-tabulator select {
+        background: color-mix(in srgb, var(--c-bg) 94%, #000 6%);
+      }
+      :root.dark .dashboard-tabulator .tabulator-footer {
+        background: color-mix(in srgb, var(--c-bg) 88%, #000 12%);
+      }
+      :root.dark .dashboard-annotation-shell,
+      :root.dark .dashboard-annotation-shell__content {
+        color: var(--c-fg);
+      }
+      :root.dark .teacher-grid-note,
+      :root.dark .attendance-config-note,
+      :root.dark .dashboard-muted,
+      :root.dark .log-empty,
+      :root.dark .dashboard-menu-shortcut,
+      :root.dark .dashboard-annotation-modal__meta,
+      :root.dark .dashboard-annotation-modal__hint,
+      :root.dark .dashboard-annotation-modal__field,
+      :root.dark .dashboard-annotation-modal__close {
+        color: color-mix(in srgb, var(--c-fg) 78%, #ffffff 22%);
+      }
+      :root.dark .dashboard-inline-select:disabled,
+      :root.dark .dashboard-inline-select[data-state="disabled"] {
+        color: color-mix(in srgb, var(--c-fg) 62%, #ffffff 18%);
+      }
+      :root.dark .dashboard-pill--score {
+        color: #dbeafe;
+      }
+      :root.dark .dashboard-pill--percent-high {
+        color: #bbf7d0;
+      }
+      :root.dark .dashboard-pill--percent-mid {
+        color: #fde68a;
+      }
+      :root.dark .dashboard-pill--percent-low {
+        color: #fecaca;
+      }
+      :root.dark .dashboard-progress__track {
+        background: color-mix(in srgb, var(--c-bg) 72%, #fff 6%);
+      }
+      :root.dark .dashboard-progress--high {
+        color: #bbf7d0;
+      }
+      :root.dark .dashboard-progress--mid {
+        color: #fde68a;
+      }
+      :root.dark .dashboard-progress--low {
+        color: #fecaca;
+      }
+      :root.dark .dashboard-pill--absence-warning {
+        color: #fde68a;
+      }
+      :root.dark .dashboard-pill--absence-critical {
+        color: #fecaca;
+      }
+      :root.dark .attendance-config-state[data-state="saved"] {
+        color: #86efac;
+      }
+      :root.dark .attendance-config-state[data-state="saving"] {
+        color: #fcd34d;
+      }
+      :root.dark .attendance-config-state[data-state="error"] {
+        color: #fca5a5;
+      }
+      :root.dark .dashboard-pill--absence {
+        color: #fecaca;
+      }
+      :root.dark .dashboard-pill--risk-bajo {
+        color: #bbf7d0;
+      }
+      :root.dark .dashboard-pill--risk-medio {
+        color: #fde68a;
+      }
+      :root.dark .dashboard-pill--risk-alto {
+        color: #fecaca;
+      }
+      :root.dark .dashboard-attendance-chip--present {
+        color: #bbf7d0;
+      }
+      :root.dark .dashboard-attendance-chip--partial {
+        color: #fde68a;
+      }
+      @media (max-width: 720px) {
+        .dashboard-annotation-modal__grid {
+          grid-template-columns: 1fr;
+        }
+      }
       .eval-id-anchor {
         border: none;
         background: transparent;
@@ -2816,6 +4028,9 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         font-size: 0.75rem;
       }
       @media (max-width: 960px) {
+        .wrap {
+          padding: 0;
+        }
         .dashboard-shell {
           grid-template-columns: 1fr;
         }
@@ -2833,9 +4048,21 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
           margin-bottom: 0.2rem;
         }
         .dashboard-scope-controls {
+          display: flex;
+          flex-wrap: nowrap;
+          align-items: flex-end;
+          gap: 0.55rem;
           width: 100%;
-          justify-content: flex-end;
           padding-top: 0.7rem;
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: thin;
+        }
+        .dashboard-scope-field {
+          display: inline-flex;
+          flex-direction: column;
+          flex: 0 0 auto;
+          min-width: 144px;
         }
         .tab {
           border-left: 0;
@@ -2859,12 +4086,12 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         <aside class="dashboard-sidebar" aria-label="Navegación del panel">
           {isTeacher ? (
             <>
-              <h1 class="dashboard-sidebar-title">Panel de Administración</h1>
-              <p class="dashboard-sidebar-copy">Usuarios, entregas y asistencia del curso activo.</p>
               <div class="tabs">
-                <div class:list={['tab', initialTeacherDashboardTab === 'users' ? 'active' : '']} data-tab="users">Usuarios</div>
-                <div class:list={['tab', initialTeacherDashboardTab === 'deliveries' ? 'active' : '']} data-tab="deliveries">Entregas</div>
-                <div class:list={['tab', initialTeacherDashboardTab === 'attendance' ? 'active' : '']} data-tab="attendance">Asistencia</div>
+                <div class:list={['tab', initialTeacherDashboardTab === 'overview' ? 'active' : '']} data-dashboard-tab="overview">Overview</div>
+                <div class:list={['tab', initialTeacherDashboardTab === 'gradebook' ? 'active' : '']} data-dashboard-tab="gradebook">Gradebook</div>
+                <div class:list={['tab', initialTeacherDashboardTab === 'attendance' ? 'active' : '']} data-dashboard-tab="attendance">Asistencia</div>
+                <div class:list={['tab', initialTeacherDashboardTab === 'comments' ? 'active' : '']} data-dashboard-tab="comments">Comments</div>
+                <div class:list={['tab', initialTeacherDashboardTab === 'admin' ? 'active' : '']} data-dashboard-tab="admin">Admin</div>
                 <div class="dashboard-scope-controls">
                   <label class="dashboard-scope-field">
                     <span>Curso</span>
@@ -2893,8 +4120,6 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
             </>
           ) : (
             <>
-              <h1 class="dashboard-sidebar-title">Panel de Estudiante</h1>
-              <p class="dashboard-sidebar-copy">Perfil, entregas y log personal del curso seleccionado.</p>
               <nav class="dashboard-sidebar-nav" aria-label="Secciones del panel">
                 <a href="#student-profile" class="tab active">Perfil</a>
                 <a href="#student-deliveries" class="tab">Entregas</a>
@@ -2928,739 +4153,62 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
             </>
           )}
         </aside>
-        <section class="dashboard-main">
-      {isTeacher ? (
-        <>
-          <div id="users-content" style={initialTeacherDashboardTab === 'users' ? 'display: block;' : 'display: none;'}>
-            <h2>Lista de Usuarios</h2>
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Email</th>
-                  <th>Rol</th>
-                  <th>Cursos Inscritos</th>
-                  <th>Entregas</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allUsers.map((user:any) => {
-                  const userEnrolls = allEnrollments.filter((e:any) => e.userId === user.id);
-                  const userSubs = allSubmissions.filter((s:any) => s.userId === user.id);
-                  const pendingSubs = userSubs.filter((s:any) => !isSubmissionReviewed(s));
-                  const gradedSubs = userSubs.filter((s:any) => isSubmissionReviewed(s));
-                  
-                  return (
-                    <tr>
-                      <td>{user.name}</td>
-                      <td style="font-size: 0.85rem; color: var(--c-fg-dim);">{user.email}</td>
-                      <td>
-                        <span class:list={['role-badge', user.role === 'teacher' ? 'role-teacher' : 'role-student']}>
-                          {getRoleBadgeLabel(user.role)}
-                        </span>
-                      </td>
-                      <td>
-                        <div class="enrollment-list">
-                          {userEnrolls.length > 0 ? (
-                            userEnrolls.map((e:any) => (
-                              <span class="enrollment-item">{e.courseId}</span>
-                            ))
-                          ) : (
-                            <span style="color: var(--c-fg-dim); font-size: 0.85rem;">Sin inscripciones</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div>
-                          <span class="submission-count">{userSubs.length}</span> total
-                          {pendingSubs.length > 0 && (
-                            <span class="status-pending"> • {pendingSubs.length} pendientes</span>
-                          )}
-                          {gradedSubs.length > 0 && (
-                            <span class="status-graded"> • {gradedSubs.length} calificadas</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div class="table-actions">
-                          <a href={`/admin/user/${user.id}`} class="icon-btn" aria-label="Editar usuario" title="Editar usuario">
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                              <path fill="currentColor" d="M3 17.25V21h3.75l11-11-3.75-3.75-11 11Zm18-11.5a1 1 0 0 0 0-1.41l-1.34-1.34a1 1 0 0 0-1.41 0l-1.05 1.05L19.95 6.8 21 5.75Z" />
-                            </svg>
-                          </a>
-                          <button
-                            type="button"
-                            class="icon-btn icon-btn-danger js-delete-user"
-                            data-user-id={user.id}
-                            data-user-name={user.name || user.email || user.id}
-                            aria-label="Eliminar usuario"
-                            title="Eliminar usuario"
-                          >
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                              <path fill="currentColor" d="M9 3h6l1 2h5v2H3V5h5l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Zm-1 12a2 2 0 0 1-2-2V8h16v11a2 2 0 0 1-2 2H6Z" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div id="deliveries-content" style={initialTeacherDashboardTab === 'deliveries' ? 'display: block;' : 'display: none;'}>
-            <h2>Entregas</h2>
-            <div class="deliveries-toolbar">
-              <input
-                type="search"
-                class="log-input"
-                data-deliveries-query
-                placeholder="Buscar por curso, tipo, usuario, respuesta, payload..."
-                aria-label="Buscar en entregas"
-              />
-            </div>
-            <div class="deliveries-subtabs">
-              <button type="button" class:list={['deliveries-subtab', initialTeacherDeliveryView === 'recent' ? 'active' : '']} data-delivery-view="recent">Recientes</button>
-              <button type="button" class:list={['deliveries-subtab', initialTeacherDeliveryView === 'course' ? 'active' : '']} data-delivery-view="course">Curso</button>
-              <button type="button" class:list={['deliveries-subtab', initialTeacherDeliveryView === 'log' ? 'active' : '']} data-delivery-view="log">Log</button>
-            </div>
-
-            <div id="deliveries-recent" data-delivery-panel="recent" style={initialTeacherDeliveryView === 'recent' ? 'display: block;' : 'display: none;'}>
-            <p class="fold-shortcuts">
-              <strong>Atajos:</strong>
-              <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>↑</kbd> fold all,
-              <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>↓</kbd> unfold all,
-              <kbd>⌘</kbd> + <kbd>↑</kbd> fold un nivel,
-              <kbd>⌘</kbd> + <kbd>↓</kbd> unfold un nivel.
-            </p>
-
-            {(() => {
-              if (recentTeacherSubmissions.length === 0) {
-                return <p>No hay entregas recientes.</p>;
-              }
-
-              const groupedByType = recentTeacherSubmissions.reduce((acc: any, submission: any) => {
-                const meta = resolveSubmissionMeta(submission);
-                const noteTypeKey = meta.noteType || 'unknown';
-
-                if (!acc[noteTypeKey]) {
-                  acc[noteTypeKey] = {
-                    key: noteTypeKey,
-                    label: meta.noteTypeLabel,
-                    order: meta.noteTypeOrder,
-                    submissions: [],
-                  };
-                }
-
-                acc[noteTypeKey].submissions.push({ submission, meta });
-                return acc;
-              }, {});
-
-              const noteTypeGroups = Object.values(groupedByType || {}).sort((left: any, right: any) => {
-                if (left.order !== right.order) return left.order - right.order;
-                return String(left.label).localeCompare(String(right.label), 'es');
-              });
-
-              return noteTypeGroups.map((group: any) => {
-                const pendingByType = group.submissions.filter((entry: any) => !isSubmissionReviewed(entry.submission)).length;
-
-                return (
-                  <section
-                    class="fold-node fold-level-1"
-                    data-fold-level="1"
-                    data-fold-node
-                    data-fold-scope="submissions"
-                    data-submission-type-group
-                    style="margin-bottom: 0.55rem;"
-                  >
-                    <button type="button" class="fold-header" data-fold-toggle>
-                      <span class="fold-toggle-icon">▾</span>
-                      <span>🧩 {group.label}</span>
-                      <span class="fold-student-summary">{group.submissions.length} respuestas • {pendingByType} pendientes</span>
-                    </button>
-                    <div class="fold-children">
-                      <table class="admin-table" data-submission-table style="margin-top: 0;">
-                        <thead>
-                          <tr>
-                            <th>Usuario</th>
-                            <th>Clase</th>
-                            <th>ID</th>
-                            <th>Entrega</th>
-                            <th>Respuesta</th>
-                            <th>Resultado</th>
-                            <th>Punto (x/10)</th>
-                            <th>Retroalimentación</th>
-                            <th>Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.submissions.map((entry: any) => {
-                            const sub = entry.submission;
-                            const meta = entry.meta;
-                            const submitter = allUsers && allUsers.find((u: any) => u.id === sub.userId);
-                            const resultState = getSubmissionResultState(sub);
-                            const answerText = getSubmissionAnswerText(sub, assignmentById);
-                            const evalPreviewAttr = toEvalPreviewAttr(meta.evalPreview);
-                            const rowSearch = [
-                              submitter?.name,
-                              submitter?.email,
-                              meta.assignmentLabel,
-                              meta.assignmentSlug,
-                              meta.courseId,
-                              meta.noteTypeLabel,
-                              meta.evalType,
-                              answerText,
-                              sub.feedback,
-                            ]
-                              .map((value) => normalizeTextLower(value))
-                              .filter(Boolean)
-                              .join(' ');
-
-                            return (
-                              <tr data-submission-row data-submission-id={sub.id} data-search={rowSearch}>
-                                <td>{submitter?.name || 'Usuario desconocido'}</td>
-                                <td style="font-size: 0.85rem;" title={meta.assignmentSlug}>{meta.assignmentLabel}</td>
-                                <td style="font-size: 0.78rem;">
-                                  <button
-                                    type="button"
-                                    class="eval-id-anchor"
-                                    data-eval-preview={evalPreviewAttr}
-                                    aria-label={`Ver bloque eval ${sub.assignmentId}`}
-                                  >
-                                    <code>{sub.assignmentId}</code>
-                                  </button>
-                                </td>
-                                <td style="font-size: 0.85rem;">{formatSubmissionDate(sub.submittedAt)}</td>
-                                <td style="max-width: 320px; font-size: 0.84rem;">{answerText}</td>
-                                <td style="text-align: center;">
-                                  <span class:list={['result-icon', resultState]}>{getResultIcon(resultState)}</span>
-                                </td>
-                                <td style="text-align: center;">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max="10"
-                                    step="0.1"
-                                    value={sub.score !== null && sub.score !== undefined ? sub.score : ''}
-                                    placeholder="-"
-                                    class="quick-score-input"
-                                    data-submission-id={sub.id}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="text"
-                                    class="quick-feedback-input"
-                                    data-submission-id={sub.id}
-                                    value={sub.feedback || ''}
-                                    placeholder="Enter para guardar"
-                                  />
-                                </td>
-                                <td>
-                                  <div class="table-actions">
-                                    <span class="inline-grade-note">
-                                      {normalizeText(sub?.feedback) ? 'Auto + feedback' : 'Auto'}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      class="icon-btn icon-btn-danger js-delete-submission"
-                                      data-submission-id={sub.id}
-                                      aria-label="Eliminar entrega"
-                                      title="Eliminar entrega"
-                                    >
-                                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M9 3h6l1 2h5v2H3V5h5l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Zm-1 12a2 2 0 0 1-2-2V8h16v11a2 2 0 0 1-2 2H6Z" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
-                );
-              });
-            })()}
-          </div>
-
-          <div id="deliveries-course" data-delivery-panel="course" style={initialTeacherDeliveryView === 'course' ? 'display: block;' : 'display: none;'}>
-            <p class="course-grades-shortcuts">
-              <strong>Atajos:</strong>
-              <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>↑</kbd> fold all,
-              <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>↓</kbd> unfold all,
-              <kbd>⌘</kbd> + <kbd>↑</kbd> fold un nivel,
-              <kbd>⌘</kbd> + <kbd>↓</kbd> unfold un nivel.
-            </p>
-            <div class="course-bulk-toolbar" data-course-bulk-toolbar>
-              <span class="bulk-hint">Edición masiva: <kbd>Alt</kbd> + click para seleccionar filas.</span>
-              <span class="bulk-spacer"></span>
-              <label for="bulk-turno-select">Turno:</label>
-              <select id="bulk-turno-select" class="grade-board-meta-input grade-turno-select" data-bulk-turno>
-                <option value="">-</option>
-                <option value="M">M</option>
-                <option value="T">T</option>
-                <option value="N">N</option>
-              </select>
-              <button type="button" data-bulk-apply-turno>Aplicar</button>
-              <button type="button" data-bulk-clear-selection>Limpiar selección</button>
-              <span class="bulk-count" data-bulk-count>0 seleccionados</span>
-            </div>
-
-            {allEnrollments && allSubmissions && allUsers && allAssignments && (() => {
-              const enrollmentSource = scopedTeacherEnrollments.filter((enrollment: any) =>
-                !isTeacherCourseMember(enrollment?.userId, enrollment?.courseId, scopedTeacherEnrollments),
-              );
-
-              const courseGroups = enrollmentSource.reduce((acc, enroll) => {
-                const courseId = canonicalizeCourseId(enroll?.courseId) || String(enroll?.courseId || '').trim();
-                if (!courseId) return acc;
-                if (!acc[courseId]) acc[courseId] = [];
-                acc[courseId].push(enroll);
-                return acc;
-              }, {});
-              const usersById = new Map((allUsers || []).map((user) => [user.id, user]));
-
-              return Object.entries(courseGroups)
-                .sort(([left], [right]) => String(left).localeCompare(String(right), 'es'))
-                .map(([courseId, enrolls]) => {
-                  const courseSubmissionsAllYears = scopedTeacherSubmissions.filter((submission) => {
-                    const meta = resolveSubmissionMeta(submission);
-                    const submissionCourseId = canonicalizeCourseId(meta?.courseIdRaw || meta?.courseId || '');
-                    return submissionCourseId === courseId;
-                  });
-
-                  const courseAssignmentsMap = new Map();
-
-                  (liveEvalEntriesByCourseId[courseId] || []).forEach((entry: any) => {
-                    const assignmentId = String(entry?.evalId || '').trim();
-                    if (!assignmentId) return;
-                    courseAssignmentsMap.set(assignmentId, {
-                      id: assignmentId,
-                      courseId,
-                      slug: String(entry?.entryId || ''),
-                    });
-                  });
-
-                  courseSubmissionsAllYears.forEach((submission) => {
-                    const assignmentId = String(submission?.assignmentId || '').trim();
-                    const meta = resolveSubmissionMeta(submission);
-                    if (
-                      !assignmentId
-                      || courseAssignmentsMap.has(assignmentId)
-                      || !liveEvalEntryById.has(assignmentId)
-                      || isSystemMetaAssignmentRef(meta.assignmentSlug || assignmentId)
-                    ) return;
-                    courseAssignmentsMap.set(assignmentId, {
-                      id: assignmentId,
-                      courseId,
-                      slug: meta.assignmentSlug || `${courseId}/${assignmentId}`,
-                    });
-                  });
-
-                  const courseAssignments = Array.from(courseAssignmentsMap.values())
-                    .sort((left, right) => {
-                      const leftKey = String(left.slug || left.id || '');
-                      const rightKey = String(right.slug || right.id || '');
-                      return leftKey.localeCompare(rightKey, 'es');
-                    });
-                  const assignmentsByPage = courseAssignments.reduce((acc, assignment) => {
-                    const assignmentSlug = String(assignment.slug || assignment.id || '').replace(/^\/+|\/+$/g, '');
-                    const slugParts = assignmentSlug.split('/').filter(Boolean);
-                    const slugCourseId = canonicalizeCourseId(slugParts[0] || '');
-                    const pageSlug = slugCourseId === courseId
-                      ? slugParts.slice(1).join('/')
-                      : assignmentSlug;
-                    const page = pageSlug || 'other';
-                    if (!acc[page]) acc[page] = [];
-                    acc[page].push(assignment);
-                    return acc;
-                  }, {});
-                  const lessonGroups = Object.entries(assignmentsByPage)
-                    .sort(([left], [right]) => String(left).localeCompare(String(right), 'es'))
-                    .map(([lessonSlug, lessonAssignments]) => ({
-                      lessonSlug,
-                      lessonLabel: decodeUriSafe(lessonSlug),
-                      assignments: [...lessonAssignments].sort((left, right) => {
-                        const leftLabel = decodeUriSafe(String(left.id || '')).toLowerCase();
-                        const rightLabel = decodeUriSafe(String(right.id || '')).toLowerCase();
-                        return leftLabel.localeCompare(rightLabel, 'es');
-                      }),
-                    }));
-                  const flatAssignments = lessonGroups.flatMap((lesson) => lesson.assignments);
-                  const assignmentIdSet = new Set(flatAssignments.map((assignment) => assignment.id));
-                  const scopedCourseSubmissionsAllYears = courseSubmissionsAllYears.filter((submission) =>
-                    assignmentIdSet.has(submission.assignmentId) &&
-                    !isTeacherCourseMember(submission?.userId, courseId, enrolls),
-                  );
-                  const yearSet = new Set([activeYear]);
-                  scopedCourseSubmissionsAllYears.forEach((submission) => {
-                    yearSet.add(getSubmissionYear(submission));
-                  });
-                  const years = Array.from(yearSet).sort((left, right) => {
-                    const numericDiff = Number(right) - Number(left);
-                    if (!Number.isNaN(numericDiff) && numericDiff !== 0) return numericDiff;
-                    return String(right).localeCompare(String(left), 'es');
-                  });
-
-                  const currentStudents = enrolls
-                    .filter((enrollment) => normalizeRole(enrollment?.roleInCourse) === 'student')
-                    .map((enrollment) => usersById.get(enrollment.userId))
-                    .filter(Boolean);
-
-                  if (currentStudents.length === 0 && scopedCourseSubmissionsAllYears.length === 0) return null;
-
-                  const enrollmentsByStudent = new Map(
-                    enrolls
-                      .filter((enrollment) => normalizeRole(enrollment?.roleInCourse) === 'student')
-                      .map((enrollment) => [enrollment.userId, enrollment]),
-                  );
-
-                  return (
-                    <section data-course-group style="margin-bottom: 0.9rem;">
-                      {flatAssignments.length === 0 ? (
-                        <p class="student-empty">No hay bloques de evaluación registrados en este curso.</p>
-                      ) : (
-                        years.map((year, yearIndex) => {
-                            const yearSubmissions = scopedCourseSubmissionsAllYears.filter(
-                              (submission) => getSubmissionYear(submission) === year,
-                            );
-                            const submissionMap = new Map();
-                            yearSubmissions.forEach((submission) => {
-                              submissionMap.set(`${submission.userId}::${submission.assignmentId}`, submission);
-                            });
-
-                            const yearStudentIds = new Set(currentStudents.map((student) => String(student?.id || '')));
-                            yearSubmissions.forEach((submission) => {
-                              const studentId = String(submission?.userId || '');
-                              if (studentId) yearStudentIds.add(studentId);
-                            });
-                            const students = Array.from(yearStudentIds)
-                              .map((studentId) => usersById.get(studentId))
-                              .filter(Boolean)
-                              .sort((left, right) =>
-                                String(left?.name || left?.email || '').localeCompare(
-                                  String(right?.name || right?.email || ''),
-                                  'es',
-                                ),
-                              );
-
-                            if (students.length === 0) return null;
-
-                            const yearPending = yearSubmissions.filter((submission) => !isSubmissionReviewed(submission)).length;
-
-                            return (
-                              <section
-                                class="fold-node fold-level-2"
-                                data-fold-level="2"
-                                data-fold-node
-                                data-fold-scope="course-grades"
-                                data-course-year-group
-                                data-search={`${normalizeTextLower(courseId)} ${normalizeTextLower(year)}`}
-                                style="margin-bottom: 0.6rem;"
-                              >
-                                <button type="button" class="fold-header" data-fold-toggle>
-                                  <span class="fold-toggle-icon">▾</span>
-                                  <span>🗓 {year}</span>
-                                  <span class="fold-student-summary">{students.length} estudiantes • {yearPending} pendientes</span>
-                                </button>
-                                <div class="fold-children">
-                                  <div class="grade-board-wrap">
-                                    <table class="student-assignment-table grade-board-table">
-                                      <thead>
-                                        <tr>
-                                          <th rowspan="2">Nombre</th>
-                                          <th rowspan="2">Turno</th>
-                                          <th rowspan="2">Email</th>
-                                          <th colspan="4" class:list={['grade-board-final-header', 'group-general', 'group-start']}>General</th>
-                                          {lessonGroups.map((lesson, lessonIndex) => (
-                                            <th
-                                              class:list={[
-                                                'lesson-group-header',
-                                                lessonIndex % 2 === 0 ? 'lesson-group-even' : 'lesson-group-odd',
-                                                'group-start',
-                                              ]}
-                                              colspan={Math.max(lesson.assignments.length, 1)}
-                                              title={lesson.lessonSlug}
-                                            >
-                                              {lesson.lessonLabel}
-                                            </th>
-                                          ))}
-                                        </tr>
-                                        <tr>
-                                          <th class:list={['group-general', 'group-start']}>Promedio</th>
-                                          <th class="group-general">Asistencia</th>
-                                          <th class="group-general">Concepto</th>
-                                          <th class="group-general">Grupo</th>
-                                          {lessonGroups.map((lesson, lessonIndex) => lesson.assignments.map((assignment, assignmentIndex) => {
-                                            const assignmentLabel = decodeUriSafe(String(assignment.id || '').split('/').pop() || assignment.id);
-                                            return (
-                                              <th
-                                                class:list={[
-                                                  'eval-header',
-                                                  lessonIndex % 2 === 0 ? 'lesson-group-even' : 'lesson-group-odd',
-                                                  assignmentIndex === 0 ? 'group-start' : '',
-                                                ]}
-                                                title={assignment.id}
-                                              >
-                                                {assignmentLabel}
-                                              </th>
-                                            );
-                                          }))}
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {students.map((student) => {
-                                          const panelKey = `${courseId}__${year}__${student.id}`
-                                            .replace(/[^a-zA-Z0-9_-]/g, '_')
-                                            .slice(0, 140);
-                                          const scores = flatAssignments
-                                            .map((assignment) => {
-                                              const submission = submissionMap.get(`${student.id}::${assignment.id}`);
-                                              if (!submission) return null;
-                                              if (submission.score === null || submission.score === undefined) return null;
-                                              const value = Number(submission.score);
-                                              return Number.isNaN(value) ? null : value;
-                                            })
-                                            .filter((value) => value !== null);
-                                          const average = scores.length > 0
-                                            ? (scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(1)
-                                            : '-';
-                                          const studentEnrollment = enrollmentsByStudent.get(student.id);
-                                          const metaKey = `${normalizeTextLower(courseId)}::${year}::${student.id}`;
-                                          const savedMeta = courseStudentMetaByKey.get(metaKey);
-                                          const attendanceCount = attendanceDayCountByStudentKey.get(metaKey)?.size || 0;
-                                          const turnoRaw = normalizeText(savedMeta?.turno || studentEnrollment?.turno || student?.turno || '').toUpperCase();
-                                          const turnoValue = ['M', 'T', 'N'].includes(turnoRaw) ? turnoRaw : 'M';
-                                          const groupValue = normalizeText(
-                                            savedMeta?.grupo
-                                              || studentEnrollment?.group
-                                              || studentEnrollment?.grupo
-                                              || student?.group
-                                              || student?.grupo
-                                              || '',
-                                          );
-                                          const conceptValue = normalizeText(
-                                            savedMeta?.concepto
-                                              || studentEnrollment?.concept
-                                              || studentEnrollment?.concepto
-                                              || '',
-                                          );
-                                          const rowSearch = [
-                                            courseId,
-                                            year,
-                                            student?.name,
-                                            student?.email,
-                                            turnoValue,
-                                            String(attendanceCount),
-                                            groupValue,
-                                            conceptValue,
-                                            ...lessonGroups.map((lesson) => lesson.lessonLabel),
-                                            ...flatAssignments.map((assignment) => assignment.id),
-                                          ]
-                                            .map((value) => normalizeTextLower(value))
-                                            .filter(Boolean)
-                                            .join(' ');
-
-                                          return (
-                                            <tr
-                                              data-course-row
-                                              data-course-id={courseId}
-                                              data-year={year}
-                                              data-student-id={student.id}
-                                              data-search={rowSearch}
-                                            >
-                                              <td>
-                                                <div class="grade-board-student">
-                                                  <span>{student?.name || student?.email || student?.id}</span>
-                                                </div>
-                                              </td>
-                                              <td>
-                                                <select
-                                                  class="grade-board-meta-input grade-turno-select"
-                                                  data-course-id={courseId}
-                                                  data-year={year}
-                                                  data-student-id={student.id}
-                                                >
-                                                  <option value="M" selected={turnoValue === 'M'}>M</option>
-                                                  <option value="T" selected={turnoValue === 'T'}>T</option>
-                                                  <option value="N" selected={turnoValue === 'N'}>N</option>
-                                                </select>
-                                              </td>
-                                              <td class="grade-board-email">
-                                                {student?.email || student?.id}
-                                              </td>
-                                              <td class:list={['grade-board-average', 'group-general', 'group-start']} data-average-for={panelKey}>
-                                                {average}
-                                              </td>
-                                              <td class="group-general" title={`${attendanceCount} dias asistidos`}>
-                                                {attendanceCount}
-                                              </td>
-                                              <td class="group-general">
-                                                <input
-                                                  type="number"
-                                                  min="0"
-                                                  max="10"
-                                                  step="0.1"
-                                                  class="grade-board-meta-input grade-concept-input"
-                                                  data-course-id={courseId}
-                                                  data-year={year}
-                                                  data-student-id={student.id}
-                                                  value={conceptValue}
-                                                  placeholder="Concepto"
-                                                />
-                                              </td>
-                                              <td class="group-general">
-                                                <input
-                                                  type="number"
-                                                  min="0"
-                                                  step="1"
-                                                  class="grade-board-meta-input grade-group-input"
-                                                  data-course-id={courseId}
-                                                  data-year={year}
-                                                  data-student-id={student.id}
-                                                  value={groupValue}
-                                                  placeholder="Grupo"
-                                                />
-                                              </td>
-                                              {lessonGroups.map((lesson, lessonIndex) => lesson.assignments.map((assignment, assignmentIndex) => {
-                                                const assignmentLabel = decodeUriSafe(String(assignment.id || '').split('/').pop() || assignment.id);
-                                                const submission = submissionMap.get(`${student.id}::${assignment.id}`);
-                                                const statusLabel = isSubmissionReviewed(submission)
-                                                  ? 'calificada'
-                                                  : submission
-                                                    ? 'pendiente'
-                                                    : 'sin entrega';
-
-                                                return (
-                                                  <td
-                                                    class:list={[
-                                                      lessonIndex % 2 === 0 ? 'lesson-group-even' : 'lesson-group-odd',
-                                                      assignmentIndex === 0 ? 'group-start' : '',
-                                                    ]}
-                                                    title={`${assignmentLabel} • ${statusLabel}`}
-                                                  >
-                                                    {submission ? (
-                                                      <div>
-                                                        <input
-                                                          type="number"
-                                                          min="0"
-                                                          max="10"
-                                                          step="0.1"
-                                                          value={submission.score !== null && submission.score !== undefined ? submission.score : ''}
-                                                          placeholder="-"
-                                                          data-submission-id={submission.id}
-                                                          data-assignment-id={assignment.id}
-                                                          data-student-panel={panelKey}
-                                                          class="grade-input"
-                                                          style="width: 56px; padding: 0.18rem; text-align: center; border: 1px solid var(--c-border); border-radius: 4px; background: var(--c-bg); font-size: 0.74rem;"
-                                                        />
-                                                        <div class="grade-board-state">{statusLabel}</div>
-                                                      </div>
-                                                    ) : (
-                                                      <span style="color: var(--c-fg-dim);">-</span>
-                                                    )}
-                                                  </td>
-                                                );
-                                              }))}
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              </section>
-                            );
-                          })
-                      )}
-                    </section>
-                  );
-                });
-            })()}
-          </div>
-
-          <div id="deliveries-log" data-delivery-panel="log" style={initialTeacherDeliveryView === 'log' ? 'display: block;' : 'display: none;'}>
-            <p class="log-empty">
-              Registro completo de eventos de evaluación para todos los cursos en los que estás inscripto como docente.
-            </p>
-            <section class="log-panel" data-log-panel data-log-scope="teacher" data-show-user="true">
-              <div class="log-toolbar">
+        <section class="dashboard-main" data-dashboard-root>
+      {isTeacher && (
+        <div class="teacher-dashboard-panels">
+          <div
+            class="teacher-panel"
+            data-dashboard-tab-panel="overview"
+            hidden={initialTeacherDashboardTab !== 'overview'}
+          >
+            <div class="teacher-grid-shell">
+              <div class="teacher-grid-toolbar">
                 <input
                   type="search"
-                  class="log-input"
-                  data-log-query
-                  placeholder="Buscar en log"
-                  aria-label="Buscar en log"
+                  class="dashboard-grid-search"
+                  data-dashboard-search="overview"
+                  placeholder="Buscar estudiante, email, turno, grupo..."
+                  aria-label="Buscar en overview"
                 />
-                <select class="log-select" data-log-filter="evalType" aria-label="Filtrar por tipo de evaluación">
-                  <option value="">Todos los eval type</option>
-                </select>
-                <select class="log-select" data-log-filter="mode" aria-label="Filtrar por modo">
-                  <option value="">Todos los modos</option>
-                </select>
-                <select class="log-select" data-log-filter="noteType" aria-label="Filtrar por tipo de nota">
-                  <option value="">Todos los tipos de nota</option>
-                </select>
+                <div class="dashboard-grid-actions">
+                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="overview">CSV</button>
+                </div>
               </div>
-              <p class="log-empty" data-log-summary></p>
-              <div class="log-table-wrap">
-                <table class="log-table">
-                  <thead>
-                    <tr>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="submittedAtTs">Envío</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="gradedAtTs">Revisión</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="courseId">Curso</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="noteTypeOrder">Tipo Nota</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="evalType">Eval Type</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="mode">Mode</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="userName">Usuario</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="assignmentLabel">Clase</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="assignmentId">ID</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="attempts">Attempt</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="score">Score</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="resultState">Result</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="submissionState">Submission</button></th>
-                      <th><button type="button" class="log-sort-btn" data-log-sort="reviewState">Review</button></th>
-                      <th>Respuesta</th>
-                      <th>Payload</th>
-                      <th>Feedback</th>
-                      <th>ID Submission</th>
-                      <th>Source</th>
-                    </tr>
-                  </thead>
-                  <tbody data-log-body></tbody>
-                </table>
-              </div>
-              <p class="log-empty" data-log-empty hidden>No hay resultados para los filtros actuales.</p>
-            </section>
+              <div class="dashboard-tabulator" data-dashboard-grid="overview"></div>
+            </div>
           </div>
 
-          <div id="attendance-content" style={initialTeacherDashboardTab === 'attendance' ? 'display: block;' : 'display: none;'} data-attendance-today={todayAttendanceDateKey}>
-            <h2>Asistencia</h2>
-            {!activeCourseId ? (
-              <p class="student-empty">Selecciona un curso activo para ver la asistencia.</p>
-            ) : (
-              <>
-                <div class="attendance-stat-cluster" style="margin-bottom: 0.8rem;">
-                  <span class="attendance-stat-chip" title="Sesiones registradas en el curso/año activo">
-                    <span aria-hidden="true">🎬</span>
-                    <strong>{attendanceSessionRows.length}</strong>
-                  </span>
-                  <span class="attendance-stat-chip" title="Students visibles en la grilla">
-                    <span aria-hidden="true">🎓</span>
-                    <strong>{attendanceGridRows.length}</strong>
-                  </span>
-                  <span class="attendance-stat-chip" title="Registros totales del log para el curso/año activo">
-                    <span aria-hidden="true">🧾</span>
-                    <strong>{attendanceLogRows.length}</strong>
-                  </span>
+          <div
+            class="teacher-panel"
+            data-dashboard-tab-panel="gradebook"
+            hidden={initialTeacherDashboardTab !== 'gradebook'}
+          >
+            <div class="teacher-grid-shell">
+              <div class="teacher-grid-toolbar">
+                <input
+                  type="search"
+                  class="dashboard-grid-search"
+                  data-dashboard-search="gradebook"
+                  placeholder="Buscar estudiante, email, evaluación, clase..."
+                  aria-label="Buscar en gradebook"
+                />
+                <div class="dashboard-grid-actions">
+                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="gradebook">CSV</button>
                 </div>
+              </div>
+              <div class="dashboard-tabulator" data-dashboard-grid="gradebook"></div>
+            </div>
+          </div>
 
+          <div
+            class="teacher-panel"
+            data-dashboard-tab-panel="attendance"
+            hidden={initialTeacherDashboardTab !== 'attendance'}
+          >
+            <div class="teacher-grid-shell">
+              {!activeCourseId ? (
+                <p class="student-empty">Selecciona un curso activo para ver la asistencia.</p>
+              ) : (
                 <section class="attendance-config-panel">
                   <div
                     class="attendance-config-bar"
@@ -3688,1350 +4236,87 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                         title="Fin de cursada"
                       />
                     </label>
-                    <button
-                      type="button"
-                      class="attendance-config-apply"
-                      data-attendance-config-apply
-                      title="Guardar fechas y reconstruir grilla"
-                    >
-                      Aplicar
-                    </button>
                   </div>
                   <p class="attendance-config-note">{ATTENDANCE_VALUE_HELP}</p>
                 </section>
-
-                {attendanceGridRows.length === 0 ? (
-                  <p class="student-empty">No hay estudiantes inscriptos para este curso y año.</p>
-                ) : attendanceScheduleGrid.columns.length === 0 ? (
-                  <p class="student-empty">Define un rango de cursada válido para construir la grilla semanal.</p>
-                ) : (
-                  <div class="grade-board-wrap attendance-grid-wrap">
-                    <table class="student-assignment-table grade-board-table attendance-grid-table">
-                      <thead>
-                        <tr>
-                          <th class="attendance-col-sticky attendance-col--first-name">Nombre</th>
-                          <th class="attendance-col-sticky attendance-col--last-name">Apellido</th>
-                          <th class="attendance-col-sticky attendance-col--turno">Turno</th>
-                          <th class="attendance-col-sticky attendance-col--grupo">Grupo</th>
-                          <th class="attendance-col-sticky attendance-col--absence">Inasist.</th>
-                          <th>Email</th>
-                          {attendanceScheduleGrid.columns.map((column: any) => (
-                            <th
-                              class="attendance-date-head"
-                              title={column.dateKey}
-                            >
-                              {column.label}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attendanceGridRows.map((row: any) => (
-                          <tr
-                            class:list={[
-                              row.rowState === 'warning' ? 'attendance-row--warning' : '',
-                              row.rowState === 'critical' ? 'attendance-row--critical' : '',
-                            ]}
-                            data-attendance-row
-                            data-attendance-user-id={row.userId}
-                          >
-                            <td class="attendance-col-sticky attendance-col--first-name">{row.firstName || '—'}</td>
-                            <td class="attendance-col-sticky attendance-col--last-name">{row.lastName || '—'}</td>
-                            <td class="attendance-col-sticky attendance-col--turno">{row.turno}</td>
-                            <td class="attendance-col-sticky attendance-col--grupo">{row.grupo}</td>
-                            <td
-                              class="attendance-col-sticky attendance-col--absence attendance-absence-cell"
-                              data-attendance-row-absences={row.userId}
-                            >
-                              {row.absenceDisplay}
-                            </td>
-                            <td class="grade-board-email">{row.email || '—'}</td>
-                            {row.columns.map((column: any) => (
-                              <td
-                                class:list={[
-                                  'attendance-day-cell',
-                                  column.effectiveValue > 0 ? 'is-present' : '',
-                                  column.dateKey > todayAttendanceDateKey ? 'is-future' : '',
-                                ]}
-                              >
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="1"
-                                  step="0.5"
-                                  inputmode="decimal"
-                                  class="attendance-manual-input"
-                                  data-attendance-manual-input
-                                  data-course-id={activeCourseId}
-                                  data-year={activeYear}
-                                  data-student-id={row.userId}
-                                  data-date={column.dateKey}
-                                  data-live-value={String(column.liveValue || 0)}
-                                  data-manual-override={column.hasManualOverride ? 'true' : 'false'}
-                                  data-manual-value={column.hasManualOverride ? String(column.manualValue || 0) : ''}
-                                  value={column.displayValue}
-                                  placeholder={column.dateKey <= todayAttendanceDateKey ? '0' : ''}
-                                  title={column.title}
-                                />
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                <section class="attendance-log-panel">
-                  <div class="attendance-log-toolbar">
-                    <input
-                      type="search"
-                      class="attendance-log-search"
-                      data-attendance-log-query
-                      placeholder="Buscar en el log de asistencias"
-                      aria-label="Buscar en el log de asistencias"
-                    />
-                    <span class="attendance-stat-chip" data-attendance-log-count title="Registros visibles en el log">
-                      <span aria-hidden="true">🧾</span>
-                      <strong>{attendanceLogRows.length}</strong>
-                    </span>
-                  </div>
-                  <div class="log-table-wrap">
-                    <table class="admin-table attendance-table attendance-log-table" style="margin-top: 0;">
-                      <thead>
-                        <tr>
-                          <th>Dia</th>
-                          <th>Usuario</th>
-                          <th>Clase</th>
-                          <th>Rol</th>
-                          <th>Conex.</th>
-                          <th>Tiempo</th>
-                          <th>Ultima actividad</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attendanceLogSearchRows.length > 0 ? (
-                          attendanceLogSearchRows.map((row: any) => (
-                            <tr data-attendance-log-row data-search={row.search}>
-                              <td>{row.dayLabel}</td>
-                              <td>
-                                <div>{row.displayName}</div>
-                                <div class="attendance-log-subline">{row.email || row.identity || '—'}</div>
-                              </td>
-                              <td title={row.pageSlug}>{row.lessonLabel}</td>
-                              <td>
-                                <span class:list={['role-badge', normalizeRole(row?.role) === 'teacher' ? 'role-teacher' : 'role-student']}>
-                                  {getRoleBadgeLabel(row?.role)}
-                                </span>
-                              </td>
-                              <td title={`Salidas: ${row.leaveCount} • Abortos: ${row.abortedCount}`}>{row.joinCount}</td>
-                              <td>{row.durationLabel}</td>
-                              <td>{row.lastSeenLabel}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colspan="7" style="color: var(--c-fg-dim); font-style: italic;">
-                              No hay registros de conexion para este curso y año.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p class="log-empty" data-attendance-log-empty hidden>No hay resultados para el filtro actual.</p>
-                </section>
-              </>
-            )}
-          </div>
+              )}
+              <div class="teacher-grid-toolbar">
+                <input
+                  type="search"
+                  class="dashboard-grid-search"
+                  data-dashboard-search="attendance-summary"
+                  placeholder="Buscar estudiante, email, clase, día..."
+                  aria-label="Buscar en asistencia"
+                />
+                <div class="dashboard-grid-actions">
+                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="attendance-summary">CSV resumen</button>
+                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="attendance-log">CSV log</button>
+                </div>
+              </div>
+              <div class="dashboard-tabulator" data-dashboard-grid="attendance-summary"></div>
+              <div class="teacher-grid-toolbar">
+                <input
+                  type="search"
+                  class="dashboard-grid-search"
+                  data-dashboard-search="attendance-log"
+                  placeholder="Buscar en log: estudiante, email, clase, día..."
+                  aria-label="Buscar en log de asistencia"
+                />
+              </div>
+              <div class="dashboard-tabulator" data-dashboard-grid="attendance-log"></div>
+            </div>
           </div>
 
-          <script>
-            const foldStates = {};
-
-            function getFoldState(scope) {
-              if (!foldStates[scope]) {
-                foldStates[scope] = { depth: 0, maxLevel: 1 };
-              }
-              return foldStates[scope];
-            }
-
-            function getFoldNodes(scope) {
-              return Array.from(document.querySelectorAll(`[data-fold-node][data-fold-scope="${scope}"]`));
-            }
-
-            function getActiveTabName() {
-              const activeTab = document.querySelector('.tab.active');
-              return activeTab ? activeTab.getAttribute('data-tab') : null;
-            }
-
-            function getActiveDeliveryView() {
-              const activeSubtab = document.querySelector('.deliveries-subtab.active');
-              return activeSubtab ? String(activeSubtab.getAttribute('data-delivery-view') || 'recent') : 'recent';
-            }
-
-            function getActiveFoldScope() {
-              const activeTabName = getActiveTabName();
-              if (activeTabName === 'attendance') return 'attendance';
-              if (activeTabName !== 'deliveries') return null;
-              const view = getActiveDeliveryView();
-              if (view === 'recent') return 'submissions';
-              if (view === 'course') return 'course-grades';
-              return null;
-            }
-
-            function showMainTab(tabName) {
-              document.querySelectorAll('.tab').forEach((tab) => tab.classList.remove('active'));
-              document.querySelectorAll('[id$="-content"]').forEach((content) => {
-                content.style.display = 'none';
-              });
-
-              const tabNode = document.querySelector(`.tab[data-tab="${tabName}"]`);
-              if (tabNode) tabNode.classList.add('active');
-              const contentNode = document.getElementById(`${tabName}-content`);
-              if (contentNode) contentNode.style.display = 'block';
-
-              if (tabName === 'deliveries') {
-                initializeDeliveriesTab();
-                return;
-              }
-
-              if (tabName === 'attendance') {
-                initializeAttendanceTab();
-              }
-            }
-
-            function bindMainTabs() {
-              document.querySelectorAll('.tab').forEach((tab) => {
-                if (tab.dataset.bound === 'true') return;
-                tab.dataset.bound = 'true';
-                tab.addEventListener('click', () => {
-                  const tabName = String(tab.getAttribute('data-tab') || '');
-                  if (!tabName) return;
-                  showMainTab(tabName);
-                });
-              });
-            }
-
-            function updateDashboardScopeQuery(nextCourseId, nextYear) {
-              const url = new URL(window.location.href);
-              if (nextCourseId) {
-                url.searchParams.set('course', nextCourseId);
-              } else {
-                url.searchParams.delete('course');
-              }
-              if (nextYear) {
-                url.searchParams.set('year', nextYear);
-              } else {
-                url.searchParams.delete('year');
-              }
-
-              const activeTabName = getActiveTabName();
-              if (activeTabName) {
-                url.searchParams.set('tab', activeTabName);
-                if (activeTabName === 'deliveries') {
-                  url.searchParams.set('deliveryView', getActiveDeliveryView());
-                } else {
-                  url.searchParams.delete('deliveryView');
-                }
-              }
-              window.location.href = `${url.pathname}${url.search}${url.hash}`;
-            }
-
-            function initializeDashboardScopeSelectors() {
-              const courseSelect = document.querySelector('[data-dashboard-scope="course"]');
-              const yearSelect = document.querySelector('[data-dashboard-scope="year"]');
-              if (!(courseSelect instanceof HTMLSelectElement) || !(yearSelect instanceof HTMLSelectElement)) {
-                return;
-              }
-              if (courseSelect.dataset.boundScope !== 'true') {
-                courseSelect.dataset.boundScope = 'true';
-                courseSelect.addEventListener('change', () => {
-                  updateDashboardScopeQuery(courseSelect.value, yearSelect.value);
-                });
-              }
-              if (yearSelect.dataset.boundScope !== 'true') {
-                yearSelect.dataset.boundScope = 'true';
-                yearSelect.addEventListener('change', () => {
-                  updateDashboardScopeQuery(courseSelect.value, yearSelect.value);
-                });
-              }
-            }
-
-            function restoreDashboardTabFromQuery() {
-              const params = new URLSearchParams(window.location.search);
-              const tab = String(params.get('tab') || '').trim();
-              const deliveryView = String(params.get('deliveryView') || '').trim();
-              if (tab && ['users', 'deliveries', 'attendance'].includes(tab)) {
-                showMainTab(tab);
-              }
-              if (tab === 'deliveries' && deliveryView) {
-                switchDeliveryView(deliveryView);
-              }
-            }
-
-            function switchDeliveryView(view) {
-              const requestedView = ['recent', 'course', 'log'].includes(view) ? view : 'recent';
-              document.querySelectorAll('.deliveries-subtab').forEach((subtab) => {
-                subtab.classList.toggle('active', subtab.getAttribute('data-delivery-view') === requestedView);
-              });
-              document.querySelectorAll('[data-delivery-panel]').forEach((panel) => {
-                panel.style.display = panel.getAttribute('data-delivery-panel') === requestedView ? 'block' : 'none';
-              });
-
-              if (requestedView === 'recent') {
-                initializeSubmissionQuickEditors();
-                initializeSubmissionDeleteButtons();
-                initializeCorrectionFolding('submissions');
-              }
-              if (requestedView === 'course') {
-                initializeGradeAutosave();
-                initializeCorrectionFolding('course-grades');
-              }
-              if (requestedView === 'log') {
-                if (typeof initializeDashboardLogPanels === 'function') {
-                  initializeDashboardLogPanels();
-                }
-              }
-
-              const queryInput = document.querySelector('[data-deliveries-query]');
-              const queryValue = queryInput instanceof HTMLInputElement ? queryInput.value : '';
-              applyDeliveriesSearch(queryValue);
-            }
-
-            function bindDeliverySubtabs() {
-              document.querySelectorAll('.deliveries-subtab').forEach((subtab) => {
-                if (subtab.dataset.bound === 'true') return;
-                subtab.dataset.bound = 'true';
-                subtab.addEventListener('click', () => {
-                  const view = String(subtab.getAttribute('data-delivery-view') || 'recent');
-                  switchDeliveryView(view);
-                });
-              });
-            }
-
-            function includesQuery(value, query) {
-              if (!query) return true;
-              return String(value || '').toLowerCase().includes(query);
-            }
-
-            function applyRecentSearch(query) {
-              const rows = Array.from(document.querySelectorAll('#deliveries-recent [data-submission-row]'));
-              rows.forEach((row) => {
-                const search = row.getAttribute('data-search') || '';
-                row.hidden = !includesQuery(search, query);
-              });
-
-              document.querySelectorAll('#deliveries-recent [data-submission-type-group]').forEach((group) => {
-                const visibleRows = group.querySelectorAll('[data-submission-row]:not([hidden])').length;
-                group.hidden = visibleRows === 0;
-                if (query && visibleRows > 0) group.classList.remove('is-collapsed');
-              });
-            }
-
-            function applyCourseSearch(query) {
-              const rows = Array.from(document.querySelectorAll('#deliveries-course [data-course-row]'));
-              rows.forEach((row) => {
-                const search = row.getAttribute('data-search') || '';
-                row.hidden = !includesQuery(search, query);
-              });
-
-              document.querySelectorAll('#deliveries-course [data-course-year-group]').forEach((group) => {
-                const visibleRows = group.querySelectorAll('[data-course-row]:not([hidden])').length;
-                group.hidden = visibleRows === 0;
-                if (query && visibleRows > 0) group.classList.remove('is-collapsed');
-              });
-
-              document.querySelectorAll('#deliveries-course [data-course-group]').forEach((group) => {
-                const visibleYearGroups = group.querySelectorAll('[data-course-year-group]:not([hidden])').length;
-                group.hidden = visibleYearGroups === 0;
-                if (query && visibleYearGroups > 0) group.classList.remove('is-collapsed');
-              });
-            }
-
-            function applyLogSearch(query) {
-              document.querySelectorAll('#deliveries-log [data-log-panel]').forEach((panel) => {
-                panel.dispatchEvent(new CustomEvent('dashboard-log-query', {
-                  detail: { query },
-                  bubbles: false,
-                }));
-              });
-
-              const logQueryInput = document.querySelector('#deliveries-log [data-log-query]');
-              if (!(logQueryInput instanceof HTMLInputElement)) return;
-              if (logQueryInput.value === query) return;
-              logQueryInput.value = query;
-              logQueryInput.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-
-            function applyDeliveriesSearch(rawValue) {
-              const query = String(rawValue || '').trim().toLowerCase();
-              const activeView = getActiveDeliveryView();
-              if (activeView === 'recent') {
-                applyRecentSearch(query);
-                return;
-              }
-              if (activeView === 'course') {
-                applyCourseSearch(query);
-                return;
-              }
-              applyLogSearch(query);
-            }
-
-            function initializeDeliveriesSearch() {
-              const input = document.querySelector('[data-deliveries-query]');
-              if (!(input instanceof HTMLInputElement)) return;
-              if (input.dataset.bound === 'true') return;
-              input.dataset.bound = 'true';
-              input.addEventListener('input', () => {
-                applyDeliveriesSearch(input.value);
-              });
-              applyDeliveriesSearch(input.value);
-            }
-
-            function initializeDeliveriesTab() {
-              bindDeliverySubtabs();
-              initializeDeliveriesSearch();
-              initializeSubmissionQuickEditors();
-              initializeSubmissionDeleteButtons();
-              initializeGradeAutosave();
-              initializeCorrectionFolding('submissions');
-              initializeCorrectionFolding('course-grades');
-              initializeUserDeleteButtons();
-              if (typeof initializeDashboardLogPanels === 'function') {
-                initializeDashboardLogPanels();
-              }
-              switchDeliveryView(getActiveDeliveryView());
-            }
-
-            function initializeAttendanceTab() {
-              initializeAttendanceConfigEditors();
-              initializeAttendanceManualEditors();
-              initializeAttendanceLogSearch();
-            }
-
-            async function saveAttendanceConfig(panel) {
-              if (!(panel instanceof HTMLElement)) return false;
-
-              const courseId = String(panel.getAttribute('data-course-id') || '').trim();
-              const year = String(panel.getAttribute('data-year') || '').trim();
-              const startInput = panel.querySelector('[data-attendance-config-input="startDate"]');
-              const endInput = panel.querySelector('[data-attendance-config-input="endDate"]');
-              const applyButton = panel.querySelector('[data-attendance-config-apply]');
-
-              if (!(startInput instanceof HTMLInputElement) || !(endInput instanceof HTMLInputElement)) {
-                return false;
-              }
-
-              const startDate = String(startInput.value || '').trim();
-              const endDate = String(endInput.value || '').trim();
-              if (!courseId || !year || !startDate || !endDate) {
-                markQuickState(startInput, 'quick-error');
-                markQuickState(endInput, 'quick-error');
-                return false;
-              }
-
-              if (applyButton instanceof HTMLButtonElement) {
-                applyButton.disabled = true;
-              }
-              markQuickState(startInput, 'quick-saving');
-              markQuickState(endInput, 'quick-saving');
-
-              try {
-                const response = await fetch('/api/grade/course-attendance-config', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    courseId,
-                    year,
-                    startDate,
-                    endDate,
-                  }),
-                });
-
-                if (!response.ok) {
-                  markQuickState(startInput, 'quick-error');
-                  markQuickState(endInput, 'quick-error');
-                  return false;
-                }
-
-                markQuickState(startInput, 'quick-success');
-                markQuickState(endInput, 'quick-success');
-
-                const url = new URL(window.location.href);
-                url.searchParams.set('tab', 'attendance');
-                window.location.href = `${url.pathname}${url.search}${url.hash}`;
-                return true;
-              } catch (error) {
-                console.error('Error saving attendance configuration:', error);
-                markQuickState(startInput, 'quick-error');
-                markQuickState(endInput, 'quick-error');
-                return false;
-              } finally {
-                if (applyButton instanceof HTMLButtonElement) {
-                  applyButton.disabled = false;
-                }
-              }
-            }
-
-            function initializeAttendanceConfigEditors() {
-              document.querySelectorAll('[data-attendance-config]').forEach((panel) => {
-                if (!(panel instanceof HTMLElement)) return;
-                if (panel.dataset.bound === 'true') return;
-                panel.dataset.bound = 'true';
-
-                const applyButton = panel.querySelector('[data-attendance-config-apply]');
-                if (applyButton instanceof HTMLButtonElement) {
-                  applyButton.addEventListener('click', () => {
-                    saveAttendanceConfig(panel);
-                  });
-                }
-              });
-            }
-
-            function clampAttendanceValue(value) {
-              const parsed = Number(String(value ?? '').replace(',', '.'));
-              if (!Number.isFinite(parsed)) return 0;
-              const clamped = Math.max(0, Math.min(1, parsed));
-              return Math.round(clamped * 2) / 2;
-            }
-
-            function formatAttendanceInputValue(value) {
-              const normalized = clampAttendanceValue(value);
-              if (normalized <= 0) return '';
-              return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1).replace(/\.0$/, '');
-            }
-
-            function formatAttendanceAbsenceValue(value) {
-              const parsed = Number(value);
-              if (!Number.isFinite(parsed) || parsed <= 0) return '0';
-              const normalized = Math.round(parsed * 2) / 2;
-              return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1).replace(/\.0$/, '');
-            }
-
-            function getAttendanceTodayKey() {
-              const panel = document.getElementById('attendance-content');
-              return panel instanceof HTMLElement ? String(panel.dataset.attendanceToday || '').trim() : '';
-            }
-
-            function getAttendanceEffectiveValue(input) {
-              if (!(input instanceof HTMLInputElement)) return 0;
-              const liveValue = clampAttendanceValue(input.getAttribute('data-live-value') || 0);
-              const hasManualOverride = input.dataset.manualOverride === 'true';
-              if (!hasManualOverride) return liveValue;
-              return clampAttendanceValue(input.dataset.manualValue || 0);
-            }
-
-            function refreshAttendanceCell(input) {
-              if (!(input instanceof HTMLInputElement)) return;
-              const cell = input.closest('.attendance-day-cell');
-              const liveValue = clampAttendanceValue(input.getAttribute('data-live-value') || 0);
-              const hasManualOverride = input.dataset.manualOverride === 'true';
-              const manualValue = hasManualOverride ? clampAttendanceValue(input.dataset.manualValue || 0) : 0;
-              const effectiveValue = hasManualOverride ? manualValue : liveValue;
-              input.value = hasManualOverride
-                ? formatAttendanceInputValue(manualValue)
-                : formatAttendanceInputValue(liveValue);
-              const attendanceValueHelp = 'Escala: 1 presente • 0.5 media falta • 0 o vacío falta';
-              input.title = `Room: ${formatAttendanceInputValue(liveValue) || '0'} • Override: ${
-                hasManualOverride ? formatAttendanceInputValue(manualValue) || '0' : 'auto'
-              } • Final: ${formatAttendanceInputValue(effectiveValue) || '0'} • ${attendanceValueHelp}`;
-              if (cell instanceof HTMLElement) {
-                cell.classList.toggle('is-present', effectiveValue > 0);
-              }
-            }
-
-            function refreshAttendanceRowSummary(row) {
-              if (!(row instanceof HTMLElement)) return;
-              const userId = String(row.getAttribute('data-attendance-user-id') || '').trim();
-              if (!userId) return;
-              const todayKey = getAttendanceTodayKey();
-              let absenceUnits = 0;
-
-              row.querySelectorAll('[data-attendance-manual-input]').forEach((input) => {
-                if (!(input instanceof HTMLInputElement)) return;
-                const dateKey = String(input.getAttribute('data-date') || '').trim();
-                if (!dateKey) return;
-                if (todayKey && dateKey > todayKey) return;
-                const effectiveValue = getAttendanceEffectiveValue(input);
-                absenceUnits += Math.max(0, 1 - effectiveValue);
-              });
-
-              const absenceNode = row.querySelector(`[data-attendance-row-absences="${CSS.escape(userId)}"]`);
-              if (absenceNode instanceof HTMLElement) {
-                absenceNode.textContent = formatAttendanceAbsenceValue(absenceUnits);
-              }
-
-              row.classList.toggle('attendance-row--warning', absenceUnits >= 3 && absenceUnits < 4);
-              row.classList.toggle('attendance-row--critical', absenceUnits >= 4);
-            }
-
-            async function saveAttendanceManualInput(input) {
-              if (!(input instanceof HTMLInputElement)) return;
-
-              const courseId = String(input.getAttribute('data-course-id') || '').trim();
-              const year = String(input.getAttribute('data-year') || '').trim();
-              const studentId = String(input.getAttribute('data-student-id') || '').trim();
-              const date = String(input.getAttribute('data-date') || '').trim();
-              const rawValue = String(input.value || '').trim().replace(',', '.');
-              const nextValue = rawValue === '' ? null : clampAttendanceValue(rawValue);
-
-              markQuickState(input, 'quick-saving');
-
-              try {
-                const response = await fetch('/api/grade/course-attendance-manual', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    courseId,
-                    year,
-                    studentId,
-                    date,
-                    countRaw: nextValue === null ? '' : String(nextValue),
-                  }),
-                });
-
-                if (!response.ok) {
-                  markQuickState(input, 'quick-error');
-                  return;
-                }
-
-                input.dataset.manualOverride = nextValue === null ? 'false' : 'true';
-                input.dataset.manualValue = nextValue === null ? '' : String(nextValue);
-                refreshAttendanceCell(input);
-                const row = input.closest('[data-attendance-row]');
-                if (row instanceof HTMLElement) {
-                  refreshAttendanceRowSummary(row);
-                }
-                markQuickState(input, 'quick-success');
-              } catch (error) {
-                console.error('Error saving manual attendance:', error);
-                markQuickState(input, 'quick-error');
-              }
-            }
-
-            function initializeAttendanceManualEditors() {
-              document.querySelectorAll('[data-attendance-manual-input]').forEach((input) => {
-                if (!(input instanceof HTMLInputElement)) return;
-                if (input.dataset.bound === 'true') return;
-                input.dataset.bound = 'true';
-                refreshAttendanceCell(input);
-
-                input.addEventListener('change', () => {
-                  saveAttendanceManualInput(input);
-                });
-                input.addEventListener('keydown', (event) => {
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  saveAttendanceManualInput(input);
-                });
-              });
-
-              document.querySelectorAll('[data-attendance-row]').forEach((row) => {
-                if (row instanceof HTMLElement) {
-                  refreshAttendanceRowSummary(row);
-                }
-              });
-            }
-
-            function applyAttendanceLogSearch(query) {
-              const rows = Array.from(document.querySelectorAll('[data-attendance-log-row]'));
-              let visibleCount = 0;
-              rows.forEach((row) => {
-                const search = row.getAttribute('data-search') || '';
-                const visible = includesQuery(search, query);
-                row.hidden = !visible;
-                if (visible) visibleCount += 1;
-              });
-
-              const countNode = document.querySelector('[data-attendance-log-count] strong');
-              if (countNode instanceof HTMLElement) {
-                countNode.textContent = String(visibleCount);
-              }
-
-              const emptyNode = document.querySelector('[data-attendance-log-empty]');
-              if (emptyNode instanceof HTMLElement) {
-                emptyNode.hidden = visibleCount > 0;
-              }
-            }
-
-            function initializeAttendanceLogSearch() {
-              const input = document.querySelector('[data-attendance-log-query]');
-              if (!(input instanceof HTMLInputElement)) return;
-              if (input.dataset.bound === 'true') {
-                applyAttendanceLogSearch(String(input.value || '').trim().toLowerCase());
-                return;
-              }
-              input.dataset.bound = 'true';
-              input.addEventListener('input', () => {
-                applyAttendanceLogSearch(String(input.value || '').trim().toLowerCase());
-              });
-              applyAttendanceLogSearch(String(input.value || '').trim().toLowerCase());
-            }
-
-            function debounce(func, wait) {
-              let timeout;
-              return function executedFunction(...args) {
-                const later = () => {
-                  clearTimeout(timeout);
-                  func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-              };
-            }
-
-            async function saveGrade(input) {
-              const submissionId = input.dataset.submissionId;
-              const score = parseFloat(input.value);
-
-              if (!submissionId || Number.isNaN(score)) return;
-
-              input.style.borderColor = '#ffa500';
-
-              try {
-                const response = await fetch(`/api/grade/quick-update`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    submissionId: submissionId,
-                    score: score,
-                  }),
-                });
-
-                if (response.ok) {
-                  input.style.borderColor = '#4caf50';
-                  setTimeout(() => {
-                    input.style.borderColor = '';
-                  }, 1000);
-                  updateRowAverage(input);
-                } else {
-                  input.style.borderColor = '#f44336';
-                  setTimeout(() => {
-                    input.style.borderColor = '';
-                  }, 2000);
-                }
-              } catch (error) {
-                console.error('Error saving grade:', error);
-                input.style.borderColor = '#f44336';
-                setTimeout(() => {
-                  input.style.borderColor = '';
-                }, 2000);
-              }
-            }
-
-            function updateRowAverage(input) {
-              const panelKey = input.dataset.studentPanel;
-              if (!panelKey) return;
-
-              const panelInputs = document.querySelectorAll(`.grade-input[data-student-panel="${panelKey}"]`);
-              const scores = [];
-
-              panelInputs.forEach((panelInput) => {
-                const value = parseFloat(panelInput.value);
-                if (!Number.isNaN(value)) scores.push(value);
-              });
-
-              const averageElement = document.querySelector(`[data-average-for="${panelKey}"]`);
-              if (!averageElement) return;
-
-              if (scores.length === 0) {
-                averageElement.textContent = '-';
-                return;
-              }
-
-              const average = (scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(1);
-              averageElement.textContent = average;
-            }
-
-            const debouncedSaveGrade = debounce(saveGrade, 800);
-
-            async function saveCourseStudentMeta(row, input) {
-              if (!(row instanceof HTMLElement) || !(input instanceof HTMLElement)) return;
-
-              const courseId = String(row.getAttribute('data-course-id') || '').trim();
-              const studentId = String(row.getAttribute('data-student-id') || '').trim();
-              const year = String(row.getAttribute('data-year') || '').trim();
-              if (!courseId || !studentId || !year) return;
-
-              const turnoInput = row.querySelector('.grade-turno-select');
-              const conceptInput = row.querySelector('.grade-concept-input');
-              const groupInput = row.querySelector('.grade-group-input');
-              if (!(turnoInput instanceof HTMLSelectElement)) return;
-              if (!(conceptInput instanceof HTMLInputElement)) return;
-              if (!(groupInput instanceof HTMLInputElement)) return;
-
-              const payload = {
-                courseId,
-                studentId,
-                year,
-                turno: String(turnoInput.value || ''),
-                concepto: String(conceptInput.value || ''),
-                grupo: String(groupInput.value || ''),
-              };
-
-              markQuickState(input, 'quick-saving');
-
-              try {
-                const response = await fetch('/api/grade/course-student-meta', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(payload),
-                });
-
-                if (!response.ok) {
-                  markQuickState(input, 'quick-error');
-                  return;
-                }
-
-                const result = await response.json().catch(() => ({}));
-                const meta = result?.meta || {};
-                if (typeof meta.turno === 'string' && ['M', 'T', 'N'].includes(meta.turno)) {
-                  turnoInput.value = meta.turno;
-                }
-                if (typeof meta.concepto === 'string') {
-                  conceptInput.value = meta.concepto;
-                }
-                if (typeof meta.grupo === 'string') {
-                  groupInput.value = meta.grupo;
-                }
-                markQuickState(input, 'quick-success');
-              } catch (error) {
-                console.error('Error saving course student meta:', error);
-                markQuickState(input, 'quick-error');
-              }
-            }
-
-            const debouncedSaveCourseStudentMeta = debounce((row, input) => {
-              saveCourseStudentMeta(row, input);
-            }, 700);
-
-            const selectedCourseRowKeys = new Set();
-
-            function getCourseRowKey(row) {
-              if (!(row instanceof HTMLElement)) return '';
-              const courseId = String(row.getAttribute('data-course-id') || '').trim();
-              const year = String(row.getAttribute('data-year') || '').trim();
-              const studentId = String(row.getAttribute('data-student-id') || '').trim();
-              if (!courseId || !year || !studentId) return '';
-              return `${courseId}::${year}::${studentId}`;
-            }
-
-            function getCourseRowByKey(key) {
-              if (!key) return null;
-              const [courseId = '', year = '', studentId = ''] = String(key).split('::');
-              if (!courseId || !year || !studentId) return null;
-              return document.querySelector(
-                `[data-course-row][data-course-id="${CSS.escape(courseId)}"][data-year="${CSS.escape(year)}"][data-student-id="${CSS.escape(studentId)}"]`,
-              );
-            }
-
-            function getSelectedCourseRows() {
-              return Array.from(selectedCourseRowKeys)
-                .map((key) => getCourseRowByKey(key))
-                .filter((row) => row instanceof HTMLElement && row.isConnected);
-            }
-
-            function updateCourseBulkSelectionUI() {
-              const countNode = document.querySelector('[data-bulk-count]');
-              if (countNode instanceof HTMLElement) {
-                countNode.textContent = `${selectedCourseRowKeys.size} seleccionados`;
-              }
-            }
-
-            function setCourseRowSelected(row, selected) {
-              const key = getCourseRowKey(row);
-              if (!key) return;
-
-              if (selected) {
-                selectedCourseRowKeys.add(key);
-                row.classList.add('is-row-selected');
-              } else {
-                selectedCourseRowKeys.delete(key);
-                row.classList.remove('is-row-selected');
-              }
-              updateCourseBulkSelectionUI();
-            }
-
-            function clearCourseRowSelection() {
-              getSelectedCourseRows().forEach((row) => row.classList.remove('is-row-selected'));
-              selectedCourseRowKeys.clear();
-              updateCourseBulkSelectionUI();
-            }
-
-            function propagateMetaValueToSelectedRows(sourceRow, field, value) {
-              if (!(sourceRow instanceof HTMLElement)) return;
-              const sourceKey = getCourseRowKey(sourceRow);
-              if (!sourceKey || selectedCourseRowKeys.size < 2 || !selectedCourseRowKeys.has(sourceKey)) return;
-
-              const selectorByField = {
-                turno: '.grade-turno-select',
-                concepto: '.grade-concept-input',
-                grupo: '.grade-group-input',
-              };
-              const selector = selectorByField[field];
-              if (!selector) return;
-
-              getSelectedCourseRows().forEach((row) => {
-                const rowKey = getCourseRowKey(row);
-                if (!rowKey || rowKey === sourceKey) return;
-
-                const input = row.querySelector(selector);
-                if (
-                  !(
-                    input instanceof HTMLInputElement ||
-                    input instanceof HTMLSelectElement
-                  )
-                ) {
-                  return;
-                }
-                if (String(input.value || '') === String(value || '')) return;
-
-                input.value = String(value || '');
-                saveCourseStudentMeta(row, input);
-              });
-            }
-
-            function applyTurnoToSelectedRows(turnoValue) {
-              const normalizedTurno = String(turnoValue || '').trim().toUpperCase();
-              if (!['M', 'T', 'N'].includes(normalizedTurno)) return;
-
-              getSelectedCourseRows().forEach((row) => {
-                const input = row.querySelector('.grade-turno-select');
-                if (!(input instanceof HTMLSelectElement)) return;
-                if (input.value === normalizedTurno) return;
-                input.value = normalizedTurno;
-                saveCourseStudentMeta(row, input);
-              });
-            }
-
-            function initializeCourseBulkEditing() {
-              const panel = document.getElementById('deliveries-course');
-              if (!(panel instanceof HTMLElement)) return;
-              if (panel.dataset.bulkBound === 'true') return;
-              panel.dataset.bulkBound = 'true';
-
-              panel.addEventListener('click', (event) => {
-                if (!event.altKey) return;
-                const target = event.target;
-                if (!(target instanceof Element)) return;
-                const row = target.closest('[data-course-row]');
-                if (!(row instanceof HTMLElement)) return;
-                event.preventDefault();
-                event.stopPropagation();
-                const alreadySelected = row.classList.contains('is-row-selected');
-                setCourseRowSelected(row, !alreadySelected);
-              });
-
-              const bulkTurnoInput = panel.querySelector('[data-bulk-turno]');
-              const applyTurnoButton = panel.querySelector('[data-bulk-apply-turno]');
-              const clearButton = panel.querySelector('[data-bulk-clear-selection]');
-
-              if (bulkTurnoInput instanceof HTMLSelectElement && applyTurnoButton instanceof HTMLButtonElement) {
-                applyTurnoButton.addEventListener('click', () => {
-                  applyTurnoToSelectedRows(bulkTurnoInput.value);
-                });
-              }
-
-              if (clearButton instanceof HTMLButtonElement) {
-                clearButton.addEventListener('click', () => {
-                  clearCourseRowSelection();
-                });
-              }
-
-              updateCourseBulkSelectionUI();
-            }
-
-            function initializeGradeAutosave() {
-              const gradeInputs = document.querySelectorAll('.grade-input');
-              const turnoInputs = document.querySelectorAll('.grade-turno-select');
-              const conceptInputs = document.querySelectorAll('.grade-concept-input');
-              const groupInputs = document.querySelectorAll('.grade-group-input');
-
-              gradeInputs.forEach((input) => {
-                input.removeEventListener('input', input._autosaveHandler);
-                input._autosaveHandler = (event) => {
-                  debouncedSaveGrade(event.target);
-                };
-                input.addEventListener('input', input._autosaveHandler);
-              });
-
-              turnoInputs.forEach((input) => {
-                if (!(input instanceof HTMLSelectElement)) return;
-                if (input.dataset.boundMeta === 'true') return;
-                input.dataset.boundMeta = 'true';
-                input.addEventListener('change', () => {
-                  const row = input.closest('[data-course-row]');
-                  saveCourseStudentMeta(row, input);
-                  propagateMetaValueToSelectedRows(row, 'turno', input.value);
-                });
-              });
-
-              conceptInputs.forEach((input) => {
-                if (!(input instanceof HTMLInputElement)) return;
-                if (input.dataset.boundMeta === 'true') return;
-                input.dataset.boundMeta = 'true';
-
-                input.addEventListener('input', () => {
-                  const row = input.closest('[data-course-row]');
-                  debouncedSaveCourseStudentMeta(row, input);
-                });
-                input.addEventListener('blur', () => {
-                  const row = input.closest('[data-course-row]');
-                  saveCourseStudentMeta(row, input);
-                  propagateMetaValueToSelectedRows(row, 'concepto', input.value);
-                });
-                input.addEventListener('keydown', (event) => {
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  const row = input.closest('[data-course-row]');
-                  saveCourseStudentMeta(row, input);
-                  propagateMetaValueToSelectedRows(row, 'concepto', input.value);
-                });
-              });
-
-              groupInputs.forEach((input) => {
-                if (!(input instanceof HTMLInputElement)) return;
-                if (input.dataset.boundMeta === 'true') return;
-                input.dataset.boundMeta = 'true';
-
-                input.addEventListener('input', () => {
-                  const row = input.closest('[data-course-row]');
-                  debouncedSaveCourseStudentMeta(row, input);
-                });
-                input.addEventListener('blur', () => {
-                  const row = input.closest('[data-course-row]');
-                  saveCourseStudentMeta(row, input);
-                  propagateMetaValueToSelectedRows(row, 'grupo', input.value);
-                });
-                input.addEventListener('keydown', (event) => {
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  const row = input.closest('[data-course-row]');
-                  saveCourseStudentMeta(row, input);
-                  propagateMetaValueToSelectedRows(row, 'grupo', input.value);
-                });
-              });
-
-              initializeCourseBulkEditing();
-            }
-
-            function applyFoldDepth(scope) {
-              const foldNodes = getFoldNodes(scope);
-              if (foldNodes.length === 0) return;
-
-              const state = getFoldState(scope);
-              const collapseFromLevel = state.maxLevel - state.depth + 1;
-
-              foldNodes.forEach((node) => {
-                const level = Number(node.dataset.foldLevel || 0);
-                const shouldCollapse = state.depth > 0 && level >= collapseFromLevel;
-                node.classList.toggle('is-collapsed', shouldCollapse);
-              });
-            }
-
-            function setFoldDepth(scope, nextDepth) {
-              const state = getFoldState(scope);
-              const bounded = Math.max(0, Math.min(state.maxLevel, nextDepth));
-              state.depth = bounded;
-              applyFoldDepth(scope);
-            }
-
-            function initializeCorrectionFolding(scope) {
-              const foldNodes = getFoldNodes(scope);
-              if (foldNodes.length === 0) return false;
-
-              const state = getFoldState(scope);
-              state.maxLevel = foldNodes.reduce((max, node) => {
-                const level = Number(node.dataset.foldLevel || 0);
-                return Math.max(max, level);
-              }, 1);
-
-              foldNodes.forEach((node) => {
-                if (node.dataset.foldBound === 'true') return;
-                node.dataset.foldBound = 'true';
-
-                const toggle = node.querySelector('[data-fold-toggle]');
-                if (!toggle) return;
-
-                toggle.addEventListener('click', () => {
-                  node.classList.toggle('is-collapsed');
-                });
-              });
-
-              applyFoldDepth(scope);
-              return true;
-            }
-
-            function handleFoldShortcuts(event) {
-              const isMacShortcut = event.metaKey;
-              if (!isMacShortcut) return;
-
-              const target = event.target;
-              if (target instanceof HTMLElement) {
-                const tag = target.tagName.toLowerCase();
-                if (target.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select') {
-                  return;
-                }
-              }
-
-              const scope = getActiveFoldScope();
-              if (!scope) return;
-              if (!initializeCorrectionFolding(scope)) return;
-
-              const state = getFoldState(scope);
-
-              if (event.shiftKey && event.key === 'ArrowUp') {
-                event.preventDefault();
-                setFoldDepth(scope, state.maxLevel);
-                return;
-              }
-
-              if (event.shiftKey && event.key === 'ArrowDown') {
-                event.preventDefault();
-                setFoldDepth(scope, 0);
-                return;
-              }
-
-              if (!event.shiftKey && event.key === 'ArrowUp') {
-                event.preventDefault();
-                setFoldDepth(scope, state.depth + 1);
-                return;
-              }
-
-              if (!event.shiftKey && event.key === 'ArrowDown') {
-                event.preventDefault();
-                setFoldDepth(scope, state.depth - 1);
-              }
-            }
-
-            function markQuickState(input, state) {
-              input.classList.remove('quick-saving', 'quick-success', 'quick-error');
-              if (state) input.classList.add(state);
-              if (state === 'quick-success' || state === 'quick-error') {
-                setTimeout(() => {
-                  input.classList.remove('quick-success', 'quick-error');
-                }, 1200);
-              }
-            }
-
-            async function saveQuickSubmissionField({ submissionId, score, feedback, input }) {
-              if (!submissionId) return;
-
-              markQuickState(input, 'quick-saving');
-
-              try {
-                const response = await fetch('/api/grade/quick-update', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    submissionId,
-                    score,
-                    feedback,
-                  }),
-                });
-
-                if (!response.ok) {
-                  markQuickState(input, 'quick-error');
-                  return;
-                }
-
-                markQuickState(input, 'quick-success');
-              } catch (error) {
-                console.error('Error saving quick submission field:', error);
-                markQuickState(input, 'quick-error');
-              }
-            }
-
-            function initializeSubmissionQuickEditors() {
-              const feedbackInputs = document.querySelectorAll('.quick-feedback-input');
-              const scoreInputs = document.querySelectorAll('.quick-score-input');
-
-              feedbackInputs.forEach((input) => {
-                if (input.dataset.bound === 'true') return;
-                input.dataset.bound = 'true';
-
-                input.addEventListener('keydown', async (event) => {
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  await saveQuickSubmissionField({
-                    submissionId: input.dataset.submissionId,
-                    feedback: input.value,
-                    input,
-                  });
-                });
-              });
-
-              scoreInputs.forEach((input) => {
-                if (input.dataset.bound === 'true') return;
-                input.dataset.bound = 'true';
-
-                const handleSaveScore = async () => {
-                  if (input.value === '') return;
-                  const score = parseFloat(input.value);
-                  if (Number.isNaN(score)) return;
-                  await saveQuickSubmissionField({
-                    submissionId: input.dataset.submissionId,
-                    score,
-                    input,
-                  });
-                };
-
-                input.addEventListener('keydown', async (event) => {
-                  if (event.key !== 'Enter') return;
-                  event.preventDefault();
-                  await handleSaveScore();
-                });
-
-                input.addEventListener('blur', handleSaveScore);
-              });
-            }
-
-            async function handleDeleteSubmission(button) {
-              const submissionId = String(button.getAttribute('data-submission-id') || '').trim();
-              if (!submissionId) return;
-              const confirmed = window.confirm('¿Eliminar esta entrega? Esta acción no se puede deshacer.');
-              if (!confirmed) return;
-
-              button.disabled = true;
-              try {
-                const response = await fetch(`/api/submissions/${submissionId}`, {
-                  method: 'DELETE',
-                });
-                if (!response.ok) {
-                  const payload = await response.json().catch(() => ({}));
-                  throw new Error(payload?.error || 'No se pudo eliminar la entrega');
-                }
-                window.location.reload();
-              } catch (error) {
-                console.error('Error deleting submission:', error);
-                alert(error?.message || 'No se pudo eliminar la entrega');
-                button.disabled = false;
-              }
-            }
-
-            function initializeSubmissionDeleteButtons() {
-              document.querySelectorAll('.js-delete-submission').forEach((button) => {
-                if (button.dataset.bound === 'true') return;
-                button.dataset.bound = 'true';
-                button.addEventListener('click', () => handleDeleteSubmission(button));
-              });
-            }
-
-            async function handleDeleteUser(button) {
-              const userId = String(button.getAttribute('data-user-id') || '').trim();
-              const userName = String(button.getAttribute('data-user-name') || userId).trim();
-              if (!userId) return;
-
-              const confirmed = window.confirm(`¿Eliminar usuario "${userName}"? Se eliminarán sus inscripciones y entregas.`);
-              if (!confirmed) return;
-
-              button.disabled = true;
-              try {
-                const response = await fetch(`/api/admin/users/${userId}`, {
-                  method: 'DELETE',
-                });
-                if (!response.ok) {
-                  const payload = await response.json().catch(() => ({}));
-                  throw new Error(payload?.error || 'No se pudo eliminar el usuario');
-                }
-                window.location.reload();
-              } catch (error) {
-                console.error('Error deleting user:', error);
-                alert(error?.message || 'No se pudo eliminar el usuario');
-                button.disabled = false;
-              }
-            }
-
-            function initializeUserDeleteButtons() {
-              document.querySelectorAll('.js-delete-user').forEach((button) => {
-                if (button.dataset.bound === 'true') return;
-                button.dataset.bound = 'true';
-                button.addEventListener('click', () => handleDeleteUser(button));
-              });
-            }
-
-            async function handleUnenrollStudent(button) {
-              const enrollmentId = String(button.getAttribute('data-enrollment-id') || '').trim();
-              const userName = String(button.getAttribute('data-user-name') || 'este estudiante').trim();
-              const enrollmentRole = String(button.getAttribute('data-enrollment-role') || 'student').trim().toLowerCase();
-              const isTeacherEnrollment = enrollmentRole === 'teacher';
-              if (!enrollmentId) return;
-
-              const confirmed = window.confirm(
-                isTeacherEnrollment
-                  ? `¿Quitar tu inscripción docente "${userName}" de este curso?`
-                  : `¿Desinscribir a "${userName}" de este curso?`,
-              );
-              if (!confirmed) return;
-
-              button.disabled = true;
-              try {
-                const response = await fetch('/api/enroll', {
-                  method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ enrollmentId }),
-                });
-                if (!response.ok) {
-                  const payload = await response.json().catch(() => ({}));
-                  throw new Error(
-                    payload?.error
-                    || (isTeacherEnrollment
-                      ? 'No se pudo quitar la inscripción docente'
-                      : 'No se pudo desinscribir al estudiante'),
-                  );
-                }
-                window.location.reload();
-              } catch (error) {
-                console.error('Error removing enrollment:', error);
-                alert(
-                  error?.message
-                  || (isTeacherEnrollment
-                    ? 'No se pudo quitar la inscripción docente'
-                    : 'No se pudo desinscribir al estudiante'),
-                );
-                button.disabled = false;
-              }
-            }
-
-            function initializeUnenrollButtons() {
-              document.querySelectorAll('.js-unenroll-student').forEach((button) => {
-                if (button.dataset.bound === 'true') return;
-                button.dataset.bound = 'true';
-                button.addEventListener('click', () => handleUnenrollStudent(button));
-              });
-            }
-
-            function bootTeacherDashboard() {
-              bindMainTabs();
-              initializeDashboardScopeSelectors();
-              initializeUserDeleteButtons();
-              initializeUnenrollButtons();
-              restoreDashboardTabFromQuery();
-              const activeTab = getActiveTabName();
-              if (activeTab === 'deliveries') {
-                initializeDeliveriesTab();
-              }
-              if (activeTab === 'attendance') {
-                initializeAttendanceTab();
-              }
-              if (!window.__musikiDashboardFoldShortcutsBound) {
-                document.addEventListener('keydown', handleFoldShortcuts);
-                window.__musikiDashboardFoldShortcutsBound = true;
-              }
-            }
-
-            if (document.readyState === 'loading') {
-              document.addEventListener('DOMContentLoaded', bootTeacherDashboard, { once: true });
-            } else {
-              bootTeacherDashboard();
-            }
-
-            document.addEventListener('astro:page-load', bootTeacherDashboard);
-          </script>
-        </>
-      ) : (
-        <>
+          <div
+            class="teacher-panel"
+            data-dashboard-tab-panel="comments"
+            hidden={initialTeacherDashboardTab !== 'comments'}
+          >
+            <div class="teacher-grid-shell">
+              <div class="teacher-grid-toolbar">
+                <input
+                  type="search"
+                  class="dashboard-grid-search"
+                  data-dashboard-search="comments"
+                  placeholder="Buscar estudiante, scope, color, comentario..."
+                  aria-label="Buscar en comments"
+                />
+                <div class="dashboard-grid-actions">
+                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="comments">CSV</button>
+                </div>
+              </div>
+              <p class="teacher-grid-note">
+                Observaciones operativas compartidas entre teachers del curso activo.
+              </p>
+              <div class="dashboard-tabulator" data-dashboard-grid="comments"></div>
+            </div>
+          </div>
+
+          <div
+            class="teacher-panel"
+            data-dashboard-tab-panel="admin"
+            hidden={initialTeacherDashboardTab !== 'admin'}
+          >
+            <div class="teacher-grid-shell">
+              <div class="teacher-grid-toolbar">
+                <input
+                  type="search"
+                  class="dashboard-grid-search"
+                  data-dashboard-search="admin"
+                  placeholder="Buscar nombre, email, rol, actividad..."
+                  aria-label="Buscar en admin"
+                />
+                <div class="dashboard-grid-actions">
+                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="admin">CSV</button>
+                </div>
+              </div>
+              <div class="dashboard-tabulator" data-dashboard-grid="admin"></div>
+            </div>
+          </div>
+        </div>
+      )}
+      {!isTeacher && (
+        <div class="student-dashboard-panels">
           <section class="student-section" id="student-profile">
             <h2 class="group-title">Mi Perfil</h2>
             <article class="student-profile-card">
@@ -5073,7 +4358,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                   </tr>
                 </thead>
                 <tbody>
-                  {scopedStudentSubmissions.map((sub: any) => {
+                  {scopedStudentSubmissions.map((sub) => {
                     const assignment = studentAssignmentById.get(sub.assignmentId);
                     const assignmentSlug = String(assignment?.slug || sub.assignmentId || '');
                     const assignmentLabel = decodeUriSafe(assignmentSlug.split('/').pop() || assignmentSlug);
@@ -5146,7 +4431,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                     </tr>
                   </thead>
                   <tbody>
-                    {attendanceLogRows.map((row: any) => (
+                    {attendanceLogRows.map((row) => (
                       <tr>
                         <td>{row.dayLabel}</td>
                         <td title={row.pageSlug}>{row.lessonLabel}</td>
@@ -5227,14 +4512,23 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
               <p class="log-empty" data-log-empty hidden>No hay resultados para los filtros actuales.</p>
             </div>
           </section>
-        </>
+        </div>
       )}
         </section>
       </div>
     </main>
     <script type="application/json" id="dashboard-log-data" set:html={dashboardLogDataJson}></script>
+    <script type="application/json" id="dashboard-teacher-tabulator-meta" set:html={teacherTabulatorMetaJson}></script>
+    <script type="application/json" id="dashboard-teacher-overview" set:html={teacherOverviewProjectionJson}></script>
+    <script type="application/json" id="dashboard-teacher-gradebook" set:html={teacherGradebookProjectionJson}></script>
+    <script type="application/json" id="dashboard-teacher-attendance" set:html={teacherAttendanceProjectionJson}></script>
+    <script type="application/json" id="dashboard-teacher-comments" set:html={teacherCommentsProjectionJson}></script>
+    <script type="application/json" id="dashboard-teacher-admin" set:html={teacherAdminProjectionJson}></script>
+    <script type="application/json" id="dashboard-teacher-annotations" set:html={teacherDashboardAnnotationsJson}></script>
 
     <script>
+      import { mountDashboardTabulators } from '../scripts/dashboard-tabulator.ts';
+
       const escapeHtml = (value) =>
         String(value ?? '')
           .replaceAll('&', '&amp;')
@@ -5732,12 +5026,24 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         });
       };
 
+      let teardownDashboardTabulators = null;
+
       const bootDashboardEnhancements = () => {
+        const dashboardRoot = document.querySelector('[data-dashboard-root]');
+        if (dashboardRoot instanceof HTMLElement) {
+          if (typeof teardownDashboardTabulators === 'function') {
+            teardownDashboardTabulators();
+            teardownDashboardTabulators = null;
+          }
+          teardownDashboardTabulators = mountDashboardTabulators(dashboardRoot);
+        }
         initializeDashboardLogPanels();
         initializeEnrollButtons();
         initializeUnenrollButtons();
         attachEvalPreviewHandlers(document);
       };
+
+      window.__musikiDashboardRemount = bootDashboardEnhancements;
 
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', bootDashboardEnhancements, { once: true });

@@ -113,7 +113,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   }
 };
 
-export const DELETE: APIRoute = async ({ params, locals }) => {
+export const DELETE: APIRoute = async ({ params, locals, request }) => {
   const session = (locals as any).session;
   const currentUser = session?.user;
   if (!currentUser?.email) {
@@ -126,6 +126,8 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   }
 
   const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+  const requestUrl = new URL(request.url);
+  const activeCourseId = String(requestUrl.searchParams.get('courseId') || '').trim();
 
   try {
     const { data: requester, error: requesterError } = await supabase
@@ -148,12 +150,52 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
 
     const { data: targetUser, error: targetUserError } = await supabase
       .from('User')
-      .select('id')
+      .select('id, role, name, email')
       .eq('id', targetUserId)
       .maybeSingle();
 
     if (targetUserError) throw targetUserError;
     if (!targetUser) return json({ error: 'User not found' }, 404);
+
+    const targetRole = normalizeRole(targetUser.role);
+
+    if (targetRole === 'teacher') {
+      const { count: otherTeachersCount, error: teacherCountError } = await supabase
+        .from('User')
+        .select('id', { count: 'exact', head: true })
+        .eq('role', 'teacher')
+        .neq('id', targetUserId);
+
+      if (teacherCountError) throw teacherCountError;
+      if (!Number(otherTeachersCount || 0)) {
+        return json({ error: 'At least one teacher account must remain' }, 400);
+      }
+    }
+
+    if (activeCourseId) {
+      const { data: targetCourseEnrollment, error: targetEnrollmentError } = await supabase
+        .from('Enrollment')
+        .select('id, roleInCourse')
+        .eq('courseId', activeCourseId)
+        .eq('userId', targetUserId)
+        .maybeSingle();
+
+      if (targetEnrollmentError) throw targetEnrollmentError;
+
+      if (normalizeRole(targetCourseEnrollment?.roleInCourse) === 'teacher') {
+        const { count: otherCourseTeachersCount, error: otherCourseTeachersError } = await supabase
+          .from('Enrollment')
+          .select('id', { count: 'exact', head: true })
+          .eq('courseId', activeCourseId)
+          .eq('roleInCourse', 'teacher')
+          .neq('userId', targetUserId);
+
+        if (otherCourseTeachersError) throw otherCourseTeachersError;
+        if (!Number(otherCourseTeachersCount || 0)) {
+          return json({ error: 'At least one course teacher must remain in this course' }, 400);
+        }
+      }
+    }
 
     const { error: submissionsDeleteError } = await supabase
       .from('Submission')

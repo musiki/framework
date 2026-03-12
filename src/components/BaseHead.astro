@@ -18,6 +18,7 @@ const pageURL = canonicalURL.toString();
 
 const { title, description, image = FallbackImage } = Astro.props;
 const imageURL = new URL(image.src, canonicalURL).toString();
+const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || 'G-0NXGW5G7NX').trim();
 ---
 
 <!-- Global Metadata -->
@@ -79,3 +80,59 @@ const imageURL = new URL(image.src, canonicalURL).toString();
 <meta property="twitter:title" content={title} />
 <meta property="twitter:description" content={description} />
 <meta property="twitter:image" content={imageURL} />
+
+<script is:inline define:vars={{ gaMeasurementId }}>
+	(() => {
+		const measurementId = String(gaMeasurementId || '').trim();
+		if (!measurementId) return;
+
+		const allowedHosts = new Set(['musiki.org.ar', 'www.musiki.org.ar']);
+		const hostname = String(window.location.hostname || '').toLowerCase();
+		if (!allowedHosts.has(hostname)) return;
+
+		window.dataLayer = window.dataLayer || [];
+		window.gtag =
+			window.gtag ||
+			function gtag() {
+				window.dataLayer.push(arguments);
+			};
+
+		const gtag = window.gtag;
+		const pagePath = () => `${window.location.pathname}${window.location.search}`;
+		const trackPageView = () => {
+			const currentLocation = String(window.location.href || '');
+			if (!currentLocation) return;
+			if (window.__musikiAnalyticsLastLocation === currentLocation) return;
+			window.__musikiAnalyticsLastLocation = currentLocation;
+			gtag('event', 'page_view', {
+				page_title: document.title,
+				page_location: currentLocation,
+				page_path: pagePath(),
+			});
+		};
+
+		if (!window.__musikiAnalyticsInitialized) {
+			window.__musikiAnalyticsInitialized = true;
+
+			if (!document.querySelector(`script[data-musiki-ga="${measurementId}"]`)) {
+				const script = document.createElement('script');
+				script.async = true;
+				script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
+				script.dataset.musikiGa = measurementId;
+				document.head.appendChild(script);
+			}
+
+			gtag('js', new Date());
+			gtag('config', measurementId, {
+				send_page_view: false,
+				anonymize_ip: true,
+			});
+
+			document.addEventListener('astro:page-load', trackPageView);
+			queueMicrotask(trackPageView);
+			return;
+		}
+
+		trackPageView();
+	})();
+</script>
