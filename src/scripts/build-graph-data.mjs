@@ -151,6 +151,7 @@ export function buildGraphData() {
 // Write to public directory
 const graphData = buildGraphData();
 const outputPath = path.resolve('public/graph-data.json');
+fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, JSON.stringify(graphData, null, 2));
 console.log(`Graph data written to ${outputPath}`);
 console.log(`Nodes: ${graphData.nodes.length}, Links: ${graphData.links.length}`);

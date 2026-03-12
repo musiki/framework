@@ -390,6 +390,17 @@ const canonicalizeCourseId = (value: unknown) => {
   return courseCanonicalByAlias.get(normalizeTextLower(normalized)) || normalized;
 };
 
+const catalogCourseIds = new Set(
+  courseEntries
+    .map((course: any) => canonicalizeCourseId(course?.courseId))
+    .filter(Boolean),
+);
+
+const isCatalogCourseId = (value: unknown) => {
+  const courseId = canonicalizeCourseId(value);
+  return Boolean(courseId) && catalogCourseIds.has(courseId);
+};
+
 const deriveCourseIdFromPageSlug = (value: unknown) => {
   const normalized = normalizeActivityPageSlug(normalizeText(value));
   if (!normalized) return '';
@@ -694,6 +705,7 @@ if (isTeacher && Array.isArray(allEnrollments)) {
     )
     .forEach((enrollment: any) => {
       const rawCourseId = canonicalizeCourseId(enrollment?.courseId);
+      if (!rawCourseId || !catalogCourseIds.has(rawCourseId)) return;
       const normalizedCourseId = normalizeTextLower(rawCourseId);
       if (normalizedCourseId) teacherManagedCourseIds.add(normalizedCourseId);
       if (rawCourseId) teacherManagedCourseIdsRaw.add(rawCourseId);
@@ -843,6 +855,7 @@ const availableCourseIds = (() => {
         new Set(
           Array.from(teacherManagedCourseIdsRaw)
             .map((courseId) => canonicalizeCourseId(courseId))
+            .filter((courseId) => isCatalogCourseId(courseId))
             .filter(Boolean),
         ),
       );
@@ -854,6 +867,7 @@ const availableCourseIds = (() => {
     new Set(
       (userEnrollments || [])
         .map((enrollment: any) => canonicalizeCourseId(enrollment?.courseId))
+        .filter((courseId) => isCatalogCourseId(courseId))
         .filter(Boolean),
     ),
   );
