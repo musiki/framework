@@ -372,6 +372,10 @@ const resolvedSlideTheme =
         object-fit: contain;
       }
 
+      :global(.dark) .reveal .slides :is(.lily-score, .lilypond-block) img {
+        filter: invert(1);
+      }
+
       .slide-grid-block :is(.lily-score, .lilypond-block) {
         width: 100%;
         height: 100%;

@@ -836,6 +836,11 @@ ol ol ol ol > li::marker {
   object-fit: contain;
 }
 
+.dark .lilypond-block img,
+.dark .lily-score img {
+  filter: invert(1);
+}
+
 /* Forum dynamic DOM (created client-side in cursos/[...slug].astro)
    Astro component-scoped styles do not always hit these nodes, so keep
    critical presentation rules global and explicit. */
