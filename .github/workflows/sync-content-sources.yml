@@ -56,6 +56,7 @@ jobs:
       - name: Sync content on VPS
         if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || github.event.inputs.trigger_deploy == 'true' }}
         env:
+          CONTENT_SOURCE_READ_TOKEN: ${{ secrets.CONTENT_SOURCE_READ_TOKEN }}
           VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST || vars.VPS_SSH_HOST }}
           VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT || vars.VPS_SSH_PORT }}
           VPS_SSH_USER: ${{ secrets.VPS_SSH_USER || vars.VPS_SSH_USER }}
@@ -65,6 +66,7 @@ jobs:
           VPS_INSTALL_COMMAND: ${{ secrets.VPS_INSTALL_COMMAND || vars.VPS_INSTALL_COMMAND }}
           VPS_BUILD_COMMAND: ${{ secrets.VPS_BUILD_COMMAND || vars.VPS_BUILD_COMMAND }}
           VPS_RELOAD_COMMAND: ${{ secrets.VPS_RELOAD_COMMAND || vars.VPS_RELOAD_COMMAND }}
+          VPS_CONTENT_SOURCE_STRATEGY: ${{ secrets.VPS_CONTENT_SOURCE_STRATEGY || vars.VPS_CONTENT_SOURCE_STRATEGY }}
         run: |
           set -euo pipefail
 
@@ -76,6 +78,7 @@ jobs:
           install_command="$(printf '%s' "${VPS_INSTALL_COMMAND:-npm ci}" | sed 's/[[:space:]]*$//')"
           build_command="$(printf '%s' "${VPS_BUILD_COMMAND:-npm run build}" | sed 's/[[:space:]]*$//')"
           reload_command="$(printf '%s' "${VPS_RELOAD_COMMAND}" | sed 's/[[:space:]]*$//')"
+          content_source_strategy="$(printf '%s' "${VPS_CONTENT_SOURCE_STRATEGY:-remote-only}" | tr -d '[:space:]')"
 
           if [[ -z "${host}" || -z "${user}" || -z "${framework_dir}" || -z "${VPS_SSH_KEY}" ]]; then
             echo "Missing VPS deploy config."
@@ -88,7 +91,15 @@ jobs:
           printf '%s\n' "${VPS_SSH_KEY}" > "${key_file}"
           chmod 600 "${key_file}"
 
-          remote_cmd="cd ${framework_dir@Q} && git checkout ${branch@Q} && git pull --ff-only origin ${branch@Q}"
+          remote_cmd=""
+          if [[ -n "${CONTENT_SOURCE_READ_TOKEN}" ]]; then
+            remote_cmd="export CONTENT_SOURCE_READ_TOKEN=${CONTENT_SOURCE_READ_TOKEN@Q} && "
+          fi
+          if [[ -n "${content_source_strategy}" ]]; then
+            remote_cmd="${remote_cmd}export CONTENT_SOURCE_STRATEGY=${content_source_strategy@Q} && "
+          fi
+
+          remote_cmd="${remote_cmd}cd ${framework_dir@Q} && git checkout ${branch@Q} && git pull --ff-only origin ${branch@Q}"
           if [[ -n "${install_command}" ]]; then
             remote_cmd="${remote_cmd} && ${install_command}"
           fi
@@ -98,9 +109,12 @@ jobs:
           fi
 
           echo "Running VPS content sync on ${user}@${host}:${framework_dir}"
+          echo "Remote content source strategy: ${content_source_strategy}"
           ssh -i "${key_file}" \
             -p "${port}" \
             -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            -o ConnectionAttempts=1 \
             -o StrictHostKeyChecking=accept-new \
             "${user}@${host}" \
             "bash -lc $(printf '%q' "${remote_cmd}")"

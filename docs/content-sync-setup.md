@@ -49,6 +49,7 @@ Configuracion requerida en `musiki/framework`:
 - `VPS_INSTALL_COMMAND`: comando de instalación en el VPS. Opcional, default `npm ci`. Puede ir como secret o repo variable.
 - `VPS_BUILD_COMMAND`: comando de build en el VPS. Opcional, default `npm run build`. Puede ir como secret o repo variable.
 - `VPS_RELOAD_COMMAND`: comando para recargar el proceso (`pm2 reload ...`, `sudo systemctl restart ...`, etc.). Opcional. Puede ir como secret o repo variable.
+- `VPS_CONTENT_SOURCE_STRATEGY`: estrategia para `content:pull` en el VPS. Opcional, default `remote-only`. Puede ir como secret o repo variable.
 
 Comandos usados por el workflow:
 
@@ -60,6 +61,12 @@ Runtime del workflow:
 - `Node 22`
 
 El workflow no commitea `src/content`: valida el ensamblado y luego entra al VPS por SSH para correr `git pull --ff-only`, instalación, build y recarga del proceso.
+
+Notas importantes para el VPS:
+
+- el workflow reenvia `CONTENT_SOURCE_READ_TOKEN` al shell remoto para que `content:pull` pueda leer repos privados durante el build
+- por default usa `CONTENT_SOURCE_STRATEGY=remote-only` en el VPS para ignorar `localPath` y no copiar un repo hermano desactualizado como `../i1`
+- si SSH al dominio se vuelve inestable, usar la IP directa del VPS en `VPS_SSH_HOST`
 
 ## 3) Workflow en cada repo de materia (push -> dispatch)
 

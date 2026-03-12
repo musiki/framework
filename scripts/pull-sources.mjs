@@ -15,6 +15,19 @@ const findArgValue = (flag, fallback) => {
 const manifestPath = path.resolve(findArgValue('--manifest', 'config/sources.manifest.json'));
 const sourcesDir = path.resolve(findArgValue('--sources-dir', '.content-sources'));
 const cleanMissing = args.includes('--clean');
+const sourceStrategy = (() => {
+  const normalized = (process.env.CONTENT_SOURCE_STRATEGY || 'prefer-local')
+    .trim()
+    .toLowerCase();
+
+  if (normalized === 'prefer-local' || normalized === 'remote-only') {
+    return normalized;
+  }
+
+  throw new Error(
+    `Invalid CONTENT_SOURCE_STRATEGY "${process.env.CONTENT_SOURCE_STRATEGY}". Use "prefer-local" or "remote-only".`,
+  );
+})();
 
 const run = (cmd, cmdArgs, options = {}) => {
   execFileSync(cmd, cmdArgs, {
@@ -101,6 +114,7 @@ const main = () => {
   const token = process.env.CONTENT_SOURCE_READ_TOKEN || process.env.GITHUB_TOKEN || '';
 
   ensureDir(sourcesDir);
+  console.log(`[content:pull] strategy=${sourceStrategy}`);
 
   const knownIds = new Set();
   for (const source of sources) {
@@ -110,7 +124,7 @@ const main = () => {
     knownIds.add(source.id);
     const targetDir = path.join(sourcesDir, source.id);
 
-    if (source.localPath) {
+    if (source.localPath && sourceStrategy === 'prefer-local') {
       const pulledFromLocalPath = pullFromLocalPath(source, targetDir);
       if (!pulledFromLocalPath && !source.repo) {
         throw new Error(
@@ -124,8 +138,19 @@ const main = () => {
         );
         pullFromRepo(source, targetDir, token);
       }
-    } else {
+    } else if (source.repo) {
+      if (source.localPath && sourceStrategy === 'remote-only') {
+        console.log(
+          `Source "${source.id}" ignoring localPath "${source.localPath}" because CONTENT_SOURCE_STRATEGY=remote-only.`,
+        );
+      }
       pullFromRepo(source, targetDir, token);
+    } else if (source.localPath) {
+      throw new Error(
+        `Source "${source.id}" is configured with localPath only, but CONTENT_SOURCE_STRATEGY=remote-only requires a repo.`,
+      );
+    } else {
+      throw new Error(`Source "${source.id}" needs either "repo" or "localPath".`);
     }
 
     const contentRoot = source.contentRoot || '.';
