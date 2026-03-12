@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { visit } from 'unist-util-visit';
 import { renderRemoteLilypond } from '../lib/lilypond-remote.mjs';
 
@@ -12,9 +13,23 @@ function escapeHtmlAttribute(value) {
 export default function remarkRemoteLilypond(options = {}) {
   const enabled = options.enabled === true;
   const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 10_000;
+  const preferRemote = options.preferRemote === true;
+
+  let localLilypondAvailable = null;
+  const hasLocalLilypond = () => {
+    if (localLilypondAvailable !== null) return localLilypondAvailable;
+    try {
+      execSync('lilypond --version', { stdio: 'ignore' });
+      localLilypondAvailable = true;
+    } catch {
+      localLilypondAvailable = false;
+    }
+    return localLilypondAvailable;
+  };
 
   return async (tree) => {
     if (!enabled) return;
+    if (!preferRemote && hasLocalLilypond()) return;
 
     const memo = new Map();
     const replacements = [];

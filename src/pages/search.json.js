@@ -9,6 +9,8 @@ import {
 } from '../lib/course-routing';
 import { getContentCanonicalSlug } from '../lib/content-slug';
 
+export const prerender = true;
+
 export async function GET() {
   const [content, cursos] = await Promise.all([
     getCollection('content'),

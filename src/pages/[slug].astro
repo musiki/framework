@@ -1,68 +1,25 @@
 ---
-export const prerender = false;
+export const prerender = true;
 
-import { getCollection, render } from 'astro:content';
+import { getEntry, render } from 'astro:content';
 import WikiLayout from '../layouts/WikiLayout.astro';
-import RevealSlidesLayout from '../layouts/RevealSlidesLayout.astro';
-import { buildCourseLessonHref } from '../lib/course-routing';
 import {
-  getContentFilenameSlug,
-  getContentFrontmatterSlug,
-  getContentTitleSlug,
-  normalizeContentSlug,
-} from '../lib/content-slug';
+  getPublicContentStaticPaths,
+  type PublicContentRouteProps,
+} from '../lib/public-content-routes';
 
-const { slug } = Astro.params;
-const isSlidesView = Astro.url.searchParams.get('view') === 'slides';
-const targetSlug = normalizeContentSlug(decodeURIComponent(slug || ''));
-
-// Get all content entries
-const allContent = await getCollection('content');
-
-const findUniqueMatch = <T,>(items: T[]) => (items.length === 1 ? items[0] : null);
-
-// Prefer explicit frontmatter slug when present.
-let entry = findUniqueMatch(
-  allContent.filter((item) => getContentFrontmatterSlug(item) === targetSlug),
-);
-
-// Fallback by unique filename slug.
-if (!entry) {
-  entry = findUniqueMatch(
-    allContent.filter((item) => getContentFilenameSlug(item) === targetSlug),
-  );
+export async function getStaticPaths() {
+  return getPublicContentStaticPaths();
 }
 
-// Fallback by unique title slug (e.g. /generatividad-y-complejidad)
-if (!entry) {
-  entry = findUniqueMatch(
-    allContent.filter((item) => getContentTitleSlug(item) === targetSlug),
-  );
+const route = Astro.props as PublicContentRouteProps;
+
+if (route.kind === 'redirect') {
+  return Astro.redirect(route.redirectTo);
 }
 
-// Legacy fallback: if an old flat slug points to a course lesson, redirect to /cursos/...
+const entry = await getEntry('content', route.entryId);
 if (!entry) {
-  const allCourseContent = await getCollection('cursos');
-  const courseLessons = allCourseContent.filter(
-    (item) => !item.id.endsWith('/_index') && !item.id.endsWith('_index'),
-  );
-
-  const byFilename = courseLessons.filter((item) => getContentFilenameSlug(item) === targetSlug);
-  let redirectLesson = findUniqueMatch(byFilename);
-  if (!redirectLesson) {
-    redirectLesson = findUniqueMatch(
-      courseLessons.filter((item) => getContentTitleSlug(item) === targetSlug),
-    );
-  }
-
-  if (redirectLesson) {
-    const courseId = redirectLesson.id.split('/')[0] || '';
-    const courseIndexEntry = allCourseContent.find((item) => item.id === `${courseId}/_index`);
-    return Astro.redirect(
-      buildCourseLessonHref(courseId, (courseIndexEntry?.data || {}) as Record<string, unknown>, redirectLesson),
-    );
-  }
-
   return Astro.redirect('/404');
 }
 
@@ -90,29 +47,27 @@ const rawPresentationTheme =
   (entry.data as Record<string, unknown>).slideTheme ||
   (entry.data as Record<string, unknown>).revealTheme;
 const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
-const presentationHref = hasPresentationTheme ? `${Astro.url.pathname}?view=slides` : '';
+const presentationHref = hasPresentationTheme ? route.presentationHref : '';
 ---
 
-{
-  isSlidesView ? (
-    <RevealSlidesLayout
-      title={title}
-      description={description}
-      slideTheme={slideTheme}
-    >
-      <Content />
-    </RevealSlidesLayout>
-  ) : (
-    <>
-      <WikiLayout
-        title={title}
-        description={description}
-        id={entry.id}
-        tags={tags}
-        presentationHref={presentationHref}
-      >
-        <Content />
-      </WikiLayout>
-    </>
-  )
-}
+<>
+  {
+    presentationHref ? (
+      <script is:inline define:vars={{ presentationHref }}>
+        const currentUrl = new URL(window.location.href);
+        if (currentUrl.searchParams.get('view') === 'slides') {
+          window.location.replace(presentationHref);
+        }
+      </script>
+    ) : null
+  }
+  <WikiLayout
+    title={title}
+    description={description}
+    id={entry.id}
+    tags={tags}
+    presentationHref={presentationHref}
+  >
+    <Content />
+  </WikiLayout>
+</>

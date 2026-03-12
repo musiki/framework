@@ -17,7 +17,7 @@ import remarkLily from './src/plugins/remark-lily.mjs'
 import remarkRemoteLilypond from './src/plugins/remark-remote-lilypond.mjs'
 
 import auth from 'auth-astro';
-import vercel from '@astrojs/vercel';
+import node from '@astrojs/node';
 
 const localhostUrlRe = /^https?:\/\/(?:localhost|127(?:\.\d+){3}|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i;
 
@@ -49,7 +49,9 @@ const site = firstNonLocalUrl(
 export default defineConfig({
   site,
   output: 'server',
-  adapter: vercel(),
+  adapter: node({
+    mode: 'standalone'
+  }),
   vite: {
     optimizeDeps: {
       include: [
@@ -65,7 +67,7 @@ export default defineConfig({
     },
   },
   // Auth.js already validates CSRF tokens for auth endpoints.
-  // Astro's origin guard can false-positive behind Vercel/proxies.
+  // Astro's origin guard can false-positive behind reverse proxies.
   security: {
     checkOrigin: false,
   },

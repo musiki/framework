@@ -675,6 +675,8 @@ const resolvedSlideTheme =
         const noteUrl = new URL(window.location.href);
         if (noteUrl.pathname.startsWith('/cursos/slides/')) {
           noteUrl.pathname = noteUrl.pathname.replace('/cursos/slides/', '/cursos/');
+        } else if (noteUrl.pathname.startsWith('/slides/')) {
+          noteUrl.pathname = noteUrl.pathname.replace('/slides/', '/');
         }
         noteUrl.searchParams.delete('view');
         noteUrl.searchParams.delete('autofs');
@@ -1079,6 +1081,9 @@ const resolvedSlideTheme =
               return parts[1];
             }
           }
+          if (parts[0] === 'slides') {
+            return decodePathPart(currentUrl.searchParams.get('courseId') || '') || 'global';
+          }
           if (parts[0] === 'live' && currentUrl.searchParams.get('courseId')) {
             return decodePathPart(currentUrl.searchParams.get('courseId') || '');
           }
@@ -1094,6 +1099,9 @@ const resolvedSlideTheme =
           const decodedParts = parts.map((part) => decodePathPart(part));
           if (decodedParts[0] === 'cursos' && decodedParts[1] === 'slides') {
             return decodedParts.slice(2).join('/');
+          }
+          if (decodedParts[0] === 'slides') {
+            return decodedParts.slice(1).join('/');
           }
           if (decodedParts[0] === 'cursos') {
             return decodedParts.slice(1).join('/');

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       trigger_deploy:
-        description: "Trigger a Vercel deploy hook after validating the content assembly"
+        description: "Trigger the VPS content sync after validating the content assembly"
         required: false
         default: "true"
 
@@ -51,36 +51,53 @@ jobs:
           path: .tmp/assemble-report.json
           if-no-files-found: warn
 
-      - name: Trigger Vercel deploy hook
+      - name: Sync content on VPS
         if: ${{ github.event_name == 'repository_dispatch' || github.event.inputs.trigger_deploy == 'true' }}
         env:
-          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST }}
+          VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
+          VPS_SSH_USER: ${{ secrets.VPS_SSH_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_FRAMEWORK_DIR: ${{ secrets.VPS_FRAMEWORK_DIR }}
+          VPS_GIT_BRANCH: ${{ secrets.VPS_GIT_BRANCH }}
+          VPS_INSTALL_COMMAND: ${{ secrets.VPS_INSTALL_COMMAND }}
+          VPS_BUILD_COMMAND: ${{ secrets.VPS_BUILD_COMMAND }}
+          VPS_RELOAD_COMMAND: ${{ secrets.VPS_RELOAD_COMMAND }}
         run: |
-          hook_url="$(printf '%s' "${VERCEL_DEPLOY_HOOK_URL}" | tr -d '[:space:]')"
+          set -euo pipefail
 
-          if [[ -z "${hook_url}" ]]; then
-            echo "VERCEL_DEPLOY_HOOK_URL not configured."
+          host="$(printf '%s' "${VPS_SSH_HOST}" | tr -d '[:space:]')"
+          port="$(printf '%s' "${VPS_SSH_PORT:-22}" | tr -d '[:space:]')"
+          user="$(printf '%s' "${VPS_SSH_USER}" | tr -d '[:space:]')"
+          framework_dir="$(printf '%s' "${VPS_FRAMEWORK_DIR}" | sed 's/[[:space:]]*$//')"
+          branch="$(printf '%s' "${VPS_GIT_BRANCH:-main}" | tr -d '[:space:]')"
+          install_command="$(printf '%s' "${VPS_INSTALL_COMMAND:-npm ci}" | sed 's/[[:space:]]*$//')"
+          build_command="$(printf '%s' "${VPS_BUILD_COMMAND:-npm run build}" | sed 's/[[:space:]]*$//')"
+          reload_command="$(printf '%s' "${VPS_RELOAD_COMMAND}" | sed 's/[[:space:]]*$//')"
+
+          if [[ -z "${host}" || -z "${user}" || -z "${framework_dir}" || -z "${VPS_SSH_KEY}" ]]; then
+            echo "VPS_SSH_HOST, VPS_SSH_USER, VPS_FRAMEWORK_DIR and VPS_SSH_KEY are required."
             exit 1
           fi
 
-          response_file="$(mktemp)"
-          error_file="$(mktemp)"
-          http_code="$(
-            curl -sS -o "${response_file}" -w '%{http_code}' -X POST "${hook_url}" 2>"${error_file}"
-          )"
-          curl_exit=$?
+          key_file="$(mktemp)"
+          trap 'rm -f "${key_file}"' EXIT
+          printf '%s\n' "${VPS_SSH_KEY}" > "${key_file}"
+          chmod 600 "${key_file}"
 
-          if [[ "${curl_exit}" -ne 0 ]]; then
-            echo "curl failed with exit code ${curl_exit}"
-            cat "${error_file}"
-            exit "${curl_exit}"
+          remote_cmd="cd ${framework_dir@Q} && git checkout ${branch@Q} && git pull --ff-only origin ${branch@Q}"
+          if [[ -n "${install_command}" ]]; then
+            remote_cmd="${remote_cmd} && ${install_command}"
+          fi
+          remote_cmd="${remote_cmd} && ${build_command}"
+          if [[ -n "${reload_command}" ]]; then
+            remote_cmd="${remote_cmd} && ${reload_command}"
           fi
 
-          echo "Vercel deploy hook HTTP ${http_code}"
-          cat "${response_file}"
-
-          if [[ "${http_code}" -lt 200 || "${http_code}" -ge 300 ]]; then
-            echo
-            echo "Vercel deploy hook failed."
-            exit 1
-          fi
+          echo "Running VPS content sync on ${user}@${host}:${framework_dir}"
+          ssh -i "${key_file}" \
+            -p "${port}" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            "${user}@${host}" \
+            "bash -lc $(printf '%q' "${remote_cmd}")"

@@ -1,6 +1,6 @@
-# Content Sync Setup (Repos por Materia -> Framework)
+# Content Sync Setup (Repos por Materia -> Framework -> VPS)
 
-Este setup permite que cada equipo docente trabaje en su repo de materia y que `musiki/framework` despliegue todo junto en Vercel.
+Este setup permite que cada equipo docente trabaje en su repo de materia y que `musiki/framework` valide el ensamblado y luego reconstruya el sitio en tu VPS.
 
 ## 0) Crear el repo de materia
 
@@ -28,21 +28,29 @@ Reglas de promoción desde cursos a público:
 - `public_path: tema/ruta-del-articulo.md`
 - `type: assignment`, `eval`, `lesson-presentation` y `app-dataviewjs` quedan excluidos del público aunque tengan flags
 
-## 2) Workflow de framework (dispatch -> validate -> redeploy)
+## 2) Workflow de framework (dispatch -> validate -> sync remoto)
 
 Ya está agregado en `.github/workflows/sync-content-sources.yml`.
 
 Secrets requeridos en `musiki/framework`:
 
 - `CONTENT_SOURCE_READ_TOKEN`: token con acceso de lectura a repos de materia (si son privados).
-- `VERCEL_DEPLOY_HOOK_URL`: deploy hook del proyecto en Vercel.
+- `VPS_SSH_HOST`: host o IP del VPS.
+- `VPS_SSH_PORT`: puerto SSH del VPS. Opcional, default `22`.
+- `VPS_SSH_USER`: usuario SSH que hace el deploy.
+- `VPS_SSH_KEY`: private key usada por GitHub Actions para entrar al VPS.
+- `VPS_FRAMEWORK_DIR`: path del checkout productivo en el VPS.
+- `VPS_GIT_BRANCH`: branch a desplegar. Opcional, default `main`.
+- `VPS_INSTALL_COMMAND`: comando de instalación en el VPS. Opcional, default `npm ci`.
+- `VPS_BUILD_COMMAND`: comando de build en el VPS. Opcional, default `npm run build`.
+- `VPS_RELOAD_COMMAND`: comando para recargar el proceso (`pm2 reload ...`, `sudo systemctl restart ...`, etc.). Opcional.
 
 Comandos usados por el workflow:
 
 - `npm run content:pull -- --clean`
 - `npm run content:assemble:dry`
 
-El workflow no commitea `src/content`: valida el ensamblado y luego dispara un redeploy de Vercel.
+El workflow no commitea `src/content`: valida el ensamblado y luego entra al VPS por SSH para correr `git pull --ff-only`, instalación, build y recarga del proceso.
 
 ## 3) Workflow en cada repo de materia (push -> dispatch)
 
@@ -98,8 +106,8 @@ Workflow local recomendado:
 
 De ese modo `src/content` sigue siendo generado, pero la regeneracion queda automatizada mientras trabajas.
 
-Para Vercel:
+Para el VPS:
 
 - el build del framework corre `content:pull` + `content:assemble` antes de `astro build`
-- Vercel necesita `CONTENT_SOURCE_READ_TOKEN` para leer repos privados
-- cada cambio en `i1`, `i2`, `cym` o `s123` puede despachar al workflow del framework para disparar un nuevo deploy
+- el VPS necesita sus propios secrets/env para leer repos privados y hablar con Supabase/Auth
+- cada cambio en `i1`, `i2`, `cym` o `s123` puede despachar al workflow del framework para disparar un nuevo sync

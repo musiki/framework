@@ -1,0 +1,41 @@
+---
+export const prerender = true;
+
+import { getEntry, render } from 'astro:content';
+import RevealSlidesLayout from '../../layouts/RevealSlidesLayout.astro';
+import {
+  getPublicSlidesStaticPaths,
+  type PublicSlidesRouteProps,
+} from '../../lib/public-content-routes';
+
+export async function getStaticPaths() {
+  return getPublicSlidesStaticPaths();
+}
+
+const route = Astro.props as PublicSlidesRouteProps;
+const entry = await getEntry('content', route.entryId);
+if (!entry) {
+  return Astro.redirect('/404');
+}
+
+const { Content } = await render(entry);
+
+const title = entry.data.title || entry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
+const description = entry.data.summary || entry.data.description || entry.data.subtitle || '';
+const defaultSlideTheme = 'zztt';
+const slideThemeFromData =
+  (entry.data as Record<string, unknown>).slideTheme ||
+  (entry.data as Record<string, unknown>).revealTheme ||
+  (entry.data as Record<string, unknown>).theme;
+const slideTheme = typeof slideThemeFromData === 'string' && slideThemeFromData.trim()
+  ? slideThemeFromData.trim()
+  : defaultSlideTheme;
+---
+
+<RevealSlidesLayout
+  title={title}
+  description={description}
+  slideTheme={slideTheme}
+>
+  <Content />
+</RevealSlidesLayout>

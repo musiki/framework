@@ -30,7 +30,6 @@
     "@astrojs/node": "^9.5.1",
     "@astrojs/rss": "^4.0.12",
     "@astrojs/sitemap": "^3.6.0",
-    "@astrojs/vercel": "^8.0.4",
     "@auth/core": "^0.37.4",
     "@aws-sdk/client-s3": "^3.1004.0",
     "@mediapipe/tasks-vision": "^0.10.32",

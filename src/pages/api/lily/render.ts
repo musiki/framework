@@ -7,6 +7,8 @@ import { renderRemoteLilypond } from '../../../lib/lilypond-remote.mjs';
 
 const LILY_DIR = path.join(process.cwd(), 'public', 'lily');
 const MAX_SOURCE_BYTES = 64 * 1024;
+const LILYPOND_RENDER_STRATEGY =
+  String(process.env.LILYPOND_RENDER_STRATEGY || 'local-first').trim().toLowerCase();
 
 function ensureLilyDir() {
   if (!fs.existsSync(LILY_DIR)) {
@@ -102,6 +104,27 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
+  const tryLocalFirst = LILYPOND_RENDER_STRATEGY !== 'remote-first';
+
+  if (tryLocalFirst) {
+    const generatedLocally = tryRenderLilySvg(hash, source);
+    if (generatedLocally) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          hash,
+          url: svgUrl,
+          generated: true,
+          local: true,
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+  }
+
   const remoteUrl = await renderRemoteLilypond(source, { timeoutMs: 10_000 });
   if (remoteUrl) {
     return new Response(
@@ -119,7 +142,7 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
-  const generated = tryRenderLilySvg(hash, source);
+  const generated = tryLocalFirst ? false : tryRenderLilySvg(hash, source);
   if (!generated) {
     return new Response(
       JSON.stringify({
