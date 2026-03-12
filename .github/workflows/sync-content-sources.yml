@@ -56,15 +56,15 @@ jobs:
       - name: Sync content on VPS
         if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || github.event.inputs.trigger_deploy == 'true' }}
         env:
-          VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST }}
-          VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
-          VPS_SSH_USER: ${{ secrets.VPS_SSH_USER }}
+          VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST || vars.VPS_SSH_HOST }}
+          VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT || vars.VPS_SSH_PORT }}
+          VPS_SSH_USER: ${{ secrets.VPS_SSH_USER || vars.VPS_SSH_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_FRAMEWORK_DIR: ${{ secrets.VPS_FRAMEWORK_DIR }}
-          VPS_GIT_BRANCH: ${{ secrets.VPS_GIT_BRANCH }}
-          VPS_INSTALL_COMMAND: ${{ secrets.VPS_INSTALL_COMMAND }}
-          VPS_BUILD_COMMAND: ${{ secrets.VPS_BUILD_COMMAND }}
-          VPS_RELOAD_COMMAND: ${{ secrets.VPS_RELOAD_COMMAND }}
+          VPS_FRAMEWORK_DIR: ${{ secrets.VPS_FRAMEWORK_DIR || vars.VPS_FRAMEWORK_DIR }}
+          VPS_GIT_BRANCH: ${{ secrets.VPS_GIT_BRANCH || vars.VPS_GIT_BRANCH }}
+          VPS_INSTALL_COMMAND: ${{ secrets.VPS_INSTALL_COMMAND || vars.VPS_INSTALL_COMMAND }}
+          VPS_BUILD_COMMAND: ${{ secrets.VPS_BUILD_COMMAND || vars.VPS_BUILD_COMMAND }}
+          VPS_RELOAD_COMMAND: ${{ secrets.VPS_RELOAD_COMMAND || vars.VPS_RELOAD_COMMAND }}
         run: |
           set -euo pipefail
 
@@ -78,7 +78,8 @@ jobs:
           reload_command="$(printf '%s' "${VPS_RELOAD_COMMAND}" | sed 's/[[:space:]]*$//')"
 
           if [[ -z "${host}" || -z "${user}" || -z "${framework_dir}" || -z "${VPS_SSH_KEY}" ]]; then
-            echo "VPS_SSH_HOST, VPS_SSH_USER, VPS_FRAMEWORK_DIR and VPS_SSH_KEY are required."
+            echo "Missing VPS deploy config."
+            echo "Required: VPS_SSH_HOST, VPS_SSH_USER and VPS_FRAMEWORK_DIR (repo vars or secrets), plus VPS_SSH_KEY (secret)."
             exit 1
           fi
 

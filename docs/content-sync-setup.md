@@ -37,18 +37,18 @@ Se dispara en dos casos:
 - `push` a `main` en `framework`
 - `repository_dispatch` desde repos de materia como `i1`
 
-Secrets requeridos en `musiki/framework`:
+Configuracion requerida en `musiki/framework`:
 
 - `CONTENT_SOURCE_READ_TOKEN`: token con acceso de lectura a repos de materia (si son privados).
-- `VPS_SSH_HOST`: host o IP del VPS.
-- `VPS_SSH_PORT`: puerto SSH del VPS. Opcional, default `22`.
-- `VPS_SSH_USER`: usuario SSH que hace el deploy.
-- `VPS_SSH_KEY`: private key usada por GitHub Actions para entrar al VPS.
-- `VPS_FRAMEWORK_DIR`: path del checkout productivo en el VPS.
-- `VPS_GIT_BRANCH`: branch a desplegar. Opcional, default `main`.
-- `VPS_INSTALL_COMMAND`: comando de instalación en el VPS. Opcional, default `npm ci`.
-- `VPS_BUILD_COMMAND`: comando de build en el VPS. Opcional, default `npm run build`.
-- `VPS_RELOAD_COMMAND`: comando para recargar el proceso (`pm2 reload ...`, `sudo systemctl restart ...`, etc.). Opcional.
+- `VPS_SSH_KEY`: secret obligatorio. Private key usada por GitHub Actions para entrar al VPS.
+- `VPS_SSH_HOST`: host o IP del VPS. Puede ir como secret o repo variable.
+- `VPS_SSH_PORT`: puerto SSH del VPS. Opcional, default `22`. Puede ir como secret o repo variable.
+- `VPS_SSH_USER`: usuario SSH que hace el deploy. Puede ir como secret o repo variable.
+- `VPS_FRAMEWORK_DIR`: path del checkout productivo en el VPS. Puede ir como secret o repo variable.
+- `VPS_GIT_BRANCH`: branch a desplegar. Opcional, default `main`. Puede ir como secret o repo variable.
+- `VPS_INSTALL_COMMAND`: comando de instalación en el VPS. Opcional, default `npm ci`. Puede ir como secret o repo variable.
+- `VPS_BUILD_COMMAND`: comando de build en el VPS. Opcional, default `npm run build`. Puede ir como secret o repo variable.
+- `VPS_RELOAD_COMMAND`: comando para recargar el proceso (`pm2 reload ...`, `sudo systemctl restart ...`, etc.). Opcional. Puede ir como secret o repo variable.
 
 Comandos usados por el workflow:
 
