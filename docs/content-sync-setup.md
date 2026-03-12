@@ -28,9 +28,14 @@ Reglas de promoción desde cursos a público:
 - `public_path: tema/ruta-del-articulo.md`
 - `type: assignment`, `eval`, `lesson-presentation` y `app-dataviewjs` quedan excluidos del público aunque tengan flags
 
-## 2) Workflow de framework (dispatch -> validate -> sync remoto)
+## 2) Workflow de framework (push/dispatch -> validate -> sync remoto)
 
 Ya está agregado en `.github/workflows/sync-content-sources.yml`.
+
+Se dispara en dos casos:
+
+- `push` a `main` en `framework`
+- `repository_dispatch` desde repos de materia como `i1`
 
 Secrets requeridos en `musiki/framework`:
 
@@ -49,6 +54,10 @@ Comandos usados por el workflow:
 
 - `npm run content:pull -- --clean`
 - `npm run content:assemble:dry`
+
+Runtime del workflow:
+
+- `Node 22`
 
 El workflow no commitea `src/content`: valida el ensamblado y luego entra al VPS por SSH para correr `git pull --ff-only`, instalación, build y recarga del proceso.
 

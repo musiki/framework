@@ -1,6 +1,8 @@
 name: Sync Content Sources
 
 on:
+  push:
+    branches: [main]
   repository_dispatch:
     types: [content-source-updated]
   workflow_dispatch:
@@ -30,7 +32,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -52,7 +54,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Sync content on VPS
-        if: ${{ github.event_name == 'repository_dispatch' || github.event.inputs.trigger_deploy == 'true' }}
+        if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'push' || github.event.inputs.trigger_deploy == 'true' }}
         env:
           VPS_SSH_HOST: ${{ secrets.VPS_SSH_HOST }}
           VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
