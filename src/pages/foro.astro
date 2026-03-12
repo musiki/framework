@@ -783,6 +783,11 @@ if (activeCourse) {
         overflow-x: auto;
       }
 
+      :global(.dark) .forum-reader-message-content :is(.lily-score, .lilypond-block) img,
+      :global(.dark) #forum-reader-root .forum-post-body :is(.lily-score, .lilypond-block) img {
+        filter: invert(1);
+      }
+
       .forum-reader-message-content pre {
         padding: 0.75rem;
         border-radius: 10px;

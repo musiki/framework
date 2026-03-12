@@ -1798,16 +1798,21 @@ const forumThreadPrompt = sessionFirstName
         overflow-x: auto;
       }
 
-      .forum-post-body .lilypond-block img {
-        display: block;
-        width: 200%;
-        max-width: none;
-        height: auto;
-      }
+        .forum-post-body .lilypond-block img {
+          display: block;
+          width: 200%;
+          max-width: none;
+          height: auto;
+        }
 
-      .forum-post-body pre {
-        overflow: auto;
-        background: var(--forum-bg-subtle);
+        :global(.dark) .content-area :is(.lily-score, .lilypond-block) img,
+        :global(.dark) .forum-post-body :is(.lily-score, .lilypond-block) img {
+          filter: invert(1);
+        }
+
+        .forum-post-body pre {
+          overflow: auto;
+          background: var(--forum-bg-subtle);
         border: 1px solid var(--forum-border-soft);
         border-radius: 7px;
         padding: 0.62rem;
