@@ -35,6 +35,8 @@ if (!currentUser?.email) {
 const dashboardUrl = new URL(Astro.request.url);
 const requestedCourseParam = String(dashboardUrl.searchParams.get('course') || '').trim();
 const requestedYearParam = String(dashboardUrl.searchParams.get('year') || '').trim();
+const requestedTabParam = String(dashboardUrl.searchParams.get('tab') || '').trim().toLowerCase();
+const requestedDeliveryViewParam = String(dashboardUrl.searchParams.get('deliveryView') || '').trim().toLowerCase();
 
 // Initialize Supabase
 const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
@@ -134,6 +136,12 @@ const hasTeacherRole = (matchedUsers.length > 0 ? matchedUsers : [dbUser]).some(
   (row) => normalizeRole(row?.role) === 'teacher'
 );
 const isTeacher = hasTeacherRole || hasTeacherEnrollment;
+const initialTeacherDashboardTab = isTeacher && ['users', 'deliveries', 'attendance'].includes(requestedTabParam)
+  ? requestedTabParam
+  : 'users';
+const initialTeacherDeliveryView = ['recent', 'course', 'log'].includes(requestedDeliveryViewParam)
+  ? requestedDeliveryViewParam
+  : 'recent';
 
 if (isTeacher && normalizeRole(dbUser?.role) !== 'teacher') {
   const teacherRow = matchedUsers.find((row) => normalizeRole(row?.role) === 'teacher');
@@ -553,11 +561,6 @@ const addUtcDays = (value: Date, amount: number) => {
   return next;
 };
 
-const getStartOfIsoWeek = (value: Date) => {
-  const day = value.getUTCDay() || 7;
-  return addUtcDays(value, 1 - day);
-};
-
 const formatAttendanceGridDayLabel = (value: string) => {
   const parsed = parseDateOnly(value);
   if (!parsed) return value;
@@ -569,53 +572,80 @@ const formatAttendanceGridDayLabel = (value: string) => {
   });
 };
 
-const buildAttendanceWeekGroups = (startDateValue: string, endDateValue: string) => {
+const ATTENDANCE_VALUE_HELP = 'Escala: 1 presente • 0.5 media falta • 0 o vacío falta';
+
+const normalizeAttendanceValue = (value: unknown) => {
+  const raw = normalizeText(String(value ?? '').replace(',', '.'));
+  if (!raw) return 0;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 0;
+  const clamped = Math.max(0, Math.min(1, parsed));
+  return Math.round(clamped * 2) / 2;
+};
+
+const formatAttendanceValue = (value: unknown) => {
+  const normalized = normalizeAttendanceValue(value);
+  if (normalized <= 0) return '';
+  return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1).replace(/\.0$/, '');
+};
+
+const formatAbsenceValue = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return '0';
+  const normalized = Math.round(parsed * 2) / 2;
+  return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1).replace(/\.0$/, '');
+};
+
+const splitAttendanceName = (value: unknown) => {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return { firstName: '—', lastName: '' };
+  }
+
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return {
+      firstName: parts[0] || normalized,
+      lastName: '',
+    };
+  }
+
+  return {
+    firstName: parts[0] || normalized,
+    lastName: parts.slice(1).join(' '),
+  };
+};
+
+const buildAttendanceScheduleColumns = (startDateValue: string, endDateValue: string) => {
   const parsedStart = parseDateOnly(startDateValue);
   const parsedEnd = parseDateOnly(endDateValue);
   if (!parsedStart || !parsedEnd) {
     return {
       startDate: '',
       endDate: '',
-      weeks: [] as any[],
+      columns: [] as any[],
     };
   }
 
   const normalizedStart = parsedStart.getTime() <= parsedEnd.getTime() ? parsedStart : parsedEnd;
   const normalizedEnd = parsedStart.getTime() <= parsedEnd.getTime() ? parsedEnd : parsedStart;
-  const weeks: any[] = [];
-  let cursor = getStartOfIsoWeek(normalizedStart);
-  let weekIndex = 0;
+  const columns: any[] = [];
+  let cursor = normalizedStart;
 
   while (cursor.getTime() <= normalizedEnd.getTime()) {
-    const days = Array.from({ length: 5 }, (_, index) => {
-      const date = addUtcDays(cursor, index);
-      const dateKey = formatDateOnly(date);
-      const inRange = date.getTime() >= normalizedStart.getTime() && date.getTime() <= normalizedEnd.getTime();
-      return {
-        dateKey,
-        inRange,
-        label: formatAttendanceGridDayLabel(dateKey),
-      };
+    const dateKey = formatDateOnly(cursor);
+    columns.push({
+      dateKey,
+      label: formatAttendanceGridDayLabel(dateKey),
+      isoWeekday: cursor.getUTCDay() || 7,
     });
-
-    const visibleDays = days.filter((day) => day.inRange);
-    if (visibleDays.length > 0) {
-      weeks.push({
-        key: formatDateOnly(cursor),
-        label: `Sem ${weekIndex + 1}`,
-        title: `${visibleDays[0]?.label || ''} -> ${visibleDays[visibleDays.length - 1]?.label || ''}`,
-        days,
-      });
-      weekIndex += 1;
-    }
-
     cursor = addUtcDays(cursor, 7);
   }
 
   return {
     startDate: formatDateOnly(normalizedStart),
     endDate: formatDateOnly(normalizedEnd),
-    weeks,
+    columns,
   };
 };
 
@@ -783,11 +813,10 @@ if (isTeacher) {
         Object.entries(manualDaysPayload)
           .map(([dateKey, countValue]) => {
             const date = normalizeText(dateKey);
-            const parsedCount = Number(countValue);
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedCount) || parsedCount <= 0) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
               return [null, null];
             }
-            return [date, Math.max(0, Math.trunc(parsedCount))];
+            return [date, normalizeAttendanceValue(countValue)];
           })
           .filter(([dateKey, countValue]) => Boolean(dateKey) && countValue !== null),
       );
@@ -1667,7 +1696,7 @@ const defaultAttendanceRange = (() => {
 
   const fallbackStart = `${activeYear || new Date().getFullYear()}-01-01`;
   const parsedFallbackStart = parseDateOnly(fallbackStart);
-  const fallbackEnd = parsedFallbackStart ? formatDateOnly(addUtcDays(parsedFallbackStart, 27)) : fallbackStart;
+  const fallbackEnd = parsedFallbackStart ? formatDateOnly(addUtcDays(parsedFallbackStart, 7 * 14)) : fallbackStart;
   return {
     startDate: fallbackStart,
     endDate: fallbackEnd,
@@ -1683,14 +1712,15 @@ const activeAttendanceConfig = {
   endDate: normalizeText(savedAttendanceConfig?.endDate || defaultAttendanceRange.endDate),
 };
 
-const attendanceWeekGrid = buildAttendanceWeekGroups(
+const todayAttendanceDateKey = formatDateOnly(new Date()) || '';
+const attendanceScheduleGrid = buildAttendanceScheduleColumns(
   activeAttendanceConfig.startDate,
   activeAttendanceConfig.endDate,
 );
 
-const attendanceLiveCountByStudentDayKey = (() => {
-  const counts = new Map<string, number>();
-  if (!isTeacher) return counts;
+const attendanceLiveValueByStudentDayKey = (() => {
+  const values = new Map<string, number>();
+  if (!isTeacher) return values;
 
   scopedTeacherLiveAttendance
     .filter((attendance: any) => normalizeRole(attendance?.role) === 'student')
@@ -1704,10 +1734,10 @@ const attendanceLiveCountByStudentDayKey = (() => {
       if (Number(attendance?.joinCount || 0) <= 0) return;
 
       const mapKey = `${normalizeTextLower(courseId)}::${year}::${userId}::${dayKey}`;
-      counts.set(mapKey, (counts.get(mapKey) || 0) + 1);
+      values.set(mapKey, 1);
     });
 
-  return counts;
+  return values;
 })();
 
 const attendanceGridRows = (() => {
@@ -1725,57 +1755,71 @@ const attendanceGridRows = (() => {
     .map((enrollment: any) => {
       const userId = normalizeText(enrollment?.userId || '');
       const user = allUsersById.get(userId);
-      const manualDays = courseAttendanceManualByKey.get(
-        `${normalizeTextLower(activeCourseId)}::${activeYear}::${userId}`,
-      ) || {};
+      const displayName = String(user?.name || user?.email || userId);
+      const { firstName, lastName } = splitAttendanceName(displayName);
+      const metaKey = `${normalizeTextLower(activeCourseId)}::${activeYear}::${userId}`;
+      const savedMeta = courseStudentMetaByKey.get(metaKey);
+      const manualDays = courseAttendanceManualByKey.get(metaKey) || {};
+      const turnoRaw = normalizeText(savedMeta?.turno || enrollment?.turno || user?.turno || '').toUpperCase();
+      const turnoValue = ['M', 'T', 'N'].includes(turnoRaw) ? turnoRaw : '—';
+      const groupValue = normalizeText(
+        savedMeta?.grupo
+          || enrollment?.group
+          || enrollment?.grupo
+          || user?.group
+          || user?.grupo
+          || '',
+      ) || '—';
 
-      let totalLiveCount = 0;
-      let totalManualCount = 0;
-      const weeks = attendanceWeekGrid.weeks.map((week: any) => ({
-        ...week,
-        days: week.days.map((day: any) => {
-          if (!day.inRange) {
-            return {
-              ...day,
-              liveCount: 0,
-              manualCount: 0,
-              totalCount: 0,
-            };
-          }
+      let absenceUnits = 0;
+      const columns = attendanceScheduleGrid.columns.map((column: any) => {
+        const liveValue = attendanceLiveValueByStudentDayKey.get(
+          `${normalizeTextLower(activeCourseId)}::${activeYear}::${userId}::${column.dateKey}`,
+        ) || 0;
+        const hasManualOverride = Object.prototype.hasOwnProperty.call(manualDays, column.dateKey);
+        const manualValue = hasManualOverride ? normalizeAttendanceValue(manualDays?.[column.dateKey]) : 0;
+        const effectiveValue = hasManualOverride ? manualValue : liveValue;
+        const absenceValue = column.dateKey <= todayAttendanceDateKey
+          ? Math.max(0, 1 - effectiveValue)
+          : 0;
 
-          const liveCount = attendanceLiveCountByStudentDayKey.get(
-            `${normalizeTextLower(activeCourseId)}::${activeYear}::${userId}::${day.dateKey}`,
-          ) || 0;
-          const manualCount = Math.max(0, Number(manualDays?.[day.dateKey] || 0));
-          const totalCount = liveCount + manualCount;
-          totalLiveCount += liveCount;
-          totalManualCount += manualCount;
+        absenceUnits += absenceValue;
 
-          return {
-            ...day,
-            liveCount,
-            manualCount,
-            totalCount,
-          };
-        }),
-      }));
+        return {
+          ...column,
+          liveValue,
+          manualValue,
+          hasManualOverride,
+          effectiveValue,
+          absenceValue,
+          displayValue: hasManualOverride
+            ? formatAttendanceValue(manualValue)
+            : formatAttendanceValue(liveValue),
+          title: `Room: ${formatAttendanceValue(liveValue) || '0'} • Override: ${
+            hasManualOverride ? formatAttendanceValue(manualValue) || '0' : 'auto'
+          } • Final: ${formatAttendanceValue(effectiveValue) || '0'} • ${ATTENDANCE_VALUE_HELP}`,
+        };
+      });
 
       return {
         userId,
-        name: String(user?.name || user?.email || userId),
+        name: displayName,
+        firstName,
+        lastName,
         email: String(user?.email || ''),
-        daysAttended: weeks.reduce(
-          (sum: number, week: any) =>
-            sum + week.days.filter((day: any) => day.inRange && day.totalCount > 0).length,
-          0,
-        ),
-        totalLiveCount,
-        totalManualCount,
-        totalCount: totalLiveCount + totalManualCount,
-        weeks,
+        turno: turnoValue,
+        grupo: groupValue,
+        absenceUnits,
+        absenceDisplay: formatAbsenceValue(absenceUnits),
+        rowState: absenceUnits >= 4 ? 'critical' : absenceUnits >= 3 ? 'warning' : '',
+        columns,
       };
     })
-    .sort((left: any, right: any) => String(left.name || '').localeCompare(String(right.name || ''), 'es'));
+    .sort((left: any, right: any) => {
+      const lastNameDiff = String(left.lastName || '').localeCompare(String(right.lastName || ''), 'es');
+      if (lastNameDiff !== 0) return lastNameDiff;
+      return String(left.firstName || left.name || '').localeCompare(String(right.firstName || right.name || ''), 'es');
+    });
 })();
 
 const attendanceLogSearchRows = attendanceLogRows.map((row: any) => ({
@@ -2058,10 +2102,15 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         margin: 0 0 0.8rem;
       }
       .attendance-config-bar {
-        display: inline-flex;
+        display: flex;
         align-items: center;
         gap: 0.55rem;
         flex-wrap: wrap;
+      }
+      .attendance-config-note {
+        margin: 0.45rem 0 0;
+        font-size: 0.78rem;
+        color: var(--c-fg-dim);
       }
       .attendance-config-input,
       .attendance-config-apply,
@@ -2084,85 +2133,102 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
       .attendance-grid-wrap {
         margin-bottom: 1rem;
       }
+      .attendance-config-field {
+        display: grid;
+        gap: 0.2rem;
+        font-size: 0.76rem;
+        color: var(--c-fg-dim);
+      }
       .attendance-grid-table {
         min-width: max-content;
+        table-layout: fixed;
       }
       .attendance-grid-table th,
       .attendance-grid-table td {
         text-align: center;
       }
-      .attendance-grid-table th:nth-child(2),
-      .attendance-grid-table td:nth-child(2),
-      .attendance-grid-table th:nth-child(3),
-      .attendance-grid-table td:nth-child(3) {
+      .attendance-grid-table .attendance-col-sticky {
         position: sticky;
-        background: var(--c-bg);
         z-index: 3;
+        background: color-mix(in srgb, var(--c-bg, #111) 96%, #000 4%);
       }
-      .attendance-grid-table th:nth-child(2),
-      .attendance-grid-table td:nth-child(2) {
-        left: 172px;
-        min-width: 220px;
-        text-align: left;
-      }
-      .attendance-grid-table th:nth-child(3),
-      .attendance-grid-table td:nth-child(3) {
-        left: 392px;
-        min-width: 82px;
-        text-align: left;
-      }
-      .attendance-grid-table thead th:nth-child(2),
-      .attendance-grid-table thead th:nth-child(3) {
+      .attendance-grid-table thead .attendance-col-sticky {
         background: var(--c-bg-mute);
         z-index: 4;
       }
-      .attendance-grid-table tbody td:nth-child(2),
-      .attendance-grid-table tbody td:nth-child(3) {
+      .attendance-grid-table th.attendance-col--first-name,
+      .attendance-grid-table td.attendance-col--first-name {
+        left: 0;
+        min-width: 118px;
+        text-align: left;
+      }
+      .attendance-grid-table th.attendance-col--last-name,
+      .attendance-grid-table td.attendance-col--last-name {
+        left: 118px;
+        min-width: 146px;
+        text-align: left;
+      }
+      .attendance-grid-table th.attendance-col--turno,
+      .attendance-grid-table td.attendance-col--turno {
+        left: 264px;
+        min-width: 58px;
+      }
+      .attendance-grid-table th.attendance-col--grupo,
+      .attendance-grid-table td.attendance-col--grupo {
+        left: 322px;
+        min-width: 74px;
+      }
+      .attendance-grid-table th.attendance-col--absence,
+      .attendance-grid-table td.attendance-col--absence {
+        left: 396px;
+        min-width: 92px;
+      }
+      .attendance-grid-table tbody .attendance-col--absence {
         box-shadow: 8px 0 14px rgba(0, 0, 0, 0.16);
       }
-      .attendance-grid-table th.attendance-week-head {
-        min-width: 280px;
-      }
-      .attendance-day-head {
-        min-width: 56px;
-        font-size: 0.72rem;
+      .attendance-date-head {
+        min-width: 72px;
+        font-size: 0.7rem;
         line-height: 1.15;
       }
-      .attendance-day-head.is-out-of-range {
-        color: var(--c-fg-dim);
+      .attendance-absence-cell {
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
       }
       .attendance-day-cell {
-        padding: 0.32rem 0.24rem;
+        padding: 0.24rem 0.22rem;
+        min-width: 72px;
       }
       .attendance-day-cell.is-present {
         background: color-mix(in srgb, var(--c-link) 10%, transparent);
       }
-      .attendance-day-stack {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.22rem;
+      .attendance-day-cell.is-future {
+        opacity: 0.7;
       }
-      .attendance-day-total {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 1.45rem;
-        min-height: 1.05rem;
-        font-size: 0.77rem;
-        font-weight: 600;
-        line-height: 1;
-        cursor: help;
+      .attendance-grid-table tbody tr.attendance-row--warning > td {
+        background: rgba(245, 158, 11, 0.18);
+      }
+      .attendance-grid-table tbody tr.attendance-row--critical > td {
+        background: rgba(239, 68, 68, 0.18);
+      }
+      .attendance-grid-table tbody tr.attendance-row--warning > td.attendance-col-sticky {
+        background: rgba(245, 158, 11, 0.18);
+      }
+      .attendance-grid-table tbody tr.attendance-row--critical > td.attendance-col-sticky {
+        background: rgba(239, 68, 68, 0.18);
       }
       .attendance-manual-input {
-        width: 2.8rem;
-        padding: 0.16rem 0.2rem;
+        width: 3rem;
+        padding: 0.2rem 0.24rem;
         text-align: center;
-        font-size: 0.72rem;
-      }
-      .attendance-day-empty {
-        color: var(--c-fg-dim);
         font-size: 0.74rem;
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+      }
+      .attendance-manual-input::placeholder {
+        color: var(--c-fg-dim);
       }
       .attendance-log-panel {
         margin-top: 0.9rem;
@@ -2604,10 +2670,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
           8px 0 14px rgba(0, 0, 0, 0.2);
       }
       @media (max-width: 980px) {
-        .attendance-grid-table th:nth-child(2),
-        .attendance-grid-table td:nth-child(2),
-        .attendance-grid-table th:nth-child(3),
-        .attendance-grid-table td:nth-child(3) {
+        .attendance-grid-table .attendance-col-sticky {
           position: static;
           box-shadow: none;
         }
@@ -2797,12 +2860,11 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
           {isTeacher ? (
             <>
               <h1 class="dashboard-sidebar-title">Panel de Administración</h1>
-              <p class="dashboard-sidebar-copy">Usuarios, inscripciones, entregas y asistencia del curso activo.</p>
+              <p class="dashboard-sidebar-copy">Usuarios, entregas y asistencia del curso activo.</p>
               <div class="tabs">
-                <div class="tab active" data-tab="users">Usuarios</div>
-                <div class="tab" data-tab="enrollments">Inscripciones</div>
-                <div class="tab" data-tab="deliveries">Entregas</div>
-                <div class="tab" data-tab="attendance">Asistencia</div>
+                <div class:list={['tab', initialTeacherDashboardTab === 'users' ? 'active' : '']} data-tab="users">Usuarios</div>
+                <div class:list={['tab', initialTeacherDashboardTab === 'deliveries' ? 'active' : '']} data-tab="deliveries">Entregas</div>
+                <div class:list={['tab', initialTeacherDashboardTab === 'attendance' ? 'active' : '']} data-tab="attendance">Asistencia</div>
                 <div class="dashboard-scope-controls">
                   <label class="dashboard-scope-field">
                     <span>Curso</span>
@@ -2869,7 +2931,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         <section class="dashboard-main">
       {isTeacher ? (
         <>
-          <div id="users-content">
+          <div id="users-content" style={initialTeacherDashboardTab === 'users' ? 'display: block;' : 'display: none;'}>
             <h2>Lista de Usuarios</h2>
             <table class="admin-table">
               <thead>
@@ -2948,105 +3010,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
             </table>
           </div>
 
-          <div id="enrollments-content" style="display: none;">
-            <h2>Inscripciones</h2>
-            {(() => {
-              if (!activeCourseId) {
-                return (
-                  <div style="padding: 1rem; color: var(--c-fg-dim); font-style: italic;">
-                    Selecciona un curso activo para ver inscripciones.
-                  </div>
-                );
-              }
-
-              const courseEnrollments = scopedTeacherEnrollments.filter(
-                (enrollment: any) => canonicalizeCourseId(enrollment?.courseId) === activeCourseId,
-              );
-              const teacherEnrollmentCount = courseEnrollments.filter(
-                (enrollment: any) => normalizeRole(enrollment?.roleInCourse) === 'teacher',
-              ).length;
-              const isTeacherEnrolled = allEnrollments.some(
-                (enrollment: any) =>
-                  enrollment.userId === dbUser.id &&
-                  canonicalizeCourseId(enrollment.courseId) === activeCourseId,
-              );
-
-              return (
-                <>
-                  <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 0.85rem;">
-                    {isTeacherEnrolled ? (
-                      <span style="font-size: 0.85rem; color: var(--c-fg-dim); font-weight: 500;">✓ Inscrito</span>
-                    ) : (
-                      <button type="button" class="enroll-btn" data-course-id={activeCourseId}>Inscribirme</button>
-                    )}
-                  </div>
-                  {courseEnrollments.length > 0 ? (
-                    <table class="admin-table" style="margin-top: 0;">
-                      <thead>
-                        <tr>
-                          <th>Usuario</th>
-                          <th>Rol</th>
-                          <th>Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {courseEnrollments.map((enrollment: any) => {
-                          const user = allUsers.find((u: any) => u.id === enrollment.userId);
-                          const enrollmentRole = normalizeRole(enrollment?.roleInCourse);
-                          const enrollmentLabel = String(user?.name || user?.email || enrollment.userId || 'estudiante').trim();
-                          const canRemoveEnrollment =
-                            enrollmentRole === 'student'
-                            || (
-                              enrollmentRole === 'teacher'
-                              && dashboardUserIds.includes(enrollment.userId)
-                              && teacherEnrollmentCount > 1
-                            );
-                          const enrollmentActionLabel = enrollmentRole === 'teacher'
-                            ? `Quitar inscripción docente de ${enrollmentLabel}`
-                            : `Desinscribir a ${enrollmentLabel}`;
-                          return (
-                            <tr>
-                              <td>{user?.name || enrollment.userId}</td>
-                              <td>
-                                <span class:list={['role-badge', enrollmentRole === 'teacher' ? 'role-teacher' : 'role-student']}>
-                                  {getRoleBadgeLabel(enrollment.roleInCourse)}
-                                </span>
-                              </td>
-                              <td>
-                                {canRemoveEnrollment ? (
-                                  <button
-                                    type="button"
-                                    class="icon-btn icon-btn-danger js-unenroll-student"
-                                    data-enrollment-id={enrollment.id}
-                                    data-enrollment-role={enrollmentRole}
-                                    data-user-name={enrollmentLabel}
-                                    aria-label={enrollmentActionLabel}
-                                    title={enrollmentActionLabel}
-                                  >
-                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                                      <path fill="currentColor" d="M9 3h6l1 2h5v2H3V5h5l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM7 9h2v9H7V9Zm-1 12a2 2 0 0 1-2-2V8h16v11a2 2 0 0 1-2 2H6Z" />
-                                    </svg>
-                                  </button>
-                                ) : (
-                                  <span style="color: var(--c-fg-dim);">—</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div style="padding: 1rem; color: var(--c-fg-dim); font-style: italic;">
-                      No hay estudiantes inscritos en este curso para el año seleccionado.
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-
-          <div id="deliveries-content" style="display: none;">
+          <div id="deliveries-content" style={initialTeacherDashboardTab === 'deliveries' ? 'display: block;' : 'display: none;'}>
             <h2>Entregas</h2>
             <div class="deliveries-toolbar">
               <input
@@ -3058,12 +3022,12 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
               />
             </div>
             <div class="deliveries-subtabs">
-              <button type="button" class="deliveries-subtab active" data-delivery-view="recent">Recientes</button>
-              <button type="button" class="deliveries-subtab" data-delivery-view="course">Curso</button>
-              <button type="button" class="deliveries-subtab" data-delivery-view="log">Log</button>
+              <button type="button" class:list={['deliveries-subtab', initialTeacherDeliveryView === 'recent' ? 'active' : '']} data-delivery-view="recent">Recientes</button>
+              <button type="button" class:list={['deliveries-subtab', initialTeacherDeliveryView === 'course' ? 'active' : '']} data-delivery-view="course">Curso</button>
+              <button type="button" class:list={['deliveries-subtab', initialTeacherDeliveryView === 'log' ? 'active' : '']} data-delivery-view="log">Log</button>
             </div>
 
-            <div id="deliveries-recent" data-delivery-panel="recent">
+            <div id="deliveries-recent" data-delivery-panel="recent" style={initialTeacherDeliveryView === 'recent' ? 'display: block;' : 'display: none;'}>
             <p class="fold-shortcuts">
               <strong>Atajos:</strong>
               <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>↑</kbd> fold all,
@@ -3224,7 +3188,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
             })()}
           </div>
 
-          <div id="deliveries-course" data-delivery-panel="course" style="display: none;">
+          <div id="deliveries-course" data-delivery-panel="course" style={initialTeacherDeliveryView === 'course' ? 'display: block;' : 'display: none;'}>
             <p class="course-grades-shortcuts">
               <strong>Atajos:</strong>
               <kbd>⌘</kbd> + <kbd>⇧</kbd> + <kbd>↑</kbd> fold all,
@@ -3620,7 +3584,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
             })()}
           </div>
 
-          <div id="deliveries-log" data-delivery-panel="log" style="display: none;">
+          <div id="deliveries-log" data-delivery-panel="log" style={initialTeacherDeliveryView === 'log' ? 'display: block;' : 'display: none;'}>
             <p class="log-empty">
               Registro completo de eventos de evaluación para todos los cursos en los que estás inscripto como docente.
             </p>
@@ -3676,7 +3640,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
             </section>
           </div>
 
-          <div id="attendance-content" style="display: none;">
+          <div id="attendance-content" style={initialTeacherDashboardTab === 'attendance' ? 'display: block;' : 'display: none;'} data-attendance-today={todayAttendanceDateKey}>
             <h2>Asistencia</h2>
             {!activeCourseId ? (
               <p class="student-empty">Selecciona un curso activo para ver la asistencia.</p>
@@ -3691,10 +3655,6 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                     <span aria-hidden="true">🎓</span>
                     <strong>{attendanceGridRows.length}</strong>
                   </span>
-                  <span class="attendance-stat-chip" title="Teachers con actividad registrada en el log">
-                    <span aria-hidden="true">🧑‍🏫</span>
-                    <strong>{attendanceUserSummaryRows.filter((row: any) => normalizeRole(row?.role) === 'teacher').length}</strong>
-                  </span>
                   <span class="attendance-stat-chip" title="Registros totales del log para el curso/año activo">
                     <span aria-hidden="true">🧾</span>
                     <strong>{attendanceLogRows.length}</strong>
@@ -3708,20 +3668,26 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                     data-course-id={activeCourseId}
                     data-year={activeYear}
                   >
-                    <input
-                      type="date"
-                      class="attendance-config-input"
-                      data-attendance-config-input="startDate"
-                      value={activeAttendanceConfig.startDate}
-                      title="Inicio de cursada"
-                    />
-                    <input
-                      type="date"
-                      class="attendance-config-input"
-                      data-attendance-config-input="endDate"
-                      value={activeAttendanceConfig.endDate}
-                      title="Fin de cursada"
-                    />
+                    <label class="attendance-config-field">
+                      <span>Fecha de comienzo de cursada</span>
+                      <input
+                        type="date"
+                        class="attendance-config-input"
+                        data-attendance-config-input="startDate"
+                        value={activeAttendanceConfig.startDate}
+                        title="Inicio de cursada"
+                      />
+                    </label>
+                    <label class="attendance-config-field">
+                      <span>Fecha de fin de cuatrimestre</span>
+                      <input
+                        type="date"
+                        class="attendance-config-input"
+                        data-attendance-config-input="endDate"
+                        value={activeAttendanceConfig.endDate}
+                        title="Fin de cursada"
+                      />
+                    </label>
                     <button
                       type="button"
                       class="attendance-config-apply"
@@ -3731,100 +3697,84 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                       Aplicar
                     </button>
                   </div>
+                  <p class="attendance-config-note">{ATTENDANCE_VALUE_HELP}</p>
                 </section>
 
                 {attendanceGridRows.length === 0 ? (
                   <p class="student-empty">No hay estudiantes inscriptos para este curso y año.</p>
-                ) : attendanceWeekGrid.weeks.length === 0 ? (
+                ) : attendanceScheduleGrid.columns.length === 0 ? (
                   <p class="student-empty">Define un rango de cursada válido para construir la grilla semanal.</p>
                 ) : (
                   <div class="grade-board-wrap attendance-grid-wrap">
                     <table class="student-assignment-table grade-board-table attendance-grid-table">
                       <thead>
                         <tr>
-                          <th rowspan="2">Nombre</th>
-                          <th rowspan="2">Email</th>
-                          <th rowspan="2">Asistencia</th>
-                          {attendanceWeekGrid.weeks.map((week: any, weekIndex) => (
+                          <th class="attendance-col-sticky attendance-col--first-name">Nombre</th>
+                          <th class="attendance-col-sticky attendance-col--last-name">Apellido</th>
+                          <th class="attendance-col-sticky attendance-col--turno">Turno</th>
+                          <th class="attendance-col-sticky attendance-col--grupo">Grupo</th>
+                          <th class="attendance-col-sticky attendance-col--absence">Inasist.</th>
+                          <th>Email</th>
+                          {attendanceScheduleGrid.columns.map((column: any) => (
                             <th
-                              colspan="5"
-                              class:list={[
-                                'attendance-week-head',
-                                weekIndex % 2 === 0 ? 'lesson-group-even' : 'lesson-group-odd',
-                                'group-start',
-                              ]}
-                              title={week.title}
+                              class="attendance-date-head"
+                              title={column.dateKey}
                             >
-                              {week.label}
+                              {column.label}
                             </th>
                           ))}
-                        </tr>
-                        <tr>
-                          {attendanceWeekGrid.weeks.map((week: any, weekIndex) =>
-                            week.days.map((day: any, dayIndex) => (
-                              <th
-                                class:list={[
-                                  'attendance-day-head',
-                                  weekIndex % 2 === 0 ? 'lesson-group-even' : 'lesson-group-odd',
-                                  dayIndex === 0 ? 'group-start' : '',
-                                  !day.inRange ? 'is-out-of-range' : '',
-                                ]}
-                                title={day.dateKey}
-                              >
-                                {day.inRange ? day.label : '—'}
-                              </th>
-                            ))
-                          )}
                         </tr>
                       </thead>
                       <tbody>
                         {attendanceGridRows.map((row: any) => (
-                          <tr>
-                            <td>{row.name}</td>
+                          <tr
+                            class:list={[
+                              row.rowState === 'warning' ? 'attendance-row--warning' : '',
+                              row.rowState === 'critical' ? 'attendance-row--critical' : '',
+                            ]}
+                            data-attendance-row
+                            data-attendance-user-id={row.userId}
+                          >
+                            <td class="attendance-col-sticky attendance-col--first-name">{row.firstName || '—'}</td>
+                            <td class="attendance-col-sticky attendance-col--last-name">{row.lastName || '—'}</td>
+                            <td class="attendance-col-sticky attendance-col--turno">{row.turno}</td>
+                            <td class="attendance-col-sticky attendance-col--grupo">{row.grupo}</td>
+                            <td
+                              class="attendance-col-sticky attendance-col--absence attendance-absence-cell"
+                              data-attendance-row-absences={row.userId}
+                            >
+                              {row.absenceDisplay}
+                            </td>
                             <td class="grade-board-email">{row.email || '—'}</td>
-                            <td data-attendance-row-days={row.userId}>{row.daysAttended}</td>
-                            {row.weeks.map((week: any, weekIndex) =>
-                              week.days.map((day: any, dayIndex) => (
-                                <td
-                                  class:list={[
-                                    'attendance-day-cell',
-                                    weekIndex % 2 === 0 ? 'lesson-group-even' : 'lesson-group-odd',
-                                    dayIndex === 0 ? 'group-start' : '',
-                                    day.totalCount > 0 ? 'is-present' : '',
-                                    !day.inRange ? 'is-out-of-range' : '',
-                                  ]}
-                                >
-                                  {day.inRange ? (
-                                    <div class="attendance-day-stack">
-                                      <span
-                                        class="attendance-day-total"
-                                        data-attendance-day-total
-                                        title={`En vivo: ${day.liveCount} • Manual: ${day.manualCount} • Total: ${day.totalCount}`}
-                                      >
-                                        {day.totalCount > 0 ? day.totalCount : '·'}
-                                      </span>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        class="attendance-manual-input"
-                                        data-attendance-manual-input
-                                        data-course-id={activeCourseId}
-                                        data-year={activeYear}
-                                        data-student-id={row.userId}
-                                        data-date={day.dateKey}
-                                        data-live-count={day.liveCount}
-                                        value={day.manualCount > 0 ? String(day.manualCount) : ''}
-                                        placeholder="+"
-                                        title={`Cursada presencial manual para ${day.label}`}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <span class="attendance-day-empty">—</span>
-                                  )}
-                                </td>
-                              ))
-                            )}
+                            {row.columns.map((column: any) => (
+                              <td
+                                class:list={[
+                                  'attendance-day-cell',
+                                  column.effectiveValue > 0 ? 'is-present' : '',
+                                  column.dateKey > todayAttendanceDateKey ? 'is-future' : '',
+                                ]}
+                              >
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="1"
+                                  step="0.5"
+                                  inputmode="decimal"
+                                  class="attendance-manual-input"
+                                  data-attendance-manual-input
+                                  data-course-id={activeCourseId}
+                                  data-year={activeYear}
+                                  data-student-id={row.userId}
+                                  data-date={column.dateKey}
+                                  data-live-value={String(column.liveValue || 0)}
+                                  data-manual-override={column.hasManualOverride ? 'true' : 'false'}
+                                  data-manual-value={column.hasManualOverride ? String(column.manualValue || 0) : ''}
+                                  value={column.displayValue}
+                                  placeholder={column.dateKey <= todayAttendanceDateKey ? '0' : ''}
+                                  title={column.title}
+                                />
+                              </td>
+                            ))}
                           </tr>
                         ))}
                       </tbody>
@@ -4012,7 +3962,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
               const params = new URLSearchParams(window.location.search);
               const tab = String(params.get('tab') || '').trim();
               const deliveryView = String(params.get('deliveryView') || '').trim();
-              if (tab && ['users', 'enrollments', 'deliveries', 'attendance'].includes(tab)) {
+              if (tab && ['users', 'deliveries', 'attendance'].includes(tab)) {
                 showMainTab(tab);
               }
               if (tab === 'deliveries' && deliveryView) {
@@ -4239,22 +4189,81 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
               });
             }
 
-            function updateAttendanceRowDays(input) {
+            function clampAttendanceValue(value) {
+              const parsed = Number(String(value ?? '').replace(',', '.'));
+              if (!Number.isFinite(parsed)) return 0;
+              const clamped = Math.max(0, Math.min(1, parsed));
+              return Math.round(clamped * 2) / 2;
+            }
+
+            function formatAttendanceInputValue(value) {
+              const normalized = clampAttendanceValue(value);
+              if (normalized <= 0) return '';
+              return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1).replace(/\.0$/, '');
+            }
+
+            function formatAttendanceAbsenceValue(value) {
+              const parsed = Number(value);
+              if (!Number.isFinite(parsed) || parsed <= 0) return '0';
+              const normalized = Math.round(parsed * 2) / 2;
+              return Number.isInteger(normalized) ? String(normalized) : normalized.toFixed(1).replace(/\.0$/, '');
+            }
+
+            function getAttendanceTodayKey() {
+              const panel = document.getElementById('attendance-content');
+              return panel instanceof HTMLElement ? String(panel.dataset.attendanceToday || '').trim() : '';
+            }
+
+            function getAttendanceEffectiveValue(input) {
+              if (!(input instanceof HTMLInputElement)) return 0;
+              const liveValue = clampAttendanceValue(input.getAttribute('data-live-value') || 0);
+              const hasManualOverride = input.dataset.manualOverride === 'true';
+              if (!hasManualOverride) return liveValue;
+              return clampAttendanceValue(input.dataset.manualValue || 0);
+            }
+
+            function refreshAttendanceCell(input) {
               if (!(input instanceof HTMLInputElement)) return;
-              const row = input.closest('tr');
-              if (!(row instanceof HTMLElement)) return;
-              const userId = String(input.getAttribute('data-student-id') || '').trim();
-              if (!userId) return;
-
-              const dayCount = Array.from(row.querySelectorAll('[data-attendance-day-total]')).reduce((sum, node) => {
-                const totalValue = Number(node.textContent === '·' ? 0 : node.textContent || 0);
-                return sum + (totalValue > 0 ? 1 : 0);
-              }, 0);
-
-              const daysCell = row.querySelector(`[data-attendance-row-days="${CSS.escape(userId)}"]`);
-              if (daysCell instanceof HTMLElement) {
-                daysCell.textContent = String(dayCount);
+              const cell = input.closest('.attendance-day-cell');
+              const liveValue = clampAttendanceValue(input.getAttribute('data-live-value') || 0);
+              const hasManualOverride = input.dataset.manualOverride === 'true';
+              const manualValue = hasManualOverride ? clampAttendanceValue(input.dataset.manualValue || 0) : 0;
+              const effectiveValue = hasManualOverride ? manualValue : liveValue;
+              input.value = hasManualOverride
+                ? formatAttendanceInputValue(manualValue)
+                : formatAttendanceInputValue(liveValue);
+              const attendanceValueHelp = 'Escala: 1 presente • 0.5 media falta • 0 o vacío falta';
+              input.title = `Room: ${formatAttendanceInputValue(liveValue) || '0'} • Override: ${
+                hasManualOverride ? formatAttendanceInputValue(manualValue) || '0' : 'auto'
+              } • Final: ${formatAttendanceInputValue(effectiveValue) || '0'} • ${attendanceValueHelp}`;
+              if (cell instanceof HTMLElement) {
+                cell.classList.toggle('is-present', effectiveValue > 0);
               }
+            }
+
+            function refreshAttendanceRowSummary(row) {
+              if (!(row instanceof HTMLElement)) return;
+              const userId = String(row.getAttribute('data-attendance-user-id') || '').trim();
+              if (!userId) return;
+              const todayKey = getAttendanceTodayKey();
+              let absenceUnits = 0;
+
+              row.querySelectorAll('[data-attendance-manual-input]').forEach((input) => {
+                if (!(input instanceof HTMLInputElement)) return;
+                const dateKey = String(input.getAttribute('data-date') || '').trim();
+                if (!dateKey) return;
+                if (todayKey && dateKey > todayKey) return;
+                const effectiveValue = getAttendanceEffectiveValue(input);
+                absenceUnits += Math.max(0, 1 - effectiveValue);
+              });
+
+              const absenceNode = row.querySelector(`[data-attendance-row-absences="${CSS.escape(userId)}"]`);
+              if (absenceNode instanceof HTMLElement) {
+                absenceNode.textContent = formatAttendanceAbsenceValue(absenceUnits);
+              }
+
+              row.classList.toggle('attendance-row--warning', absenceUnits >= 3 && absenceUnits < 4);
+              row.classList.toggle('attendance-row--critical', absenceUnits >= 4);
             }
 
             async function saveAttendanceManualInput(input) {
@@ -4264,9 +4273,8 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
               const year = String(input.getAttribute('data-year') || '').trim();
               const studentId = String(input.getAttribute('data-student-id') || '').trim();
               const date = String(input.getAttribute('data-date') || '').trim();
-              const liveCount = Number(input.getAttribute('data-live-count') || 0);
-              const manualCount = Math.max(0, Math.trunc(Number(input.value || 0) || 0));
-              const totalNode = input.closest('.attendance-day-stack')?.querySelector('[data-attendance-day-total]');
+              const rawValue = String(input.value || '').trim().replace(',', '.');
+              const nextValue = rawValue === '' ? null : clampAttendanceValue(rawValue);
 
               markQuickState(input, 'quick-saving');
 
@@ -4279,7 +4287,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                     year,
                     studentId,
                     date,
-                    count: manualCount,
+                    countRaw: nextValue === null ? '' : String(nextValue),
                   }),
                 });
 
@@ -4288,20 +4296,13 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                   return;
                 }
 
-                input.value = manualCount > 0 ? String(manualCount) : '';
-                if (totalNode instanceof HTMLElement) {
-                  const totalCount = liveCount + manualCount;
-                  totalNode.textContent = totalCount > 0 ? String(totalCount) : '·';
-                  totalNode.setAttribute(
-                    'title',
-                    `En vivo: ${liveCount} • Manual: ${manualCount} • Total: ${totalCount}`,
-                  );
-                  const cell = totalNode.closest('.attendance-day-cell');
-                  if (cell instanceof HTMLElement) {
-                    cell.classList.toggle('is-present', totalCount > 0);
-                  }
+                input.dataset.manualOverride = nextValue === null ? 'false' : 'true';
+                input.dataset.manualValue = nextValue === null ? '' : String(nextValue);
+                refreshAttendanceCell(input);
+                const row = input.closest('[data-attendance-row]');
+                if (row instanceof HTMLElement) {
+                  refreshAttendanceRowSummary(row);
                 }
-                updateAttendanceRowDays(input);
                 markQuickState(input, 'quick-success');
               } catch (error) {
                 console.error('Error saving manual attendance:', error);
@@ -4314,6 +4315,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                 if (!(input instanceof HTMLInputElement)) return;
                 if (input.dataset.bound === 'true') return;
                 input.dataset.bound = 'true';
+                refreshAttendanceCell(input);
 
                 input.addEventListener('change', () => {
                   saveAttendanceManualInput(input);
@@ -4323,6 +4325,12 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                   event.preventDefault();
                   saveAttendanceManualInput(input);
                 });
+              });
+
+              document.querySelectorAll('[data-attendance-row]').forEach((row) => {
+                if (row instanceof HTMLElement) {
+                  refreshAttendanceRowSummary(row);
+                }
               });
             }
 
@@ -4994,7 +5002,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
               });
             }
 
-            document.addEventListener('DOMContentLoaded', () => {
+            function bootTeacherDashboard() {
               bindMainTabs();
               initializeDashboardScopeSelectors();
               initializeUserDeleteButtons();
@@ -5004,8 +5012,22 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
               if (activeTab === 'deliveries') {
                 initializeDeliveriesTab();
               }
-              document.addEventListener('keydown', handleFoldShortcuts);
-            });
+              if (activeTab === 'attendance') {
+                initializeAttendanceTab();
+              }
+              if (!window.__musikiDashboardFoldShortcutsBound) {
+                document.addEventListener('keydown', handleFoldShortcuts);
+                window.__musikiDashboardFoldShortcutsBound = true;
+              }
+            }
+
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', bootTeacherDashboard, { once: true });
+            } else {
+              bootTeacherDashboard();
+            }
+
+            document.addEventListener('astro:page-load', bootTeacherDashboard);
           </script>
         </>
       ) : (

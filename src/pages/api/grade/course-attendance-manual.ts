@@ -75,10 +75,28 @@ async function ensureMetaAssignment(
   if (withoutWeight.error) throw withoutWeight.error;
 }
 
-const normalizeManualCount = (value: unknown) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return Math.max(0, Math.trunc(parsed));
+const normalizeManualCountInput = (value: unknown) => {
+  const raw = cleanString(String(value ?? '').replace(',', '.'));
+  if (!raw) {
+    return {
+      hasValue: false,
+      count: 0,
+    };
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return {
+      hasValue: true,
+      count: 0,
+    };
+  }
+
+  const clamped = Math.max(0, Math.min(1, parsed));
+  return {
+    hasValue: true,
+    count: Math.round(clamped * 2) / 2,
+  };
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -93,7 +111,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const studentId = cleanString(body?.studentId);
     const year = normalizeYear(body?.year);
     const date = normalizeDateOnly(body?.date);
-    const count = normalizeManualCount(body?.count);
+    const countInput = normalizeManualCountInput(body?.countRaw ?? body?.count);
 
     if (!courseId || !studentId || !year || !date) {
       return json({ error: 'courseId, studentId, year and date are required' }, 400);
@@ -125,8 +143,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
         ? { ...currentPayload.manualDays }
         : {};
 
-    if (count > 0) {
-      currentManualDays[date] = count;
+    if (countInput.hasValue) {
+      currentManualDays[date] = countInput.count;
     } else {
       delete currentManualDays[date];
     }
@@ -175,7 +193,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         studentId,
         year,
         date,
-        count,
+        count: countInput.hasValue ? countInput.count : null,
         manualDays: currentManualDays,
       },
     });
