@@ -43,6 +43,7 @@ const sessionEmail = String(currentUser.email || '').trim();
 const normalizedSessionEmail = sessionEmail.toLowerCase();
 
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
+const getRoleBadgeLabel = (value) => normalizeRole(value) === 'teacher' ? 'Teacher' : 'Student';
 
 async function resolveDashboardUserByEmail(email, normalizedEmail) {
   const { data, error } = await supabase
@@ -638,6 +639,17 @@ const isKnownCourseMetaSubmission = (submission: any) =>
   || isCourseAttendanceConfigSubmission(submission)
   || isCourseAttendanceManualSubmission(submission);
 
+const isSystemMetaAssignmentRef = (value: unknown) => {
+  const normalized = String(value || '').trim().replace(/^\/+|\/+$/g, '');
+  if (!normalized) return false;
+  return normalized.includes('/__meta__/') || normalized.startsWith('__meta__:');
+};
+
+const isVisibleCourseDeliveryAssignment = (assignment: any) => {
+  if (!assignment || typeof assignment !== 'object') return false;
+  return !isSystemMetaAssignmentRef(assignment?.slug || assignment?.id || '');
+};
+
 const asJsonText = (value: unknown) => {
   try {
     return JSON.stringify(value ?? null);
@@ -788,6 +800,28 @@ if (isTeacher) {
 }
 
 const evalCatalog = await buildEvalCatalog();
+const liveEvalEntries = Array.from(evalCatalog.entries())
+  .map(([evalId, entries]) => {
+    const entry = resolveEvalCatalogEntry(entries, '') || entries[0] || null;
+    if (!entry) return null;
+    const canonicalCourseId = canonicalizeCourseId(entry.courseId || entry.entryId.split('/')[0] || '');
+    return {
+      ...entry,
+      evalId,
+      canonicalCourseId,
+    };
+  })
+  .filter(Boolean);
+const liveEvalEntryById = new Map(
+  liveEvalEntries.map((entry: any) => [String(entry.evalId || ''), entry]),
+);
+const liveEvalEntriesByCourseId = liveEvalEntries.reduce((acc, entry: any) => {
+  const courseId = canonicalizeCourseId(entry?.canonicalCourseId || entry?.courseId || '');
+  if (!courseId) return acc;
+  if (!acc[courseId]) acc[courseId] = [];
+  acc[courseId].push(entry);
+  return acc;
+}, {} as Record<string, any[]>);
 
 const resolveSubmissionMeta = (submission: any) => {
   const assignment = assignmentById.get(submission.assignmentId);
@@ -2148,9 +2182,40 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
         font-size: 0.8rem;
         color: var(--c-fg-dim);
       }
-      .role-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
-      .role-teacher { background: #e3f2fd; color: #1976d2; }
-      .role-student { background: #f3e5f5; color: #7b1fa2; }
+      .role-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.24rem 0.52rem;
+        border: 1px solid var(--role-badge-border, transparent);
+        border-radius: 999px;
+        background: var(--role-badge-bg, transparent);
+        color: var(--role-badge-fg, var(--c-fg));
+        font-size: 0.75rem;
+        font-weight: 600;
+        line-height: 1;
+        white-space: nowrap;
+      }
+      .role-teacher {
+        --role-badge-bg: rgba(25, 118, 210, 0.12);
+        --role-badge-fg: #145ea8;
+        --role-badge-border: rgba(25, 118, 210, 0.22);
+      }
+      .role-student {
+        --role-badge-bg: rgba(123, 31, 162, 0.1);
+        --role-badge-fg: #6f1f93;
+        --role-badge-border: rgba(123, 31, 162, 0.2);
+      }
+      :root.dark .role-teacher {
+        --role-badge-bg: rgba(25, 118, 210, 0.24);
+        --role-badge-fg: #d7ecff;
+        --role-badge-border: rgba(147, 197, 253, 0.4);
+      }
+      :root.dark .role-student {
+        --role-badge-bg: rgba(124, 58, 237, 0.24);
+        --role-badge-fg: #efe1ff;
+        --role-badge-border: rgba(196, 181, 253, 0.42);
+      }
       .enrollment-list { font-size: 0.85rem; }
       .enrollment-item { display: inline-block; padding: 0.2rem 0.5rem; background: var(--c-bg-mute); border-radius: 4px; margin: 0.2rem; }
       .submission-count { font-weight: 600; color: var(--c-link); }
@@ -2830,7 +2895,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                       <td style="font-size: 0.85rem; color: var(--c-fg-dim);">{user.email}</td>
                       <td>
                         <span class:list={['role-badge', user.role === 'teacher' ? 'role-teacher' : 'role-student']}>
-                          {user.role === 'teacher' ? '👨‍🏫 Teacher' : '👨‍🎓 Student'}
+                          {getRoleBadgeLabel(user.role)}
                         </span>
                       </td>
                       <td>
@@ -2944,7 +3009,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                               <td>{user?.name || enrollment.userId}</td>
                               <td>
                                 <span class:list={['role-badge', enrollmentRole === 'teacher' ? 'role-teacher' : 'role-student']}>
-                                  {enrollment.roleInCourse}
+                                  {getRoleBadgeLabel(enrollment.roleInCourse)}
                                 </span>
                               </td>
                               <td>
@@ -3207,17 +3272,25 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
 
                   const courseAssignmentsMap = new Map();
 
-                  (allAssignments || [])
-                    .filter((assignment) => canonicalizeCourseId(assignment?.courseId) === courseId)
-                    .forEach((assignment) => {
-                      if (!assignment?.id) return;
-                      courseAssignmentsMap.set(assignment.id, assignment);
+                  (liveEvalEntriesByCourseId[courseId] || []).forEach((entry: any) => {
+                    const assignmentId = String(entry?.evalId || '').trim();
+                    if (!assignmentId) return;
+                    courseAssignmentsMap.set(assignmentId, {
+                      id: assignmentId,
+                      courseId,
+                      slug: String(entry?.entryId || ''),
                     });
+                  });
 
                   courseSubmissionsAllYears.forEach((submission) => {
                     const assignmentId = String(submission?.assignmentId || '').trim();
-                    if (!assignmentId || courseAssignmentsMap.has(assignmentId)) return;
                     const meta = resolveSubmissionMeta(submission);
+                    if (
+                      !assignmentId
+                      || courseAssignmentsMap.has(assignmentId)
+                      || !liveEvalEntryById.has(assignmentId)
+                      || isSystemMetaAssignmentRef(meta.assignmentSlug || assignmentId)
+                    ) return;
                     courseAssignmentsMap.set(assignmentId, {
                       id: assignmentId,
                       courseId,
@@ -3798,7 +3871,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
                               <td title={row.pageSlug}>{row.lessonLabel}</td>
                               <td>
                                 <span class:list={['role-badge', normalizeRole(row?.role) === 'teacher' ? 'role-teacher' : 'role-student']}>
-                                  {normalizeRole(row?.role) === 'teacher' ? 'teacher' : 'student'}
+                                  {getRoleBadgeLabel(row?.role)}
                                 </span>
                               </td>
                               <td title={`Salidas: ${row.leaveCount} • Abortos: ${row.abortedCount}`}>{row.joinCount}</td>
