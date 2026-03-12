@@ -306,6 +306,40 @@ const resolvedSlideTheme =
         justify-content: center;
       }
 
+      .reveal .slides > section.slide-media-only {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+        height: 100%;
+      }
+
+      .reveal .slides > section.slide-media-only > :not(aside.notes) {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+      }
+
+      .reveal .slides > section.slide-media-only > .slide-media-figure,
+      .reveal .slides > section.slide-media-only > p:only-child,
+      .reveal .slides > section.slide-media-only > :is(img, video, iframe):only-child {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .reveal.ready .slides > section.slide-media-only > :not(aside.notes) {
+        transition: opacity 500ms ease;
+      }
+
+      .reveal.ready .slides > section.slide-media-only.past > :not(aside.notes),
+      .reveal.ready .slides > section.slide-media-only.future > :not(aside.notes) {
+        opacity: 0;
+      }
+
+      .reveal.ready .slides > section.slide-media-only.present > :not(aside.notes) {
+        opacity: 1;
+      }
+
       .slide-grid-block > p:has(> img:only-child),
       .slide-grid-block > p:has(> video:only-child),
       .slide-grid-block > p:has(> iframe:only-child) {
@@ -962,6 +996,32 @@ const resolvedSlideTheme =
           });
         };
 
+        const isMediaOnlySlideNode = (node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          if (node.matches('img, video, iframe')) return true;
+          if (node.matches('p')) {
+            const meaningfulNodes = Array.from(node.childNodes).filter((child) => {
+              if (isIgnorableText(child)) return false;
+              if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'BR') return false;
+              return true;
+            });
+            return meaningfulNodes.length === 1 && isMediaElement(meaningfulNodes[0]);
+          }
+          if (node.matches('figure.slide-media-figure')) {
+            const visualChildren = Array.from(node.children).filter((child) => child.tagName !== 'FIGCAPTION');
+            return visualChildren.length === 1 && isMediaElement(visualChildren[0]);
+          }
+          return false;
+        };
+
+        const updateSlideMediaState = (slide) => {
+          if (!(slide instanceof HTMLElement)) return false;
+          const contentChildren = Array.from(slide.children).filter((child) => !child.matches('aside.notes'));
+          const isMediaOnly = contentChildren.length === 1 && isMediaOnlySlideNode(contentChildren[0]);
+          slide.classList.toggle('slide-media-only', isMediaOnly);
+          return isMediaOnly;
+        };
+
         const shouldCenterTextSlide = (slide) => {
           if (!(slide instanceof HTMLElement)) return false;
           if (slide.querySelector('.slide-grid-block')) return false;
@@ -1079,6 +1139,7 @@ const resolvedSlideTheme =
           if (!hasContent) return;
           normalizeMediaFigures(section);
           normalizeNotes(section);
+          updateSlideMediaState(section);
           slidesRoot.appendChild(section);
           section = document.createElement('section');
           hasContent = false;
@@ -3032,6 +3093,15 @@ const resolvedSlideTheme =
             const currentSlide = deck.getCurrentSlide?.();
             if (!(currentSlide instanceof HTMLElement)) return;
 
+            const isMediaOnlySlide = updateSlideMediaState(currentSlide);
+            currentSlide.classList.remove('slide-scrollable');
+            currentSlide.classList.remove('slide-text-centered');
+            currentSlide.scrollTop = 0;
+
+            if (isMediaOnlySlide) {
+              return;
+            }
+
             const directMedia = Array.from(
               currentSlide.querySelectorAll(':scope > p > img, :scope > p > video, :scope > img, :scope > video'),
             ).filter((node) => !node.closest('.slide-grid-block'));
@@ -3059,10 +3129,6 @@ const resolvedSlideTheme =
                 mediaNode.style.height = 'auto';
               });
             }
-
-            currentSlide.classList.remove('slide-scrollable');
-            currentSlide.classList.remove('slide-text-centered');
-            currentSlide.scrollTop = 0;
 
             // Grid-based slides are absolutely positioned and should not enter
             // overflow scrolling mode.

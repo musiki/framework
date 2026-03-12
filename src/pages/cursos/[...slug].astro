@@ -365,6 +365,12 @@ const forumThreadPrompt = sessionFirstName
         --course-shell-bottom-gap: 0.7rem;
         --left-sidebar-width: clamp(248px, 19vw, 312px);
         --right-sidebar-width: clamp(400px, 31vw, 520px);
+        --course-fold-cursor-down:
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 22 6 10h20Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
+          s-resize;
+        --course-fold-cursor-up:
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 10 26 22H6Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
+          n-resize;
         display: grid;
         grid-template-columns:
           minmax(0, var(--left-sidebar-width))
@@ -378,6 +384,15 @@ const forumThreadPrompt = sessionFirstName
         min-height: calc(100dvh - 6.75rem);
         align-items: start;
         position: relative;
+      }
+
+      :global(.dark) .course-container {
+        --course-fold-cursor-down:
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 22 6 10h20Z' fill='%23ffffff'/%3E%3C/svg%3E") 16 16,
+          s-resize;
+        --course-fold-cursor-up:
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 10 26 22H6Z' fill='%23ffffff'/%3E%3C/svg%3E") 16 16,
+          n-resize;
       }
 
       .course-container[data-left-open='false'] {
@@ -2295,18 +2310,14 @@ const forumThreadPrompt = sessionFirstName
     .content-area .content-fold-summary:hover *,
     .sidebar--left .class-toc-summary:hover,
     .sidebar--left .class-toc-summary:hover * {
-      cursor:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 22 6 10h20Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
-        s-resize !important;
+      cursor: var(--course-fold-cursor-down) !important;
     }
 
     .content-area .content-fold[open] > .content-fold-summary:hover,
     .content-area .content-fold[open] > .content-fold-summary:hover *,
     .sidebar--left .class-toc-branch[open] > .class-toc-summary:hover,
     .sidebar--left .class-toc-branch[open] > .class-toc-summary:hover * {
-      cursor:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 10 26 22H6Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
-        n-resize !important;
+      cursor: var(--course-fold-cursor-up) !important;
     }
 
     [data-musiki-no-list-marker='true'] {
