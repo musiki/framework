@@ -4467,9 +4467,58 @@ if (
       border-right: 0;
     }
 
+    .conference-instruments-layout {
+      grid-template-rows: minmax(0, 1fr) minmax(0, 56%);
+    }
+
     .conference-sidebar-section {
       gap: 0.55rem;
       padding: 0.55rem 0.68rem 0.68rem;
+    }
+
+    .conference-sidebar-section--mixer {
+      height: 100%;
+      max-height: none;
+      overflow-x: hidden;
+      padding-bottom: 0.8rem;
+    }
+
+    .conference-sidebar-section--mixer > .conference-sidebar-heading {
+      top: -0.55rem;
+      margin: -0.55rem -0.68rem 0;
+      padding: 0.55rem 0.68rem 0.42rem;
+    }
+
+    .conference-mixer {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.4rem 0.28rem;
+    }
+
+    .conference-mixer-channel {
+      padding: 0.22rem 0.14rem 0.16rem;
+    }
+
+    .conference-mixer-channel--video {
+      grid-column: 1 / -1;
+      gap: 0.22rem;
+    }
+
+    .conference-video-mixer-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.28rem 0.2rem;
+    }
+
+    .conference-video-mixer-control--wide {
+      grid-column: auto;
+    }
+
+    .conference-mixer-fx {
+      gap: 0.45rem;
+      padding: 0.5rem 0 0;
+    }
+
+    .conference-mixer-fx-card {
+      padding: 0.42rem 0;
     }
 
     .conference-meta-top {
