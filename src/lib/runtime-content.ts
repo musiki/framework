@@ -22,6 +22,32 @@ import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 
 const CONTENT_DIR = path.resolve(process.cwd(), 'src/content/cursos');
 
+export async function renderRuntimeMarkdown(rawContent: string, id = '') {
+  const { data: frontmatter, content: markdownBody } = matter(rawContent);
+
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(slugMathRemark)
+    .use(remarkMath)
+    .use(remarkMermaid)
+    .use(remarkEvalBlocks)
+    .use(remarkDataviewLite)
+    .use(remarkWikiLink)
+    .use(remarkRemoteLilypond, { enabled: true, timeoutMs: 10000 })
+    .use(remarkLily)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeObsidianCallouts)
+    .use(rehypeRaw)
+    .use(rehypeKatex, { strict: false })
+    .use(rehypeStringify);
+
+  const result = await processor.process(markdownBody);
+  const html = result.toString();
+
+  return { html, frontmatter, id };
+}
+
 export async function getRuntimeDynamicContent(slug: string) {
   // El slug puede venir como "i1/01-mentes/segundo-cerebro"
   // Pero el archivo puede ser "i1/01-mentes/segundo cerebro.md"
@@ -60,29 +86,7 @@ export async function getRuntimeDynamicContent(slug: string) {
   console.log(`[Runtime Content] RENDERING DYNAMIC: ${actualPath}`);
 
   try {
-    const { data: frontmatter, content: markdownBody } = matter(rawContent);
-
-    const processor = unified()
-      .use(remarkParse)
-      .use(remarkGfm)
-      .use(slugMathRemark)
-      .use(remarkMath)
-      .use(remarkMermaid)
-      .use(remarkEvalBlocks)
-      .use(remarkDataviewLite)
-      .use(remarkWikiLink)
-      .use(remarkRemoteLilypond, { enabled: true, timeoutMs: 10000 })
-      .use(remarkLily)
-      .use(remarkRehype, { allowDangerousHtml: true })
-      .use(rehypeObsidianCallouts)
-      .use(rehypeRaw)
-      .use(rehypeKatex, { strict: false })
-      .use(rehypeStringify);
-
-    const result = await processor.process(markdownBody);
-    const html = result.toString();
-
-    return { html, frontmatter, id: slug };
+    return await renderRuntimeMarkdown(rawContent, slug);
   } catch (error) {
     console.error(`[Runtime Content] Error processing ${slug}:`, error);
     return null;

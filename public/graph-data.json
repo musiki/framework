@@ -1,6 +1,13 @@
 {
   "nodes": [
     {
+      "id": "cursos/i1/01-mentes/nueva-nota",
+      "name": "nota creada",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
       "id": "cursos/i1/01-mentes/segundo cerebro",
       "name": "Segundo Cerebro",
       "type": "document",

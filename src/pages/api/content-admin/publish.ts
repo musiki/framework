@@ -1,5 +1,3 @@
-import path from 'node:path';
-import fs from 'node:fs';
 import type { APIRoute } from 'astro';
 import matter from 'gray-matter';
 import {
@@ -12,6 +10,7 @@ import {
 } from '../../../lib/content-admin';
 import { normalizeContentSlug } from '../../../lib/content-slug';
 import { json } from '../../../lib/forum-server';
+import { renderRuntimeMarkdown } from '../../../lib/runtime-content';
 import {
   createBranch,
   createPullRequest,
@@ -121,6 +120,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const message = `${mode === 'create' ? 'create' : 'edit'}: ${targetPath}\n\n${editSummary}`;
   const isPublicPath = targetPath.startsWith('public/');
   const usePRWorkflow = isPublicPath;
+  const renderedContent = await renderRuntimeMarkdown(finalContent, targetPath).catch((error) => {
+    console.error('Runtime markdown render error during publish:', error);
+    return null;
+  });
 
   try {
     if (localContentAdminEnabled) {
@@ -136,6 +139,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
         fileSha: localResult.fileSha,
         localOnly: true,
         localPaths: localResult.writtenPaths,
+        renderedHtml: renderedContent?.html || '',
+        renderedFrontmatter: renderedContent?.frontmatter || {},
       });
     }
 
@@ -163,24 +168,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       authorEmail: sessionEmail,
     });
 
-    // Persistent local save to the correct .content-sources directory
-    // This allows the local watcher (watch-content.mjs) to pick up changes immediately.
+    // Persist to local source mirrors so runtime rendering sees the update immediately.
     try {
-      const sourceId = source.id;
-      const contentSourcesDir = path.resolve(process.cwd(), '.content-sources');
-      const localRepoDir = path.join(contentSourcesDir, sourceId);
-      
-      if (fs.existsSync(localRepoDir)) {
-        const localFilePath = path.join(localRepoDir, targetPath);
-        const localDir = path.dirname(localFilePath);
-        
-        if (!fs.existsSync(localDir)) {
-          fs.mkdirSync(localDir, { recursive: true });
-        }
-        
-        fs.writeFileSync(localFilePath, finalContent, 'utf8');
-        console.log(`[Publish] Locally persisted to: ${localFilePath}`);
-      }
+      const localResult = writeEditableLocalRepoFile(source, targetPath, finalContent);
+      console.log(`[Publish] Locally persisted to: ${localResult.writtenPaths.join(', ')}`);
     } catch (localError) {
       console.error('[Publish] Failed to persist local file:', localError);
     }
@@ -206,6 +197,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       fileSha: result.fileSha,
       prUrl: prResult?.htmlUrl,
       prNumber: prResult?.number,
+      renderedHtml: renderedContent?.html || '',
+      renderedFrontmatter: renderedContent?.frontmatter || {},
     });
   } catch (error: any) {
     console.error('Content publish error:', error);

@@ -9,7 +9,6 @@ import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId, getCourseAliases } from '../../lib/course-alias';
 import {
   buildDefaultCreatePath,
-  buildEditorHref,
   getEditableLocalRepoFile,
   isLocalContentAdminEnabled,
   sanitizeRepoMarkdownPath,
@@ -254,6 +253,11 @@ const teacherEditHref =
   canManageLiveInteractions && currentEntrySourcePath
     ? `${Astro.url.pathname}?mode=edit`
     : '';
+const cleanEditorSearchParams = new URLSearchParams(Astro.url.searchParams);
+cleanEditorSearchParams.delete('mode');
+cleanEditorSearchParams.delete('path');
+cleanEditorSearchParams.delete('dir');
+const cleanEditorHref = `${Astro.url.pathname}${cleanEditorSearchParams.toString() ? `?${cleanEditorSearchParams.toString()}` : ''}`;
 const courseForumHref = `${courseHref}/foro`;
 const forumShellHref = Astro.url.pathname;
 const lessonForumHref = isLessonPage
@@ -430,10 +434,17 @@ order:
     />
     {isEditorActive && (
       <style>
-        .integrated-editor {
-          max-width: 1100px;
+        .content-area.is-editor-active {
+          position: relative;
+        }
+        .class-content[hidden] {
+          display: none !important;
+        }
+        .integrated-editor-shell {
+          max-width: 76ch;
           margin: 0 auto;
-          padding: 1.5rem;
+        }
+        .integrated-editor {
           display: grid;
           gap: 1.2rem;
         }
@@ -499,6 +510,7 @@ order:
         .editor-status {
           font-size: 0.9rem;
           color: var(--c-fg-dim);
+          min-height: 1.4rem;
         }
         .editor-status[data-tone='success'] { color: #14713e; }
         .editor-status[data-tone='error'] { color: #b3261e; }
@@ -589,6 +601,8 @@ order:
         align-items: center;
         justify-content: center;
         cursor: pointer;
+        font-size: 0.95rem;
+        line-height: 1;
         transition: opacity 180ms ease, transform 180ms ease;
       }
 
@@ -605,6 +619,10 @@ order:
       }
 
       .course-container[data-left-open='false'] .course-sidebar-handle--left {
+        display: inline-flex;
+      }
+
+      .course-container[data-right-open='false'][data-has-right-sidebar='true'] .course-sidebar-handle--right {
         display: inline-flex;
       }
       
@@ -796,34 +814,6 @@ order:
   color: #1f8f45 !important;
   border-color: color-mix(in srgb, #1f8f45 42%, var(--forum-border-soft, #d8dee6) 58%) !important;
 }
-
-.course-sidebar-handle {
-  position: fixed;
-  top: calc(var(--musiki-header-height, 4.5rem) + 1.05rem);
-  z-index: 46;
-  width: 2.1rem;
-  height: 2.1rem;
-  border-radius: 50%;
-  border: 1px solid var(--c-border);
-  background: var(--c-bg);
-  color: var(--c-fg-dim);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 180ms ease;
-  font-size: 0.85rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-.course-sidebar-handle:hover {
-  background: var(--c-bg-mute);
-  color: var(--c-fg);
-  transform: scale(1.08);
-}
-
-.course-sidebar-handle--left::before { content: '→'; }
-.course-sidebar-handle--right::before { content: '←'; }
 
       .course-title-secondary {
         margin-top: 0.55rem;
@@ -2254,9 +2244,22 @@ order:
         }
 
         .course-sidebar-handle {
-          display: inline-flex;
+          display: none;
           top: auto;
           bottom: 0.8rem;
+          background: #ffffff;
+          border: 1px solid color-mix(in srgb, var(--c-border) 82%, var(--c-fg) 18%);
+          box-shadow:
+            0 10px 24px rgba(15, 23, 42, 0.16),
+            0 0 0 1px rgba(15, 23, 42, 0.06);
+        }
+
+        :global(.dark) .course-sidebar-handle {
+          background: #111827;
+          border-color: color-mix(in srgb, var(--c-border) 76%, white 24%);
+          box-shadow:
+            0 12px 28px rgba(0, 0, 0, 0.44),
+            0 0 0 1px rgba(255, 255, 255, 0.08);
         }
 
         .course-sidebar-handle--left {
@@ -2265,6 +2268,11 @@ order:
 
         .course-sidebar-handle--right {
           right: 0.8rem;
+        }
+
+        .course-container[data-left-open='false'] .course-sidebar-handle--left,
+        .course-container[data-right-open='false'][data-has-right-sidebar='true'] .course-sidebar-handle--right {
+          display: inline-flex;
         }
 
         .sidebar {
@@ -2578,98 +2586,6 @@ order:
       teacherEditHref={teacherEditHref}
     />
 
-    {isEditorActive ? (
-      <main class="integrated-editor">
-        <section class="editor-card">
-          <h1 style="margin:0; font-size: 1.4rem;">{isCreating ? 'Crear nota' : `Editor: ${currentEntry.data.title}`}</h1>
-          <p style="margin: 0.4rem 0 0; color: var(--c-fg-dim); font-size: 0.9rem;">
-            {isCreating ? `Creando nueva nota en ${activeCourseCode}.` : `Editando ${editorTargetPath} en ${activeCourseCode}.`}
-          </p>
-        </section>
-
-        <section class="editor-card">
-          <form id="integrated-content-editor-form">
-            <input type="hidden" name="courseId" value={canonicalCourseId} />
-            <input type="hidden" name="mode" value={isCreating ? 'create' : 'edit'} />
-            <input type="hidden" name="sha" value={editorInitialSha} />
-            <input type="hidden" name="targetPath" value={editorTargetPath} />
-
-            <div class="editor-field">
-              <label class="editor-label">Resumen de cambios</label>
-              <input class="editor-input" type="text" name="editSummary" placeholder="¿Qué cambiaste?" autocomplete="off" />
-            </div>
-
-            <div class="editor-field">
-              <label class="editor-label">Markdown</label>
-              <textarea class="editor-textarea" name="content" spellcheck="false">{editorInitialContent}</textarea>
-            </div>
-
-            <div class="editor-actions">
-              <button type="submit" class="editor-btn editor-btn--primary" disabled={Boolean(editorError)}>
-                {isCreating ? 'Crear nota' : 'Guardar cambios'}
-              </button>
-              <a href={Astro.url.pathname} class="editor-btn">Cancelar</a>
-              <span id="integrated-editor-status" class="editor-status" data-tone={editorError ? 'error' : 'idle'}>
-                {editorError}
-              </span>
-            </div>
-          </form>
-        </section>
-      </main>
-
-      <script>
-        const mountIntegratedEditor = () => {
-          const form = document.getElementById('integrated-content-editor-form');
-          const statusNode = document.getElementById('integrated-editor-status');
-          if (!(form instanceof HTMLFormElement) || !statusNode) return;
-          if (form.dataset.bound === 'true') return;
-          form.dataset.bound = 'true';
-
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const submitBtn = form.querySelector('button[type="submit"]');
-            if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = true;
-
-            statusNode.dataset.tone = 'idle';
-            statusNode.textContent = 'Guardando...';
-
-            try {
-              const payload = Object.fromEntries(new FormData(form).entries());
-              const res = await fetch('/api/content-admin/publish', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
-              const raw = await res.text();
-              let result = {};
-              try {
-                result = raw ? JSON.parse(raw) : {};
-              } catch {
-                result = { error: raw || 'Error al publicar' };
-              }
-              if (!res.ok) throw new Error(result.error || 'Error al publicar');
-
-              statusNode.dataset.tone = 'success';
-              statusNode.textContent = '¡Guardado correctamente!';
-              
-              window.setTimeout(() => {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('mode');
-                window.location.href = url.toString();
-              }, 1000);
-
-            } catch (err: any) {
-              statusNode.dataset.tone = 'error';
-              statusNode.textContent = err.message;
-              if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = false;
-            }
-          });
-        };
-
-        mountIntegratedEditor();
-        document.addEventListener('astro:page-load', mountIntegratedEditor);
-      </script>
-    ) : (
     <main
       class="course-container"
       data-course-layout-root
@@ -2688,14 +2604,14 @@ order:
         data-sidebar-handle="left"
         aria-label="Mostrar navegación del curso"
         title="Mostrar navegación del curso (⌘/Ctrl + \\)"
-      ></button>
+      >→</button>
       <button
         type="button"
         class="course-sidebar-handle course-sidebar-handle--right"
         data-sidebar-handle="right"
         aria-label="Mostrar foros"
         title="Mostrar foros (⌘/Ctrl + Shift + \\)"
-      ></button>
+      >←</button>
       <div class="course-sidebar-overlay" data-course-sidebar-overlay></div>
 
       <!-- Sidebar Navigation -->
@@ -2808,7 +2724,7 @@ order:
       </aside>
 
       <!-- Main Content -->
-      <article class="content-area">
+      <article class:list={['content-area', { 'is-editor-active': isEditorActive }]}>
         {isLessonPage && currentEntryStatus === 'draft' && (
           <div class="draft-badge">Material en preparación</div>
         )}
@@ -2817,8 +2733,54 @@ order:
             📝 Tarea • {currentEntry.data.points || 0} puntos
           </div>
         )}
+
+        {isEditorActive && (
+          <section class="integrated-editor-shell" data-inline-editor>
+            <div class="integrated-editor">
+              <section class="editor-card">
+                <h1 style="margin:0; font-size: 1.4rem;">{isCreating ? 'Crear nota' : `Editor: ${currentEntry.data.title}`}</h1>
+                <p style="margin: 0.4rem 0 0; color: var(--c-fg-dim); font-size: 0.9rem;">
+                  {isCreating ? `Creando nueva nota en ${activeCourseCode}.` : `Editando ${editorTargetPath} en ${activeCourseCode}.`}
+                </p>
+              </section>
+
+              <section class="editor-card">
+                <form
+                  id="integrated-content-editor-form"
+                  data-clean-href={cleanEditorHref}
+                  data-mode={isCreating ? 'create' : 'edit'}
+                >
+                  <input type="hidden" name="courseId" value={canonicalCourseId} />
+                  <input type="hidden" name="mode" value={isCreating ? 'create' : 'edit'} />
+                  <input type="hidden" name="sha" value={editorInitialSha} />
+                  <input type="hidden" name="targetPath" value={editorTargetPath} />
+
+                  <div class="editor-field">
+                    <label class="editor-label">Resumen de cambios</label>
+                    <input class="editor-input" type="text" name="editSummary" placeholder="¿Qué cambiaste?" autocomplete="off" />
+                  </div>
+
+                  <div class="editor-field">
+                    <label class="editor-label">Markdown</label>
+                    <textarea class="editor-textarea" name="content" spellcheck="false">{editorInitialContent}</textarea>
+                  </div>
+
+                  <div class="editor-actions">
+                    <button type="submit" class="editor-btn editor-btn--primary" disabled={Boolean(editorError)}>
+                      {isCreating ? 'Crear nota' : 'Guardar cambios'}
+                    </button>
+                    <a href={cleanEditorHref} class="editor-btn">Cancelar</a>
+                    <span id="integrated-editor-status" class="editor-status" data-tone={editorError ? 'error' : 'idle'}>
+                      {editorError}
+                    </span>
+                  </div>
+                </form>
+              </section>
+            </div>
+          </section>
+        )}
         
-      <div class="class-content">
+      <div class="class-content" data-class-content hidden={isEditorActive}>
         {dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />}
       </div>
         
@@ -3067,6 +3029,90 @@ order:
         >↑</button>
       </div>
     </main>
+    {isEditorActive && (
+      <script>
+        const mountIntegratedEditor = () => {
+          const form = document.getElementById('integrated-content-editor-form');
+          const statusNode = document.getElementById('integrated-editor-status');
+          if (!(form instanceof HTMLFormElement) || !statusNode) return;
+          if (form.dataset.bound === 'true') return;
+          form.dataset.bound = 'true';
+
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = true;
+
+            statusNode.dataset.tone = 'idle';
+            statusNode.textContent = 'Guardando...';
+
+            try {
+              const payload = Object.fromEntries(new FormData(form).entries());
+              const res = await fetch('/api/content-admin/publish', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const raw = await res.text();
+              let result = {};
+              try {
+                result = raw ? JSON.parse(raw) : {};
+              } catch {
+                result = { error: raw || 'Error al publicar' };
+              }
+              if (!res.ok) throw new Error(result.error || 'Error al publicar');
+
+              const contentNode = document.querySelector('[data-class-content]');
+              const editorNode = document.querySelector('[data-inline-editor]');
+              const contentArea = document.querySelector('.content-area');
+              const nextHref = String(form.dataset.cleanHref || window.location.pathname).trim() || window.location.pathname;
+              const mode = String(form.dataset.mode || payload.mode || '').trim().toLowerCase();
+
+              if (contentNode instanceof HTMLElement && typeof result.renderedHtml === 'string' && result.renderedHtml.trim()) {
+                contentNode.innerHTML = result.renderedHtml;
+                contentNode.hidden = false;
+              }
+
+              if (editorNode instanceof HTMLElement) {
+                editorNode.hidden = true;
+              }
+
+              if (contentArea instanceof HTMLElement) {
+                contentArea.classList.remove('is-editor-active');
+              }
+
+              statusNode.dataset.tone = 'success';
+              statusNode.textContent = mode === 'create'
+                ? 'Nota creada. Vista previa cargada.'
+                : '¡Guardado correctamente!';
+
+              const shaInput = form.elements.namedItem('sha');
+              if (shaInput instanceof HTMLInputElement && typeof result.fileSha === 'string') {
+                shaInput.value = result.fileSha;
+              }
+
+              const modeInput = form.elements.namedItem('mode');
+              if (modeInput instanceof HTMLInputElement && mode === 'create') {
+                modeInput.value = 'edit';
+              }
+
+              window.history.replaceState({}, '', nextHref);
+              window.__musikiCourseContentBootKey = '';
+              document.dispatchEvent(new Event('astro:page-load'));
+            } catch (err) {
+              statusNode.dataset.tone = 'error';
+              statusNode.textContent = err instanceof Error ? err.message : 'Error al publicar';
+              if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = false;
+              return;
+            }
+
+            if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = false;
+          });
+        };
+
+        mountIntegratedEditor();
+        document.addEventListener('astro:page-load', mountIntegratedEditor);
+      </script>
     )}
     <div id="forum-media-modal" class="forum-media-modal" hidden aria-hidden="true">
       <div class="forum-media-modal-stage" role="dialog" aria-modal="true" aria-label="Media ampliado">
@@ -3087,6 +3133,10 @@ order:
         interface Window {
           __musikiCourseLayoutKeyHandler?: (event: KeyboardEvent) => void;
           __musikiCourseLayoutResizeHandler?: () => void;
+          __musikiCourseLayoutTouchStartHandler?: (event: TouchEvent) => void;
+          __musikiCourseLayoutTouchMoveHandler?: (event: TouchEvent) => void;
+          __musikiCourseLayoutTouchEndHandler?: (event: TouchEvent) => void;
+          __musikiCourseLayoutTouchCancelHandler?: () => void;
         }
       }
 
@@ -3095,6 +3145,8 @@ order:
         if (!(root instanceof HTMLElement)) return;
 
         const overlay = root.querySelector('[data-course-sidebar-overlay]');
+        const leftSidebar = root.querySelector('[data-course-sidebar="left"]');
+        const rightSidebar = root.querySelector('[data-course-sidebar="right"]');
         const leftButtons = Array.from(root.querySelectorAll('[data-sidebar-toggle="left"], [data-sidebar-handle="left"]'));
         const rightButtons = Array.from(root.querySelectorAll('[data-sidebar-toggle="right"], [data-sidebar-handle="right"]'));
         const rightMaximizeButtons = Array.from(root.querySelectorAll('[data-sidebar-maximize="right"]'));
@@ -3158,6 +3210,14 @@ order:
             leftHandle.title = `${nextLabel} (⌘/Ctrl + \\)`;
           }
 
+          const rightHandle = root.querySelector('[data-sidebar-handle="right"]');
+          if (rightHandle instanceof HTMLButtonElement) {
+            const nextLabel = rightOpen ? 'Ocultar foros' : 'Mostrar foros';
+            rightHandle.textContent = rightOpen ? '→' : '←';
+            rightHandle.setAttribute('aria-label', nextLabel);
+            rightHandle.title = nextLabel;
+          }
+
           rightMaximizeButtons.forEach((button) => {
             if (!(button instanceof HTMLButtonElement)) return;
             const active = rightOpen && rightMaximized;
@@ -3172,6 +3232,20 @@ order:
           window.localStorage.setItem('musiki:course:left-open', leftOpen ? 'true' : 'false');
           window.localStorage.setItem('musiki:course:right-open', rightOpen ? 'true' : 'false');
           window.localStorage.setItem('musiki:course:right-maximized', rightMaximized ? 'true' : 'false');
+        };
+
+        const applySidebarState = (side: 'left' | 'right', open: boolean) => {
+          if (side === 'left') {
+            leftOpen = open;
+          } else if (hasRightSidebar) {
+            rightOpen = open;
+            if (!open) {
+              rightMaximized = false;
+            }
+          }
+
+          persistLayoutState();
+          syncLayoutState();
         };
 
         const toggleSidebar = (side: 'left' | 'right') => {
@@ -3257,6 +3331,147 @@ order:
 
         window.addEventListener('resize', resizeHandler);
         window.__musikiCourseLayoutResizeHandler = resizeHandler;
+
+        if (typeof window.__musikiCourseLayoutTouchStartHandler === 'function') {
+          document.removeEventListener('touchstart', window.__musikiCourseLayoutTouchStartHandler);
+        }
+        if (typeof window.__musikiCourseLayoutTouchMoveHandler === 'function') {
+          document.removeEventListener('touchmove', window.__musikiCourseLayoutTouchMoveHandler);
+        }
+        if (typeof window.__musikiCourseLayoutTouchEndHandler === 'function') {
+          document.removeEventListener('touchend', window.__musikiCourseLayoutTouchEndHandler);
+        }
+        if (typeof window.__musikiCourseLayoutTouchCancelHandler === 'function') {
+          document.removeEventListener('touchcancel', window.__musikiCourseLayoutTouchCancelHandler);
+        }
+
+        const EDGE_SWIPE_ZONE_PX = 28;
+        const SWIPE_TRIGGER_DISTANCE_PX = 58;
+        const SWIPE_MAX_VERTICAL_DRIFT_PX = 48;
+        const SWIPE_HORIZONTAL_RATIO = 1.2;
+        let activeSwipe:
+          | {
+              side: 'left' | 'right';
+              action: 'open' | 'close';
+              startX: number;
+              startY: number;
+              lastX: number;
+              lastY: number;
+            }
+          | null = null;
+
+        const isEditableTouchTarget = (target: EventTarget | null) =>
+          target instanceof HTMLElement &&
+          (
+            target.isContentEditable ||
+            Boolean(target.closest('input, textarea, select, option, button, a, [contenteditable="true"]'))
+          );
+
+        const resolveSwipeIntent = (target: EventTarget | null, startX: number) => {
+          if (!isMobileViewport()) return null;
+          if (isEditableTouchTarget(target)) return null;
+
+          const viewportWidth = window.innerWidth;
+          const targetNode = target instanceof Node ? target : null;
+
+          if (!leftOpen && startX <= EDGE_SWIPE_ZONE_PX) {
+            return { side: 'left' as const, action: 'open' as const };
+          }
+
+          if (leftOpen && leftSidebar instanceof HTMLElement && targetNode && leftSidebar.contains(targetNode)) {
+            return { side: 'left' as const, action: 'close' as const };
+          }
+
+          if (hasRightSidebar && !rightOpen && startX >= viewportWidth - EDGE_SWIPE_ZONE_PX) {
+            return { side: 'right' as const, action: 'open' as const };
+          }
+
+          if (hasRightSidebar && rightOpen && rightSidebar instanceof HTMLElement && targetNode && rightSidebar.contains(targetNode)) {
+            return { side: 'right' as const, action: 'close' as const };
+          }
+
+          return null;
+        };
+
+        const clearActiveSwipe = () => {
+          activeSwipe = null;
+        };
+
+        const touchStartHandler = (event: TouchEvent) => {
+          if (event.touches.length !== 1) {
+            clearActiveSwipe();
+            return;
+          }
+
+          const touch = event.touches[0];
+          const intent = resolveSwipeIntent(event.target, touch.clientX);
+          if (!intent) {
+            clearActiveSwipe();
+            return;
+          }
+
+          activeSwipe = {
+            ...intent,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            lastX: touch.clientX,
+            lastY: touch.clientY,
+          };
+        };
+
+        const touchMoveHandler = (event: TouchEvent) => {
+          if (!activeSwipe || event.touches.length !== 1) return;
+          const touch = event.touches[0];
+          activeSwipe.lastX = touch.clientX;
+          activeSwipe.lastY = touch.clientY;
+        };
+
+        const touchEndHandler = (event: TouchEvent) => {
+          if (!activeSwipe) return;
+
+          const touch = event.changedTouches[0];
+          const endX = touch?.clientX ?? activeSwipe.lastX;
+          const endY = touch?.clientY ?? activeSwipe.lastY;
+          const deltaX = endX - activeSwipe.startX;
+          const deltaY = endY - activeSwipe.startY;
+          const absDeltaX = Math.abs(deltaX);
+          const absDeltaY = Math.abs(deltaY);
+
+          const isHorizontalSwipe =
+            absDeltaX >= SWIPE_TRIGGER_DISTANCE_PX &&
+            absDeltaY <= SWIPE_MAX_VERTICAL_DRIFT_PX &&
+            absDeltaX >= absDeltaY * SWIPE_HORIZONTAL_RATIO;
+
+          if (!isHorizontalSwipe) {
+            clearActiveSwipe();
+            return;
+          }
+
+          if (activeSwipe.side === 'left') {
+            if (activeSwipe.action === 'open' && deltaX > 0) {
+              applySidebarState('left', true);
+            } else if (activeSwipe.action === 'close' && deltaX < 0) {
+              applySidebarState('left', false);
+            }
+          } else if (activeSwipe.side === 'right') {
+            if (activeSwipe.action === 'open' && deltaX < 0) {
+              applySidebarState('right', true);
+            } else if (activeSwipe.action === 'close' && deltaX > 0) {
+              applySidebarState('right', false);
+            }
+          }
+
+          clearActiveSwipe();
+        };
+
+        document.addEventListener('touchstart', touchStartHandler, { passive: true });
+        document.addEventListener('touchmove', touchMoveHandler, { passive: true });
+        document.addEventListener('touchend', touchEndHandler, { passive: true });
+        document.addEventListener('touchcancel', clearActiveSwipe, { passive: true });
+        window.__musikiCourseLayoutTouchStartHandler = touchStartHandler;
+        window.__musikiCourseLayoutTouchMoveHandler = touchMoveHandler;
+        window.__musikiCourseLayoutTouchEndHandler = touchEndHandler;
+        window.__musikiCourseLayoutTouchCancelHandler = clearActiveSwipe;
 
         syncLayoutState();
       };

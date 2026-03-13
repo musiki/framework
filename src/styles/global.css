@@ -15,13 +15,19 @@
 	--space-md: 1.35rem;
 	--space-lg: 2rem;
 	--space-xl: 2.8rem;
-	--font-family-primary: "Dank Mono", monospace;
-	--font-family-mono: "Dank Mono", monospace;
+	--font-ui-helvetica: "Helvetica Neue", Helvetica, Arial, sans-serif;
+	--font-ui-dank: "Dank Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+	--font-ui-current: var(--font-ui-helvetica);
+	--font-family-primary: var(--font-ui-current);
+	--font-family-mono: var(--font-ui-dank);
 }
 
 html {
 	width: 100%;
 	overflow-x: hidden;
+	font-synthesis: none;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 *,
@@ -40,22 +46,22 @@ header[data-astro-cid-3ef6ksr2] {
 	font-family: "Dank Mono";
 	src: url("/fonts/DankMonoNerdFontMono-Regular.woff2") format("woff2");
 	font-weight: 400;
-font-style: normal;
-	font-display: swap;
+	font-style: normal;
+	font-display: optional;
 }
 @font-face {
 	font-family: "Dank Mono";
 	src: url("/fonts/DankMonoNerdFontMono-Italic.woff2") format("woff2");
 	font-weight: 400;
 	font-style: italic;
-	font-display: swap;
+	font-display: optional;
 }
 @font-face {
 	font-family: "Dank Mono";
 	src: url("/fonts/DankMonoNerdFontMono-Bold.woff2") format("woff2");
 	font-weight: 700;
 	font-style: normal;
-	font-display: swap;
+	font-display: optional;
 }
 body {
 	font-family: var(--font-family-primary);
