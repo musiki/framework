@@ -1,18 +1,31 @@
 ---
-export const prerender = true;
+// Eliminamos prerender = true para evitar warnings de headers durante el build
+// y permitir que el Header muestre la sesión del usuario si está logueado.
+// Al usar output: 'server' en astro.config.mjs, esta página se renderizará en el servidor.
 
-import { getEntry, render } from 'astro:content';
+import { getEntry, render, getCollection } from 'astro:content';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
   getPublicContentStaticPaths,
   type PublicContentRouteProps,
 } from '../lib/public-content-routes';
 
-export async function getStaticPaths() {
-  return getPublicContentStaticPaths();
+// En modo SSR (sin prerender), getStaticPaths no es necesario para la generación de archivos,
+// pero Astro aún puede usarlo si la ruta es ambigua. 
+// Sin embargo, para SSR puro con parámetros dinámicos, simplemente usamos Astro.params.
+
+const { slug } = Astro.params;
+
+// Intentamos encontrar la entrada de contenido público que corresponda a este slug.
+// Para esto, usamos la misma lógica que getStaticPaths pero para la ruta actual.
+const allPaths = await getPublicContentStaticPaths();
+const routeMatch = allPaths.find(p => p.params.slug === slug);
+
+if (!routeMatch) {
+  return Astro.redirect('/404');
 }
 
-const route = Astro.props as PublicContentRouteProps;
+const route = routeMatch.props as PublicContentRouteProps;
 
 if (route.kind === 'redirect') {
   return Astro.redirect(route.redirectTo);

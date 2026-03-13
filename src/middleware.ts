@@ -19,7 +19,23 @@ const shouldSyncEvalCatalogForPath = (pathname: string): boolean => {
 };
 
 export const onRequest = defineMiddleware(async (context, next) => {
-  const session = await getSession(context.request);
+  const pathname = context.url.pathname;
+
+  // Skip session check for known static or prerendered paths (search.json, assets, etc)
+  const isStaticLike = 
+    pathname === "/search.json" || 
+    pathname.startsWith("/_") || 
+    pathname.startsWith("/assets/") || 
+    /\.[a-z0-9]+$/i.test(pathname);
+
+  let session = null;
+  if (!isStaticLike) {
+    try {
+      session = await getSession(context.request);
+    } catch (e) {
+      // Ignore errors during build-time prerendering
+    }
+  }
   context.locals.session = session;
 
   if (shouldSyncEvalCatalogForPath(context.url.pathname)) {
