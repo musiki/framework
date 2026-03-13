@@ -1,0 +1,12 @@
+---
+import WikiLayout from '../layouts/WikiLayout.astro';
+export const prerender = true;
+---
+
+<WikiLayout title="404: No encontrado" description="La página que buscas no existe.">
+	<div style="text-align: center; padding: 4rem 2rem;">
+		<h1>404</h1>
+		<p>Lo sentimos, no pudimos encontrar la página que buscas.</p>
+		<a href="/" class="btn" style="display: inline-block; margin-top: 1rem; padding: 0.5rem 1rem; background: var(--accent); color: white; border-radius: 6px; text-decoration: none;">Volver al inicio</a>
+	</div>
+</WikiLayout>

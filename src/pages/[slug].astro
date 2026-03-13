@@ -16,13 +16,17 @@ import {
 
 const { slug } = Astro.params;
 
+// Ignore asset-like paths that might have fallen through
+if (!slug || slug.includes('.') || slug.startsWith('_')) {
+  return new Response(null, { status: 404 });
+}
+
 // Intentamos encontrar la entrada de contenido público que corresponda a este slug.
-// Para esto, usamos la misma lógica que getStaticPaths pero para la ruta actual.
 const allPaths = await getPublicContentStaticPaths();
 const routeMatch = allPaths.find(p => p.params.slug === slug);
 
 if (!routeMatch) {
-  return Astro.redirect('/404');
+  return new Response(null, { status: 404, statusText: 'Not Found' });
 }
 
 const route = routeMatch.props as PublicContentRouteProps;
