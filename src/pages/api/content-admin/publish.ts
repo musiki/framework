@@ -1,11 +1,19 @@
 import type { APIRoute } from 'astro';
+import matter from 'gray-matter';
 import {
   isEditableCourseRepoPath,
   resolveCourseSource,
   sanitizeRepoMarkdownPath,
 } from '../../../lib/content-admin';
+import { normalizeContentSlug } from '../../../lib/content-slug';
 import { json } from '../../../lib/forum-server';
-import { getRepoFile, isGitHubAppConfigured, upsertRepoFile } from '../../../lib/github-app';
+import {
+  createBranch,
+  createPullRequest,
+  getRepoFile,
+  isGitHubAppConfigured,
+  upsertRepoFile,
+} from '../../../lib/github-app';
 import { resolveLiveManageAccess } from '../../../lib/live/access';
 
 export const prerender = false;
@@ -14,6 +22,7 @@ const normalizeText = (value: unknown) => String(value || '').trim();
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
+  const userName = normalizeText(session?.user?.name);
   const sessionEmail = normalizeText(session?.user?.email);
   if (!sessionEmail) {
     return json({ error: 'Not authenticated' }, 401);
@@ -54,19 +63,33 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: 'The target path is outside the editable area for this course.' }, 403);
   }
 
-  const content = String(body?.content || '').replace(/\r\n?/g, '\n');
-  if (!content.trim()) {
+  const rawContent = String(body?.content || '').replace(/\r\n?/g, '\n');
+  if (!rawContent.trim()) {
     return json({ error: 'Content cannot be empty.' }, 400);
   }
 
-  const branch = normalizeText(source.branch) || 'main';
+  const editSummary = normalizeText(body?.editSummary || body?.message) || 'Edit via online editor';
+  
+  // Update Frontmatter (MediaWiki-style versioning)
+  let finalContent = rawContent;
+  try {
+    const { data: frontmatter, content: markdownBody } = matter(rawContent);
+    frontmatter.updatedAt = new Date().toISOString();
+    frontmatter.updatedBy = userName ? `${userName} <${sessionEmail}>` : sessionEmail;
+    frontmatter.editSummary = editSummary;
+    finalContent = matter.stringify(markdownBody, frontmatter);
+  } catch (error) {
+    console.warn('[Publish] Frontmatter parse error, using raw content:', error);
+  }
+
+  const baseBranch = normalizeText(source.branch) || 'main';
   const mode = normalizeText(body?.mode).toLowerCase() === 'create' ? 'create' : 'edit';
   const expectedSha = normalizeText(body?.sha);
 
   const existing = await getRepoFile({
     repoFullName: source.repo,
     path: targetPath,
-    ref: branch,
+    ref: baseBranch,
   });
 
   if (mode === 'create' && existing) {
@@ -87,31 +110,56 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const message =
-    normalizeText(body?.message) ||
-    `${mode === 'create' ? 'create' : 'edit'}: ${targetPath}`;
+  const message = `${mode === 'create' ? 'create' : 'edit'}: ${targetPath}\n\n${editSummary}`;
+  const isPublicPath = targetPath.startsWith('public/');
+  const usePRWorkflow = isPublicPath;
 
   try {
+    let activeBranch = baseBranch;
+    let prResult = null;
+
+    if (usePRWorkflow) {
+      const userSlug = normalizeContentSlug(userName || sessionEmail.split('@')[0]);
+      activeBranch = `editor/${userSlug}/${Date.now()}`;
+      await createBranch({
+        repoFullName: source.repo,
+        branchName: activeBranch,
+        baseBranch,
+      });
+    }
+
     const result = await upsertRepoFile({
       repoFullName: source.repo,
-      branch,
+      branch: activeBranch,
       path: targetPath,
-      content,
+      content: finalContent,
       message,
-      sha: existing?.sha || undefined,
-      authorName: normalizeText(session?.user?.name) || sessionEmail,
+      sha: (usePRWorkflow ? undefined : existing?.sha) || undefined,
+      authorName: userName || sessionEmail,
       authorEmail: sessionEmail,
     });
+
+    if (usePRWorkflow) {
+      prResult = await createPullRequest({
+        repoFullName: source.repo,
+        head: activeBranch,
+        base: baseBranch,
+        title: `${mode === 'create' ? 'Create' : 'Edit'} ${targetPath}`,
+        body: `Automated ${mode} request from Musiki Editor.\n\n**Author:** ${userName} (${sessionEmail})\n**Path:** ${targetPath}\n**Summary:** ${editSummary}`,
+      });
+    }
 
     return json({
       success: true,
       mode,
       repo: source.repo,
-      branch,
+      branch: activeBranch,
       path: result.path,
       commitSha: result.commitSha,
       commitUrl: result.commitUrl,
       fileSha: result.fileSha,
+      prUrl: prResult?.htmlUrl,
+      prNumber: prResult?.number,
     });
   } catch (error: any) {
     console.error('Content publish error:', error);

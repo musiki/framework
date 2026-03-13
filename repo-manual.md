@@ -422,14 +422,36 @@ Excepción:
 - No editar contenido fuente en este repo framework salvo durante la migración.
 - Toda nota pública debe tener dueño académico claro.
 
-## 16. Decisión final recomendada
+## 17. Protocolo del Editor Online (GitHub Protocol)
 
-La decisión más sólida hoy es:
+El editor integrado en el framework implementa un flujo automatizado para garantizar que GitHub siga siendo el **source of truth** con un historial claro y versionado.
 
-1. Un repo/vault por materia.
-2. Este repo queda como framework LMS.
-3. En cada materia: `cursos`, `public`, `draft`.
-4. `public` vive en la materia de origen y entra por PR.
-5. `cursos` puede tener flujo más directo del equipo docente.
-6. `draft` queda como incubadora no publicada.
-7. El LMS principal ensambla todo, pero no se vuelve el lugar de autoría de contenidos.
+### Versionado estilo MediaWiki
+
+Cada vez que se guarda una nota desde el editor, el sistema inyecta o actualiza metadatos en el frontmatter del archivo Markdown:
+
+```yaml
+updatedAt: "2026-03-13T15:45:00Z"
+updatedBy: "Nombre Docente <email@ejemplo.com>"
+editSummary: "Corregida explicación de armónicos en el segundo párrafo"
+```
+
+Esto permite rastrear la autoría y el propósito del cambio directamente en el archivo, además de en el historial de Git.
+
+### Flujos de trabajo automáticos
+
+El editor detecta el destino de la nota y aplica reglas de seguridad:
+
+1.  **Notas de curso (`cursos/**`) y borradores (`draft/**`):**
+    - Se realiza un **Push Directo** a la rama principal configurada (generalmente `main`).
+    - Esto prioriza la velocidad para el mantenimiento cotidiano del material de clase.
+2.  **Notas públicas (`public/**`):**
+    - Se aplica un **Flujo de Pull Request**.
+    - El editor crea automáticamente una rama temporal (`editor/[user]/[timestamp]`).
+    - Sube el archivo a esa rama.
+    - Abre un **Pull Request** hacia `main` con el resumen de cambios.
+    - El docente recibe el enlace al PR para seguimiento.
+
+### Identidad
+
+El editor utiliza el nombre y email de la sesión activa en Musiki para firmar tanto el commit de Git como los campos del frontmatter.

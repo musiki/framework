@@ -275,13 +275,13 @@ if (!source?.repo) {
           </label>
 
           <label class="editor-field" style="margin-top: 0.8rem;">
-            <span class="editor-label">Commit message</span>
+            <span class="editor-label">Resumen de cambios</span>
             <input
               class="editor-input"
               type="text"
-              name="message"
-              value={mode === 'create' ? `create: ${targetPath}` : `edit: ${targetPath}`}
-              spellcheck="false"
+              name="editSummary"
+              placeholder="¿Qué cambiaste?"
+              spellcheck="true"
               autocomplete="off"
             />
           </label>
@@ -369,10 +369,19 @@ if (!source?.repo) {
               shaInput.value = result.fileSha;
             }
 
+            const summaryInput = form.elements.namedItem('editSummary');
+            if (summaryInput instanceof HTMLInputElement) {
+              summaryInput.value = '';
+            }
+
             statusNode.dataset.tone = 'success';
-            statusNode.innerHTML = result?.commitUrl
-              ? `Publicado. <a href="${result.commitUrl}" target="_blank" rel="noreferrer">Ver commit</a>`
-              : 'Publicado.';
+            if (result?.prUrl) {
+              statusNode.innerHTML = `Pull Request creado: <a href="${result.prUrl}" target="_blank" rel="noreferrer">Ver PR #${result.prNumber}</a>`;
+            } else {
+              statusNode.innerHTML = result?.commitUrl
+                ? `Publicado. <a href="${result.commitUrl}" target="_blank" rel="noreferrer">Ver commit</a>`
+                : 'Publicado.';
+            }
           } catch (error) {
             statusNode.dataset.tone = 'error';
             statusNode.textContent = error instanceof Error ? error.message : 'No se pudo publicar la nota.';

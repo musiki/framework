@@ -30,6 +30,14 @@ export type GitHubUpsertResult = {
   fileSha: string;
 };
 
+export type GitHubPRResult = {
+  id: number;
+  number: number;
+  htmlUrl: string;
+  state: string;
+  title: string;
+};
+
 let cachedInstallationToken: CachedInstallationToken | null = null;
 
 const normalizeText = (value: unknown) => String(value || '').trim();
@@ -252,5 +260,71 @@ export async function upsertRepoFile(options: {
     commitUrl: normalizeText(payload?.commit?.html_url),
     path: normalizeText(payload?.content?.path || options.path),
     fileSha: normalizeText(payload?.content?.sha),
+  };
+}
+
+export async function createBranch(options: {
+  repoFullName: string;
+  branchName: string;
+  baseBranch?: string;
+}): Promise<string> {
+  const { owner, repo } = splitRepoFullName(options.repoFullName);
+  const baseBranch = normalizeText(options.baseBranch) || 'main';
+  const token = await getInstallationToken();
+
+  const baseRefPayload = await githubApiRequest(
+    `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(baseBranch)}`,
+    { token },
+  );
+  const baseSha = normalizeText(baseRefPayload?.object?.sha);
+  if (!baseSha) {
+    throw new Error(`Could not find SHA for base branch "${baseBranch}"`);
+  }
+
+  const payload = await githubApiRequest(
+    `/repos/${owner}/${repo}/git/refs`,
+    {
+      method: 'POST',
+      token,
+      body: {
+        ref: `refs/heads/${normalizeText(options.branchName)}`,
+        sha: baseSha,
+      },
+    },
+  );
+
+  return normalizeText(payload?.object?.sha);
+}
+
+export async function createPullRequest(options: {
+  repoFullName: string;
+  head: string;
+  base: string;
+  title: string;
+  body: string;
+}): Promise<GitHubPRResult> {
+  const { owner, repo } = splitRepoFullName(options.repoFullName);
+  const token = await getInstallationToken();
+
+  const payload = await githubApiRequest(
+    `/repos/${owner}/${repo}/pulls`,
+    {
+      method: 'POST',
+      token,
+      body: {
+        title: normalizeText(options.title),
+        body: normalizeText(options.body),
+        head: normalizeText(options.head),
+        base: normalizeText(options.base),
+      },
+    },
+  );
+
+  return {
+    id: Number(payload?.id),
+    number: Number(payload?.number),
+    htmlUrl: normalizeText(payload?.html_url),
+    state: normalizeText(payload?.state),
+    title: normalizeText(payload?.title),
   };
 }
