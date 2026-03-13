@@ -9,6 +9,8 @@ import remarkRehype from 'remark-rehype';
 import rehypeRaw from 'rehype-raw';
 import rehypeKatex from 'rehype-katex';
 import rehypeStringify from 'rehype-stringify';
+import rehypeHighlight from 'rehype-highlight';
+import { all as lowlightAll } from 'lowlight';
 
 // Importamos tus plugins personalizados
 import slugMathRemark from '../plugins/slug-math-remark.js';
@@ -20,6 +22,14 @@ import remarkWikiLink from '../plugins/remark-wiki-link.mjs';
 import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 
 const CONTENT_DIR = path.resolve(process.cwd(), 'src/content/cursos');
+const runtimeHighlightAliases = {
+  javascript: ['js'],
+  python: ['py'],
+  shell: ['bash', 'sh', 'zsh', 'fish'],
+  xml: ['html'],
+  markdown: ['md'],
+  scheme: ['guile', 'lilypond', 'lily', 'ly'],
+};
 
 export async function renderRuntimeMarkdown(rawContent: string, id = '') {
   const { data: frontmatter, content: markdownBody } = matter(rawContent);
@@ -38,6 +48,11 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
     .use(rehypeObsidianCallouts)
     .use(rehypeRaw)
     .use(rehypeKatex, { strict: false })
+    .use(rehypeHighlight, {
+      languages: lowlightAll,
+      aliases: runtimeHighlightAliases,
+      ignoreMissing: true,
+    })
     .use(rehypeStringify);
 
   const result = await processor.process(markdownBody);

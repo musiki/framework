@@ -102,6 +102,9 @@ export default defineConfig({
         'dataviewjs': 'javascript',
         'ref': 'text',
         'run-python': 'python',
+        'lily': 'scheme',
+        'lilypond': 'scheme',
+        'ly': 'scheme',
       }
     },
     remarkPlugins: [

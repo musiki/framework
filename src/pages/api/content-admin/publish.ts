@@ -11,6 +11,8 @@ import {
 } from '../../../lib/content-admin';
 import { normalizeContentSlug } from '../../../lib/content-slug';
 import { json } from '../../../lib/forum-server';
+import { renderRemoteLilypond } from '../../../lib/lilypond-remote.mjs';
+import { annotateMarkdownLilypondBlocks } from '../../../lib/lilypond-rendered-comment.mjs';
 import { renderRuntimeMarkdown } from '../../../lib/runtime-content';
 import {
   createBranch,
@@ -90,6 +92,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   } catch (error) {
     console.warn('[Publish] Frontmatter parse error, using raw content:', error);
   }
+
+  finalContent = await annotateMarkdownLilypondBlocks(finalContent, {
+    resolveUrl: (lilySource) => renderRemoteLilypond(lilySource, { timeoutMs: 10_000 }),
+  }).catch((error) => {
+    console.error('[Publish] LilyPond metadata refresh failed:', error);
+    return finalContent;
+  });
 
   const baseBranch = normalizeText(source.branch) || 'main';
   const mode = normalizeText(body?.mode).toLowerCase() === 'create' ? 'create' : 'edit';

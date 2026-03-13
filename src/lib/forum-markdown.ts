@@ -25,7 +25,7 @@ const forumHighlightAliases = {
   xml: ['html'],
   markdown: ['md'],
   latex: ['mathjax', 'math', 'tex'],
-  lisp: ['lilypond', 'ly', 'lily'],
+  scheme: ['guile', 'lilypond', 'ly', 'lily'],
 };
 
 export type RenderForumMarkdownOptions = {

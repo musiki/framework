@@ -4,6 +4,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { renderRemoteLilypond } from '../../../lib/lilypond-remote.mjs';
+import {
+  getRenderedLilypondUrl,
+  stripRenderedLilypondComment,
+} from '../../../lib/lilypond-rendered-comment.mjs';
 
 const LILY_DIR = path.join(process.cwd(), 'public', 'lily');
 const MAX_SOURCE_BYTES = 64 * 1024;
@@ -66,7 +70,9 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 
-  const source = String(payload.code || '');
+  const rawSource = String(payload.code || '');
+  const cachedUrl = getRenderedLilypondUrl(rawSource);
+  const source = stripRenderedLilypondComment(rawSource);
   if (!source.trim()) {
     return new Response(JSON.stringify({ error: 'Missing LilyPond source code' }), {
       status: 400,
@@ -88,6 +94,23 @@ export const POST: APIRoute = async ({ request }) => {
   const svgFilename = `${hash}.svg`;
   const svgPath = path.join(LILY_DIR, svgFilename);
   const svgUrl = `/lily/${svgFilename}`;
+
+  if (cachedUrl) {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        hash,
+        url: cachedUrl,
+        generated: false,
+        cached: true,
+        remote: true,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+  }
 
   if (fs.existsSync(svgPath)) {
     return new Response(

@@ -26,6 +26,7 @@ import {
   getPreferredCoursePathSegment,
   isCourseLessonEntryForCourse,
 } from '../../lib/course-routing';
+import { getCoursePageHistory } from '../../lib/page-history';
 
 import { getRuntimeDynamicContent } from '../../lib/runtime-content';
 
@@ -243,6 +244,11 @@ const currentEntrySourcePath =
       ? `cursos/${canonicalCourseId}/${getCourseEntryLegacyPath(currentEntry, canonicalCourseId)}.md`
       : `cursos/${canonicalCourseId}/_index.md`
   );
+const pageHistory = getCoursePageHistory(canonicalCourseId, currentEntrySourcePath);
+const hasPageHistoryInfo =
+  pageHistory.historyEntries.length > 0 ||
+  pageHistory.commitSha !== 'Unknown' ||
+  pageHistory.sourcePath.length > 0;
 const currentEntrySourceDir = currentEntrySourcePath.includes('/')
   ? currentEntrySourcePath.split('/').slice(0, -1).join('/')
   : `cursos/${canonicalCourseId}`;
@@ -657,6 +663,160 @@ order:
         top: var(--course-shell-top);
         height: calc(100dvh - var(--course-shell-top) - var(--course-shell-bottom-gap));
         touch-action: pan-y;
+        position: sticky;
+      }
+
+      .page-info-sidebar-panel {
+        position: absolute;
+        inset: 0;
+        z-index: 18;
+        display: grid;
+        align-content: start;
+        gap: 0.85rem;
+        padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
+        background: var(--c-bg);
+        border-radius: inherit;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(0.7rem);
+        transition: opacity 180ms ease, transform 180ms ease;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+
+      .course-container[data-page-info-open='true'] .page-info-sidebar-panel {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateX(0);
+      }
+
+      .page-info-sidebar-header {
+        position: sticky;
+        top: calc(-1 * var(--course-sidebar-pad-top));
+        z-index: 2;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 0.75rem;
+        margin:
+          calc(-1 * var(--course-sidebar-pad-top))
+          calc(-1 * var(--course-sidebar-pad-x))
+          0;
+        padding:
+          calc(var(--course-sidebar-pad-top) + 0.1rem)
+          var(--course-sidebar-pad-x)
+          0.7rem;
+        border-bottom: 1px solid var(--c-border);
+        background: var(--c-bg);
+      }
+
+      .page-info-sidebar-kicker {
+        margin: 0 0 0.16rem 0;
+        font-size: 0.72rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+      }
+
+      .page-info-sidebar-title {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.2;
+      }
+
+      .page-info-sidebar-close {
+        width: 2rem;
+        height: 2rem;
+        border: 1px solid var(--c-border);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--c-bg) 90%, var(--c-bg-mute) 10%);
+        color: var(--c-fg);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .page-info-sidebar-close:hover {
+        background: var(--c-bg-mute);
+      }
+
+      .page-info-meta {
+        display: grid;
+        grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+        gap: 0.35rem 0.7rem;
+        margin: 0;
+      }
+
+      .page-info-meta dt {
+        font-size: 0.78rem;
+        color: var(--c-fg-dim);
+      }
+
+      .page-info-meta dd {
+        margin: 0;
+        min-width: 0;
+        word-break: break-word;
+      }
+
+      .page-info-meta a,
+      .page-info-history-link {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .page-info-history-link:hover,
+      .page-info-meta a:hover {
+        text-decoration: underline;
+      }
+
+      .page-info-history {
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .page-info-history-title {
+        margin: 0;
+        font-size: 0.86rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+      }
+
+      .page-info-history-list {
+        list-style: none;
+        display: grid;
+        gap: 0.55rem;
+        padding: 0;
+        margin: 0;
+      }
+
+      .page-info-history-item {
+        display: grid;
+        gap: 0.18rem;
+        padding-bottom: 0.55rem;
+        border-bottom: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
+      }
+
+      .page-info-history-item:last-child {
+        padding-bottom: 0;
+        border-bottom: none;
+      }
+
+      .page-info-history-author {
+        font-weight: 600;
+      }
+
+      .page-info-history-date,
+      .page-info-history-meta {
+        font-size: 0.82rem;
+        color: var(--c-fg-dim);
+      }
+
+      .page-info-history-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 0.6rem;
       }
 
       .course-container[data-left-open='false'] .sidebar--left {
@@ -2930,6 +3090,94 @@ order:
           </div>
         </div>
 
+        {hasPageHistoryInfo && (
+          <section
+            class="page-info-sidebar-panel"
+            id="page-info-sidebar"
+            aria-label="Información de la página"
+            aria-hidden="true"
+          >
+            <div class="page-info-sidebar-header">
+              <div>
+                <p class="page-info-sidebar-kicker">Page info</p>
+                <h2 class="page-info-sidebar-title">Historial y versiones</h2>
+              </div>
+              <button
+                type="button"
+                class="page-info-sidebar-close"
+                data-page-info-close
+                aria-label="Cerrar información de la página"
+                title="Cerrar"
+              >×</button>
+            </div>
+
+            <dl class="page-info-meta">
+              <dt>Fuente</dt>
+              <dd><code>{pageHistory.sourcePath || currentEntrySourcePath}</code></dd>
+              <dt>Subido por</dt>
+              <dd>{pageHistory.uploaderAuthor}</dd>
+              <dt>Fecha de carga</dt>
+              <dd>{pageHistory.uploaderDate}</dd>
+              <dt>Última actualización</dt>
+              <dd>{pageHistory.lastDate}</dd>
+              <dt>Último autor</dt>
+              <dd>{pageHistory.lastAuthor}</dd>
+              <dt>Commit actual</dt>
+              <dd>
+                {pageHistory.commitUrl ? (
+                  <a href={pageHistory.commitUrl} target="_blank" rel="noopener noreferrer">
+                    {pageHistory.commitSha === 'Unknown' ? 'Unknown' : pageHistory.commitSha.slice(0, 7)}
+                  </a>
+                ) : (
+                  <span>{pageHistory.commitSha === 'Unknown' ? 'Unknown' : pageHistory.commitSha.slice(0, 7)}</span>
+                )}
+              </dd>
+            </dl>
+
+            <section class="page-info-history" aria-label="Historial de commits">
+              <h3 class="page-info-history-title">History ({pageHistory.historyEntries.length})</h3>
+              {pageHistory.historyEntries.length > 0 ? (
+                <ol class="page-info-history-list">
+                  {pageHistory.historyEntries.map((entry) => (
+                    <li class="page-info-history-item">
+                      <span class="page-info-history-author">{entry.author}</span>
+                      <span class="page-info-history-date">{entry.date}</span>
+                      <span class="page-info-history-meta">
+                        {entry.email ? `${entry.email} · ` : ''}
+                        {entry.shortSha}
+                      </span>
+                      <div class="page-info-history-actions">
+                        {entry.url && (
+                          <a
+                            class="page-info-history-link"
+                            href={entry.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Commit
+                          </a>
+                        )}
+                        {entry.compareUrl && (
+                          <a
+                            class="page-info-history-link"
+                            href={entry.compareUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Comparar
+                          </a>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p class="course-sidebar-state-note">Sin historial de commits disponible.</p>
+              )}
+            </section>
+          </section>
+        )}
+
         {hasForumSidebar ? (
           <section
             class="lesson-forum"
@@ -3533,6 +3781,7 @@ order:
     <script>
       import { subscribeToLive } from '../../lib/live/client.mjs';
       import { formatCountdown, getRemainingMs } from '../../lib/live/countdown.mjs';
+      import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
 
       const courseLayoutRoot = document.querySelector('[data-course-layout-root]');
       const canManageLiveInteractions =
@@ -8572,78 +8821,29 @@ a[node] -->|edge| b[hub]
         }
 
         function attachForumEditor(textarea, explicitActions = null) {
-          if (!textarea || textarea.dataset.forumEditorEnhanced === 'true') return;
+          if (!(textarea instanceof HTMLTextAreaElement)) return;
+          if (textarea.dataset.forumEditorEnhanced === 'true') return;
           textarea.dataset.forumEditorEnhanced = 'true';
-          const dropzone = ensureForumDropzone(textarea);
-          let dragDepth = 0;
 
           textarea.spellcheck = false;
           textarea.autocomplete = 'off';
           textarea.autocapitalize = 'off';
           textarea.setAttribute('autocorrect', 'off');
 
-          attachForumTypingHelpers(textarea);
-          textarea.classList.add('forum-editor-input');
-          mountForumEditorActions(textarea, explicitActions);
+          const actions = explicitActions instanceof HTMLElement
+            ? explicitActions
+            : textarea.closest('form, .forum-edit-form')?.querySelector('.forum-form-actions');
 
-          textarea.addEventListener('paste', async (event) => {
-            const uploadFiles = extractForumUploadFiles(
-              event.clipboardData?.files,
-              event.clipboardData?.items,
-            );
-            if (uploadFiles.length === 0) return;
-
-            event.preventDefault();
-            await handleForumMediaUpload(textarea, uploadFiles, 'portapapeles');
-          });
-
-          textarea.addEventListener('dragover', (event) => {
-            const uploadFiles = extractForumUploadFiles(
-              event.dataTransfer?.files,
-              event.dataTransfer?.items,
-            );
-            if (uploadFiles.length === 0) return;
-            event.preventDefault();
-            if (event.dataTransfer) {
-              event.dataTransfer.dropEffect = 'copy';
-            }
-            if (dropzone) dropzone.classList.add('is-upload-target');
-            textarea.classList.add('is-upload-target');
-          });
-
-          textarea.addEventListener('dragenter', (event) => {
-            const uploadFiles = extractForumUploadFiles(
-              event.dataTransfer?.files,
-              event.dataTransfer?.items,
-            );
-            if (uploadFiles.length === 0) return;
-
-            event.preventDefault();
-            dragDepth += 1;
-            if (dropzone) dropzone.classList.add('is-upload-target');
-            textarea.classList.add('is-upload-target');
-          });
-
-          textarea.addEventListener('dragleave', () => {
-            dragDepth = Math.max(0, dragDepth - 1);
-            if (dragDepth === 0) {
-              if (dropzone) dropzone.classList.remove('is-upload-target');
-              textarea.classList.remove('is-upload-target');
-            }
-          });
-
-          textarea.addEventListener('drop', async (event) => {
-            const uploadFiles = extractForumUploadFiles(
-              event.dataTransfer?.files,
-              event.dataTransfer?.items,
-            );
-            if (uploadFiles.length === 0) return;
-
-            event.preventDefault();
-            dragDepth = 0;
-            if (dropzone) dropzone.classList.remove('is-upload-target');
-            textarea.classList.remove('is-upload-target');
-            await handleForumMediaUpload(textarea, uploadFiles, 'arrastre');
+          enhanceMarkdownTextarea(textarea, {
+            actionsContainer: actions instanceof HTMLElement ? actions : null,
+            status: (message, tone = 'info') => setForumStatus(message, tone),
+            buttonClassName: 'forum-action-btn forum-action-f forum-editor-action-btn',
+            actionSpacerClassName: 'forum-editor-action-spacer',
+            dropzoneClassName: 'forum-editor-dropzone',
+            dropzoneOverlayClassName: 'forum-editor-dropzone-overlay',
+            dropzoneLabelClassName: 'forum-editor-dropzone-label',
+            inputClassName: 'forum-editor-input',
+            dropLabel: 'Drop file',
           });
         }
 

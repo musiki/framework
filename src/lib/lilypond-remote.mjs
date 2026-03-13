@@ -1,8 +1,17 @@
+import {
+  cacheRenderedLilypondUrl,
+  getRenderedLilypondUrl,
+  stripRenderedLilypondComment,
+} from './lilypond-rendered-comment.mjs';
+
 export const REMOTE_LILYPOND_RENDER_URL =
   process.env.REMOTE_LILYPOND_RENDER_URL || 'http://85.31.234.141:4543/render';
 
 export async function renderRemoteLilypond(source, { timeoutMs = 10_000 } = {}) {
-  const normalizedSource = String(source || '');
+  const cachedUrl = getRenderedLilypondUrl(source);
+  if (cachedUrl) return cachedUrl;
+
+  const normalizedSource = stripRenderedLilypondComment(source);
   if (!normalizedSource.trim()) return null;
 
   const controller = new AbortController();
@@ -28,7 +37,7 @@ export async function renderRemoteLilypond(source, { timeoutMs = 10_000 } = {}) 
       throw new Error('Remote LilyPond render returned no url');
     }
 
-    return url;
+    return cacheRenderedLilypondUrl(normalizedSource, url) || url;
   } catch (error) {
     console.error('[lilypond-remote] Render error:', error);
     return null;

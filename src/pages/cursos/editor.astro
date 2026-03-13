@@ -112,6 +112,13 @@ if (!source?.repo) {
         padding: 1rem 1rem 1.1rem;
       }
 
+      .editor-workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: 1rem;
+        align-items: start;
+      }
+
       .editor-kicker {
         margin: 0 0 0.25rem 0;
         font-size: 0.72rem;
@@ -197,6 +204,43 @@ if (!source?.repo) {
         cursor: pointer;
       }
 
+      .editor-markdown-tool-btn {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 7px;
+        border: 1px solid var(--c-border);
+        background: color-mix(in srgb, var(--c-bg) 88%, var(--c-bg-mute) 12%);
+        color: var(--c-fg);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .editor-markdown-tool-btn svg {
+        width: 0.9rem;
+        height: 0.9rem;
+        display: block;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.15;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .editor-markdown-tool-spacer {
+        width: 0.35rem;
+        min-width: 0.35rem;
+        height: 1.4rem;
+        display: inline-block;
+        opacity: 0;
+        pointer-events: none;
+      }
+
       .editor-status {
         min-height: 1.3rem;
         font-size: 0.9rem;
@@ -218,6 +262,116 @@ if (!source?.repo) {
         color: var(--c-fg-dim);
       }
 
+      .editor-preview-card {
+        min-height: 100%;
+      }
+
+      .editor-preview-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.85rem;
+      }
+
+      .editor-preview-title {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .editor-preview-status {
+        min-height: 1.2rem;
+        font-size: 0.82rem;
+        color: var(--c-fg-dim);
+      }
+
+      .editor-preview-status[data-tone='error'] {
+        color: #b3261e;
+      }
+
+      .editor-preview {
+        min-height: 68dvh;
+        border: 1px solid color-mix(in srgb, var(--c-border) 70%, transparent);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--c-bg) 92%, var(--c-bg-mute) 8%);
+        padding: 1rem;
+        overflow: auto;
+      }
+
+      .editor-preview.is-empty {
+        display: grid;
+        place-items: center;
+        color: var(--c-fg-dim);
+      }
+
+      .editor-preview :where(h1, h2, h3, h4, h5, h6) {
+        margin-top: 0;
+      }
+
+      .editor-preview :where(pre, table, blockquote, .callout, .mermaid, .katex-display, .lily-score, .lilypond-block) {
+        margin: 1rem 0;
+      }
+
+      .editor-preview pre {
+        overflow: auto;
+        padding: 0.9rem 1rem;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--c-bg-mute) 86%, black 14%);
+      }
+
+      .editor-preview code {
+        font-family: 'SFMono-Regular', 'Menlo', monospace;
+        font-size: 0.92em;
+      }
+
+      .editor-preview pre code {
+        display: block;
+        white-space: pre;
+      }
+
+      .editor-preview :is(.lily-score, .lilypond-block) img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto;
+      }
+
+      .editor-markdown-dropzone {
+        position: relative;
+      }
+
+      .editor-markdown-dropzone-overlay {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        border: 2px dashed color-mix(in srgb, var(--c-accent, #2f6fff) 42%, transparent);
+        background: color-mix(in srgb, var(--c-accent, #2f6fff) 8%, transparent);
+        color: var(--c-fg);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms ease;
+        border-radius: 12px;
+      }
+
+      .editor-markdown-dropzone-label {
+        padding: 0.3rem 0.55rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--c-bg) 88%, black 12%);
+        border: 1px solid color-mix(in srgb, var(--c-border) 80%, transparent);
+        font-size: 0.82rem;
+      }
+
+      .editor-markdown-dropzone.is-upload-target .editor-markdown-dropzone-overlay {
+        opacity: 1;
+      }
+
+      .editor-markdown-dropzone.is-uploading .editor-textarea,
+      .editor-textarea.is-uploading {
+        cursor: progress;
+        opacity: 0.88;
+      }
+
       @media (max-width: 720px) {
         .editor-shell {
           width: min(100vw - 1rem, 1100px);
@@ -230,6 +384,16 @@ if (!source?.repo) {
 
         .editor-textarea {
           min-height: 58dvh;
+        }
+      }
+
+      @media (max-width: 980px) {
+        .editor-workspace {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .editor-preview {
+          min-height: 38dvh;
         }
       }
     </style>
@@ -263,65 +427,77 @@ if (!source?.repo) {
         </div>
       </section>
 
-      <section class="editor-card">
-        <form id="content-editor-form">
-          <input type="hidden" name="courseId" value={canonicalCourseId} />
-          <input type="hidden" name="mode" value={mode} />
-          <input type="hidden" name="sha" value={initialSha} />
+      <div class="editor-workspace">
+        <section class="editor-card">
+          <form id="content-editor-form">
+            <input type="hidden" name="courseId" value={canonicalCourseId} />
+            <input type="hidden" name="mode" value={mode} />
+            <input type="hidden" name="sha" value={initialSha} />
 
-          <label class="editor-field">
-            <span class="editor-label">Path en repo</span>
-            <input
-              class="editor-input"
-              type="text"
-              name="targetPath"
-              value={targetPath}
-              spellcheck="false"
-              autocomplete="off"
-            />
-          </label>
+            <label class="editor-field">
+              <span class="editor-label">Path en repo</span>
+              <input
+                class="editor-input"
+                type="text"
+                name="targetPath"
+                value={targetPath}
+                spellcheck="false"
+                autocomplete="off"
+              />
+            </label>
 
-          <label class="editor-field" style="margin-top: 0.8rem;">
-            <span class="editor-label">Resumen de cambios</span>
-            <input
-              class="editor-input"
-              type="text"
-              name="editSummary"
-              placeholder="¿Qué cambiaste?"
-              spellcheck="true"
-              autocomplete="off"
-            />
-          </label>
+            <label class="editor-field" style="margin-top: 0.8rem;">
+              <span class="editor-label">Resumen de cambios</span>
+              <input
+                class="editor-input"
+                type="text"
+                name="editSummary"
+                placeholder="¿Qué cambiaste?"
+                spellcheck="true"
+                autocomplete="off"
+              />
+            </label>
 
-          <label class="editor-field" style="margin-top: 0.8rem;">
-            <span class="editor-label">Markdown</span>
-            <textarea
-              class="editor-textarea"
-              name="content"
-              spellcheck="false"
-              autocapitalize="off"
-              autocomplete="off"
-              autocorrect="off"
-            >{initialContent}</textarea>
-          </label>
+            <label class="editor-field" style="margin-top: 0.8rem;">
+              <span class="editor-label">Markdown</span>
+              <textarea
+                class="editor-textarea"
+                name="content"
+                spellcheck="false"
+                autocapitalize="off"
+                autocomplete="off"
+                autocorrect="off"
+              >{initialContent}</textarea>
+            </label>
 
-          <div class="editor-actions" style="margin-top: 0.9rem;">
-            <button
-              class="editor-action editor-action--primary"
-              type="submit"
-              title={mode === 'create' ? 'Crear nota en GitHub' : 'Guardar cambios en GitHub'}
-              aria-label={mode === 'create' ? 'Crear nota en GitHub' : 'Guardar cambios en GitHub'}
-              disabled={Boolean(editorError)}
-            >
-              {mode === 'create' ? 'C' : 'E'}
-            </button>
-            <a class="editor-action" href={returnTo} title="Volver" aria-label="Volver">X</a>
-            <span class="editor-status" id="editor-status" data-tone={editorError ? 'error' : 'idle'}>
-              {editorError}
-            </span>
+            <div class="editor-actions" style="margin-top: 0.9rem;">
+              <button
+                class="editor-action editor-action--primary"
+                type="submit"
+                title={mode === 'create' ? 'Crear nota en GitHub' : 'Guardar cambios en GitHub'}
+                aria-label={mode === 'create' ? 'Crear nota en GitHub' : 'Guardar cambios en GitHub'}
+                disabled={Boolean(editorError)}
+              >
+                {mode === 'create' ? 'C' : 'E'}
+              </button>
+              <a class="editor-action" href={returnTo} title="Volver" aria-label="Volver">X</a>
+              <span class="editor-status" id="editor-status" data-tone={editorError ? 'error' : 'idle'}>
+                {editorError}
+              </span>
+            </div>
+          </form>
+        </section>
+
+        <section class="editor-card editor-preview-card">
+          <div class="editor-preview-meta">
+            <h2 class="editor-preview-title">Preview</h2>
+            <span class="editor-preview-status" id="editor-preview-status">Esperando cambios…</span>
           </div>
-        </form>
-      </section>
+          <div class="editor-preview is-empty" id="editor-preview">
+            Escribe o pega markdown para ver la nota renderizada.
+          </div>
+        </section>
+      </div>
 
       <section class="editor-card">
         <p class="editor-note">
@@ -333,12 +509,120 @@ if (!source?.repo) {
     <Footer />
 
     <script>
+      import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
+
       const mountContentEditor = () => {
         const form = document.getElementById('content-editor-form');
         const statusNode = document.getElementById('editor-status');
+        const previewNode = document.getElementById('editor-preview');
+        const previewStatusNode = document.getElementById('editor-preview-status');
         if (!(form instanceof HTMLFormElement) || !(statusNode instanceof HTMLElement)) return;
         if (form.dataset.bound === 'true') return;
         form.dataset.bound = 'true';
+
+        const textarea = form.elements.namedItem('content');
+        const pathInput = form.elements.namedItem('targetPath');
+        const courseIdInput = form.elements.namedItem('courseId');
+        let previewTimer = 0;
+        let previewRequestId = 0;
+
+        const setPreviewHtml = (html) => {
+          if (!(previewNode instanceof HTMLElement)) return;
+          const normalizedHtml = String(html || '').trim();
+          if (!normalizedHtml) {
+            previewNode.innerHTML = 'Escribe o pega markdown para ver la nota renderizada.';
+            previewNode.classList.add('is-empty');
+            return;
+          }
+          previewNode.innerHTML = normalizedHtml;
+          previewNode.classList.remove('is-empty');
+        };
+
+        const setPreviewStatus = (message, tone = 'idle') => {
+          if (!(previewStatusNode instanceof HTMLElement)) return;
+          previewStatusNode.dataset.tone = tone;
+          previewStatusNode.textContent = message;
+        };
+
+        const requestPreview = async () => {
+          if (!(textarea instanceof HTMLTextAreaElement) || !(courseIdInput instanceof HTMLInputElement)) return;
+          const content = textarea.value || '';
+          if (!content.trim()) {
+            setPreviewHtml('');
+            setPreviewStatus('Esperando cambios…');
+            return;
+          }
+
+          const currentRequestId = ++previewRequestId;
+          setPreviewStatus('Renderizando preview…');
+
+          try {
+            const response = await fetch('/api/content-admin/preview', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                courseId: courseIdInput.value,
+                path: pathInput instanceof HTMLInputElement ? pathInput.value : '',
+                content,
+              }),
+            });
+
+            const raw = await response.text();
+            let result = {};
+            try {
+              result = raw ? JSON.parse(raw) : {};
+            } catch {
+              result = { error: raw || 'No se pudo renderizar la preview.' };
+            }
+
+            if (currentRequestId !== previewRequestId) return;
+            if (!response.ok) {
+              throw new Error(result?.error || 'No se pudo renderizar la preview.');
+            }
+
+            setPreviewHtml(result?.html || '');
+            setPreviewStatus('Preview al día.');
+          } catch (error) {
+            if (currentRequestId !== previewRequestId) return;
+            setPreviewStatus(error instanceof Error ? error.message : 'Error en preview.', 'error');
+          }
+        };
+
+        const schedulePreview = () => {
+          window.clearTimeout(previewTimer);
+          previewTimer = window.setTimeout(() => {
+            void requestPreview();
+          }, 320);
+        };
+
+        if (textarea instanceof HTMLTextAreaElement) {
+          textarea.addEventListener('input', schedulePreview);
+        }
+
+        if (pathInput instanceof HTMLInputElement) {
+          pathInput.addEventListener('input', schedulePreview);
+        }
+
+        const actionsContainer = form.querySelector('.editor-actions');
+        if (textarea instanceof HTMLTextAreaElement) {
+          enhanceMarkdownTextarea(textarea, {
+            actionsContainer: actionsContainer instanceof HTMLElement ? actionsContainer : null,
+            status: (message, tone = 'info') => {
+              if (!(statusNode instanceof HTMLElement)) return;
+              statusNode.dataset.tone = tone === 'error' ? 'error' : 'idle';
+              statusNode.textContent = message;
+            },
+            buttonClassName: 'editor-markdown-tool-btn',
+            actionSpacerClassName: 'editor-markdown-tool-spacer',
+            dropzoneClassName: 'editor-markdown-dropzone',
+            dropzoneOverlayClassName: 'editor-markdown-dropzone-overlay',
+            dropzoneLabelClassName: 'editor-markdown-dropzone-label',
+            inputClassName: '',
+            dropLabel: 'Drop file',
+          });
+        }
+
+        void requestPreview();
 
         form.addEventListener('submit', async (event) => {
           event.preventDefault();
@@ -398,6 +682,11 @@ if (!source?.repo) {
               statusNode.innerHTML = result?.commitUrl
                 ? `Publicado. <a href="${result.commitUrl}" target="_blank" rel="noreferrer">Ver commit</a>`
                 : 'Publicado.';
+            }
+
+            if (typeof result?.renderedHtml === 'string') {
+              setPreviewHtml(result.renderedHtml);
+              setPreviewStatus('Preview sincronizada con el guardado.');
             }
           } catch (error) {
             statusNode.dataset.tone = 'error';

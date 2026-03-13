@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 .tmp/
+.cache/
 
 # Astro
 .astro/
