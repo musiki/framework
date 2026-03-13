@@ -241,12 +241,7 @@ const currentEntrySourceDir = currentEntrySourcePath.includes('/')
   ? currentEntrySourcePath.split('/').slice(0, -1).join('/')
   : `cursos/${canonicalCourseId}`;
 const teacherCreateHref = canManageLiveInteractions
-  ? buildEditorHref({
-      courseId: canonicalCourseId,
-      mode: 'create',
-      dir: currentEntrySourceDir,
-      returnTo: `${Astro.url.pathname}${Astro.url.search}`,
-    })
+  ? `${Astro.url.pathname}?mode=create&dir=${encodeURIComponent(currentEntrySourceDir)}`
   : '';
 const teacherEditHref =
   canManageLiveInteractions && currentEntrySourcePath
@@ -363,36 +358,54 @@ const forumThreadPrompt = sessionFirstName
 // Integrated Editor Logic
 const editorMode = String(Astro.url.searchParams.get('mode') || '').trim().toLowerCase();
 const isEditing = canManageLiveInteractions && editorMode === 'edit';
+const isCreating = canManageLiveInteractions && editorMode === 'create';
+const isEditorActive = isEditing || isCreating;
+
 let editorInitialContent = '';
 let editorInitialSha = '';
 let editorError = '';
-let editorTargetPath = currentEntrySourcePath;
+let editorTargetPath = isEditing ? currentEntrySourcePath : (sanitizeRepoMarkdownPath(Astro.url.searchParams.get('path') || '') || buildDefaultCreatePath(canonicalCourseId, currentEntrySourceDir));
 
-if (isEditing) {
-  try {
-    const { resolveCourseSource } = await import('../../lib/content-admin');
-    const { getRepoFile } = await import('../../lib/github-app');
-    const source = resolveCourseSource(canonicalCourseId);
-    
-    if (!source?.repo) {
-      editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
-    } else {
-      const remoteFile = await getRepoFile({
-        repoFullName: source.repo,
-        path: currentEntrySourcePath,
-        ref: source.branch || 'main',
-      });
-
-      if (!remoteFile) {
-        editorError = 'La nota no existe en GitHub o no pudo resolverse.';
+if (isEditorActive) {
+  if (isEditing) {
+    try {
+      const { resolveCourseSource } = await import('../../lib/content-admin');
+      const { getRepoFile } = await import('../../lib/github-app');
+      const source = resolveCourseSource(canonicalCourseId);
+      
+      if (!source?.repo) {
+        editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
       } else {
-        editorTargetPath = remoteFile.path || currentEntrySourcePath;
-        editorInitialContent = remoteFile.content || '';
-        editorInitialSha = remoteFile.sha || '';
+        const remoteFile = await getRepoFile({
+          repoFullName: source.repo,
+          path: currentEntrySourcePath,
+          ref: source.branch || 'main',
+        });
+
+        if (!remoteFile) {
+          editorError = 'La nota no existe en GitHub o no pudo resolverse.';
+        } else {
+          editorTargetPath = remoteFile.path || currentEntrySourcePath;
+          editorInitialContent = remoteFile.content || '';
+          editorInitialSha = remoteFile.sha || '';
+        }
       }
+    } catch (err: any) {
+      editorError = err?.message || 'Error al cargar datos para el editor.';
     }
-  } catch (err: any) {
-    editorError = err?.message || 'Error al cargar datos para el editor.';
+  } else {
+    // Mode Create
+    editorInitialContent = `---
+type: lesson
+title: ""
+chapter: ""
+status:
+order:
+---
+
+# Nueva nota
+
+`;
   }
 }
 ---
@@ -401,10 +414,10 @@ if (isEditing) {
 <html lang="es">
   <head>
     <BaseHead 
-      title={isEditing ? `Editando: ${currentEntry.data.title || courseIndex.data.title}` : (currentEntry.data.title || courseIndex.data.title)} 
+      title={isEditorActive ? `${isCreating ? 'Creando' : 'Editando'}: ${currentEntry.data.title || 'Nueva nota'}` : (currentEntry.data.title || courseIndex.data.title)} 
       description={lessonDescription} 
     />
-    {isEditing && (
+    {isEditorActive && (
       <style>
         .integrated-editor {
           max-width: 1100px;
@@ -735,6 +748,16 @@ if (isEditing) {
   gap: 0.35rem;
 }
 
+.course-teacher-float-actions {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  z-index: 45;
+}
+
 .teacher-action-btn {
   width: 1.56rem !important;
   height: 1.56rem !important;
@@ -768,6 +791,34 @@ if (isEditing) {
   color: #1f8f45 !important;
   border-color: color-mix(in srgb, #1f8f45 42%, var(--forum-border-soft, #d8dee6) 58%) !important;
 }
+
+.course-sidebar-handle {
+  position: fixed;
+  top: calc(var(--musiki-header-height, 4.5rem) + 1.05rem);
+  z-index: 46;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  border: 1px solid var(--c-border);
+  background: var(--c-bg);
+  color: var(--c-fg-dim);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 180ms ease;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.course-sidebar-handle:hover {
+  background: var(--c-bg-mute);
+  color: var(--c-fg);
+  transform: scale(1.08);
+}
+
+.course-sidebar-handle--left::before { content: '→'; }
+.course-sidebar-handle--right::before { content: '←'; }
 
       .course-title-secondary {
         margin-top: 0.55rem;
@@ -2512,6 +2563,7 @@ if (isEditing) {
   </head>
   <body>
     <Header
+      showPageInfoToggle={!isEditorActive}
       courseId={canonicalCourseId || courseSlug}
       activeCourseId={canonicalCourseId || courseSlug}
       activeCourseCode={activeCourseCode}
@@ -2521,19 +2573,19 @@ if (isEditing) {
       teacherEditHref={teacherEditHref}
     />
 
-    {isEditing ? (
+    {isEditorActive ? (
       <main class="integrated-editor">
         <section class="editor-card">
-          <h1 style="margin:0; font-size: 1.4rem;">Editor: {currentEntry.data.title}</h1>
+          <h1 style="margin:0; font-size: 1.4rem;">{isCreating ? 'Crear nota' : `Editor: ${currentEntry.data.title}`}</h1>
           <p style="margin: 0.4rem 0 0; color: var(--c-fg-dim); font-size: 0.9rem;">
-            Editando <code>{editorTargetPath}</code> en {activeCourseCode}.
+            {isCreating ? `Creando nueva nota en ${activeCourseCode}.` : `Editando ${editorTargetPath} en ${activeCourseCode}.`}
           </p>
         </section>
 
         <section class="editor-card">
           <form id="integrated-content-editor-form">
             <input type="hidden" name="courseId" value={canonicalCourseId} />
-            <input type="hidden" name="mode" value="edit" />
+            <input type="hidden" name="mode" value={isCreating ? 'create' : 'edit'} />
             <input type="hidden" name="sha" value={editorInitialSha} />
             <input type="hidden" name="targetPath" value={editorTargetPath} />
 
@@ -2549,7 +2601,7 @@ if (isEditing) {
 
             <div class="editor-actions">
               <button type="submit" class="editor-btn editor-btn--primary" disabled={Boolean(editorError)}>
-                Guardar cambios
+                {isCreating ? 'Crear nota' : 'Guardar cambios'}
               </button>
               <a href={Astro.url.pathname} class="editor-btn">Cancelar</a>
               <span id="integrated-editor-status" class="editor-status" data-tone={editorError ? 'error' : 'idle'}>
@@ -2619,20 +2671,30 @@ if (isEditing) {
       data-live-course-id={canonicalCourseId || courseSlug}
       data-live-page-slug={livePageSlug}
     >
+      {(teacherEditHref || teacherCreateHref) && (
+        <div class="course-teacher-float-actions" aria-label="Acciones docentes">
+          {teacherEditHref && (
+            <a href={teacherEditHref} class="teacher-action-btn" title="Editar esta nota" aria-label="Editar">E</a>
+          )}
+          {teacherCreateHref && (
+            <a href={teacherCreateHref} class="teacher-action-btn teacher-action-btn--create" title="Crear nueva nota" aria-label="Crear">C</a>
+          )}
+        </div>
+      )}
       <button
         type="button"
         class="course-sidebar-handle course-sidebar-handle--left"
         data-sidebar-handle="left"
         aria-label="Mostrar navegación del curso"
         title="Mostrar navegación del curso (⌘/Ctrl + \\)"
-      >⋮</button>
+      ></button>
       <button
         type="button"
         class="course-sidebar-handle course-sidebar-handle--right"
         data-sidebar-handle="right"
         aria-label="Mostrar foros"
         title="Mostrar foros (⌘/Ctrl + Shift + \\)"
-      >⋮</button>
+      ></button>
       <div class="course-sidebar-overlay" data-course-sidebar-overlay></div>
 
       <!-- Sidebar Navigation -->
@@ -2643,26 +2705,6 @@ if (isEditing) {
               <span class="course-title-link-text">{courseIndex.data.title}</span>
             </a>
             <div class="course-title-actions">
-              {teacherEditHref && (
-                <a
-                  href={teacherEditHref}
-                  class="teacher-action-btn"
-                  title="Editar nota"
-                  aria-label="Editar"
-                >
-                  E
-                </a>
-              )}
-              {teacherCreateHref && (
-                <a
-                  href={teacherCreateHref}
-                  class="teacher-action-btn teacher-action-btn--create"
-                  title="Crear nota"
-                  aria-label="Crear"
-                >
-                  C
-                </a>
-              )}
               <button
                 type="button"
                 class="sidebar-toggle-btn"
