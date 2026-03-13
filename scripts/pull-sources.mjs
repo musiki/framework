@@ -93,7 +93,15 @@ const pullFromRepo = (source, targetDir, token) => {
     return;
   }
 
+  if (!fs.existsSync(path.join(targetDir, '.git'))) {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    run('git', ['clone', '--depth', '1', '--branch', branch, authRepoUrl, targetDir]);
+    return;
+  }
+
   run('git', ['-C', targetDir, 'remote', 'set-url', 'origin', authRepoUrl]);
+  run('git', ['-C', targetDir, 'reset', '--hard', 'HEAD']);
+  run('git', ['-C', targetDir, 'clean', '-fd']);
   run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', branch]);
   run('git', ['-C', targetDir, 'checkout', '-B', branch, 'FETCH_HEAD']);
   run('git', ['-C', targetDir, 'clean', '-fd']);

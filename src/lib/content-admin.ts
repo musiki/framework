@@ -140,7 +140,10 @@ export function isLocalContentAdminEnabled(): boolean {
 function resolveSourceLocalRoot(source: SourceManifestSource | null): string {
   const localPath = normalizeText(source?.localPath);
   if (!localPath) return '';
-  return path.resolve(process.cwd(), localPath);
+  const resolved = path.resolve(process.cwd(), localPath);
+  if (!fs.existsSync(resolved)) return '';
+  if (!fs.statSync(resolved).isDirectory()) return '';
+  return resolved;
 }
 
 function buildLocalEditableCandidatePaths(source: SourceManifestSource | null, repoPath: string): string[] {
