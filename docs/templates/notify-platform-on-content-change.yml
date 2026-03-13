@@ -20,7 +20,11 @@ jobs:
           CONTENT_BUS_SECRET: ${{ secrets.CONTENT_BUS_SECRET }}
         run: |
           # Avisamos al Content Bus del Framework (Zero Downtime)
-          curl -sS -X POST https://musiki.org.ar/api/webhook/content-update \
+          # Usamos la IP directa para saltar problemas de DNS/Timeout en el handshake
+          # -k permite ignorar el aviso de certificado de la IP
+          # -H "Host: musiki.org.ar" indica a Caddy a qué dominio pertenece la petición
+          curl -sS -k -X POST https://85.31.234.141/api/webhook/content-update \
+            -H "Host: musiki.org.ar" \
             -H "Authorization: Bearer ${CONTENT_BUS_SECRET}" \
             -H "Content-Type: application/json" \
             -d @- <<JSON
