@@ -21,6 +21,8 @@ import {
   isCourseLessonEntryForCourse,
 } from '../../lib/course-routing';
 
+import { getRuntimeDynamicContent } from '../../lib/runtime-content';
+
 const rawSlug = Astro.params.slug;
 if (!rawSlug) return Astro.redirect('/cursos');
 
@@ -160,7 +162,15 @@ if ((parts.length === 1 || isCourseForumPage) && requestedCoursePathSegment !== 
   return Astro.redirect(`${courseHref}${forumSuffix}${Astro.url.search}`);
 }
 
-const { Content } = await render(currentEntry);
+const { Content: StaticContent } = await render(currentEntry);
+const dynamicContent = (process.env.NODE_ENV === 'production' && !isCourseForumPage)
+  ? await getRuntimeDynamicContent(currentEntry.id)
+  : null;
+
+// Envolvemos el contenido en un objeto compatible para el JSX
+const dynamicHtml = dynamicContent?.html;
+const Content = StaticContent;
+
 const assignmentLikeTypes = new Set(['assignment', 'eval']);
 const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
 const isAssignment = assignmentLikeTypes.has(currentEntryType);
@@ -2504,7 +2514,9 @@ const forumThreadPrompt = sessionFirstName
           </div>
         )}
         
-        <Content />
+      <div class="class-content">
+        {dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />}
+      </div>
         
         {isAssignment && (
           <div style="margin-top: 2rem; padding: 1.5rem; background: var(--c-bg-mute); border-radius: 8px;">

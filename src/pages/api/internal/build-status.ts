@@ -3,7 +3,7 @@ import type { APIRoute } from 'astro';
 const GITHUB_OWNER = 'musiki';
 const GITHUB_REPO = 'framework';
 const GITHUB_WORKFLOW = 'sync-content-sources.yml';
-const CACHE_TTL_MS = 15_000;
+const CACHE_TTL_MS = 5_000; // Shorter TTL for local bus
 const WORKFLOW_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${GITHUB_WORKFLOW}`;
 
 type CachedPayload = {
@@ -26,34 +26,16 @@ const formatTimestamp = (value: unknown) => {
   }).format(date);
 };
 
-const toState = (status: string, conclusion: string | null) => {
-  if (status && status !== 'completed') return 'running';
-  if (conclusion === 'success') return 'ok';
-  if (conclusion === 'failure' || conclusion === 'cancelled' || conclusion === 'timed_out') {
-    return 'error';
-  }
-  if (conclusion === 'skipped' || conclusion === 'neutral') return 'idle';
-  return 'unknown';
+const toTitle = (state: string, details: string, timestamp: string) => {
+  const suffix = [details, timestamp].filter(Boolean).join(' · ');
+  const displayDetails = suffix ? ` · ${suffix}` : '';
+
+  if (state === 'running') return `Sincronización en curso${displayDetails}`;
+  if (state === 'ok') return `Última sincronización correcta${displayDetails}`;
+  if (state === 'error') return `Última sincronización con error${displayDetails}`;
+  if (state === 'idle') return `Content Bus listo${displayDetails}`;
+  return `Estado no disponible${displayDetails}`;
 };
-
-const toTitle = (state: string, runNumber: unknown, timestamp: string) => {
-  const suffix = [runNumber ? `run ${runNumber}` : '', timestamp].filter(Boolean).join(' · ');
-  const details = suffix ? ` · ${suffix}` : '';
-
-  if (state === 'running') return `Sincronizacion de contenidos en curso${details}`;
-  if (state === 'ok') return `Ultima sincronizacion correcta${details}`;
-  if (state === 'error') return `Ultima sincronizacion con error${details}`;
-  if (state === 'idle') return `Sincronizacion sin cambios${details}`;
-  return `Estado de sincronizacion no disponible${details}`;
-};
-
-const toFallbackBody = (message: string) => ({
-  state: 'unknown',
-  title: message,
-  workflowUrl: WORKFLOW_URL,
-  runUrl: WORKFLOW_URL,
-  fetchedAt: new Date().toISOString(),
-});
 
 export const GET: APIRoute = async () => {
   const now = Date.now();
@@ -61,88 +43,76 @@ export const GET: APIRoute = async () => {
     return new Response(JSON.stringify(cachedPayload.body), {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'public, max-age=0, s-maxage=15, stale-while-revalidate=45',
+        'Cache-Control': 'public, max-age=0, s-maxage=5, stale-while-revalidate=10',
       },
     });
   }
 
   try {
-    const token = (
-      import.meta.env.GITHUB_STATUS_TOKEN
-      || import.meta.env.GITHUB_TOKEN
-      || ''
-    ).trim();
+    // 1. Try to fetch from LOCAL Content Bus
+    const busResponse = await fetch('http://127.0.0.1:4322/status').catch(() => null);
+    
+    if (busResponse && busResponse.ok) {
+      const busStatus = await busResponse.json();
+      const timestamp = formatTimestamp(busStatus.updatedAt || busStatus.createdAt);
+      const sourceInfo = busStatus.sourceRepo ? `repo: ${busStatus.sourceRepo.split('/')[1] || busStatus.sourceRepo}` : '';
+      
+      const body = {
+        ...busStatus,
+        title: toTitle(busStatus.state, sourceInfo, timestamp),
+        fetchedAt: new Date().toISOString(),
+      };
 
+      cachedPayload = { expiresAt: now + CACHE_TTL_MS, body };
+      return new Response(JSON.stringify(body), {
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      });
+    }
+
+    // 2. Fallback to GitHub (original logic)
+    const token = (import.meta.env.GITHUB_STATUS_TOKEN || import.meta.env.GITHUB_TOKEN || '').trim();
     const headers: Record<string, string> = {
       Accept: 'application/vnd.github+json',
       'User-Agent': 'musiki-framework-build-status',
     };
-
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+    if (token) headers.Authorization = `Bearer ${token}`;
 
     const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${encodeURIComponent(GITHUB_WORKFLOW)}/runs?per_page=8`,
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${encodeURIComponent(GITHUB_WORKFLOW)}/runs?per_page=1`,
       { headers },
     );
 
-    if (!response.ok) {
-      throw new Error(`GitHub API responded with ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`GitHub API error`);
 
     const payload = await response.json();
-    const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
-    const latestRun =
-      runs.find((run) => run && (run.event === 'repository_dispatch' || run.event === 'workflow_dispatch'))
-      || runs[0]
-      || null;
+    const latestRun = payload?.workflow_runs?.[0];
 
-    if (!latestRun) {
-      throw new Error('No workflow runs found.');
-    }
+    if (!latestRun) throw new Error('No runs');
 
-    const timestamp = formatTimestamp(latestRun.updated_at || latestRun.created_at);
-    const state = toState(String(latestRun.status || ''), latestRun.conclusion || null);
+    const state = latestRun.status === 'completed' 
+      ? (latestRun.conclusion === 'success' ? 'ok' : 'error') 
+      : 'running';
+    
+    const timestamp = formatTimestamp(latestRun.updated_at);
     const body = {
       state,
-      title: toTitle(state, latestRun.run_number, timestamp),
-      workflowUrl: WORKFLOW_URL,
-      runUrl: String(latestRun.html_url || WORKFLOW_URL),
-      event: String(latestRun.event || ''),
-      status: String(latestRun.status || ''),
-      conclusion: latestRun.conclusion || null,
-      runNumber: latestRun.run_number ?? null,
-      createdAt: latestRun.created_at || null,
-      updatedAt: latestRun.updated_at || null,
+      title: toTitle(state, `GH run ${latestRun.run_number}`, timestamp),
+      runUrl: latestRun.html_url,
+      mode: 'github-fallback',
       fetchedAt: new Date().toISOString(),
     };
 
-    cachedPayload = {
-      expiresAt: now + CACHE_TTL_MS,
-      body,
-    };
-
+    cachedPayload = { expiresAt: now + CACHE_TTL_MS, body };
     return new Response(JSON.stringify(body), {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'public, max-age=0, s-maxage=15, stale-while-revalidate=45',
-      },
+      headers: { 'Content-Type': 'application/json; charset=utf-8' }
     });
+
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? `Estado de sincronizacion no disponible: ${error.message}`
-        : 'Estado de sincronizacion no disponible.';
-
-    const body = cachedPayload?.body || toFallbackBody(message);
-
-    return new Response(JSON.stringify(body), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'public, max-age=0, s-maxage=15, stale-while-revalidate=45',
-      },
-    });
+    const body = {
+      state: 'unknown',
+      title: 'Estado de sincronización no disponible',
+      fetchedAt: new Date().toISOString(),
+    };
+    return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
   }
 };

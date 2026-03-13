@@ -4,8 +4,15 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const authHeader = request.headers.get('authorization');
     
-    // 1. Forward the request to the internal Content Bus (port 4322)
-    // We use localhost to reach the bus running in PM2
+    // Read the original payload to forward it
+    const bodyText = await request.text();
+    let payload;
+    try {
+      payload = JSON.parse(bodyText);
+    } catch (e) {
+      payload = { raw: bodyText };
+    }
+    
     const busUrl = 'http://127.0.0.1:4322/webhook/content-update';
     
     console.log('[Astro Bridge] Forwarding webhook to Content Bus...');
@@ -16,8 +23,7 @@ export const POST: APIRoute = async ({ request }) => {
         'Authorization': authHeader || '',
         'Content-Type': 'application/json'
       },
-      // We don't necessarily need to wait for the full body if we just want to trigger it
-      body: JSON.stringify({ triggeredBy: 'astro-bridge', timestamp: new Date().toISOString() })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();

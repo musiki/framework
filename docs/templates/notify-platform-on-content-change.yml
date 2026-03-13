@@ -20,8 +20,9 @@ jobs:
           CONTENT_BUS_SECRET: ${{ secrets.CONTENT_BUS_SECRET }}
         run: |
           # Avisamos al Content Bus del Framework (Zero Downtime)
-          # Usamos el dominio real (HTTPS 443). El firewall debe estar abierto en el VPS.
-          curl -sS -X POST https://musiki.org.ar/api/webhook/content-update \
+          # -fsS hace que falle si el status code >= 400
+          # --fail-with-body muestra el error del servidor en el log de GitHub
+          curl -fsS --fail-with-body -X POST https://www.musiki.org.ar/api/webhook/content-update \
             -H "Authorization: Bearer ${CONTENT_BUS_SECRET}" \
             -H "Content-Type: application/json" \
             -d @- <<JSON

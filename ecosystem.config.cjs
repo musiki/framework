@@ -1,7 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-// Basic .env parser to inject variables into PM2 apps
 const envPath = path.resolve(__dirname, '.env');
 const dotEnv = {};
 if (fs.existsSync(envPath)) {
@@ -29,6 +28,9 @@ module.exports = {
         NODE_ENV: 'production',
         HOST: '127.0.0.1',
         PORT: '4321',
+        // FORZADO DE ENTORNO
+        AUTH_URL: 'https://www.musiki.org.ar',
+        AUTH_TRUST_HOST: 'true',
         ...dotEnv
       },
     },

@@ -53,6 +53,14 @@ export default defineConfig({
     mode: 'standalone'
   }),
   vite: {
+    server: {
+      allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', '85.31.234.141'],
+      hmr: {
+        protocol: 'wss',
+        host: 'www.musiki.org.ar',
+        clientPort: 443,
+      },
+    },
     optimizeDeps: {
       include: [
         '@mediapipe/tasks-vision',
@@ -71,9 +79,12 @@ export default defineConfig({
   security: {
     checkOrigin: false,
   },
+  server: {
+    trustProxy: true,
+  },
   integrations: [
     mdx(), 
-    auth({ injectEndpoints: false })
+    auth({ injectEndpoints: true })
   ],
   markdown: {
     shikiConfig: {
