@@ -7,7 +7,14 @@ import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId, getCourseAliases } from '../../lib/course-alias';
-import { buildEditorHref, sourcePathFromFrameworkFilePath } from '../../lib/content-admin';
+import {
+  buildDefaultCreatePath,
+  buildEditorHref,
+  getEditableLocalRepoFile,
+  isLocalContentAdminEnabled,
+  sanitizeRepoMarkdownPath,
+  sourcePathFromFrameworkFilePath,
+} from '../../lib/content-admin';
 import { createSupabaseServerClient } from '../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../lib/live/access';
 import {
@@ -354,6 +361,7 @@ const lessonForumHoverTitle = isLessonPage
 const forumThreadPrompt = sessionFirstName
   ? `¿Qué pensás, ${sessionFirstName}?`
   : '¿Qué pensás?';
+const localContentAdminEnabled = isLocalContentAdminEnabled();
 
 // Integrated Editor Logic
 const editorMode = String(Astro.url.searchParams.get('mode') || '').trim().toLowerCase();
@@ -370,20 +378,23 @@ if (isEditorActive) {
   if (isEditing) {
     try {
       const { resolveCourseSource } = await import('../../lib/content-admin');
-      const { getRepoFile } = await import('../../lib/github-app');
       const source = resolveCourseSource(canonicalCourseId);
       
       if (!source?.repo) {
         editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
       } else {
-        const remoteFile = await getRepoFile({
-          repoFullName: source.repo,
-          path: currentEntrySourcePath,
-          ref: source.branch || 'main',
-        });
+        const remoteFile = localContentAdminEnabled
+          ? getEditableLocalRepoFile(source, currentEntrySourcePath)
+          : await (await import('../../lib/github-app')).getRepoFile({
+              repoFullName: source.repo,
+              path: currentEntrySourcePath,
+              ref: source.branch || 'main',
+            });
 
         if (!remoteFile) {
-          editorError = 'La nota no existe en GitHub o no pudo resolverse.';
+          editorError = localContentAdminEnabled
+            ? 'La nota no existe en local o no pudo resolverse.'
+            : 'La nota no existe en GitHub o no pudo resolverse.';
         } else {
           editorTargetPath = remoteFile.path || currentEntrySourcePath;
           editorInitialContent = remoteFile.content || '';
@@ -748,37 +759,31 @@ order:
   gap: 0.35rem;
 }
 
-.course-teacher-float-actions {
-  position: absolute;
-  top: 1.25rem;
-  right: 1.45rem;
+.course-teacher-actions {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  z-index: 45;
 }
 
 .teacher-action-btn {
-  width: 1.56rem !important;
-  height: 1.56rem !important;
-  min-width: 1.56rem !important;
-  min-height: 1.56rem !important;
   border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
-  border-radius: 0 !important;
+  border-radius: 999px !important;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  padding: 0.14rem !important;
+  min-height: 2rem !important;
+  padding: 0.45rem 0.72rem !important;
   margin: 0 !important;
   text-transform: uppercase !important;
   letter-spacing: 0.03em;
   font-weight: 900 !important;
-  font-size: 0.58rem !important;
+  font-size: 0.72rem !important;
   line-height: 1 !important;
   color: var(--forum-text-secondary, var(--c-fg-dim, #6b7480)) !important;
   cursor: pointer;
   background: transparent !important;
   text-decoration: none !important;
+  white-space: nowrap;
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 
@@ -2635,7 +2640,13 @@ order:
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
               });
-              const result = await res.json();
+              const raw = await res.text();
+              let result = {};
+              try {
+                result = raw ? JSON.parse(raw) : {};
+              } catch {
+                result = { error: raw || 'Error al publicar' };
+              }
               if (!res.ok) throw new Error(result.error || 'Error al publicar');
 
               statusNode.dataset.tone = 'success';
@@ -2671,16 +2682,6 @@ order:
       data-live-course-id={canonicalCourseId || courseSlug}
       data-live-page-slug={livePageSlug}
     >
-      {(teacherEditHref || teacherCreateHref) && (
-        <div class="course-teacher-float-actions" aria-label="Acciones docentes">
-          {teacherEditHref && (
-            <a href={teacherEditHref} class="teacher-action-btn" title="Editar esta nota" aria-label="Editar">E</a>
-          )}
-          {teacherCreateHref && (
-            <a href={teacherCreateHref} class="teacher-action-btn teacher-action-btn--create" title="Crear nueva nota" aria-label="Crear">C</a>
-          )}
-        </div>
-      )}
       <button
         type="button"
         class="course-sidebar-handle course-sidebar-handle--left"
@@ -2705,6 +2706,16 @@ order:
               <span class="course-title-link-text">{courseIndex.data.title}</span>
             </a>
             <div class="course-title-actions">
+              {(teacherEditHref || teacherCreateHref) && (
+                <div class="course-teacher-actions" aria-label="Acciones docentes">
+                  {teacherEditHref && (
+                    <a href={teacherEditHref} class="teacher-action-btn" title="Editar esta nota" aria-label="Editar">E</a>
+                  )}
+                  {teacherCreateHref && (
+                    <a href={teacherCreateHref} class="teacher-action-btn teacher-action-btn--create" title="Crear nueva nota" aria-label="Crear">C</a>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 class="sidebar-toggle-btn"

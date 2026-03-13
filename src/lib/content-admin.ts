@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 type SourceManifestSource = {
   id: string;
@@ -22,6 +23,7 @@ let cachedManifest: SourceManifest | null = null;
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizePath = (value: unknown) => normalizeText(value).replace(/\\/g, '/');
+const isTruthy = (value: unknown) => /^(1|true|yes|on)$/i.test(normalizeText(value));
 
 function readManifest(): SourceManifest {
   const stat = fs.statSync(manifestPath);
@@ -126,4 +128,86 @@ export function buildEditorHref(options: {
   if (returnTo) params.set('returnTo', returnTo);
 
   return `/cursos/editor?${params.toString()}`;
+}
+
+export function isLocalContentAdminEnabled(): boolean {
+  return isTruthy(
+    process.env.CONTENT_ADMIN_LOCAL_WRITE ||
+    import.meta.env.CONTENT_ADMIN_LOCAL_WRITE,
+  );
+}
+
+function resolveSourceLocalRoot(source: SourceManifestSource | null): string {
+  const localPath = normalizeText(source?.localPath);
+  if (!localPath) return '';
+  return path.resolve(process.cwd(), localPath);
+}
+
+function buildLocalEditableCandidatePaths(source: SourceManifestSource | null, repoPath: string): string[] {
+  const normalizedRepoPath = sanitizeRepoMarkdownPath(repoPath);
+  if (!normalizedRepoPath || !source?.id) return [];
+
+  const candidates = [
+    path.join(process.cwd(), '.content-sources', source.id, normalizedRepoPath),
+    path.join(process.cwd(), 'src/content', normalizedRepoPath),
+  ];
+
+  const sourceLocalRoot = resolveSourceLocalRoot(source);
+  if (sourceLocalRoot) {
+    candidates.unshift(path.join(sourceLocalRoot, normalizedRepoPath));
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+export function getEditableLocalRepoFile(source: SourceManifestSource | null, repoPath: string): {
+  path: string;
+  content: string;
+  sha: string;
+  absolutePath: string;
+} | null {
+  const normalizedRepoPath = sanitizeRepoMarkdownPath(repoPath);
+  if (!normalizedRepoPath) return null;
+
+  const existingPath = buildLocalEditableCandidatePaths(source, normalizedRepoPath)
+    .find((candidatePath) => fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile());
+
+  if (!existingPath) return null;
+
+  const content = fs.readFileSync(existingPath, 'utf8');
+  return {
+    path: normalizedRepoPath,
+    content,
+    sha: createHash('sha1').update(content, 'utf8').digest('hex'),
+    absolutePath: existingPath,
+  };
+}
+
+export function writeEditableLocalRepoFile(source: SourceManifestSource | null, repoPath: string, content: string): {
+  path: string;
+  fileSha: string;
+  writtenPaths: string[];
+} {
+  const normalizedRepoPath = sanitizeRepoMarkdownPath(repoPath);
+  if (!normalizedRepoPath) {
+    throw new Error('A valid markdown target path is required.');
+  }
+  if (!source?.id) {
+    throw new Error('No source repository is configured for this course.');
+  }
+
+  const candidatePaths = buildLocalEditableCandidatePaths(source, normalizedRepoPath);
+  const writtenPaths: string[] = [];
+
+  for (const candidatePath of candidatePaths) {
+    fs.mkdirSync(path.dirname(candidatePath), { recursive: true });
+    fs.writeFileSync(candidatePath, content, 'utf8');
+    writtenPaths.push(candidatePath);
+  }
+
+  return {
+    path: normalizedRepoPath,
+    fileSha: createHash('sha1').update(content, 'utf8').digest('hex'),
+    writtenPaths,
+  };
 }

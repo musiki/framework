@@ -1,9 +1,14 @@
+import path from 'node:path';
+import fs from 'node:fs';
 import type { APIRoute } from 'astro';
 import matter from 'gray-matter';
 import {
+  getEditableLocalRepoFile,
   isEditableCourseRepoPath,
+  isLocalContentAdminEnabled,
   resolveCourseSource,
   sanitizeRepoMarkdownPath,
+  writeEditableLocalRepoFile,
 } from '../../../lib/content-admin';
 import { normalizeContentSlug } from '../../../lib/content-slug';
 import { json } from '../../../lib/forum-server';
@@ -22,13 +27,14 @@ const normalizeText = (value: unknown) => String(value || '').trim();
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
+  const localContentAdminEnabled = isLocalContentAdminEnabled();
   const userName = normalizeText(session?.user?.name);
   const sessionEmail = normalizeText(session?.user?.email);
   if (!sessionEmail) {
     return json({ error: 'Not authenticated' }, 401);
   }
 
-  if (!isGitHubAppConfigured()) {
+  if (!localContentAdminEnabled && !isGitHubAppConfigured()) {
     return json({ error: 'GitHub App is not configured on the server.' }, 503);
   }
 
@@ -86,11 +92,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const mode = normalizeText(body?.mode).toLowerCase() === 'create' ? 'create' : 'edit';
   const expectedSha = normalizeText(body?.sha);
 
-  const existing = await getRepoFile({
-    repoFullName: source.repo,
-    path: targetPath,
-    ref: baseBranch,
-  });
+  const existing = localContentAdminEnabled
+    ? getEditableLocalRepoFile(source, targetPath)
+    : await getRepoFile({
+        repoFullName: source.repo,
+        path: targetPath,
+        ref: baseBranch,
+      });
 
   if (mode === 'create' && existing) {
     return json({ error: 'A file already exists at that path.', latestSha: existing.sha }, 409);
@@ -115,6 +123,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const usePRWorkflow = isPublicPath;
 
   try {
+    if (localContentAdminEnabled) {
+      const localResult = writeEditableLocalRepoFile(source, targetPath, finalContent);
+      return json({
+        success: true,
+        mode,
+        repo: source.repo || 'local',
+        branch: 'local',
+        path: localResult.path,
+        commitSha: localResult.fileSha,
+        commitUrl: '',
+        fileSha: localResult.fileSha,
+        localOnly: true,
+        localPaths: localResult.writtenPaths,
+      });
+    }
+
     let activeBranch = baseBranch;
     let prResult = null;
 

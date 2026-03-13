@@ -6,6 +6,8 @@ import Footer from '../../components/Footer.astro';
 import Header from '../../components/Header.astro';
 import {
   buildDefaultCreatePath,
+  getEditableLocalRepoFile,
+  isLocalContentAdminEnabled,
   resolveCourseSource,
   sanitizeRepoDirectoryPath,
   sanitizeRepoMarkdownPath,
@@ -31,7 +33,8 @@ if (!access.canManage) {
 }
 
 const source = resolveCourseSource(canonicalCourseId);
-const githubAppConfigured = isGitHubAppConfigured();
+const localContentAdminEnabled = isLocalContentAdminEnabled();
+const githubAppConfigured = localContentAdminEnabled || isGitHubAppConfigured();
 const mode = String(Astro.url.searchParams.get('mode') || 'edit').trim().toLowerCase() === 'create'
   ? 'create'
   : 'edit';
@@ -63,14 +66,18 @@ if (!source?.repo) {
     editorError = 'Falta el path de la nota a editar.';
   } else {
     try {
-      const remoteFile = await getRepoFile({
-        repoFullName: source.repo,
-        path: requestedPath,
-        ref: source.branch || 'main',
-      });
+      const remoteFile = localContentAdminEnabled
+        ? getEditableLocalRepoFile(source, requestedPath)
+        : await getRepoFile({
+            repoFullName: source.repo,
+            path: requestedPath,
+            ref: source.branch || 'main',
+          });
 
       if (!remoteFile) {
-        editorError = 'La nota no existe en GitHub o no pudo resolverse.';
+        editorError = localContentAdminEnabled
+          ? 'La nota no existe en local o no pudo resolverse.'
+          : 'La nota no existe en GitHub o no pudo resolverse.';
       } else {
         targetPath = remoteFile.path || requestedPath;
         initialContent = remoteFile.content || '';
@@ -351,8 +358,13 @@ if (!source?.repo) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
             });
-
-            const result = await response.json().catch(() => ({}));
+            const raw = await response.text();
+            let result = {};
+            try {
+              result = raw ? JSON.parse(raw) : {};
+            } catch {
+              result = { error: raw || 'No se pudo publicar la nota.' };
+            }
             if (!response.ok) {
               throw new Error(result?.error || 'No se pudo publicar la nota.');
             }

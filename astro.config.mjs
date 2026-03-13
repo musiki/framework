@@ -46,6 +46,23 @@ const site = firstNonLocalUrl(
   process.env.VERCEL_URL
 ) || 'http://localhost:4321';
 
+const remoteDevHmrHost = (
+  process.env.REMOTE_DEV_HMR_HOST ||
+  process.env.VITE_HMR_HOST ||
+  ''
+).trim();
+const viteServerConfig = {
+  allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', '85.31.234.141'],
+};
+
+if (remoteDevHmrHost) {
+  viteServerConfig.hmr = {
+    protocol: 'wss',
+    host: remoteDevHmrHost,
+    clientPort: Number(process.env.VITE_HMR_CLIENT_PORT || 443),
+  };
+}
+
 export default defineConfig({
   site,
   output: 'server',
@@ -53,14 +70,7 @@ export default defineConfig({
     mode: 'standalone'
   }),
   vite: {
-    server: {
-      allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', '85.31.234.141'],
-      hmr: {
-        protocol: 'wss',
-        host: 'www.musiki.org.ar',
-        clientPort: 443,
-      },
-    },
+    server: viteServerConfig,
     optimizeDeps: {
       include: [
         '@mediapipe/tasks-vision',
