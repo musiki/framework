@@ -629,6 +629,7 @@ const withActiveCourse = (href: string) => {
 		if (!(brandLink instanceof HTMLAnchorElement)) return;
 
 		const defaultTitle = brandLink.title || 'musiki26';
+		let lastState = brandLink.dataset.buildState || 'unknown';
 		let intervalId = 0;
 		let controller: AbortController | null = null;
 
@@ -673,9 +674,20 @@ const withActiveCourse = (href: string) => {
 				|| String(payload.title || defaultTitle).trim()
 				|| defaultTitle;
 
+			const transitionedToFinished = 
+				lastState === 'running' && 
+				(state === 'ok' || state === 'idle');
+
 			brandLink.dataset.buildState = state;
 			brandLink.title = title;
 			brandLink.setAttribute('aria-label', title);
+			lastState = state;
+
+			if (transitionedToFinished) {
+				window.setTimeout(() => {
+					window.location.reload();
+				}, 1000);
+			}
 		};
 
 		const applyFallback = () => {
