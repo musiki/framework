@@ -1,4 +1,5 @@
 import { getCollection } from 'astro:content';
+import { safeGetCollection } from '../lib/safe-content-collection';
 import {
   buildCourseHref,
   buildCourseLessonHref,
@@ -13,7 +14,7 @@ export const prerender = true;
 
 export async function GET() {
   const [content, cursos] = await Promise.all([
-    getCollection('content'),
+    safeGetCollection('content'),
     getCollection('cursos'),
   ]);
 

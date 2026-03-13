@@ -5,6 +5,7 @@ import {
   getContentFrontmatterSlug,
   getContentTitleSlug,
 } from './content-slug';
+import { safeGetCollection } from './safe-content-collection';
 
 type ContentEntry = CollectionEntry<'content'>;
 type CourseEntry = CollectionEntry<'cursos'>;
@@ -79,7 +80,7 @@ const hasPresentationTheme = (entry: ContentEntry) => {
 
 const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
   const [contentEntries, courseEntries] = await Promise.all([
-    getCollection('content'),
+    safeGetCollection<ContentEntry>('content'),
     getCollection('cursos'),
   ]);
 

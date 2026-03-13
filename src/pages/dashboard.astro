@@ -3449,6 +3449,23 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         padding: 0.18rem 0.22rem;
         background: var(--c-bg) !important;
       }
+      .dashboard-tabulator[data-range-selection="true"] .tabulator-row,
+      .dashboard-tabulator[data-range-selection="true"] .tabulator-cell,
+      .dashboard-tabulator[data-range-selection="true"] .dashboard-annotation-shell,
+      .dashboard-tabulator[data-range-selection="true"] .dashboard-annotation-shell__content {
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .dashboard-tabulator[data-range-selection="true"] .tabulator-editing,
+      .dashboard-tabulator[data-range-selection="true"] .tabulator-editing *,
+      .dashboard-tabulator[data-range-selection="true"] input,
+      .dashboard-tabulator[data-range-selection="true"] textarea,
+      .dashboard-tabulator[data-range-selection="true"] select,
+      .dashboard-tabulator[data-range-selection="true"] button,
+      .dashboard-tabulator[data-range-selection="true"] a {
+        user-select: text;
+        -webkit-user-select: text;
+      }
       .dashboard-tabulator .tabulator-col-content {
         padding: 0.24rem 0.22rem;
       }
@@ -3863,6 +3880,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .dashboard-cell--range-anchor {
         box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-link) 64%, transparent);
+      }
+      body.dashboard-range-dragging,
+      body.dashboard-range-dragging * {
+        user-select: none !important;
+        -webkit-user-select: none !important;
       }
       :root.dark .dashboard-grid-search,
       :root.dark .dashboard-grid-btn,

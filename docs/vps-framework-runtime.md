@@ -34,22 +34,45 @@ Sólo asegúrate de tener este secret en `i1`:
 En `framework`, el workflow espera:
 
 - `CONTENT_SOURCE_READ_TOKEN`
-- `VPS_SSH_HOST`
-- `VPS_SSH_PORT`
-- `VPS_SSH_USER`
-- `VPS_SSH_KEY`
 - `VPS_FRAMEWORK_DIR`
 - `VPS_GIT_BRANCH`
 - `VPS_INSTALL_COMMAND`
 - `VPS_BUILD_COMMAND`
 - `VPS_RELOAD_COMMAND`
+- `VPS_CONTENT_SOURCE_STRATEGY`
 
 Valores recomendados:
 
+- `VPS_FRAMEWORK_DIR=/opt/musiki/framework`
 - `VPS_GIT_BRANCH=main`
 - `VPS_INSTALL_COMMAND=npm ci`
 - `VPS_BUILD_COMMAND=npm run build`
 - `VPS_RELOAD_COMMAND=pm2 reload ecosystem.config.cjs --only musiki-framework --update-env && pm2 save`
+- `VPS_CONTENT_SOURCE_STRATEGY=remote-only`
+
+El workflow ahora asume un runner self-hosted en el VPS con labels:
+
+- `self-hosted`
+- `linux`
+- `x64`
+- `musiki-framework`
+
+Setup sugerido del runner en el VPS:
+
+```bash
+mkdir -p /home/zz/actions-runner && cd /home/zz/actions-runner
+# descargar el tarball del runner desde GitHub UI
+tar xzf actions-runner-linux-x64-*.tar.gz
+./config.sh --url https://github.com/musiki/framework --token <runner-token> --labels musiki-framework
+sudo ./svc.sh install zz
+sudo ./svc.sh start
+```
+
+Verificacion:
+
+```bash
+systemctl status actions.runner.* --no-pager
+```
 
 ## 3. PM2
 
@@ -94,7 +117,7 @@ sudo systemctl reload caddy
 
 ## 5. Fish
 
-Deploy manual desde tu máquina:
+Deploy manual desde tu máquina, sólo como fallback:
 
 - [scripts/vps/deploy-framework.sh](/Users/zztt/projects/26-musiki/framework/scripts/vps/deploy-framework.sh)
 

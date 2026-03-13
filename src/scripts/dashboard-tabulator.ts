@@ -72,9 +72,12 @@ type AnnotationModalApi = {
 type RangeSelectionState = {
   anchorCell: any | null;
   dragging: boolean;
+  movedDuringDrag: boolean;
   preserveExisting: boolean;
+  suppressClickUntil: number;
   selectedCells: Set<any>;
   selectedElements: Set<HTMLElement>;
+  bodyClassApplied: boolean;
 };
 
 const SEARCH_DEBOUNCE_MS = 150;
@@ -1797,15 +1800,46 @@ const bindTableRangeSelection = (table: Tabulator, kind: GridKind, root: HTMLEle
   const state: RangeSelectionState = {
     anchorCell: null,
     dragging: false,
+    movedDuringDrag: false,
     preserveExisting: false,
+    suppressClickUntil: 0,
     selectedCells: new Set<any>(),
     selectedElements: new Set<HTMLElement>(),
+    bodyClassApplied: false,
   };
   (table as any).__musikiRangeSelectionState = state;
   const tableElement =
     ((table as any)?.rowManager?.element as HTMLElement | undefined)
     || ((table as any)?.element as HTMLElement | undefined)
     || null;
+  const tableHost =
+    ((table as any)?.element as HTMLElement | undefined)
+    || tableElement?.closest<HTMLElement>('.dashboard-tabulator')
+    || null;
+  if (tableHost instanceof HTMLElement) {
+    tableHost.dataset.rangeSelection = 'true';
+  }
+
+  const clearNativeSelection = () => {
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {
+      // ignore browser selection cleanup failures
+    }
+  };
+
+  const setDraggingVisualState = (enabled: boolean) => {
+    if (enabled && !state.bodyClassApplied) {
+      document.body.classList.add('dashboard-range-dragging');
+      state.bodyClassApplied = true;
+      return;
+    }
+
+    if (!enabled && state.bodyClassApplied) {
+      document.body.classList.remove('dashboard-range-dragging');
+      state.bodyClassApplied = false;
+    }
+  };
 
   const clearSelection = () => {
     state.selectedCells.clear();
@@ -1870,7 +1904,10 @@ const bindTableRangeSelection = (table: Tabulator, kind: GridKind, root: HTMLEle
 
   const beginSelection = (event: MouseEvent, cell: any) => {
     state.dragging = true;
+    state.movedDuringDrag = false;
     state.preserveExisting = Boolean(event.metaKey || event.ctrlKey);
+    setDraggingVisualState(true);
+    clearNativeSelection();
     if (!event.shiftKey) {
       state.anchorCell = cell;
     }
@@ -1878,7 +1915,13 @@ const bindTableRangeSelection = (table: Tabulator, kind: GridKind, root: HTMLEle
   };
 
   const mouseUpHandler = () => {
+    if (state.movedDuringDrag) {
+      state.suppressClickUntil = Date.now() + 250;
+    }
     state.dragging = false;
+    state.movedDuringDrag = false;
+    setDraggingVisualState(false);
+    clearNativeSelection();
   };
   document.addEventListener('mouseup', mouseUpHandler);
 
@@ -1886,6 +1929,7 @@ const bindTableRangeSelection = (table: Tabulator, kind: GridKind, root: HTMLEle
     if (event.button !== 0 || isInteractiveDashboardTarget(event.target)) return;
     const cell = resolveCellComponentFromTarget(table, event.target);
     if (!cell) return;
+    event.preventDefault();
     beginSelection(event, cell);
   };
 
@@ -1893,24 +1937,53 @@ const bindTableRangeSelection = (table: Tabulator, kind: GridKind, root: HTMLEle
     if (!state.dragging || isInteractiveDashboardTarget(event.target)) return;
     const cell = resolveCellComponentFromTarget(table, event.target);
     if (!cell) return;
+    event.preventDefault();
+    clearNativeSelection();
+    if (cell !== state.anchorCell) {
+      state.movedDuringDrag = true;
+    }
     applyRange(state.anchorCell || cell, cell, state.preserveExisting);
+  };
+
+  const selectStartHandler = (event: Event) => {
+    if (isInteractiveDashboardTarget(event.target)) return;
+    if (!resolveCellComponentFromTarget(table, event.target)) return;
+    event.preventDefault();
+    clearNativeSelection();
+  };
+
+  const dragStartHandler = (event: DragEvent) => {
+    if (isInteractiveDashboardTarget(event.target)) return;
+    if (!resolveCellComponentFromTarget(table, event.target)) return;
+    event.preventDefault();
   };
 
   tableElement?.addEventListener('mousedown', mouseDownHandler, true);
   tableElement?.addEventListener('mousemove', mouseMoveHandler, true);
   tableElement?.addEventListener('mouseover', mouseMoveHandler, true);
+  tableElement?.addEventListener('selectstart', selectStartHandler, true);
+  tableElement?.addEventListener('dragstart', dragStartHandler, true);
 
   return () => {
     document.removeEventListener('mouseup', mouseUpHandler);
     tableElement?.removeEventListener('mousedown', mouseDownHandler, true);
     tableElement?.removeEventListener('mousemove', mouseMoveHandler, true);
     tableElement?.removeEventListener('mouseover', mouseMoveHandler, true);
+    tableElement?.removeEventListener('selectstart', selectStartHandler, true);
+    tableElement?.removeEventListener('dragstart', dragStartHandler, true);
+    setDraggingVisualState(false);
     clearSelection();
+    if (tableHost instanceof HTMLElement) {
+      delete tableHost.dataset.rangeSelection;
+    }
     delete (table as any).__musikiRangeSelectionState;
   };
 };
 
 const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
+  const CLICK_TOGGLE_DELAY_MS = 180;
+  const TOUCH_LONG_PRESS_DELAY_MS = 420;
+
   const resolveAttendanceCellContext = (cell: any) => {
     const field = normalizeText(cell.getField?.() || '');
     const rowData = cell.getData?.() || {};
@@ -1998,6 +2071,66 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     });
   };
 
+  const getAttendanceCellKey = (cell: any) => {
+    const context = resolveAttendanceCellContext(cell);
+    if (!context) return '';
+    return `${context.studentId}::${context.dateKey}`;
+  };
+
+  const persistAttendanceSelection = async (
+    cell: any,
+    normalized: ReturnType<typeof normalizeAttendanceInput>,
+  ) => {
+    await persistAttendanceCellValue(cell, normalized);
+
+    const extraCells = getSelectedAttendanceCells(cell);
+    const failures: string[] = [];
+    for (const selectedCell of extraCells) {
+      try {
+        await persistAttendanceCellValue(selectedCell, normalized);
+      } catch (error: any) {
+        failures.push(error?.message || 'No se pudo guardar una celda del rango');
+      }
+    }
+
+    if (failures.length > 0) {
+      alert(`Se guardó la celda activa, pero fallaron ${failures.length} celdas del rango.`);
+    }
+  };
+
+  const getNextToggleValue = (cell: any) => {
+    const context = resolveAttendanceCellContext(cell);
+    const effectiveValue = Number(context?.cellMeta?.effectiveValue || 0);
+    return effectiveValue >= 1
+      ? normalizeAttendanceInput('0')
+      : normalizeAttendanceInput('1');
+  };
+
+  let pendingToggleTimer: number | null = null;
+  let pendingToggleCellKey = '';
+  let suppressClickCellKey = '';
+  let suppressClickUntil = 0;
+  let touchLongPressTimer: number | null = null;
+  let touchLongPressCellKey = '';
+  let touchLongPressTriggered = false;
+
+  const clearPendingToggle = () => {
+    if (pendingToggleTimer !== null) {
+      window.clearTimeout(pendingToggleTimer);
+      pendingToggleTimer = null;
+    }
+    pendingToggleCellKey = '';
+  };
+
+  const clearTouchLongPress = () => {
+    if (touchLongPressTimer !== null) {
+      window.clearTimeout(touchLongPressTimer);
+      touchLongPressTimer = null;
+    }
+    touchLongPressCellKey = '';
+    touchLongPressTriggered = false;
+  };
+
   table.on('cellEditing', (cell: any) => {
     if (!resolveAttendanceCellContext(cell)) return;
 
@@ -2024,27 +2157,106 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     }
 
     try {
-      await persistAttendanceCellValue(cell, normalized);
-
-      const extraCells = getSelectedAttendanceCells(cell);
-      const failures: string[] = [];
-      for (const selectedCell of extraCells) {
-        try {
-          await persistAttendanceCellValue(selectedCell, normalized);
-        } catch (error: any) {
-          failures.push(error?.message || 'No se pudo guardar una celda del rango');
-        }
-      }
-
-      if (failures.length > 0) {
-        alert(`Se guardó la celda activa, pero fallaron ${failures.length} celdas del rango.`);
-      }
+      await persistAttendanceSelection(cell, normalized);
     } catch (error: any) {
       console.error('Error saving manual attendance:', error);
       cell.restoreOldValue();
       alert(error?.message || 'No se pudo guardar la asistencia manual');
     }
   });
+
+  table.on('cellClick', (event: MouseEvent, cell: any) => {
+    if (!resolveAttendanceCellContext(cell)) return;
+    if (isInteractiveDashboardTarget(event.target)) return;
+    if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+
+    const rangeState = (table as any).__musikiRangeSelectionState as RangeSelectionState | undefined;
+    if (rangeState?.suppressClickUntil && rangeState.suppressClickUntil > Date.now()) return;
+
+    const cellKey = getAttendanceCellKey(cell);
+    if (!cellKey) return;
+    if (suppressClickCellKey === cellKey && suppressClickUntil > Date.now()) return;
+
+    clearPendingToggle();
+    pendingToggleCellKey = cellKey;
+    pendingToggleTimer = window.setTimeout(async () => {
+      pendingToggleTimer = null;
+      pendingToggleCellKey = '';
+
+      try {
+        await persistAttendanceSelection(cell, getNextToggleValue(cell));
+      } catch (error: any) {
+        console.error('Error toggling attendance cell:', error);
+        alert(error?.message || 'No se pudo actualizar la asistencia');
+      }
+    }, CLICK_TOGGLE_DELAY_MS);
+  });
+
+  table.on('cellDblClick', (_event: MouseEvent, cell: any) => {
+    if (!resolveAttendanceCellContext(cell)) return;
+    const cellKey = getAttendanceCellKey(cell);
+    if (pendingToggleCellKey && pendingToggleCellKey === cellKey) {
+      clearPendingToggle();
+    }
+  });
+
+  const tableElement =
+    ((table as any)?.rowManager?.element as HTMLElement | undefined)
+    || ((table as any)?.element as HTMLElement | undefined)
+    || null;
+
+  const touchStartHandler = (event: TouchEvent) => {
+    if (isInteractiveDashboardTarget(event.target)) return;
+    const cell = resolveCellComponentFromTarget(table, event.target);
+    if (!cell || !resolveAttendanceCellContext(cell)) return;
+
+    clearTouchLongPress();
+    touchLongPressCellKey = getAttendanceCellKey(cell);
+    touchLongPressTimer = window.setTimeout(() => {
+      touchLongPressTriggered = true;
+      suppressClickCellKey = touchLongPressCellKey;
+      suppressClickUntil = Date.now() + 900;
+      clearPendingToggle();
+      try {
+        cell.getComponent?.().edit?.(true);
+      } catch {
+        // ignore touch edit failures
+      }
+    }, TOUCH_LONG_PRESS_DELAY_MS);
+  };
+
+  const touchEndHandler = () => {
+    if (touchLongPressTimer !== null) {
+      window.clearTimeout(touchLongPressTimer);
+      touchLongPressTimer = null;
+    }
+
+    if (!touchLongPressTriggered) {
+      touchLongPressCellKey = '';
+      return;
+    }
+
+    touchLongPressCellKey = '';
+    touchLongPressTriggered = false;
+  };
+
+  const touchMoveCancelHandler = () => {
+    clearTouchLongPress();
+  };
+
+  tableElement?.addEventListener('touchstart', touchStartHandler, { passive: true });
+  tableElement?.addEventListener('touchend', touchEndHandler, { passive: true });
+  tableElement?.addEventListener('touchcancel', touchMoveCancelHandler, { passive: true });
+  tableElement?.addEventListener('touchmove', touchMoveCancelHandler, { passive: true });
+
+  return () => {
+    clearPendingToggle();
+    clearTouchLongPress();
+    tableElement?.removeEventListener('touchstart', touchStartHandler);
+    tableElement?.removeEventListener('touchend', touchEndHandler);
+    tableElement?.removeEventListener('touchcancel', touchMoveCancelHandler);
+    tableElement?.removeEventListener('touchmove', touchMoveCancelHandler);
+  };
 };
 
 const bindAdminRoleSelects = (host: HTMLElement, table: Tabulator) => {
@@ -2410,7 +2622,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     trackTableBuilt(summaryTable, readyTables);
     trackTableBuilt(logTable, readyTables);
     bindTableSelection(summaryTable, 'attendance-summary', annotationState);
-    bindAttendanceManualEditing(summaryTable, meta);
+    destroyers.push(bindAttendanceManualEditing(summaryTable, meta));
     destroyers.push(bindTurnoSelects(attendanceNode, summaryTable, meta));
     destroyers.push(bindGrupoInputs(attendanceNode, summaryTable, meta));
     destroyers.push(bindTableRangeSelection(summaryTable, 'attendance-summary', root));

@@ -168,6 +168,9 @@ const resolvedActiveCourseId = normalizeCourseId(
 );
 const resolvedActiveCourseLabel = resolvedActiveCourse?.title || '';
 const courseMenuLabel = resolvedActiveCourseLabel || 'Cursos';
+const activeCourseHref = resolvedActiveCourse
+	? `/cursos/${encodeCoursePath(resolvedActiveCourse.pathSegment || resolvedActiveCourse.courseId)}?course=${encodeURIComponent(resolvedActiveCourse.courseId)}`
+	: '/cursos';
 const showHeaderClassControls = Boolean(user && (resolvedActiveCourseId || hasPerformativeRoomLink));
 const normalizedTeacherCreateHref = typeof teacherCreateHref === 'string' ? teacherCreateHref.trim() : '';
 const normalizedTeacherEditHref = typeof teacherEditHref === 'string' ? teacherEditHref.trim() : '';
@@ -206,15 +209,21 @@ const withActiveCourse = (href: string) => {
 			{
 				user && enrolledCourses.length > 0 ? (
 					<div class="course-menu">
+						<a
+							href={activeCourseHref}
+							class="course-menu-trigger course-menu-trigger--label"
+							aria-label={resolvedActiveCourseLabel ? `Ir a ${resolvedActiveCourseLabel}` : 'Ir a Cursos'}
+						>
+							<span class="course-menu-trigger-label">{courseMenuLabel}</span>
+						</a>
 						<button
 							type="button"
-							class="course-menu-trigger"
+							class="course-menu-trigger course-menu-trigger--arrow"
 							id="course-menu-button"
 							aria-haspopup="menu"
 							aria-expanded="false"
-							aria-label={resolvedActiveCourseLabel ? `Cambiar curso. Curso activo: ${resolvedActiveCourseLabel}` : 'Abrir cursos'}
+							aria-label={resolvedActiveCourseLabel ? `Abrir selector de cursos. Curso activo: ${resolvedActiveCourseLabel}` : 'Abrir selector de cursos'}
 						>
-							<span class="course-menu-trigger-label">{courseMenuLabel}</span>
 							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 								<polyline points="6 9 12 15 18 9"></polyline>
 							</svg>
@@ -917,6 +926,7 @@ const withActiveCourse = (href: string) => {
 		position: relative;
 		display: inline-flex;
 		align-items: center;
+		flex-wrap: nowrap;
 		z-index: 1260;
 	}
 	.course-menu-trigger {
@@ -932,10 +942,20 @@ const withActiveCourse = (href: string) => {
 		font: inherit;
 		border-bottom: 4px solid transparent;
 		white-space: nowrap;
+		text-decoration: none;
 	}
 	.course-menu-trigger:hover,
 	.course-menu-trigger:focus-visible {
 		color: var(--accent);
+	}
+	.course-menu-trigger--label {
+		min-width: 0;
+	}
+	.course-menu-trigger--arrow {
+		gap: 0;
+		padding-left: 0.18rem;
+		padding-right: 0.38rem;
+		flex: 0 0 auto;
 	}
 	.course-menu-trigger-label {
 		display: inline-block;

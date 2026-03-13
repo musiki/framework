@@ -1,6 +1,6 @@
-import { getCollection } from 'astro:content';
 import { createHash } from 'node:crypto';
 import { parseEvalBlock } from './eval/parse-eval-block.mjs';
+import { safeGetCollection } from './safe-content-collection';
 
 export type EvalNoteType = 'course' | 'lesson' | 'assignment' | 'project' | 'unknown';
 
@@ -207,7 +207,7 @@ const resolveEntryNoteType = (
 const buildCollectionCatalog = async (
   sourceCollection: 'cursos' | 'content',
 ): Promise<EvalCatalogMap> => {
-  const entries = await getCollection(sourceCollection as any);
+  const entries = await safeGetCollection(sourceCollection);
   const catalog: EvalCatalogMap = new Map();
 
   entries.forEach((entry: any) => {

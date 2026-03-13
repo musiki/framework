@@ -28,7 +28,7 @@ Reglas de promoción desde cursos a público:
 - `public_path: tema/ruta-del-articulo.md`
 - `type: assignment`, `eval`, `lesson-presentation` y `app-dataviewjs` quedan excluidos del público aunque tengan flags
 
-## 2) Workflow de framework (push/dispatch -> validate -> sync remoto)
+## 2) Workflow de framework (push/dispatch -> validate -> deploy en runner self-hosted)
 
 Ya está agregado en `.github/workflows/sync-content-sources.yml`.
 
@@ -40,16 +40,13 @@ Se dispara en dos casos:
 Configuracion requerida en `musiki/framework`:
 
 - `CONTENT_SOURCE_READ_TOKEN`: token con acceso de lectura a repos de materia (si son privados).
-- `VPS_SSH_KEY`: secret obligatorio. Private key usada por GitHub Actions para entrar al VPS.
-- `VPS_SSH_HOST`: host o IP del VPS. Puede ir como secret o repo variable.
-- `VPS_SSH_PORT`: puerto SSH del VPS. Opcional, default `22`. Puede ir como secret o repo variable.
-- `VPS_SSH_USER`: usuario SSH que hace el deploy. Puede ir como secret o repo variable.
-- `VPS_FRAMEWORK_DIR`: path del checkout productivo en el VPS. Puede ir como secret o repo variable.
-- `VPS_GIT_BRANCH`: branch a desplegar. Opcional, default `main`. Puede ir como secret o repo variable.
-- `VPS_INSTALL_COMMAND`: comando de instalación en el VPS. Opcional, default `npm ci`. Puede ir como secret o repo variable.
-- `VPS_BUILD_COMMAND`: comando de build en el VPS. Opcional, default `npm run build`. Puede ir como secret o repo variable.
-- `VPS_RELOAD_COMMAND`: comando para recargar el proceso (`pm2 reload ...`, `sudo systemctl restart ...`, etc.). Opcional. Puede ir como secret o repo variable.
-- `VPS_CONTENT_SOURCE_STRATEGY`: estrategia para `content:pull` en el VPS. Opcional, default `remote-only`. Puede ir como secret o repo variable.
+- runner self-hosted Linux con labels: `self-hosted`, `linux`, `x64`, `musiki-framework`
+- `VPS_FRAMEWORK_DIR`: repo variable. Path del checkout productivo en el VPS.
+- `VPS_GIT_BRANCH`: repo variable. Opcional, default `main`.
+- `VPS_INSTALL_COMMAND`: repo variable. Opcional, default `npm ci`.
+- `VPS_BUILD_COMMAND`: repo variable. Opcional, default `npm run build`.
+- `VPS_RELOAD_COMMAND`: repo variable. Opcional. Ejemplo: `pm2 reload ecosystem.config.cjs --only musiki-framework --update-env && pm2 save`
+- `VPS_CONTENT_SOURCE_STRATEGY`: repo variable o secret. Opcional, default `remote-only`.
 
 Comandos usados por el workflow:
 
@@ -60,13 +57,13 @@ Runtime del workflow:
 
 - `Node 22`
 
-El workflow no commitea `src/content`: valida el ensamblado y luego entra al VPS por SSH para correr `git pull --ff-only`, instalación, build y recarga del proceso.
+El workflow no commitea `src/content`: valida el ensamblado en GitHub-hosted runner y luego ejecuta el deploy dentro del VPS mediante un runner self-hosted.
 
 Notas importantes para el VPS:
 
-- el workflow reenvia `CONTENT_SOURCE_READ_TOKEN` al shell remoto para que `content:pull` pueda leer repos privados durante el build
+- el workflow reenvia `CONTENT_SOURCE_READ_TOKEN` al proceso local del runner para que `content:pull` pueda leer repos privados durante el build
 - por default usa `CONTENT_SOURCE_STRATEGY=remote-only` en el VPS para ignorar `localPath` y no copiar un repo hermano desactualizado como `../i1`
-- si SSH al dominio se vuelve inestable, usar la IP directa del VPS en `VPS_SSH_HOST`
+- el deploy automático ya no depende de abrir SSH desde internet hacia el VPS
 
 ## 3) Workflow en cada repo de materia (push -> dispatch)
 
