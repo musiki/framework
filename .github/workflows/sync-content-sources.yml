@@ -20,6 +20,9 @@ concurrency:
   group: content-sync
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: true
+
 jobs:
   validate:
     name: Validate Content Assembly
@@ -62,27 +65,49 @@ jobs:
       VPS_FRAMEWORK_DIR: ${{ vars.VPS_FRAMEWORK_DIR || '/opt/musiki/framework' }}
       VPS_GIT_BRANCH: ${{ vars.VPS_GIT_BRANCH || 'main' }}
       VPS_INSTALL_COMMAND: ${{ vars.VPS_INSTALL_COMMAND || 'npm ci' }}
-      VPS_BUILD_COMMAND: ${{ vars.VPS_BUILD_COMMAND || 'npm run build' }}
-      VPS_RELOAD_COMMAND: ${{ vars.VPS_RELOAD_COMMAND || 'pm2 reload ecosystem.config.cjs --only musiki-framework --update-env && pm2 save' }}
       VPS_CONTENT_SOURCE_STRATEGY: ${{ vars.VPS_CONTENT_SOURCE_STRATEGY || 'remote-only' }}
     steps:
-      - name: Sync and Build on VPS
+      - name: Zero Downtime Sync and Build on VPS
         run: |
           cd "$VPS_FRAMEWORK_DIR"
+          
+          # Ensure PM2 and Node are in PATH (common issue in non-interactive shells)
+          export PATH=$PATH:$(npm config get prefix)/bin
+          
+          echo ">>> Fetching latest code..."
           git fetch origin "$VPS_GIT_BRANCH"
           git checkout "$VPS_GIT_BRANCH"
           git reset --hard "origin/$VPS_GIT_BRANCH"
           
-          # Run install if specified
+          echo ">>> Installing dependencies..."
           if [ -n "$VPS_INSTALL_COMMAND" ]; then
             $VPS_INSTALL_COMMAND
           fi
           
-          # Run build (which includes content:pull and content:assemble)
-          # We pass CONTENT_SOURCE_STRATEGY to override local paths in VPS
-          CONTENT_SOURCE_STRATEGY="$VPS_CONTENT_SOURCE_STRATEGY" $VPS_BUILD_COMMAND
+          echo ">>> Preparing content..."
+          CONTENT_SOURCE_STRATEGY="$VPS_CONTENT_SOURCE_STRATEGY" npm run content:pull -- --clean
+          CONTENT_SOURCE_STRATEGY="$VPS_CONTENT_SOURCE_STRATEGY" npm run content:assemble
           
-          # Reload process manager
-          if [ -n "$VPS_RELOAD_COMMAND" ]; then
-            $VPS_RELOAD_COMMAND
+          echo ">>> Running Database Sync..."
+          npm run eval:sync:db
+          
+          echo ">>> Building Astro to temporary directory (ZERO DOWNTIME)..."
+          # We build to dist_tmp so the current 'dist' remains untouched and serving
+          npx astro build --remote --outDir dist_tmp
+          
+          echo ">>> Atomic Swap of dist folders..."
+          rm -rf dist_old
+          if [ -d "dist" ]; then
+            mv dist dist_old
           fi
+          mv dist_tmp dist
+          
+          echo ">>> Reloading PM2..."
+          # Reload ensures the running Node process switches to the new files in 'dist'
+          pm2 reload ecosystem.config.cjs --only musiki-framework --update-env || pm2 start ecosystem.config.cjs
+          pm2 save
+          
+          echo ">>> Cleanup..."
+          rm -rf dist_old
+          
+          echo ">>> Deploy finished successfully."
