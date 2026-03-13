@@ -52,10 +52,6 @@ export default defineConfig({
   adapter: node({
     mode: 'standalone'
   }),
-  build: {
-    format: 'directory',
-    concurrency: 1
-  },
   vite: {
     server: {
       allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', '85.31.234.141'],

@@ -23,11 +23,6 @@ import {
 
 import { getRuntimeDynamicContent } from '../../lib/runtime-content';
 
-// Forzamos SSR dinámico puro y desactivamos caché para contenido vivo
-Astro.response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-Astro.response.headers.set('Pragma', 'no-cache');
-Astro.response.headers.set('Expires', '0');
-
 const rawSlug = Astro.params.slug;
 if (!rawSlug) return Astro.redirect('/cursos');
 
@@ -168,10 +163,7 @@ if ((parts.length === 1 || isCourseForumPage) && requestedCoursePathSegment !== 
 }
 
 const { Content: StaticContent } = await render(currentEntry);
-
-// Buscamos el contenido dinámico directamente en el disco (Hot-Swap)
-// Solo lo saltamos si es la página del foro del curso
-const dynamicContent = !isCourseForumPage 
+const dynamicContent = (process.env.NODE_ENV === 'production' && !isCourseForumPage)
   ? await getRuntimeDynamicContent(currentEntry.id)
   : null;
 

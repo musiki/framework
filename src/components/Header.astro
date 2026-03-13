@@ -629,7 +629,6 @@ const withActiveCourse = (href: string) => {
 		if (!(brandLink instanceof HTMLAnchorElement)) return;
 
 		const defaultTitle = brandLink.title || 'musiki26';
-		let lastState = brandLink.dataset.buildState || 'unknown';
 		let intervalId = 0;
 		let controller: AbortController | null = null;
 
@@ -674,21 +673,9 @@ const withActiveCourse = (href: string) => {
 				|| String(payload.title || defaultTitle).trim()
 				|| defaultTitle;
 
-			const transitionedToFinished = 
-				lastState === 'running' && 
-				(state === 'ok' || state === 'idle');
-
 			brandLink.dataset.buildState = state;
 			brandLink.title = title;
 			brandLink.setAttribute('aria-label', title);
-			lastState = state;
-
-			if (transitionedToFinished) {
-				// Short delay to allow the UI to reflect the finished state before reloading
-				window.setTimeout(() => {
-					window.location.reload();
-				}, 800);
-			}
 		};
 
 		const applyFallback = () => {
@@ -883,6 +870,9 @@ const withActiveCourse = (href: string) => {
 	.brand-link:hover .brand-logo,
 	.brand-link:focus-visible .brand-logo {
 		transform: scale(1.04);
+	}
+	.brand-link[data-build-state='ok'] .brand-logo {
+		filter: drop-shadow(0 0 0.28rem rgba(26, 163, 111, 0.32));
 	}
 	.brand-link[data-build-state='running'] .brand-logo {
 	        animation: header-brand-sync-pulse 0.85s ease-in-out infinite;
