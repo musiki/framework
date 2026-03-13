@@ -250,12 +250,7 @@ const teacherCreateHref = canManageLiveInteractions
   : '';
 const teacherEditHref =
   canManageLiveInteractions && currentEntrySourcePath
-    ? buildEditorHref({
-        courseId: canonicalCourseId,
-        mode: 'edit',
-        path: currentEntrySourcePath,
-        returnTo: `${Astro.url.pathname}${Astro.url.search}`,
-      })
+    ? `${Astro.url.pathname}?mode=edit`
     : '';
 const courseForumHref = `${courseHref}/foro`;
 const forumShellHref = Astro.url.pathname;
@@ -364,15 +359,127 @@ const lessonForumHoverTitle = isLessonPage
 const forumThreadPrompt = sessionFirstName
   ? `¿Qué pensás, ${sessionFirstName}?`
   : '¿Qué pensás?';
+
+// Integrated Editor Logic
+const editorMode = String(Astro.url.searchParams.get('mode') || '').trim().toLowerCase();
+const isEditing = canManageLiveInteractions && editorMode === 'edit';
+let editorInitialContent = '';
+let editorInitialSha = '';
+let editorError = '';
+let editorTargetPath = currentEntrySourcePath;
+
+if (isEditing) {
+  try {
+    const { resolveCourseSource } = await import('../../lib/content-admin');
+    const { getRepoFile } = await import('../../lib/github-app');
+    const source = resolveCourseSource(canonicalCourseId);
+    
+    if (!source?.repo) {
+      editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
+    } else {
+      const remoteFile = await getRepoFile({
+        repoFullName: source.repo,
+        path: currentEntrySourcePath,
+        ref: source.branch || 'main',
+      });
+
+      if (!remoteFile) {
+        editorError = 'La nota no existe en GitHub o no pudo resolverse.';
+      } else {
+        editorTargetPath = remoteFile.path || currentEntrySourcePath;
+        editorInitialContent = remoteFile.content || '';
+        editorInitialSha = remoteFile.sha || '';
+      }
+    }
+  } catch (err: any) {
+    editorError = err?.message || 'Error al cargar datos para el editor.';
+  }
+}
 ---
 
 <!doctype html>
 <html lang="es">
   <head>
     <BaseHead 
-      title={currentEntry.data.title || courseIndex.data.title} 
+      title={isEditing ? `Editando: ${currentEntry.data.title || courseIndex.data.title}` : (currentEntry.data.title || courseIndex.data.title)} 
       description={lessonDescription} 
     />
+    {isEditing && (
+      <style>
+        .integrated-editor {
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 1.5rem;
+          display: grid;
+          gap: 1.2rem;
+        }
+        .editor-card {
+          border: 1px solid var(--c-border);
+          border-radius: 14px;
+          background: var(--c-bg);
+          padding: 1.2rem;
+        }
+        .editor-field {
+          display: grid;
+          gap: 0.4rem;
+          margin-bottom: 1rem;
+        }
+        .editor-label {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--c-fg-dim);
+          font-weight: 700;
+        }
+        .editor-input, .editor-textarea {
+          width: 100%;
+          border: 1px solid var(--c-border);
+          border-radius: 10px;
+          background: var(--c-bg-mute);
+          color: var(--c-fg);
+          font: inherit;
+          padding: 0.7rem 0.8rem;
+        }
+        .editor-textarea {
+          min-height: 65dvh;
+          font-family: 'Dank Mono', 'SFMono-Regular', monospace;
+          font-size: 0.95rem;
+          line-height: 1.5;
+          resize: vertical;
+        }
+        .editor-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.8rem;
+          margin-top: 1rem;
+        }
+        .editor-btn {
+          height: 2.4rem;
+          padding: 0 1.2rem;
+          border-radius: 8px;
+          border: 1px solid var(--c-border);
+          background: var(--c-bg-mute);
+          color: var(--c-fg);
+          font-weight: 700;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          text-decoration: none;
+        }
+        .editor-btn--primary {
+          background: var(--c-fg);
+          color: var(--c-bg);
+          border-color: var(--c-fg);
+        }
+        .editor-status {
+          font-size: 0.9rem;
+          color: var(--c-fg-dim);
+        }
+        .editor-status[data-tone='success'] { color: #14713e; }
+        .editor-status[data-tone='error'] { color: #b3261e; }
+      </style>
+    )}
     <style>
       .course-container {
         --course-shell-top-gap: clamp(1rem, 1.45vw, 1.35rem);
@@ -622,13 +729,45 @@ const forumThreadPrompt = sessionFirstName
         justify-content: space-between;
         gap: 0.55rem;
       }
+.course-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
 
-      .course-title-actions {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.45rem;
-        flex: 0 0 auto;
-      }
+.teacher-action-btn {
+  width: 1.56rem !important;
+  height: 1.56rem !important;
+  min-width: 1.56rem !important;
+  min-height: 1.56rem !important;
+  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border-radius: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0.14rem !important;
+  margin: 0 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.03em;
+  font-weight: 900 !important;
+  font-size: 0.58rem !important;
+  line-height: 1 !important;
+  color: var(--forum-text-secondary, var(--c-fg-dim, #6b7480)) !important;
+  cursor: pointer;
+  background: transparent !important;
+  text-decoration: none !important;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.teacher-action-btn:hover {
+  background: color-mix(in srgb, var(--forum-bg-subtle, #eef2f5) 65%, transparent) !important;
+  color: var(--forum-text-primary, var(--c-fg, #1c1f23)) !important;
+}
+
+.teacher-action-btn--create {
+  color: #1f8f45 !important;
+  border-color: color-mix(in srgb, #1f8f45 42%, var(--forum-border-soft, #d8dee6) 58%) !important;
+}
 
       .course-title-secondary {
         margin-top: 0.55rem;
@@ -2381,6 +2520,93 @@ const forumThreadPrompt = sessionFirstName
       teacherCreateHref={teacherCreateHref}
       teacherEditHref={teacherEditHref}
     />
+
+    {isEditing ? (
+      <main class="integrated-editor">
+        <section class="editor-card">
+          <h1 style="margin:0; font-size: 1.4rem;">Editor: {currentEntry.data.title}</h1>
+          <p style="margin: 0.4rem 0 0; color: var(--c-fg-dim); font-size: 0.9rem;">
+            Editando <code>{editorTargetPath}</code> en {activeCourseCode}.
+          </p>
+        </section>
+
+        <section class="editor-card">
+          <form id="integrated-content-editor-form">
+            <input type="hidden" name="courseId" value={canonicalCourseId} />
+            <input type="hidden" name="mode" value="edit" />
+            <input type="hidden" name="sha" value={editorInitialSha} />
+            <input type="hidden" name="targetPath" value={editorTargetPath} />
+
+            <div class="editor-field">
+              <label class="editor-label">Resumen de cambios</label>
+              <input class="editor-input" type="text" name="editSummary" placeholder="¿Qué cambiaste?" autocomplete="off" />
+            </div>
+
+            <div class="editor-field">
+              <label class="editor-label">Markdown</label>
+              <textarea class="editor-textarea" name="content" spellcheck="false">{editorInitialContent}</textarea>
+            </div>
+
+            <div class="editor-actions">
+              <button type="submit" class="editor-btn editor-btn--primary" disabled={Boolean(editorError)}>
+                Guardar cambios
+              </button>
+              <a href={Astro.url.pathname} class="editor-btn">Cancelar</a>
+              <span id="integrated-editor-status" class="editor-status" data-tone={editorError ? 'error' : 'idle'}>
+                {editorError}
+              </span>
+            </div>
+          </form>
+        </section>
+      </main>
+
+      <script>
+        const mountIntegratedEditor = () => {
+          const form = document.getElementById('integrated-content-editor-form');
+          const statusNode = document.getElementById('integrated-editor-status');
+          if (!(form instanceof HTMLFormElement) || !statusNode) return;
+          if (form.dataset.bound === 'true') return;
+          form.dataset.bound = 'true';
+
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = true;
+
+            statusNode.dataset.tone = 'idle';
+            statusNode.textContent = 'Guardando...';
+
+            try {
+              const payload = Object.fromEntries(new FormData(form).entries());
+              const res = await fetch('/api/content-admin/publish', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const result = await res.json();
+              if (!res.ok) throw new Error(result.error || 'Error al publicar');
+
+              statusNode.dataset.tone = 'success';
+              statusNode.textContent = '¡Guardado correctamente!';
+              
+              window.setTimeout(() => {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('mode');
+                window.location.href = url.toString();
+              }, 1000);
+
+            } catch (err: any) {
+              statusNode.dataset.tone = 'error';
+              statusNode.textContent = err.message;
+              if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = false;
+            }
+          });
+        };
+
+        mountIntegratedEditor();
+        document.addEventListener('astro:page-load', mountIntegratedEditor);
+      </script>
+    ) : (
     <main
       class="course-container"
       data-course-layout-root
@@ -2417,6 +2643,26 @@ const forumThreadPrompt = sessionFirstName
               <span class="course-title-link-text">{courseIndex.data.title}</span>
             </a>
             <div class="course-title-actions">
+              {teacherEditHref && (
+                <a
+                  href={teacherEditHref}
+                  class="teacher-action-btn"
+                  title="Editar nota"
+                  aria-label="Editar"
+                >
+                  E
+                </a>
+              )}
+              {teacherCreateHref && (
+                <a
+                  href={teacherCreateHref}
+                  class="teacher-action-btn teacher-action-btn--create"
+                  title="Crear nota"
+                  aria-label="Crear"
+                >
+                  C
+                </a>
+              )}
               <button
                 type="button"
                 class="sidebar-toggle-btn"
@@ -2768,6 +3014,7 @@ const forumThreadPrompt = sessionFirstName
         >↑</button>
       </div>
     </main>
+    )}
     <div id="forum-media-modal" class="forum-media-modal" hidden aria-hidden="true">
       <div class="forum-media-modal-stage" role="dialog" aria-modal="true" aria-label="Media ampliado">
         <button

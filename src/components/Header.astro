@@ -257,39 +257,8 @@ const withActiveCourse = (href: string) => {
 					</button>
 				) : null
 			}
-		</div>
 		<Search />
 		<div class="social-links">
-			{
-				showTeacherEditorActions ? (
-					<div class="header-editor-actions" aria-label="Acciones docentes">
-						{
-							normalizedTeacherCreateHref ? (
-								<a
-									href={normalizedTeacherCreateHref}
-									class="header-editor-btn"
-									title="Crear nota"
-									aria-label="Crear nota"
-								>
-									C
-								</a>
-							) : null
-						}
-						{
-							normalizedTeacherEditHref ? (
-								<a
-									href={normalizedTeacherEditHref}
-									class="header-editor-btn"
-									title="Editar nota"
-									aria-label="Editar nota"
-								>
-									E
-								</a>
-							) : null
-						}
-					</div>
-				) : null
-			}
 			{
 				hasPresentationLink && (
 					<button
@@ -1064,31 +1033,34 @@ const withActiveCourse = (href: string) => {
 		flex: 0 0 auto;
 	}
 	.header-editor-btn {
-		width: 1.26rem;
-		height: 1.26rem;
-		min-width: 1.26rem;
-		min-height: 1.26rem;
-		border: 1px solid color-mix(in srgb, var(--c-border) 88%, transparent);
-		border-radius: 0;
-		background: transparent;
+		width: 1.28rem;
+		height: 1.28rem;
+		min-width: 1.28rem;
+		min-height: 1.28rem;
+		border: 1px solid color-mix(in srgb, var(--c-border) 75%, transparent);
+		border-radius: 6px;
+		background: color-mix(in srgb, var(--c-bg-mute) 40%, transparent);
 		color: var(--c-fg-dim);
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		text-decoration: none;
-		padding: 0.08rem;
-		font-size: 0.5rem;
-		font-weight: 900;
-		letter-spacing: 0.03em;
+		padding: 0;
+		font-size: 0.54rem;
+		font-weight: 800;
+		letter-spacing: 0.01em;
 		text-transform: uppercase;
 		line-height: 1;
-		transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+		margin-bottom: 0.18rem;
+		transition: all 0.16s ease;
 	}
 	.header-editor-btn:hover,
 	.header-editor-btn:focus-visible {
-		background: color-mix(in srgb, var(--c-bg-mute) 65%, transparent);
+		background: var(--c-bg-mute);
 		color: var(--c-fg);
-		border-color: color-mix(in srgb, var(--c-border) 92%, transparent);
+		border-color: var(--c-border);
+		transform: translateY(-1px);
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
 		outline: none;
 	}
 	.header-activity-led-btn {

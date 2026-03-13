@@ -139,6 +139,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
       authorEmail: sessionEmail,
     });
 
+    // Persistent local save to the correct .content-sources directory
+    // This allows the local watcher (watch-content.mjs) to pick up changes immediately.
+    try {
+      const sourceId = source.id;
+      const contentSourcesDir = path.resolve(process.cwd(), '.content-sources');
+      const localRepoDir = path.join(contentSourcesDir, sourceId);
+      
+      if (fs.existsSync(localRepoDir)) {
+        const localFilePath = path.join(localRepoDir, targetPath);
+        const localDir = path.dirname(localFilePath);
+        
+        if (!fs.existsSync(localDir)) {
+          fs.mkdirSync(localDir, { recursive: true });
+        }
+        
+        fs.writeFileSync(localFilePath, finalContent, 'utf8');
+        console.log(`[Publish] Locally persisted to: ${localFilePath}`);
+      }
+    } catch (localError) {
+      console.error('[Publish] Failed to persist local file:', localError);
+    }
+
     if (usePRWorkflow) {
       prResult = await createPullRequest({
         repoFullName: source.repo,

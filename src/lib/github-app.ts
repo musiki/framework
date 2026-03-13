@@ -1,19 +1,9 @@
-import { createSign } from 'node:crypto';
-
 const GITHUB_API_BASE = 'https://api.github.com';
 
-type GitHubAppConfig = {
-  appId: string;
-  installationId: string;
-  privateKey: string;
+type GitHubConfig = {
+  token: string;
   committerName: string;
   committerEmail: string;
-};
-
-type CachedInstallationToken = {
-  token: string;
-  expiresAt: number;
-  installationId: string;
 };
 
 export type GitHubRepoFile = {
@@ -38,53 +28,25 @@ export type GitHubPRResult = {
   title: string;
 };
 
-let cachedInstallationToken: CachedInstallationToken | null = null;
-
 const normalizeText = (value: unknown) => String(value || '').trim();
 
-const toBase64Url = (value: Buffer | string) =>
-  Buffer.from(value)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+function readGitHubConfig(): GitHubConfig {
+  // Preferimos process.env para asegurar compatibilidad en build y runtime
+  const token = normalizeText(
+    process.env.CONTENT_SOURCE_READ_TOKEN || 
+    process.env.GITHUB_TOKEN || 
+    import.meta.env.CONTENT_SOURCE_READ_TOKEN || 
+    import.meta.env.GITHUB_TOKEN
+  );
+  const committerName = normalizeText(process.env.GITHUB_APP_COMMITTER_NAME || import.meta.env.GITHUB_APP_COMMITTER_NAME) || 'musiki editor';
+  const committerEmail = normalizeText(process.env.GITHUB_APP_COMMITTER_EMAIL || import.meta.env.GITHUB_APP_COMMITTER_EMAIL) || 'noreply@musiki.org.ar';
 
-const normalizePrivateKey = (value: unknown) => {
-  const raw = normalizeText(value);
-  if (!raw) return '';
-
-  const withNewlines = raw.replace(/\\n/g, '\n');
-  if (withNewlines.includes('BEGIN') && withNewlines.includes('PRIVATE KEY')) {
-    return withNewlines;
-  }
-
-  try {
-    const decoded = Buffer.from(raw, 'base64').toString('utf8').replace(/\\n/g, '\n');
-    if (decoded.includes('BEGIN') && decoded.includes('PRIVATE KEY')) {
-      return decoded;
-    }
-  } catch {
-    // Ignore invalid base64 and fall through to empty return.
-  }
-
-  return '';
-};
-
-function readGitHubAppConfig(): GitHubAppConfig {
-  const appId = normalizeText(import.meta.env.GITHUB_APP_ID);
-  const installationId = normalizeText(import.meta.env.GITHUB_APP_INSTALLATION_ID);
-  const privateKey = normalizePrivateKey(import.meta.env.GITHUB_APP_PRIVATE_KEY);
-  const committerName = normalizeText(import.meta.env.GITHUB_APP_COMMITTER_NAME) || 'musiki editor';
-  const committerEmail = normalizeText(import.meta.env.GITHUB_APP_COMMITTER_EMAIL) || 'noreply@musiki.org.ar';
-
-  if (!appId || !installationId || !privateKey) {
-    throw new Error('GITHUB_APP_NOT_CONFIGURED');
+  if (!token) {
+    throw new Error('GITHUB_TOKEN_NOT_CONFIGURED');
   }
 
   return {
-    appId,
-    installationId,
-    privateKey,
+    token,
     committerName,
     committerEmail,
   };
@@ -92,29 +54,11 @@ function readGitHubAppConfig(): GitHubAppConfig {
 
 export function isGitHubAppConfigured(): boolean {
   try {
-    readGitHubAppConfig();
+    readGitHubConfig();
     return true;
   } catch {
     return false;
   }
-}
-
-function createAppJwt(config: GitHubAppConfig): string {
-  const now = Math.floor(Date.now() / 1000);
-  const header = toBase64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-  const payload = toBase64Url(JSON.stringify({
-    iat: now - 60,
-    exp: now + 9 * 60,
-    iss: config.appId,
-  }));
-  const unsigned = `${header}.${payload}`;
-
-  const signer = createSign('RSA-SHA256');
-  signer.update(unsigned);
-  signer.end();
-  const signature = signer.sign(config.privateKey);
-
-  return `${unsigned}.${toBase64Url(signature)}`;
 }
 
 async function githubApiRequest(
@@ -129,7 +73,7 @@ async function githubApiRequest(
     method: options.method || 'GET',
     headers: {
       Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${options.token}`,
+      Authorization: `token ${options.token}`,
       'Content-Type': 'application/json',
       'User-Agent': 'musiki-framework',
       'X-GitHub-Api-Version': '2022-11-28',
@@ -146,40 +90,6 @@ async function githubApiRequest(
   }
 
   return payload;
-}
-
-async function getInstallationToken(): Promise<string> {
-  const config = readGitHubAppConfig();
-  const now = Date.now();
-  if (
-    cachedInstallationToken &&
-    cachedInstallationToken.installationId === config.installationId &&
-    cachedInstallationToken.expiresAt - 60_000 > now
-  ) {
-    return cachedInstallationToken.token;
-  }
-
-  const appJwt = createAppJwt(config);
-  const payload = await githubApiRequest(
-    `/app/installations/${encodeURIComponent(config.installationId)}/access_tokens`,
-    {
-      method: 'POST',
-      token: appJwt,
-    },
-  );
-
-  const token = normalizeText(payload?.token);
-  const expiresAt = Date.parse(String(payload?.expires_at || ''));
-  if (!token || Number.isNaN(expiresAt)) {
-    throw new Error('GitHub installation token response was incomplete');
-  }
-
-  cachedInstallationToken = {
-    token,
-    expiresAt,
-    installationId: config.installationId,
-  };
-  return token;
 }
 
 function splitRepoFullName(repoFullName: string) {
@@ -200,10 +110,10 @@ export async function getRepoFile(options: {
   const normalizedPath = normalizeText(options.path).split('/').map(encodeURIComponent).join('/');
   const ref = normalizeText(options.ref);
   const requestPath = `/repos/${owner}/${repo}/contents/${normalizedPath}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`;
-  const token = await getInstallationToken();
+  const config = readGitHubConfig();
 
   try {
-    const payload = await githubApiRequest(requestPath, { token });
+    const payload = await githubApiRequest(requestPath, { token: config.token });
     const rawContent = String(payload?.content || '').replace(/\n/g, '');
     const content = rawContent ? Buffer.from(rawContent, 'base64').toString('utf8') : '';
     return {
@@ -228,16 +138,15 @@ export async function upsertRepoFile(options: {
   authorName: string;
   authorEmail: string;
 }): Promise<GitHubUpsertResult> {
-  const config = readGitHubAppConfig();
+  const config = readGitHubConfig();
   const { owner, repo } = splitRepoFullName(options.repoFullName);
   const normalizedPath = normalizeText(options.path).split('/').map(encodeURIComponent).join('/');
-  const token = await getInstallationToken();
 
   const payload = await githubApiRequest(
     `/repos/${owner}/${repo}/contents/${normalizedPath}`,
     {
       method: 'PUT',
-      token,
+      token: config.token,
       body: {
         message: normalizeText(options.message),
         content: Buffer.from(options.content, 'utf8').toString('base64'),
@@ -270,11 +179,11 @@ export async function createBranch(options: {
 }): Promise<string> {
   const { owner, repo } = splitRepoFullName(options.repoFullName);
   const baseBranch = normalizeText(options.baseBranch) || 'main';
-  const token = await getInstallationToken();
+  const config = readGitHubConfig();
 
   const baseRefPayload = await githubApiRequest(
     `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(baseBranch)}`,
-    { token },
+    { token: config.token },
   );
   const baseSha = normalizeText(baseRefPayload?.object?.sha);
   if (!baseSha) {
@@ -285,7 +194,7 @@ export async function createBranch(options: {
     `/repos/${owner}/${repo}/git/refs`,
     {
       method: 'POST',
-      token,
+      token: config.token,
       body: {
         ref: `refs/heads/${normalizeText(options.branchName)}`,
         sha: baseSha,
@@ -304,13 +213,13 @@ export async function createPullRequest(options: {
   body: string;
 }): Promise<GitHubPRResult> {
   const { owner, repo } = splitRepoFullName(options.repoFullName);
-  const token = await getInstallationToken();
+  const config = readGitHubConfig();
 
   const payload = await githubApiRequest(
     `/repos/${owner}/${repo}/pulls`,
     {
       method: 'POST',
-      token,
+      token: config.token,
       body: {
         title: normalizeText(options.title),
         body: normalizeText(options.body),
