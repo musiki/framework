@@ -52,11 +52,11 @@ export default defineConfig({
   trustHost: true,
   providers: [
     Google({
-      clientId: import.meta.env.GOOGLE_CLIENT_ID,
-      clientSecret: import.meta.env.GOOGLE_CLIENT_SECRET,
+      clientId: process.env.GOOGLE_CLIENT_ID || import.meta.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || import.meta.env.GOOGLE_CLIENT_SECRET,
     }),
   ],
-  secret: import.meta.env.AUTH_SECRET,
+  secret: process.env.AUTH_SECRET || import.meta.env.AUTH_SECRET,
   callbacks: {
     async jwt({ token, user, profile }) {
       const userImage =

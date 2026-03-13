@@ -1,3 +1,19 @@
+const fs = require('node:fs');
+const path = require('node:path');
+
+// Basic .env parser to inject variables into PM2 apps
+const envPath = path.resolve(__dirname, '.env');
+const dotEnv = {};
+if (fs.existsSync(envPath)) {
+  const content = fs.readFileSync(envPath, 'utf8');
+  content.split('\n').forEach(line => {
+    const [key, ...value] = line.split('=');
+    if (key && value.length > 0) {
+      dotEnv[key.trim()] = value.join('=').trim().replace(/^["']|["']$/g, '');
+    }
+  });
+}
+
 module.exports = {
   apps: [
     {
@@ -13,6 +29,7 @@ module.exports = {
         NODE_ENV: 'production',
         HOST: '127.0.0.1',
         PORT: '4321',
+        ...dotEnv
       },
     },
     {
@@ -27,8 +44,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         CONTENT_BUS_PORT: '4322',
-        // Esto debería coincidir con el token configurado en los GitHub Actions de las materias
-        CONTENT_BUS_SECRET: process.env.CONTENT_BUS_SECRET || 'mwlEL5avF0SDrK4s3kgt4oZBpSSLisra'
+        ...dotEnv,
+        CONTENT_BUS_SECRET: dotEnv.CONTENT_BUS_SECRET || 'musiki-local-secret'
       },
     },
   ],
