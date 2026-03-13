@@ -8,7 +8,7 @@ import { renderRemoteLilypond } from '../../../lib/lilypond-remote.mjs';
 const LILY_DIR = path.join(process.cwd(), 'public', 'lily');
 const MAX_SOURCE_BYTES = 64 * 1024;
 const LILYPOND_RENDER_STRATEGY =
-  String(process.env.LILYPOND_RENDER_STRATEGY || 'local-first').trim().toLowerCase();
+  String(process.env.LILYPOND_RENDER_STRATEGY || 'remote-only').trim().toLowerCase();
 
 function ensureLilyDir() {
   if (!fs.existsSync(LILY_DIR)) {
@@ -104,9 +104,15 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
-  const tryLocalFirst = LILYPOND_RENDER_STRATEGY !== 'remote-first';
+  const isLocalFirst = LILYPOND_RENDER_STRATEGY === 'local-first';
+  const isRemoteOnly = LILYPOND_RENDER_STRATEGY === 'remote-only';
+  const shouldTryRemote = LILYPOND_RENDER_STRATEGY !== 'local-only';
+  const allowsLocalFallback =
+    LILYPOND_RENDER_STRATEGY === 'local-first' ||
+    LILYPOND_RENDER_STRATEGY === 'remote-first' ||
+    LILYPOND_RENDER_STRATEGY === 'local-only';
 
-  if (tryLocalFirst) {
+  if (isLocalFirst) {
     const generatedLocally = tryRenderLilySvg(hash, source);
     if (generatedLocally) {
       return new Response(
@@ -125,24 +131,40 @@ export const POST: APIRoute = async ({ request }) => {
     }
   }
 
-  const remoteUrl = await renderRemoteLilypond(source, { timeoutMs: 10_000 });
-  if (remoteUrl) {
+  if (shouldTryRemote) {
+    const remoteUrl = await renderRemoteLilypond(source, { timeoutMs: 10_000 });
+    if (remoteUrl) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          hash,
+          url: remoteUrl,
+          generated: true,
+          remote: true,
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+  }
+
+  if (isRemoteOnly) {
     return new Response(
       JSON.stringify({
-        success: true,
+        success: false,
         hash,
-        url: remoteUrl,
-        generated: true,
-        remote: true,
+        error: 'Remote LilyPond render is unavailable',
       }),
       {
-        status: 200,
+        status: 502,
         headers: { 'Content-Type': 'application/json' },
       },
     );
   }
 
-  const generated = tryLocalFirst ? false : tryRenderLilySvg(hash, source);
+  const generated = allowsLocalFallback ? tryRenderLilySvg(hash, source) : false;
   if (!generated) {
     return new Response(
       JSON.stringify({

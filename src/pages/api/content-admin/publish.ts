@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import matter from 'gray-matter';
 import {
+  buildCreateCandidatePath,
   getEditableLocalRepoFile,
   isEditableCourseRepoPath,
   isLocalContentAdminEnabled,
@@ -59,12 +60,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: `No source repository is configured for course "${courseId}".` }, 400);
   }
 
-  const targetPath = sanitizeRepoMarkdownPath(body?.targetPath || body?.path);
-  if (!targetPath) {
+  const requestedTargetPath = sanitizeRepoMarkdownPath(body?.targetPath || body?.path);
+  if (!requestedTargetPath) {
     return json({ error: 'A valid markdown target path is required.' }, 400);
   }
 
-  if (!isEditableCourseRepoPath(courseId, targetPath)) {
+  if (!isEditableCourseRepoPath(courseId, requestedTargetPath)) {
     return json({ error: 'The target path is outside the editable area for this course.' }, 403);
   }
 
@@ -74,14 +75,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const editSummary = normalizeText(body?.editSummary || body?.message) || 'Edit via online editor';
-  
+
   // Update Frontmatter (MediaWiki-style versioning)
   let finalContent = rawContent;
+  let parsedFrontmatter: Record<string, unknown> = {};
   try {
-    const { data: frontmatter, content: markdownBody } = matter(rawContent);
+    const { data, content: markdownBody } = matter(rawContent);
+    const frontmatter = { ...(data || {}) } as Record<string, unknown>;
     frontmatter.updatedAt = new Date().toISOString();
     frontmatter.updatedBy = userName ? `${userName} <${sessionEmail}>` : sessionEmail;
     frontmatter.editSummary = editSummary;
+    parsedFrontmatter = frontmatter;
     finalContent = matter.stringify(markdownBody, frontmatter);
   } catch (error) {
     console.warn('[Publish] Frontmatter parse error, using raw content:', error);
@@ -91,16 +95,41 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const mode = normalizeText(body?.mode).toLowerCase() === 'create' ? 'create' : 'edit';
   const expectedSha = normalizeText(body?.sha);
 
-  const existing = localContentAdminEnabled
-    ? getEditableLocalRepoFile(source, targetPath)
-    : await getRepoFile({
-        repoFullName: source.repo,
-        path: targetPath,
-        ref: baseBranch,
-      });
+  const loadExistingFile = (candidatePath: string) =>
+    localContentAdminEnabled
+      ? Promise.resolve(getEditableLocalRepoFile(source, candidatePath))
+      : getRepoFile({
+          repoFullName: source.repo,
+          path: candidatePath,
+          ref: baseBranch,
+        });
 
-  if (mode === 'create' && existing) {
-    return json({ error: 'A file already exists at that path.', latestSha: existing.sha }, 409);
+  let targetPath = requestedTargetPath;
+  let existing: Awaited<ReturnType<typeof loadExistingFile>> = null;
+
+  if (mode === 'create') {
+    let resolvedCreatePath = '';
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      const candidatePath = buildCreateCandidatePath({
+        courseId,
+        preferredPath: requestedTargetPath,
+        title: parsedFrontmatter?.title,
+        attempt,
+      });
+      const candidateExisting = await loadExistingFile(candidatePath);
+      if (!candidateExisting) {
+        resolvedCreatePath = candidatePath;
+        break;
+      }
+    }
+
+    if (!resolvedCreatePath) {
+      return json({ error: 'Could not find a free filename for the new note.' }, 409);
+    }
+
+    targetPath = resolvedCreatePath;
+  } else {
+    existing = await loadExistingFile(targetPath);
   }
 
   if (mode === 'edit' && !existing) {

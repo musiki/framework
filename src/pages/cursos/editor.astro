@@ -381,6 +381,11 @@ if (!source?.repo) {
               shaInput.value = result.fileSha;
             }
 
+            const modeInput = form.elements.namedItem('mode');
+            if (modeInput instanceof HTMLInputElement && payload.mode === 'create') {
+              modeInput.value = 'edit';
+            }
+
             const summaryInput = form.elements.namedItem('editSummary');
             if (summaryInput instanceof HTMLInputElement) {
               summaryInput.value = '';

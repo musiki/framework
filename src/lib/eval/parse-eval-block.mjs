@@ -369,6 +369,52 @@ const normalizePatchAi = (raw, common) => {
   };
 };
 
+const normalizeShortAi = (raw, common) => ({
+  ...common,
+  type: 'short_ai',
+  prompt: asText(raw.prompt || raw.question || raw.title || ''),
+  rubric: asText(raw.rubric || raw.criteria || raw.rubrica),
+  provider: asText(raw.provider, 'ollama').toLowerCase() || 'ollama',
+  model: asText(raw.model),
+  passScore: asPositiveNumber(raw.passScore, 6),
+  minChars: asPositiveInteger(raw.minChars, 0),
+  placeholder: asText(
+    raw.placeholder
+    || raw.studentPlaceholder
+    || raw.student_placeholder
+    || 'Escribe aqui tu respuesta.',
+  ),
+  submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Evaluar respuesta'),
+});
+
+const normalizeReferenceAi = (raw, common) => ({
+  ...common,
+  type: 'reference_ai',
+  prompt: asText(raw.prompt || raw.question || raw.title || ''),
+  referenceText: asText(
+    raw.referenceText
+    || raw.reference_text
+    || raw.referenceAnswer
+    || raw.reference_answer
+    || raw.answerGuide
+    || raw.answer_guide
+    || raw.respuestaReferencia
+    || raw.respuesta_referencia,
+  ),
+  rubric: asText(raw.rubric || raw.criteria || raw.rubrica),
+  provider: asText(raw.provider, 'ollama').toLowerCase() || 'ollama',
+  model: asText(raw.model),
+  passScore: asPositiveNumber(raw.passScore, 6),
+  minChars: asPositiveInteger(raw.minChars, 0),
+  placeholder: asText(
+    raw.placeholder
+    || raw.studentPlaceholder
+    || raw.student_placeholder
+    || 'Escribe aqui tu respuesta.',
+  ),
+  submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Evaluar respuesta'),
+});
+
 export function parseEvalBlock(blockValue, options = {}) {
   const { fallbackId = 'eval-item' } = options;
 
@@ -395,6 +441,8 @@ export function parseEvalBlock(blockValue, options = {}) {
   if (type === 'poll') return normalizePoll(parsed, common);
   if (type === 'wordcloud') return normalizeWordcloud(parsed, common);
   if (type === 'patch_ai') return normalizePatchAi(parsed, common);
+  if (type === 'short_ai') return normalizeShortAi(parsed, common);
+  if (type === 'reference_ai') return normalizeReferenceAi(parsed, common);
 
   return {
     ...common,

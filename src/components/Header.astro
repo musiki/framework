@@ -1516,12 +1516,20 @@ const withActiveCourse = (href: string) => {
 			padding: 0 0.4rem;
 		}
 		nav {
+			flex-wrap: wrap;
+			align-items: center;
 			gap: 0.06rem 0.18rem;
+		}
+		h2 {
+			order: 1;
+			flex: 0 0 auto;
+			min-width: 0;
 		}
 		.brand-logo {
 			height: 34px;
 		}
 		.internal-links {
+			order: 2;
 			width: auto;
 			justify-content: flex-start;
 			gap: 0 0.08rem;
@@ -1533,6 +1541,7 @@ const withActiveCourse = (href: string) => {
 			overscroll-behavior-x: contain;
 			scrollbar-width: none;
 			white-space: nowrap;
+			flex-wrap: nowrap;
 		}
 		.internal-links::-webkit-scrollbar {
 			display: none;
@@ -1560,10 +1569,13 @@ const withActiveCourse = (href: string) => {
 			font-size: 0.46rem;
 		}
 		.social-links {
-			width: auto;
+			order: 3;
+			width: 100%;
 			justify-content: flex-end;
 			gap: 0.15rem;
 			flex-wrap: nowrap;
+			flex: 0 0 100%;
+			padding-top: 0.02rem;
 		}
 		.social-links a {
 			padding: 0;

@@ -13,7 +13,7 @@ function escapeHtmlAttribute(value) {
 export default function remarkRemoteLilypond(options = {}) {
   const enabled = options.enabled === true;
   const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 10_000;
-  const preferRemote = options.preferRemote === true;
+  const preferRemote = options.preferRemote !== false;
 
   let localLilypondAvailable = null;
   const hasLocalLilypond = () => {

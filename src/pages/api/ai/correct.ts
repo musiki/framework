@@ -231,6 +231,116 @@ const normalizeEvaluation = (rawEvaluation: unknown): Record<string, any> => {
   };
 };
 
+const createShortAiPrompt = ({
+  prompt,
+  studentText,
+  rubricText,
+}: {
+  prompt: string;
+  studentText: string;
+  rubricText?: string;
+}): string => {
+  const rubric = ensureText(rubricText) || DEFAULT_RUBRIC.join('; ');
+
+  return `Eres un asistente de corrección académica especializado en interpretación de textos.
+
+Tu tarea: evaluar la respuesta de un estudiante a partir de una consigna del docente y devolver SOLO JSON válido (sin markdown, sin comentarios, sin texto extra) con esta estructura exacta:
+{
+  "resumen": "string",
+  "tesis": {
+    "clara": true,
+    "explicacion": "string"
+  },
+  "fortalezas": ["string", "string"],
+  "debilidades": ["string", "string"],
+  "sugerencia": "string",
+  "calificacion": {
+    "nota": 0,
+    "justificacion": "string"
+  }
+}
+
+Reglas:
+- Evalúa si la respuesta cumple la consigna del docente.
+- "resumen": breve y objetivo (1-3 oraciones).
+- "tesis.clara": booleano estricto true/false.
+- "fortalezas": exactamente 2 items concretos.
+- "debilidades": exactamente 2 items concretos.
+- "sugerencia": una acción puntual y aplicable.
+- "calificacion.nota": número entre 0 y 10 (acepta decimal, ej. 7.5).
+- "calificacion.justificacion": 1 oración breve explicando por qué esa nota.
+- Usa esta rúbrica base: ${rubric}
+
+Consigna del docente:
+"""
+${prompt}
+"""
+
+Respuesta del estudiante:
+"""
+${studentText}
+"""`;
+};
+
+const createReferenceAiPrompt = ({
+  prompt,
+  referenceText,
+  studentText,
+  rubricText,
+}: {
+  prompt: string;
+  referenceText: string;
+  studentText: string;
+  rubricText?: string;
+}): string => {
+  const rubric = ensureText(rubricText) || DEFAULT_RUBRIC.join('; ');
+
+  return `Eres un asistente de corrección académica especializado en comparación entre respuesta de referencia y respuesta estudiantil.
+
+Tu tarea: evaluar la respuesta de un estudiante comparándola con una consigna y una respuesta de referencia. Devuelve SOLO JSON válido (sin markdown, sin comentarios, sin texto extra) con esta estructura exacta:
+{
+  "resumen": "string",
+  "tesis": {
+    "clara": true,
+    "explicacion": "string"
+  },
+  "fortalezas": ["string", "string"],
+  "debilidades": ["string", "string"],
+  "sugerencia": "string",
+  "calificacion": {
+    "nota": 0,
+    "justificacion": "string"
+  }
+}
+
+Reglas:
+- Evalúa si la respuesta del estudiante responde a la consigna y en qué medida se aproxima a la respuesta de referencia.
+- No copies literalmente la respuesta de referencia; úsala como guía comparativa.
+- "resumen": breve y objetivo (1-3 oraciones).
+- "tesis.clara": booleano estricto true/false.
+- "fortalezas": exactamente 2 items concretos.
+- "debilidades": exactamente 2 items concretos.
+- "sugerencia": una acción puntual y aplicable.
+- "calificacion.nota": número entre 0 y 10 (acepta decimal, ej. 7.5).
+- "calificacion.justificacion": 1 oración breve explicando por qué esa nota.
+- Usa esta rúbrica base: ${rubric}
+
+Consigna del docente:
+"""
+${prompt}
+"""
+
+Respuesta de referencia:
+"""
+${referenceText}
+"""
+
+Respuesta del estudiante:
+"""
+${studentText}
+"""`;
+};
+
 const createDeepSeekPrompt = ({ studentText, rubricText }: { studentText: string; rubricText?: string }): string => {
   const rubric = ensureText(rubricText) || DEFAULT_RUBRIC.join('; ');
 
@@ -295,6 +405,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const model = ensureText(body.model) || undefined;
   const provider = ensureText(body.provider).toLowerCase() || 'ollama';
   const taskType = ensureText(body.taskType || body.type).toLowerCase();
+  const explicitPromptOverride = ensureText(body.promptOverride);
   let requestPayload: CorrectionRequest = {
     texto,
     rubrica,
@@ -337,6 +448,56 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     requestPayload = {
       texto: studentPatch,
+      rubrica: promptOverride,
+      promptOverride,
+      model,
+    };
+  } else if (taskType === 'short' || taskType === 'short_ai') {
+    const consigna = ensureText(body.consigna || body.prompt);
+    const studentText = ensureText(body.studentText || body.student_text || body.texto);
+
+    if (!consigna || !studentText) {
+      return json({ error: 'prompt and texto are required for short_ai task' }, 400);
+    }
+
+    const promptOverride = explicitPromptOverride || createShortAiPrompt({
+      prompt: consigna,
+      studentText,
+      rubricText: rubrica,
+    });
+
+    if (promptOverride.length > maxPromptChars) {
+      return json({ error: `prompt too long (max ${maxPromptChars} chars)` }, 413);
+    }
+
+    requestPayload = {
+      texto: studentText,
+      rubrica: promptOverride,
+      promptOverride,
+      model,
+    };
+  } else if (taskType === 'reference' || taskType === 'reference_ai') {
+    const consigna = ensureText(body.consigna || body.prompt);
+    const referenceText = ensureText(body.referenceText || body.reference_text || body.referenceAnswer || body.reference_answer);
+    const studentText = ensureText(body.studentText || body.student_text || body.texto);
+
+    if (!consigna || !referenceText || !studentText) {
+      return json({ error: 'prompt, referenceText and texto are required for reference_ai task' }, 400);
+    }
+
+    const promptOverride = explicitPromptOverride || createReferenceAiPrompt({
+      prompt: consigna,
+      referenceText,
+      studentText,
+      rubricText: rubrica,
+    });
+
+    if (promptOverride.length > maxPromptChars) {
+      return json({ error: `prompt too long (max ${maxPromptChars} chars)` }, 413);
+    }
+
+    requestPayload = {
+      texto: studentText,
       rubrica: promptOverride,
       promptOverride,
       model,

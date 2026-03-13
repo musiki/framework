@@ -15,7 +15,6 @@ import rehypeObsidianImageSize from '../plugins/rehype-obsidian-image-size.mjs';
 import remarkMermaid from '../plugins/remark-mermaid.mjs';
 import remarkMediaEmbed from '../plugins/remark-media-embed.mjs';
 import remarkWikiLink from '../plugins/remark-wiki-link.mjs';
-import remarkLily from '../plugins/remark-lily.mjs';
 import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 import remarkForumMathMacros from '../plugins/remark-forum-math-macros.mjs';
 
@@ -42,13 +41,12 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
     .use(remarkForumMathMacros)
     .use(remarkMermaid)
     .use(remarkWikiLink)
-    .use(remarkMediaEmbed);
-
-  if (options.remoteLilypond) {
-    processor.use(remarkRemoteLilypond, { enabled: true, timeoutMs: 10_000 });
-  } else {
-    processor.use(remarkLily);
-  }
+    .use(remarkMediaEmbed)
+    .use(remarkRemoteLilypond, {
+      enabled: options.remoteLilypond !== false,
+      timeoutMs: 10_000,
+      preferRemote: true,
+    });
 
   return processor
     .use(remarkRehype, { allowDangerousHtml: true })

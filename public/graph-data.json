@@ -29,6 +29,13 @@
       "img": ""
     },
     {
+      "id": "cursos/i1/03-organología/demo-ollama",
+      "name": "demo ollama",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
       "id": "cursos/i1/03-organología/eval-class reveal",
       "name": "eval class reveal",
       "type": "document",

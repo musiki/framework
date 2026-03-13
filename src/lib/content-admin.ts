@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { normalizeContentSlug } from './content-slug';
 
 type SourceManifestSource = {
   id: string;
@@ -105,6 +106,52 @@ export function buildDefaultCreatePath(courseId: string, preferredDir = ''): str
   }
 
   return `cursos/${normalizedCourseId}/nueva-nota.md`;
+}
+
+function resolveCreateTargetDirectory(courseId: string, preferredPath = ''): string {
+  const normalizedCourseId = normalizeText(courseId);
+  const normalizedPreferredPath = sanitizeRepoMarkdownPath(preferredPath);
+  const normalizedDir = sanitizeRepoDirectoryPath(
+    normalizedPreferredPath
+      ? path.posix.dirname(normalizedPreferredPath)
+      : preferredPath,
+  );
+
+  if (normalizedDir && isEditableCourseRepoPath(normalizedCourseId, `${normalizedDir}/placeholder.md`)) {
+    return normalizedDir;
+  }
+
+  return `cursos/${normalizedCourseId}`;
+}
+
+function resolveCreateTargetStem(title: unknown, preferredPath = ''): string {
+  const titleSlug = normalizeContentSlug(title);
+  if (titleSlug) return titleSlug;
+
+  const normalizedPreferredPath = sanitizeRepoMarkdownPath(preferredPath);
+  if (normalizedPreferredPath) {
+    const preferredBase = path.posix.basename(
+      normalizedPreferredPath,
+      path.posix.extname(normalizedPreferredPath),
+    );
+    const preferredSlug = normalizeContentSlug(preferredBase);
+    if (preferredSlug) return preferredSlug;
+  }
+
+  return 'nueva-nota';
+}
+
+export function buildCreateCandidatePath(options: {
+  courseId: string;
+  preferredPath?: string;
+  title?: unknown;
+  attempt?: number;
+}): string {
+  const directory = resolveCreateTargetDirectory(options.courseId, options.preferredPath || '');
+  const stem = resolveCreateTargetStem(options.title, options.preferredPath || '');
+  const attempt = Number.isFinite(options.attempt) ? Math.max(0, Number(options.attempt) || 0) : 0;
+  const suffix = attempt > 0 ? `-${attempt + 1}` : '';
+  return `${directory}/${stem}${suffix}.md`;
 }
 
 export function buildEditorHref(options: {

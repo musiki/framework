@@ -329,19 +329,15 @@ if (hasSessionUser && (canonicalCourseId || courseSlug)) {
   }
 }
 
-const forumBoardSortWeight = (slug: string) => {
-  if (slug === 'general') return 0;
-  if (slug === 'proyecto-final') return 1;
-  return 2;
-};
-
-const sidebarForumBoards = [...initialCourseForumBoards].sort((left, right) => {
-  const leftSlug = normalizeForumBoardSlug(left?.slug);
-  const rightSlug = normalizeForumBoardSlug(right?.slug);
-  const weightDifference = forumBoardSortWeight(leftSlug) - forumBoardSortWeight(rightSlug);
-  if (weightDifference !== 0) return weightDifference;
-  return String(left?.title || '').localeCompare(String(right?.title || ''), 'es');
-});
+const sidebarForumBoards = [...initialCourseForumBoards].sort((left, right) =>
+  String(left?.title || '').localeCompare(String(right?.title || ''), 'es'),
+);
+const generalSidebarForumBoard =
+  sidebarForumBoards.find((board) => normalizeForumBoardSlug(board?.slug) === 'general') || null;
+const customSidebarForumBoards = sidebarForumBoards.filter(
+  (board) => normalizeForumBoardSlug(board?.slug) !== 'general',
+);
+const GENERAL_FORUM_SWITCHER_COLOR = '#ea580c';
 const forumSwitcherPalette = ['#16a34a', '#2563eb', '#d97706', '#7c3aed', '#dc2626', '#0f766e'];
 const getForumSwitcherColor = (index: number) => forumSwitcherPalette[((index % forumSwitcherPalette.length) + forumSwitcherPalette.length) % forumSwitcherPalette.length];
 const getForumSwitcherMarkParts = (value: unknown) => {
@@ -521,7 +517,7 @@ order:
         --course-shell-top-gap: clamp(1rem, 1.45vw, 1.35rem);
         --course-shell-top: calc(var(--musiki-header-height, 4.5rem) + var(--course-shell-top-gap));
         --course-shell-bottom-gap: 0.7rem;
-        --left-sidebar-width: clamp(248px, 19vw, 312px);
+        --left-sidebar-width: clamp(258px, calc(19vw + 10px), 322px);
         --right-sidebar-width: clamp(400px, 31vw, 520px);
         --course-fold-cursor-down:
           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 22 6 10h20Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
@@ -2394,7 +2390,7 @@ order:
           --course-sidebar-pad-top: 0.9rem;
           --course-sidebar-pad-x: 0.9rem;
           --course-sidebar-pad-bottom: 1.1rem;
-          top: calc(var(--musiki-header-height, 4.5rem) + 0.32rem);
+          top: var(--musiki-header-height, 4.5rem);
           right: 0;
           bottom: 0;
           left: 0;
@@ -2402,8 +2398,11 @@ order:
           width: 100dvw;
           max-width: none;
           height: auto;
-          min-height: calc(100dvh - var(--musiki-header-height, 4.5rem) - 0.32rem);
+          min-height: calc(100dvh - var(--musiki-header-height, 4.5rem));
           padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
+          border-top: none;
+          border-radius: 0;
+          box-shadow: 0 16px 34px rgba(0, 0, 0, 0.14);
         }
 
         .sidebar-panel-actions {
@@ -2412,6 +2411,7 @@ order:
           z-index: 2;
           background: var(--c-bg);
           padding-top: 0.1rem;
+          border-top: none;
         }
       }
 
@@ -2821,30 +2821,57 @@ order:
                 data-active-mode={initialSidebarForumMode}
                 data-active-board-slug={initialSidebarBoardSlug}
               >
-                {isLessonPage && (() => {
-                  const lessonMark = getForumSwitcherMarkParts('Lección');
-                  return (
-                    <a
-                      href={`${lessonForumHref}#lesson-forum`}
-                      class:list={['forum-switcher-link', 'forum-switcher-link--lesson', 'forum-subforum-link', { active: initialSidebarForumMode === 'lesson' }]}
-                      data-board-slug="lesson"
-                      data-forum-scope-key={isLessonPage ? `lesson:${canonicalCourseId || courseSlug}:${lessonSlug}` : undefined}
-                      data-forum-total="0"
-                      style={{ '--forum-switcher-color': '#7c3aed' }}
-                      title={lessonForumHoverTitle}
-                      aria-label="Lección"
-                      aria-current={initialSidebarForumMode === 'lesson' ? 'page' : undefined}
-                    >
-                      <span class="forum-switcher-mark" aria-hidden="true">
-                        {lessonMark.primary}
-                        {lessonMark.secondary && <sup class="forum-switcher-sup">{lessonMark.secondary}</sup>}
-                      </span>
-                      <span class="forum-switcher-unread-dot" aria-hidden="true"></span>
-                    </a>
-                  );
-                })()}
                 {hasSessionUser ? (
-                  sidebarForumBoards.map((board, index) => {
+                  <>
+                    {generalSidebarForumBoard && (() => {
+                      const boardSlug = normalizeForumBoardSlug(generalSidebarForumBoard.slug);
+                      const isActiveBoard = initialSidebarForumMode === 'board' && boardSlug === initialSidebarBoardSlug;
+                      const boardHref = `${forumShellHref}?board=${encodeURIComponent(boardSlug)}#lesson-forum`;
+                      const boardMark = getForumSwitcherMarkParts(generalSidebarForumBoard.title);
+
+                      return (
+                        <a
+                          href={boardHref}
+                          class:list={['forum-switcher-link', 'forum-switcher-link--board', 'forum-subforum-link', { active: isActiveBoard }]}
+                          data-board-slug={boardSlug}
+                          data-forum-scope-key={`board:${canonicalCourseId || courseSlug}:${boardSlug}`}
+                          data-forum-total={String(Math.max(0, Number((generalSidebarForumBoard as any)?.messageCount ?? 0) || 0))}
+                          style={{ '--forum-switcher-color': GENERAL_FORUM_SWITCHER_COLOR }}
+                          title={generalSidebarForumBoard.title}
+                          aria-label={generalSidebarForumBoard.title}
+                          aria-current={isActiveBoard ? 'page' : undefined}
+                        >
+                          <span class="forum-switcher-mark" aria-hidden="true">
+                            {boardMark.primary}
+                            {boardMark.secondary && <sup class="forum-switcher-sup">{boardMark.secondary}</sup>}
+                          </span>
+                          <span class="forum-switcher-unread-dot" aria-hidden="true"></span>
+                        </a>
+                      );
+                    })()}
+                    {isLessonPage && (() => {
+                      const lessonMark = getForumSwitcherMarkParts('Lección');
+                      return (
+                        <a
+                          href={`${lessonForumHref}#lesson-forum`}
+                          class:list={['forum-switcher-link', 'forum-switcher-link--lesson', 'forum-subforum-link', { active: initialSidebarForumMode === 'lesson' }]}
+                          data-board-slug="lesson"
+                          data-forum-scope-key={isLessonPage ? `lesson:${canonicalCourseId || courseSlug}:${lessonSlug}` : undefined}
+                          data-forum-total="0"
+                          style={{ '--forum-switcher-color': '#7c3aed' }}
+                          title={lessonForumHoverTitle}
+                          aria-label="Lección"
+                          aria-current={initialSidebarForumMode === 'lesson' ? 'page' : undefined}
+                        >
+                          <span class="forum-switcher-mark" aria-hidden="true">
+                            {lessonMark.primary}
+                            {lessonMark.secondary && <sup class="forum-switcher-sup">{lessonMark.secondary}</sup>}
+                          </span>
+                          <span class="forum-switcher-unread-dot" aria-hidden="true"></span>
+                        </a>
+                      );
+                    })()}
+                    {customSidebarForumBoards.map((board, index) => {
                     const boardSlug = normalizeForumBoardSlug(board.slug);
                     const isActiveBoard = initialSidebarForumMode === 'board' && boardSlug === initialSidebarBoardSlug;
                     const boardHref = `${forumShellHref}?board=${encodeURIComponent(boardSlug)}#lesson-forum`;
@@ -2870,7 +2897,8 @@ order:
                         <span class="forum-switcher-unread-dot" aria-hidden="true"></span>
                       </a>
                     );
-                  })
+                    })}
+                  </>
                 ) : (
                   <span class="forum-switcher-link forum-subforum-link is-disabled" title="Inicia sesión para ver subforos" aria-hidden="true">
                     <span class="forum-switcher-mark">?</span>
@@ -3091,6 +3119,11 @@ order:
                 shaInput.value = result.fileSha;
               }
 
+              const pathInput = form.elements.namedItem('targetPath');
+              if (pathInput instanceof HTMLInputElement && typeof result.path === 'string' && result.path) {
+                pathInput.value = result.path;
+              }
+
               const modeInput = form.elements.namedItem('mode');
               if (modeInput instanceof HTMLInputElement && mode === 'create') {
                 modeInput.value = 'edit';
@@ -3287,6 +3320,18 @@ order:
           button.dataset.boundCourseSidebar = 'true';
           button.addEventListener('click', () => toggleRightMaximized());
         });
+
+        if (leftSidebar instanceof HTMLElement && leftSidebar.dataset.boundCourseSidebarNav !== 'true') {
+          leftSidebar.dataset.boundCourseSidebarNav = 'true';
+          leftSidebar.addEventListener('click', (event) => {
+            if (!isMobileViewport()) return;
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+            const navigationLink = target.closest('.lesson-link, .class-toc-link, .course-title-link');
+            if (!(navigationLink instanceof HTMLAnchorElement)) return;
+            applySidebarState('left', false);
+          });
+        }
 
         if (overlay instanceof HTMLElement && overlay.dataset.boundCourseSidebar !== 'true') {
           overlay.dataset.boundCourseSidebar = 'true';
@@ -4831,6 +4876,336 @@ order:
         renderEvalMath(container);
       }
 
+      function renderTextAI(wrapper, data, position) {
+        const previousSubmission = getSubmission(data.id);
+        const previousPayload = getSubmissionPayload(previousSubmission);
+        const previousRecord = previousPayload && typeof previousPayload === 'object' ? previousPayload : {};
+        const previousAnswer = previousRecord.answer && typeof previousRecord.answer === 'object'
+          ? previousRecord.answer
+          : previousRecord;
+        const previousStudentText = ensureEvalText(
+          previousAnswer.studentText
+          || previousAnswer.student_text
+          || previousRecord.answerText
+          || previousRecord.answerPreview,
+        );
+        const previousEvaluationSource =
+          previousAnswer.evaluation
+          || previousRecord.aiEvaluation
+          || previousRecord.evaluation
+          || null;
+        const previousEvaluation = hasAiEvaluation(previousEvaluationSource)
+          ? normalizeAiEvaluation(previousEvaluationSource)
+          : null;
+        const previousScore = previousEvaluation
+          ? parseEvalScore(previousEvaluation?.calificacion?.nota)
+          : null;
+        const passScore = Number.isFinite(Number(data.passScore))
+          ? Math.max(0, Number(data.passScore))
+          : 6;
+        const allowEdit = Boolean(data.allowEdit);
+        const wasCorrect = previousScore !== null ? previousScore >= passScore : isSubmissionCorrect(previousSubmission);
+        const isReferenceMode = data.type === 'reference_ai';
+
+        registerProgress(data, position, wasCorrect);
+
+        const container = document.createElement('div');
+        container.className = 'eval-block patch-ai-block';
+        container.dataset.evalId = data.id;
+        container.id = `eval-${data.id}`;
+
+        const prompt = document.createElement('h4');
+        prompt.className = 'eval-prompt';
+        prompt.textContent = data.prompt || data.title || 'Escribe tu respuesta y envíala a corrección.';
+        container.appendChild(prompt);
+
+        const meta = document.createElement('p');
+        meta.className = 'patch-ai-meta';
+        const providerLabel = ensureEvalText(data.provider || 'ollama') || 'ollama';
+        const modelLabel = ensureEvalText(data.model);
+        meta.textContent = [
+          `Proveedor: ${providerLabel}`,
+          modelLabel ? `Modelo: ${modelLabel}` : '',
+          `Aprobacion: ${passScore}/10`,
+        ].filter(Boolean).join(' · ');
+        container.appendChild(meta);
+
+        if (ensureEvalText(data.rubric)) {
+          const rubricDetails = document.createElement('details');
+          rubricDetails.className = 'patch-ai-reference';
+
+          const rubricSummary = document.createElement('summary');
+          rubricSummary.textContent = 'Ver rúbrica';
+          rubricDetails.appendChild(rubricSummary);
+
+          const rubricPre = document.createElement('pre');
+          rubricPre.className = 'patch-ai-code';
+          rubricPre.textContent = ensureEvalText(data.rubric);
+          rubricDetails.appendChild(rubricPre);
+
+          container.appendChild(rubricDetails);
+        }
+
+        if (isReferenceMode && ensureEvalText(data.referenceText)) {
+          const referenceDetails = document.createElement('details');
+          referenceDetails.className = 'patch-ai-reference';
+          if (!previousStudentText) referenceDetails.open = true;
+
+          const referenceSummary = document.createElement('summary');
+          referenceSummary.textContent = 'Ver respuesta de referencia';
+          referenceDetails.appendChild(referenceSummary);
+
+          const referencePre = document.createElement('pre');
+          referencePre.className = 'patch-ai-code';
+          referencePre.textContent = ensureEvalText(data.referenceText);
+          referenceDetails.appendChild(referencePre);
+
+          container.appendChild(referenceDetails);
+        }
+
+        if (allowEdit) {
+          const editableHint = document.createElement('p');
+          editableHint.className = 'feedback-explanation';
+          editableHint.textContent = 'Puedes editar tu respuesta y reenviarla.';
+          container.appendChild(editableHint);
+        }
+
+        const form = document.createElement('form');
+        form.className = 'patch-ai-form';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'patch-ai-textarea';
+        textarea.placeholder = ensureEvalText(data.placeholder) || 'Escribe aqui tu respuesta.';
+        textarea.spellcheck = true;
+        textarea.autocomplete = 'off';
+        textarea.autocapitalize = 'sentences';
+        textarea.setAttribute('autocorrect', 'on');
+        textarea.value = previousStudentText;
+        form.appendChild(textarea);
+
+        const submitButton = document.createElement('button');
+        submitButton.type = 'submit';
+        submitButton.className = 'eval-submit';
+        submitButton.textContent = previousSubmission && allowEdit
+          ? 'Reevaluar respuesta'
+          : (ensureEvalText(data.submitLabel) || 'Evaluar respuesta');
+        form.appendChild(submitButton);
+
+        container.appendChild(form);
+
+        const feedback = document.createElement('div');
+        feedback.className = 'eval-feedback patch-ai-feedback';
+        feedback.hidden = true;
+
+        const status = document.createElement('p');
+        status.className = 'feedback-message';
+        feedback.appendChild(status);
+
+        const explanation = document.createElement('p');
+        explanation.className = 'feedback-explanation';
+        feedback.appendChild(explanation);
+
+        const cards = document.createElement('div');
+        cards.className = 'patch-ai-cards';
+        feedback.appendChild(cards);
+
+        const rawDetails = document.createElement('details');
+        rawDetails.className = 'patch-ai-raw';
+        rawDetails.hidden = true;
+        const rawSummary = document.createElement('summary');
+        rawSummary.textContent = 'Ver salida cruda';
+        rawDetails.appendChild(rawSummary);
+        const rawPre = document.createElement('pre');
+        rawPre.className = 'patch-ai-code';
+        rawDetails.appendChild(rawPre);
+        feedback.appendChild(rawDetails);
+
+        container.appendChild(feedback);
+
+        const renderEvaluationCard = (title, body) => {
+          const text = ensureEvalText(body);
+          if (!text) return;
+          const card = document.createElement('article');
+          card.className = 'patch-ai-card';
+          const heading = document.createElement('h5');
+          heading.className = 'patch-ai-card-title';
+          heading.textContent = title;
+          const content = document.createElement('p');
+          content.className = 'patch-ai-card-body';
+          content.textContent = text;
+          card.append(heading, content);
+          cards.appendChild(card);
+        };
+
+        const paintEvaluation = (evaluation, providerName = '', modelName = '') => {
+          feedback.hidden = false;
+          cards.innerHTML = '';
+
+          const score = parseEvalScore(evaluation?.calificacion?.nota);
+          const scoreLabel = score !== null ? `${score}/10` : 'sin nota';
+          const passed = score !== null ? score >= passScore : false;
+          status.textContent = passed
+            ? `✅ Respuesta lograda (${scoreLabel})`
+            : `⚠️ Respuesta todavía insuficiente (${scoreLabel})`;
+          status.className = `feedback-message ${passed ? 'correct' : 'incorrect'}`;
+
+          explanation.textContent = [
+            ensureEvalText(evaluation?.calificacion?.justificacion),
+            providerName ? `Proveedor: ${providerName}` : '',
+            modelName ? `Modelo: ${modelName}` : '',
+          ].filter(Boolean).join(' · ');
+
+          renderEvaluationCard('Resumen', evaluation?.resumen);
+          renderEvaluationCard('Idea principal', ensureEvalBool(evaluation?.tesis?.clara) ? 'Clara' : 'No clara');
+          renderEvaluationCard('Lectura de la respuesta', evaluation?.tesis?.explicacion);
+          renderEvaluationCard('Fortalezas', ensureEvalPair(evaluation?.fortalezas).filter(Boolean).join(' | '));
+          renderEvaluationCard('Debilidades', ensureEvalPair(evaluation?.debilidades).filter(Boolean).join(' | '));
+          renderEvaluationCard('Sugerencia', evaluation?.sugerencia);
+
+          const rawText = ensureEvalText(evaluation?.raw);
+          rawPre.textContent = rawText || '(sin salida cruda)';
+          rawDetails.hidden = !rawText;
+        };
+
+        if (previousEvaluation) {
+          paintEvaluation(
+            previousEvaluation,
+            ensureEvalText(previousAnswer.provider || previousRecord.provider || data.provider || 'ollama'),
+            ensureEvalText(previousAnswer.model || previousRecord.model || data.model),
+          );
+
+          if (previousSubmission && !allowEdit) {
+            textarea.disabled = true;
+            submitButton.disabled = true;
+          }
+        }
+
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+
+          const studentText = ensureEvalText(textarea.value);
+          if (!studentText) {
+            alert('Escribe una respuesta antes de evaluar.');
+            return;
+          }
+
+          const minChars = Number.isFinite(Number(data.minChars))
+            ? Math.max(0, Math.round(Number(data.minChars)))
+            : 0;
+          if (minChars > 0 && studentText.length < minChars) {
+            alert(`La respuesta debe tener al menos ${minChars} caracteres.`);
+            return;
+          }
+
+          submitButton.disabled = true;
+          submitButton.textContent = 'Evaluando respuesta...';
+          status.textContent = 'Enviando respuesta al backend de corrección...';
+          status.className = 'feedback-message';
+          explanation.textContent = '';
+          cards.innerHTML = '';
+          rawDetails.hidden = true;
+          rawPre.textContent = '';
+          feedback.hidden = false;
+
+          try {
+            const response = await fetch('/api/ai/correct', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                taskType: isReferenceMode ? 'reference' : 'short',
+                prompt: ensureEvalText(data.prompt || data.title),
+                referenceText: isReferenceMode ? ensureEvalText(data.referenceText) : undefined,
+                texto: studentText,
+                rubrica: ensureEvalText(data.rubric),
+                provider: ensureEvalText(data.provider || 'ollama') || 'ollama',
+                model: ensureEvalText(data.model) || undefined,
+              }),
+            });
+
+            const responseData = await response.json().catch(() => ({}));
+            if (!response.ok || !responseData?.ok) {
+              status.textContent = responseData?.error || 'No se pudo evaluar la respuesta.';
+              status.className = 'feedback-message incorrect';
+              rawPre.textContent = JSON.stringify(responseData || {}, null, 2);
+              rawDetails.hidden = false;
+              submitButton.disabled = false;
+              submitButton.textContent = ensureEvalText(data.submitLabel) || 'Evaluar respuesta';
+              return;
+            }
+
+            const normalizedEvaluation = normalizeAiEvaluation(responseData.evaluation || {});
+            const providerName = ensureEvalText(responseData.provider || data.provider || 'ollama') || 'ollama';
+            const modelName = ensureEvalText(responseData.model || data.model);
+            const score = parseEvalScore(normalizedEvaluation?.calificacion?.nota);
+            const isCorrect = score !== null ? score >= passScore : false;
+
+            paintEvaluation(normalizedEvaluation, providerName, modelName);
+
+            const answerPayload = {
+              type: isReferenceMode ? 'reference_ai' : 'short_ai',
+              consigna: ensureEvalText(data.prompt || data.title),
+              referenceText: isReferenceMode ? ensureEvalText(data.referenceText) : '',
+              rubric: ensureEvalText(data.rubric),
+              studentText,
+              provider: providerName,
+              model: modelName,
+              evaluation: normalizedEvaluation,
+              correctedAt: new Date().toISOString(),
+            };
+
+            const feedbackText =
+              ensureEvalText(normalizedEvaluation?.calificacion?.justificacion)
+              || ensureEvalText(normalizedEvaluation?.sugerencia);
+
+            const saved = await saveSubmission({
+              evalId: data.id,
+              answer: answerPayload,
+              isCorrect,
+              score,
+              feedback: feedbackText,
+              markAsGraded: score !== null,
+              meta: {
+                type: isReferenceMode ? 'reference_ai' : 'short_ai',
+                answerText: studentText.slice(0, 160),
+                answerPreview: studentText.slice(0, 320),
+                provider: providerName,
+                model: modelName,
+                passScore,
+                aiEvaluation: normalizedEvaluation,
+              },
+            });
+
+            if (!saved) {
+              alert('La evaluación salió bien, pero no se pudo guardar la entrega.');
+              submitButton.disabled = false;
+              submitButton.textContent = allowEdit
+                ? 'Reevaluar respuesta'
+                : (ensureEvalText(data.submitLabel) || 'Evaluar respuesta');
+              return;
+            }
+
+            setProgressCompletion(data.id, isCorrect);
+
+            if (!allowEdit) {
+              textarea.disabled = true;
+              submitButton.disabled = true;
+            } else {
+              submitButton.disabled = false;
+              submitButton.textContent = 'Reevaluar respuesta';
+            }
+          } catch (error) {
+            console.error(`Error evaluating ${data.type} block:`, error);
+            status.textContent = 'Fallo de red o backend no disponible.';
+            status.className = 'feedback-message incorrect';
+            submitButton.disabled = false;
+            submitButton.textContent = ensureEvalText(data.submitLabel) || 'Evaluar respuesta';
+          }
+        });
+
+        wrapper.appendChild(container);
+        renderEvalMath(container);
+      }
+
       function renderPatchAI(wrapper, data, position) {
         const previousSubmission = getSubmission(data.id);
         const previousPayload = getSubmissionPayload(previousSubmission);
@@ -6114,6 +6489,7 @@ order:
       }
 
       const forumSwitcherPalette = ['#16a34a', '#2563eb', '#d97706', '#7c3aed', '#dc2626', '#0f766e'];
+      const GENERAL_FORUM_SWITCHER_COLOR = '#ea580c';
       const FORUM_READ_PREFIX = 'forum:read:';
 
       function getForumSwitcherColor(index) {
@@ -6283,6 +6659,8 @@ order:
         if (!hasSession || !baseHref) return;
 
         const resolvedBoards = Array.isArray(boards) ? boards : [];
+        const generalBoard = resolvedBoards.find((board) => normalizeForumBoardSlug(board?.slug) === 'general') || null;
+        const customBoards = resolvedBoards.filter((board) => normalizeForumBoardSlug(board?.slug) !== 'general');
         const activeMode = options.activeMode === 'lesson' ? 'lesson' : (initialActiveMode === 'lesson' ? 'lesson' : 'board');
         const preferredBoardSlug = normalizeForumBoardSlug(
           options.preferredBoardSlug || context.activeBoardSlug || 'general',
@@ -6298,6 +6676,36 @@ order:
         node.dataset.activeMode = activeMode;
         node.dataset.activeBoardSlug = activeBoardSlug;
         node.innerHTML = '';
+
+        let renderedSwitcherLinkCount = 0;
+
+        if (generalBoard) {
+          const slug = normalizeForumBoardSlug(generalBoard?.slug);
+          const label = String(generalBoard?.title || slug);
+          const totalMessages = Math.max(0, Number(generalBoard?.messageCount ?? generalBoard?.totalMessages ?? 0) || 0);
+          const link = document.createElement('a');
+          link.className = 'forum-switcher-link forum-switcher-link--board forum-subforum-link';
+          link.dataset.boardSlug = slug;
+          link.dataset.forumScopeKey = `board:${context.courseId}:${slug}`;
+          link.dataset.forumTotal = String(totalMessages);
+          if (String(generalBoard?.lastActivityAt || '').trim()) {
+            link.dataset.forumLastActivity = String(generalBoard?.lastActivityAt || '').trim();
+          }
+          link.style.setProperty('--forum-switcher-color', GENERAL_FORUM_SWITCHER_COLOR);
+          link.setAttribute('aria-label', label);
+          link.title = label;
+          link.href = `${baseHref}?board=${encodeURIComponent(slug)}#lesson-forum`;
+          link.appendChild(createForumSwitcherMark(label));
+          link.appendChild(createForumSwitcherUnreadDot());
+
+          if (activeMode === 'board' && slug === activeBoardSlug) {
+            link.classList.add('active');
+            link.setAttribute('aria-current', 'page');
+          }
+
+          node.appendChild(link);
+          renderedSwitcherLinkCount += 1;
+        }
 
         if (isLessonPage && lessonHref) {
           const lessonLink = document.createElement('a');
@@ -6323,21 +6731,10 @@ order:
           }
 
           node.appendChild(lessonLink);
+          renderedSwitcherLinkCount += 1;
         }
 
-        if (resolvedBoards.length === 0) {
-          const emptyLink = document.createElement('span');
-          emptyLink.className = 'forum-switcher-link forum-subforum-link is-disabled';
-          emptyLink.title = 'Sin subforos disponibles';
-          emptyLink.appendChild(createForumSwitcherMark('?'));
-          node.appendChild(emptyLink);
-          if (persistentAddButton instanceof HTMLElement) {
-            node.appendChild(persistentAddButton);
-          }
-          return;
-        }
-
-        resolvedBoards.forEach((board, index) => {
+        customBoards.forEach((board, index) => {
           const slug = normalizeForumBoardSlug(board?.slug);
           if (!slug) return;
 
@@ -6364,7 +6761,16 @@ order:
           }
 
           node.appendChild(link);
+          renderedSwitcherLinkCount += 1;
         });
+
+        if (renderedSwitcherLinkCount === 0) {
+          const emptyLink = document.createElement('span');
+          emptyLink.className = 'forum-switcher-link forum-subforum-link is-disabled';
+          emptyLink.title = 'Sin subforos disponibles';
+          emptyLink.appendChild(createForumSwitcherMark('?'));
+          node.appendChild(emptyLink);
+        }
 
         if (persistentAddButton instanceof HTMLElement) {
           node.appendChild(persistentAddButton);
@@ -9927,6 +10333,11 @@ a[node] -->|edge| b[hub]
 
             if (evalData.type === 'patch_ai') {
               renderPatchAI(wrapper, evalData, index);
+              return;
+            }
+
+            if (evalData.type === 'short_ai' || evalData.type === 'reference_ai') {
+              renderTextAI(wrapper, evalData, index);
               return;
             }
 
