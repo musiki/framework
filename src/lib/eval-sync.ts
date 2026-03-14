@@ -151,6 +151,7 @@ const toAssignmentCandidate = (entry: EvalCatalogEntry): JsonRecord => {
       evalType: cleanString(entry.evalType) || 'unknown',
       mode: cleanString(entry.mode) || 'self',
       prompt,
+      group: cleanString(entry.group),
       options: Array.isArray(entry.options) ? entry.options : [],
       sourceCollection: cleanString(entry.sourceCollection),
       entryId,

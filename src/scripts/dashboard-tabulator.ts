@@ -1022,13 +1022,25 @@ const buildTable = (
   context: { kind: GridKind; meta: DashboardMeta },
   annotationState: AnnotationState,
   modalRef: { current: AnnotationModalApi | null },
-) =>
-  new Tabulator(element, {
+) => {
+  const headerMenu = [
+    {
+      label: "Fold/Unfold Group",
+      action: function (e: any, column: any) {
+        column.getColumns().forEach((col: any) => {
+          col.toggle();
+        });
+      }
+    }
+  ];
+
+  return new Tabulator(element, {
     index: 'id',
     data: Array.isArray(projection?.rows) ? projection.rows : [],
     columns: configureColumns(Array.isArray(projection?.columns) ? projection.columns : [], context, annotationState, modalRef),
     layout: context.kind === 'gradebook' ? 'fitDataTable' : 'fitColumns',
     editTriggerEvent: context.kind === 'attendance-summary' ? 'dblclick' : 'focus',
+    columnHeaderVertAlign: 'bottom',
     pagination: 'local',
     paginationSize: 25,
     movableColumns: true,
@@ -1045,7 +1057,7 @@ const buildTable = (
     popupContainer: root,
     rowHeight: context.kind === 'attendance-summary' ? 36 : 38,
   });
-
+};
 const trackTableBuilt = (table: Tabulator, readyTables: WeakSet<Tabulator>) => {
   table.on('tableBuilt', () => {
     readyTables.add(table);

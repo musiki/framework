@@ -64,6 +64,7 @@ Objetivos centrales:
 id: clase6-poll-01
 type: poll
 mode: self
+group: "Tarea 1"
 prompt: "¿Qué tan claro quedó el concepto de complejidad efectiva?"
 options:
   - Muy claro
@@ -78,6 +79,7 @@ Campos relevantes:
 - `id`: único y estable.
 - `type`: tipo de evaluación.
 - `mode`: `self | graded | peer | teacherreview`.
+- `group` (o `tarea`): agrupa evaluaciones dentro de una misma clase. Permite calcular sub-promedios y organizar visualmente el Gradebook.
 - `anonymous`: permite anonimato en interacción live.
 - `time`: habilita respuesta temporizada.
 - `durationMinutes`/`durationSeconds`: ventana de respuesta.

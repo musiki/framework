@@ -113,6 +113,7 @@ export type EvalCatalogEntry = {
   mode: string;
   points: number;
   prompt: string;
+  group: string;
   options: string[];
   contentHash: string;
   contentVersion: string;
@@ -164,6 +165,7 @@ const buildEvalSnapshot = (parsed: Record<string, unknown>): Record<string, unkn
     mode: asText((parsed as Record<string, unknown>).mode, 'self'),
     title: asText((parsed as Record<string, unknown>).title),
     prompt: asText((parsed as Record<string, unknown>).prompt),
+    group: asText((parsed as Record<string, unknown>).group),
     points: Number((parsed as Record<string, unknown>).points || 0) || 0,
     options,
     allowEdit: Boolean((parsed as Record<string, unknown>).allowEdit),
@@ -254,6 +256,7 @@ const buildCollectionCatalog = async (
           mode: asText(parsed.mode, 'self'),
           points: Number(parsed.points || 0) || 0,
           prompt: asText(parsed.prompt || parsed.title || ''),
+          group: asText(parsed.group),
           options: toOptionTextList((parsed as Record<string, unknown>).options),
           contentHash,
           contentVersion,

@@ -432,6 +432,7 @@ export function parseEvalBlock(blockValue, options = {}) {
     mode: ALLOWED_MODES.has(normalizedMode) ? normalizedMode : 'self',
     points: asPositiveNumber(parsed.points, 1),
     title: asText(parsed.title),
+    group: asText(parsed.group || parsed.tarea),
     allowEdit: asBoolean(parsed.allowEdit ?? parsed.allowedit ?? parsed.allow_edit ?? parsed.editable, false),
   };
 

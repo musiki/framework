@@ -33,18 +33,60 @@ export function buildGradebookProjection({
   );
   const lessonGroups = Array.isArray(activeCourseGroup?.lessonGroups) ? activeCourseGroup.lessonGroups : [];
 
-  const assignmentColumns = lessonGroups.map((lesson: any, lessonIndex: number) => ({
-    title: String(lesson?.lessonLabel || 'Clase'),
-    columns: (lesson?.assignments || []).map((assignment: any) => ({
-      title: String(assignment?.label || assignment?.id || 'Eval'),
-      field: fieldKeyFromId('eval', assignment?.id),
-      minWidth: 88,
-      hozAlign: 'center' as const,
-      headerHozAlign: 'center' as const,
-      kind: 'grade-score',
-      cssClass: lessonIndex % 2 === 0 ? 'dashboard-grade-col-even' : 'dashboard-grade-col-odd',
-    })),
-  }));
+  const assignmentColumns = lessonGroups.map((lesson: any, lessonIndex: number) => {
+    const lessonField = `__avg_lesson_${lessonIndex}`;
+    
+    // Group assignments by their 'group' (tarea) property
+    const taskGroups: Record<string, any[]> = {};
+    (lesson?.assignments || []).forEach((assignment: any) => {
+      const g = String(assignment?.group || '').trim() || 'General';
+      if (!taskGroups[g]) taskGroups[g] = [];
+      taskGroups[g].push(assignment);
+    });
+
+    const groupColumns = Object.entries(taskGroups).map(([groupName, assignments], groupIndex) => {
+      const groupField = `__avg_lesson_${lessonIndex}_group_${groupIndex}`;
+      return {
+        title: groupName,
+        columns: [
+          ...assignments.map((assignment: any) => ({
+            title: String(assignment?.label || assignment?.id || 'Eval'),
+            field: fieldKeyFromId('eval', assignment?.id),
+            minWidth: 88,
+            hozAlign: 'center' as const,
+            headerHozAlign: 'center' as const,
+            kind: 'grade-score',
+            cssClass: lessonIndex % 2 === 0 ? 'dashboard-grade-col-even' : 'dashboard-grade-col-odd',
+          })),
+          {
+            title: 'Sub-Prom.',
+            field: groupField,
+            width: 80,
+            hozAlign: 'center' as const,
+            headerHozAlign: 'center' as const,
+            kind: 'score',
+            cssClass: 'dashboard-grade-sub-avg',
+          }
+        ]
+      };
+    });
+
+    return {
+      title: String(lesson?.lessonLabel || 'Clase'),
+      columns: [
+        ...groupColumns,
+        {
+          title: 'Prom. Clase',
+          field: lessonField,
+          width: 90,
+          hozAlign: 'center' as const,
+          headerHozAlign: 'center' as const,
+          kind: 'score',
+          cssClass: 'dashboard-grade-lesson-avg',
+        }
+      ],
+    };
+  });
 
   const rows = (activeYearGroup?.rows || [])
     .map((row: any) => {
@@ -64,19 +106,48 @@ export function buildGradebookProjection({
         __gradeState: {},
       };
 
-      lessonGroups.forEach((lesson: any) => {
+      lessonGroups.forEach((lesson: any, lessonIndex: number) => {
+        let lessonSum = 0;
+        let lessonCount = 0;
+
+        const taskGroups: Record<string, any[]> = {};
         (lesson?.assignments || []).forEach((assignment: any) => {
-          const field = fieldKeyFromId('eval', assignment?.id);
-          const cell = row?.cells?.[assignment?.id] || null;
-          record[field] =
-            cell?.score !== null && cell?.score !== undefined && cell?.score !== ''
-              ? asDashboardNumber(cell.score)
-              : null;
-          record.__gradeState[field] = {
-            statusLabel: String(cell?.statusLabel || ''),
-            assignmentId: String(assignment?.id || ''),
-          };
+          const g = String(assignment?.group || '').trim() || 'General';
+          if (!taskGroups[g]) taskGroups[g] = [];
+          taskGroups[g].push(assignment);
         });
+
+        Object.entries(taskGroups).forEach(([groupName, assignments], groupIndex) => {
+          let groupSum = 0;
+          let groupCount = 0;
+
+          assignments.forEach((assignment: any) => {
+            const field = fieldKeyFromId('eval', assignment?.id);
+            const cell = row?.cells?.[assignment?.id] || null;
+            const score = cell?.score !== null && cell?.score !== undefined && cell?.score !== ''
+              ? Number(cell.score)
+              : null;
+            
+            record[field] = score !== null ? asDashboardNumber(score) : null;
+            record.__gradeState[field] = {
+              statusLabel: String(cell?.statusLabel || ''),
+              assignmentId: String(assignment?.id || ''),
+            };
+
+            if (score !== null) {
+              groupSum += score;
+              groupCount += 1;
+              lessonSum += score;
+              lessonCount += 1;
+            }
+          });
+
+          const groupField = `__avg_lesson_${lessonIndex}_group_${groupIndex}`;
+          record[groupField] = groupCount > 0 ? asDashboardNumber(groupSum / groupCount) : null;
+        });
+
+        const lessonField = `__avg_lesson_${lessonIndex}`;
+        record[lessonField] = lessonCount > 0 ? asDashboardNumber(lessonSum / lessonCount) : null;
       });
 
       record.__search = buildSearchBlob([

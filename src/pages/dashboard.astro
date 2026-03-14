@@ -1952,9 +1952,12 @@ const teacherCourseGradeGroups = (() => {
         lessonLabel: String(lesson?.lessonLabel || ''),
         assignments: (lesson?.assignments || []).map((assignment: any) => {
           const assignmentId = String(assignment?.id || '');
+          const dbAssignment = assignmentById.get(assignmentId);
+          const group = String(dbAssignment?.settings?.group || dbAssignment?.settings?.tarea || '').trim();
           return {
             id: assignmentId,
             label: decodeUriSafe(assignmentId.split('/').pop() || assignmentId),
+            group,
           };
         }),
       }));
@@ -2389,6 +2392,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         gap: 0;
         align-items: start;
         min-height: calc(100dvh - 7rem);
+        transition: grid-template-columns 0.25s ease;
+        position: relative;
+      }
+      .dashboard-shell[data-left-open="false"] {
+        grid-template-columns: 0px minmax(0, 1fr);
       }
       .dashboard-sidebar {
         position: sticky;
@@ -2399,6 +2407,51 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         border: 1px solid var(--c-border);
         background: var(--c-bg);
         padding: 0.78rem;
+        transition: transform 0.25s ease, opacity 0.25s ease;
+      }
+      .dashboard-shell[data-left-open="false"] .dashboard-sidebar {
+        transform: translateX(-100%);
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .dashboard-sidebar-header {
+        display: none;
+        justify-content: flex-end;
+        margin-bottom: 1rem;
+      }
+      .dashboard-sidebar[data-left-open="true"] .dashboard-sidebar-header {
+        display: flex;
+      }
+      .dashboard-shell[data-left-open="true"] .dashboard-sidebar-header {
+        display: flex;
+      }
+
+      .dashboard-sidebar-toggle {
+        background: none;
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        color: var(--c-fg);
+        cursor: pointer;
+        padding: 0.2rem 0.5rem;
+        font-size: 1rem;
+      }
+      .dashboard-sidebar-handle {
+        position: fixed;
+        left: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 100;
+        background: var(--c-bg);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        color: var(--c-fg);
+        cursor: pointer;
+        padding: 0.5rem 0.2rem;
+        display: none;
+      }
+      .dashboard-shell[data-left-open="false"] .dashboard-sidebar-handle {
+        display: block;
       }
       .dashboard-sidebar-nav {
         display: grid;
@@ -3418,6 +3471,17 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         background: var(--c-bg) !important;
         color: var(--c-fg);
       }
+      .dashboard-tabulator .tabulator-cell.dashboard-grade-sub-avg { 
+        background-color: var(--c-link-faded, rgba(11, 108, 255, 0.05)) !important; 
+        font-weight: 700;
+      }
+      .dashboard-tabulator .tabulator-cell.dashboard-grade-lesson-avg { 
+        background-color: var(--c-link-faded, rgba(11, 108, 255, 0.15)) !important;
+        font-weight: 800;
+        border-right: 2px solid var(--c-border) !important;
+      }
+      .dashboard-tabulator .dashboard-grade-col-even { background-color: var(--c-bg-mute) !important; }
+      .dashboard-tabulator .dashboard-grade-col-odd { background-color: transparent !important; }
       .dashboard-tabulator .tabulator-col-title,
       .dashboard-tabulator .tabulator-col-content,
       .dashboard-tabulator .tabulator-row,
@@ -4103,8 +4167,22 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       activeCourseCode={activeCourseCode}
     />
     <main class="wrap">
-      <div class="dashboard-shell">
+      <div class="dashboard-shell" data-left-open="true">
+        <button
+          type="button"
+          class="dashboard-sidebar-handle"
+          aria-label="Toggle sidebar"
+          title="Toggle sidebar (⌘/Ctrl + \)"
+        >→</button>
         <aside class="dashboard-sidebar" aria-label="Navegación del panel">
+          <div class="dashboard-sidebar-header">
+            <button
+              type="button"
+              class="dashboard-sidebar-toggle"
+              aria-label="Hide sidebar"
+              title="Hide sidebar (⌘/Ctrl + \)"
+            >←</button>
+          </div>
           {isTeacher ? (
             <>
               <div class="tabs">
@@ -5049,8 +5127,39 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
 
       let teardownDashboardTabulators = null;
 
+      const bootDashboardSidebar = () => {
+        const shell = document.querySelector('.dashboard-shell');
+        const toggle = document.querySelector('.dashboard-sidebar-toggle');
+        const handle = document.querySelector('.dashboard-sidebar-handle');
+        if (!shell || !toggle || !handle) return;
+
+        const STORAGE_KEY = 'musiki:dashboard:sidebar-open';
+        const initialState = localStorage.getItem(STORAGE_KEY) !== 'false';
+        shell.setAttribute('data-left-open', initialState ? 'true' : 'false');
+
+        const setSidebarOpen = (isOpen) => {
+          shell.setAttribute('data-left-open', isOpen ? 'true' : 'false');
+          localStorage.setItem(STORAGE_KEY, isOpen ? 'true' : 'false');
+          // Trigger window resize for Tabulator to adjust
+          window.dispatchEvent(new Event('resize'));
+        };
+
+        toggle.addEventListener('click', () => setSidebarOpen(false));
+        handle.addEventListener('click', () => setSidebarOpen(true));
+
+        // Keyboard shortcut: Cmd/Ctrl + \
+        window.addEventListener('keydown', (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+            e.preventDefault();
+            const isOpen = shell.getAttribute('data-left-open') === 'true';
+            setSidebarOpen(!isOpen);
+          }
+        });
+      };
+
       const bootDashboardEnhancements = () => {
         const dashboardRoot = document.querySelector('[data-dashboard-root]');
+        bootDashboardSidebar();
         if (dashboardRoot instanceof HTMLElement) {
           if (typeof teardownDashboardTabulators === 'function') {
             teardownDashboardTabulators();
