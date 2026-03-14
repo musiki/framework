@@ -33,10 +33,24 @@ export function buildGradebookProjection({
   );
   const lessonGroups = Array.isArray(activeCourseGroup?.lessonGroups) ? activeCourseGroup.lessonGroups : [];
 
+  const studentColumns = {
+    title: 'Estudiante',
+    field: '__group_student',
+    columns: [
+      { title: 'Apellido', field: 'lastName', width: 120, frozen: true, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
+      { title: 'Nombre', field: 'firstName', width: 120, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
+      { title: 'Email', field: 'email', width: 180, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
+      { title: 'Prom.', field: 'average', width: 65, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'score' },
+      { title: 'Concepto', field: 'conceptValue', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const },
+      { title: 'Turno', field: 'turno', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const },
+      { title: 'Grupo', field: 'grupo', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const },
+      { title: 'Asist.', field: 'attendanceCount', width: 65, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'metric' },
+    ]
+  };
+
   const assignmentColumns = lessonGroups.map((lesson: any, lessonIndex: number) => {
     const lessonField = `__avg_lesson_${lessonIndex}`;
     
-    // Group assignments by their 'group' (tarea) property
     const taskGroups: Record<string, any[]> = {};
     (lesson?.assignments || []).forEach((assignment: any) => {
       const g = String(assignment?.group || '').trim() || 'General';
@@ -48,6 +62,7 @@ export function buildGradebookProjection({
       const groupField = `__avg_lesson_${lessonIndex}_group_${groupIndex}`;
       return {
         title: groupName,
+        field: `__group_lesson_${lessonIndex}_task_${groupIndex}`,
         columns: [
           ...assignments.map((assignment: any) => ({
             title: String(assignment?.label || assignment?.id || 'Eval'),
@@ -73,6 +88,7 @@ export function buildGradebookProjection({
 
     return {
       title: String(lesson?.lessonLabel || 'Clase'),
+      field: `__group_lesson_${lessonIndex}`,
       columns: [
         ...groupColumns,
         {
@@ -174,14 +190,7 @@ export function buildGradebookProjection({
 
   return {
     columns: [
-      { title: 'Nombre', field: 'firstName', frozen: true, minWidth: 140 },
-      { title: 'Apellido', field: 'lastName', frozen: true, minWidth: 150 },
-      { title: 'Email', field: 'email', minWidth: 220 },
-      { title: 'Prom.', field: 'average', width: 92, hozAlign: 'center', headerHozAlign: 'center', kind: 'score' },
-      { title: 'Concepto', field: 'conceptValue', width: 104, hozAlign: 'center', headerHozAlign: 'center' },
-      { title: 'Turno', field: 'turno', width: 74, hozAlign: 'center', headerHozAlign: 'center', kind: 'turno' },
-      { title: 'Grupo', field: 'grupo', width: 84, hozAlign: 'center', headerHozAlign: 'center', kind: 'grupo' },
-      { title: 'Asist.', field: 'attendanceCount', width: 88, hozAlign: 'center', headerHozAlign: 'center', kind: 'metric' },
+      studentColumns,
       ...assignmentColumns,
     ],
     rows,

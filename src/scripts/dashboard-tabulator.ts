@@ -868,6 +868,36 @@ const buildCellContextMenu = (contextKind: GridKind, annotationState: Annotation
     ];
   };
 
+const toggleGroupFolding = (column: any) => {
+  const subCols = column.getColumns();
+  if (subCols.length === 0) return;
+
+  // Determine if we are currently folded
+  // A group is "folded" if at least one non-average column is hidden
+  const isFolded = subCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+
+  subCols.forEach((c: any) => {
+    const def = c.getDefinition();
+    const isAvg = def.field?.startsWith('__avg');
+    const isLastName = def.field === 'lastName';
+    
+    if (isFolded) {
+      c.show();
+    } else {
+      // When folding: keep averages and last name (for student group) visible
+      if (!isAvg && !isLastName) {
+        c.hide();
+      }
+    }
+  });
+
+  // Update icon class on header element
+  const headerEl = column.getElement();
+  if (headerEl) {
+    headerEl.classList.toggle('group-folded', !isFolded);
+  }
+};
+
 const configureColumns = (
   columns: any[],
   context: { kind: GridKind; meta: DashboardMeta },
@@ -878,18 +908,7 @@ const configureColumns = (
     {
       label: "Fold/Unfold Group",
       action: function (e: any, column: any) {
-        const subCols = column.getColumns();
-        if (subCols.length > 0) {
-          // If any child is visible, hide all except the last one (usually sub-average)
-          const anyVisible = subCols.some((c: any) => c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
-          subCols.forEach((c: any) => {
-            if (c.getDefinition().field?.startsWith('__avg')) {
-              c.show();
-            } else {
-              if (anyVisible) c.hide(); else c.show();
-            }
-          });
-        }
+        toggleGroupFolding(column);
       }
     }
   ];
@@ -899,6 +918,20 @@ const configureColumns = (
       return {
         ...column,
         headerContextMenu: headerMenu,
+        headerClick: function(e: any, col: any) {
+          // If clicking near the right edge (where the triangle is)
+          const rect = col.getElement().getBoundingClientRect();
+          if (e.clientX > rect.right - 30) {
+            toggleGroupFolding(col);
+          }
+        },
+        titleFormatter: function(col: any) {
+          const title = col.getValue();
+          return `<div class="group-header-content">
+            <span class="group-header-title">${title}</span>
+            <span class="group-header-icon"></span>
+          </div>`;
+        },
         columns: configureColumns(column.columns, context, annotationState, modalRef),
       };
     }
@@ -1084,41 +1117,67 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
 
     e.preventDefault();
 
-    const allCols = table.getColumns(true); // true for all including nested
-
     if (isShift) {
-      // Fold/Unfold ALL
-      allCols.forEach((col: any) => {
-        const def = col.getDefinition();
-        const isGroup = Array.isArray(def.columns);
-        const isAvg = def.field?.startsWith('__avg');
-        
-        if (isGroup) return; // groups themselves stay
-
-        if (key === 'ArrowLeft') {
-          if (!isAvg && def.field) col.hide();
-        } else {
-          col.show();
-        }
-      });
-    } else {
-      // Fold/Unfold focused or first level
-      // For now, let's toggle top-level groups
+      // Unfold/Fold ALL levels
       const topCols = table.getColumns();
-      topCols.forEach((col: any) => {
-        const subCols = col.getColumns();
-        if (subCols.length > 0) {
-          subCols.forEach((c: any) => {
-            const def = c.getDefinition();
-            const isAvg = def.field?.startsWith('__avg');
-            if (isAvg) {
-              c.show();
-            } else {
-              if (key === 'ArrowLeft') c.hide(); else c.show();
-            }
+      topCols.forEach((group: any) => {
+        const subGroups = group.getColumns().filter((c: any) => Array.isArray(c.getDefinition().columns));
+        if (subGroups.length > 0) {
+          subGroups.forEach((sg: any) => {
+            const shouldFold = key === 'ArrowLeft';
+            const isSGFolded = sg.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+            if (shouldFold !== isSGFolded) toggleGroupFolding(sg);
           });
         }
+        const shouldFold = key === 'ArrowLeft';
+        const isFolded = group.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+        if (shouldFold !== isFolded) toggleGroupFolding(group);
       });
+    } else {
+      // Tiered folding:
+      // If ArrowLeft: fold sub-groups first. If already folded, fold classes.
+      // If ArrowRight: unfold classes first. If already unfolded, unfold sub-groups.
+      const topCols = table.getColumns();
+      
+      if (key === 'ArrowLeft') {
+        let anySubGroupFolded = false;
+        topCols.forEach((group: any) => {
+          const subGroups = group.getColumns().filter((c: any) => Array.isArray(c.getDefinition().columns));
+          subGroups.forEach((sg: any) => {
+            const isSGFolded = sg.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+            if (!isSGFolded) {
+              toggleGroupFolding(sg);
+              anySubGroupFolded = true;
+            }
+          });
+        });
+        
+        if (!anySubGroupFolded) {
+          topCols.forEach((group: any) => {
+            const isFolded = group.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+            if (!isFolded) toggleGroupFolding(group);
+          });
+        }
+      } else {
+        let anyClassUnfolded = false;
+        topCols.forEach((group: any) => {
+          const isFolded = group.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+          if (isFolded) {
+            toggleGroupFolding(group);
+            anyClassUnfolded = true;
+          }
+        });
+
+        if (!anyClassUnfolded) {
+          topCols.forEach((group: any) => {
+            const subGroups = group.getColumns().filter((c: any) => Array.isArray(c.getDefinition().columns));
+            subGroups.forEach((sg: any) => {
+              const isSGFolded = sg.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+              if (isSGFolded) toggleGroupFolding(sg);
+            });
+          });
+        }
+      }
     }
   };
 

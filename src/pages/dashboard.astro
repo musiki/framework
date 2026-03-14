@@ -3506,6 +3506,36 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-tabulator .tabulator-col.tabulator-col-group .tabulator-col-group-cols {
         background: var(--c-bg) !important;
       }
+
+      .group-header-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding-right: 4px;
+      }
+      .group-header-title {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .group-header-icon {
+        width: 0;
+        height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-right: 7px solid var(--c-fg-dim, #666);
+        margin-left: 8px;
+        transition: transform 0.2s ease;
+        cursor: pointer;
+      }
+      .tabulator-col.group-folded .group-header-icon {
+        transform: rotate(180deg);
+      }
+      .tabulator-col.tabulator-col-group:hover .group-header-icon {
+        border-right-color: var(--c-link);
+      }
       .dashboard-tabulator .tabulator-col.tabulator-sortable:hover {
         background: color-mix(in srgb, var(--c-link) 6%, transparent);
       }
