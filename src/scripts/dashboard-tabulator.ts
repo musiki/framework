@@ -873,11 +873,32 @@ const configureColumns = (
   context: { kind: GridKind; meta: DashboardMeta },
   annotationState: AnnotationState,
   modalRef: { current: AnnotationModalApi | null },
-): any[] =>
-  (columns || []).map((column) => {
+): any[] => {
+  const headerMenu = [
+    {
+      label: "Fold/Unfold Group",
+      action: function (e: any, column: any) {
+        const subCols = column.getColumns();
+        if (subCols.length > 0) {
+          // If any child is visible, hide all except the last one (usually sub-average)
+          const anyVisible = subCols.some((c: any) => c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+          subCols.forEach((c: any) => {
+            if (c.getDefinition().field?.startsWith('__avg')) {
+              c.show();
+            } else {
+              if (anyVisible) c.hide(); else c.show();
+            }
+          });
+        }
+      }
+    }
+  ];
+
+  return (columns || []).map((column) => {
     if (Array.isArray(column?.columns) && column.columns.length > 0) {
       return {
         ...column,
+        headerContextMenu: headerMenu,
         columns: configureColumns(column.columns, context, annotationState, modalRef),
       };
     }
@@ -961,6 +982,7 @@ const configureColumns = (
 
     return nextColumn;
   });
+};
 
 const installGlobalSearch = (tables: Tabulator[], input: HTMLInputElement, persistKey: string) => {
   const filterState = { query: normalizeTextLower(getStoredSearchQuery(persistKey)) };
@@ -1023,17 +1045,6 @@ const buildTable = (
   annotationState: AnnotationState,
   modalRef: { current: AnnotationModalApi | null },
 ) => {
-  const headerMenu = [
-    {
-      label: "Fold/Unfold Group",
-      action: function (e: any, column: any) {
-        column.getColumns().forEach((col: any) => {
-          col.toggle();
-        });
-      }
-    }
-  ];
-
   return new Tabulator(element, {
     index: 'id',
     data: Array.isArray(projection?.rows) ? projection.rows : [],
@@ -1057,6 +1068,62 @@ const buildTable = (
     popupContainer: root,
     rowHeight: context.kind === 'attendance-summary' ? 36 : 38,
   });
+};
+
+const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
+  const handler = (e: KeyboardEvent) => {
+    if (!e.metaKey && !e.ctrlKey) return;
+    
+    const isShift = e.shiftKey;
+    const key = e.key;
+    
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+    
+    const table = registry.get('gradebook');
+    if (!table) return;
+
+    e.preventDefault();
+
+    const allCols = table.getColumns(true); // true for all including nested
+
+    if (isShift) {
+      // Fold/Unfold ALL
+      allCols.forEach((col: any) => {
+        const def = col.getDefinition();
+        const isGroup = Array.isArray(def.columns);
+        const isAvg = def.field?.startsWith('__avg');
+        
+        if (isGroup) return; // groups themselves stay
+
+        if (key === 'ArrowLeft') {
+          if (!isAvg && def.field) col.hide();
+        } else {
+          col.show();
+        }
+      });
+    } else {
+      // Fold/Unfold focused or first level
+      // For now, let's toggle top-level groups
+      const topCols = table.getColumns();
+      topCols.forEach((col: any) => {
+        const subCols = col.getColumns();
+        if (subCols.length > 0) {
+          subCols.forEach((c: any) => {
+            const def = c.getDefinition();
+            const isAvg = def.field?.startsWith('__avg');
+            if (isAvg) {
+              c.show();
+            } else {
+              if (key === 'ArrowLeft') c.hide(); else c.show();
+            }
+          });
+        }
+      });
+    }
+  };
+
+  window.addEventListener('keydown', handler);
+  return () => window.removeEventListener('keydown', handler);
 };
 const trackTableBuilt = (table: Tabulator, readyTables: WeakSet<Tabulator>) => {
   table.on('tableBuilt', () => {
@@ -2686,6 +2753,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   bindScopeSelectors(shell);
   bindAttendanceConfig();
   bindCsvButtons(root, registry, meta);
+  destroyers.push(bindFoldingShortcuts(registry));
 
   root.dataset.dashboardTabulatorMounted = 'true';
 
