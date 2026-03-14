@@ -2,7 +2,6 @@
 import type { CollectionEntry } from 'astro:content';
 import type { ImageMetadata } from 'astro';
 import BaseHead from '../components/BaseHead.astro';
-import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -585,12 +584,11 @@ const commitUrl =
             <p class="history-date">Sin historial de commits.</p>
           )}
         </details>
-      </aside>
-    </main>
+      <slot />
+      </main>
 
-    <Footer />
+      <!-- Scripts -->
 
-    <!-- Scripts -->
     <script>
       // ────────────────────────────────────────────────
       // Lenis smooth scrolling

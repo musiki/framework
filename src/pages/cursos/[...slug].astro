@@ -4,7 +4,6 @@ export const prerender = false;
 import { getCollection, getEntry, render } from 'astro:content';
 import BaseHead from '../../components/BaseHead.astro';
 import Header from '../../components/Header.astro';
-import Footer from '../../components/Footer.astro';
 import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId, getCourseAliases } from '../../lib/course-alias';
 import {
@@ -3406,10 +3405,10 @@ order:
         >×</button>
         <div id="forum-media-modal-content" class="forum-media-modal-content"></div>
       </div>
-    </div>
-    <Footer />
+      </div>
 
-    <script>
+      <script>
+
       declare global {
         interface Window {
           __musikiCourseLayoutKeyHandler?: (event: KeyboardEvent) => void;

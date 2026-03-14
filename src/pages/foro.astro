@@ -3,7 +3,6 @@ export const prerender = false;
 
 import { getCollection } from 'astro:content';
 import BaseHead from '../components/BaseHead.astro';
-import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
 import {
   createSupabaseServerClient,
@@ -1611,7 +1610,6 @@ if (activeCourse) {
         <div id="forum-media-modal-content" class="forum-media-modal-content"></div>
       </div>
     </div>
-    <Footer />
 
     <script is:inline>
       const FORUM_READ_PREFIX = 'forum:read:';

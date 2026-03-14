@@ -2,7 +2,6 @@
 import { getCollection } from 'astro:content';
 import BaseHead from '../../components/BaseHead.astro';
 import Header from '../../components/Header.astro';
-import Footer from '../../components/Footer.astro';
 import { createClient } from '@supabase/supabase-js';
 import { buildCourseHref } from '../../lib/course-routing';
 
@@ -308,12 +307,10 @@ if (currentUser?.email) {
 				<p style="text-align: center; margin-top: 3rem; color: var(--c-fg-dim);">
 					No hay cursos disponibles por el momento.
 				</p>
-			)}
-		</main>
-		<Footer />
-		
-		<script>
-			document.querySelectorAll('.enroll-btn').forEach(btn => {
+				)}
+				</main>
+
+				<script>			document.querySelectorAll('.enroll-btn').forEach(btn => {
 				btn.addEventListener('click', async (e) => {
 					const button = e.target as HTMLButtonElement;
 					const courseId = button.dataset.courseId;

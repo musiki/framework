@@ -207,41 +207,43 @@ const withActiveCourse = (href: string) => {
 			<HeaderLink href="/about">Acerca</HeaderLink>
 			{user && <HeaderLink href={withActiveCourse('/dashboard')}>Dashboard</HeaderLink>}
 			{
-				user && enrolledCourses.length > 0 ? (
-					<div class="course-menu">
-						<a
-							href={activeCourseHref}
-							class="course-menu-trigger course-menu-trigger--label"
-							aria-label={resolvedActiveCourseLabel ? `Ir a ${resolvedActiveCourseLabel}` : 'Ir a Cursos'}
-						>
-							<span class="course-menu-trigger-label">{courseMenuLabel}</span>
-						</a>
-						<button
-							type="button"
-							class="course-menu-trigger course-menu-trigger--arrow"
-							id="course-menu-button"
-							aria-haspopup="menu"
-							aria-expanded="false"
-							aria-label={resolvedActiveCourseLabel ? `Abrir selector de cursos. Curso activo: ${resolvedActiveCourseLabel}` : 'Abrir selector de cursos'}
-						>
-							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-								<polyline points="6 9 12 15 18 9"></polyline>
-							</svg>
-						</button>
-						<div class="course-dropdown" id="course-dropdown" role="menu">
-							{enrolledCourses.map((course) => {
-								const isCurrent = normalizeCourseIdKey(course.courseId) === normalizeCourseIdKey(resolvedActiveCourseId);
-								const courseHref = `/cursos/${encodeCoursePath(course.pathSegment || course.courseId)}?course=${encodeURIComponent(course.courseId)}`;
-								return (
-									<a href={courseHref} role="menuitem" class:list={['course-dropdown-link', { active: isCurrent }]}>
-										<span class="course-dropdown-title">{course.title}</span>
-									</a>
-								);
-							})}
+				user && (
+					enrolledCourses.length > 0 ? (
+						<div class="course-menu">
+							<a
+								href={activeCourseHref}
+								class="course-menu-trigger course-menu-trigger--label"
+								aria-label={resolvedActiveCourseLabel ? `Ir a ${resolvedActiveCourseLabel}` : 'Ir a Cursos'}
+							>
+								<span class="course-menu-trigger-label">{courseMenuLabel}</span>
+							</a>
+							<button
+								type="button"
+								class="course-menu-trigger course-menu-trigger--arrow"
+								id="course-menu-button"
+								aria-haspopup="menu"
+								aria-expanded="false"
+								aria-label={resolvedActiveCourseLabel ? `Abrir selector de cursos. Curso activo: ${resolvedActiveCourseLabel}` : 'Abrir selector de cursos'}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+									<polyline points="6 9 12 15 18 9"></polyline>
+								</svg>
+							</button>
+							<div class="course-dropdown" id="course-dropdown" role="menu">
+								{enrolledCourses.map((course) => {
+									const isCurrent = normalizeCourseIdKey(course.courseId) === normalizeCourseIdKey(resolvedActiveCourseId);
+									const courseHref = `/cursos/${encodeCoursePath(course.pathSegment || course.courseId)}?course=${encodeURIComponent(course.courseId)}`;
+									return (
+										<a href={courseHref} role="menuitem" class:list={['course-dropdown-link', { active: isCurrent }]}>
+											<span class="course-dropdown-title">{course.title}</span>
+										</a>
+									);
+								})}
+							</div>
 						</div>
-					</div>
-				) : (
-					<HeaderLink href="/cursos">Cursos</HeaderLink>
+					) : (
+						<HeaderLink href="/cursos">Cursos</HeaderLink>
+					)
 				)
 			}
 			{
@@ -354,7 +356,7 @@ const withActiveCourse = (href: string) => {
 						</button>
 						<div class="user-dropdown" id="user-dropdown">
 							<a href={withActiveCourse('/dashboard')}>Dashboard</a>
-							<a href="/api/auth/signout">Cerrar Sesión</a>
+							<a href="/logout">Cerrar Sesión</a>
 						</div>
 					</div>
 				) : (

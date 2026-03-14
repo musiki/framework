@@ -6,7 +6,7 @@
   --c-border: #dcdcdc;
 }
 :root.dark{
-  --c-bg: #0b0b0c;
+  --c-bg: #000000;
   --c-fg: #e8e8ea;
   --c-subtle: #b3b3b7;
   --c-link: #8ab4ff;

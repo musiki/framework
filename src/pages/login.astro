@@ -1,7 +1,6 @@
 ---
 import BaseHead from "../components/BaseHead.astro";
 import Header from "../components/Header.astro";
-import Footer from "../components/Footer.astro";
 import { SignIn } from "auth-astro/components";
 
 const session = (Astro.locals as any).session;
@@ -73,6 +72,5 @@ if (session?.user?.email) {
             <SignIn provider="google" options={{ callbackUrl: callbackPath }}>Continuar con Google</SignIn>
         </div>
     </main>
-    <Footer />
 </body>
 </html>

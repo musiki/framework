@@ -1,7 +1,6 @@
 ---
 import BaseHead from '../../../components/BaseHead.astro';
 import Header from '../../../components/Header.astro';
-import Footer from '../../../components/Footer.astro';
 import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { getResultIcon, getSubmissionAnswerText, getSubmissionResultState } from '../../../lib/submission-table';
@@ -1060,6 +1059,5 @@ const attendanceDayGroups = (() => {
         document.addEventListener('keydown', handleFoldShortcuts);
       });
     </script>
-    <Footer />
   </body>
 </html>

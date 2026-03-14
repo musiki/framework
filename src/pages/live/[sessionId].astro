@@ -3,7 +3,6 @@ export const prerender = false;
 
 import BaseHead from '../../components/BaseHead.astro';
 import Header from '../../components/Header.astro';
-import Footer from '../../components/Footer.astro';
 
 const routeSessionId = decodeURIComponent(Astro.params.sessionId || '').trim();
 if (!routeSessionId) {
@@ -261,7 +260,6 @@ const studentId = String(session?.user?.email || '').trim();
         <p class="live-meta" data-live-meta></p>
       </section>
     </main>
-    <Footer />
 
     <script>
       import { subscribeToLive } from '../../lib/live/client.mjs';

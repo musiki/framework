@@ -1,7 +1,6 @@
 ---
 // src/pages/dashboard.astro
 import BaseHead from '../components/BaseHead.astro';
-import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
 import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '../lib/forum-server';
@@ -5075,6 +5074,5 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
 
       document.addEventListener('astro:page-load', bootDashboardEnhancements);
     </script>
-    <Footer />
   </body>
 </html>

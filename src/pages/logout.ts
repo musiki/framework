@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
 
 export const GET: APIRoute = async ({ redirect }) => {
-	return redirect('/api/auth/signout');
+	return redirect('/api/auth/signout?callbackUrl=/');
 };
