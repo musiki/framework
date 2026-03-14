@@ -36,8 +36,9 @@ export function buildGradebookProjection({
   const studentColumns = {
     title: 'Estudiante',
     field: '__group_student',
+    frozen: true,
     columns: [
-      { title: 'Apellido', field: 'lastName', width: 120, frozen: true, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
+      { title: 'Apellido', field: 'lastName', width: 120, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
       { title: 'Nombre', field: 'firstName', width: 120, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
       { title: 'Email', field: 'email', width: 180, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
       { title: 'Prom.', field: 'average', width: 65, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'score' },

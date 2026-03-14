@@ -869,9 +869,9 @@ const buildCellContextMenu = (contextKind: GridKind, annotationState: Annotation
   };
 
 const toggleGroupFolding = (column: any) => {
-  if (!column) return;
+  if (!column || typeof column.getColumns !== 'function') return;
   const subCols = column.getColumns();
-  if (subCols.length === 0) return;
+  if (!subCols || subCols.length === 0) return;
 
   // Determine if we are currently folded
   // A group is "folded" if at least one hideable column is hidden
@@ -1135,7 +1135,8 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
       // Unfold/Fold ALL levels
       const topCols = table.getColumns();
       topCols.forEach((group: any) => {
-        const subGroups = group.getColumns().filter((c: any) => Array.isArray(c.getDefinition().columns));
+        if (typeof group.getColumns !== 'function') return;
+        const subGroups = group.getColumns().filter((c: any) => typeof c.getColumns === 'function' && Array.isArray(c.getDefinition().columns));
         if (subGroups.length > 0) {
           subGroups.forEach((sg: any) => {
             const shouldFold = key === 'ArrowLeft';
@@ -1156,7 +1157,8 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
       if (key === 'ArrowLeft') {
         let anySubGroupFolded = false;
         topCols.forEach((group: any) => {
-          const subGroups = group.getColumns().filter((c: any) => Array.isArray(c.getDefinition().columns));
+          if (typeof group.getColumns !== 'function') return;
+          const subGroups = group.getColumns().filter((c: any) => typeof c.getColumns === 'function' && Array.isArray(c.getDefinition().columns));
           subGroups.forEach((sg: any) => {
             const isSGFolded = sg.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
             if (!isSGFolded) {
@@ -1168,6 +1170,7 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
         
         if (!anySubGroupFolded) {
           topCols.forEach((group: any) => {
+            if (typeof group.getColumns !== 'function') return;
             const isFolded = group.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
             if (!isFolded) toggleGroupFolding(group);
           });
@@ -1175,6 +1178,7 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
       } else {
         let anyClassUnfolded = false;
         topCols.forEach((group: any) => {
+          if (typeof group.getColumns !== 'function') return;
           const isFolded = group.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
           if (isFolded) {
             toggleGroupFolding(group);
@@ -1184,7 +1188,8 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
 
         if (!anyClassUnfolded) {
           topCols.forEach((group: any) => {
-            const subGroups = group.getColumns().filter((c: any) => Array.isArray(c.getDefinition().columns));
+            if (typeof group.getColumns !== 'function') return;
+            const subGroups = group.getColumns().filter((c: any) => typeof c.getColumns === 'function' && Array.isArray(c.getDefinition().columns));
             subGroups.forEach((sg: any) => {
               const isSGFolded = sg.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
               if (isSGFolded) toggleGroupFolding(sg);
