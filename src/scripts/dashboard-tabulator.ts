@@ -869,22 +869,28 @@ const buildCellContextMenu = (contextKind: GridKind, annotationState: Annotation
   };
 
 const toggleGroupFolding = (column: any) => {
+  if (!column) return;
   const subCols = column.getColumns();
   if (subCols.length === 0) return;
 
   // Determine if we are currently folded
-  // A group is "folded" if at least one non-average column is hidden
-  const isFolded = subCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+  // A group is "folded" if at least one hideable column is hidden
+  const nonHideableFields = ['lastName'];
+  const isFolded = subCols.some((c: any) => {
+    const field = c.getDefinition().field;
+    return !c.isVisible() && !field?.startsWith('__avg') && !nonHideableFields.includes(field);
+  });
+
+  const targetState = isFolded; // if folded, we want to unfold
 
   subCols.forEach((c: any) => {
     const def = c.getDefinition();
     const isAvg = def.field?.startsWith('__avg');
     const isLastName = def.field === 'lastName';
     
-    if (isFolded) {
+    if (targetState) {
       c.show();
     } else {
-      // When folding: keep averages and last name (for student group) visible
       if (!isAvg && !isLastName) {
         c.hide();
       }
@@ -894,8 +900,11 @@ const toggleGroupFolding = (column: any) => {
   // Update icon class on header element
   const headerEl = column.getElement();
   if (headerEl) {
-    headerEl.classList.toggle('group-folded', !isFolded);
+    headerEl.classList.toggle('group-folded', !targetState);
   }
+  
+  // Force table redraw to fix alignment
+  column.getTable()?.redraw();
 };
 
 const configureColumns = (
@@ -906,7 +915,7 @@ const configureColumns = (
 ): any[] => {
   const headerMenu = [
     {
-      label: "Fold/Unfold Group",
+      label: "Plegar/Desplegar Grupo",
       action: function (e: any, column: any) {
         toggleGroupFolding(column);
       }
@@ -921,7 +930,12 @@ const configureColumns = (
         headerClick: function(e: any, col: any) {
           // If clicking near the right edge (where the triangle is)
           const rect = col.getElement().getBoundingClientRect();
-          if (e.clientX > rect.right - 30) {
+          const clickX = e.clientX - rect.left;
+          const isRightEdge = clickX > rect.width - 35;
+          
+          if (isRightEdge) {
+            e.preventDefault();
+            e.stopPropagation();
             toggleGroupFolding(col);
           }
         },
@@ -929,7 +943,7 @@ const configureColumns = (
           const title = col.getValue();
           return `<div class="group-header-content">
             <span class="group-header-title">${title}</span>
-            <span class="group-header-icon"></span>
+            <span class="group-header-icon" title="Plegar/Desplegar"></span>
           </div>`;
         },
         columns: configureColumns(column.columns, context, annotationState, modalRef),

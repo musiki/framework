@@ -29,15 +29,20 @@ const capitalizeFirst = (value: string) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : '';
 
 const buildAttendanceDateColumns = (columns: any[] = []) => {
+  const validColumns = (columns || []).filter((c) => {
+    const dk = String(c?.dateKey || '').trim();
+    return dk !== '' && dk !== 'undefined' && dk !== 'null';
+  });
+
   const yearSet = new Set(
-    columns
+    validColumns
       .map((column) => parseDateKey(String(column?.dateKey || ''))?.getUTCFullYear())
       .filter((value): value is number => Number.isFinite(value)),
   );
   const showYear = yearSet.size > 1;
   const monthGroups = new Map<string, { title: string; columns: any[] }>();
 
-  columns.forEach((column: any) => {
+  validColumns.forEach((column: any) => {
     const dateKey = String(column?.dateKey || '');
     const parsed = parseDateKey(dateKey);
     const monthKey = parsed
@@ -59,9 +64,9 @@ const buildAttendanceDateColumns = (columns: any[] = []) => {
       field: dateFieldKey(dateKey),
       dateKey,
       kind: 'attendance-day',
-      width: 40,
-      minWidth: 36,
-      maxWidth: 44,
+      width: 44,
+      minWidth: 44,
+      maxWidth: 50,
       hozAlign: 'center' as const,
       headerHozAlign: 'center' as const,
       cssClass: 'dashboard-attendance-day-col',

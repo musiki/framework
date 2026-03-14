@@ -3461,7 +3461,6 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         background: var(--c-bg);
         color: var(--c-fg);
         font-size: 0.84rem;
-        width: 100%;
       }
       .dashboard-tabulator .tabulator-header {
         border-bottom: 1px solid var(--c-border);
@@ -3502,6 +3501,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .dashboard-tabulator .tabulator-col.tabulator-col-group {
         background: var(--c-bg) !important;
+        min-width: min-content !important;
       }
       .dashboard-tabulator .tabulator-col.tabulator-col-group .tabulator-col-group-cols {
         background: var(--c-bg) !important;
