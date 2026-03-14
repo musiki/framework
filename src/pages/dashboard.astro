@@ -3448,6 +3448,13 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         background: var(--c-bg);
         border-radius: 0;
         overflow: visible;
+        overscroll-behavior-x: none;
+      }
+      .dashboard-tabulator .tabulator-tableholder {
+        overscroll-behavior-x: none;
+      }
+      :global(body:has(.dashboard-shell)) {
+        overscroll-behavior-x: none;
       }
       .dashboard-tabulator .tabulator {
         border: none;
