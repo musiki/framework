@@ -9,6 +9,31 @@ import Header from "../components/Header.astro";
       title="Terminos del Servicio | musiki26"
       description="Terminos del servicio de musiki26, plataforma educativa de Ciencia y Musica UNTREF."
     />
+    <style>
+      .wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      h1 {
+        margin-bottom: 0.75rem;
+      }
+      h2 {
+        margin-top: 1.25rem;
+        margin-bottom: 0.35rem;
+        font-size: 1.05rem;
+      }
+      p {
+        line-height: 1.55;
+        margin: 0;
+      }
+      p + p {
+        margin-top: 0.65rem;
+      }
+      .links {
+        margin-top: 1.25rem;
+      }
+    </style>
   </head>
   <body>
     <Header />
@@ -50,30 +75,4 @@ import Header from "../components/Header.astro";
       </p>
     </main>
   </body>
-  <style>
-    .wrap {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 1rem;
-    }
-    h1 {
-      margin-bottom: 0.75rem;
-    }
-    h2 {
-      margin-top: 1.25rem;
-      margin-bottom: 0.35rem;
-      font-size: 1.05rem;
-    }
-    p {
-      line-height: 1.55;
-      margin: 0;
-    }
-    p + p {
-      margin-top: 0.65rem;
-    }
-    .links {
-      margin-top: 1.25rem;
-    }
-  </style>
 </html>
-

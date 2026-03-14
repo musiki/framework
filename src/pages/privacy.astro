@@ -6,41 +6,59 @@ import Header from "../components/Header.astro";
 <html lang="es">
   <head>
     <BaseHead
-      title="Politica de Privacidad | musiki26"
-      description="Politica de privacidad de musiki26, plataforma educativa de Ciencia y Musica UNTREF."
+      title="musiki | Politica de privacidad"
+      description="Nuestras practicas de tratamiento de datos."
     />
+    <style>
+      .wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      h1 {
+        margin-bottom: 0.75rem;
+      }
+      h2 {
+        margin-top: 1.25rem;
+        margin-bottom: 0.35rem;
+        font-size: 1.05rem;
+      }
+      p {
+        line-height: 1.55;
+        margin: 0;
+      }
+      p + p {
+        margin-top: 0.65rem;
+      }
+      .links {
+        margin-top: 1.25rem;
+      }
+    </style>
   </head>
   <body>
     <Header />
     <main class="wrap">
-      <h1>Politica de Privacidad</h1>
+      <h1>Politica de privacidad</h1>
       <p>
-        musiki26 es una plataforma educativa vinculada a la catedra Ciencia y Musica (UNTREF).
+        En musiki valoramos la privacidad. Esta aplicacion es una plataforma educativa para el aprendizaje de las artes y las ciencias musicales.
       </p>
-      <h2>Datos que procesamos</h2>
+
+      <h2>Datos recopilados</h2>
       <p>
-        Para iniciar sesion usamos Google OAuth y recibimos datos basicos de perfil
-        (nombre, correo electronico e imagen de cuenta) para autenticar usuarios y
-        habilitar acceso a contenidos y funciones del sitio.
+        Solo recopilamos la informacion necesaria para la operacion del servicio: nombre, correo electronico y avatar proporcionados por su proveedor de identidad (Google). Tambien registramos su participacion en cursos y actividades para fines academicos.
       </p>
+
       <h2>Uso de la informacion</h2>
       <p>
-        Los datos se usan exclusivamente para operar la plataforma, gestionar sesiones,
-        mostrar perfil de usuario y administrar cursos/foros internos.
+        La informacion se utiliza exclusivamente para gestionar su acceso a los contenidos, permitir la interaccion en el foro y registrar sus progresos educativos. No vendemos ni compartimos sus datos con terceros con fines comerciales.
       </p>
-      <h2>Comparticion de datos</h2>
+
+      <h2>Cookies</h2>
       <p>
-        No vendemos ni comercializamos datos personales. Los datos solo se comparten
-        con proveedores tecnicos necesarios para el funcionamiento del servicio
-        (autenticacion, hosting y base de datos).
+        Utilizamos cookies tecnicas para mantener su sesion iniciada y para analisis anonimo de trafico (Google Analytics).
       </p>
-      <h2>Conservacion y derechos</h2>
-      <p>
-        Conservamos los datos mientras la cuenta permanezca activa o sea necesaria para
-        fines academicos y operativos. Si queres solicitar correccion o eliminacion de
-        datos, contacta al equipo docente responsable del sitio.
-      </p>
-      <h2>Actualizaciones</h2>
+
+      <h2>Cambios</h2>
       <p>
         Esta politica puede actualizarse para reflejar cambios tecnicos o regulatorios.
         Ultima actualizacion: 2026-02-26.
@@ -51,31 +69,5 @@ import Header from "../components/Header.astro";
         <a href="/terms">Terminos del servicio</a>
       </p>
     </main>
-    </body>
-    </html>
-    .wrap {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 1rem;
-    }
-    h1 {
-      margin-bottom: 0.75rem;
-    }
-    h2 {
-      margin-top: 1.25rem;
-      margin-bottom: 0.35rem;
-      font-size: 1.05rem;
-    }
-    p {
-      line-height: 1.55;
-      margin: 0;
-    }
-    p + p {
-      margin-top: 0.65rem;
-    }
-    .links {
-      margin-top: 1.25rem;
-    }
-  </style>
+  </body>
 </html>
-
