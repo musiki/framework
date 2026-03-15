@@ -25,13 +25,28 @@ module.exports = {
       autorestart: true,
       max_memory_restart: '1G',
       env: {
+        ...dotEnv,
         NODE_ENV: 'production',
-        HOST: '127.0.0.1',
+        HOST: '0.0.0.0',
         PORT: '4321',
-        // FORZADO DE ENTORNO
         AUTH_URL: 'https://www.musiki.org.ar',
-        AUTH_TRUST_HOST: 'true',
-        ...dotEnv
+        AUTH_TRUST_HOST: 'true'
+      },
+    },
+    {
+      name: 'musiki-framework-dev',
+      cwd: __dirname,
+      script: 'node_modules/.bin/astro',
+      args: 'dev --host 0.0.0.0 --port 4325',
+      interpreter: 'node',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      env: {
+        ...dotEnv,
+        NODE_ENV: 'development',
+        AUTH_URL: 'https://dev.musiki.org.ar',
+        AUTH_TRUST_HOST: 'true'
       },
     },
     {

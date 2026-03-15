@@ -1,12 +1,10 @@
 import Google from "@auth/core/providers/google";
 import { defineConfig } from "auth-astro";
 
-const SITE_URL = "https://www.musiki.org.ar";
-
 export default defineConfig({
   trustHost: true,
-  // Esta es la clave: le dice a Auth.js cuál es la URL pública base de la API de Auth
-  redirectProxyUrl: `${SITE_URL}/api/auth`,
+  // Forzamos manualmente el proxy URL para asegurar que use HTTPS en el callback de Google
+  redirectProxyUrl: "https://dev.musiki.org.ar/api/auth",
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || import.meta.env.GOOGLE_CLIENT_ID,
@@ -30,9 +28,18 @@ export default defineConfig({
       return session;
     },
     async redirect({ url, baseUrl }) {
-      const effectiveBase = process.env.AUTH_URL || SITE_URL;
-      if (url.startsWith("/")) return `${effectiveBase}${url}`;
-      return url.startsWith(effectiveBase) ? url : `${effectiveBase}/dashboard`;
+      // Forzamos a que cualquier redirección use dev.musiki.org.ar con https
+      const devBase = "https://dev.musiki.org.ar";
+      if (url.startsWith("/")) return `${devBase}${url}`;
+      if (url.includes("localhost") || url.includes("127.0.0.1") || url.startsWith("http://dev.musiki.org.ar")) {
+        try {
+          const u = new URL(url);
+          return `${devBase}${u.pathname}${u.search}`;
+        } catch (e) {
+          return `${devBase}/dashboard`;
+        }
+      }
+      return url;
     },
   },
 });

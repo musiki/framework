@@ -51,7 +51,7 @@ const remoteDevHmrHost = (
   ''
 ).trim();
 const viteServerConfig = {
-  allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', '85.31.234.141'],
+  allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', 'dev.musiki.org.ar', '85.31.234.141'],
 };
 
 if (remoteDevHmrHost) {
@@ -80,6 +80,7 @@ export default defineConfig({
         'reveal.js/plugin/markdown/markdown.esm.js',
         'marked',
         'mermaid',
+        'tabulator-tables',
       ],
     },
   },

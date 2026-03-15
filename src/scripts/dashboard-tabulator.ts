@@ -49,9 +49,9 @@ type CellScopeContext = {
   scopeRef: string;
   subjectUserId: string;
   field: string;
-  rowLabel: string;
   columnLabel: string;
-  metadata: Record<string, any>;
+  rowLabel: string;
+  metadata?: Record<string, any>;
 };
 
 type AnnotationState = {
@@ -80,8 +80,8 @@ type RangeSelectionState = {
   bodyClassApplied: boolean;
 };
 
-const SEARCH_DEBOUNCE_MS = 150;
 const VALID_TEACHER_TABS = ['overview', 'gradebook', 'attendance', 'comments', 'admin'];
+const SEARCH_DEBOUNCE_MS = 300;
 const DASHBOARD_PROJECTION_SCRIPT_IDS = [
   'dashboard-teacher-tabulator-meta',
   'dashboard-teacher-overview',
@@ -92,759 +92,411 @@ const DASHBOARD_PROJECTION_SCRIPT_IDS = [
   'dashboard-teacher-annotations',
 ];
 
-declare global {
-  interface Window {
-    __musikiDashboardRemount?: () => void;
-  }
-}
+const normalizeText = (value: any) => String(value || '').trim();
+const normalizeTextLower = (value: any) => normalizeText(value).toLowerCase();
+
+const debounce = <T extends (...args: any[]) => any>(fn: T, ms: number) => {
+  let timeoutId: number | null = null;
+  return (...args: Parameters<T>) => {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => fn(...args), ms);
+  };
+};
 
 const parseJsonScript = <T>(id: string, fallback: T): T => {
-  const node = document.getElementById(id);
-  if (!(node instanceof HTMLScriptElement)) return fallback;
-
+  const script = document.getElementById(id);
+  if (!script) return fallback;
   try {
-    return (JSON.parse(node.textContent || 'null') ?? fallback) as T;
+    return JSON.parse(script.textContent || '') as T;
   } catch {
     return fallback;
   }
 };
 
-const normalizeText = (value: unknown) => String(value ?? '').trim();
-const normalizeTextLower = (value: unknown) => normalizeText(value).toLowerCase();
+const buildPersistKey = (meta: DashboardMeta, grid: string) =>
+  `musiki:dashboard:${normalizeText(meta?.courseId)}:${normalizeText(meta?.year)}:${grid}`;
 
-const formatScore = (value: unknown) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return '';
-  return Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(1).replace(/\.0$/, '');
-};
-
-const formatAbsence = (value: unknown) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return '0';
-  const normalized = Math.round(parsed * 2) / 2;
-  return Number.isInteger(normalized)
-    ? String(normalized)
-    : normalized.toFixed(1).replace(/\.0$/, '');
-};
-
-const formatDateTime = (value: unknown) => {
-  const raw = normalizeText(value);
-  if (!raw) return '—';
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw;
-  return parsed.toLocaleString('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const formatPercentLabel = (value: unknown) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return '0%';
-  const normalized = Math.max(0, Math.min(100, parsed));
-  return Number.isInteger(normalized)
-    ? `${normalized}%`
-    : `${normalized.toFixed(1).replace(/\.0$/, '')}%`;
-};
-
-const formatAttendanceSymbol = (value: unknown, options: { isFuture?: boolean } = {}) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return options.isFuture ? '' : '✖';
+const setStoredSearchQuery = (persistKey: string, query: string) => {
+  try {
+    window.localStorage.setItem(`${persistKey}:search`, query);
+  } catch {
+    // ignore storage errors
   }
-  if (options.isFuture && parsed <= 0) return '';
-  if (parsed >= 1) return '✔';
-  if (parsed > 0) return '~';
-  return '✖';
-};
-
-const normalizeAttendanceInput = (value: unknown) => {
-  const raw = normalizeText(String(value ?? '').replace(',', '.')).toLowerCase();
-  if (!raw) {
-    return {
-      valid: true,
-      count: null as number | null,
-      displayValue: '',
-      countRaw: '',
-    };
-  }
-
-  if (raw === '/' || raw === '1' || raw === '✔') {
-    return {
-      valid: true,
-      count: 1,
-      displayValue: '✔',
-      countRaw: '1',
-    };
-  }
-
-  if (raw === '-' || raw === '~' || raw === '0.5' || raw === '.5') {
-    return {
-      valid: true,
-      count: 0.5,
-      displayValue: '~',
-      countRaw: '0.5',
-    };
-  }
-
-  if (raw === 'x' || raw === '0' || raw === '✖') {
-    return {
-      valid: true,
-      count: 0,
-      displayValue: '✖',
-      countRaw: '0',
-    };
-  }
-
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) {
-    return {
-      valid: false,
-      count: null as number | null,
-      displayValue: '',
-      countRaw: raw,
-    };
-  }
-
-  const clamped = Math.max(0, Math.min(1, parsed));
-  const normalized = Math.round(clamped * 2) / 2;
-  if (Math.abs(normalized - parsed) > 0.000001) {
-    return {
-      valid: false,
-      count: null as number | null,
-      displayValue: '',
-      countRaw: raw,
-    };
-  }
-
-  return {
-    valid: true,
-    count: normalized,
-    displayValue: formatAttendanceSymbol(normalized),
-    countRaw: String(normalized),
-  };
-};
-
-const debounce = <T extends (...args: any[]) => void>(callback: T, waitMs: number) => {
-  let timeoutId: number | null = null;
-  return (...args: Parameters<T>) => {
-    if (timeoutId !== null) window.clearTimeout(timeoutId);
-    timeoutId = window.setTimeout(() => {
-      callback(...args);
-    }, waitMs);
-  };
-};
-
-const escapeHtml = (value: unknown) =>
-  String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-
-const buildPersistKey = (meta: DashboardMeta, tabName: string) =>
-  `musiki:dashboard:${normalizeText(meta?.userId || 'anon')}:${normalizeText(meta?.courseId || 'sin-curso')}:${normalizeText(meta?.year || 'sin-anio')}:${tabName}`;
-
-const isApplePlatform = () =>
-  /mac|iphone|ipad|ipod/i.test(
-    String(window.navigator.platform || window.navigator.userAgent || ''),
-  );
-
-const getCommentShortcutLabel = () =>
-  isApplePlatform() ? 'M' : 'Ctrl + Alt + M';
-
-const getTurnoTitle = (value: unknown) => {
-  const normalized = normalizeText(value).toUpperCase();
-  if (normalized === 'T') return 'Tarde';
-  if (normalized === 'N') return 'Noche';
-  return 'Mañana';
-};
-
-const normalizeGrupoDigits = (value: unknown) => {
-  const digits = String(value ?? '').replace(/\D+/g, '').slice(0, 2);
-  if (!digits) return '';
-  const parsed = Number(digits);
-  if (!Number.isFinite(parsed)) return '';
-  return String(Math.min(99, Math.max(0, Math.trunc(parsed)))).padStart(2, '0');
 };
 
 const getStoredSearchQuery = (persistKey: string) => {
   try {
-    return window.localStorage.getItem(`${persistKey}:search`) || '';
+    return normalizeText(window.localStorage.getItem(`${persistKey}:search`));
   } catch {
     return '';
   }
 };
 
-const setStoredSearchQuery = (persistKey: string, value: string) => {
-  try {
-    window.localStorage.setItem(`${persistKey}:search`, value);
-  } catch {
-    // ignore storage write failures
-  }
+const escapeHtml = (value: string) => {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return value.replace(/[&<>"']/g, (m) => map[m]);
 };
 
-const buildCommentsRowsFromAnnotations = (annotations: DashboardAnnotationRecord[]) =>
-  [...(annotations || [])]
-    .map((annotation) => ({
-      id: String(annotation?.id || ''),
-      studentLabel: normalizeText(
-        annotation?.metadata?.rowLabel
-          || annotation?.metadata?.studentName
-          || annotation?.subjectUserId
-          || '—',
-      ) || '—',
-      tabLabel: normalizeText(annotation?.metadata?.tabLabel || annotation?.tab || '—') || '—',
-      scopeLabel: normalizeText(
-        annotation?.metadata?.scopeLabel
-          || annotation?.metadata?.columnLabel
-          || annotation?.field
-          || annotation?.scopeRef
-          || '—',
-      ) || '—',
-      color: normalizeDashboardAnnotationColor(annotation?.color),
-      comment: normalizeText(annotation?.comment) || '—',
-      visibilityLabel: dashboardAnnotationVisibilityLabel(annotation?.visibility || 'teachers'),
-      authorName: normalizeText(annotation?.authorName || annotation?.authorEmail || annotation?.authorUserId || '—') || '—',
-      updatedAt: normalizeText(annotation?.updatedAt || annotation?.createdAt),
-      updatedAtLabel: normalizeText(
-        annotation?.metadata?.updatedAtLabel
-          || formatDateTime(annotation?.updatedAt || annotation?.createdAt),
-      ) || '—',
-      __search: [
-        annotation?.metadata?.rowLabel,
-        annotation?.metadata?.scopeLabel,
-        annotation?.metadata?.columnLabel,
-        annotation?.tab,
-        annotation?.color,
-        annotation?.comment,
-        annotation?.visibility,
-        annotation?.authorName,
-        annotation?.authorEmail,
-      ]
-        .map((value) => normalizeTextLower(value))
-        .filter(Boolean)
-        .join(' '),
-    }))
-    .sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || ''), 'es'));
+const formatSubmissionDate = (dateValue: string | Date | null | undefined) => {
+  if (!dateValue) return '—';
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const formatAbsence = (units: number) => {
+  if (units <= 0) return '0';
+  return String(Math.round(units * 10) / 10).replace('.', ',');
+};
+
+const formatAttendanceSymbol = (value: number) => {
+  if (value >= 1) return '/';
+  if (value >= 0.5) return '~';
+  return 'x';
+};
+
+const normalizeAttendanceInput = (value: any) => {
+  const raw = normalizeText(value).toLowerCase();
+  if (raw === '' || raw === '—') return { valid: true, countRaw: null };
+  if (['/', '1'].includes(raw)) return { valid: true, countRaw: 1 };
+  if (['-', '~', '0.5', '0,5'].includes(raw)) return { valid: true, countRaw: 0.5 };
+  if (['x', '0'].includes(raw)) return { valid: true, countRaw: 0 };
+  return { valid: false, countRaw: null };
+};
+
+const getTurnoTitle = (value: string) => {
+  const v = normalizeText(value).toUpperCase();
+  if (v === 'M') return 'Mañana';
+  if (v === 'T') return 'Tarde';
+  if (v === 'N') return 'Noche';
+  return 'Sin turno';
+};
+
+const normalizeGrupoDigits = (value: any) => {
+  const raw = normalizeText(value).replace(/[^0-9]/g, '');
+  return raw ? String(parseInt(raw, 10)) : '';
+};
+
+const getCommentShortcutLabel = () => {
+  const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  return isMac ? '⌥ + ⌘ + M' : 'Alt + Ctrl + M';
+};
 
 const isAnnotationContextKind = (kind: GridKind) =>
   ['overview', 'gradebook', 'attendance-summary', 'admin'].includes(kind);
 
-const tabLabelByKind = (kind: GridKind) => {
-  switch (kind) {
-    case 'overview':
-      return 'Overview';
-    case 'gradebook':
-      return 'Gradebook';
-    case 'attendance-summary':
-      return 'Attendance';
-    case 'admin':
-      return 'Admin';
-    default:
-      return kind;
-  }
-};
-
-const buildScopeContextFromCell = (cell: any, tableKind: GridKind): CellScopeContext | null => {
-  if (!isAnnotationContextKind(tableKind)) return null;
-
-  const rowData = cell.getData?.() || {};
+const buildScopeContextFromCell = (cell: any, gridKind: GridKind): CellScopeContext | null => {
   const field = normalizeText(cell.getField?.() || '');
-  if (!field || field.startsWith('__')) return null;
+  const rowData = cell.getData?.() || {};
+  const columnDefinition = cell.getColumn?.()?.getDefinition?.() || {};
+  const subjectUserId = normalizeText(rowData?.studentId || rowData?.userId || rowData?.id || '');
+  if (!field || !subjectUserId) return null;
 
-  const columnDef = cell.getColumn?.()?.getDefinition?.() || {};
-  const columnLabel = normalizeText(columnDef?.title || field) || field;
-  const rowLabel = normalizeText(
-    rowData?.name
-      || rowData?.displayName
-      || `${normalizeText(rowData?.firstName)} ${normalizeText(rowData?.lastName)}`.trim()
-      || rowData?.studentLabel
-      || rowData?.email
-      || rowData?.userId
-      || rowData?.studentId
-      || rowData?.subjectUserId,
-  ) || 'Registro';
-  const subjectUserId = normalizeText(rowData?.studentId || rowData?.userId || rowData?.subjectUserId || '');
-
-  if (!subjectUserId) return null;
-
-  if (tableKind === 'overview') {
-    return {
-      tab: 'overview',
-      tabLabel: 'Overview',
-      scopeType: 'overview_cell',
-      scopeRef: `${subjectUserId}::${field}`,
-      subjectUserId,
-      field,
-      rowLabel,
-      columnLabel,
-      metadata: {},
-    };
+  let tab: CellScopeContext['tab'] = 'overview';
+  let tabLabel = 'Resumen';
+  if (gridKind === 'gradebook') {
+    tab = 'gradebook';
+    tabLabel = 'Calificaciones';
+  } else if (gridKind === 'attendance-summary') {
+    tab = 'attendance';
+    tabLabel = 'Asistencia';
+  } else if (gridKind === 'admin') {
+    tab = 'admin';
+    tabLabel = 'Admin';
   }
 
-  if (tableKind === 'gradebook') {
-    const assignmentId = normalizeText(rowData?.__gradeState?.[field]?.assignmentId || field);
-    return {
-      tab: 'gradebook',
-      tabLabel: 'Gradebook',
-      scopeType: 'gradebook_cell',
-      scopeRef: `${subjectUserId}::${assignmentId || field}`,
-      subjectUserId,
-      field,
-      rowLabel,
-      columnLabel,
-      metadata: {
-        assignmentId,
-      },
-    };
+  let scopeType: DashboardAnnotationScopeType = 'cell';
+  let scopeRef = field;
+  if (field === 'firstName' || field === 'lastName' || field === 'name' || field === 'email') {
+    scopeType = 'user';
+    scopeRef = subjectUserId;
   }
 
-  if (tableKind === 'attendance-summary') {
-    const dateKey = normalizeText(columnDef?.dateKey || rowData?.__attendanceCellMeta?.[field]?.dateKey || field);
-    return {
-      tab: 'attendance',
-      tabLabel: 'Attendance',
-      scopeType: 'attendance_cell',
-      scopeRef: `${subjectUserId}::${dateKey || field}`,
-      subjectUserId,
-      field,
-      rowLabel,
-      columnLabel,
-      metadata: {
-        dateKey,
-      },
-    };
-  }
-
-  if (tableKind === 'admin') {
-    return {
-      tab: 'admin',
-      tabLabel: 'Admin',
-      scopeType: 'admin_cell',
-      scopeRef: `${subjectUserId}::${field}`,
-      subjectUserId,
-      field,
-      rowLabel,
-      columnLabel,
-      metadata: {},
-    };
-  }
-
-  return null;
+  return {
+    tab,
+    tabLabel,
+    scopeType,
+    scopeRef,
+    subjectUserId,
+    field,
+    columnLabel: normalizeText(columnDefinition.title || field),
+    rowLabel: normalizeText(rowData.name || rowData.lastName || rowData.firstName || subjectUserId),
+    metadata: {
+      ...rowData,
+      __gradeState: undefined,
+      __attendanceCellMeta: undefined,
+      __search: undefined,
+    },
+  };
 };
 
-const indexAnnotationsByScope = (
-  annotations: DashboardAnnotationRecord[],
-  currentUserId: string,
-) => {
-  const map = new Map<string, DashboardAnnotationRecord[]>();
-  (annotations || []).forEach((annotation) => {
-    const key = buildDashboardAnnotationScopeKey(annotation.scopeType, annotation.scopeRef);
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)?.push(annotation);
-  });
-
-  map.forEach((list, key) => {
-    list.sort((left, right) => {
-      const leftOwn = normalizeText(left.authorUserId) === normalizeText(currentUserId) ? 1 : 0;
-      const rightOwn = normalizeText(right.authorUserId) === normalizeText(currentUserId) ? 1 : 0;
-      if (leftOwn !== rightOwn) return rightOwn - leftOwn;
-      return String(right.updatedAt || right.createdAt || '').localeCompare(
-        String(left.updatedAt || left.createdAt || ''),
-        'es',
-      );
-    });
-    map.set(key, list);
-  });
-
-  return map;
+const getDisplayAnnotation = (state: AnnotationState, context: CellScopeContext) => {
+  const key = buildDashboardAnnotationScopeKey(context);
+  const list = state.annotationsByScope.get(key) || [];
+  if (list.length === 0) return null;
+  const own = list.find((a) => a.authorUserId === state.currentUserId);
+  if (own) return own;
+  const teachers = list.filter((a) => a.visibility === 'teachers');
+  return teachers[0] || null;
 };
 
-const getScopeAnnotations = (state: AnnotationState, context: CellScopeContext) =>
-  state.annotationsByScope.get(buildDashboardAnnotationScopeKey(context.scopeType, context.scopeRef)) || [];
-
-const getOwnAnnotation = (state: AnnotationState, context: CellScopeContext) =>
-  getScopeAnnotations(state, context).find(
-    (annotation) => normalizeText(annotation.authorUserId) === normalizeText(state.currentUserId),
-  ) || null;
-
-const getDisplayAnnotation = (state: AnnotationState, context: CellScopeContext) =>
-  getScopeAnnotations(state, context)[0] || null;
-
-const setAnnotations = (state: AnnotationState, annotations: DashboardAnnotationRecord[]) => {
-  state.annotations = [...annotations];
-  state.annotationsByScope = indexAnnotationsByScope(state.annotations, state.currentUserId);
+const getOwnAnnotation = (state: AnnotationState, context: CellScopeContext) => {
+  const key = buildDashboardAnnotationScopeKey(context);
+  const list = state.annotationsByScope.get(key) || [];
+  return list.find((a) => a.authorUserId === state.currentUserId) || null;
 };
 
 const refreshAnnotationViews = (state: AnnotationState) => {
-  state.registry.forEach((table, key) => {
-    if (key === 'comments') {
-      void table.replaceData(buildCommentsRowsFromAnnotations(state.annotations));
-      return;
-    }
+  state.registry.forEach((table) => {
     table.redraw(true);
   });
 };
 
-const upsertAnnotationInState = (state: AnnotationState, annotation: DashboardAnnotationRecord | null) => {
-  if (!annotation) return;
-  const next = state.annotations.filter((item) => String(item.id || '') !== String(annotation.id || ''));
-  next.unshift(annotation);
-  setAnnotations(state, next);
+const setAnnotations = (state: AnnotationState, annotations: DashboardAnnotationRecord[]) => {
+  state.annotations = annotations || [];
+  state.annotationsByScope.clear();
+  state.annotations.forEach((record) => {
+    const key = buildDashboardAnnotationScopeKey({
+      tab: record.tab,
+      scopeType: record.scopeType,
+      scopeRef: record.scopeRef,
+      subjectUserId: record.subjectUserId,
+    });
+    if (!state.annotationsByScope.has(key)) {
+      state.annotationsByScope.set(key, []);
+    }
+    state.annotationsByScope.get(key)?.push(record);
+  });
+};
+
+const upsertAnnotationInState = (state: AnnotationState, record: DashboardAnnotationRecord) => {
+  const index = state.annotations.findIndex((a) => a.id === record.id);
+  if (index !== -1) {
+    state.annotations[index] = record;
+  } else {
+    state.annotations.push(record);
+  }
+  setAnnotations(state, state.annotations);
 };
 
 const removeAnnotationFromState = (state: AnnotationState, annotationId: string) => {
-  setAnnotations(
-    state,
-    state.annotations.filter((item) => String(item.id || '') !== String(annotationId || '')),
-  );
+  state.annotations = state.annotations.filter((a) => a.id !== annotationId);
+  setAnnotations(state, state.annotations);
 };
 
 const setActiveSelection = (state: AnnotationState, cell: any, context: CellScopeContext | null) => {
-  if (state.selectedCellEl instanceof HTMLElement) {
+  if (state.selectedCellEl) {
     state.selectedCellEl.classList.remove('dashboard-cell--selected');
   }
-
   state.selectedContext = context;
-  const nextEl = cell?.getElement?.();
-  if (nextEl instanceof HTMLElement && context) {
-    nextEl.classList.add('dashboard-cell--selected');
-    state.selectedCellEl = nextEl;
-  } else {
-    state.selectedCellEl = null;
+  state.selectedCellEl = cell?.getElement?.() || null;
+  if (state.selectedCellEl) {
+    state.selectedCellEl.classList.add('dashboard-cell--selected');
   }
-};
-
-const annotationColorFormatter = (cell: any) => {
-  const color = normalizeDashboardAnnotationColor(cell.getValue());
-  if (!color) return '<span class="dashboard-muted">—</span>';
-  return `
-    <span class="dashboard-annotation-color-pill dashboard-annotation-color-pill--${escapeHtml(color)}">
-      <span class="dashboard-annotation-color-pill__swatch" aria-hidden="true"></span>
-      ${escapeHtml(dashboardAnnotationColorLabel(color))}
-    </span>
-  `;
-};
-
-const roleFormatter = (cell: any) => {
-  const role = normalizeTextLower(cell.getValue()) || 'student';
-  const label = role === 'teacher' ? 'Teacher' : 'Student';
-  return `<span class="role-badge ${role === 'teacher' ? 'role-teacher' : 'role-student'}">${escapeHtml(label)}</span>`;
-};
-
-const renderCourseRoleSelectMarkup = (cell: any) => {
-  const row = cell.getData?.() || {};
-  const role = normalizeTextLower(cell.getValue()) === 'teacher' ? 'teacher' : 'student';
-  const enrollmentId = normalizeText(row?.enrollmentId || '');
-  const rowId = normalizeText(row?.id || row?.userId || '');
-  const disabledAttr = enrollmentId ? '' : ' disabled';
-  const stateAttr = enrollmentId ? 'idle' : 'disabled';
-
-  return `
-    <span class="dashboard-inline-select-wrap">
-      <select
-        class="dashboard-inline-select dashboard-inline-select--role"
-        data-dashboard-course-role-select
-        data-row-id="${escapeHtml(rowId)}"
-        data-enrollment-id="${escapeHtml(enrollmentId)}"
-        data-state="${escapeHtml(stateAttr)}"
-        aria-label="Rol curso"
-        ${disabledAttr}
-      >
-        <option value="student"${role === 'student' ? ' selected' : ''}>Student</option>
-        <option value="teacher"${role === 'teacher' ? ' selected' : ''}>Teacher</option>
-      </select>
-    </span>
-  `;
-};
-
-const renderTurnoSelectMarkup = (cell: any) => {
-  const row = cell.getData?.() || {};
-  const turno = ['M', 'T', 'N'].includes(normalizeText(cell.getValue()).toUpperCase())
-    ? normalizeText(cell.getValue()).toUpperCase()
-    : 'M';
-  const studentId = normalizeText(row?.studentId || row?.userId || row?.id || '');
-  const rowId = normalizeText(row?.id || row?.studentId || row?.userId || '');
-  const title = getTurnoTitle(turno);
-
-  return `
-    <span class="dashboard-inline-select-wrap">
-      <select
-        class="dashboard-inline-select dashboard-inline-select--turno"
-        data-dashboard-turno-select
-        data-row-id="${escapeHtml(rowId)}"
-        data-student-id="${escapeHtml(studentId)}"
-        data-state="idle"
-        aria-label="Turno"
-        title="${escapeHtml(title)}"
-      >
-        <option value="M"${turno === 'M' ? ' selected' : ''}>M</option>
-        <option value="T"${turno === 'T' ? ' selected' : ''}>T</option>
-        <option value="N"${turno === 'N' ? ' selected' : ''}>N</option>
-      </select>
-    </span>
-  `;
-};
-
-const renderGrupoInputMarkup = (cell: any) => {
-  const row = cell.getData?.() || {};
-  const grupo = normalizeGrupoDigits(cell.getValue());
-  const studentId = normalizeText(row?.studentId || row?.userId || row?.id || '');
-  const rowId = normalizeText(row?.id || row?.studentId || row?.userId || '');
-
-  return `
-    <span class="dashboard-inline-input-wrap">
-      <input
-        type="text"
-        inputmode="numeric"
-        maxlength="2"
-        class="dashboard-inline-input dashboard-inline-input--grupo"
-        data-dashboard-grupo-input
-        data-row-id="${escapeHtml(rowId)}"
-        data-student-id="${escapeHtml(studentId)}"
-        data-state="idle"
-        aria-label="Grupo"
-        placeholder="--"
-        value="${escapeHtml(grupo)}"
-      />
-    </span>
-  `;
-};
-
-const renderAdminActionsMarkup = (cell: any) => {
-  const row = cell.getData?.() || {};
-  const userId = normalizeText(row?.userId || row?.id || '');
-  if (!userId) {
-    return '<span class="dashboard-muted">—</span>';
-  }
-
-  const userName = normalizeText(row?.name || row?.email || userId) || userId;
-  const userEmail = normalizeText(row?.email || '');
-  const globalRole = normalizeTextLower(row?.globalRole || '');
-  const courseRole = normalizeTextLower(row?.courseRole || '');
-
-  return `
-    <span class="dashboard-admin-actions">
-      <a
-        class="dashboard-grid-icon-btn"
-        href="/admin/user/${encodeURIComponent(userId)}"
-        data-dashboard-user-detail
-        aria-label="Abrir detalle de ${escapeHtml(userName)}"
-        title="Abrir detalle"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path fill="currentColor" d="M3 17.25V21h3.75l11-11-3.75-3.75-11 11Zm18-11.5a1 1 0 0 0 0-1.41l-1.34-1.34a1 1 0 0 0-1.41 0l-1.05 1.05L19.95 6.8 21 5.75Z"></path>
-        </svg>
-      </a>
-      <button
-        type="button"
-        class="dashboard-grid-icon-btn dashboard-grid-icon-btn--danger"
-        data-dashboard-user-delete
-        data-user-id="${escapeHtml(userId)}"
-        data-user-name="${escapeHtml(userName)}"
-        data-user-email="${escapeHtml(userEmail)}"
-        data-user-global-role="${escapeHtml(globalRole)}"
-        data-user-course-role="${escapeHtml(courseRole)}"
-        aria-label="Borrar usuario ${escapeHtml(userName)}"
-        title="Borrar usuario"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path fill="currentColor" d="M9 3h6l1 2h5v2H3V5h5l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM6 8h12l-1 12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 8Z"></path>
-        </svg>
-      </button>
-    </span>
-  `;
-};
-
-const renderRiskMarkup = (cell: any) => {
-  const risk = normalizeTextLower(cell.getValue()) || 'bajo';
-  const label = risk === 'alto' ? 'Alto' : risk === 'medio' ? 'Medio' : 'Bajo';
-  return `<span class="dashboard-pill dashboard-pill--risk dashboard-pill--risk-${escapeHtml(risk)}">${escapeHtml(label)}</span>`;
-};
-
-const renderScoreMarkup = (cell: any) => {
-  const display = formatScore(cell.getValue());
-  return display
-    ? `<span class="dashboard-pill dashboard-pill--score">${escapeHtml(display)}</span>`
-    : '<span class="dashboard-muted">—</span>';
-};
-
-const renderPercentMarkup = (cell: any) => {
-  const parsed = Number(cell.getValue());
-  if (!Number.isFinite(parsed)) {
-    return '<span class="dashboard-muted">—</span>';
-  }
-  const tone = parsed >= 85 ? 'high' : parsed >= 70 ? 'mid' : 'low';
-  const label = Number.isInteger(parsed) ? `${parsed}%` : `${parsed.toFixed(1).replace(/\.0$/, '')}%`;
-  return `<span class="dashboard-pill dashboard-pill--percent dashboard-pill--percent-${tone}">${escapeHtml(label)}</span>`;
-};
-
-const renderDateTimeCellMarkup = (cell: any) => {
-  const field = String(cell.getField() || '');
-  const row = cell.getData?.() || {};
-  const label = normalizeText(row?.[`${field}Label`] || formatDateTime(cell.getValue()));
-  return label
-    ? `<span class="dashboard-date-cell">${escapeHtml(label)}</span>`
-    : '<span class="dashboard-muted">—</span>';
-};
-
-const renderAbsenceMarkup = (cell: any) => {
-  const parsed = Number(cell.getValue());
-  const display = formatAbsence(cell.getValue());
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return '<span class="dashboard-muted">0</span>';
-  }
-  if (parsed >= 4) {
-    return `<span class="dashboard-pill dashboard-pill--absence dashboard-pill--absence-critical">${escapeHtml(display)}</span>`;
-  }
-  if (parsed >= 3) {
-    return `<span class="dashboard-pill dashboard-pill--absence dashboard-pill--absence-warning">${escapeHtml(display)}</span>`;
-  }
-  return `<span class="dashboard-pill dashboard-pill--absence">${escapeHtml(display)}</span>`;
-};
-
-const renderGradeMarkup = (cell: any) => {
-  const display = formatScore(cell.getValue());
-  const field = String(cell.getField() || '');
-  const statusLabel = normalizeText(cell.getData?.()?.__gradeState?.[field]?.statusLabel || '');
-  if (display) {
-    return `<span class="dashboard-pill dashboard-pill--score">${escapeHtml(display)}</span>`;
-  }
-  if (normalizeTextLower(statusLabel) === 'pendiente') {
-    return '<span class="dashboard-muted">Pend.</span>';
-  }
-  return '<span class="dashboard-muted">—</span>';
-};
-
-const renderAttendanceMarkup = (cell: any) => {
-  const field = String(cell.getField() || '');
-  const meta = cell.getData?.()?.__attendanceCellMeta?.[field] || {};
-  const effectiveValue = Number(meta?.effectiveValue || 0);
-  const isFuture = Boolean(meta?.isFuture);
-  const hasManualOverride = Boolean(meta?.hasManualOverride);
-  const displayValue = formatAttendanceSymbol(effectiveValue, { isFuture });
-
-  let tone = 'empty';
-  if (effectiveValue >= 1) {
-    tone = 'present';
-  } else if (effectiveValue > 0) {
-    tone = 'partial';
-  } else if (isFuture) {
-    tone = 'future';
-  }
-
-  return `<span class="dashboard-attendance-chip dashboard-attendance-chip--${escapeHtml(tone)}${hasManualOverride ? ' dashboard-attendance-chip--manual' : ''}">${escapeHtml(displayValue)}</span>`;
-};
-
-const renderAttendanceProgressMarkup = (cell: any) => {
-  const parsed = Number(cell.getValue());
-  const normalized = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 0;
-  const tone = normalized >= 85 ? 'high' : normalized >= 70 ? 'mid' : 'low';
-  const label = formatPercentLabel(normalized);
-  return `
-    <span class="dashboard-progress dashboard-progress--${escapeHtml(tone)}" aria-label="Attendance ${escapeHtml(label)}">
-      <span class="dashboard-progress__track" aria-hidden="true">
-        <span class="dashboard-progress__fill" style="width:${escapeHtml(String(normalized))}%"></span>
-      </span>
-      <span class="dashboard-progress__label">${escapeHtml(label)}</span>
-    </span>
-  `;
-};
-
-const renderPlainMarkup = (cell: any) => {
-  const value = cell.getValue();
-  const normalized = normalizeText(value);
-  if (!normalized && value !== 0) {
-    return '<span class="dashboard-muted">—</span>';
-  }
-  return escapeHtml(value === null || value === undefined ? '—' : String(value));
 };
 
 const buildCellMarkup = (
   cell: any,
-  contextKind: GridKind,
-  annotationState: AnnotationState,
-  baseRenderer: (cell: any) => string,
+  kind: GridKind,
+  state: AnnotationState,
+  baseFormatter: (cell: any) => string,
 ) => {
-  const baseHtml = baseRenderer(cell);
-  const cellContext = buildScopeContextFromCell(cell, contextKind);
-  const element = cell.getElement?.();
+  const context = buildScopeContextFromCell(cell, kind);
+  if (!context) return baseFormatter(cell);
 
-  if (!cellContext) {
-    if (element instanceof HTMLElement) {
-      element.removeAttribute('data-annotation-color');
-    }
-    return baseHtml;
-  }
+  const annotation = getDisplayAnnotation(state, context);
+  const color = normalizeDashboardAnnotationColor(annotation?.color);
+  const style = color ? `background-color: ${color}` : '';
+  const content = baseFormatter(cell);
+  const hasComment = normalizeText(annotation?.comment).length > 0;
+  const commentIndicator = hasComment ? '<div class="dashboard-cell-comment-indicator"></div>' : '';
 
-  const annotation = getDisplayAnnotation(annotationState, cellContext);
-  const annotationColor = normalizeDashboardAnnotationColor(annotation?.color);
-  const annotationComment = normalizeDashboardAnnotationComment(annotation?.comment);
-  const commentCount = getScopeAnnotations(annotationState, cellContext).filter((entry) => normalizeText(entry.comment)).length;
-  const commentIndicator = annotationComment
-    ? `<span class="dashboard-annotation-dot" title="${escapeHtml(annotationComment)}">${commentCount > 1 ? escapeHtml(String(commentCount)) : ''}</span>`
-    : '';
+  return `<div class="dashboard-cell-inner" style="${style}">${content}${commentIndicator}</div>`;
+};
 
-  if (element instanceof HTMLElement) {
-    const titleParts = [
-      normalizeText(cell.getData?.()?.__attendanceCellMeta?.[String(cell.getField() || '')]?.title || ''),
-      annotationComment ? `Comentario: ${annotationComment}` : '',
-    ].filter(Boolean);
-    element.title = titleParts.join(' • ');
-    element.setAttribute(
-      'aria-label',
-      [cellContext.rowLabel, cellContext.columnLabel, annotationComment].filter(Boolean).join(' • '),
-    );
-    if (annotationColor) {
-      element.setAttribute('data-annotation-color', annotationColor);
-    } else {
-      element.removeAttribute('data-annotation-color');
-    }
-  }
+const buildCommentsRowsFromAnnotations = (annotations: DashboardAnnotationRecord[]) => {
+  return (annotations || []).map((a) => ({
+    id: a.id,
+    authorName: a.authorName || a.authorEmail || 'Teacher',
+    studentName: a.metadata?.studentName || a.subjectUserId || '—',
+    tabLabel: a.metadata?.tabLabel || a.tab || '—',
+    scopeLabel: a.metadata?.scopeLabel || a.scopeRef || '—',
+    color: a.color,
+    comment: a.comment,
+    visibility: a.visibility,
+    updatedAt: a.updatedAt || a.createdAt,
+    __search: normalizeTextLower(`${a.authorName} ${a.authorEmail} ${a.metadata?.studentName} ${a.comment} ${a.color} ${a.visibility}`),
+  }));
+};
 
+const renderPlainMarkup = (cell: any) => {
+  const val = cell.getValue();
+  return val === null || val === undefined || val === '' ? '—' : escapeHtml(String(val));
+};
+
+const renderRiskMarkup = (cell: any) => {
+  const val = Number(cell.getValue() || 0);
+  const color = val > 0.7 ? '#ef4444' : val > 0.4 ? '#f59e0b' : 'inherit';
+  return `<span style="color: ${color}; font-weight: bold;">${val.toFixed(2)}</span>`;
+};
+
+const renderScoreMarkup = (cell: any) => {
+  const val = cell.getValue();
+  if (val === null || val === undefined || val === '') return '<span class="dashboard-val-empty">—</span>';
+  const num = Number(val);
+  const colorClass = num >= 7 ? 'dashboard-score-high' : num >= 4 ? 'dashboard-score-mid' : 'dashboard-score-low';
+  return `<span class="dashboard-score-pill ${colorClass}">${num.toFixed(1)}</span>`;
+};
+
+const renderGradeMarkup = (cell: any) => {
+  const val = cell.getValue();
+  if (val === null || val === undefined || val === '') return '<span class="dashboard-val-empty">—</span>';
+  const num = Number(val);
+  const colorClass = num >= 7 ? 'dashboard-score-high' : num >= 4 ? 'dashboard-score-mid' : 'dashboard-score-low';
+  const data = cell.getData() || {};
+  const field = cell.getField();
+  const status = normalizeText(data?.__gradeState?.[field]?.statusLabel);
+  const statusMarkup = status ? `<span class="dashboard-grade-status">${escapeHtml(status)}</span>` : '';
+  return `<div class="dashboard-grade-wrap"><span class="dashboard-score-pill ${colorClass}">${num.toFixed(1)}</span>${statusMarkup}</div>`;
+};
+
+const renderAbsenceMarkup = (cell: any) => {
+  const val = Number(cell.getValue() || 0);
+  const color = val >= 3 ? '#ef4444' : val >= 1 ? '#f59e0b' : 'inherit';
+  return `<span style="color: ${color}">${formatAbsence(val)}</span>`;
+};
+
+const renderPercentMarkup = (cell: any) => {
+  const val = Number(cell.getValue() || 0);
+  return `${val.toFixed(1)}%`;
+};
+
+const renderAttendanceProgressMarkup = (cell: any) => {
+  const val = Number(cell.getValue() || 0);
+  const color = val < 60 ? '#ef4444' : val < 80 ? '#f59e0b' : '#10b981';
   return `
-    <span class="dashboard-annotation-shell${annotationColor ? ` dashboard-annotation-shell--${escapeHtml(annotationColor)}` : ''}">
-      <span class="dashboard-annotation-shell__content">${baseHtml}</span>
-      ${commentIndicator}
-    </span>
+    <div class="dashboard-progress-wrap">
+      <div class="dashboard-progress-bg">
+        <div class="dashboard-progress-bar" style="width: ${val}%; background-color: ${color}"></div>
+      </div>
+      <span class="dashboard-progress-label">${val.toFixed(1)}%</span>
+    </div>
   `;
 };
 
-const buildCellContextMenu = (contextKind: GridKind, annotationState: AnnotationState, modalRef: { current: AnnotationModalApi | null }) =>
-  (_event: MouseEvent, cell: any) => {
-    const context = buildScopeContextFromCell(cell, contextKind);
+const renderDateTimeCellMarkup = (cell: any) => formatSubmissionDate(cell.getValue());
+
+const renderAttendanceMarkup = (cell: any) => {
+  const val = cell.getValue();
+  const field = cell.getField();
+  const meta = cell.getData()?.__attendanceCellMeta?.[field];
+  if (!meta) return escapeHtml(String(val || ''));
+
+  const units = Number(meta.effectiveValue || 0);
+  const symbol = formatAttendanceSymbol(units);
+  const isFuture = Boolean(meta.isFuture);
+  const hasManual = Boolean(meta.hasManualOverride);
+
+  let cssClass = 'dashboard-attendance-pill';
+  if (isFuture) cssClass += ' dashboard-attendance-pill--future';
+  if (hasManual) cssClass += ' dashboard-attendance-pill--manual';
+  if (units >= 1) cssClass += ' dashboard-attendance-pill--present';
+  else if (units >= 0.5) cssClass += ' dashboard-attendance-pill--partial';
+  else if (!isFuture) cssClass += ' dashboard-attendance-pill--absent';
+
+  return `<span class="${cssClass}">${symbol}</span>`;
+};
+
+const annotationColorFormatter = (cell: any) => {
+  const value = cell.getValue();
+  const label = dashboardAnnotationColorLabel(value);
+  return `<div class="dashboard-annotation-color-cell" style="background-color: ${value || 'transparent'}"></div><span>${label}</span>`;
+};
+
+const roleFormatter = (cell: any) => {
+  const value = cell.getValue();
+  return normalizeText(value).toLowerCase() === 'teacher' ? 'Teacher' : 'Student';
+};
+
+const renderCourseRoleSelectMarkup = (cell: any) => {
+  const value = normalizeTextLower(cell.getValue());
+  const rowId = cell.getData()?.id;
+  const enrollmentId = cell.getData()?.enrollmentId;
+  return `
+    <div class="dashboard-inline-select-wrap">
+      <select class="dashboard-inline-select" data-dashboard-course-role-select data-row-id="${escapeHtml(rowId)}" data-enrollment-id="${escapeHtml(enrollmentId)}">
+        <option value="student" ${value === 'student' ? 'selected' : ''}>Student</option>
+        <option value="teacher" ${value === 'teacher' ? 'selected' : ''}>Teacher</option>
+      </select>
+    </div>
+  `;
+};
+
+const renderTurnoSelectMarkup = (cell: any) => {
+  const value = normalizeText(cell.getValue()).toUpperCase();
+  const rowId = cell.getData()?.id;
+  const studentId = cell.getData()?.studentId;
+  return `
+    <div class="dashboard-inline-select-wrap">
+      <select class="dashboard-inline-select" data-dashboard-turno-select data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" title="${getTurnoTitle(value)}">
+        <option value="M" ${value === 'M' ? 'selected' : ''}>M</option>
+        <option value="T" ${value === 'T' ? 'selected' : ''}>T</option>
+        <option value="N" ${value === 'N' ? 'selected' : ''}>N</option>
+      </select>
+    </div>
+  `;
+};
+
+const renderGrupoInputMarkup = (cell: any) => {
+  const value = normalizeGrupoDigits(cell.getValue());
+  const rowId = cell.getData()?.id;
+  const studentId = cell.getData()?.studentId;
+  return `
+    <div class="dashboard-inline-input-wrap">
+      <input type="text" class="dashboard-inline-input" data-dashboard-grupo-input value="${escapeHtml(value)}" data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" placeholder="—" />
+    </div>
+  `;
+};
+
+const renderAdminActionsMarkup = (cell: any) => {
+  const data = cell.getData() || {};
+  return `
+    <div class="dashboard-admin-actions">
+      <button type="button" class="dashboard-grid-icon-btn" data-dashboard-user-delete data-user-id="${escapeHtml(data.id)}" data-user-name="${escapeHtml(data.name)}" data-user-email="${escapeHtml(data.email)}" data-user-global-role="${escapeHtml(data.role)}" data-user-course-role="${escapeHtml(data.courseRole)}" title="Borrar usuario">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+      </button>
+    </div>
+  `;
+};
+
+const buildCellContextMenu = (
+  kind: GridKind,
+  annotationState: AnnotationState,
+  modalRef: { current: AnnotationModalApi | null },
+) => {
+  return (e: MouseEvent, cell: any) => {
+    const context = buildScopeContextFromCell(cell, kind);
     if (!context) return [];
 
     setActiveSelection(annotationState, cell, context);
     const ownAnnotation = getOwnAnnotation(annotationState, context);
-    const displayAnnotation = getDisplayAnnotation(annotationState, context);
 
     return [
       {
-        label: `<strong>Comentar…</strong> <span class="dashboard-menu-shortcut">${escapeHtml(getCommentShortcutLabel())}</span>`,
-        action: () => {
-          modalRef.current?.open(context);
-        },
-      },
-      { separator: true },
-      {
-        label: 'Resaltar',
-        menu: DASHBOARD_ANNOTATION_COLORS.map((color) => ({
-          label: `<span class="dashboard-menu-color dashboard-menu-color--${escapeHtml(color)}"></span>${escapeHtml(dashboardAnnotationColorLabel(color))}`,
-          action: async () => {
-            const nextColor = normalizeDashboardAnnotationColor(color);
-            await saveAnnotation(annotationState, context, {
-              color: nextColor,
-              comment: ownAnnotation?.comment || '',
-              visibility: ownAnnotation?.visibility || displayAnnotation?.visibility || 'teachers',
-            });
-          },
-        })),
+        label: ownAnnotation ? 'Editar comentario' : 'Añadir comentario',
+        action: () => modalRef.current?.open(context),
       },
       {
         label: 'Quitar highlight',
@@ -867,55 +519,80 @@ const buildCellContextMenu = (contextKind: GridKind, annotationState: Annotation
       },
     ];
   };
+};
+
+// Helper to get sub-columns safely, falling back to manual lookup if getColumns() fails
+const getGroupSubColumns = (column: any): any[] => {
+  const def = column.getDefinition();
+  if (!def || !Array.isArray(def.columns)) return [];
+
+  const table = column.getTable();
+  if (!table) return [];
+
+  let subCols: any[] = [];
+  if (typeof column.getColumns === 'function') {
+    try {
+      subCols = column.getColumns();
+    } catch (e) {
+      // Fallback below
+    }
+  }
+
+  if (!subCols || subCols.length === 0) {
+    subCols = def.columns
+      .map((colDef: any) => {
+        if (colDef.field) return table.getColumn(colDef.field);
+        return null;
+      })
+      .filter(Boolean);
+  }
+
+  return subCols;
+};
 
 const toggleGroupFolding = (column: any) => {
   if (!column) return;
   const def = column.getDefinition();
-  if (!def || !Array.isArray(def.columns)) return;
+  const subCols = getGroupSubColumns(column);
 
-  if (typeof column.getColumns !== 'function') {
-    console.warn('toggleGroupFolding: column has no getColumns method', column);
+  if (subCols.length === 0) {
+    if (Array.isArray(def.columns)) {
+      console.warn('toggleGroupFolding: No sub-columns found for group', def.title);
+    }
     return;
   }
 
-  const subCols = column.getColumns();
-  if (!subCols || subCols.length === 0) return;
+  const table = column.getTable();
 
   // Determine if we are currently folded
-  // A group is "folded" if at least one hideable column is hidden
-  const nonHideableFields = ['lastName'];
   const isFolded = subCols.some((c: any) => {
     const field = c.getDefinition().field;
-    return !c.isVisible() && !field?.startsWith('__avg') && !nonHideableFields.includes(field);
+    const isHideable = !field?.startsWith('__avg') && field !== 'lastName' && field !== 'firstName';
+    return isHideable && !c.isVisible();
   });
 
-  const targetState = isFolded; // if folded, we want to unfold
+  const targetState = isFolded; // if folded, we want to unfold (show all)
 
   subCols.forEach((c: any) => {
     const cDef = c.getDefinition();
     const isAvg = cDef.field?.startsWith('__avg');
-    const isLastName = cDef.field === 'lastName';
+    const isIdentity = cDef.field === 'lastName' || cDef.field === 'firstName';
     
     if (targetState) {
       c.show();
     } else {
-      if (!isAvg && !isLastName) {
+      if (!isAvg && !isIdentity) {
         c.hide();
       }
     }
   });
 
-  // Update icon class on header element
   const headerEl = column.getElement();
   if (headerEl) {
     headerEl.classList.toggle('group-folded', !targetState);
   }
   
-  // Force table redraw to fix alignment
-  const table = column.getTable();
-  if (table) {
-    table.redraw(true);
-  }
+  table?.redraw(true);
 };
 
 const configureColumns = (
@@ -934,16 +611,21 @@ const configureColumns = (
   ];
 
   return (columns || []).map((column) => {
-    if (Array.isArray(column?.columns) && column.columns.length > 0) {
+    // Tooltips for everyone
+    const baseColumn = {
+      ...column,
+      tooltip: true,
+      headerTooltip: true,
+    };
+
+    if (Array.isArray(baseColumn?.columns) && baseColumn.columns.length > 0) {
       return {
-        ...column,
+        ...baseColumn,
         headerContextMenu: headerMenu,
         headerClick: function(e: any, col: any) {
-          // Only react to clicks on groups
           const def = col.getDefinition();
           if (!Array.isArray(def.columns)) return;
 
-          // If clicking near the right edge (where the triangle is)
           const rect = col.getElement().getBoundingClientRect();
           const clickX = e.clientX - rect.left;
           const isRightEdge = clickX > rect.width - 35;
@@ -956,12 +638,12 @@ const configureColumns = (
         },
         titleFormatter: function(col: any) {
           const title = col.getValue();
-          return `<div class="group-header-content">
+          return `<div class="group-header-content" title="${title}">
             <span class="group-header-title">${title}</span>
             <span class="group-header-icon" title="Plegar/Desplegar"></span>
           </div>`;
         },
-        columns: configureColumns(column.columns, context, annotationState, modalRef),
+        columns: configureColumns(baseColumn.columns, context, annotationState, modalRef),
       };
     }
 
@@ -969,10 +651,18 @@ const configureColumns = (
       kind,
       dateKey: _dateKey,
       ...restColumn
-    } = column || {};
+    } = baseColumn || {};
     const nextColumn: Record<string, any> = {
       ...restColumn,
     };
+
+    if (context.kind === 'gradebook') {
+      if (kind === 'grade-score' || kind === 'score') {
+        nextColumn.width = 44;
+        nextColumn.minWidth = 40;
+        nextColumn.maxWidth = 50;
+      }
+    }
 
     let baseFormatter: ((cell: any) => string) | null = renderPlainMarkup;
 
@@ -1119,6 +809,7 @@ const buildTable = (
     pagination: 'local',
     paginationSize: 25,
     movableColumns: !isComplexTable,
+    headerSort: !isComplexTable, // Disable sort icons to save space
     resizableColumnFit: false,
     selectableRows: false,
     placeholder: projection?.emptyMessage || 'Sin datos.',
@@ -1137,25 +828,21 @@ const buildTable = (
 const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
   const handler = (e: KeyboardEvent) => {
     if (!e.metaKey && !e.ctrlKey) return;
-    
+
     const isShift = e.shiftKey;
     const key = e.key;
-    
+
     if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
-    
+
     const table = registry.get('gradebook');
     if (!table) return;
 
     e.preventDefault();
 
     if (isShift) {
-      // Unfold/Fold ALL levels
       const topCols = table.getColumns();
       topCols.forEach((group: any) => {
-        const groupDef = group.getDefinition();
-        if (!Array.isArray(groupDef.columns)) return;
-
-        const subGroups = group.getColumns().filter((c: any) => {
+        const subGroups = getGroupSubColumns(group).filter((c: any) => {
           const def = c.getDefinition();
           return Array.isArray(def.columns);
         });
@@ -1163,33 +850,30 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
         if (subGroups.length > 0) {
           subGroups.forEach((sg: any) => {
             const shouldFold = key === 'ArrowLeft';
-            const isSGFolded = sg.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+            const sgCols = getGroupSubColumns(sg);
+            const isSGFolded = sgCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
             if (shouldFold !== isSGFolded) toggleGroupFolding(sg);
           });
         }
         const shouldFold = key === 'ArrowLeft';
-        const isFolded = group.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+        const groupCols = getGroupSubColumns(group);
+        const isFolded = groupCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
         if (shouldFold !== isFolded) toggleGroupFolding(group);
       });
     } else {
-      // Tiered folding:
-      // If ArrowLeft: fold sub-groups first. If already folded, fold classes.
-      // If ArrowRight: unfold classes first. If already unfolded, unfold sub-groups.
       const topCols = table.getColumns();
       
       if (key === 'ArrowLeft') {
         let anySubGroupFolded = false;
         topCols.forEach((group: any) => {
-          const groupDef = group.getDefinition();
-          if (!Array.isArray(groupDef.columns)) return;
-
-          const subGroups = group.getColumns().filter((c: any) => {
+          const subGroups = getGroupSubColumns(group).filter((c: any) => {
             const def = c.getDefinition();
             return Array.isArray(def.columns);
           });
 
           subGroups.forEach((sg: any) => {
-            const isSGFolded = sg.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+            const sgCols = getGroupSubColumns(sg);
+            const isSGFolded = sgCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
             if (!isSGFolded) {
               toggleGroupFolding(sg);
               anySubGroupFolded = true;
@@ -1199,20 +883,16 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
         
         if (!anySubGroupFolded) {
           topCols.forEach((group: any) => {
-            const groupDef = group.getDefinition();
-            if (!Array.isArray(groupDef.columns)) return;
-
-            const isFolded = group.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+            const groupCols = getGroupSubColumns(group);
+            const isFolded = groupCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
             if (!isFolded) toggleGroupFolding(group);
           });
         }
       } else {
         let anyClassUnfolded = false;
         topCols.forEach((group: any) => {
-          const groupDef = group.getDefinition();
-          if (!Array.isArray(groupDef.columns)) return;
-
-          const isFolded = group.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+          const groupCols = getGroupSubColumns(group);
+          const isFolded = groupCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
           if (isFolded) {
             toggleGroupFolding(group);
             anyClassUnfolded = true;
@@ -1221,16 +901,14 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
 
         if (!anyClassUnfolded) {
           topCols.forEach((group: any) => {
-            const groupDef = group.getDefinition();
-            if (!Array.isArray(groupDef.columns)) return;
-
-            const subGroups = group.getColumns().filter((c: any) => {
+            const subGroups = getGroupSubColumns(group).filter((c: any) => {
               const def = c.getDefinition();
               return Array.isArray(def.columns);
             });
 
             subGroups.forEach((sg: any) => {
-              const isSGFolded = sg.getColumns().some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
+              const sgCols = getGroupSubColumns(sg);
+              const isSGFolded = sgCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
               if (isSGFolded) toggleGroupFolding(sg);
             });
           });
@@ -1242,6 +920,7 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
   window.addEventListener('keydown', handler);
   return () => window.removeEventListener('keydown', handler);
 };
+
 const trackTableBuilt = (table: Tabulator, readyTables: WeakSet<Tabulator>) => {
   table.on('tableBuilt', () => {
     readyTables.add(table);
@@ -2433,7 +2112,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     }
 
     touchLongPressCellKey = '';
-    touchLongPressTriggered = false;
+    touchLongTriggered = false;
   };
 
   const touchMoveCancelHandler = () => {

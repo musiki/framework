@@ -3508,20 +3508,33 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         min-width: 100% !important;
       }
 
+      .dashboard-tabulator .tabulator-col-title {
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+        padding: 0 4px;
+      }
+      .dashboard-tabulator .tabulator-col-content {
+        padding: 4px 0 !important;
+      }
+      .dashboard-tabulator .tabulator-col-sorter {
+        display: none !important;
+      }
       .group-header-content {
         display: flex;
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        padding-right: 4px;
+        padding: 0 4px;
+        overflow: hidden;
       }
       .group-header-title {
         flex: 1;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .group-header-icon {
+        font-weight: 600;
+      }      .group-header-icon {
         width: 0;
         height: 0;
         border-top: 5px solid transparent;
