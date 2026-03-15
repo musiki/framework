@@ -873,6 +873,11 @@ const toggleGroupFolding = (column: any) => {
   const def = column.getDefinition();
   if (!def || !Array.isArray(def.columns)) return;
 
+  if (typeof column.getColumns !== 'function') {
+    console.warn('toggleGroupFolding: column has no getColumns method', column);
+    return;
+  }
+
   const subCols = column.getColumns();
   if (!subCols || subCols.length === 0) return;
 
@@ -907,7 +912,10 @@ const toggleGroupFolding = (column: any) => {
   }
   
   // Force table redraw to fix alignment
-  column.getTable()?.redraw();
+  const table = column.getTable();
+  if (table) {
+    table.redraw(true);
+  }
 };
 
 const configureColumns = (
@@ -1099,6 +1107,8 @@ const buildTable = (
   annotationState: AnnotationState,
   modalRef: { current: AnnotationModalApi | null },
 ) => {
+  const isComplexTable = context.kind === 'gradebook' || context.kind === 'attendance-summary';
+
   return new Tabulator(element, {
     index: 'id',
     data: Array.isArray(projection?.rows) ? projection.rows : [],
@@ -1108,7 +1118,7 @@ const buildTable = (
     columnHeaderVertAlign: 'bottom',
     pagination: 'local',
     paginationSize: 25,
-    movableColumns: true,
+    movableColumns: !isComplexTable,
     resizableColumnFit: false,
     selectableRows: false,
     placeholder: projection?.emptyMessage || 'Sin datos.',
