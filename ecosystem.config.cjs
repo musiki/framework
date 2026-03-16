@@ -27,10 +27,11 @@ module.exports = {
       env: {
         ...dotEnv,
         NODE_ENV: 'production',
-        HOST: '0.0.0.0',
+        HOST: '127.0.0.1',
         PORT: '4321',
-        AUTH_URL: 'https://www.musiki.org.ar',
-        AUTH_TRUST_HOST: 'true'
+        // FORZADO DE ENTORNO
+        AUTH_URL: 'https://musiki.org.ar',
+        AUTH_TRUST_HOST: 'true',
       },
     },
     {
