@@ -825,95 +825,77 @@ const buildTable = (
   });
 };
 
+let foldLevel = 0;
+
+const applyFoldLevel = (table: Tabulator, level: number) => {
+  const topCols = table.getColumns();
+  topCols.forEach((topCol: any) => {
+    const field = topCol.getDefinition().field;
+    if (field === '__group_student') {
+      const studentCols = getGroupSubColumns(topCol);
+      studentCols.forEach((c: any) => {
+         const f = c.getDefinition().field;
+         if (f === 'lastName') c.show();
+         else if (level >= 3) c.hide();
+         else c.show();
+      });
+      const headerEl = topCol.getElement();
+      if (headerEl) headerEl.classList.toggle('group-folded', level >= 3);
+      return;
+    }
+    if (field?.startsWith('__group_lesson')) {
+       const lessonCols = getGroupSubColumns(topCol);
+       const isLessonAvg = (c: any) => c.getDefinition().field?.startsWith('__avg_lesson') && !c.getDefinition().field?.includes('_group_');
+       if (level >= 2) {
+          lessonCols.forEach((c: any) => {
+             if (isLessonAvg(c)) c.show();
+             else c.hide(); 
+          });
+          const headerEl = topCol.getElement();
+          if (headerEl) headerEl.classList.add('group-folded');
+       } else {
+          lessonCols.forEach((c: any) => {
+             if (isLessonAvg(c)) {
+                 c.show();
+             } else if (Array.isArray(c.getDefinition().columns)) {
+                 c.show();
+                 const sgCols = getGroupSubColumns(c);
+                 const isGroupAvg = (sc: any) => sc.getDefinition().cssClass?.includes('dashboard-grade-sub-avg');
+                 sgCols.forEach((sc: any) => {
+                    if (isGroupAvg(sc)) sc.show();
+                    else if (level >= 1) sc.hide();
+                    else sc.show();
+                 });
+                 const sgHeaderEl = c.getElement();
+                 if (sgHeaderEl) sgHeaderEl.classList.toggle('group-folded', level >= 1);
+             } else {
+                 if (level >= 1) c.hide(); else c.show();
+             }
+          });
+          const headerEl = topCol.getElement();
+          if (headerEl) headerEl.classList.remove('group-folded');
+       }
+    }
+  });
+};
+
 const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
   const handler = (e: KeyboardEvent) => {
-    if (!e.metaKey && !e.ctrlKey) return;
-
-    const isShift = e.shiftKey;
-    const key = e.key;
-
-    if (key !== 'ArrowLeft' && key !== 'ArrowRight') return;
+    const target = e.target as HTMLElement | null;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable) return;
 
     const table = registry.get('gradebook');
     if (!table) return;
 
-    e.preventDefault();
+    const key = e.key;
 
-    if (isShift) {
-      const topCols = table.getColumns();
-      topCols.forEach((group: any) => {
-        const subGroups = getGroupSubColumns(group).filter((c: any) => {
-          const def = c.getDefinition();
-          return Array.isArray(def.columns);
-        });
-
-        if (subGroups.length > 0) {
-          subGroups.forEach((sg: any) => {
-            const shouldFold = key === 'ArrowLeft';
-            const sgCols = getGroupSubColumns(sg);
-            const isSGFolded = sgCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
-            if (shouldFold !== isSGFolded) toggleGroupFolding(sg);
-          });
-        }
-        const shouldFold = key === 'ArrowLeft';
-        const groupCols = getGroupSubColumns(group);
-        const isFolded = groupCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
-        if (shouldFold !== isFolded) toggleGroupFolding(group);
-      });
-    } else {
-      const topCols = table.getColumns();
-      
-      if (key === 'ArrowLeft') {
-        let anySubGroupFolded = false;
-        topCols.forEach((group: any) => {
-          const subGroups = getGroupSubColumns(group).filter((c: any) => {
-            const def = c.getDefinition();
-            return Array.isArray(def.columns);
-          });
-
-          subGroups.forEach((sg: any) => {
-            const sgCols = getGroupSubColumns(sg);
-            const isSGFolded = sgCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
-            if (!isSGFolded) {
-              toggleGroupFolding(sg);
-              anySubGroupFolded = true;
-            }
-          });
-        });
-        
-        if (!anySubGroupFolded) {
-          topCols.forEach((group: any) => {
-            const groupCols = getGroupSubColumns(group);
-            const isFolded = groupCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
-            if (!isFolded) toggleGroupFolding(group);
-          });
-        }
-      } else {
-        let anyClassUnfolded = false;
-        topCols.forEach((group: any) => {
-          const groupCols = getGroupSubColumns(group);
-          const isFolded = groupCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
-          if (isFolded) {
-            toggleGroupFolding(group);
-            anyClassUnfolded = true;
-          }
-        });
-
-        if (!anyClassUnfolded) {
-          topCols.forEach((group: any) => {
-            const subGroups = getGroupSubColumns(group).filter((c: any) => {
-              const def = c.getDefinition();
-              return Array.isArray(def.columns);
-            });
-
-            subGroups.forEach((sg: any) => {
-              const sgCols = getGroupSubColumns(sg);
-              const isSGFolded = sgCols.some((c: any) => !c.isVisible() && !c.getDefinition().field?.startsWith('__avg'));
-              if (isSGFolded) toggleGroupFolding(sg);
-            });
-          });
-        }
-      }
+    if (key === '0') { e.preventDefault(); foldLevel = 0; applyFoldLevel(table, foldLevel); return; }
+    if (key === '9') { e.preventDefault(); foldLevel = 3; applyFoldLevel(table, foldLevel); return; }
+    if (e.shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+        e.preventDefault();
+        if (key === 'ArrowLeft') foldLevel = Math.min(3, foldLevel + 1);
+        if (key === 'ArrowRight') foldLevel = Math.max(0, foldLevel - 1);
+        applyFoldLevel(table, foldLevel);
     }
   };
 
@@ -1385,15 +1367,35 @@ const bindAnnotationShortcut = (
 ) => {
   const handler = (event: KeyboardEvent) => {
     const key = String(event.key || '').toLowerCase();
-    const isChordShortcut = (event.metaKey || event.ctrlKey) && event.altKey && key === 'm';
-    const isFallbackShortcut =
+    
+    // Toggle help HUD shortcut A
+    if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'a') {
+      const target = event.target as HTMLElement | null;
+      if (
+        !target || (
+          !(target instanceof HTMLInputElement)
+          && !(target instanceof HTMLTextAreaElement)
+          && !(target instanceof HTMLSelectElement)
+          && !(target?.isContentEditable)
+        )
+      ) {
+        event.preventDefault();
+        const hud = document.getElementById('dashboard-shortcuts-hud');
+        if (hud) hud.hidden = !hud.hidden;
+        return;
+      }
+    }
+
+    const isHJKL = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && ['h', 'j', 'k', 'l'].includes(key);
+    const isC = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'c';
+    const isChordM = (event.metaKey || event.ctrlKey) && event.altKey && key === 'm';
+    const isFallbackM =
       !event.metaKey
       && !event.ctrlKey
       && !event.altKey
       && !event.shiftKey
       && key === 'm';
-    const isShortcut = isChordShortcut || isFallbackShortcut;
-    if (!isShortcut) return;
+    const isM = isChordM || isFallbackM;
 
     const target = event.target as HTMLElement | null;
     if (
@@ -1405,10 +1407,39 @@ const bindAnnotationShortcut = (
       return;
     }
 
-    if (!state.selectedContext) return;
+    if (isHJKL && state.selectedContext) {
+      event.preventDefault();
+      let color: DashboardAnnotationColor | '' = '';
+      if (key === 'h') color = 'yellow';
+      else if (key === 'j') color = 'green';
+      else if (key === 'k') color = 'red';
+      else if (key === 'l') color = '';
+      
+      const own = getOwnAnnotation(state, state.selectedContext);
+      void saveAnnotation(state, state.selectedContext, {
+        color,
+        comment: own?.comment || '',
+        visibility: own?.visibility || 'teachers'
+      });
+      return;
+    }
 
-    event.preventDefault();
-    modalRef.current?.open(state.selectedContext);
+    if (isC && state.selectedContext) {
+      event.preventDefault();
+      const table = state.registry.get(state.selectedContext.tab);
+      if (table) {
+        const column = table.getColumn(state.selectedContext.field);
+        if (column && typeof column.toggle === 'function') {
+           column.toggle();
+        }
+      }
+      return;
+    }
+
+    if (isM && state.selectedContext) {
+      event.preventDefault();
+      modalRef.current?.open(state.selectedContext);
+    }
   };
 
   document.addEventListener('keydown', handler);
@@ -2112,7 +2143,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     }
 
     touchLongPressCellKey = '';
-    touchLongTriggered = false;
+    touchLongPressTriggered = false;
   };
 
   const touchMoveCancelHandler = () => {

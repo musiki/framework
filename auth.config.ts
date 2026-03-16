@@ -2,13 +2,21 @@ import Google from "@auth/core/providers/google";
 import { defineConfig } from "auth-astro";
 
 const configuredUrl = process.env.AUTH_URL || import.meta.env.AUTH_URL;
-const SITE_URL = configuredUrl || "https://musiki.org.ar";
+// Check if we are in local development mode
+const isDev = process.env.NODE_ENV === "development" || import.meta.env.DEV;
+
+// 1. VPS/Prod with PM2 explicitly setting AUTH_URL: Uses configuredUrl
+// 2. Local dev (npm run dev): Uses undefined (falls back to localhost dynamically)
+// 3. VPS/Prod without AUTH_URL: Uses musiki.org.ar to fix Nginx/PM2 missing Host header issues.
+const redirectProxyUrl = configuredUrl 
+  ? `${configuredUrl}/api/auth` 
+  : (isDev ? undefined : "https://musiki.org.ar/api/auth");
+
+const SITE_URL = configuredUrl || (isDev ? "http://localhost:4321" : "https://musiki.org.ar");
 
 export default defineConfig({
   trustHost: true,
-  // Force the proxy URL ONLY if one is explicitly given (PM2 uses this)
-  // Otherwise, respect standard request host headers for generic `npm run dev`.
-  redirectProxyUrl: configuredUrl ? `${configuredUrl}/api/auth` : undefined,
+  redirectProxyUrl,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || import.meta.env.GOOGLE_CLIENT_ID,

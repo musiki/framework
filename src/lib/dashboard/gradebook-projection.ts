@@ -6,6 +6,20 @@ import {
   type DashboardGridProjection,
 } from './shared';
 
+const formatAbletonLabel = (label: string) => {
+  const words = String(label || '').trim().split(/[\s_\-]+/);
+  let out = '';
+  let num = '';
+  words.forEach((w) => {
+    if (/^\d+$/.test(w)) {
+      num = w;
+    } else if (w) {
+      out += w[0].toUpperCase();
+    }
+  });
+  return out + (num ? parseInt(num, 10).toString() : '');
+};
+
 interface GradebookProjectionInput {
   activeCourseId: string;
   activeYear: string;
@@ -62,26 +76,27 @@ export function buildGradebookProjection({
     const groupColumns = Object.entries(taskGroups).map(([groupName, assignments], groupIndex) => {
       const groupField = `__avg_lesson_${lessonIndex}_group_${groupIndex}`;
       return {
-        title: groupName,
+        title: groupName === 'General' ? '' : groupName,
         field: `__group_lesson_${lessonIndex}_task_${groupIndex}`,
         columns: [
           ...assignments.map((assignment: any) => ({
-            title: String(assignment?.label || assignment?.id || 'Eval'),
+            title: formatAbletonLabel(String(assignment?.label || assignment?.id || 'Eval')),
             field: fieldKeyFromId('eval', assignment?.id),
-            minWidth: 88,
+            minWidth: 44,
             hozAlign: 'center' as const,
             headerHozAlign: 'center' as const,
             kind: 'grade-score',
             cssClass: lessonIndex % 2 === 0 ? 'dashboard-grade-col-even' : 'dashboard-grade-col-odd',
           })),
           {
-            title: 'Sub-Prom.',
+            title: 'P',
             field: groupField,
-            width: 80,
+            width: 44,
+            minWidth: 44,
             hozAlign: 'center' as const,
             headerHozAlign: 'center' as const,
             kind: 'score',
-            cssClass: 'dashboard-grade-sub-avg',
+            cssClass: 'dashboard-grade-sub-avg dashboard-grade-prom',
           }
         ]
       };
@@ -93,13 +108,14 @@ export function buildGradebookProjection({
       columns: [
         ...groupColumns,
         {
-          title: 'Prom. Clase',
+          title: 'P',
           field: lessonField,
-          width: 90,
+          width: 44,
+          minWidth: 44,
           hozAlign: 'center' as const,
           headerHozAlign: 'center' as const,
           kind: 'score',
-          cssClass: 'dashboard-grade-lesson-avg',
+          cssClass: 'dashboard-grade-lesson-avg dashboard-grade-prom',
         }
       ],
     };

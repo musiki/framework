@@ -35,3 +35,42 @@ hr{ border:0; border-top:1px solid var(--c-border); }
 }
 .page-title{ margin: 1rem 0 0.5rem; }
 .subtle{ color: var(--c-subtle); font-size: .95rem; }
+
+.dashboard-grade-prom {
+  background-color: rgba(128, 128, 128, 0.2) !important;
+}
+
+.dashboard-shortcuts-hud {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: var(--musiki-box-bg, var(--c-bg));
+  border: 1px solid var(--musiki-border-color, var(--c-border));
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  font-size: 0.85rem;
+  z-index: 1000;
+  max-width: 320px;
+}
+.dashboard-shortcuts-hud h4 {
+  margin: 0 0 0.5rem 0;
+  color: var(--musiki-primary-color, var(--c-link));
+  font-size: 0.9rem;
+}
+.dashboard-shortcuts-hud p {
+  margin: 0.25rem 0;
+}
+.dashboard-shortcuts-hud strong {
+  color: var(--musiki-primary-color, var(--c-link));
+}
+.dashboard-shortcuts-hud hr {
+  margin: 0.75rem 0;
+}
+.dashboard-shortcuts-hud kbd {
+  background: var(--musiki-table-bg, var(--c-bg));
+  border: 1px solid var(--musiki-border-color, var(--c-border));
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: monospace;
+}
