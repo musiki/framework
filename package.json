@@ -72,7 +72,7 @@
     "remark-math": "^6.0.0"
   },
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "packageManager": "npm@10.9.3"
 }
