@@ -2,8 +2,7 @@
 
 set -euo pipefail
 
-: "${VPS_HOST:?Set VPS_HOST (ejemplo: VPS_HOST=musiki.org.ar)}"
-
+VPS_HOST="${VPS_HOST:-musiki.org.ar}"
 VPS_USER="${VPS_USER:-deploy}"
 VPS_PORT="${VPS_PORT:-22}"
 VPS_PATH="${VPS_PATH:-/opt/musiki/framework}"
@@ -14,7 +13,7 @@ VPS_RELOAD_COMMAND="${VPS_RELOAD_COMMAND:-pm2 reload ecosystem.config.cjs --only
 
 printf "\n[framework] Deploying %s@%s:%s (%s)\n" "$VPS_USER" "$VPS_HOST" "$VPS_PATH" "$VPS_BRANCH"
 
-remote_cmd="cd ${VPS_PATH@Q} && git checkout ${VPS_BRANCH@Q} && git pull --ff-only origin ${VPS_BRANCH@Q}"
+remote_cmd="cd \"${VPS_PATH}\" && git checkout \"${VPS_BRANCH}\" && git pull --ff-only origin \"${VPS_BRANCH}\""
 
 if [[ -n "${VPS_INSTALL_COMMAND}" ]]; then
   remote_cmd="${remote_cmd} && ${VPS_INSTALL_COMMAND}"
