@@ -891,11 +891,13 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
 
     if (key === '0') { e.preventDefault(); e.stopPropagation(); foldLevel = 0; applyFoldLevel(table, foldLevel); return; }
     if (key === '9') { e.preventDefault(); e.stopPropagation(); foldLevel = 3; applyFoldLevel(table, foldLevel); return; }
-    if (e.shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        const targetInner = e.target as HTMLElement | null;
+        if (targetInner && (targetInner.tagName === 'INPUT' || targetInner.tagName === 'TEXTAREA')) return;
         e.preventDefault();
         e.stopPropagation();
-        if (key === 'ArrowLeft') foldLevel = Math.min(3, foldLevel + 1);
-        if (key === 'ArrowRight') foldLevel = Math.max(0, foldLevel - 1);
+        if (key === 'ArrowLeft') foldLevel = 3; // Fold all
+        if (key === 'ArrowRight') foldLevel = 0; // Unfold all
         applyFoldLevel(table, foldLevel);
     }
   };
@@ -1387,16 +1389,16 @@ const bindAnnotationShortcut = (
       }
     }
 
-    const isHJKL = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && ['h', 'j', 'k', 'l'].includes(key);
+    const isVBNM = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && ['v', 'b', 'n', 'm'].includes(key);
     const isC = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'c';
     const isChordM = (event.metaKey || event.ctrlKey) && event.altKey && key === 'm';
-    const isFallbackM =
+    const isFallbackEnter =
       !event.metaKey
       && !event.ctrlKey
       && !event.altKey
       && !event.shiftKey
-      && key === 'm';
-    const isM = isChordM || isFallbackM;
+      && key === 'enter';
+    const isCommentShortcut = isChordM || isFallbackEnter;
 
     const target = event.target as HTMLElement | null;
     if (
@@ -1408,14 +1410,14 @@ const bindAnnotationShortcut = (
       return;
     }
 
-    if (isHJKL && state.selectedContext) {
+    if (isVBNM && state.selectedContext) {
       event.preventDefault();
       event.stopPropagation();
       let color: DashboardAnnotationColor | '' = '';
-      if (key === 'h') color = 'yellow';
-      else if (key === 'j') color = 'green';
-      else if (key === 'k') color = 'red';
-      else if (key === 'l') color = '';
+      if (key === 'v') color = 'green';
+      else if (key === 'b') color = 'yellow';
+      else if (key === 'n') color = 'red';
+      else if (key === 'm') color = '';
       
       const own = getOwnAnnotation(state, state.selectedContext);
       void saveAnnotation(state, state.selectedContext, {
@@ -1439,7 +1441,7 @@ const bindAnnotationShortcut = (
       return;
     }
 
-    if (isM && state.selectedContext) {
+    if (isCommentShortcut && state.selectedContext) {
       event.preventDefault();
       event.stopPropagation();
       modalRef.current?.open(state.selectedContext);

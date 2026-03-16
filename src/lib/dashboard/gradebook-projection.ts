@@ -91,13 +91,13 @@ export function buildGradebookProjection({
             cssClass: lessonIndex % 2 === 0 ? 'dashboard-grade-col-even' : 'dashboard-grade-col-odd',
           })),
           {
-            title: 'P',
+            title: 'Pg',
             field: groupField,
             width: 44,
             minWidth: 44,
             hozAlign: 'center' as const,
             headerHozAlign: 'center' as const,
-            headerTooltip: 'Sub-Promedio',
+            headerTooltip: 'Promedio Grupo (Pg)',
             kind: 'score',
             cssClass: 'dashboard-grade-sub-avg dashboard-grade-prom',
           }
@@ -112,13 +112,13 @@ export function buildGradebookProjection({
       columns: [
         ...groupColumns,
         {
-          title: 'P',
+          title: 'Pc',
           field: lessonField,
           width: 44,
           minWidth: 44,
           hozAlign: 'center' as const,
           headerHozAlign: 'center' as const,
-          headerTooltip: 'Prom. Clase',
+          headerTooltip: 'Promedio Clase (Pc)',
           kind: 'score',
           cssClass: 'dashboard-grade-lesson-avg dashboard-grade-prom',
         }

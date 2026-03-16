@@ -4665,6 +4665,26 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       )}
         </section>
       </div>
+
+      <div id="dashboard-shortcuts-hud" class="dashboard-shortcuts-hud" hidden>
+        <h4>Atajos de Teclado</h4>
+        <hr>
+        <p style="color: var(--musiki-primary-color, var(--c-link)); font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">Visibilidad</p>
+        <p><kbd>A</kbd> Mostrar / ocultar panel de ayuda</p>
+        <p><kbd>←</kbd> Colapsar <kbd>→</kbd> Expandir columnas un nivel</p>
+        <p><kbd>0</kbd> Expandir todo &nbsp;&nbsp; <kbd>9</kbd> Colapsar todo</p>
+        <p><kbd>C</kbd> Ocultar columna interactiva</p>
+        <hr>
+        <p style="color: var(--musiki-primary-color, var(--c-link)); font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">Anotaciones</p>
+        <p><kbd>V</kbd> Verde &nbsp;&nbsp; <kbd>B</kbd> Amarillo</p>
+        <p><kbd>N</kbd> Rojo  &nbsp;&nbsp; <kbd>M</kbd> Limpiar color</p>
+        <p><kbd>Enter</kbd> Comentarios en celdas</p>
+        <hr>
+        <p style="color: var(--musiki-primary-color, var(--c-link)); font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">Asistencia</p>
+        <p style="font-size: 0.78rem;">
+          Input veloz de celdas: <strong>/</strong> o <strong>1</strong> → ✔ | <strong>~</strong> o <strong>0.5</strong> → ~ | <strong>x</strong> o <strong>0</strong> → ✖
+        </p>
+      </div>
     </main>
     <script type="application/json" id="dashboard-log-data" set:html={dashboardLogDataJson}></script>
     <script type="application/json" id="dashboard-teacher-tabulator-meta" set:html={teacherTabulatorMetaJson}></script>
