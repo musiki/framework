@@ -889,18 +889,19 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
 
     const key = e.key;
 
-    if (key === '0') { e.preventDefault(); foldLevel = 0; applyFoldLevel(table, foldLevel); return; }
-    if (key === '9') { e.preventDefault(); foldLevel = 3; applyFoldLevel(table, foldLevel); return; }
+    if (key === '0') { e.preventDefault(); e.stopPropagation(); foldLevel = 0; applyFoldLevel(table, foldLevel); return; }
+    if (key === '9') { e.preventDefault(); e.stopPropagation(); foldLevel = 3; applyFoldLevel(table, foldLevel); return; }
     if (e.shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
         e.preventDefault();
+        e.stopPropagation();
         if (key === 'ArrowLeft') foldLevel = Math.min(3, foldLevel + 1);
         if (key === 'ArrowRight') foldLevel = Math.max(0, foldLevel - 1);
         applyFoldLevel(table, foldLevel);
     }
   };
 
-  window.addEventListener('keydown', handler);
-  return () => window.removeEventListener('keydown', handler);
+  window.addEventListener('keydown', handler, { capture: true });
+  return () => window.removeEventListener('keydown', handler, { capture: true });
 };
 
 const trackTableBuilt = (table: Tabulator, readyTables: WeakSet<Tabulator>) => {
@@ -1409,6 +1410,7 @@ const bindAnnotationShortcut = (
 
     if (isHJKL && state.selectedContext) {
       event.preventDefault();
+      event.stopPropagation();
       let color: DashboardAnnotationColor | '' = '';
       if (key === 'h') color = 'yellow';
       else if (key === 'j') color = 'green';
@@ -1426,6 +1428,7 @@ const bindAnnotationShortcut = (
 
     if (isC && state.selectedContext) {
       event.preventDefault();
+      event.stopPropagation();
       const table = state.registry.get(state.selectedContext.tab);
       if (table) {
         const column = table.getColumn(state.selectedContext.field);
@@ -1438,13 +1441,14 @@ const bindAnnotationShortcut = (
 
     if (isM && state.selectedContext) {
       event.preventDefault();
+      event.stopPropagation();
       modalRef.current?.open(state.selectedContext);
     }
   };
 
-  document.addEventListener('keydown', handler);
+  document.addEventListener('keydown', handler, { capture: true });
   return () => {
-    document.removeEventListener('keydown', handler);
+    document.removeEventListener('keydown', handler, { capture: true });
   };
 };
 

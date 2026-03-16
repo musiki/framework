@@ -29,9 +29,27 @@ export default defineConfig({
       return session;
     },
     async redirect({ url, baseUrl }) {
-      const effectiveBase = configuredUrl ? configuredUrl.replace(/\/$/, "") : baseUrl;
-      if (url.startsWith("/")) return `${effectiveBase}${url}`;
-      return url.startsWith(effectiveBase) ? url : `${effectiveBase}/dashboard`;
+      // In Production with Nginx, baseUrl often incorrectly points to localhost (missing port & protocol).
+      // If we have an AUTH_URL, always use it.
+      const isDev = process.env.NODE_ENV === "development" || typeof import.meta.env !== "undefined" && import.meta.env.DEV;
+      const effectiveBase = process.env.AUTH_URL 
+        ? process.env.AUTH_URL.replace(/\/$/, "") 
+        : (isDev ? baseUrl : "https://musiki.org.ar");
+      
+      try {
+        const parsed = new URL(url, effectiveBase);
+        // Force replace localhost without port to our true origin in prod
+        if (parsed.hostname === 'localhost' && !isDev) {
+           return `${effectiveBase}${parsed.pathname}${parsed.search}${parsed.hash}`;
+        }
+        if (parsed.origin === effectiveBase || parsed.origin === baseUrl) {
+          return `${effectiveBase}${parsed.pathname}${parsed.search}${parsed.hash}`;
+        }
+        return url;
+      } catch {
+        if (url.startsWith("/")) return `${effectiveBase}${url}`;
+        return `${effectiveBase}/dashboard`;
+      }
     },
   },
 });

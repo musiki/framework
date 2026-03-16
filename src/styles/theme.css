@@ -40,6 +40,11 @@ hr{ border:0; border-top:1px solid var(--c-border); }
   background-color: rgba(128, 128, 128, 0.2) !important;
 }
 
+.tabulator .tabulator-header .tabulator-col-title {
+  text-overflow: clip !important;
+  padding-right: 0 !important;
+}
+
 .dashboard-shortcuts-hud {
   position: fixed;
   bottom: 1.5rem;

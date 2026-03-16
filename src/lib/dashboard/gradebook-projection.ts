@@ -78,10 +78,12 @@ export function buildGradebookProjection({
       return {
         title: groupName === 'General' ? '' : groupName,
         field: `__group_lesson_${lessonIndex}_task_${groupIndex}`,
+        headerTooltip: groupName === 'General' ? undefined : groupName,
         columns: [
           ...assignments.map((assignment: any) => ({
             title: formatAbletonLabel(String(assignment?.label || assignment?.id || 'Eval')),
             field: fieldKeyFromId('eval', assignment?.id),
+            headerTooltip: String(assignment?.label || assignment?.id || 'Eval'),
             minWidth: 44,
             hozAlign: 'center' as const,
             headerHozAlign: 'center' as const,
@@ -95,6 +97,7 @@ export function buildGradebookProjection({
             minWidth: 44,
             hozAlign: 'center' as const,
             headerHozAlign: 'center' as const,
+            headerTooltip: 'Sub-Promedio',
             kind: 'score',
             cssClass: 'dashboard-grade-sub-avg dashboard-grade-prom',
           }
@@ -105,6 +108,7 @@ export function buildGradebookProjection({
     return {
       title: String(lesson?.lessonLabel || 'Clase'),
       field: `__group_lesson_${lessonIndex}`,
+      headerTooltip: String(lesson?.lessonLabel || 'Clase'),
       columns: [
         ...groupColumns,
         {
@@ -114,6 +118,7 @@ export function buildGradebookProjection({
           minWidth: 44,
           hozAlign: 'center' as const,
           headerHozAlign: 'center' as const,
+          headerTooltip: 'Prom. Clase',
           kind: 'score',
           cssClass: 'dashboard-grade-lesson-avg dashboard-grade-prom',
         }
