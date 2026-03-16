@@ -81,7 +81,8 @@ export function buildGradebookProjection({
         headerTooltip: groupName === 'General' ? undefined : groupName,
         columns: [
           ...assignments.map((assignment: any) => ({
-            title: formatAbletonLabel(String(assignment?.label || assignment?.id || 'Eval')),
+            title: String(assignment?.label || assignment?.id || 'Eval'),
+            titleFormatter: (): string => formatAbletonLabel(String(assignment?.label || assignment?.id || 'Eval')),
             field: fieldKeyFromId('eval', assignment?.id),
             headerTooltip: String(assignment?.label || assignment?.id || 'Eval'),
             minWidth: 44,
@@ -91,7 +92,8 @@ export function buildGradebookProjection({
             cssClass: lessonIndex % 2 === 0 ? 'dashboard-grade-col-even' : 'dashboard-grade-col-odd',
           })),
           {
-            title: 'Pg',
+            title: 'Promedio Grupo (Pg)',
+            titleFormatter: (): string => 'Pg',
             field: groupField,
             width: 44,
             minWidth: 44,
@@ -112,7 +114,8 @@ export function buildGradebookProjection({
       columns: [
         ...groupColumns,
         {
-          title: 'Pc',
+          title: 'Promedio Clase (Pc)',
+          titleFormatter: (): string => 'Pc',
           field: lessonField,
           width: 44,
           minWidth: 44,
