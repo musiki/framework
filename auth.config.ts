@@ -1,10 +1,14 @@
 import Google from "@auth/core/providers/google";
 import { defineConfig } from "auth-astro";
 
-const SITE_URL = process.env.AUTH_URL || import.meta.env.AUTH_URL || "https://musiki.org.ar";
+const configuredUrl = process.env.AUTH_URL || import.meta.env.AUTH_URL;
+const SITE_URL = configuredUrl || "https://musiki.org.ar";
 
 export default defineConfig({
   trustHost: true,
+  // Force the proxy URL ONLY if one is explicitly given (PM2 uses this)
+  // Otherwise, respect standard request host headers for generic `npm run dev`.
+  redirectProxyUrl: configuredUrl ? `${configuredUrl}/api/auth` : undefined,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || import.meta.env.GOOGLE_CLIENT_ID,
