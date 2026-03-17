@@ -95,6 +95,22 @@ const DASHBOARD_PROJECTION_SCRIPT_IDS = [
 const normalizeText = (value: any) => String(value || '').trim();
 const normalizeTextLower = (value: any) => normalizeText(value).toLowerCase();
 
+// Abbreviated label for narrow gradebook eval column headers.
+// "demo-ollama-patch-01" → "DOP1"  (first initial of each word, max 3, + last number)
+const formatAbletonLabel = (label: string) => {
+  const words = String(label || '').trim().split(/[\s_\-]+/);
+  let initials = '';
+  let num = '';
+  words.forEach((w) => {
+    if (/^\d+$/.test(w)) {
+      num = w;
+    } else if (w && initials.length < 3) {
+      initials += w[0].toUpperCase();
+    }
+  });
+  return initials + (num ? parseInt(num, 10).toString() : '');
+};
+
 const debounce = <T extends (...args: any[]) => any>(fn: T, ms: number) => {
   let timeoutId: number | null = null;
   return (...args: Parameters<T>) => {
@@ -132,7 +148,7 @@ const getStoredSearchQuery = (persistKey: string) => {
   }
 };
 
-const escapeHtml = (value: string) => {
+const escapeHtml = (value: string | null | undefined) => {
   const map: Record<string, string> = {
     '&': '&amp;',
     '<': '&lt;',
@@ -140,7 +156,7 @@ const escapeHtml = (value: string) => {
     '"': '&quot;',
     "'": '&#039;',
   };
-  return value.replace(/[&<>"']/g, (m) => map[m]);
+  return String(value ?? '').replace(/[&<>"']/g, (m) => map[m]);
 };
 
 const formatSubmissionDate = (dateValue: string | Date | null | undefined) => {
@@ -217,10 +233,13 @@ const buildScopeContextFromCell = (cell: any, gridKind: GridKind): CellScopeCont
     tabLabel = 'Admin';
   }
 
-  let scopeType: DashboardAnnotationScopeType = 'cell';
+  let scopeType: DashboardAnnotationScopeType = 'overview_cell';
+  if (gridKind === 'gradebook') scopeType = 'gradebook_cell';
+  else if (gridKind === 'attendance-summary') scopeType = 'attendance_cell';
+  else if (gridKind === 'admin') scopeType = 'admin_cell';
+
   let scopeRef = field;
   if (field === 'firstName' || field === 'lastName' || field === 'name' || field === 'email') {
-    scopeType = 'user';
     scopeRef = subjectUserId;
   }
 
@@ -243,7 +262,7 @@ const buildScopeContextFromCell = (cell: any, gridKind: GridKind): CellScopeCont
 };
 
 const getDisplayAnnotation = (state: AnnotationState, context: CellScopeContext) => {
-  const key = buildDashboardAnnotationScopeKey(context);
+  const key = buildDashboardAnnotationScopeKey(context.scopeType, context.scopeRef);
   const list = state.annotationsByScope.get(key) || [];
   if (list.length === 0) return null;
   const own = list.find((a) => a.authorUserId === state.currentUserId);
@@ -253,7 +272,7 @@ const getDisplayAnnotation = (state: AnnotationState, context: CellScopeContext)
 };
 
 const getOwnAnnotation = (state: AnnotationState, context: CellScopeContext) => {
-  const key = buildDashboardAnnotationScopeKey(context);
+  const key = buildDashboardAnnotationScopeKey(context.scopeType, context.scopeRef);
   const list = state.annotationsByScope.get(key) || [];
   return list.find((a) => a.authorUserId === state.currentUserId) || null;
 };
@@ -268,12 +287,7 @@ const setAnnotations = (state: AnnotationState, annotations: DashboardAnnotation
   state.annotations = annotations || [];
   state.annotationsByScope.clear();
   state.annotations.forEach((record) => {
-    const key = buildDashboardAnnotationScopeKey({
-      tab: record.tab,
-      scopeType: record.scopeType,
-      scopeRef: record.scopeRef,
-      subjectUserId: record.subjectUserId,
-    });
+    const key = buildDashboardAnnotationScopeKey(record.scopeType, record.scopeRef);
     if (!state.annotationsByScope.has(key)) {
       state.annotationsByScope.set(key, []);
     }
@@ -318,12 +332,14 @@ const buildCellMarkup = (
 
   const annotation = getDisplayAnnotation(state, context);
   const color = normalizeDashboardAnnotationColor(annotation?.color);
-  const style = color ? `background-color: ${color}` : '';
+  const shellClass = color
+    ? `dashboard-annotation-shell dashboard-annotation-shell--${color}`
+    : 'dashboard-annotation-shell';
   const content = baseFormatter(cell);
   const hasComment = normalizeText(annotation?.comment).length > 0;
-  const commentIndicator = hasComment ? '<div class="dashboard-cell-comment-indicator"></div>' : '';
+  const commentDot = hasComment ? '<div class="dashboard-annotation-dot"></div>' : '';
 
-  return `<div class="dashboard-cell-inner" style="${style}">${content}${commentIndicator}</div>`;
+  return `<div class="${shellClass}"><div class="dashboard-annotation-shell__content">${content}</div>${commentDot}</div>`;
 };
 
 const buildCommentsRowsFromAnnotations = (annotations: DashboardAnnotationRecord[]) => {
@@ -409,12 +425,12 @@ const renderAttendanceMarkup = (cell: any) => {
   const isFuture = Boolean(meta.isFuture);
   const hasManual = Boolean(meta.hasManualOverride);
 
-  let cssClass = 'dashboard-attendance-pill';
-  if (isFuture) cssClass += ' dashboard-attendance-pill--future';
-  if (hasManual) cssClass += ' dashboard-attendance-pill--manual';
-  if (units >= 1) cssClass += ' dashboard-attendance-pill--present';
-  else if (units >= 0.5) cssClass += ' dashboard-attendance-pill--partial';
-  else if (!isFuture) cssClass += ' dashboard-attendance-pill--absent';
+  let cssClass = 'dashboard-attendance-chip';
+  if (isFuture) cssClass += ' dashboard-attendance-chip--future';
+  if (hasManual) cssClass += ' dashboard-attendance-chip--manual';
+  if (units >= 1) cssClass += ' dashboard-attendance-chip--present';
+  else if (units >= 0.5) cssClass += ' dashboard-attendance-chip--partial';
+  else if (!isFuture) cssClass += ' dashboard-attendance-chip--empty';
 
   return `<span class="${cssClass}">${symbol}</span>`;
 };
@@ -436,7 +452,7 @@ const renderCourseRoleSelectMarkup = (cell: any) => {
   const enrollmentId = cell.getData()?.enrollmentId;
   return `
     <div class="dashboard-inline-select-wrap">
-      <select class="dashboard-inline-select" data-dashboard-course-role-select data-row-id="${escapeHtml(rowId)}" data-enrollment-id="${escapeHtml(enrollmentId)}">
+      <select class="dashboard-inline-select" data-dashboard-course-role-select data-row-id="${escapeHtml(rowId)}" data-enrollment-id="${escapeHtml(enrollmentId)}" data-role="${value === 'teacher' ? 'teacher' : 'student'}">
         <option value="student" ${value === 'student' ? 'selected' : ''}>Student</option>
         <option value="teacher" ${value === 'teacher' ? 'selected' : ''}>Teacher</option>
       </select>
@@ -470,11 +486,39 @@ const renderGrupoInputMarkup = (cell: any) => {
   `;
 };
 
+const normalizeConceptoInput = (value: any) => {
+  const raw = String(value ?? '').replace(',', '.').trim();
+  if (raw === '' || raw === '—') return '';
+  const n = parseFloat(raw);
+  if (!isFinite(n)) return '';
+  return String(Math.min(10, Math.max(0, Number(n.toFixed(2)))));
+};
+
+const renderConceptoInputMarkup = (cell: any) => {
+  const raw = cell.getValue();
+  const value = raw === '—' || raw === null || raw === undefined ? '' : normalizeConceptoInput(raw);
+  const rowId = cell.getData()?.id;
+  const studentId = cell.getData()?.studentId;
+  return `
+    <div class="dashboard-inline-input-wrap">
+      <input type="text" inputmode="decimal" class="dashboard-inline-input dashboard-inline-input--concepto" data-dashboard-concepto-input value="${escapeHtml(value)}" data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" placeholder="—" />
+    </div>
+  `;
+};
+
 const renderAdminActionsMarkup = (cell: any) => {
   const data = cell.getData() || {};
+  const uid  = escapeHtml(data.id);
+  const name = escapeHtml(data.name);
+  const email = escapeHtml(data.email);
+  const role  = escapeHtml(data.globalRole);
+  const crole = escapeHtml(data.courseRole);
   return `
     <div class="dashboard-admin-actions">
-      <button type="button" class="dashboard-grid-icon-btn" data-dashboard-user-delete data-user-id="${escapeHtml(data.id)}" data-user-name="${escapeHtml(data.name)}" data-user-email="${escapeHtml(data.email)}" data-user-global-role="${escapeHtml(data.role)}" data-user-course-role="${escapeHtml(data.courseRole)}" title="Borrar usuario">
+      <button type="button" class="dashboard-grid-icon-btn" data-dashboard-user-edit data-user-id="${uid}" data-user-name="${name}" data-user-email="${email}" data-user-global-role="${role}" title="Editar usuario">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+      </button>
+      <button type="button" class="dashboard-grid-icon-btn dashboard-grid-icon-btn--danger" data-dashboard-user-delete data-user-id="${uid}" data-user-name="${name}" data-user-email="${email}" data-user-global-role="${role}" data-user-course-role="${crole}" title="Borrar usuario">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
       </button>
     </div>
@@ -495,19 +539,28 @@ const buildCellContextMenu = (
 
     return [
       {
-        label: ownAnnotation ? 'Editar comentario' : 'Añadir comentario',
-        action: () => modalRef.current?.open(context),
+        label: 'Verde (V)',
+        action: async () => saveAnnotation(annotationState, context, { color: 'green', comment: ownAnnotation?.comment || '', visibility: ownAnnotation?.visibility || 'teachers' }),
       },
       {
-        label: 'Quitar highlight',
+        label: 'Amarillo (B)',
+        action: async () => saveAnnotation(annotationState, context, { color: 'yellow', comment: ownAnnotation?.comment || '', visibility: ownAnnotation?.visibility || 'teachers' }),
+      },
+      {
+        label: 'Rojo (N)',
+        action: async () => saveAnnotation(annotationState, context, { color: 'red', comment: ownAnnotation?.comment || '', visibility: ownAnnotation?.visibility || 'teachers' }),
+      },
+      {
+        label: 'Sin resaltado (M)',
         disabled: !normalizeDashboardAnnotationColor(ownAnnotation?.color),
-        action: async () => {
-          await saveAnnotation(annotationState, context, {
-            color: '',
-            comment: ownAnnotation?.comment || '',
-            visibility: ownAnnotation?.visibility || 'teachers',
-          });
-        },
+        action: async () => saveAnnotation(annotationState, context, { color: '', comment: ownAnnotation?.comment || '', visibility: ownAnnotation?.visibility || 'teachers' }),
+      },
+      {
+        separator: true,
+      },
+      {
+        label: ownAnnotation ? 'Editar comentario' : 'Añadir comentario',
+        action: () => modalRef.current?.open(context),
       },
       {
         label: 'Borrar anotación',
@@ -601,6 +654,8 @@ const configureColumns = (
   annotationState: AnnotationState,
   modalRef: { current: AnnotationModalApi | null },
 ): any[] => {
+  const isMobileNarrow = typeof window !== 'undefined' && window.innerWidth < 500;
+
   const headerMenu = [
     {
       label: "Plegar/Desplegar Grupo",
@@ -611,16 +666,25 @@ const configureColumns = (
   ];
 
   return (columns || []).map((column) => {
-    // Tooltips for everyone
+    // Tooltips for everyone; preserve explicit headerTooltip strings from the projection
     const baseColumn = {
       ...column,
       tooltip: true,
-      headerTooltip: true,
+      headerTooltip: column.headerTooltip != null ? column.headerTooltip : true,
     };
 
     if (Array.isArray(baseColumn?.columns) && baseColumn.columns.length > 0) {
+      const isAttendanceMonth = String(baseColumn.cssClass || '').includes('dashboard-attendance-month-group');
+      if (isAttendanceMonth) {
+        return {
+          ...baseColumn,
+          ...(isMobileNarrow ? { frozen: false } : {}),
+          columns: configureColumns(baseColumn.columns, context, annotationState, modalRef),
+        };
+      }
       return {
         ...baseColumn,
+        ...(isMobileNarrow ? { frozen: false } : {}),
         headerContextMenu: headerMenu,
         headerClick: function(e: any, col: any) {
           const def = col.getDefinition();
@@ -654,13 +718,23 @@ const configureColumns = (
     } = baseColumn || {};
     const nextColumn: Record<string, any> = {
       ...restColumn,
+      ...(isMobileNarrow ? { frozen: false } : {}),
     };
 
     if (context.kind === 'gradebook') {
-      if (kind === 'grade-score' || kind === 'score') {
+      if (kind === 'grade-score') {
+        // Eval columns: enforce narrow width, abbreviate the header label.
         nextColumn.width = 44;
         nextColumn.minWidth = 40;
         nextColumn.maxWidth = 50;
+        nextColumn.titleFormatter = (col: any) => {
+          const abbr = escapeHtml(formatAbletonLabel(col.getValue()));
+          return `<div class="gradebook-eval-col-title">${abbr}</div>`;
+        };
+      } else if (kind === 'score') {
+        // Pg / Pc / Prom. — keep their own widths from the projection; only style the label.
+        nextColumn.titleFormatter = (col: any) =>
+          `<div class="gradebook-eval-col-title">${escapeHtml(col.getValue())}</div>`;
       }
     }
 
@@ -713,6 +787,8 @@ const configureColumns = (
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
       nextColumn.headerSort = false;
+    } else if (kind === 'concepto') {
+      baseFormatter = renderConceptoInputMarkup;
     } else if (kind === 'grupo') {
       baseFormatter = renderGrupoInputMarkup;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
@@ -877,6 +953,7 @@ const applyFoldLevel = (table: Tabulator, level: number) => {
        }
     }
   });
+  table.redraw(true);
 };
 
 const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
@@ -902,8 +979,8 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
     }
   };
 
-  window.addEventListener('keydown', handler, { capture: true });
-  return () => window.removeEventListener('keydown', handler, { capture: true });
+  window.addEventListener('keydown', handler);
+  return () => window.removeEventListener('keydown', handler);
 };
 
 const trackTableBuilt = (table: Tabulator, readyTables: WeakSet<Tabulator>) => {
@@ -1412,7 +1489,7 @@ const bindAnnotationShortcut = (
 
     if (isVBNM && state.selectedContext) {
       event.preventDefault();
-      event.stopPropagation();
+      // event.stopPropagation(); removing to prevent Astro toolbar crash
       let color: DashboardAnnotationColor | '' = '';
       if (key === 'v') color = 'green';
       else if (key === 'b') color = 'yellow';
@@ -1443,14 +1520,13 @@ const bindAnnotationShortcut = (
 
     if (isCommentShortcut && state.selectedContext) {
       event.preventDefault();
-      event.stopPropagation();
       modalRef.current?.open(state.selectedContext);
     }
   };
 
-  document.addEventListener('keydown', handler, { capture: true });
+  document.addEventListener('keydown', handler);
   return () => {
-    document.removeEventListener('keydown', handler, { capture: true });
+    document.removeEventListener('keydown', handler);
   };
 };
 
@@ -1668,6 +1744,82 @@ const bindGrupoInputs = (host: HTMLElement, table: Tabulator, meta: DashboardMet
   };
 };
 
+const bindConceptoInputs = (host: HTMLElement, table: Tabulator, meta: DashboardMeta) => {
+  const syncInputValue = (input: HTMLInputElement) => {
+    const normalized = normalizeConceptoInput(input.value);
+    if (input.value !== normalized) input.value = normalized;
+    return normalized;
+  };
+
+  const updateConcepto = async (input: HTMLInputElement) => {
+    const rowId = normalizeText(input.dataset.rowId || '');
+    const studentId = normalizeText(input.dataset.studentId || '');
+    const concepto = syncInputValue(input);
+    const previous = normalizeConceptoInput(input.dataset.previousConcepto || '');
+    if (!rowId || !studentId || !meta?.courseId || !meta?.year) { input.value = previous; return; }
+    if (concepto === previous) return;
+
+    const setVisualState = (state: string, disabled: boolean) => {
+      input.dataset.state = state;
+      input.disabled = disabled;
+    };
+
+    setVisualState('saving', true);
+    try {
+      const response = await fetch('/api/grade/course-student-meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: meta.courseId, year: meta.year, studentId, concepto }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || 'No se pudo guardar el concepto');
+
+      const resolved = normalizeConceptoInput(payload?.meta?.concepto ?? concepto);
+      const row = table.getRow(rowId);
+      if (row) await row.update({ conceptValue: resolved || '—' });
+      input.value = resolved;
+      input.dataset.previousConcepto = resolved;
+    } catch (error: any) {
+      console.error('Error updating concepto:', error);
+      input.value = previous;
+      alert(error?.message || 'No se pudo guardar el concepto');
+      setVisualState('error', false);
+      return;
+    }
+    setVisualState('idle', false);
+  };
+
+  const focusHandler = (event: FocusEvent) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches('[data-dashboard-concepto-input]')) return;
+    input.dataset.previousConcepto = normalizeConceptoInput(input.value);
+    input.select();
+  };
+
+  const changeHandler = (event: Event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches('[data-dashboard-concepto-input]')) return;
+    void updateConcepto(input);
+  };
+
+  const keydownHandler = (event: KeyboardEvent) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches('[data-dashboard-concepto-input]')) return;
+    if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
+    if (event.key === 'Escape') { input.value = input.dataset.previousConcepto || ''; input.blur(); }
+  };
+
+  host.addEventListener('focusin', focusHandler);
+  host.addEventListener('change', changeHandler);
+  host.addEventListener('keydown', keydownHandler);
+
+  return () => {
+    host.removeEventListener('focusin', focusHandler);
+    host.removeEventListener('change', changeHandler);
+    host.removeEventListener('keydown', keydownHandler);
+  };
+};
+
 const supportsRangeSelection = (kind: GridKind) =>
   ['overview', 'gradebook', 'attendance-summary'].includes(kind);
 
@@ -1699,7 +1851,7 @@ const resolveCellComponentFromTarget = (table: Tabulator, target: EventTarget | 
 
   const columnDefinition = cell.getColumn?.()?.getDefinition?.() || {};
   const cellKind = normalizeText(columnDefinition?.kind || '');
-  if (['turno', 'grupo', 'course-role', 'admin-actions'].includes(cellKind)) {
+  if (['turno', 'grupo', 'concepto', 'course-role', 'admin-actions'].includes(cellKind)) {
     return null;
   }
 
@@ -2098,6 +2250,10 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
       try {
         await persistAttendanceSelection(cell, getNextToggleValue(cell));
       } catch (error: any) {
+        // Tabulator sometimes throws a NotFoundError when the cell's DOM node was
+        // moved/destroyed between the click and the async re-render (e.g. during
+        // a blur/scroll). The data was already saved — suppress the DOM error.
+        if (error instanceof Error && error.name === 'NotFoundError') return;
         console.error('Error toggling attendance cell:', error);
         alert(error?.message || 'No se pudo actualizar la asistencia');
       }
@@ -2212,6 +2368,7 @@ const bindAdminRoleSelects = (host: HTMLElement, table: Tabulator) => {
           courseRoleLabel: resolvedRole === 'teacher' ? 'Teacher' : 'Student',
         });
       }
+      select.dataset.role = resolvedRole;
     } catch (error: any) {
       console.error('Error updating course role:', error);
       select.value = previousRole || 'student';
@@ -2251,6 +2408,15 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (!target) return;
 
+    // ── Edit button → navigate to /admin/user/[id] ───────────────────────────
+    const editButton = target.closest<HTMLButtonElement>('[data-dashboard-user-edit]');
+    if (editButton) {
+      const userId = normalizeText(editButton.dataset.userId || '');
+      if (userId) window.location.href = `/admin/user/${encodeURIComponent(userId)}`;
+      return;
+    }
+
+    // ── Delete button ─────────────────────────────────────────────────────────
     const deleteButton = target.closest<HTMLButtonElement>('[data-dashboard-user-delete]');
     if (!deleteButton) return;
 
@@ -2497,6 +2663,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     bindTableSelection(table, 'overview', annotationState);
     destroyers.push(bindTurnoSelects(overviewNode, table, meta));
     destroyers.push(bindGrupoInputs(overviewNode, table, meta));
+    destroyers.push(bindConceptoInputs(overviewNode, table, meta));
     destroyers.push(bindTableRangeSelection(table, 'overview', root));
     registry.set('overview', table);
     tables.push(table);
@@ -2512,6 +2679,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     bindTableSelection(table, 'gradebook', annotationState);
     destroyers.push(bindTurnoSelects(gradebookNode, table, meta));
     destroyers.push(bindGrupoInputs(gradebookNode, table, meta));
+    destroyers.push(bindConceptoInputs(gradebookNode, table, meta));
     destroyers.push(bindTableRangeSelection(table, 'gradebook', root));
     registry.set('gradebook', table);
     tables.push(table);

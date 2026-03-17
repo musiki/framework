@@ -6,19 +6,6 @@ import {
   type DashboardGridProjection,
 } from './shared';
 
-const formatAbletonLabel = (label: string) => {
-  const words = String(label || '').trim().split(/[\s_\-]+/);
-  let out = '';
-  let num = '';
-  words.forEach((w) => {
-    if (/^\d+$/.test(w)) {
-      num = w;
-    } else if (w) {
-      out += w[0].toUpperCase();
-    }
-  });
-  return out + (num ? parseInt(num, 10).toString() : '');
-};
 
 interface GradebookProjectionInput {
   activeCourseId: string;
@@ -56,7 +43,7 @@ export function buildGradebookProjection({
       { title: 'Nombre', field: 'firstName', width: 120, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
       { title: 'Email', field: 'email', width: 180, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
       { title: 'Prom.', field: 'average', width: 65, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'score' },
-      { title: 'Concepto', field: 'conceptValue', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const },
+      { title: 'Concepto', field: 'conceptValue', width: 70, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'concepto' },
       { title: 'Turno', field: 'turno', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const },
       { title: 'Grupo', field: 'grupo', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const },
       { title: 'Asist.', field: 'attendanceCount', width: 65, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'metric' },
@@ -82,9 +69,7 @@ export function buildGradebookProjection({
         columns: [
           ...assignments.map((assignment: any) => ({
             title: String(assignment?.label || assignment?.id || 'Eval'),
-            titleFormatter: (): string => formatAbletonLabel(String(assignment?.label || assignment?.id || 'Eval')),
             field: fieldKeyFromId('eval', assignment?.id),
-            headerTooltip: String(assignment?.label || assignment?.id || 'Eval'),
             minWidth: 44,
             hozAlign: 'center' as const,
             headerHozAlign: 'center' as const,
@@ -92,8 +77,7 @@ export function buildGradebookProjection({
             cssClass: lessonIndex % 2 === 0 ? 'dashboard-grade-col-even' : 'dashboard-grade-col-odd',
           })),
           {
-            title: 'Promedio Grupo (Pg)',
-            titleFormatter: (): string => 'Pg',
+            title: 'Pg',
             field: groupField,
             width: 44,
             minWidth: 44,
@@ -114,8 +98,7 @@ export function buildGradebookProjection({
       columns: [
         ...groupColumns,
         {
-          title: 'Promedio Clase (Pc)',
-          titleFormatter: (): string => 'Pc',
+          title: 'Pc',
           field: lessonField,
           width: 44,
           minWidth: 44,

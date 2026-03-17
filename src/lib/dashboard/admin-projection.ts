@@ -124,7 +124,7 @@ export function buildAdminProjection({
       { title: 'Rol curso', field: 'courseRole', width: 118, hozAlign: 'center', headerHozAlign: 'center', kind: 'course-role' },
       { title: 'Inscripción', field: 'enrollmentSummary', minWidth: 220, kind: 'enrollment-courses' },
       { title: 'Última actividad', field: 'lastActivityLabel', minWidth: 150 },
-      { title: 'Acciones', field: '__adminActions', width: 98, hozAlign: 'center', headerHozAlign: 'center', headerSort: false, kind: 'admin-actions' },
+      { title: 'Acciones', field: '__adminActions', width: 72, hozAlign: 'center', headerHozAlign: 'center', headerSort: false, kind: 'admin-actions' },
     ],
     rows,
     emptyMessage: 'No hay usuarios para mostrar en Admin.',
