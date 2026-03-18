@@ -22,7 +22,7 @@ const asText = (value, fallback = '') => {
 
 const asPositiveNumber = (value, fallback = 1) => {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return parsed;
 };
 

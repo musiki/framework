@@ -722,7 +722,8 @@ const toggleGroupFolding = (column: any) => {
 
   const table = column.getTable();
 
-  // Determine if we are currently folded
+  // Determine if we are currently folded. 
+  // We consider it folded if any hideable column is hidden.
   const isFolded = subCols.some((c: any) => {
     const field = c.getDefinition().field;
     const isHideable = !field?.startsWith('__avg') && field !== 'lastName' && field !== 'firstName';
@@ -731,16 +732,33 @@ const toggleGroupFolding = (column: any) => {
 
   const targetState = isFolded; // if folded, we want to unfold (show all)
 
+  // Find columns that MUST stay visible (avg and identity)
+  const anchorCols = subCols.filter((c: any) => {
+    const cDef = c.getDefinition();
+    return cDef.field?.startsWith('__avg') || cDef.field === 'lastName' || cDef.field === 'firstName';
+  });
+
   subCols.forEach((c: any) => {
     const cDef = c.getDefinition();
     const isAvg = cDef.field?.startsWith('__avg');
     const isIdentity = cDef.field === 'lastName' || cDef.field === 'firstName';
+    const isAnchor = isAvg || isIdentity;
     
     if (targetState) {
       c.show();
     } else {
-      if (!isAvg && !isIdentity) {
-        c.hide();
+      // If we are folding:
+      // Keep anchors visible. 
+      // If there are NO anchors in this group, keep the FIRST sub-column visible as an anchor.
+      if (isAnchor) {
+        c.show();
+      } else {
+        const isFirstSubCol = c === subCols[0];
+        if (anchorCols.length === 0 && isFirstSubCol) {
+          c.show();
+        } else {
+          c.hide();
+        }
       }
     }
   });
@@ -2153,6 +2171,27 @@ const bindTableRangeSelection = (table: Tabulator, kind: GridKind) => {
   };
 };
 
+/**
+ * Prevents Tabulator's range selection from blocking interaction with
+ * custom interactive elements (selects, inputs, etc.) inside cells.
+ */
+const bindInteractiveSuppression = (element: HTMLElement) => {
+  const handler = (event: MouseEvent) => {
+    if (isInteractiveDashboardTarget(event.target)) {
+      event.stopPropagation();
+    }
+  };
+  
+  // Use capture to catch the event before Tabulator's internal listeners.
+  element.addEventListener('mousedown', handler, { capture: true });
+  element.addEventListener('dblclick', handler, { capture: true });
+  
+  return () => {
+    element.removeEventListener('mousedown', handler, { capture: true });
+    element.removeEventListener('dblclick', handler, { capture: true });
+  };
+};
+
 const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   const CLICK_TOGGLE_DELAY_MS = 180;
   const TOUCH_LONG_PRESS_DELAY_MS = 420;
@@ -2812,6 +2851,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     const table = buildTable(root, overviewNode, overview, persistKey, { kind: 'overview', meta }, annotationState, modalRef);
     trackTableBuilt(table, readyTables);
     bindTableSelection(table, 'overview', annotationState);
+    destroyers.push(bindInteractiveSuppression(overviewNode));
     destroyers.push(bindTurnoSelects(overviewNode, table, meta));
     destroyers.push(bindGrupoInputs(overviewNode, table, meta));
     destroyers.push(bindConceptoInputs(overviewNode, table, meta));
@@ -2828,6 +2868,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     const table = buildTable(root, gradebookNode, gradebook, persistKey, { kind: 'gradebook', meta }, annotationState, modalRef);
     trackTableBuilt(table, readyTables);
     bindTableSelection(table, 'gradebook', annotationState);
+    destroyers.push(bindInteractiveSuppression(gradebookNode));
     destroyers.push(bindTurnoSelects(gradebookNode, table, meta));
     destroyers.push(bindGrupoInputs(gradebookNode, table, meta));
     destroyers.push(bindConceptoInputs(gradebookNode, table, meta));
@@ -2853,6 +2894,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     trackTableBuilt(summaryTable, readyTables);
     trackTableBuilt(logTable, readyTables);
     bindTableSelection(summaryTable, 'attendance-summary', annotationState);
+    destroyers.push(bindInteractiveSuppression(attendanceNode));
     destroyers.push(bindAttendanceManualEditing(summaryTable, meta));
     destroyers.push(bindTurnoSelects(attendanceNode, summaryTable, meta));
     destroyers.push(bindGrupoInputs(attendanceNode, summaryTable, meta));
@@ -2882,6 +2924,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     );
     trackTableBuilt(table, readyTables);
     registry.set('comments', table);
+    destroyers.push(bindInteractiveSuppression(commentsNode));
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="comments"]');
     if (searchInput) installGlobalSearch([table], searchInput, persistKey);
@@ -2893,6 +2936,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     const table = buildTable(root, adminNode, admin, persistKey, { kind: 'admin', meta }, annotationState, modalRef);
     trackTableBuilt(table, readyTables);
     bindTableSelection(table, 'admin', annotationState);
+    destroyers.push(bindInteractiveSuppression(adminNode));
     destroyers.push(bindAdminRoleSelects(adminNode, table));
     destroyers.push(bindAdminActions(adminNode, table, meta));
     destroyers.push(bindTableRangeSelection(table, 'admin'));

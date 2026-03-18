@@ -159,6 +159,13 @@ const buildEvalSnapshot = (parsed: Record<string, unknown>): Record<string, unkn
       || [],
   );
   const referencePatch = asText((parsed as Record<string, unknown>).referencePatch);
+  
+  // Respect the points already normalized by parseEvalBlock if present.
+  const pointsRaw = (parsed as Record<string, unknown>).points;
+  const points = typeof pointsRaw === 'number' && Number.isFinite(pointsRaw) 
+    ? pointsRaw 
+    : (Number(pointsRaw) || 0);
+
   return sortValue({
     id: asText((parsed as Record<string, unknown>).id),
     type: asText((parsed as Record<string, unknown>).type, 'unknown'),
@@ -166,7 +173,7 @@ const buildEvalSnapshot = (parsed: Record<string, unknown>): Record<string, unkn
     title: asText((parsed as Record<string, unknown>).title),
     prompt: asText((parsed as Record<string, unknown>).prompt),
     group: asText((parsed as Record<string, unknown>).group),
-    points: Number((parsed as Record<string, unknown>).points || 0) || 0,
+    points,
     options,
     allowEdit: Boolean((parsed as Record<string, unknown>).allowEdit),
     allowMultiple: Boolean((parsed as Record<string, unknown>).allowMultiple),
@@ -254,7 +261,7 @@ const buildCollectionCatalog = async (
           evalId,
           evalType: asText(parsed.type, 'unknown'),
           mode: asText(parsed.mode, 'self'),
-          points: Number(parsed.points || 0) || 0,
+          points: typeof parsed.points === 'number' && Number.isFinite(parsed.points) ? (parsed.points as number) : 1,
           prompt: asText(parsed.prompt || parsed.title || ''),
           group: asText(parsed.group),
           options: toOptionTextList((parsed as Record<string, unknown>).options),
