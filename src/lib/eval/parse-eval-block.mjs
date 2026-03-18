@@ -144,8 +144,13 @@ const normalizeLooseEvalYaml = (rawBlock = '') =>
     .map((line) => {
       // Accept top-level `key = value` syntax for authoring convenience.
       const assignment = line.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*=\s*(.+)$/);
-      if (!assignment) return line;
-      return `${assignment[1]}: ${assignment[2]}`;
+      if (assignment) return `${assignment[1]}: ${assignment[2]}`;
+      
+      // Accept `key "value"` syntax (missing colon/equals)
+      const missingSeparator = line.match(/^([A-Za-z][A-Za-z0-9_-]*)\s+(["'].*)$/);
+      if (missingSeparator) return `${missingSeparator[1]}: ${missingSeparator[2]}`;
+
+      return line;
     })
     .join('\n');
 
