@@ -2083,14 +2083,25 @@ const teacherCourseGradeGroups = (() => {
                 const statusLabel = isSubmissionReviewed(submission)
                   ? 'calificada'
                   : 'pendiente';
+                const payload = asPayloadObject(submission.payload);
                 return [assignment.id, {
                   submissionId: submission.id,
                   assignmentId: assignment.id,
                   score: submission.score !== null && submission.score !== undefined ? submission.score : '',
+                  answer: payload?.answer || '',
                   statusLabel,
                 }];
               }),
             );
+
+            const groupCompletion: Record<string, boolean> = {};
+            flatAssignments.forEach((assignment: any) => {
+              const g = String(assignment?.group || '').trim();
+              if (g) {
+                const submission = submissionMap.get(`${student.id}::${assignment.id}`);
+                if (submission) groupCompletion[g] = true;
+              }
+            });
 
             return {
               studentId: student.id,
@@ -2102,6 +2113,7 @@ const teacherCourseGradeGroups = (() => {
               groupValue,
               conceptValue,
               attendanceCount,
+              groupCompletion,
               rowSearch,
               cells,
             };

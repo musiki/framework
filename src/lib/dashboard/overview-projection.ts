@@ -160,6 +160,9 @@ export function buildOverviewProjection({
       ].some((value) => isVisibleIdentityToken(value));
       if (!hasReadableIdentity) return null;
 
+      const groupCompletion = gradebookRow?.groupCompletion || {};
+      const wpollDone = Boolean(groupCompletion['wpoll']);
+
       return {
         id: studentId,
         studentId,
@@ -168,6 +171,7 @@ export function buildOverviewProjection({
         email,
         turno: normalizeDashboardText(attendanceRow?.turno || gradebookRow?.turnoValue || '—') || '—',
         grupo: normalizeDashboardText(attendanceRow?.grupo || gradebookRow?.groupValue || '—') || '—',
+        wpoll: wpollDone ? '✓' : '—',
         attendanceCount,
         attendanceRate,
         attendanceRateDisplay: formatPercent(attendanceRate),
@@ -193,6 +197,7 @@ export function buildOverviewProjection({
           gradebookRow?.turnoValue,
           attendanceRow?.grupo,
           gradebookRow?.groupValue,
+          wpollDone ? 'wpoll terminado' : '',
           risk,
           attendanceRate,
           attendanceCount,
@@ -219,6 +224,7 @@ export function buildOverviewProjection({
       { title: 'Email', field: 'email', minWidth: 220, kind: 'editable-text' },
       { title: 'Turno', field: 'turno', width: 74, hozAlign: 'center', headerHozAlign: 'center', kind: 'turno' },
       { title: 'Grupo', field: 'grupo', width: 84, hozAlign: 'center', headerHozAlign: 'center', kind: 'grupo' },
+      { title: 'Polls', field: 'wpoll', width: 70, hozAlign: 'center', headerHozAlign: 'center', kind: 'text' },
       { title: 'Asist.%', field: 'attendanceRate', width: 92, hozAlign: 'center', headerHozAlign: 'center', kind: 'percent' },
       { title: 'Entreg.', field: 'deliveriesDone', width: 88, hozAlign: 'center', headerHozAlign: 'center', kind: 'metric' },
       { title: 'Pend.', field: 'deliveriesPending', width: 82, hozAlign: 'center', headerHozAlign: 'center', kind: 'metric' },

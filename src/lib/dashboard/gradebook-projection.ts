@@ -157,12 +157,19 @@ export function buildGradebookProjection({
               ? Number(cell.score)
               : null;
 
-            // For non-scored evals (form-msq, form-text, etc.), show "✓" when submitted.
+            // For non-scored evals (form-msq, form-text, etc.), show answer or "✓" when submitted.
             const isFormType = Boolean(assignment?.evalType && ['form-msq', 'form-text', 'poll', 'form'].some(
               (t) => String(assignment.evalType).startsWith(t),
             ));
             if (hasSubmission && !assignment?.hasPoints && isFormType) {
-              record[field] = '✓';
+              const answer = String(cell?.answer || '').trim();
+              if (answer) {
+                // If it is an array (form-msq), join it
+                const text = Array.isArray(cell?.answer) ? cell.answer.join(', ') : answer;
+                record[field] = text.length > 24 ? text.slice(0, 22) + '…' : text;
+              } else {
+                record[field] = '✓';
+              }
             } else {
               record[field] = score !== null ? asDashboardNumber(score) : null;
             }
