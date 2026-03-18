@@ -70,14 +70,7 @@ type AnnotationModalApi = {
 };
 
 type RangeSelectionState = {
-  anchorCell: any | null;
-  dragging: boolean;
-  movedDuringDrag: boolean;
-  preserveExisting: boolean;
-  suppressClickUntil: number;
   selectedCells: Set<any>;
-  selectedElements: Set<HTMLElement>;
-  bodyClassApplied: boolean;
 };
 
 const VALID_TEACHER_TABS = ['overview', 'gradebook', 'attendance', 'comments', 'admin'];
@@ -131,6 +124,44 @@ const parseJsonScript = <T>(id: string, fallback: T): T => {
 
 const buildPersistKey = (meta: DashboardMeta, grid: string) =>
   `musiki:dashboard:${normalizeText(meta?.courseId)}:${normalizeText(meta?.year)}:${grid}`;
+
+const toTitleCase = (text: string): string =>
+  String(text || '').replace(/\S+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+
+const EDITABLE_USER_FIELDS = ['firstName', 'lastName', 'email'];
+
+const saveUserFieldFromCell = async (cell: any, overrideValue?: string): Promise<void> => {
+  const field = normalizeText(cell.getField?.() || '');
+  if (!EDITABLE_USER_FIELDS.includes(field)) return;
+  const value = overrideValue !== undefined ? overrideValue : String(cell.getValue() ?? '');
+  const rowData = (cell.getRow?.()?.getData?.() || {}) as Record<string, any>;
+  const studentId = normalizeText(rowData.studentId || rowData.id || '');
+  if (!studentId) return;
+
+  const clean = (v: string) => v.replace(/^—$/, '').trim();
+  let body: Record<string, string> = {};
+
+  if (field === 'firstName') {
+    const lastName = clean(String(rowData.lastName || ''));
+    body.name = [value, lastName].filter(Boolean).join(' ');
+  } else if (field === 'lastName') {
+    const firstName = clean(String(rowData.firstName || ''));
+    body.name = [firstName, value].filter(Boolean).join(' ');
+  } else if (field === 'email') {
+    body.email = value;
+  }
+
+  if (!Object.keys(body).length) return;
+  try {
+    await fetch(`/api/admin/users/${studentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // silent — cell is already updated in UI
+  }
+};
 
 const setStoredSearchQuery = (persistKey: string, query: string) => {
   try {
@@ -379,12 +410,16 @@ const renderScoreMarkup = (cell: any) => {
 const renderGradeMarkup = (cell: any) => {
   const val = cell.getValue();
   if (val === null || val === undefined || val === '') return '<span class="dashboard-val-empty">—</span>';
-  const num = Number(val);
-  const colorClass = num >= 7 ? 'dashboard-score-high' : num >= 4 ? 'dashboard-score-mid' : 'dashboard-score-low';
   const data = cell.getData() || {};
   const field = cell.getField();
   const status = normalizeText(data?.__gradeState?.[field]?.statusLabel);
   const statusMarkup = status ? `<span class="dashboard-grade-status">${escapeHtml(status)}</span>` : '';
+  // Non-numeric submitted value (form-msq, form-text): show checkmark badge
+  const num = Number(val);
+  if (Number.isNaN(num)) {
+    return `<div class="dashboard-grade-wrap"><span class="dashboard-grade-check">${escapeHtml(String(val))}</span>${statusMarkup}</div>`;
+  }
+  const colorClass = num >= 7 ? 'dashboard-score-high' : num >= 4 ? 'dashboard-score-mid' : 'dashboard-score-low';
   return `<div class="dashboard-grade-wrap"><span class="dashboard-score-pill ${colorClass}">${num.toFixed(1)}</span>${statusMarkup}</div>`;
 };
 
@@ -525,6 +560,35 @@ const renderAdminActionsMarkup = (cell: any) => {
   `;
 };
 
+const renderEnrollmentCoursesMarkup = (cell: any) => {
+  const data = cell.getData() || {};
+  const userName = escapeHtml(data.name || data.email || '');
+  const courses: Array<{ courseId: string; enrollmentId: string; roleInCourse: string }> =
+    Array.isArray(data.enrollmentCourses) ? data.enrollmentCourses : [];
+  if (!courses.length) return '<span style="color:var(--c-fg-dim)">—</span>';
+  return courses
+    .map(({ courseId, enrollmentId, roleInCourse }) => {
+      const cid = escapeHtml(courseId);
+      const eid = escapeHtml(enrollmentId);
+      const role = escapeHtml(roleInCourse);
+      const uname = userName;
+      return `<span class="enrollment-chip" data-course-id="${cid}">${cid}<button type="button" class="enrollment-chip-remove" data-dashboard-unenroll data-enrollment-id="${eid}" data-enrollment-role="${role}" data-user-name="${uname}" title="Desinscribir de ${cid}" aria-label="Desinscribir de ${cid}">×</button></span>`;
+    })
+    .join('');
+};
+
+const resolveContextMenuTargetCells = (cell: any, kind: GridKind): any[] => {
+  const table = cell.getTable?.();
+  const rangeState: RangeSelectionState | undefined = (table as any)?.__musikiRangeSelectionState;
+  const selectedCells = rangeState?.selectedCells;
+  // Use the range selection when there are multiple selected cells and the
+  // right-clicked cell is part of that selection.
+  if (selectedCells && selectedCells.size > 1 && selectedCells.has(cell)) {
+    return Array.from(selectedCells).filter((c) => buildScopeContextFromCell(c, kind) !== null);
+  }
+  return [cell];
+};
+
 const buildCellContextMenu = (
   kind: GridKind,
   annotationState: AnnotationState,
@@ -537,23 +601,49 @@ const buildCellContextMenu = (
     setActiveSelection(annotationState, cell, context);
     const ownAnnotation = getOwnAnnotation(annotationState, context);
 
+    const targets = resolveContextMenuTargetCells(cell, kind);
+    const count = targets.length;
+    const multi = count > 1;
+    const suffix = multi ? ` (${count})` : '';
+
+    // For the "clear" disabled state, check if ANY target has a color annotation.
+    const anyHasColor = targets.some((c) => {
+      const ctx = buildScopeContextFromCell(c, kind);
+      return ctx ? Boolean(normalizeDashboardAnnotationColor(getOwnAnnotation(annotationState, ctx)?.color)) : false;
+    });
+
+    const applyColorToAll = async (color: DashboardAnnotationColor | '') => {
+      for (const targetCell of targets) {
+        const ctx = buildScopeContextFromCell(targetCell, kind);
+        if (!ctx) continue;
+        const own = getOwnAnnotation(annotationState, ctx);
+        // For "clear", skip cells that have no color.
+        if (color === '' && !normalizeDashboardAnnotationColor(own?.color)) continue;
+        await saveAnnotation(annotationState, ctx, {
+          color,
+          comment: own?.comment || '',
+          visibility: own?.visibility || 'teachers',
+        });
+      }
+    };
+
     return [
       {
-        label: 'Verde (V)',
-        action: async () => saveAnnotation(annotationState, context, { color: 'green', comment: ownAnnotation?.comment || '', visibility: ownAnnotation?.visibility || 'teachers' }),
+        label: `Verde (V)${suffix}`,
+        action: () => applyColorToAll('green'),
       },
       {
-        label: 'Amarillo (B)',
-        action: async () => saveAnnotation(annotationState, context, { color: 'yellow', comment: ownAnnotation?.comment || '', visibility: ownAnnotation?.visibility || 'teachers' }),
+        label: `Amarillo (B)${suffix}`,
+        action: () => applyColorToAll('yellow'),
       },
       {
-        label: 'Rojo (N)',
-        action: async () => saveAnnotation(annotationState, context, { color: 'red', comment: ownAnnotation?.comment || '', visibility: ownAnnotation?.visibility || 'teachers' }),
+        label: `Rojo (N)${suffix}`,
+        action: () => applyColorToAll('red'),
       },
       {
-        label: 'Sin resaltado (M)',
-        disabled: !normalizeDashboardAnnotationColor(ownAnnotation?.color),
-        action: async () => saveAnnotation(annotationState, context, { color: '', comment: ownAnnotation?.comment || '', visibility: ownAnnotation?.visibility || 'teachers' }),
+        label: `Sin resaltado (M)${suffix}`,
+        disabled: !anyHasColor,
+        action: () => applyColorToAll(''),
       },
       {
         separator: true,
@@ -568,6 +658,21 @@ const buildCellContextMenu = (
         action: async () => {
           if (!ownAnnotation?.id) return;
           await removeAnnotation(annotationState, ownAnnotation.id);
+        },
+      },
+      {
+        separator: true,
+      },
+      {
+        label: `Title Case${suffix}`,
+        action: async () => {
+          for (const targetCell of targets) {
+            const current = String(targetCell.getValue() ?? '');
+            const titled = toTitleCase(current);
+            if (titled === current) continue;
+            targetCell.setValue(titled);
+            await saveUserFieldFromCell(targetCell, titled);
+          }
         },
       },
     ];
@@ -655,6 +760,9 @@ const configureColumns = (
   modalRef: { current: AnnotationModalApi | null },
 ): any[] => {
   const isMobileNarrow = typeof window !== 'undefined' && window.innerWidth < 500;
+  // selectableRange + frozen columns = Tabulator warning + broken selection.
+  // Strip frozen for range-enabled tables; horizontal scroll handles navigation.
+  const isRangeTable = supportsRangeSelection(context.kind);
 
   const headerMenu = [
     {
@@ -678,13 +786,13 @@ const configureColumns = (
       if (isAttendanceMonth) {
         return {
           ...baseColumn,
-          ...(isMobileNarrow ? { frozen: false } : {}),
+          ...(isMobileNarrow || isRangeTable ? { frozen: false } : {}),
           columns: configureColumns(baseColumn.columns, context, annotationState, modalRef),
         };
       }
       return {
         ...baseColumn,
-        ...(isMobileNarrow ? { frozen: false } : {}),
+        ...(isMobileNarrow || isRangeTable ? { frozen: false } : {}),
         headerContextMenu: headerMenu,
         headerClick: function(e: any, col: any) {
           const def = col.getDefinition();
@@ -718,7 +826,7 @@ const configureColumns = (
     } = baseColumn || {};
     const nextColumn: Record<string, any> = {
       ...restColumn,
-      ...(isMobileNarrow ? { frozen: false } : {}),
+      ...(isMobileNarrow || isRangeTable ? { frozen: false } : {}),
     };
 
     if (context.kind === 'gradebook') {
@@ -746,7 +854,22 @@ const configureColumns = (
       nextColumn.sorter = 'number';
       baseFormatter = renderScoreMarkup;
     } else if (kind === 'grade-score') {
-      nextColumn.sorter = 'number';
+      // Custom sorter: numeric scores sort numerically; '✓' sorts after scores; null/empty sorts last
+      nextColumn.sorter = (a: any, b: any) => {
+        const na = Number(a);
+        const nb = Number(b);
+        const aEmpty = a === null || a === undefined || a === '';
+        const bEmpty = b === null || b === undefined || b === '';
+        if (aEmpty && bEmpty) return 0;
+        if (aEmpty) return 1;
+        if (bEmpty) return -1;
+        const aNum = !Number.isNaN(na);
+        const bNum = !Number.isNaN(nb);
+        if (aNum && bNum) return na - nb;
+        if (aNum) return -1; // numbers before symbols
+        if (bNum) return 1;
+        return String(a).localeCompare(String(b));
+      };
       baseFormatter = renderGradeMarkup;
     } else if (kind === 'metric') {
       nextColumn.sorter = 'number';
@@ -786,18 +909,25 @@ const configureColumns = (
       baseFormatter = renderTurnoSelectMarkup;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
-      nextColumn.headerSort = false;
     } else if (kind === 'concepto') {
       baseFormatter = renderConceptoInputMarkup;
     } else if (kind === 'grupo') {
       baseFormatter = renderGrupoInputMarkup;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
+    } else if (kind === 'enrollment-courses') {
+      baseFormatter = renderEnrollmentCoursesMarkup;
+      nextColumn.headerSort = false;
     } else if (kind === 'admin-actions') {
       baseFormatter = renderAdminActionsMarkup;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
       nextColumn.headerSort = false;
+    } else if (kind === 'editable-text') {
+      nextColumn.editor = 'input';
+      nextColumn.cellEdited = async (cell: any) => {
+        await saveUserFieldFromCell(cell);
+      };
     }
 
     if (isAnnotationContextKind(context.kind) && normalizeText(nextColumn.field)) {
@@ -874,20 +1004,26 @@ const buildTable = (
   modalRef: { current: AnnotationModalApi | null },
 ) => {
   const isComplexTable = context.kind === 'gradebook' || context.kind === 'attendance-summary';
+  const isRangeTable = supportsRangeSelection(context.kind);
 
   return new Tabulator(element, {
     index: 'id',
     data: Array.isArray(projection?.rows) ? projection.rows : [],
     columns: configureColumns(Array.isArray(projection?.columns) ? projection.columns : [], context, annotationState, modalRef),
     layout: context.kind === 'gradebook' ? 'fitDataTable' : 'fitColumns',
-    editTriggerEvent: context.kind === 'attendance-summary' ? 'dblclick' : 'focus',
+    // dblclick recommended by Tabulator docs when selectableRange is enabled,
+    // to prevent editors from triggering on every range-start click.
+    editTriggerEvent: isRangeTable ? 'dblclick' : 'focus',
     columnHeaderVertAlign: 'bottom',
     pagination: 'local',
     paginationSize: 25,
     movableColumns: !isComplexTable,
-    headerSort: !isComplexTable, // Disable sort icons to save space
+    headerSort: !isComplexTable,
     resizableColumnFit: false,
     selectableRows: false,
+    // Native Tabulator range selection (SelectRange module, included in TabulatorFull).
+    selectableRange: isRangeTable ? 1 : false,
+    selectableRangeAutoFocus: false,
     placeholder: projection?.emptyMessage || 'Sin datos.',
     persistence: {
       sort: true,
@@ -954,6 +1090,31 @@ const applyFoldLevel = (table: Tabulator, level: number) => {
     }
   });
   table.redraw(true);
+};
+
+const unfoldAllColumns = (table: Tabulator) => {
+  const showRecursive = (col: any) => {
+    try { col.show(); } catch { /* ignore */ }
+    getGroupSubColumns(col).forEach(showRecursive);
+    const headerEl = col.getElement?.();
+    if (headerEl) headerEl.classList.remove('group-folded');
+  };
+  try { table.getColumns().forEach(showRecursive); } catch { /* ignore */ }
+  try { table.redraw(true); } catch { /* ignore */ }
+};
+
+const bindUnfoldAllButtons = (root: HTMLElement, registry: Map<string, Tabulator>) => {
+  root.querySelectorAll<HTMLButtonElement>('[data-dashboard-unfold-all]').forEach((button) => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+    button.addEventListener('click', () => {
+      const key = normalizeText(button.getAttribute('data-dashboard-unfold-all'));
+      const table = registry.get(key);
+      if (!table) return;
+      unfoldAllColumns(table);
+      if (key === 'gradebook') foldLevel = 0;
+    });
+  });
 };
 
 const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
@@ -1119,6 +1280,71 @@ const buildCsvFilename = (key: string, meta: DashboardMeta) => {
     default:
       return `musiki-dashboard-${key}-${course}-${year}.csv`;
   }
+};
+
+const parseClipboardStudentList = (text: string): Array<{ name: string; email: string }> => {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const parts = line.split(/\t/);
+      if (parts.length < 5) return [];
+      const rawName = normalizeText(parts[1] || '');
+      const email = normalizeText(parts[4] || '').toLowerCase();
+      if (!rawName || !email || !email.includes('@')) return [];
+      const [apellido, nombre] = rawName.split(',').map((s) => s.trim());
+      const name = toTitleCase([nombre, apellido].filter(Boolean).join(' ') || rawName);
+      return [{ name, email }];
+    });
+};
+
+const bindImportClipboardButton = (root: HTMLElement, meta: DashboardMeta) => {
+  root.querySelectorAll('[data-dashboard-import-clipboard]').forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+
+    button.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text.trim()) {
+          alert('El portapapeles está vacío.');
+          return;
+        }
+        const students = parseClipboardStudentList(text);
+        if (students.length === 0) {
+          alert('No se encontraron estudiantes válidos. Asegurate de copiar la lista en el formato correcto (con columnas separadas por tabulación).');
+          return;
+        }
+        const confirmed = confirm(`Se importarán ${students.length} estudiante${students.length !== 1 ? 's' : ''}. ¿Continuar?`);
+        if (!confirmed) return;
+
+        const originalContent = button.innerHTML;
+        button.disabled = true;
+        button.textContent = 'Importando...';
+
+        const response = await fetch('/api/admin/import-students', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId: meta.courseId, students }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          alert(`Error al importar: ${result.error || 'Error desconocido'}`);
+          button.disabled = false;
+          button.innerHTML = originalContent;
+        } else {
+          alert(`Importación completada: ${result.imported} importado${result.imported !== 1 ? 's' : ''}, ${result.alreadyEnrolled} ya inscripto${result.alreadyEnrolled !== 1 ? 's' : ''}.`);
+          window.location.reload();
+        }
+      } catch {
+        alert('No se pudo acceder al portapapeles. Asegurate de dar permiso al sitio.');
+        button.disabled = false;
+      }
+    });
+  });
 };
 
 const bindCsvButtons = (root: HTMLElement, registry: Map<string, Tabulator>, meta: DashboardMeta) => {
@@ -1621,12 +1847,21 @@ const bindTurnoSelects = (host: HTMLElement, table: Tabulator, meta: DashboardMe
     void updateTurno(select);
   };
 
+  const mousedownHandler = (event: MouseEvent) => {
+    const target = event.target;
+    if (target instanceof HTMLSelectElement && target.matches('[data-dashboard-turno-select]')) {
+      event.stopPropagation();
+    }
+  };
+
   host.addEventListener('focusin', focusHandler);
   host.addEventListener('change', changeHandler);
+  host.addEventListener('mousedown', mousedownHandler, true);
 
   return () => {
     host.removeEventListener('focusin', focusHandler);
     host.removeEventListener('change', changeHandler);
+    host.removeEventListener('mousedown', mousedownHandler, true);
   };
 };
 
@@ -1731,16 +1966,25 @@ const bindGrupoInputs = (host: HTMLElement, table: Tabulator, meta: DashboardMet
     }
   };
 
+  const mousedownHandler = (event: MouseEvent) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.matches('[data-dashboard-grupo-input]')) {
+      event.stopPropagation();
+    }
+  };
+
   host.addEventListener('focusin', focusHandler);
   host.addEventListener('input', inputHandler);
   host.addEventListener('change', changeHandler);
   host.addEventListener('keydown', keydownHandler);
+  host.addEventListener('mousedown', mousedownHandler, true);
 
   return () => {
     host.removeEventListener('focusin', focusHandler);
     host.removeEventListener('input', inputHandler);
     host.removeEventListener('change', changeHandler);
     host.removeEventListener('keydown', keydownHandler);
+    host.removeEventListener('mousedown', mousedownHandler, true);
   };
 };
 
@@ -1809,19 +2053,28 @@ const bindConceptoInputs = (host: HTMLElement, table: Tabulator, meta: Dashboard
     if (event.key === 'Escape') { input.value = input.dataset.previousConcepto || ''; input.blur(); }
   };
 
+  const mousedownHandler = (event: MouseEvent) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.matches('[data-dashboard-concepto-input]')) {
+      event.stopPropagation();
+    }
+  };
+
   host.addEventListener('focusin', focusHandler);
   host.addEventListener('change', changeHandler);
   host.addEventListener('keydown', keydownHandler);
+  host.addEventListener('mousedown', mousedownHandler, true);
 
   return () => {
     host.removeEventListener('focusin', focusHandler);
     host.removeEventListener('change', changeHandler);
     host.removeEventListener('keydown', keydownHandler);
+    host.removeEventListener('mousedown', mousedownHandler, true);
   };
 };
 
 const supportsRangeSelection = (kind: GridKind) =>
-  ['overview', 'gradebook', 'attendance-summary'].includes(kind);
+  ['overview', 'gradebook', 'attendance-summary', 'admin'].includes(kind);
 
 const isInteractiveDashboardTarget = (target: EventTarget | null) =>
   target instanceof HTMLInputElement
@@ -1858,188 +2111,44 @@ const resolveCellComponentFromTarget = (table: Tabulator, target: EventTarget | 
   return cell;
 };
 
-const bindTableRangeSelection = (table: Tabulator, kind: GridKind, root: HTMLElement) => {
+// Sync Tabulator's native range selection into __musikiRangeSelectionState
+// so the context menu can see which cells are selected.
+// The actual drag/highlight/keyboard behavior is handled entirely by Tabulator's
+// SelectRange module (enabled via selectableRange: 1 in buildTable).
+const bindTableRangeSelection = (table: Tabulator, kind: GridKind) => {
   if (!supportsRangeSelection(kind)) return () => {};
 
-  const state: RangeSelectionState = {
-    anchorCell: null,
-    dragging: false,
-    movedDuringDrag: false,
-    preserveExisting: false,
-    suppressClickUntil: 0,
-    selectedCells: new Set<any>(),
-    selectedElements: new Set<HTMLElement>(),
-    bodyClassApplied: false,
-  };
+  const state: RangeSelectionState = { selectedCells: new Set<any>() };
   (table as any).__musikiRangeSelectionState = state;
-  const tableElement =
-    ((table as any)?.rowManager?.element as HTMLElement | undefined)
-    || ((table as any)?.element as HTMLElement | undefined)
-    || null;
-  const tableHost =
-    ((table as any)?.element as HTMLElement | undefined)
-    || tableElement?.closest<HTMLElement>('.dashboard-tabulator')
-    || null;
-  if (tableHost instanceof HTMLElement) {
-    tableHost.dataset.rangeSelection = 'true';
-  }
 
-  const clearNativeSelection = () => {
-    try {
-      window.getSelection()?.removeAllRanges();
-    } catch {
-      // ignore browser selection cleanup failures
-    }
-  };
-
-  const setDraggingVisualState = (enabled: boolean) => {
-    if (enabled && !state.bodyClassApplied) {
-      document.body.classList.add('dashboard-range-dragging');
-      state.bodyClassApplied = true;
-      return;
-    }
-
-    if (!enabled && state.bodyClassApplied) {
-      document.body.classList.remove('dashboard-range-dragging');
-      state.bodyClassApplied = false;
-    }
-  };
-
-  const clearSelection = () => {
+  const syncFromRanges = () => {
     state.selectedCells.clear();
-    state.selectedElements.forEach((element) => {
-      element.classList.remove('dashboard-cell--range-selected', 'dashboard-cell--range-anchor');
-    });
-    state.selectedElements.clear();
-  };
-
-  const markCell = (cell: any, asAnchor = false) => {
-    const element = cell?.getElement?.();
-    if (!(element instanceof HTMLElement)) return;
-    state.selectedCells.add(cell);
-    element.classList.add('dashboard-cell--range-selected');
-    if (asAnchor) {
-      element.classList.add('dashboard-cell--range-anchor');
-    } else {
-      element.classList.remove('dashboard-cell--range-anchor');
-    }
-    state.selectedElements.add(element);
-  };
-
-  const applyRange = (startCell: any, endCell: any, preserveExisting: boolean) => {
-    if (!startCell || !endCell) return;
-    if (!preserveExisting) {
-      clearSelection();
-    }
-
-    const startRow = Number(startCell.getRow?.()?.getPosition?.() || 0);
-    const endRow = Number(endCell.getRow?.()?.getPosition?.() || 0);
-    const startCol = Number(startCell.getColumn?.()?.getPosition?.() || 0);
-    const endCol = Number(endCell.getColumn?.()?.getPosition?.() || 0);
-    const top = Math.min(startRow, endRow);
-    const bottom = Math.max(startRow, endRow);
-    const left = Math.min(startCol, endCol);
-    const right = Math.max(startCol, endCol);
-
-    const rows = (table.getRows?.('active') || table.getRows?.() || []) as any[];
-    const columns = (table.getColumns?.() || []) as any[];
-    const columnsByPosition = new Map<number, any>();
-    columns.forEach((column: any) => {
-      const position = Number(column?.getPosition?.() || 0);
-      if (position >= left && position <= right) {
-        columnsByPosition.set(position, column);
+    try {
+      const ranges: any[] = (table as any).getRanges?.() || [];
+      for (const range of ranges) {
+        // getCells() returns a 2-D array: array of rows, each row is array of cells
+        const rows: any[][] = range.getCells?.() || [];
+        for (const rowCells of rows) {
+          if (Array.isArray(rowCells)) {
+            for (const cell of rowCells) { if (cell) state.selectedCells.add(cell); }
+          } else if (rowCells) {
+            state.selectedCells.add(rowCells);
+          }
+        }
       }
-    });
-
-    rows.forEach((row: any) => {
-      const rowPosition = Number(row?.getPosition?.() || 0);
-      if (rowPosition < top || rowPosition > bottom) return;
-
-      columnsByPosition.forEach((column: any) => {
-        const cell = row?.getCell?.(column);
-        if (!cell) return;
-        markCell(
-          cell,
-          rowPosition === startRow && Number(column?.getPosition?.() || 0) === startCol,
-        );
-      });
-    });
+    } catch { /* ignore – table may be partially destroyed */ }
   };
 
-  const beginSelection = (event: MouseEvent, cell: any) => {
-    state.dragging = true;
-    state.movedDuringDrag = false;
-    state.preserveExisting = Boolean(event.metaKey || event.ctrlKey);
-    setDraggingVisualState(true);
-    clearNativeSelection();
-    if (!event.shiftKey) {
-      state.anchorCell = cell;
-    }
-    applyRange(state.anchorCell || cell, cell, state.preserveExisting && !event.shiftKey);
-  };
-
-  const mouseUpHandler = () => {
-    if (state.movedDuringDrag) {
-      state.suppressClickUntil = Date.now() + 250;
-    }
-    state.dragging = false;
-    state.movedDuringDrag = false;
-    setDraggingVisualState(false);
-    clearNativeSelection();
-  };
-  document.addEventListener('mouseup', mouseUpHandler);
-
-  const mouseDownHandler = (event: MouseEvent) => {
-    if (event.button !== 0 || isInteractiveDashboardTarget(event.target)) return;
-    const cell = resolveCellComponentFromTarget(table, event.target);
-    if (!cell) return;
-    event.preventDefault();
-    beginSelection(event, cell);
-  };
-
-  const mouseMoveHandler = (event: MouseEvent) => {
-    if (!state.dragging || isInteractiveDashboardTarget(event.target)) return;
-    const cell = resolveCellComponentFromTarget(table, event.target);
-    if (!cell) return;
-    event.preventDefault();
-    clearNativeSelection();
-    if (cell !== state.anchorCell) {
-      state.movedDuringDrag = true;
-    }
-    applyRange(state.anchorCell || cell, cell, state.preserveExisting);
-  };
-
-  const selectStartHandler = (event: Event) => {
-    if (isInteractiveDashboardTarget(event.target)) return;
-    if (!resolveCellComponentFromTarget(table, event.target)) return;
-    event.preventDefault();
-    clearNativeSelection();
-  };
-
-  const dragStartHandler = (event: DragEvent) => {
-    if (isInteractiveDashboardTarget(event.target)) return;
-    if (!resolveCellComponentFromTarget(table, event.target)) return;
-    event.preventDefault();
-  };
-
-  tableElement?.addEventListener('mousedown', mouseDownHandler, true);
-  tableElement?.addEventListener('mousemove', mouseMoveHandler, true);
-  tableElement?.addEventListener('mouseover', mouseMoveHandler, true);
-  tableElement?.addEventListener('selectstart', selectStartHandler, true);
-  tableElement?.addEventListener('dragstart', dragStartHandler, true);
+  table.on('rangeAdded', syncFromRanges);
+  table.on('rangeChanged', syncFromRanges);
+  table.on('rangeRemoved', syncFromRanges);
 
   return () => {
-    document.removeEventListener('mouseup', mouseUpHandler);
-    tableElement?.removeEventListener('mousedown', mouseDownHandler, true);
-    tableElement?.removeEventListener('mousemove', mouseMoveHandler, true);
-    tableElement?.removeEventListener('mouseover', mouseMoveHandler, true);
-    tableElement?.removeEventListener('selectstart', selectStartHandler, true);
-    tableElement?.removeEventListener('dragstart', dragStartHandler, true);
-    setDraggingVisualState(false);
-    clearSelection();
-    if (tableHost instanceof HTMLElement) {
-      delete tableHost.dataset.rangeSelection;
-    }
+    try {
+      table.off('rangeAdded', syncFromRanges);
+      table.off('rangeChanged', syncFromRanges);
+      table.off('rangeRemoved', syncFromRanges);
+    } catch { /* ignore */ }
     delete (table as any).__musikiRangeSelectionState;
   };
 };
@@ -2234,8 +2343,9 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     if (isInteractiveDashboardTarget(event.target)) return;
     if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
 
+    // Skip toggle if multiple cells are range-selected (user is selecting, not toggling)
     const rangeState = (table as any).__musikiRangeSelectionState as RangeSelectionState | undefined;
-    if (rangeState?.suppressClickUntil && rangeState.suppressClickUntil > Date.now()) return;
+    if (rangeState && rangeState.selectedCells.size > 1) return;
 
     const cellKey = getAttendanceCellKey(cell);
     if (!cellKey) return;
@@ -2407,6 +2517,47 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
   const clickHandler = async (event: Event) => {
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (!target) return;
+
+    // ── Unenroll chip button ──────────────────────────────────────────────────
+    const unenrollButton = target.closest<HTMLButtonElement>('[data-dashboard-unenroll]');
+    if (unenrollButton) {
+      const enrollmentId = normalizeText(unenrollButton.dataset.enrollmentId || '');
+      const enrollmentRole = normalizeTextLower(unenrollButton.dataset.enrollmentRole || 'student');
+      const userName = normalizeText(unenrollButton.dataset.userName || 'este usuario');
+      const courseId = normalizeText(unenrollButton.closest<HTMLElement>('.enrollment-chip')?.dataset.courseId || '');
+      if (!enrollmentId) return;
+      const confirmMsg = enrollmentRole === 'teacher'
+        ? `¿Quitar inscripción docente de ${userName} en ${courseId || 'este curso'}?`
+        : `¿Desinscribir a ${userName} de ${courseId || 'este curso'}?`;
+      if (!window.confirm(confirmMsg)) return;
+      unenrollButton.disabled = true;
+      try {
+        const response = await fetch('/api/enroll', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enrollmentId }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || 'No se pudo desinscribir');
+        // Remove the chip from the cell
+        const chip = unenrollButton.closest<HTMLElement>('.enrollment-chip');
+        chip?.remove();
+        // Update row data
+        const row = table.getRows('active').find((r: any) => {
+          const d = r.getData?.() || {};
+          return Array.isArray(d.enrollmentCourses) && d.enrollmentCourses.some((e: any) => e.enrollmentId === enrollmentId);
+        });
+        if (row) {
+          const d = row.getData?.() || {};
+          const nextCourses = (d.enrollmentCourses || []).filter((e: any) => e.enrollmentId !== enrollmentId);
+          row.update?.({ enrollmentCourses: nextCourses, enrollmentSummary: nextCourses.map((e: any) => e.courseId).join(' · ') || '—' });
+        }
+      } catch (err: any) {
+        unenrollButton.disabled = false;
+        alert(err?.message || 'No se pudo desinscribir');
+      }
+      return;
+    }
 
     // ── Edit button → navigate to /admin/user/[id] ───────────────────────────
     const editButton = target.closest<HTMLButtonElement>('[data-dashboard-user-edit]');
@@ -2664,7 +2815,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     destroyers.push(bindTurnoSelects(overviewNode, table, meta));
     destroyers.push(bindGrupoInputs(overviewNode, table, meta));
     destroyers.push(bindConceptoInputs(overviewNode, table, meta));
-    destroyers.push(bindTableRangeSelection(table, 'overview', root));
+    destroyers.push(bindTableRangeSelection(table, 'overview'));
     registry.set('overview', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="overview"]');
@@ -2680,7 +2831,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     destroyers.push(bindTurnoSelects(gradebookNode, table, meta));
     destroyers.push(bindGrupoInputs(gradebookNode, table, meta));
     destroyers.push(bindConceptoInputs(gradebookNode, table, meta));
-    destroyers.push(bindTableRangeSelection(table, 'gradebook', root));
+    destroyers.push(bindTableRangeSelection(table, 'gradebook'));
     registry.set('gradebook', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="gradebook"]');
@@ -2705,7 +2856,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     destroyers.push(bindAttendanceManualEditing(summaryTable, meta));
     destroyers.push(bindTurnoSelects(attendanceNode, summaryTable, meta));
     destroyers.push(bindGrupoInputs(attendanceNode, summaryTable, meta));
-    destroyers.push(bindTableRangeSelection(summaryTable, 'attendance-summary', root));
+    destroyers.push(bindTableRangeSelection(summaryTable, 'attendance-summary'));
     registry.set('attendance-summary', summaryTable);
     registry.set('attendance-log', logTable);
     tables.push(summaryTable, logTable);
@@ -2744,6 +2895,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     bindTableSelection(table, 'admin', annotationState);
     destroyers.push(bindAdminRoleSelects(adminNode, table));
     destroyers.push(bindAdminActions(adminNode, table, meta));
+    destroyers.push(bindTableRangeSelection(table, 'admin'));
     registry.set('admin', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="admin"]');
@@ -2754,6 +2906,8 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   bindScopeSelectors(shell);
   bindAttendanceConfig();
   bindCsvButtons(root, registry, meta);
+  bindImportClipboardButton(root, meta);
+  bindUnfoldAllButtons(root, registry);
   destroyers.push(bindFoldingShortcuts(registry));
 
   root.dataset.dashboardTabulatorMounted = 'true';

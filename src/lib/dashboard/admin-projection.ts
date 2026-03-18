@@ -78,17 +78,22 @@ export function buildAdminProjection({
 
       const globalRole = normalizeRole(user?.role);
       const roleInCourse = normalizeRole(enrollment?.roleInCourse || '');
-      const activeCourses = Array.from(
+      const enrollmentCourses = Array.from(
         new Map(
           userEnrollments
             .map((item: any) => {
               const courseId = normalizeText(item?.courseId || '');
+              const enrollmentId = normalizeText(item?.id || '');
               if (!courseId) return null;
-              return [courseId, courseId] as const;
+              return [courseId, {
+                courseId,
+                enrollmentId,
+                roleInCourse: normalizeRole(item?.roleInCourse || 'student'),
+              }] as const;
             })
-            .filter(Boolean) as [string, string][],
+            .filter(Boolean) as [string, { courseId: string; enrollmentId: string; roleInCourse: string }][],
         ).values(),
-      ).sort((left, right) => String(left).localeCompare(String(right), 'es'));
+      ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
 
       return {
         id: userId,
@@ -100,8 +105,8 @@ export function buildAdminProjection({
         globalRole,
         courseRoleLabel: roleInCourse ? getRoleBadgeLabel(roleInCourse) : '—',
         courseRole: roleInCourse,
-        enrollmentSummary: activeCourses.length ? activeCourses.join(' · ') : '—',
-        enrollmentCourses: activeCourses,
+        enrollmentSummary: enrollmentCourses.length ? enrollmentCourses.map((e) => e.courseId).join(' · ') : '—',
+        enrollmentCourses,
         lastActivityAt: latestActivityAt,
         lastActivityLabel: formatSubmissionDate(latestActivityAt),
         __search: buildSearchBlob([
@@ -109,7 +114,7 @@ export function buildAdminProjection({
           user?.email,
           globalRole,
           roleInCourse,
-          ...activeCourses,
+          ...enrollmentCourses.map((e) => e.courseId),
           latestActivityAt,
         ]),
       };

@@ -1954,10 +1954,15 @@ const teacherCourseGradeGroups = (() => {
           const assignmentId = String(assignment?.id || '');
           const dbAssignment = assignmentById.get(assignmentId);
           const group = String(dbAssignment?.settings?.group || dbAssignment?.settings?.tarea || '').trim();
+          const points = dbAssignment?.settings?.points;
+          const hasPoints = points !== null && points !== undefined && points !== '' && Number.isFinite(Number(points)) && Number(points) > 0;
+          const evalType = String(dbAssignment?.settings?.type || '').trim().toLowerCase();
           return {
             id: assignmentId,
             label: decodeUriSafe(assignmentId.split('/').pop() || assignmentId),
             group,
+            hasPoints,
+            evalType,
           };
         }),
       }));
@@ -3264,6 +3269,33 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         gap: 0.45rem;
         flex-wrap: wrap;
       }
+      .enrollment-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        background: var(--c-bg-mute);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        padding: 0.1rem 0.35rem;
+        font-size: 0.78rem;
+        white-space: nowrap;
+        margin: 0.1rem 0.15rem 0.1rem 0;
+      }
+      .enrollment-chip-remove {
+        background: none;
+        border: none;
+        padding: 0 0.1rem;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+        color: var(--c-fg-dim);
+        border-radius: 2px;
+        transition: color 0.1s, background 0.1s;
+      }
+      .enrollment-chip-remove:hover {
+        color: var(--c-danger, #c0392b);
+        background: color-mix(in srgb, var(--c-danger, #c0392b) 12%, transparent);
+      }
       .dashboard-admin-actions {
         display: inline-flex;
         align-items: center;
@@ -3307,6 +3339,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-grid-btn--primary {
         border-color: var(--c-link);
         color: var(--c-link);
+      }
+      .dashboard-grid-btn--icon {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
       }
       .dashboard-grid-btn:hover {
         border-color: var(--c-link);
@@ -3362,7 +3399,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         min-width: 6.1rem;
         max-width: 7.6rem;
         min-height: 1.75rem;
-        border: 1px solid var(--c-border);
+        border: 1px solid transparent;
         border-radius: 0;
         background-color: transparent;
         color: var(--c-fg);
@@ -3413,7 +3450,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         min-width: 3rem;
         max-width: 3.6rem;
         min-height: 1.75rem;
-        border: 1px solid var(--c-border);
+        border: 1px solid transparent;
         border-radius: 0;
         background-color: transparent;
         color: var(--c-fg);
@@ -3424,7 +3461,10 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         text-align: center;
         transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
       }
-      .dashboard-inline-input:hover,
+      .dashboard-inline-input:hover {
+        border-color: var(--c-border);
+        outline: none;
+      }
       .dashboard-inline-input:focus {
         border-color: var(--c-link);
         outline: none;
@@ -3444,7 +3484,10 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-inline-input--concepto {
         max-width: 4rem;
       }
-      .dashboard-inline-select:hover,
+      .dashboard-inline-select:hover {
+        border-color: var(--c-border);
+        outline: none;
+      }
       .dashboard-inline-select:focus {
         border-color: var(--c-link);
         outline: none;
@@ -3511,6 +3554,25 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .dashboard-tabulator .dashboard-grade-col-even { background-color: var(--c-bg-mute) !important; }
       .dashboard-tabulator .dashboard-grade-col-odd { background-color: transparent !important; }
+      /* Unfolded/expanded grade columns: allow text to wrap */
+      .dashboard-tabulator .tabulator-cell.dashboard-grade-col-even,
+      .dashboard-tabulator .tabulator-cell.dashboard-grade-col-odd {
+        white-space: normal;
+        word-break: break-word;
+        overflow: visible;
+      }
+      .dashboard-grade-check {
+        display: inline-block;
+        font-size: 1rem;
+        color: var(--c-link);
+        line-height: 1;
+      }
+      /* Suppress Tabulator range-selection outline on interactive cells */
+      .dashboard-tabulator .tabulator-cell:has(.dashboard-inline-select-wrap),
+      .dashboard-tabulator .tabulator-cell:has(.dashboard-inline-input-wrap) {
+        outline: none !important;
+        box-shadow: none !important;
+      }
       .dashboard-tabulator .tabulator-col-title,
       .dashboard-tabulator .tabulator-col-content,
       .dashboard-tabulator .tabulator-row,
@@ -4026,19 +4088,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         min-height: 1.32rem;
         padding: 0.04rem 0;
       }
-      .dashboard-cell--range-selected {
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-link) 46%, transparent);
-        background: color-mix(in srgb, var(--c-link) 10%, transparent) !important;
-      }
-      .dashboard-cell--range-anchor {
-        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-link) 64%, transparent);
-      }
-      body.dashboard-range-dragging,
-      body.dashboard-range-dragging * {
-        user-select: none !important;
-        -webkit-user-select: none !important;
-      }
-      :root.dark .dashboard-grid-search,
+:root.dark .dashboard-grid-search,
       :root.dark .dashboard-grid-btn,
       :root.dark .dashboard-grid-icon-btn,
       :root.dark .dashboard-inline-select,
@@ -4391,6 +4441,15 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                   aria-label="Buscar en overview"
                 />
                 <div class="dashboard-grid-actions">
+                  <button
+                    type="button"
+                    class="dashboard-grid-btn dashboard-grid-btn--icon"
+                    data-dashboard-import-clipboard
+                    title="Importar estudiantes desde portapapeles"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                    Importar
+                  </button>
                   <button type="button" class="dashboard-grid-btn" data-dashboard-download="overview">CSV</button>
                 </div>
               </div>
@@ -4413,6 +4472,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                   aria-label="Buscar en gradebook"
                 />
                 <div class="dashboard-grid-actions">
+                  <button type="button" class="dashboard-grid-btn" data-dashboard-unfold-all="gradebook">Desplegar todo</button>
                   <button type="button" class="dashboard-grid-btn" data-dashboard-download="gradebook">CSV</button>
                 </div>
               </div>
@@ -4468,6 +4528,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                   aria-label="Buscar en asistencia"
                 />
                 <div class="dashboard-grid-actions">
+                  <button type="button" class="dashboard-grid-btn" data-dashboard-unfold-all="attendance-summary">Desplegar todo</button>
                   <button type="button" class="dashboard-grid-btn" data-dashboard-download="attendance-summary">CSV resumen</button>
                   <button type="button" class="dashboard-grid-btn" data-dashboard-download="attendance-log">CSV log</button>
                 </div>

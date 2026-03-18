@@ -24,14 +24,23 @@ export const POST: APIRoute = async ({ params, locals }) => {
   const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 
   try {
-    // Get user
-    const { data: user } = await supabase.from('User').select('id, role').eq('email', currentUser.email).single();
+    // Get or create user record (first Google login may not have a DB row yet)
+    let { data: user } = await supabase.from('User').select('id, role').eq('email', currentUser.email).maybeSingle();
 
     if (!user) {
-      return new Response(JSON.stringify({ error: 'User not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const name = typeof currentUser.name === 'string' ? currentUser.name.trim() : '';
+      const { data: created, error: createError } = await supabase
+        .from('User')
+        .insert([{ email: currentUser.email, name, role: 'student' }])
+        .select('id, role')
+        .single();
+      if (createError || !created) {
+        return new Response(JSON.stringify({ error: 'Could not create user record' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      user = created;
     }
 
     // Check if already enrolled

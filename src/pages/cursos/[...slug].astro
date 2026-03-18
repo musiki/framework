@@ -118,6 +118,40 @@ if (session && !hasCourseEnrollment && !canManageLiveInteractions) {
   return Astro.redirect('/cursos');
 }
 
+// Redirect enrolled students to welcome poll if not yet completed
+const isStudentEnrolled = session && hasCourseEnrollment && !canManageLiveInteractions && normalizeRole(sessionEnrollmentRole) === 'student';
+const isRequestingWelcomePage = requestedLessonPath === '_welcome' || requestedLessonPath.startsWith('_welcome/');
+if (isStudentEnrolled && !isRequestingWelcomePage) {
+  const welcomeEntry = allLessons.find((entry) => entry.id === `${canonicalCourseId}/_welcome`);
+  if (welcomeEntry) {
+    const welcomeEvalIds = Array.isArray((welcomeEntry.data as any).welcomeEvalIds)
+      ? ((welcomeEntry.data as any).welcomeEvalIds as string[]).filter(Boolean)
+      : [];
+    if (welcomeEvalIds.length > 0) {
+      const sessionEmail = String(session?.user?.email || '').trim().toLowerCase();
+      if (sessionEmail) {
+        const { data: dbUserForWelcome } = await supabase
+          .from('User')
+          .select('id')
+          .ilike('email', sessionEmail)
+          .maybeSingle();
+        if (dbUserForWelcome) {
+          const { data: welcomeSubs } = await supabase
+            .from('Submission')
+            .select('assignmentId')
+            .eq('userId', dbUserForWelcome.id)
+            .in('assignmentId', welcomeEvalIds);
+          const submittedIds = new Set((welcomeSubs || []).map((s: any) => String(s.assignmentId)));
+          const allCompleted = welcomeEvalIds.every((id) => submittedIds.has(id));
+          if (!allCompleted) {
+            return Astro.redirect(`${courseHref}/_welcome`);
+          }
+        }
+      }
+    }
+  }
+}
+
 // Group lessons by chapter
 const chapters = allLessons.reduce((acc, lesson) => {
   const chapter = lesson.data.chapter || 'general';
@@ -142,13 +176,21 @@ if (parts.length === 1) {
   // Show course forum hub
   currentEntry = courseIndex;
 } else {
-  // Show specific lesson
   const lessonPath = requestedLessonPath;
-  const lessonMatch = findLessonByCoursePath(lessonPath, lessonPathIndex);
-  currentEntry = lessonMatch?.entry;
-  resolvedLessonRoutePath = lessonMatch?.shortPath || '';
+
+  // _welcome uses a literal underscore path that toCoursePathSlug would mangle,
+  // so we bypass the slug index and look it up directly by entry ID.
+  if (isRequestingWelcomePage) {
+    currentEntry = allLessons.find((e) => e.id === `${canonicalCourseId}/_welcome`);
+    resolvedLessonRoutePath = '_welcome';
+  } else {
+    const lessonMatch = findLessonByCoursePath(lessonPath, lessonPathIndex);
+    currentEntry = lessonMatch?.entry;
+    resolvedLessonRoutePath = lessonMatch?.shortPath || '';
+  }
+
   if (!currentEntry) return Astro.redirect(courseHref);
-  
+
   // Check visibility at lesson level
   const visibility = currentEntry.data.visibility;
   if (visibility === 'enrolled-only') {
@@ -163,7 +205,8 @@ if (parts.length === 1) {
     }
   }
 
-  if (requestedCoursePathSegment !== preferredCoursePathSegment || requestedLessonPath !== resolvedLessonRoutePath) {
+  // For _welcome, skip the canonical-path redirect (its path can't be slugified).
+  if (!isRequestingWelcomePage && (requestedCoursePathSegment !== preferredCoursePathSegment || requestedLessonPath !== resolvedLessonRoutePath)) {
     return Astro.redirect(`${courseHref}/${encodePathSegments(resolvedLessonRoutePath)}${Astro.url.search}`);
   }
 }
@@ -6697,6 +6740,152 @@ order:
         renderEvalMath(container);
       }
 
+      function renderFormMsq(wrapper, data, position) {
+        const options = Array.isArray(data.options)
+          ? data.options.map((option, index) => {
+              if (option && typeof option === 'object') return { id: option.id || `opt-${index}`, text: String(option.text || '') };
+              return { id: `opt-${index}`, text: String(option || '') };
+            }).filter((o) => o.text)
+          : [];
+
+        if (options.length < 2) {
+          renderUnsupported(wrapper, data, position);
+          return;
+        }
+
+        const previousSubmission = getSubmission(data.id);
+        const previousPayload = getSubmissionPayload(previousSubmission);
+        const previousAnswers = Array.isArray(previousPayload?.answerIndexes)
+          ? previousPayload.answerIndexes.map(String)
+          : Array.isArray(previousPayload?.answer)
+          ? previousPayload.answer.map(String)
+          : [];
+        const wasSubmitted = previousAnswers.length > 0;
+        registerProgress(data, position, wasSubmitted);
+
+        const container = document.createElement('div');
+        container.className = 'eval-block poll-block form-msq-block';
+        container.dataset.evalId = data.id;
+        container.id = `eval-${data.id}`;
+
+        const prompt = document.createElement('h4');
+        prompt.className = 'eval-prompt';
+        prompt.textContent = data.prompt || data.title || '';
+        container.appendChild(prompt);
+
+        const form = document.createElement('form');
+        form.className = 'form-msq-form';
+
+        options.forEach((option, index) => {
+          const label = document.createElement('label');
+          label.className = 'form-msq-option';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.name = 'option';
+          checkbox.value = String(index);
+          checkbox.checked = wasSubmitted && previousAnswers.includes(String(index));
+          if (wasSubmitted) checkbox.disabled = Boolean(!data.allowEdit);
+          label.appendChild(checkbox);
+          label.append(' ' + option.text);
+          form.appendChild(label);
+        });
+
+        const submitBtn = document.createElement('button');
+        submitBtn.type = 'submit';
+        submitBtn.className = 'eval-submit';
+        submitBtn.textContent = wasSubmitted ? (data.allowEdit ? 'Actualizar respuesta' : 'Respuesta registrada ✓') : 'Enviar';
+        submitBtn.disabled = wasSubmitted && !data.allowEdit;
+        form.appendChild(submitBtn);
+
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const checked = Array.from(form.querySelectorAll('input[type="checkbox"]:checked')).map((el) => el.value);
+          const selectedTexts = checked.map((idx) => options[Number(idx)]?.text).filter(Boolean);
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Guardando...';
+          const ok = await saveSubmission({
+            evalId: data.id,
+            answer: { type: 'form-msq', answerIndexes: checked, answerOptions: selectedTexts, selectionMode: 'multiple' },
+          });
+          if (ok) {
+            submitBtn.textContent = 'Respuesta registrada ✓';
+            form.querySelectorAll('input[type="checkbox"]').forEach((el) => { el.disabled = !data.allowEdit; });
+          } else {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Error, reintentar';
+          }
+        });
+
+        container.appendChild(form);
+        wrapper.appendChild(container);
+        renderEvalMath(container);
+      }
+
+      function renderFormText(wrapper, data, position) {
+        const previousSubmission = getSubmission(data.id);
+        const previousPayload = getSubmissionPayload(previousSubmission);
+        const previousText = ensureEvalText(
+          previousPayload?.text || previousPayload?.answerText || previousPayload?.answer?.text || '',
+        );
+        const wasSubmitted = Boolean(previousText);
+        registerProgress(data, position, wasSubmitted);
+
+        const container = document.createElement('div');
+        container.className = 'eval-block form-text-block';
+        container.dataset.evalId = data.id;
+        container.id = `eval-${data.id}`;
+
+        const prompt = document.createElement('h4');
+        prompt.className = 'eval-prompt';
+        prompt.textContent = data.prompt || data.title || '';
+        container.appendChild(prompt);
+
+        const form = document.createElement('form');
+        form.className = 'form-text-form';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-text-input';
+        input.placeholder = 'Tu respuesta...';
+        input.maxLength = Math.max(10, Number(data.size) || 50) * 2;
+        input.size = Math.max(20, Number(data.size) || 50);
+        input.value = previousText;
+        input.disabled = wasSubmitted && !data.allowEdit;
+        form.appendChild(input);
+
+        const submitBtn = document.createElement('button');
+        submitBtn.type = 'submit';
+        submitBtn.className = 'eval-submit';
+        submitBtn.textContent = wasSubmitted ? (data.allowEdit ? 'Actualizar respuesta' : 'Respuesta registrada ✓') : 'Enviar';
+        submitBtn.disabled = wasSubmitted && !data.allowEdit;
+        form.appendChild(submitBtn);
+
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const text = input.value.trim();
+          if (!text) return;
+          submitBtn.disabled = true;
+          input.disabled = true;
+          submitBtn.textContent = 'Guardando...';
+          const ok = await saveSubmission({
+            evalId: data.id,
+            answer: { type: 'form-text', text },
+          });
+          if (ok) {
+            submitBtn.textContent = 'Respuesta registrada ✓';
+            if (!data.allowEdit) input.disabled = true;
+          } else {
+            submitBtn.disabled = false;
+            input.disabled = false;
+            submitBtn.textContent = 'Error, reintentar';
+          }
+        });
+
+        container.appendChild(form);
+        wrapper.appendChild(container);
+        renderEvalMath(container);
+      }
+
       function renderUnsupported(wrapper, data, position) {
         registerProgress(data, position, false);
 
@@ -10540,6 +10729,16 @@ a[node] -->|edge| b[hub]
               return;
             }
 
+            if (evalData.type === 'form-msq') {
+              renderFormMsq(wrapper, evalData, index);
+              return;
+            }
+
+            if (evalData.type === 'form-text') {
+              renderFormText(wrapper, evalData, index);
+              return;
+            }
+
             renderUnsupported(wrapper, evalData, index);
           } catch (error) {
             console.error('Eval block bootstrap error:', error);
@@ -11113,6 +11312,29 @@ a[node] -->|edge| b[hub]
       }
       .poll-block {
         border-style: solid;
+      }
+      .form-msq-form,
+      .form-text-form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+      }
+      .form-msq-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        font-size: 0.95rem;
+      }
+      .form-text-input {
+        padding: 0.4rem 0.65rem;
+        border: 1px solid var(--c-border, #ccc);
+        border-radius: 4px;
+        font-size: 0.95rem;
+        background: var(--c-bg, #fff);
+        color: var(--c-fg, #222);
+        width: min(100%, 36ch);
       }
       .poll-status {
         margin: 0.25rem 0 0;

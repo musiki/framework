@@ -214,9 +214,9 @@ export function buildOverviewProjection({
 
   return {
     columns: [
-      { title: 'Nombre', field: 'firstName', frozen: true, minWidth: 140 },
-      { title: 'Apellido', field: 'lastName', frozen: true, minWidth: 150 },
-      { title: 'Email', field: 'email', minWidth: 220 },
+      { title: 'Nombre', field: 'firstName', frozen: true, minWidth: 140, kind: 'editable-text' },
+      { title: 'Apellido', field: 'lastName', frozen: true, minWidth: 150, kind: 'editable-text' },
+      { title: 'Email', field: 'email', minWidth: 220, kind: 'editable-text' },
       { title: 'Turno', field: 'turno', width: 74, hozAlign: 'center', headerHozAlign: 'center', kind: 'turno' },
       { title: 'Grupo', field: 'grupo', width: 84, hozAlign: 'center', headerHozAlign: 'center', kind: 'grupo' },
       { title: 'Asist.%', field: 'attendanceRate', width: 92, hozAlign: 'center', headerHozAlign: 'center', kind: 'percent' },

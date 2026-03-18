@@ -60,8 +60,12 @@ export function buildGradebookProjection({
       taskGroups[g].push(assignment);
     });
 
+    // Only show Pg/Pc when at least one assignment in the scope has numeric points.
+    const lessonHasPoints = (lesson?.assignments || []).some((a: any) => Boolean(a?.hasPoints));
+
     const groupColumns = Object.entries(taskGroups).map(([groupName, assignments], groupIndex) => {
       const groupField = `__avg_lesson_${lessonIndex}_group_${groupIndex}`;
+      const groupHasPoints = assignments.some((a: any) => Boolean(a?.hasPoints));
       return {
         title: groupName === 'General' ? '' : groupName,
         field: `__group_lesson_${lessonIndex}_task_${groupIndex}`,
@@ -76,7 +80,7 @@ export function buildGradebookProjection({
             kind: 'grade-score',
             cssClass: lessonIndex % 2 === 0 ? 'dashboard-grade-col-even' : 'dashboard-grade-col-odd',
           })),
-          {
+          ...(groupHasPoints ? [{
             title: 'Pg',
             field: groupField,
             width: 44,
@@ -86,7 +90,7 @@ export function buildGradebookProjection({
             headerTooltip: 'Promedio Grupo (Pg)',
             kind: 'score',
             cssClass: 'dashboard-grade-sub-avg dashboard-grade-prom',
-          }
+          }] : []),
         ]
       };
     });
@@ -97,7 +101,7 @@ export function buildGradebookProjection({
       headerTooltip: String(lesson?.lessonLabel || 'Clase'),
       columns: [
         ...groupColumns,
-        {
+        ...(lessonHasPoints ? [{
           title: 'Pc',
           field: lessonField,
           width: 44,
@@ -107,7 +111,7 @@ export function buildGradebookProjection({
           headerTooltip: 'Promedio Clase (Pc)',
           kind: 'score',
           cssClass: 'dashboard-grade-lesson-avg dashboard-grade-prom',
-        }
+        }] : []),
       ],
     };
   });
@@ -148,17 +152,27 @@ export function buildGradebookProjection({
           assignments.forEach((assignment: any) => {
             const field = fieldKeyFromId('eval', assignment?.id);
             const cell = row?.cells?.[assignment?.id] || null;
+            const hasSubmission = Boolean(cell);
             const score = cell?.score !== null && cell?.score !== undefined && cell?.score !== ''
               ? Number(cell.score)
               : null;
-            
-            record[field] = score !== null ? asDashboardNumber(score) : null;
+
+            // For non-scored evals (form-msq, form-text, etc.), show "✓" when submitted.
+            const isFormType = Boolean(assignment?.evalType && ['form-msq', 'form-text', 'poll', 'form'].some(
+              (t) => String(assignment.evalType).startsWith(t),
+            ));
+            if (hasSubmission && !assignment?.hasPoints && isFormType) {
+              record[field] = '✓';
+            } else {
+              record[field] = score !== null ? asDashboardNumber(score) : null;
+            }
+
             record.__gradeState[field] = {
-              statusLabel: String(cell?.statusLabel || ''),
+              statusLabel: String(cell?.statusLabel || (hasSubmission ? 'entregado' : '')),
               assignmentId: String(assignment?.id || ''),
             };
 
-            if (score !== null) {
+            if (score !== null && assignment?.hasPoints) {
               groupSum += score;
               groupCount += 1;
               lessonSum += score;

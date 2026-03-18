@@ -444,6 +444,18 @@ export function parseEvalBlock(blockValue, options = {}) {
   if (type === 'patch_ai') return normalizePatchAi(parsed, common);
   if (type === 'short_ai') return normalizeShortAi(parsed, common);
   if (type === 'reference_ai') return normalizeReferenceAi(parsed, common);
+  if (type === 'form-msq') {
+    const base = normalizePoll(parsed, common);
+    return { ...base, type: 'form-msq', allowMultiple: true };
+  }
+  if (type === 'form-text') {
+    return {
+      ...common,
+      type: 'form-text',
+      prompt: asText(parsed.prompt || parsed.title || ''),
+      size: asPositiveInteger(parsed.size, 50),
+    };
+  }
 
   return {
     ...common,

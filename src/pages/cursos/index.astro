@@ -58,7 +58,7 @@ const currentUser = session?.user;
 let userEnrollments: string[] = [];
 if (currentUser?.email) {
   const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-  const { data: user } = await supabase.from('User').select('id').eq('email', currentUser.email).single();
+  const { data: user } = await supabase.from('User').select('id').eq('email', currentUser.email).maybeSingle();
   
   if (user) {
     const { data: enrollments } = await supabase.from('Enrollment').select('courseId').eq('userId', user.id);
@@ -333,14 +333,10 @@ if (currentUser?.email) {
 						const data = await response.json();
 						
 						if (response.ok) {
-							// Show success message
 							button.textContent = 'Inscrito';
 							button.style.background = '#4caf50';
-							
-							// Reload page after short delay to update UI
-							setTimeout(() => {
-								window.location.reload();
-							}, 1000);
+							// Redirect to course — server-side welcome redirect will kick in
+							setTimeout(() => { window.location.href = `/cursos/${courseId}`; }, 800);
 						} else {
 							throw new Error(data.error || 'Error al inscribirse');
 						}

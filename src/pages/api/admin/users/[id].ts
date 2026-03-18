@@ -28,8 +28,11 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
 
   const payload = await request.json().catch(() => ({}));
   const nextRole = normalizeRole((payload as any)?.role);
-  if (!nextRole) {
-    return json({ error: 'Invalid role' }, 400);
+  const nextName = typeof (payload as any)?.name === 'string' ? String((payload as any).name).trim() : null;
+  const nextEmail = typeof (payload as any)?.email === 'string' ? String((payload as any).email).trim().toLowerCase() : null;
+
+  if (!nextRole && !nextName && !nextEmail) {
+    return json({ error: 'Nothing to update' }, 400);
   }
 
   const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
@@ -45,11 +48,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     if (!requester) return json({ error: 'Requester user not found' }, 404);
 
     if (normalizeRole(requester.role) !== 'teacher') {
-      return json({ error: 'Only teachers can update roles' }, 403);
-    }
-
-    if (requester.id === targetUserId) {
-      return json({ error: 'Cannot update your own role from this view' }, 400);
+      return json({ error: 'Only teachers can update user data' }, 403);
     }
 
     const { data: targetUser, error: targetUserError } = await supabase
@@ -61,42 +60,58 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     if (targetUserError) throw targetUserError;
     if (!targetUser) return json({ error: 'User not found' }, 404);
 
-    const currentRole = normalizeRole(targetUser.role);
-    if (!currentRole) {
-      return json({ error: 'Target user has an unsupported role' }, 400);
+    const updateFields: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+
+    // Handle name update
+    if (nextName !== null) {
+      updateFields.name = nextName;
     }
 
-    if (currentRole === nextRole) {
-      return json({
-        success: true,
-        user: {
-          id: targetUser.id,
-          name: targetUser.name,
-          email: targetUser.email,
-          role: currentRole,
-        },
-      });
-    }
-
-    if (currentRole === 'teacher' && nextRole !== 'teacher') {
-      const { count: otherTeachersCount, error: teacherCountError } = await supabase
-        .from('User')
-        .select('id', { count: 'exact', head: true })
-        .eq('role', 'teacher')
-        .neq('id', targetUserId);
-
-      if (teacherCountError) throw teacherCountError;
-      if (!Number(otherTeachersCount || 0)) {
-        return json({ error: 'At least one teacher account must remain' }, 400);
+    // Handle email update
+    if (nextEmail !== null) {
+      if (!nextEmail.includes('@')) {
+        return json({ error: 'Invalid email' }, 400);
       }
+      // Check uniqueness (skip if same as current)
+      if (nextEmail !== String(targetUser.email || '').toLowerCase()) {
+        const { data: existingEmail } = await supabase
+          .from('User')
+          .select('id')
+          .ilike('email', nextEmail)
+          .neq('id', targetUserId)
+          .maybeSingle();
+        if (existingEmail) {
+          return json({ error: 'Email already in use' }, 409);
+        }
+      }
+      updateFields.email = nextEmail;
+    }
+
+    // Handle role update
+    if (nextRole) {
+      if (requester.id === targetUserId) {
+        return json({ error: 'Cannot update your own role from this view' }, 400);
+      }
+
+      const currentRole = normalizeRole(targetUser.role);
+      if (currentRole === 'teacher' && nextRole !== 'teacher') {
+        const { count: otherTeachersCount, error: teacherCountError } = await supabase
+          .from('User')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'teacher')
+          .neq('id', targetUserId);
+
+        if (teacherCountError) throw teacherCountError;
+        if (!Number(otherTeachersCount || 0)) {
+          return json({ error: 'At least one teacher account must remain' }, 400);
+        }
+      }
+      updateFields.role = nextRole;
     }
 
     const { data: updatedUser, error: updateError } = await supabase
       .from('User')
-      .update({
-        role: nextRole,
-        updatedAt: new Date().toISOString(),
-      })
+      .update(updateFields)
       .eq('id', targetUserId)
       .select('id, name, email, role')
       .single();
@@ -108,8 +123,8 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       user: updatedUser,
     });
   } catch (error: any) {
-    console.error('Error updating user role:', error?.message || error);
-    return json({ error: error?.message || 'Failed to update user role' }, 500);
+    console.error('Error updating user:', error?.message || error);
+    return json({ error: error?.message || 'Failed to update user' }, 500);
   }
 };
 
