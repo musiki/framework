@@ -496,7 +496,7 @@ const renderCourseRoleSelectMarkup = (cell: any) => {
   const rowId = cell.getData()?.id;
   const enrollmentId = cell.getData()?.enrollmentId;
   return `
-    <div class="dashboard-inline-select-wrap">
+    <div class="dashboard-inline-select-wrap" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()">
       <select class="dashboard-inline-select" data-dashboard-course-role-select data-row-id="${escapeHtml(rowId)}" data-enrollment-id="${escapeHtml(enrollmentId)}" data-role="${value === 'teacher' ? 'teacher' : 'student'}">
         <option value="student" ${value === 'student' ? 'selected' : ''}>Student</option>
         <option value="teacher" ${value === 'teacher' ? 'selected' : ''}>Teacher</option>
@@ -510,7 +510,7 @@ const renderTurnoSelectMarkup = (cell: any) => {
   const rowId = cell.getData()?.id;
   const studentId = cell.getData()?.studentId;
   return `
-    <div class="dashboard-inline-select-wrap">
+    <div class="dashboard-inline-select-wrap" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()">
       <select class="dashboard-inline-select" data-dashboard-turno-select data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" title="${getTurnoTitle(value)}">
         <option value="M" ${value === 'M' ? 'selected' : ''}>M</option>
         <option value="T" ${value === 'T' ? 'selected' : ''}>T</option>
@@ -525,7 +525,7 @@ const renderGrupoInputMarkup = (cell: any) => {
   const rowId = cell.getData()?.id;
   const studentId = cell.getData()?.studentId;
   return `
-    <div class="dashboard-inline-input-wrap">
+    <div class="dashboard-inline-input-wrap" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()">
       <input type="text" class="dashboard-inline-input" data-dashboard-grupo-input value="${escapeHtml(value)}" data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" placeholder="—" />
     </div>
   `;
@@ -545,7 +545,7 @@ const renderConceptoInputMarkup = (cell: any) => {
   const rowId = cell.getData()?.id;
   const studentId = cell.getData()?.studentId;
   return `
-    <div class="dashboard-inline-input-wrap">
+    <div class="dashboard-inline-input-wrap" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()">
       <input type="text" inputmode="decimal" class="dashboard-inline-input dashboard-inline-input--concepto" data-dashboard-concepto-input value="${escapeHtml(value)}" data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" placeholder="—" />
     </div>
   `;
@@ -559,7 +559,7 @@ const renderAdminActionsMarkup = (cell: any) => {
   const role  = escapeHtml(data.globalRole);
   const crole = escapeHtml(data.courseRole);
   return `
-    <div class="dashboard-admin-actions">
+    <div class="dashboard-admin-actions" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()">
       <button type="button" class="dashboard-grid-icon-btn" data-dashboard-user-edit data-user-id="${uid}" data-user-name="${name}" data-user-email="${email}" data-user-global-role="${role}" title="Editar usuario">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
       </button>
@@ -582,7 +582,7 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
       const eid = escapeHtml(enrollmentId);
       const role = escapeHtml(roleInCourse);
       const uname = userName;
-      return `<span class="enrollment-chip" data-course-id="${cid}">${cid}<button type="button" class="enrollment-chip-remove" data-dashboard-unenroll data-enrollment-id="${eid}" data-enrollment-role="${role}" data-user-name="${uname}" title="Desinscribir de ${cid}" aria-label="Desinscribir de ${cid}">×</button></span>`;
+      return `<span class="enrollment-chip" data-course-id="${cid}">${cid}<button type="button" class="enrollment-chip-remove" onmousedown="event.stopPropagation()" ondblclick="event.stopPropagation()" data-dashboard-unenroll data-enrollment-id="${eid}" data-enrollment-role="${role}" data-user-name="${uname}" title="Desinscribir de ${cid}" aria-label="Desinscribir de ${cid}">×</button></span>`;
     })
     .join('');
 };
@@ -1875,21 +1875,12 @@ const bindTurnoSelects = (host: HTMLElement, table: Tabulator, meta: DashboardMe
     void updateTurno(select);
   };
 
-  const mousedownHandler = (event: MouseEvent) => {
-    const target = event.target;
-    if (target instanceof HTMLSelectElement && target.matches('[data-dashboard-turno-select]')) {
-      event.stopPropagation();
-    }
-  };
-
   host.addEventListener('focusin', focusHandler);
   host.addEventListener('change', changeHandler);
-  host.addEventListener('mousedown', mousedownHandler, true);
 
   return () => {
     host.removeEventListener('focusin', focusHandler);
     host.removeEventListener('change', changeHandler);
-    host.removeEventListener('mousedown', mousedownHandler, true);
   };
 };
 
@@ -1994,25 +1985,16 @@ const bindGrupoInputs = (host: HTMLElement, table: Tabulator, meta: DashboardMet
     }
   };
 
-  const mousedownHandler = (event: MouseEvent) => {
-    const target = event.target;
-    if (target instanceof HTMLInputElement && target.matches('[data-dashboard-grupo-input]')) {
-      event.stopPropagation();
-    }
-  };
-
   host.addEventListener('focusin', focusHandler);
   host.addEventListener('input', inputHandler);
   host.addEventListener('change', changeHandler);
   host.addEventListener('keydown', keydownHandler);
-  host.addEventListener('mousedown', mousedownHandler, true);
 
   return () => {
     host.removeEventListener('focusin', focusHandler);
     host.removeEventListener('input', inputHandler);
     host.removeEventListener('change', changeHandler);
     host.removeEventListener('keydown', keydownHandler);
-    host.removeEventListener('mousedown', mousedownHandler, true);
   };
 };
 
@@ -2081,23 +2063,14 @@ const bindConceptoInputs = (host: HTMLElement, table: Tabulator, meta: Dashboard
     if (event.key === 'Escape') { input.value = input.dataset.previousConcepto || ''; input.blur(); }
   };
 
-  const mousedownHandler = (event: MouseEvent) => {
-    const target = event.target;
-    if (target instanceof HTMLInputElement && target.matches('[data-dashboard-concepto-input]')) {
-      event.stopPropagation();
-    }
-  };
-
   host.addEventListener('focusin', focusHandler);
   host.addEventListener('change', changeHandler);
   host.addEventListener('keydown', keydownHandler);
-  host.addEventListener('mousedown', mousedownHandler, true);
 
   return () => {
     host.removeEventListener('focusin', focusHandler);
     host.removeEventListener('change', changeHandler);
     host.removeEventListener('keydown', keydownHandler);
-    host.removeEventListener('mousedown', mousedownHandler, true);
   };
 };
 
@@ -2192,13 +2165,17 @@ const bindInteractiveSuppression = (element: HTMLElement) => {
     }
   };
   
-  // Use capture to catch the event before Tabulator's internal listeners.
-  element.addEventListener('mousedown', handler, { capture: true });
+  // Use capture for dblclick to prevent Tabulator's internal cell editor from triggering 
+  // on custom interactive elements.
   element.addEventListener('dblclick', handler, { capture: true });
   
+  // Use bubbling for mousedown so children (like <select>) actually receive the event.
+  // The formatters also stop propagation on the wrap to prevent Tabulator range-select.
+  element.addEventListener('mousedown', handler); 
+  
   return () => {
-    element.removeEventListener('mousedown', handler, { capture: true });
     element.removeEventListener('dblclick', handler, { capture: true });
+    element.removeEventListener('mousedown', handler);
   };
 };
 
