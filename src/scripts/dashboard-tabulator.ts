@@ -308,7 +308,17 @@ const getOwnAnnotation = (state: AnnotationState, context: CellScopeContext) => 
   return list.find((a) => a.authorUserId === state.currentUserId) || null;
 };
 
-const refreshAnnotationViews = (state: AnnotationState) => {
+const refreshAnnotationViews = (state: AnnotationState, targetTab?: string) => {
+  if (targetTab) {
+    const table = state.registry.get(targetTab);
+    if (table) {
+      // redraw(true) is expensive; it re-renders the whole table DOM.
+      // Ideally we would use cell.update() but since annotations are drawn 
+      // by the formatter based on external state, we must redraw.
+      table.redraw(true);
+    }
+    return;
+  }
   state.registry.forEach((table) => {
     table.redraw(true);
   });
@@ -1501,7 +1511,7 @@ const saveAnnotation = async (
     upsertAnnotationInState(state, result.annotation as DashboardAnnotationRecord);
   }
 
-  refreshAnnotationViews(state);
+  refreshAnnotationViews(state, context.tab);
 };
 
 const removeAnnotation = async (state: AnnotationState, annotationId: string) => {
@@ -1733,7 +1743,7 @@ const bindAnnotationShortcut = (
 
     if (isVBNM && state.selectedContext) {
       event.preventDefault();
-      // event.stopPropagation(); removing to prevent Astro toolbar crash
+      event.stopPropagation();
       let color: DashboardAnnotationColor | '' = '';
       if (key === 'v') color = 'green';
       else if (key === 'b') color = 'yellow';
