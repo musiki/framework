@@ -61,6 +61,7 @@ const normalizeNotes = (value: unknown) =>
 const normalizeGrupo = (value: unknown) => {
   const raw = cleanString(value);
   if (!raw) return '';
+  if (raw.toUpperCase() === 'X') return 'X';
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return '';
   const normalized = Math.min(99, Math.max(0, Math.trunc(parsed)));

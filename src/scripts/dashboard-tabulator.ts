@@ -427,6 +427,7 @@ const saveSingleCourseStudentMetaCellValue = async (
 ) => {
   const kind = getCellKind(cell);
   if (!isCourseStudentMetaCellKind(kind)) return;
+  const normalizedKind = normalizeText(kind);
 
   const field = getCellField(cell);
   const previousValue = normalizeCourseStudentMetaValue(
@@ -446,6 +447,9 @@ const saveSingleCourseStudentMetaCellValue = async (
       await row.update({
         [field]: previousValue || '',
       });
+      if (normalizedKind === 'grupo') {
+        row.getTable?.()?.refreshFilter?.();
+      }
     }
     return;
   }
@@ -454,6 +458,9 @@ const saveSingleCourseStudentMetaCellValue = async (
     await row?.update?.({
       [field]: nextValue || '',
     });
+    if (normalizedKind === 'grupo') {
+      row?.getTable?.()?.refreshFilter?.();
+    }
     return;
   }
 
@@ -473,6 +480,10 @@ const saveSingleCourseStudentMetaCellValue = async (
   await row?.update?.({
     [field]: resolvedValue || '',
   });
+  if (normalizedKind === 'grupo') {
+    row?.reformat?.();
+    row?.getTable?.()?.refreshFilter?.();
+  }
 };
 
 const persistClipboardCellValue = async (
@@ -672,6 +683,15 @@ const getStoredSearchQuery = (persistKey: string) => {
   }
 };
 
+const isAbandonedDashboardRow = (data: any) =>
+  normalizeTextLower(data?.grupo ?? data?.groupValue ?? '') === 'x';
+
+const applyTeacherMainRowState = (row: any) => {
+  const rowElement = row?.getElement?.();
+  if (!(rowElement instanceof HTMLElement)) return;
+  rowElement.classList.toggle('dashboard-row-abandoned', isAbandonedDashboardRow(row?.getData?.() || {}));
+};
+
 const escapeHtml = (value: string | null | undefined) => {
   const map: Record<string, string> = {
     '&': '&amp;',
@@ -701,9 +721,14 @@ const formatAbsence = (units: number) => {
   return String(Math.round(units * 10) / 10).replace('.', ',');
 };
 
-const formatAttendanceSymbol = (value: number) => {
-  if (value >= 1) return '/';
-  if (value >= 0.5) return '~';
+const formatAttendanceSymbol = (
+  value: number | null | undefined,
+  options: { blankWhenZero?: boolean } = {},
+) => {
+  const units = Number(value ?? 0);
+  if (units >= 1) return '/';
+  if (units >= 0.5) return '~';
+  if (options.blankWhenZero) return '';
   return 'x';
 };
 
@@ -764,13 +789,18 @@ const persistSingleAttendanceCellValue = async (
 
   const payload = await response.json().catch(() => ({}));
   const nextCount = typeof payload?.meta?.count === 'number' ? payload.meta.count : null;
-  const nextDisplay = nextCount === null ? '' : formatAttendanceSymbol(nextCount);
   const rowData = cell.getData?.() || {};
   const nextCellMeta = rowData?.__attendanceCellMeta?.[context.field];
+  const liveValue = Number(nextCellMeta?.liveValue || 0);
+  const nextEffectiveValue = nextCount ?? liveValue;
+  const nextDisplay = nextCount !== null
+    ? formatAttendanceSymbol(nextCount)
+    : formatAttendanceSymbol(liveValue, { blankWhenZero: true });
   if (nextCellMeta) {
     nextCellMeta.hasManualOverride = nextCount !== null;
-    nextCellMeta.manualValue = nextCount ?? 0;
-    nextCellMeta.effectiveValue = nextCount ?? Number(nextCellMeta.liveValue || 0);
+    nextCellMeta.manualValue = nextCount;
+    nextCellMeta.effectiveValue = nextEffectiveValue;
+    nextCellMeta.title = `Room: ${formatAttendanceSymbol(liveValue, { blankWhenZero: true }) || '—'} • Override: ${nextCount === null ? 'auto' : formatAttendanceSymbol(nextCount)} • Final: ${formatAttendanceSymbol(nextEffectiveValue, { blankWhenZero: true }) || '—'}`;
   }
 
   let absenceUnits = 0;
@@ -808,7 +838,9 @@ const getTurnoTitle = (value: string) => {
 };
 
 const normalizeGrupoDigits = (value: any) => {
-  const raw = normalizeText(value).replace(/[^0-9]/g, '');
+  const normalized = normalizeText(value).toUpperCase();
+  if (normalized === 'X') return 'X';
+  const raw = normalized.replace(/[^0-9]/g, '');
   return raw ? String(parseInt(raw, 10)) : '';
 };
 
@@ -1086,9 +1118,12 @@ const renderAttendanceMarkup = (cell: any) => {
   if (!meta) return escapeHtml(String(val || ''));
 
   const units = Number(meta.effectiveValue || 0);
-  const symbol = formatAttendanceSymbol(units);
   const isFuture = Boolean(meta.isFuture);
   const hasManual = Boolean(meta.hasManualOverride);
+  const liveValue = Number(meta.liveValue || 0);
+  const symbol = hasManual
+    ? formatAttendanceSymbol(units)
+    : formatAttendanceSymbol(liveValue, { blankWhenZero: true });
 
   let cssClass = 'dashboard-attendance-chip';
   if (isFuture) cssClass += ' dashboard-attendance-chip--future';
@@ -1235,7 +1270,7 @@ const validateCourseStudentMetaValue = (kind: string, value: any) => {
     return {
       valid: false,
       normalized,
-      message: 'Grupo debe ser un valor numérico.',
+      message: 'Grupo debe ser un valor numérico o X.',
     };
   }
 
@@ -1984,6 +2019,23 @@ const hideColumnBranch = (column: any) => {
   safeHide(column);
 };
 
+const branchContainsVisibleKey = (column: any, visibleKeys: Set<string>): boolean => {
+  if (!column || visibleKeys.size === 0) return false;
+
+  const definition = column.getDefinition?.() || {};
+  const foldMeta = getFoldMeta(column);
+  const directKeys = [
+    String(foldMeta.key || ''),
+    String(definition.field || ''),
+  ].filter(Boolean);
+
+  if (directKeys.some((key) => visibleKeys.has(key))) {
+    return true;
+  }
+
+  return getGroupSubColumns(column).some((child) => branchContainsVisibleKey(child, visibleKeys));
+};
+
 const visitFoldMetaColumns = (columns: any[], visitor: (column: any, foldMeta: Record<string, any>) => void) => {
   (columns || []).forEach((column) => {
     const foldMeta = getFoldMeta(column);
@@ -2034,7 +2086,9 @@ const toggleFoldMetaGroup = (
     const childMeta = getFoldMeta(child);
     const childKey = String(childMeta.key || childDefinition.field || '');
     const isGroup = Array.isArray(childDefinition.columns) && childDefinition.columns.length > 0;
-    const keepVisible = visibleKeys.size > 0 ? visibleKeys.has(childKey) : false;
+    const keepVisible = visibleKeys.size > 0
+      ? visibleKeys.has(childKey) || branchContainsVisibleKey(child, visibleKeys)
+      : false;
 
     if (isGroup) {
       toggleFoldMetaGroup(
@@ -2492,6 +2546,10 @@ const configureColumns = (
       dateKey: _dateKey,
       ...restColumn
     } = baseColumn || {};
+    const fieldName = normalizeText(restColumn?.field || '');
+    const isCompactGradeMetaField =
+      ['teacher-main', 'gradebook'].includes(context.kind)
+      && ['average', 'conceptValue', 'finalGrade'].includes(fieldName);
     const nextColumn: Record<string, any> = {
       ...restColumn,
       ...(isMobileNarrow || isRangeTable ? { frozen: false } : {}),
@@ -2520,21 +2578,53 @@ const configureColumns = (
       };
     }
 
+    if (kind === 'grade-score') {
+      nextColumn.headerVertical = 'flip';
+      nextColumn.width = 32;
+      nextColumn.minWidth = 30;
+      nextColumn.resizable = nextColumn.resizable !== false;
+
+      if (context.kind === 'gradebook' && !foldMeta?.key) {
+        nextColumn.titleFormatter = (col: any) =>
+          `<div class="gradebook-eval-col-title">${escapeHtml(String(col.getValue() || ''))}</div>`;
+      }
+    }
+
+    if (
+      ['teacher-main', 'gradebook'].includes(context.kind)
+      && (kind === 'score' || kind === 'concepto' || kind === 'final-grade')
+    ) {
+      nextColumn.headerVertical = 'flip';
+    }
+
+    if (isCompactGradeMetaField) {
+      nextColumn.headerVertical = false;
+      nextColumn.width = 32;
+      nextColumn.minWidth = 30;
+      nextColumn.headerHozAlign = 'center';
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-grade-meta-compact');
+      nextColumn.resizable = nextColumn.resizable !== false;
+    }
+
     if (context.kind === 'gradebook') {
-      if (kind === 'grade-score') {
-        // Eval columns: enforce narrow width, abbreviate the header label.
-        nextColumn.width = 44;
-        nextColumn.minWidth = 40;
-        nextColumn.maxWidth = 50;
-        nextColumn.titleFormatter = (col: any) => {
-          const abbr = escapeHtml(formatAbletonLabel(col.getValue()));
-          return `<div class="gradebook-eval-col-title">${abbr}</div>`;
-        };
-      } else if (kind === 'score') {
+      if (kind === 'score') {
         // Pg / Pc / Prom. — keep their own widths from the projection; only style the label.
         nextColumn.titleFormatter = (col: any) =>
           `<div class="gradebook-eval-col-title">${escapeHtml(col.getValue())}</div>`;
+      } else if (kind === 'concepto' || kind === 'final-grade') {
+        nextColumn.titleFormatter = (col: any) =>
+          `<div class="gradebook-eval-col-title">${escapeHtml(col.getValue())}</div>`;
       }
+    }
+
+    if (isCompactGradeMetaField) {
+      nextColumn.titleFormatter = (col: any) => {
+        const fullLabel = String(foldMeta?.fullLabel || col.getValue() || '');
+        const shortLabel = String(foldMeta?.shortLabel || formatAbletonLabel(fullLabel) || fullLabel);
+        const useShort = Boolean(foldMeta?.summaryOnly) || shouldUseShortLeafLabel(col);
+        const label = useShort ? shortLabel : fullLabel;
+        return `<div class="dashboard-grade-meta-title" title="${escapeHtml(fullLabel)}"><span class="dashboard-grade-meta-title__label">${escapeHtml(label)}</span></div>`;
+      };
     }
 
     let baseFormatter: ((cell: any) => string) | null = renderPlainMarkup;
@@ -2721,17 +2811,31 @@ const configureColumns = (
   });
 };
 
-const installGlobalSearch = (tables: Tabulator[], input: HTMLInputElement, persistKey: string) => {
-  const filterState = { query: normalizeTextLower(getStoredSearchQuery(persistKey)) };
+const installGlobalSearch = (
+  tables: Tabulator[],
+  input: HTMLInputElement,
+  persistKey: string,
+  options?: {
+    hideAbandonedButton?: HTMLButtonElement | null;
+  },
+) => {
+  const filterState = {
+    query: normalizeTextLower(getStoredSearchQuery(persistKey)),
+    hideAbandoned: Boolean(options?.hideAbandonedButton),
+    hideAbandonedActive: false,
+  };
   const initializedTables = new WeakSet<Tabulator>();
   const filterFn = (data: any) => {
+    if (filterState.hideAbandoned && filterState.hideAbandonedActive && isAbandonedDashboardRow(data)) {
+      return false;
+    }
     if (!filterState.query) return true;
     return String(data?.__search || '').includes(filterState.query);
   };
   const filterWrapper = (data: any) => filterFn(data);
 
   const applyTableFilter = (table: Tabulator) => {
-    if (!filterState.query) {
+    if (!filterState.query && !(filterState.hideAbandoned && filterState.hideAbandonedActive)) {
       table.clearFilter(true);
       return;
     }
@@ -2766,6 +2870,24 @@ const installGlobalSearch = (tables: Tabulator[], input: HTMLInputElement, persi
   }
   filterState.query = normalizeTextLower(initialValue);
 
+  const hideAbandonedButton = options?.hideAbandonedButton;
+  if (hideAbandonedButton && hideAbandonedButton.dataset.bound !== 'true') {
+    hideAbandonedButton.dataset.bound = 'true';
+    const syncButton = () => {
+      hideAbandonedButton.classList.toggle('is-active', filterState.hideAbandonedActive);
+      hideAbandonedButton.setAttribute('aria-pressed', filterState.hideAbandonedActive ? 'true' : 'false');
+    };
+    syncButton();
+    hideAbandonedButton.addEventListener('click', () => {
+      filterState.hideAbandonedActive = !filterState.hideAbandonedActive;
+      syncButton();
+      tables.forEach((table) => {
+        if (!initializedTables.has(table)) return;
+        applyTableFilter(table);
+      });
+    });
+  }
+
   if (input.dataset.bound === 'true') return;
   input.dataset.bound = 'true';
   input.addEventListener('input', () => {
@@ -2792,20 +2914,20 @@ const buildTable = (
         ? '50vh'
         : false;
   element.dataset.rangeSelection = isRangeTable ? 'true' : 'false';
-  const table = new Tabulator(element, {
+    const table = new Tabulator(element, {
     index: 'id',
     data: Array.isArray(projection?.rows) ? projection.rows : [],
     columns: configureColumns(Array.isArray(projection?.columns) ? projection.columns : [], context, annotationState, modalRef),
     layout:
       context.kind === 'teacher-main'
-        ? 'fitDataFill'
+        ? 'fitDataTable'
         : context.kind === 'gradebook'
           ? 'fitDataTable'
           : 'fitColumns',
     // dblclick recommended by Tabulator docs when selectableRange is enabled,
     // to prevent editors from triggering on every range-start click.
     editTriggerEvent: isRangeTable ? 'dblclick' : 'focus',
-    columnHeaderVertAlign: 'bottom',
+    columnHeaderVertAlign: 'center',
     ...(fillPanelHeight ? { height: '100%' } : {}),
     ...(!fillPanelHeight && maxHeight ? { maxHeight } : {}),
     movableColumns: !isComplexTable,
@@ -2838,7 +2960,17 @@ const buildTable = (
     persistenceMode: 'local',
     persistenceID: persistKey,
     popupContainer: root,
-    rowHeight: context.kind === 'attendance-summary' ? 36 : 38,
+    rowHeight:
+      context.kind === 'teacher-main' || context.kind === 'attendance-summary'
+        ? 24
+        : 38,
+    ...(context.kind === 'teacher-main'
+      ? {
+        rowFormatter: (row: any) => {
+          applyTeacherMainRowState(row);
+        },
+      }
+      : {}),
   });
 
   (table as DashboardTabulatorInstance).__musikiFoldStorageKey = buildFoldStorageKey(persistKey);
@@ -2903,18 +3035,33 @@ const applyFoldLevel = (table: Tabulator, level: number) => {
   }
 };
 
-const foldTeacherMainProfileByDefault = (table: Tabulator) => {
+const foldTeacherMainGroupsByDefault = (table: Tabulator) => {
   try {
-    const profileColumn = table.getColumns().find((column: any) => {
-      const foldMeta = getFoldMeta(column);
-      if (String(foldMeta?.key || '') === 'teacher_main_profile') return true;
-      return normalizeText(column?.getDefinition?.()?.title || '') === 'PROFILE';
+    const defaultGroupKeys = ['teacher_main_profile', 'teacher_main_attendance'];
+    let changed = false;
+    defaultGroupKeys.forEach((groupKey) => {
+      if (getStoredFoldState(table, groupKey) !== undefined) return;
+
+      const groupColumn = table.getColumns().find((column: any) => {
+        const foldMeta = getFoldMeta(column);
+        return String(foldMeta?.key || '') === groupKey;
+      });
+
+      if (!groupColumn) return;
+      toggleFoldMetaGroup(groupColumn, true, { persist: false });
+      setStoredFoldState(table, groupKey, true);
+      changed = true;
     });
-    if (!profileColumn) return;
-    if (getStoredFoldState(table, 'teacher_main_profile') !== undefined) return;
-    toggleFoldMetaGroup(profileColumn, true);
+
     if (canRedrawTable(table)) {
       table.redraw(true);
+    }
+
+    if (changed) {
+      writeStoredFoldState(table, {
+        ...readStoredFoldState(table),
+        ...snapshotCurrentFoldState(table),
+      });
     }
   } catch {
     // ignore startup folding races
@@ -4473,11 +4620,12 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
       window.requestAnimationFrame(() => {
         unfoldAllColumns(table, { persist: false });
         restoreStoredFoldState(table);
-        foldTeacherMainProfileByDefault(table);
+        foldTeacherMainGroupsByDefault(table);
       });
     });
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="teacher-main"]');
-    if (searchInput) installGlobalSearch([table], searchInput, persistKey);
+    const hideAbandonedButton = root.querySelector<HTMLButtonElement>('[data-dashboard-hide-abandoned]');
+    if (searchInput) installGlobalSearch([table], searchInput, persistKey, { hideAbandonedButton });
   }
 
   const overviewNode = root.querySelector<HTMLElement>('[data-dashboard-grid="overview"]');

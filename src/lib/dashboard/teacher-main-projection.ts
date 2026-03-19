@@ -93,8 +93,8 @@ const buildProfileColumns = (overviewColumns: DashboardGridColumn[]): DashboardG
     { title: 'Apellido', field: 'lastName', minWidth: 132, kind: 'editable-text' },
     { title: 'Nombre', field: 'firstName', minWidth: 124, kind: 'editable-text' },
     { title: 'Email', field: 'email', minWidth: 220, kind: 'editable-text' },
-    { title: 'Turno', field: 'turno', width: 38, minWidth: 38, maxWidth: 42, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'turno' },
-    { title: 'Grupo', field: 'grupo', width: 42, minWidth: 42, maxWidth: 48, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'grupo' },
+    { title: 'Turno', field: 'turno', width: 38, minWidth: 38, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'turno' },
+    { title: 'Grupo', field: 'grupo', width: 42, minWidth: 42, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'grupo' },
     ...extraWelcomeColumns,
     { title: 'Asist.%', field: 'attendanceRate', width: 104, minWidth: 96, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'attendance-progress' },
     { title: 'Entreg.', field: 'deliveriesDone', width: 84, minWidth: 78, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'metric' },
@@ -201,17 +201,31 @@ const buildGradebookColumns = (gradebookColumns: DashboardGridColumn[]): Dashboa
     .map((lessonColumn, lessonIndex) => {
       const lessonChildren = Array.isArray(lessonColumn.columns) ? lessonColumn.columns : [];
       let lessonAnchorField = '';
+      let preferredLessonAnchorField = '';
 
       const nextChildren = lessonChildren.map((childColumn, childIndex) => {
         const childClone = cloneColumn(childColumn);
         const isGroup = Array.isArray(childClone.columns) && childClone.columns.length > 0;
         if (!isGroup) {
           const childField = String(childClone.field || '');
+          const isLessonAverage =
+            String(childClone.cssClass || '').includes('dashboard-grade-lesson-avg')
+            || childField === `__avg_lesson_${lessonIndex}`;
+          if (isLessonAverage && childField) {
+            preferredLessonAnchorField = childField;
+          }
           if (!lessonAnchorField && childField) lessonAnchorField = childField;
-          return makeFoldMeta(childClone, {
-            key: `gradebook_lesson_${lessonIndex}_leaf_${childField || childIndex}`,
-            level: 0,
-          });
+          return makeFoldMeta(
+            childClone,
+            {
+              key: `gradebook_lesson_${lessonIndex}_leaf_${childField || childIndex}`,
+              level: 0,
+              shortLabel: isLessonAverage
+                ? formatProjectionAbletonLabel(`Promedio ${String(lessonColumn.title || `Clase ${lessonIndex + 1}`)}`)
+                : undefined,
+              fullLabel: childClone.title ? String(childClone.title) : undefined,
+            },
+          );
         }
 
         const groupLabel = normalizeDashboardText(childClone.title || childClone.headerTooltip || '');
@@ -250,7 +264,10 @@ const buildGradebookColumns = (gradebookColumns: DashboardGridColumn[]): Dashboa
         );
       });
 
-      const fallbackLessonAnchor = lessonAnchorField || findFirstLeafField(nextChildren[0]);
+      const fallbackLessonAnchor =
+        preferredLessonAnchorField
+        || lessonAnchorField
+        || findFirstLeafField(nextChildren[0]);
 
       return makeFoldMeta(
         {
@@ -270,9 +287,8 @@ const buildGradebookColumns = (gradebookColumns: DashboardGridColumn[]): Dashboa
       {
         title: `Promedio ${String(lessonColumn.title || `Clase ${lessonIndex + 1}`)}`,
         field: getTeacherMainLessonSummaryField(lessonIndex),
-        width: 58,
-        minWidth: 52,
-        maxWidth: 64,
+        width: 32,
+        minWidth: 30,
         hozAlign: 'center' as const,
         headerHozAlign: 'center' as const,
         kind: 'score',
@@ -293,9 +309,8 @@ const buildGradebookColumns = (gradebookColumns: DashboardGridColumn[]): Dashboa
       {
         title: 'Promedio total',
         field: 'average',
-        width: 66,
-        minWidth: 58,
-        maxWidth: 74,
+        width: 32,
+        minWidth: 30,
         hozAlign: 'center' as const,
         headerHozAlign: 'center' as const,
         kind: 'score',
@@ -310,9 +325,8 @@ const buildGradebookColumns = (gradebookColumns: DashboardGridColumn[]): Dashboa
       {
         title: 'Concepto',
         field: 'conceptValue',
-        width: 72,
-        minWidth: 64,
-        maxWidth: 82,
+        width: 32,
+        minWidth: 30,
         hozAlign: 'center' as const,
         headerHozAlign: 'center' as const,
         kind: 'concepto',
@@ -327,9 +341,8 @@ const buildGradebookColumns = (gradebookColumns: DashboardGridColumn[]): Dashboa
       {
         title: 'Nota final',
         field: 'finalGrade',
-        width: 68,
-        minWidth: 60,
-        maxWidth: 78,
+        width: 32,
+        minWidth: 30,
         hozAlign: 'center' as const,
         headerHozAlign: 'center' as const,
         kind: 'final-grade',
