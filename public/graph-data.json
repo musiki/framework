@@ -92,6 +92,26 @@
       "name": "cognición-digital-musical",
       "type": "tag",
       "group": "tags"
+    },
+    {
+      "id": "cursos/i1/_welcome",
+      "name": "bienvenidxs a i1 2026",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
+      "id": "cursos/s123/_index",
+      "name": "Seminarios de Composición",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
+      "id": "tag:composiciónmusical",
+      "name": "composiciónmusical",
+      "type": "tag",
+      "group": "tags"
     }
   ],
   "links": [
@@ -118,6 +138,11 @@
     {
       "source": "cursos/i1/_index",
       "target": "tag:cognición-digital-musical",
+      "type": "tag"
+    },
+    {
+      "source": "cursos/s123/_index",
+      "target": "tag:composiciónmusical",
       "type": "tag"
     }
   ]

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { parseEvalBlock } from './eval/parse-eval-block.mjs';
+import { extractEvalBlocks } from './eval/extract-eval-blocks.mjs';
 import { safeGetCollection } from './safe-content-collection';
 
 export type EvalNoteType = 'course' | 'lesson' | 'assignment' | 'project' | 'unknown';
@@ -69,18 +70,6 @@ const hashSnapshot = (value: unknown): string =>
   createHash('sha256')
     .update(stableStringify(value))
     .digest('hex');
-
-const extractEvalBlocks = (markdown: string): string[] => {
-  const blocks: string[] = [];
-  const pattern = /```eval\s*([\s\S]*?)```/g;
-  let match: RegExpExecArray | null = null;
-
-  while ((match = pattern.exec(markdown)) !== null) {
-    if (match[1]) blocks.push(match[1]);
-  }
-
-  return blocks;
-};
 
 export const normalizeEvalNoteType = (rawType: unknown): EvalNoteType => {
   const normalized = asText(rawType).toLowerCase();
@@ -223,10 +212,13 @@ const buildCollectionCatalog = async (
     const markdown = typeof entry.body === 'string' ? entry.body : '';
     if (!markdown) return;
 
-    const blocks = extractEvalBlocks(markdown);
+    const entryId = String(entry.id || '');
+    const blocks = extractEvalBlocks(markdown, {
+      sourcePath: `${sourceCollection}/${entryId}`,
+      fallbackIdBase: sanitizeFallbackId(entryId) || `${sourceCollection}-entry`,
+    });
     if (blocks.length === 0) return;
 
-    const entryId = String(entry.id || '');
     const entryTitle = asText(entry?.data?.title, entryId.split('/').pop() || entryId);
     const courseId = sourceCollection === 'cursos'
       ? asText(entryId.split('/')[0])
@@ -237,9 +229,8 @@ const buildCollectionCatalog = async (
 
     blocks.forEach((block, index) => {
       try {
-        const fallbackIdBase = sanitizeFallbackId(entryId) || `${sourceCollection}-entry`;
         const parsed = parseEvalBlock(block, {
-          fallbackId: `${fallbackIdBase}-eval-${index + 1}`,
+          fallbackId: `${sanitizeFallbackId(entryId) || `${sourceCollection}-entry`}-eval-${index + 1}`,
         }) as Record<string, unknown> | null;
 
         if (!parsed) return;

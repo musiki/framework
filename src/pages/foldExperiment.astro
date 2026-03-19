@@ -1,0 +1,1066 @@
+---
+/*
+  foldExperiment.astro
+  ---------------------------------------------------------------------------
+  Purpose:
+  A self-contained sandbox page for testing multi-level Tabulator column
+  folding before we wire the same pattern into the real dashboard.
+
+  Technologies used:
+  - Astro: server renders the shell and passes JSON to the browser.
+  - Tabulator: renders the table and lets us show/hide nested columns.
+  - Plain client-side JavaScript: keeps the experiment portable and easy to
+    copy into another page or script later.
+
+  Pattern used:
+  Every foldable group owns one "summary" version of itself as an immediate
+  child column. When the group is expanded, that summary column stays hidden.
+  When the group is folded, detail columns hide and the summary column shows.
+
+  Why this pattern is useful:
+  - it maps naturally to Tabulator's nested columns
+  - it avoids rebuilding the table from scratch
+  - it gives us deterministic fold levels:
+    level 1 -> fold the deepest groups
+    level 2 -> fold the middle groups
+    level 3 -> fold the top metagroups
+*/
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
+import 'tabulator-tables/dist/css/tabulator.min.css';
+
+const pageTitle = 'Fold Experiment';
+const pageDescription = 'Sandbox for multi-level Tabulator column folding.';
+
+const round = (value: number) => Math.round(value * 10) / 10;
+const avg = (values: number[]) => round(values.reduce((sum, value) => sum + value, 0) / values.length);
+const absenceUnits = (values: string[]) =>
+  round(values.reduce((sum, value) => sum + (value === 'x' ? 1 : value === '~' ? 0.5 : 0), 0));
+
+const makeLeaf = (field: string, title: string, width = 84) => ({
+  field,
+  title,
+  width,
+  minWidth: width,
+  hozAlign: 'center',
+  headerHozAlign: 'center',
+});
+
+const makeSummaryLeaf = (field: string, title: string, width = 88) => ({
+  ...makeLeaf(field, title, width),
+  summaryOnly: true,
+  cssClass: 'fold-summary-column',
+});
+
+const splitStudentName = (fullName: string) => {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return {
+      firstName: parts[0] || '',
+      lastName: parts[0] || '',
+    };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  };
+};
+
+const makeEvalGroup = (classIndex: number, groupIndex: number) => {
+  const groupKey = `grade_c${classIndex}_g${groupIndex}`;
+  const groupCode = `CG${groupIndex}`;
+
+  return {
+    title: `c${classIndex}grupo${groupIndex}`,
+    foldKey: `${groupKey}_group`,
+    foldLevel: 1,
+    foldVisibleChildren: [`${groupKey}_summary`],
+    columns: [
+      makeSummaryLeaf(`${groupKey}_summary`, `c${classIndex}grupo${groupIndex}`, 92),
+      makeLeaf(`${groupKey}_e1`, 'eval1', 74),
+      makeLeaf(`${groupKey}_e2`, 'eval2', 74),
+      makeLeaf(`${groupKey}_e3`, 'eval3', 74),
+    ],
+  };
+};
+
+const makeClassGroup = (classIndex: number) => {
+  const classKey = `grade_c${classIndex}`;
+
+  return {
+    title: `CLASS ${classIndex}`,
+    foldKey: `${classKey}_group`,
+    foldLevel: 2,
+    foldVisibleChildren: [`${classKey}_summary`],
+    columns: [
+      makeSummaryLeaf(`${classKey}_summary`, `CLASS ${classIndex}`, 96),
+      makeEvalGroup(classIndex, 1),
+      makeEvalGroup(classIndex, 2),
+      makeEvalGroup(classIndex, 3),
+    ],
+  };
+};
+
+const makeMonthGroup = (
+  monthName: string,
+  monthCode: string,
+  monthKey: string,
+  days: string[],
+) => ({
+  title: monthName,
+  foldKey: `${monthKey}_group`,
+  foldDisabled: true,
+  foldLevel: 1,
+  columns: days.map((day) => makeLeaf(`${monthKey}_${day}`, day, 64)),
+});
+
+const columns = [
+  {
+    title: 'PROFILE',
+    foldKey: 'profile_meta',
+    foldLevel: 3,
+    foldVisibleChildren: ['profile_last_name', 'profile_turno', 'profile_grupo'],
+    columns: [
+      makeLeaf('profile_last_name', 'Apellido', 112),
+      makeLeaf('profile_first_name', 'Nombre', 112),
+      makeLeaf('profile_email', 'Email', 220),
+      makeLeaf('profile_turno', 'Turno', 28),
+      makeLeaf('profile_grupo', 'Grupo', 28),
+    ],
+  },
+  {
+    title: 'ASISTENCIA',
+    foldKey: 'attendance_meta',
+    foldLevel: 3,
+    foldVisibleChildren: ['attendance_inasistencias'],
+    columns: [
+      {
+        ...makeLeaf('attendance_inasistencias', 'Inasistencias', 126),
+        foldShortLabel: 'I',
+      },
+      makeMonthGroup('MARCH', 'MAR', 'attendance_march', ['30']),
+      makeMonthGroup('APRIL', 'APR', 'attendance_april', ['03', '10', '17', '24']),
+      makeMonthGroup('MAY', 'MAY', 'attendance_may', ['08', '15', '22', '29']),
+      makeMonthGroup('JUNE', 'JUN', 'attendance_june', ['05', '12', '19', '26']),
+    ],
+  },
+  {
+    title: 'GRADEBOOK',
+    foldKey: 'gradebook_meta',
+    foldLevel: 3,
+    foldVisibleChildren: ['grade_c1_summary', 'grade_c2_summary', 'grade_c3_summary'],
+    columns: [
+      makeSummaryLeaf('grade_c1_summary', 'CLASS 1', 96),
+      makeClassGroup(1),
+      makeSummaryLeaf('grade_c2_summary', 'CLASS 2', 96),
+      makeClassGroup(2),
+      makeSummaryLeaf('grade_c3_summary', 'CLASS 3', 96),
+      makeClassGroup(3),
+    ],
+  },
+];
+
+const students = [
+  'Ada Borel',
+  'Bruno Salvat',
+  'Celia Mont',
+  'Dario Vega',
+  'Elena Pardo',
+  'Fabian Costa',
+  'Greta Neri',
+  'Hector Luna',
+  'Ines Roca',
+  'Julian Serra',
+];
+
+const buildAttendancePattern = (seed: number) =>
+  Array.from({ length: 13 }, (_, index) => {
+    const step = (seed * 3 + index * 2) % 8;
+    if (step === 0 || step === 5) return 'x';
+    if (step === 2) return '~';
+    return '/';
+  });
+
+const rows = students.map((student, index) => {
+  const seed = index + 1;
+  const { firstName, lastName } = splitStudentName(student);
+  const normalizedEmailBase = `${firstName}.${lastName}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9.]+/g, '.')
+    .replace(/\.+/g, '.')
+    .replace(/^\.|\.$/g, '')
+    .toLowerCase();
+  const turno = ['M', 'T', 'N'][index % 3];
+  const grupo = `G${(index % 4) + 1}`;
+
+  const class1Group1 = [6 + seed, 7 + seed, 8 + seed];
+  const class1Group2 = [7 + seed, 7 + seed, 8 + seed];
+  const class1Group3 = [6 + seed, 8 + seed, 9 + seed];
+
+  const class2Group1 = [5 + seed, 6 + seed, 7 + seed];
+  const class2Group2 = [6 + seed, 7 + seed, 7 + seed];
+  const class2Group3 = [7 + seed, 8 + seed, 8 + seed];
+
+  const class3Group1 = [8 + seed, 8 + seed, 9 + seed];
+  const class3Group2 = [7 + seed, 9 + seed, 9 + seed];
+  const class3Group3 = [8 + seed, 9 + seed, 10];
+
+  const attendance = buildAttendancePattern(seed);
+  const marchValues = attendance.slice(0, 1);
+  const aprilValues = attendance.slice(1, 5);
+  const mayValues = attendance.slice(5, 9);
+  const juneValues = attendance.slice(9, 13);
+
+  return {
+    id: seed,
+    profile_last_name: lastName,
+    profile_first_name: firstName,
+    profile_email: `${normalizedEmailBase || `student.${seed}`}@musiki.test`,
+    profile_turno: turno,
+    profile_grupo: grupo,
+
+    grade_c1_summary: avg([avg(class1Group1), avg(class1Group2), avg(class1Group3)]),
+    grade_c1_g1_summary: avg(class1Group1),
+    grade_c1_g1_e1: class1Group1[0],
+    grade_c1_g1_e2: class1Group1[1],
+    grade_c1_g1_e3: class1Group1[2],
+    grade_c1_g2_summary: avg(class1Group2),
+    grade_c1_g2_e1: class1Group2[0],
+    grade_c1_g2_e2: class1Group2[1],
+    grade_c1_g2_e3: class1Group2[2],
+    grade_c1_g3_summary: avg(class1Group3),
+    grade_c1_g3_e1: class1Group3[0],
+    grade_c1_g3_e2: class1Group3[1],
+    grade_c1_g3_e3: class1Group3[2],
+
+    grade_c2_summary: avg([avg(class2Group1), avg(class2Group2), avg(class2Group3)]),
+    grade_c2_g1_summary: avg(class2Group1),
+    grade_c2_g1_e1: class2Group1[0],
+    grade_c2_g1_e2: class2Group1[1],
+    grade_c2_g1_e3: class2Group1[2],
+    grade_c2_g2_summary: avg(class2Group2),
+    grade_c2_g2_e1: class2Group2[0],
+    grade_c2_g2_e2: class2Group2[1],
+    grade_c2_g2_e3: class2Group2[2],
+    grade_c2_g3_summary: avg(class2Group3),
+    grade_c2_g3_e1: class2Group3[0],
+    grade_c2_g3_e2: class2Group3[1],
+    grade_c2_g3_e3: class2Group3[2],
+
+    grade_c3_summary: avg([avg(class3Group1), avg(class3Group2), avg(class3Group3)]),
+    grade_c3_g1_summary: avg(class3Group1),
+    grade_c3_g1_e1: class3Group1[0],
+    grade_c3_g1_e2: class3Group1[1],
+    grade_c3_g1_e3: class3Group1[2],
+    grade_c3_g2_summary: avg(class3Group2),
+    grade_c3_g2_e1: class3Group2[0],
+    grade_c3_g2_e2: class3Group2[1],
+    grade_c3_g2_e3: class3Group2[2],
+    grade_c3_g3_summary: avg(class3Group3),
+    grade_c3_g3_e1: class3Group3[0],
+    grade_c3_g3_e2: class3Group3[1],
+    grade_c3_g3_e3: class3Group3[2],
+
+    attendance_inasistencias: absenceUnits(attendance),
+    attendance_march_30: marchValues[0],
+    attendance_april_03: aprilValues[0],
+    attendance_april_10: aprilValues[1],
+    attendance_april_17: aprilValues[2],
+    attendance_april_24: aprilValues[3],
+    attendance_may_08: mayValues[0],
+    attendance_may_15: mayValues[1],
+    attendance_may_22: mayValues[2],
+    attendance_may_29: mayValues[3],
+    attendance_june_05: juneValues[0],
+    attendance_june_12: juneValues[1],
+    attendance_june_19: juneValues[2],
+    attendance_june_26: juneValues[3],
+  };
+});
+
+const columnsJson = JSON.stringify(columns);
+const rowsJson = JSON.stringify(rows);
+---
+
+<html lang="en">
+  <head>
+    <BaseHead title={pageTitle} description={pageDescription} />
+  </head>
+  <body>
+    <Header />
+
+    <main class="fold-page">
+      <section class="fold-table-shell" data-fold-experiment>
+        <div class="fold-table" id="fold-experiment-table"></div>
+      </section>
+    </main>
+
+    <script
+      type="application/json"
+      id="fold-experiment-columns"
+      set:html={columnsJson}
+    ></script>
+    <script
+      type="application/json"
+      id="fold-experiment-rows"
+      set:html={rowsJson}
+    ></script>
+
+    <script>
+      import { TabulatorFull as Tabulator } from 'tabulator-tables';
+
+      /*
+        Client-side design notes
+        ---------------------------------------------------------------------
+        1. Astro gives us the page shell and dumps plain JSON into the DOM.
+        2. The browser script reads that JSON and mounts one Tabulator table.
+        3. Folding is not a Tabulator built-in feature for grouped columns, so
+           we implement it by showing/hiding child columns recursively.
+        4. Header cells are the controls. Clicking a grouped header toggles
+           only that branch of the column tree.
+      */
+
+      const readJsonScript = (id, fallback) => {
+        const node = document.getElementById(id);
+        if (!(node instanceof HTMLScriptElement)) return fallback;
+
+        try {
+          return JSON.parse(node.textContent || '');
+        } catch {
+          return fallback;
+        }
+      };
+
+      const escapeHtml = (value) =>
+        String(value ?? '').replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;',
+        }[char]));
+
+      /*
+        "Ableton-like" folded labels are generated automatically from the
+        unfolded title. The rule is:
+        - split the title into alphabetic and numeric chunks
+        - take the first letter of each alphabetic chunk
+        - append the last numeric chunk when present
+
+        Examples:
+        - ABANCIA -> A
+        - CLASS 3 -> C3
+        - eval2 -> E2
+        - c1grupo1 -> CG1
+      */
+      const buildAbletonFoldLabel = (title) => {
+        const text = String(title || '').trim();
+        const normalized = text
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[_\-]+/g, ' ')
+          .replace(/[()]/g, ' ');
+        const chunks = normalized.match(/[A-Za-z]+|\d+/g) || [];
+        const initials = chunks
+          .filter((chunk) => /[A-Za-z]/.test(chunk))
+          .slice(0, 3)
+          .map((chunk) => chunk.charAt(0).toUpperCase())
+          .join('');
+        const numericChunks = chunks.filter((chunk) => /^\d+$/.test(chunk));
+        const lastNumber = numericChunks.length > 0
+          ? String(parseInt(numericChunks[numericChunks.length - 1], 10))
+          : '';
+
+        if (initials && lastNumber) return `${initials}${lastNumber}`;
+        if (initials) return initials;
+        if (lastNumber) return lastNumber;
+        return text.slice(0, 3).toUpperCase();
+      };
+
+      const buildFoldLabelParts = (title) => {
+        const text = String(title || '').trim();
+        return {
+          full: text,
+          long: text,
+          short: buildAbletonFoldLabel(text),
+        };
+      };
+
+      const getFoldMeta = (subject) => {
+        const definition = typeof subject?.getDefinition === 'function'
+          ? subject.getDefinition()
+          : subject || {};
+
+        return definition?.titleFormatterParams?.foldMeta || {};
+      };
+
+      const decorateDefinitions = (definitions, path = []) =>
+        definitions.map((definition, index) => {
+          const {
+            columns: childDefinitions,
+            foldDisabled,
+            foldKey,
+            foldLevel,
+            foldShortLabel,
+            foldVisibleChildren,
+            summaryOnly,
+            titleFormatterParams,
+            ...tabulatorDefinition
+          } = definition;
+          const labels = buildFoldLabelParts(definition.title);
+          const fallbackKey = tabulatorDefinition.field || `${path.join('_') || 'root'}_${index}`;
+          const foldMeta = {
+            disabled: Boolean(foldDisabled),
+            key: String(foldKey || fallbackKey),
+            level: Number(foldLevel || 0),
+            fullLabel: labels.full,
+            longLabel: labels.long,
+            shortLabel: String(foldShortLabel || labels.short),
+            summaryOnly: Boolean(summaryOnly),
+            visibleChildren: Array.isArray(foldVisibleChildren)
+              ? foldVisibleChildren.map(String)
+              : [],
+          };
+          const next = {
+            ...tabulatorDefinition,
+            titleFormatterParams: {
+              ...titleFormatterParams,
+              foldMeta,
+            },
+          };
+
+          next.titleFormatter = (column) => {
+            const isGroup = Array.isArray(childDefinitions) && childDefinitions.length > 0;
+            if (isGroup) {
+              const isFolded = column.getElement?.()?.classList?.contains('group-folded');
+              const label = isFolded ? foldMeta.shortLabel : foldMeta.fullLabel;
+              const tooltip = isFolded ? foldMeta.longLabel : foldMeta.fullLabel;
+              return `
+                <div class="group-header-content" title="${escapeHtml(tooltip)}">
+                  <span class="group-header-title">${escapeHtml(label)}</span>
+                  <span class="group-header-icon" aria-hidden="true"></span>
+                </div>
+              `;
+            }
+
+            const displayShort = shouldUseShortLeafLabel(column);
+            const label = displayShort ? foldMeta.shortLabel : foldMeta.fullLabel;
+            const tooltip = displayShort ? foldMeta.longLabel : foldMeta.fullLabel;
+
+            return `
+              <span class="fold-header-label" title="${escapeHtml(tooltip)}">
+                ${escapeHtml(label)}
+              </span>
+            `;
+          };
+
+          if (Array.isArray(childDefinitions) && childDefinitions.length > 0) {
+            next.headerClick = (_event, column) => {
+              if (foldMeta.disabled) return;
+              toggleGroupFolding(column);
+              try {
+                column.getTable()?.redraw?.(true);
+              } catch {
+                // Ignore redraw issues on transient header rebuilds.
+              }
+            };
+            next.headerTooltip = `${foldMeta.fullLabel} - click to fold/unfold`;
+            next.columns = decorateDefinitions(childDefinitions, [...path, foldMeta.key]);
+          }
+
+          return next;
+        });
+
+      /*
+        This mirrors the dashboard strategy:
+        try the convenient component methods first, then fall back to the
+        underlying Tabulator column object when needed.
+      */
+      const getGroupSubColumns = (column) => {
+        let subColumns = [];
+
+        if (typeof column?.getColumns === 'function') {
+          try {
+            subColumns = column.getColumns();
+          } catch {
+            // Fall through to the other strategies below.
+          }
+        }
+
+        if ((!subColumns || subColumns.length === 0) && typeof column?.getSubColumns === 'function') {
+          try {
+            subColumns = column.getSubColumns();
+          } catch {
+            // Fall through again.
+          }
+        }
+
+        if ((!subColumns || subColumns.length === 0) && typeof column?._getSelf === 'function') {
+          try {
+            subColumns = column
+              ._getSelf()
+              .getColumns()
+              .map((child) => child?.getComponent?.() || null)
+              .filter(Boolean);
+          } catch {
+            // Last fallback below uses the definition tree.
+          }
+        }
+
+        if (!subColumns || subColumns.length === 0) {
+          const definition = column?.getDefinition?.() || {};
+          const table = column?.getTable?.();
+          if (table && Array.isArray(definition.columns)) {
+            subColumns = definition.columns
+              .map((childDefinition) => {
+                if (childDefinition?.field) return table.getColumn(childDefinition.field);
+                return null;
+              })
+              .filter(Boolean);
+          }
+        }
+
+        return Array.isArray(subColumns) ? subColumns : [];
+      };
+
+      const getColumnKey = (column) => String(getFoldMeta(column).key || '');
+
+      const findFoldedAncestor = (column) => {
+        let current = column;
+
+        while (current && typeof current.getParentColumn === 'function') {
+          const parent = current.getParentColumn();
+          if (!parent) return null;
+
+          const parentElement = parent.getElement?.();
+          if (parentElement?.classList?.contains('group-folded')) return parent;
+
+          current = parent;
+        }
+
+        return null;
+      };
+
+      const shouldUseShortLeafLabel = (column) => {
+        const isLeaf = getGroupSubColumns(column).length === 0;
+
+        if (!isLeaf) return false;
+        return Boolean(findFoldedAncestor(column));
+      };
+
+      const safeShow = (column) => {
+        try {
+          column.show();
+        } catch {
+          // Tabulator can occasionally throw if a column is mid-refresh.
+        }
+      };
+
+      const safeHide = (column) => {
+        try {
+          column.hide();
+        } catch {
+          // Same defensive reason as above.
+        }
+      };
+
+      const hideBranch = (column) => {
+        getGroupSubColumns(column).forEach(hideBranch);
+        safeHide(column);
+      };
+
+      /*
+        This is the experiment-local version of the dashboard's
+        toggleGroupFolding command.
+
+        Instead of keeping the first visible child as an anchor, we use the
+        explicit foldVisibleChildren list from the definition. That gives us the
+        precise behavior requested for PROFILE, GRADEBOOK, and ASISTENCIA.
+      */
+      const toggleGroupFolding = (column, force) => {
+        const definition = column.getDefinition?.() || {};
+        const foldMeta = getFoldMeta(column);
+        const children = getGroupSubColumns(column);
+
+        if (!Array.isArray(definition.columns) || children.length === 0) {
+          return;
+        }
+
+        if (foldMeta.disabled && force === undefined) {
+          return;
+        }
+
+        const headerElement = column.getElement?.();
+        if (!headerElement) return;
+
+        const folded = force !== undefined ? force : !headerElement.classList.contains('group-folded');
+        const visibleKeys = new Set((foldMeta.visibleChildren || []).map(String));
+
+        headerElement.classList.toggle('group-folded', folded);
+        safeShow(column);
+
+        children.forEach((child) => {
+          const childDefinition = child.getDefinition?.() || {};
+          const childMeta = getFoldMeta(child);
+          const childKey = String(childMeta.key || childDefinition.field || '');
+          const isGroup = Array.isArray(childDefinition.columns) && childDefinition.columns.length > 0;
+          const keepVisible = visibleKeys.size > 0 ? visibleKeys.has(childKey) : false;
+
+          if (isGroup) {
+            toggleGroupFolding(child, folded);
+            if (folded && !keepVisible) {
+              hideBranch(child);
+            } else {
+              safeShow(child);
+            }
+            return;
+          }
+
+          if (folded) {
+            if (keepVisible) safeShow(child);
+            else safeHide(child);
+            return;
+          }
+
+          if (childMeta.summaryOnly) {
+            safeHide(child);
+            return;
+          }
+
+          safeShow(child);
+        });
+      };
+
+      const unfoldAllColumns = (table, redraw = true) => {
+        const showRecursive = (column) => {
+          const definition = column?.getDefinition?.() || {};
+          const foldMeta = getFoldMeta(column);
+          const children = getGroupSubColumns(column);
+
+          if (Array.isArray(definition.columns) && children.length > 0) {
+            safeShow(column);
+            const headerElement = column.getElement?.();
+            if (headerElement) headerElement.classList.remove('group-folded');
+            children.forEach(showRecursive);
+            return;
+          }
+
+          if (foldMeta.summaryOnly) {
+            safeHide(column);
+            return;
+          }
+
+          safeShow(column);
+        };
+
+        table.getColumns().forEach(showRecursive);
+        if (redraw) table.redraw(true);
+      };
+
+      /*
+        Range-selection extras
+        -------------------------------------------------------------------
+        We keep these concerns isolated from the fold logic so both behaviors
+        stay easy to reason about:
+
+        - Tabulator manages which cells belong to the active ranges.
+        - This page manages one extra "green marker" state on top of those
+          cells when the user presses V.
+        - The marker state is stored by row id + field, not by DOM node, so it
+          survives redraws caused by folding, resizing, or future virtualized
+          rendering changes.
+      */
+      const buildCellHighlightKey = (cell) => {
+        const rowId = cell?.getRow?.()?.getIndex?.();
+        const field = cell?.getColumn?.()?.getDefinition?.()?.field;
+
+        if (rowId == null || !field) return null;
+        return `${rowId}::${field}`;
+      };
+
+      const getSelectedRangeCells = (table) => {
+        const cellsByKey = new Map();
+        const ranges = typeof table?.getRanges === 'function' ? table.getRanges() : [];
+
+        ranges.forEach((range) => {
+          const structuredCells = range?.getCells?.();
+          if (!Array.isArray(structuredCells)) return;
+
+          structuredCells.flat().forEach((cell) => {
+            const key = buildCellHighlightKey(cell);
+            if (!key) return;
+            cellsByKey.set(key, cell);
+          });
+        });
+
+        return Array.from(cellsByKey.values());
+      };
+
+      const syncHighlightedCellState = (table, highlightedCellKeys) => {
+        table.getRows().forEach((row) => {
+          row.getCells().forEach((cell) => {
+            const cellElement = cell.getElement?.();
+            const cellKey = buildCellHighlightKey(cell);
+
+            if (!cellElement || !cellKey) return;
+            cellElement.classList.toggle('fold-cell-highlighted', highlightedCellKeys.has(cellKey));
+          });
+        });
+      };
+
+      const toggleRangeHighlight = (table, highlightedCellKeys) => {
+        const selectedCells = getSelectedRangeCells(table);
+        const selectedKeys = selectedCells
+          .map(buildCellHighlightKey)
+          .filter(Boolean);
+
+        if (!selectedKeys.length) return;
+
+        const shouldHighlight = selectedKeys.some((key) => !highlightedCellKeys.has(key));
+
+        selectedKeys.forEach((key) => {
+          if (shouldHighlight) highlightedCellKeys.add(key);
+          else highlightedCellKeys.delete(key);
+        });
+
+        syncHighlightedCellState(table, highlightedCellKeys);
+      };
+
+      /*
+        Tabulator's built-in additive selection checks ctrlKey only.
+        On macOS the natural gesture is Command + drag, so we normalize metaKey
+        into ctrlKey locally without touching library source or the rest of the
+        page. The fold headers keep their own click behavior because we are only
+        enabling cell range selection, not header range selection.
+      */
+      const enableCommandAdditiveSelection = (table) => {
+        const rangeModule = table?.modules?.selectRange;
+        if (!rangeModule || rangeModule.__foldExperimentMetaPatched) return;
+
+        rangeModule.newSelection = (event, element) => {
+          let range;
+          const isRangeExtend = Boolean(event?.shiftKey);
+          const isAdditiveSelection = Boolean(event?.ctrlKey || event?.metaKey);
+
+          if (element.type === 'column') {
+            if (!rangeModule.columnSelection) {
+              return;
+            }
+
+            if (element === rangeModule.rowHeader) {
+              range = rangeModule.resetRanges();
+              rangeModule.selecting = 'all';
+
+              const bottomRightCell = rangeModule.getCell(-1, -1);
+              const topLeftCell = rangeModule.rowHeader
+                ? rangeModule.getCell(0, 1)
+                : rangeModule.getCell(0, 0);
+
+              range.setBounds(topLeftCell, bottomRightCell);
+              return;
+            }
+
+            rangeModule.selecting = 'column';
+          } else if (element.column === rangeModule.rowHeader) {
+            rangeModule.selecting = 'row';
+          } else {
+            rangeModule.selecting = 'cell';
+          }
+
+          if (isRangeExtend) {
+            rangeModule.activeRange.setBounds(false, element);
+            return;
+          }
+
+          if (isAdditiveSelection) {
+            rangeModule.addRange().setBounds(element);
+            return;
+          }
+
+          rangeModule.resetRanges().setBounds(element);
+        };
+
+        rangeModule.__foldExperimentMetaPatched = true;
+      };
+
+      const mountFoldExperiment = () => {
+        const root = document.querySelector('[data-fold-experiment]');
+        const tableElement = document.getElementById('fold-experiment-table');
+
+        if (!(root instanceof HTMLElement) || !(tableElement instanceof HTMLElement)) return;
+        if (root.dataset.foldExperimentMounted === 'true') return;
+        root.dataset.foldExperimentMounted = 'true';
+
+        const rawColumns = readJsonScript('fold-experiment-columns', []);
+        const rows = readJsonScript('fold-experiment-rows', []);
+        const columns = decorateDefinitions(rawColumns);
+        const highlightedCellKeys = new Set();
+        let hasCellInteraction = false;
+
+        const table = new Tabulator(tableElement, {
+          index: 'id',
+          data: rows,
+          columns,
+          layout: 'fitDataFill',
+          columnHeaderVertAlign: 'bottom',
+          resizableColumnFit: false,
+          movableColumns: false,
+          headerSort: false,
+          selectableRange: true,
+          selectableRangeAutoFocus: false,
+          rowHeight: 38,
+          height: 'auto',
+          placeholder: 'No sample data.',
+        });
+
+        enableCommandAdditiveSelection(table);
+        table.on('renderComplete', () => syncHighlightedCellState(table, highlightedCellKeys));
+
+        /*
+          The top button bar is gone now. We still perform one initial unfold
+          pass so summary helper columns start hidden and the table opens in
+          its expanded state before header clicks take over.
+        */
+        unfoldAllColumns(table);
+
+        const handleCellInteraction = (event) => {
+          if (!(event.target instanceof Element)) return;
+          if (event.target.closest('.tabulator-cell')) {
+            hasCellInteraction = true;
+          }
+        };
+
+        const handleKeyDown = (event) => {
+          const target = event.target;
+          const isEditableTarget =
+            target instanceof HTMLElement &&
+            (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+
+          if (event.defaultPrevented || isEditableTarget) return;
+          if (event.ctrlKey || event.metaKey || event.altKey) return;
+          if (String(event.key || '').toLowerCase() !== 'v') return;
+          if (!hasCellInteraction) return;
+
+          event.preventDefault();
+          toggleRangeHighlight(table, highlightedCellKeys);
+        };
+
+        root.addEventListener('pointerdown', handleCellInteraction);
+        root.addEventListener('keydown', handleKeyDown);
+
+        const cleanup = () => {
+          root.removeEventListener('pointerdown', handleCellInteraction);
+          root.removeEventListener('keydown', handleKeyDown);
+        };
+
+        document.addEventListener('astro:before-swap', cleanup, { once: true });
+      };
+
+      mountFoldExperiment();
+      document.addEventListener('astro:page-load', mountFoldExperiment);
+    </script>
+  </body>
+</html>
+
+<style>
+  .fold-page {
+    /*
+      Local visual tokens for the fold experiment.
+      They are derived from the site's theme variables, so the page stays in
+      sync with the rest of the app while still letting this table have its
+      own softer hover/stripe treatment.
+    */
+    --fold-shell-glow: color-mix(in srgb, var(--c-link) 12%, transparent);
+    --fold-shell-shadow: 0 18px 50px rgba(12, 18, 28, 0.08);
+    --fold-grid-border: color-mix(in srgb, var(--c-border) 92%, transparent);
+    --fold-header-bg:
+      linear-gradient(180deg, color-mix(in srgb, var(--c-link) 10%, transparent), transparent 72%),
+      var(--c-bg);
+    --fold-row-even: color-mix(in srgb, var(--c-bg) 96%, var(--c-fg) 4%);
+    --fold-row-hover: color-mix(in srgb, var(--c-link) 9%, var(--c-bg));
+    --fold-summary-bg: color-mix(in srgb, var(--c-link) 8%, var(--c-bg));
+    --fold-range-accent: color-mix(in srgb, var(--c-link) 86%, white 14%);
+    --fold-range-fill: color-mix(in srgb, var(--c-link) 18%, var(--c-bg));
+    --fold-highlight-fill: color-mix(in srgb, #43b556 30%, var(--c-bg));
+    --fold-highlight-border: color-mix(in srgb, #2f9e44 76%, var(--c-border));
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0.5rem;
+    border: 0;
+    background: transparent;
+  }
+
+  :global(:root.dark) .fold-page {
+    --fold-shell-shadow: 0 22px 56px rgba(0, 0, 0, 0.34);
+    --fold-grid-border: color-mix(in srgb, var(--c-border) 82%, var(--c-fg) 18%);
+    --fold-row-even: color-mix(in srgb, var(--c-bg) 92%, white 8%);
+    --fold-summary-bg: color-mix(in srgb, var(--c-link) 14%, var(--c-bg));
+    --fold-range-fill: color-mix(in srgb, var(--c-link) 26%, var(--c-bg));
+    --fold-highlight-fill: color-mix(in srgb, #43b556 22%, var(--c-bg));
+    --fold-highlight-border: color-mix(in srgb, #6fdc83 68%, var(--c-border));
+  }
+
+  .fold-table-shell {
+    background:
+      linear-gradient(145deg, var(--fold-shell-glow), transparent 45%),
+      var(--c-bg);
+    border: 0;
+    border-radius: 1rem;
+    box-shadow: var(--fold-shell-shadow);
+    padding: 0.4rem;
+    overflow-x: auto;
+  }
+
+  .fold-table {
+    width: 100%;
+  }
+
+  .fold-table :global(.tabulator) {
+    width: 100%;
+    border: 1px solid var(--fold-grid-border);
+    border-radius: 0.9rem;
+    overflow: hidden;
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+
+  .fold-table :global(.tabulator-header) {
+    border-bottom: 1px solid var(--fold-grid-border);
+    background: var(--fold-header-bg);
+  }
+
+  .fold-table :global(.tabulator-col),
+  .fold-table :global(.tabulator-row .tabulator-cell) {
+    border-right: 1px solid var(--fold-grid-border);
+    color: var(--c-fg);
+  }
+
+  .fold-table :global(.tabulator-row:nth-child(even)) {
+    background: var(--fold-row-even);
+  }
+
+  .fold-table :global(.tabulator-row:hover) {
+    background: var(--fold-row-hover);
+  }
+
+  .fold-table :global(.tabulator .tabulator-tableholder .tabulator-range-overlay .tabulator-range) {
+    border-color: var(--fold-range-accent);
+  }
+
+  .fold-table :global(.tabulator .tabulator-tableholder .tabulator-range-overlay .tabulator-range.tabulator-range-active::after) {
+    background-color: var(--fold-range-accent);
+  }
+
+  .fold-table :global(.tabulator .tabulator-tableholder .tabulator-range-overlay .tabulator-range-cell-active) {
+    border-color: var(--fold-range-accent);
+  }
+
+  .fold-table :global(.tabulator-row .tabulator-cell.tabulator-range-selected:not(.tabulator-range-only-cell-selected):not(.tabulator-range-row-header)) {
+    background: var(--fold-range-fill);
+    color: var(--c-fg);
+  }
+
+  .fold-table :global(.tabulator-row .tabulator-cell.fold-cell-highlighted) {
+    box-shadow: inset 0 0 0 999px var(--fold-highlight-fill);
+  }
+
+  .fold-table :global(.tabulator-row .tabulator-cell.fold-cell-highlighted::after) {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border: 1px solid var(--fold-highlight-border);
+    border-radius: 0.2rem;
+    pointer-events: none;
+  }
+
+  .fold-table :global(.tabulator-col-group .tabulator-col-title) {
+    font-weight: 800;
+    letter-spacing: 0.06em;
+  }
+
+  .fold-table :global(.group-header-content) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    width: 100%;
+  }
+
+  .fold-table :global(.group-header-title) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fold-table :global(.group-header-icon) {
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-right: 7px solid var(--c-subtle);
+    margin-left: 0.25rem;
+    flex-shrink: 0;
+    transition: transform 180ms ease, border-right-color 180ms ease;
+  }
+
+  .fold-table :global(.tabulator-col.group-folded .group-header-icon) {
+    transform: rotate(180deg);
+    border-right-color: var(--c-link);
+  }
+
+  .fold-table :global(.tabulator-col.tabulator-col-group:hover .group-header-icon) {
+    border-right-color: var(--c-link);
+  }
+
+  .fold-table :global(.tabulator-col-group) {
+    cursor: pointer;
+  }
+
+  .fold-table :global(.tabulator-col .tabulator-col-title) {
+    white-space: nowrap;
+  }
+
+  .fold-table :global(.tabulator-col-sorter) {
+    display: none !important;
+  }
+
+  .fold-table :global(.fold-header-label) {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+  }
+
+  .fold-table :global(.fold-summary-column) {
+    background: var(--fold-summary-bg);
+  }
+
+  /*
+    On smaller screens the experiment should use the full viewport width.
+    We remove the outer spacing so horizontal scrolling belongs to the table,
+    not to a padded page wrapper.
+  */
+  @media (max-width: 900px) {
+    .fold-page {
+      width: 100vw;
+      max-width: 100vw;
+      margin: 0;
+      padding: 0;
+    }
+
+    .fold-table-shell {
+      margin: 0;
+      padding: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .fold-table :global(.tabulator) {
+      border-radius: 0;
+    }
+  }
+</style>

@@ -1,4 +1,5 @@
-import { defineCollection, z } from 'astro:content';
+import { defineCollection } from 'astro:content';
+import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
 
 const courseNoteTypes = [
@@ -19,7 +20,7 @@ const content = defineCollection({
 		// Extglob-based exclusion was matching nested course paths unintentionally.
 		loader: glob({
 			base: './src/content',
-			pattern: ['**/*.{md,mdx}', '!blog/**', '!cursos/**'],
+			pattern: ['**/*.md', '**/*.mdx', '!blog/**', '!cursos/**'],
 		}),
 	// Schema for Obsidian-based content - very flexible to handle various YAML frontmatter
 	schema: z.object({
@@ -50,7 +51,7 @@ const content = defineCollection({
 
 const cursos = defineCollection({
 	// Load all course content
-	loader: glob({ base: './src/content/cursos', pattern: '**/*.{md,mdx}' }),
+	loader: glob({ base: './src/content/cursos', pattern: ['**/*.md', '**/*.mdx'] }),
 	schema: z.object({
 			// Course index fields
 			type: z.enum(courseNoteTypes).optional(),

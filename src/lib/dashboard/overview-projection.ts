@@ -5,6 +5,10 @@ import {
   type DashboardGridProjection,
   normalizeDashboardText,
 } from './shared';
+import {
+  getWelcomeSubmissionAnswerText,
+  type DashboardWelcomeField,
+} from './welcome-fields';
 
 interface OverviewProjectionInput {
   activeCourseId: string;
@@ -14,6 +18,7 @@ interface OverviewProjectionInput {
   submissions: any[];
   todayDateKey: string;
   teacherCourseGradeGroups: any[];
+  welcomeFields?: DashboardWelcomeField[];
 }
 
 const formatPercent = (value: number | null) => {
@@ -41,6 +46,7 @@ export function buildOverviewProjection({
   submissions,
   todayDateKey,
   teacherCourseGradeGroups,
+  welcomeFields = [],
 }: OverviewProjectionInput): DashboardGridProjection {
   if (!activeCourseId) {
     return {
@@ -80,6 +86,12 @@ export function buildOverviewProjection({
       .map((row: any) => [String(row.studentId), row]),
   );
   const submissionActivityByStudentId = new Map<string, string>();
+  const welcomeFieldByEvalId = new Map(
+    (welcomeFields || [])
+      .filter((field) => normalizeDashboardText(field?.evalId) && normalizeDashboardText(field?.field))
+      .map((field) => [String(field.evalId), field]),
+  );
+  const latestWelcomeSubmissionByKey = new Map<string, any>();
   (submissions || []).forEach((submission: any) => {
     const studentId = String(submission?.userId || '').trim();
     const submittedAt = String(submission?.submittedAt || '').trim();
@@ -88,6 +100,40 @@ export function buildOverviewProjection({
     if (!existing || submittedAt > existing) {
       submissionActivityByStudentId.set(studentId, submittedAt);
     }
+
+    const assignmentId = String(submission?.assignmentId || '').trim();
+    const welcomeField = welcomeFieldByEvalId.get(assignmentId);
+    if (!welcomeField) return;
+
+    const key = `${studentId}::${assignmentId}`;
+    const current = latestWelcomeSubmissionByKey.get(key);
+    const currentTimestamp = String(
+      current?.submittedAt
+      || current?.updatedAt
+      || current?.createdAt
+      || '',
+    ).trim();
+    const nextTimestamp = String(
+      submission?.submittedAt
+      || submission?.updatedAt
+      || submission?.createdAt
+      || '',
+    ).trim();
+    if (!current || nextTimestamp >= currentTimestamp) {
+      latestWelcomeSubmissionByKey.set(key, submission);
+    }
+  });
+
+  const welcomeAnswersByStudentId = new Map<string, Record<string, string>>();
+  latestWelcomeSubmissionByKey.forEach((submission: any) => {
+    const studentId = String(submission?.userId || '').trim();
+    const assignmentId = String(submission?.assignmentId || '').trim();
+    const welcomeField = welcomeFieldByEvalId.get(assignmentId);
+    if (!studentId || !welcomeField) return;
+
+    const existing = welcomeAnswersByStudentId.get(studentId) || {};
+    existing[welcomeField.field] = getWelcomeSubmissionAnswerText(submission) || '✓';
+    welcomeAnswersByStudentId.set(studentId, existing);
   });
 
   const studentIds = Array.from(
@@ -162,6 +208,7 @@ export function buildOverviewProjection({
 
       const groupCompletion = gradebookRow?.groupCompletion || {};
       const wpollDone = Boolean(groupCompletion['wpoll']);
+      const welcomeAnswers = welcomeAnswersByStudentId.get(studentId) || {};
 
       return {
         id: studentId,
@@ -171,6 +218,7 @@ export function buildOverviewProjection({
         email,
         turno: normalizeDashboardText(attendanceRow?.turno || gradebookRow?.turnoValue || '—') || '—',
         grupo: normalizeDashboardText(attendanceRow?.grupo || gradebookRow?.groupValue || '—') || '—',
+        ...welcomeAnswers,
         wpoll: wpollDone ? '✓' : '—',
         attendanceCount,
         attendanceRate,
@@ -197,6 +245,7 @@ export function buildOverviewProjection({
           gradebookRow?.turnoValue,
           attendanceRow?.grupo,
           gradebookRow?.groupValue,
+          ...Object.values(welcomeAnswers),
           wpollDone ? 'wpoll terminado' : '',
           risk,
           attendanceRate,
@@ -224,6 +273,13 @@ export function buildOverviewProjection({
       { title: 'Email', field: 'email', minWidth: 220, kind: 'editable-text' },
       { title: 'Turno', field: 'turno', width: 74, hozAlign: 'center', headerHozAlign: 'center', kind: 'turno' },
       { title: 'Grupo', field: 'grupo', width: 84, hozAlign: 'center', headerHozAlign: 'center', kind: 'grupo' },
+      ...(welcomeFields || []).map((field) => ({
+        title: field.title,
+        field: field.field,
+        minWidth: field.minWidth || 152,
+        headerTooltip: field.prompt || field.title,
+        kind: 'text',
+      })),
       { title: 'Polls', field: 'wpoll', width: 70, hozAlign: 'center', headerHozAlign: 'center', kind: 'text' },
       { title: 'Asist.%', field: 'attendanceRate', width: 92, hozAlign: 'center', headerHozAlign: 'center', kind: 'percent' },
       { title: 'Entreg.', field: 'deliveriesDone', width: 88, hozAlign: 'center', headerHozAlign: 'center', kind: 'metric' },

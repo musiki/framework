@@ -14,6 +14,7 @@ import {
   sourcePathFromFrameworkFilePath,
 } from '../../lib/content-admin';
 import { createSupabaseServerClient } from '../../lib/forum-server';
+import { getCourseWelcomeFields } from '../../lib/dashboard/welcome-fields';
 import { resolveLiveManageAccess } from '../../lib/live/access';
 import {
   buildCourseHref,
@@ -124,9 +125,15 @@ const isRequestingWelcomePage = requestedLessonPath === '_welcome' || requestedL
 if (isStudentEnrolled && !isRequestingWelcomePage) {
   const welcomeEntry = allLessons.find((entry) => entry.id === `${canonicalCourseId}/_welcome`);
   if (welcomeEntry) {
-    const welcomeEvalIds = Array.isArray((welcomeEntry.data as any).welcomeEvalIds)
+    const frontmatterEvalIds = Array.isArray((welcomeEntry.data as any).welcomeEvalIds)
       ? ((welcomeEntry.data as any).welcomeEvalIds as string[]).filter(Boolean)
       : [];
+    const derivedWelcomeFields = frontmatterEvalIds.length === 0
+      ? await getCourseWelcomeFields(canonicalCourseId)
+      : [];
+    const welcomeEvalIds = frontmatterEvalIds.length > 0
+      ? frontmatterEvalIds
+      : derivedWelcomeFields.map((field) => String(field.evalId || '')).filter(Boolean);
     if (welcomeEvalIds.length > 0) {
       const sessionEmail = String(session?.user?.email || '').trim().toLowerCase();
       if (sessionEmail) {
@@ -3977,6 +3984,51 @@ order:
         return submission.answer ?? submission.payload ?? null;
       }
 
+      function getPreviousFormMsqAnswers(submission) {
+        const payload = getSubmissionPayload(submission);
+        if (!payload || typeof payload !== 'object') return [];
+
+        const directAnswerIndexes = Array.isArray(payload.answerIndexes)
+          ? payload.answerIndexes
+          : [];
+        if (directAnswerIndexes.length > 0) {
+          return directAnswerIndexes.map((value) => String(value));
+        }
+
+        const nestedAnswerIndexes =
+          payload.answer && typeof payload.answer === 'object' && Array.isArray(payload.answer.answerIndexes)
+            ? payload.answer.answerIndexes
+            : [];
+        if (nestedAnswerIndexes.length > 0) {
+          return nestedAnswerIndexes.map((value) => String(value));
+        }
+
+        const directAnswer = Array.isArray(payload.answer) ? payload.answer : [];
+        if (directAnswer.length > 0) {
+          return directAnswer.map((value) => String(value));
+        }
+
+        return [];
+      }
+
+      function getPreviousFormTextAnswer(submission) {
+        const payload = getSubmissionPayload(submission);
+        if (!payload || typeof payload !== 'object') return '';
+
+        return ensureEvalText(
+          payload.text
+          || payload.answerText
+          || (payload.answer && typeof payload.answer === 'object'
+            ? (
+                payload.answer.text
+                || payload.answer.answerText
+                || payload.answer.value
+                || ''
+              )
+            : ''),
+        );
+      }
+
       function getPreviousMcqAnswer(submission) {
         const payload = getSubmissionPayload(submission);
         if (payload && typeof payload === 'object') return payload.answer;
@@ -6754,12 +6806,7 @@ order:
         }
 
         const previousSubmission = getSubmission(data.id);
-        const previousPayload = getSubmissionPayload(previousSubmission);
-        const previousAnswers = Array.isArray(previousPayload?.answerIndexes)
-          ? previousPayload.answerIndexes.map(String)
-          : Array.isArray(previousPayload?.answer)
-          ? previousPayload.answer.map(String)
-          : [];
+        const previousAnswers = getPreviousFormMsqAnswers(previousSubmission);
         const wasSubmitted = previousAnswers.length > 0;
         registerProgress(data, position, wasSubmitted);
 
@@ -6823,10 +6870,7 @@ order:
 
       function renderFormText(wrapper, data, position) {
         const previousSubmission = getSubmission(data.id);
-        const previousPayload = getSubmissionPayload(previousSubmission);
-        const previousText = ensureEvalText(
-          previousPayload?.text || previousPayload?.answerText || previousPayload?.answer?.text || '',
-        );
+        const previousText = getPreviousFormTextAnswer(previousSubmission);
         const wasSubmitted = Boolean(previousText);
         registerProgress(data, position, wasSubmitted);
 
@@ -6870,6 +6914,7 @@ order:
           const ok = await saveSubmission({
             evalId: data.id,
             answer: { type: 'form-text', text },
+            meta: { answerText: text },
           });
           if (ok) {
             submitBtn.textContent = 'Respuesta registrada ✓';

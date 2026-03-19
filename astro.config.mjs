@@ -72,6 +72,7 @@ export default defineConfig({
     server: viteServerConfig,
     optimizeDeps: {
       include: [
+        '@supabase/supabase-js',
         '@mediapipe/tasks-vision',
         'reveal.js',
         'reveal.js/plugin/notes/notes.esm.js',

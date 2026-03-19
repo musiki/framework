@@ -1,6 +1,7 @@
 import { visit } from 'unist-util-visit';
 import { Buffer } from 'node:buffer';
 import { parseEvalBlock } from '../lib/eval/parse-eval-block.mjs';
+import { shouldTreatCodeFenceAsEval } from '../lib/eval/extract-eval-blocks.mjs';
 
 const sanitizeFallbackId = (value) =>
   String(value || '')
@@ -17,10 +18,18 @@ export default function remarkEvalBlocks() {
     const sourcePrefix = sanitizeFallbackId(file?.path || file?.history?.[0] || '') || 'eval';
 
     visit(tree, 'code', (node, index, parent) => {
-      if (node.lang !== 'eval') return;
+      evalCounter += 1;
+      if (!shouldTreatCodeFenceAsEval({
+        lang: node.lang,
+        blockValue: node.value,
+        sourcePath: file?.path || file?.history?.[0] || '',
+        fallbackId: `${sourcePrefix}-eval-${evalCounter}`,
+      })) {
+        evalCounter -= 1;
+        return;
+      }
       
       try {
-        evalCounter += 1;
         const evalData = parseEvalBlock(node.value, {
           fallbackId: `${sourcePrefix}-eval-${evalCounter}`,
           sourcePath: file?.path || '',

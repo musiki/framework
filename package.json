@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
+    "dev:force": "astro dev --force",
     "start": "astro dev",
     "test": "node --test \"src/lib/live/*.test.mjs\"",
     "preflight": "bash scripts/preflight.sh",
@@ -66,6 +67,7 @@
     "vercel": "^50.31.1"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.8",
     "@astrojs/mdx": "^4.3.6",
     "astro": "^5.17.3",
     "rehype-katex": "^7.0.1",

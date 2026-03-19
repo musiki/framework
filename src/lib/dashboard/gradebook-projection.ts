@@ -44,8 +44,8 @@ export function buildGradebookProjection({
       { title: 'Email', field: 'email', width: 180, hozAlign: 'left' as const, headerHozAlign: 'left' as const },
       { title: 'Prom.', field: 'average', width: 65, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'score' },
       { title: 'Concepto', field: 'conceptValue', width: 70, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'concepto' },
-      { title: 'Turno', field: 'turno', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const },
-      { title: 'Grupo', field: 'grupo', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const },
+      { title: 'Turno', field: 'turno', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'turno' },
+      { title: 'Grupo', field: 'grupo', width: 85, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'grupo' },
       { title: 'Asist.', field: 'attendanceCount', width: 65, hozAlign: 'center' as const, headerHozAlign: 'center' as const, kind: 'metric' },
     ]
   };
@@ -130,6 +130,8 @@ export function buildGradebookProjection({
         grupo: String(row?.groupValue || '—') || '—',
         attendanceCount: Number(row?.attendanceCount || 0),
         conceptValue: String(row?.conceptValue || '') || '—',
+        notesValue: String(row?.notesValue || '') || '—',
+        finalGrade: String(row?.finalGrade || '') || '—',
         average: asDashboardNumber(row?.average),
         __gradeState: {},
       };
@@ -201,6 +203,8 @@ export function buildGradebookProjection({
         record.turno,
         record.grupo,
         record.conceptValue,
+        record.notesValue,
+        record.finalGrade,
         record.attendanceCount,
         row?.average,
         ...lessonGroups.map((lesson: any) => lesson?.lessonLabel),

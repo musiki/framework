@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId } from '../../lib/course-alias';
+import { createSupabaseServerClient, ensureDbUserFromSession } from '../../lib/forum-server';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeRole = (value: unknown) => normalizeText(value).toLowerCase();
@@ -28,16 +29,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   try {
     const { courseId } = await request.json();
-    if (!courseId) return new Response(JSON.stringify({ error: 'Missing courseId' }), { status: 400 });
+    const normalizedCourseId = await canonicalizeCourseId(courseId);
+    if (!normalizedCourseId) {
+      return new Response(JSON.stringify({ error: 'Missing courseId' }), { status: 400 });
+    }
 
-    const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-
-    const users = await resolveSessionUsers(supabase, currentUser.email);
-    const user = users[0];
+    const supabase = createSupabaseServerClient();
+    const user = await ensureDbUserFromSession(supabase, session);
     if (!user) return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
 
     // Check existing enrollment
-    const { data: existing } = await supabase.from('Enrollment').select('id').eq('userId', user.id).eq('courseId', courseId).single();
+    const { data: existing, error: existingError } = await supabase
+      .from('Enrollment')
+      .select('id')
+      .eq('userId', user.id)
+      .eq('courseId', normalizedCourseId)
+      .maybeSingle();
+    if (existingError) throw existingError;
     
     if (existing) {
       return new Response(JSON.stringify({ message: 'Already enrolled' }), { status: 200 });
@@ -49,7 +57,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     // Insert Enrollment
     const { error } = await supabase.from('Enrollment').insert([{
       userId: user.id,
-      courseId: courseId,
+      courseId: normalizedCourseId,
       roleInCourse: roleInCourse
     }]);
 
@@ -76,7 +84,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Missing enrollmentId' }), { status: 400 });
     }
 
-    const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+    const supabase = createSupabaseServerClient();
 
     const users = await resolveSessionUsers(supabase, currentUser.email);
     const actingUserIds = Array.from(new Set(users.map((user) => normalizeText(user?.id)).filter(Boolean)));
@@ -175,7 +183,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Unsupported roleInCourse' }), { status: 400 });
     }
 
-    const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+    const supabase = createSupabaseServerClient();
     const users = await resolveSessionUsers(supabase, currentUser.email);
     const actingUserIds = Array.from(new Set(users.map((user) => normalizeText(user?.id)).filter(Boolean)));
     if (actingUserIds.length === 0) {

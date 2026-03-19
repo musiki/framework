@@ -44,6 +44,20 @@ const normalizeConcepto = (value: unknown) => {
   return String(Number(bounded.toFixed(2)));
 };
 
+const normalizeNotaFinal = (value: unknown) => {
+  const raw = cleanString(value);
+  if (!raw) return '';
+  const parsed = Number(raw.replace(',', '.'));
+  if (!Number.isFinite(parsed)) return '';
+  const bounded = Math.min(10, Math.max(0, parsed));
+  return String(Number(bounded.toFixed(2)));
+};
+
+const normalizeNotes = (value: unknown) =>
+  cleanString(value)
+    .replace(/\s+/g, ' ')
+    .slice(0, 280);
+
 const normalizeGrupo = (value: unknown) => {
   const raw = cleanString(value);
   if (!raw) return '';
@@ -104,6 +118,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const hasTurno = Object.prototype.hasOwnProperty.call(body || {}, 'turno');
     const hasConcepto = Object.prototype.hasOwnProperty.call(body || {}, 'concepto');
     const hasGrupo = Object.prototype.hasOwnProperty.call(body || {}, 'grupo');
+    const hasNotes = Object.prototype.hasOwnProperty.call(body || {}, 'notes');
+    const hasNotaFinal = Object.prototype.hasOwnProperty.call(body || {}, 'notaFinal');
     const courseId = normalizeCourseId(body?.courseId);
     const studentId = cleanString(body?.studentId);
     const year = normalizeYear(body?.year);
@@ -161,6 +177,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const grupo = hasGrupo
       ? normalizeGrupo(body?.grupo)
       : normalizeGrupo(existingPayload?.grupo || existingPayload?.group);
+    const notes = hasNotes
+      ? normalizeNotes(body?.notes)
+      : normalizeNotes(existingPayload?.notes);
+    const notaFinal = hasNotaFinal
+      ? normalizeNotaFinal(body?.notaFinal)
+      : normalizeNotaFinal(existingPayload?.notaFinal || existingPayload?.finalGrade);
 
     const metaPayload = {
       __metaKind: META_KIND,
@@ -170,6 +192,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       turno,
       concepto,
       grupo,
+      notes,
+      notaFinal,
       updatedAt: new Date().toISOString(),
       updatedBy: access.userId || '',
       updatedByEmail: cleanString(session?.user?.email),
@@ -210,6 +234,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
         turno,
         concepto,
         grupo,
+        notes,
+        notaFinal,
       },
     });
   } catch (error: any) {

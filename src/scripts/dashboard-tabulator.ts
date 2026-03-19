@@ -35,6 +35,7 @@ type DashboardMeta = {
 };
 
 type GridKind =
+  | 'teacher-main'
   | 'overview'
   | 'gradebook'
   | 'attendance-summary'
@@ -43,7 +44,7 @@ type GridKind =
   | 'admin';
 
 type CellScopeContext = {
-  tab: 'overview' | 'gradebook' | 'attendance' | 'admin';
+  tab: 'main' | 'overview' | 'gradebook' | 'attendance-summary' | 'admin';
   tabLabel: string;
   scopeType: DashboardAnnotationScopeType;
   scopeRef: string;
@@ -59,6 +60,7 @@ type AnnotationState = {
   annotationsByScope: Map<string, DashboardAnnotationRecord[]>;
   registry: Map<string, Tabulator>;
   selectedContext: CellScopeContext | null;
+  selectedCell: any | null;
   selectedCellEl: HTMLElement | null;
   currentUserId: string;
   meta: DashboardMeta;
@@ -73,10 +75,23 @@ type RangeSelectionState = {
   selectedCells: Set<any>;
 };
 
-const VALID_TEACHER_TABS = ['overview', 'gradebook', 'attendance', 'comments', 'admin'];
+type RealtimeProjectionSyncController = {
+  isEnabled: () => boolean;
+  setEnabled: (next: boolean) => void;
+  destroy: () => void;
+};
+
+type DashboardTabulatorInstance = Tabulator & {
+  __musikiTableBuilt?: boolean;
+  __musikiFoldStorageKey?: string;
+};
+
+const VALID_TEACHER_TABS = ['main', 'log', 'admin'];
 const SEARCH_DEBOUNCE_MS = 300;
+const DASHBOARD_LIVE_MODE_STORAGE_KEY = 'musiki:dashboard:live-mode';
 const DASHBOARD_PROJECTION_SCRIPT_IDS = [
   'dashboard-teacher-tabulator-meta',
+  'dashboard-teacher-main',
   'dashboard-teacher-overview',
   'dashboard-teacher-gradebook',
   'dashboard-teacher-attendance',
@@ -89,19 +104,33 @@ const normalizeText = (value: any) => String(value || '').trim();
 const normalizeTextLower = (value: any) => normalizeText(value).toLowerCase();
 
 // Abbreviated label for narrow gradebook eval column headers.
-// "demo-ollama-patch-01" → "DOP1"  (first initial of each word, max 3, + last number)
+// "demo-ollama-patch-01" → "DOP1"
+// "c1grupo1" → "CG1"
 const formatAbletonLabel = (label: string) => {
-  const words = String(label || '').trim().split(/[\s_\-]+/);
-  let initials = '';
-  let num = '';
-  words.forEach((w) => {
-    if (/^\d+$/.test(w)) {
-      num = w;
-    } else if (w && initials.length < 3) {
-      initials += w[0].toUpperCase();
-    }
-  });
-  return initials + (num ? parseInt(num, 10).toString() : '');
+  const raw = String(label || '').trim();
+  if (!raw) return '';
+  const alphaChunks = raw.match(/[A-Za-zÀ-ÿ]+/g) || [];
+  const lastNumberMatch = raw.match(/(\d+)(?!.*\d)/);
+  const initials = alphaChunks.map((chunk) => chunk[0]?.toUpperCase() || '').join('');
+  const suffix = lastNumberMatch ? String(parseInt(lastNumberMatch[1] || '0', 10)) : '';
+  return `${initials}${suffix}`;
+};
+
+const getFoldMeta = (subject: any) => {
+  const definition = typeof subject?.getDefinition === 'function'
+    ? subject.getDefinition()
+    : subject || {};
+
+  return definition?.titleFormatterParams?.foldMeta || {};
+};
+
+const getColumnDashboardMeta = (subject: any) => {
+  const definition = typeof subject?.getDefinition === 'function'
+    ? subject.getDefinition()
+    : subject || {};
+  const formatterParams = definition?.formatterParams;
+  if (!formatterParams || typeof formatterParams !== 'object') return {};
+  return formatterParams.__dashboardMeta || {};
 };
 
 const debounce = <T extends (...args: any[]) => any>(fn: T, ms: number) => {
@@ -122,8 +151,155 @@ const parseJsonScript = <T>(id: string, fallback: T): T => {
   }
 };
 
+const canRedrawTable = (table: Tabulator | null | undefined) =>
+  Boolean((table as DashboardTabulatorInstance | null | undefined)?.__musikiTableBuilt);
+
 const buildPersistKey = (meta: DashboardMeta, grid: string) =>
   `musiki:dashboard:${normalizeText(meta?.courseId)}:${normalizeText(meta?.year)}:${grid}`;
+
+const buildFoldStorageKey = (persistKey: string) => `${persistKey}:folds`;
+
+const getTableFoldStorageKey = (table: Tabulator | null | undefined) =>
+  normalizeText((table as DashboardTabulatorInstance | null | undefined)?.__musikiFoldStorageKey || '');
+
+const readStoredFoldState = (table: Tabulator | null | undefined): Record<string, boolean> => {
+  const storageKey = getTableFoldStorageKey(table);
+  if (!storageKey) return {};
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).map(([key, value]) => [String(key), Boolean(value)]),
+    );
+  } catch {
+    return {};
+  }
+};
+
+const writeStoredFoldState = (table: Tabulator | null | undefined, nextState: Record<string, boolean>) => {
+  const storageKey = getTableFoldStorageKey(table);
+  if (!storageKey) return;
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(nextState));
+  } catch {
+    // ignore storage errors
+  }
+};
+
+const setStoredFoldState = (table: Tabulator | null | undefined, foldKey: string, folded: boolean) => {
+  const nextKey = normalizeText(foldKey);
+  if (!table || !nextKey) return;
+  const state = readStoredFoldState(table);
+  state[nextKey] = Boolean(folded);
+  writeStoredFoldState(table, state);
+};
+
+const snapshotCurrentFoldState = (table: Tabulator | null | undefined): Record<string, boolean> => {
+  const state: Record<string, boolean> = {};
+  if (!table) return state;
+
+  const visit = (columns: any[]) => {
+    (columns || []).forEach((column) => {
+      const foldMeta = getFoldMeta(column);
+      if (foldMeta?.key) {
+        const headerElement = column.getElement?.();
+        state[String(foldMeta.key)] = Boolean(headerElement?.classList?.contains('group-folded'));
+      }
+      const children = getGroupSubColumns(column);
+      if (children.length > 0) {
+        visit(children);
+      }
+    });
+  };
+
+  try {
+    visit(table.getColumns?.() || []);
+  } catch {
+    return state;
+  }
+
+  return state;
+};
+
+const flushCurrentFoldState = (table: Tabulator | null | undefined, message = 'Vista de columnas guardada localmente.') => {
+  if (!table) return;
+  writeStoredFoldState(table, snapshotCurrentFoldState(table));
+  setDashboardSaveStatus('saved', message);
+};
+
+const storeCurrentFoldState = (table: Tabulator | null | undefined, message = 'Vista de columnas guardada localmente.') => {
+  if (!table) return;
+  window.requestAnimationFrame(() => {
+    flushCurrentFoldState(table, message);
+  });
+};
+
+const getStoredFoldState = (table: Tabulator | null | undefined, foldKey: string) => {
+  const nextKey = normalizeText(foldKey);
+  if (!table || !nextKey) return undefined;
+  const state = readStoredFoldState(table);
+  if (!Object.prototype.hasOwnProperty.call(state, nextKey)) return undefined;
+  return Boolean(state[nextKey]);
+};
+
+const getStoredLiveModePreference = () => {
+  try {
+    return window.localStorage.getItem(DASHBOARD_LIVE_MODE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+const setStoredLiveModePreference = (enabled: boolean) => {
+  try {
+    window.localStorage.setItem(DASHBOARD_LIVE_MODE_STORAGE_KEY, enabled ? 'true' : 'false');
+  } catch {
+    // ignore storage errors
+  }
+};
+
+let dashboardSaveStatusTimeout: number | null = null;
+let dashboardSaveStatusLockDepth = 0;
+
+const setDashboardSaveStatus = (
+  state: 'idle' | 'saving' | 'saved' | 'error',
+  message: string,
+) => {
+  if (dashboardSaveStatusLockDepth > 0 && state !== 'idle') {
+    return;
+  }
+  if (dashboardSaveStatusTimeout !== null) {
+    window.clearTimeout(dashboardSaveStatusTimeout);
+    dashboardSaveStatusTimeout = null;
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-dashboard-save-indicator]').forEach((node) => {
+    node.dataset.state = state;
+    node.title = message;
+    node.setAttribute('aria-label', message);
+  });
+
+  if (state === 'saved' || state === 'error') {
+    dashboardSaveStatusTimeout = window.setTimeout(() => {
+      document.querySelectorAll<HTMLElement>('[data-dashboard-save-indicator]').forEach((node) => {
+        node.dataset.state = 'idle';
+        node.title = message;
+        node.setAttribute('aria-label', message);
+      });
+      dashboardSaveStatusTimeout = null;
+    }, 2400);
+  }
+};
+
+const lockDashboardSaveStatus = () => {
+  dashboardSaveStatusLockDepth += 1;
+};
+
+const unlockDashboardSaveStatus = () => {
+  dashboardSaveStatusLockDepth = Math.max(0, dashboardSaveStatusLockDepth - 1);
+};
 
 const toTitleCase = (text: string): string =>
   String(text || '').replace(/\S+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
@@ -153,14 +329,331 @@ const saveUserFieldFromCell = async (cell: any, overrideValue?: string): Promise
 
   if (!Object.keys(body).length) return;
   try {
+    setDashboardSaveStatus('saving', `Guardando ${field}...`);
     await fetch(`/api/admin/users/${studentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    setDashboardSaveStatus('saved', `${field} guardado.`);
   } catch {
+    setDashboardSaveStatus('error', `No se pudo guardar ${field}.`);
     // silent — cell is already updated in UI
   }
+};
+
+const saveSelectedUserFieldFromCell = async (cell: any, overrideValue?: any) => {
+  const field = getCellField(cell);
+  if (!EDITABLE_USER_FIELDS.includes(field)) return;
+
+  const value = String(overrideValue ?? cell.getValue() ?? '');
+  const targetCells = resolveSelectedTargetCells(cell, {
+    sameField: true,
+    filter: (candidate) => EDITABLE_USER_FIELDS.includes(getCellField(candidate)),
+  });
+
+  for (const targetCell of targetCells) {
+    const rowData = (targetCell.getData?.() || {}) as Record<string, any>;
+    const rowId = normalizeText(rowData.id || rowData.studentId || targetCell.getRow?.()?.getIndex?.() || '');
+    const row = rowId ? cell.getTable?.()?.getRow?.(rowId) || targetCell.getRow?.() : targetCell.getRow?.();
+    if (row) {
+      await row.update({
+        [field]: value,
+      });
+    }
+    await saveUserFieldFromCell(targetCell, value);
+  }
+};
+
+const saveSingleUserFieldCellValue = async (cell: any, overrideValue?: any) => {
+  const field = getCellField(cell);
+  if (!EDITABLE_USER_FIELDS.includes(field)) return;
+
+  const value = String(overrideValue ?? cell.getValue() ?? '');
+  const row = cell?.getRow?.();
+  if (row) {
+    await row.update({
+      [field]: value,
+    });
+  }
+  await saveUserFieldFromCell(cell, value);
+};
+
+const getCellPreviousValue = (cell: any, overridePreviousValue?: any) =>
+  overridePreviousValue
+  ?? (cell as any)?.__musikiPreviousValue
+  ?? cell?.getOldValue?.()
+  ?? cell?.getValue?.();
+
+const saveSingleCourseRoleCellValue = async (
+  cell: any,
+  overrideNextValue?: any,
+  overridePreviousValue?: any,
+) => {
+  if (getCellKind(cell) !== 'course-role') return;
+
+  const field = getCellField(cell);
+  const previousValue = normalizeCourseRoleValue(
+    getCellPreviousValue(cell, overridePreviousValue),
+  );
+  const nextValue = normalizeCourseRoleValue(overrideNextValue ?? cell.getValue?.());
+  const row = cell?.getRow?.();
+
+  if (nextValue === previousValue) {
+    await row?.update?.({
+      [field]: nextValue,
+      courseRoleLabel: getCourseRoleLabel(nextValue),
+    });
+    return;
+  }
+
+  const rowData = cell?.getData?.() || {};
+  const enrollmentId = normalizeText(rowData.enrollmentId || '');
+  if (!enrollmentId) return;
+
+  const payload = await postCourseRoleUpdate(enrollmentId, nextValue);
+  const resolvedRole = normalizeCourseRoleValue(payload?.enrollment?.roleInCourse || nextValue);
+  await row?.update?.({
+    [field]: resolvedRole,
+    courseRoleLabel: getCourseRoleLabel(resolvedRole),
+  });
+};
+
+const saveSingleCourseStudentMetaCellValue = async (
+  cell: any,
+  meta: DashboardMeta,
+  overrideNextValue?: any,
+  overridePreviousValue?: any,
+) => {
+  const kind = getCellKind(cell);
+  if (!isCourseStudentMetaCellKind(kind)) return;
+
+  const field = getCellField(cell);
+  const previousValue = normalizeCourseStudentMetaValue(
+    kind,
+    getCellPreviousValue(cell, overridePreviousValue),
+  );
+  const validation = validateCourseStudentMetaValue(kind, overrideNextValue ?? cell.getValue?.());
+  const nextValue = validation.normalized;
+  const row = cell?.getRow?.();
+
+  if (!validation.valid) {
+    throw new Error(validation.message);
+  }
+
+  if (!meta?.courseId || !meta?.year) {
+    if (row) {
+      await row.update({
+        [field]: previousValue || '',
+      });
+    }
+    return;
+  }
+
+  if (nextValue === previousValue) {
+    await row?.update?.({
+      [field]: nextValue || '',
+    });
+    return;
+  }
+
+  const patchKey = getCourseStudentMetaPatchKey(kind);
+  const rowData = cell?.getData?.() || {};
+  const studentId = normalizeText(rowData.studentId || '');
+  if (!patchKey || !studentId) return;
+
+  const payload = await postCourseStudentMetaUpdate(
+    meta,
+    studentId,
+    { [patchKey]: nextValue },
+    getCourseStudentMetaFallbackError(kind),
+  );
+
+  const resolvedValue = getCourseStudentMetaResponseValue(kind, payload, nextValue);
+  await row?.update?.({
+    [field]: resolvedValue || '',
+  });
+};
+
+const persistClipboardCellValue = async (
+  cell: any,
+  nextValue: any,
+  previousValue: any,
+  meta: DashboardMeta,
+) => {
+  const kind = getCellKind(cell);
+  if (kind === 'attendance-day') {
+    const normalized = normalizeAttendanceInput(nextValue);
+    if (!normalized.valid) {
+      throw new Error('Usa solo / o 1, -, ~ o 0.5, x o 0, o deja vacío.');
+    }
+    await persistSingleAttendanceCellValue(cell, normalized, meta);
+    return;
+  }
+
+  if (kind === 'course-role') {
+    await saveSingleCourseRoleCellValue(cell, nextValue, previousValue);
+    return;
+  }
+
+  if (isCourseStudentMetaCellKind(kind)) {
+    await saveSingleCourseStudentMetaCellValue(cell, meta, nextValue, previousValue);
+    return;
+  }
+
+  if (kind === 'editable-text') {
+    await saveSingleUserFieldCellValue(cell, nextValue);
+  }
+};
+
+const isClipboardEditableCell = (cell: any) => {
+  const resolvedCell = cell?.getComponent?.() || cell;
+  const field = getCellField(resolvedCell);
+  const kind = getCellKind(resolvedCell);
+  const rowData = resolvedCell?.getData?.() || resolvedCell?.getRow?.()?.getData?.() || {};
+
+  if (kind === 'attendance-day') {
+    return Boolean(rowData?.__attendanceCellMeta?.[field]);
+  }
+
+  if (kind === 'course-role') {
+    return Boolean(normalizeText(rowData?.enrollmentId || ''));
+  }
+
+  if (isCourseStudentMetaCellKind(kind)) {
+    return Boolean(normalizeText(rowData?.studentId || ''));
+  }
+
+  if (kind === 'editable-text') {
+    return EDITABLE_USER_FIELDS.includes(field)
+      && Boolean(normalizeText(rowData?.studentId || rowData?.id || rowData?.userId || ''));
+  }
+
+  return false;
+};
+
+const applyRangeClipboardPaste = (
+  table: Tabulator,
+  parsedRows: Record<string, any>[],
+  meta: DashboardMeta,
+) => {
+  const range = (table as any)?.modules?.selectRange?.activeRange;
+  if (!range || !Array.isArray(parsedRows) || parsedRows.length === 0) return [];
+
+  const bounds = range.getBounds?.();
+  const startCell = bounds?.start;
+  if (!startCell) return [];
+
+  const visibleColumns = table.columnManager?.getVisibleColumnsByIndex?.() || [];
+  const activeRows = table.rowManager?.activeRows?.slice?.() || [];
+  const startColIndex = visibleColumns.indexOf(startCell.column);
+  const startRowIndex = activeRows.indexOf(startCell.row);
+
+  if (startColIndex < 0 || startRowIndex < 0) return [];
+
+  const selectedRowCount = bounds?.start === bounds?.end
+    ? parsedRows.length
+    : (activeRows.indexOf(bounds.end.row) - startRowIndex) + 1;
+  const selectedColumns = bounds?.start === bounds?.end
+    ? Object.keys(parsedRows[0] || {}).length
+    : (visibleColumns.indexOf(bounds.end.column) - startColIndex) + 1;
+
+  const targetRows = activeRows.slice(startRowIndex, startRowIndex + Math.max(0, selectedRowCount));
+  const targetColumns = visibleColumns.slice(startColIndex, startColIndex + Math.max(0, selectedColumns));
+
+  if (!targetRows.length || !targetColumns.length) return [];
+
+  const operations: Array<{
+    row: any;
+    rowId: string;
+    field: string;
+    nextValue: any;
+    previousValue: any;
+  }> = [];
+
+  table.blockRedraw?.();
+
+  try {
+    targetRows.forEach((row: any, rowIndex: number) => {
+      const sourceRow = parsedRows[rowIndex % parsedRows.length] || {};
+      const patch: Record<string, any> = {};
+
+      targetColumns.forEach((column: any) => {
+        const field = normalizeText(column?.field || column?.definition?.field || '');
+        if (!field || !(field in sourceRow)) return;
+
+        const cell = row?.getCell?.(field);
+        if (!cell || !isClipboardEditableCell(cell)) return;
+
+        patch[field] = sourceRow[field];
+        operations.push({
+          row,
+          rowId: normalizeText(row?.getData?.()?.id || row?.getIndex?.() || ''),
+          field,
+          nextValue: sourceRow[field],
+          previousValue: cell.getValue?.(),
+        });
+      });
+
+      if (Object.keys(patch).length > 0) {
+        row.updateData?.(patch);
+      }
+    });
+  } finally {
+    table.restoreRedraw?.();
+  }
+
+  if (operations.length > 0) {
+    setDashboardSaveStatus('saving', `Guardando pegado en ${operations.length} celdas...`);
+    void (async () => {
+      lockDashboardSaveStatus();
+      let successCount = 0;
+      const failureMessages: string[] = [];
+
+      try {
+        for (const operation of operations) {
+          const liveRow =
+            (operation.rowId ? table.getRow?.(operation.rowId) : null)
+            || operation.row;
+          const targetCell = liveRow?.getCell?.(operation.field);
+          if (!targetCell) {
+            failureMessages.push(`No se encontró la celda ${operation.field} para guardar.`);
+            continue;
+          }
+          try {
+            await persistClipboardCellValue(
+              targetCell,
+              operation.nextValue,
+              operation.previousValue,
+              meta,
+            );
+            successCount += 1;
+          } catch (error: any) {
+            failureMessages.push(error?.message || 'No se pudo guardar una celda pegada');
+            await liveRow?.update?.({
+              [operation.field]: operation.previousValue,
+            });
+          }
+        }
+      } finally {
+        unlockDashboardSaveStatus();
+      }
+
+      if (failureMessages.length > 0) {
+        if (successCount === 0) {
+          setDashboardSaveStatus('error', failureMessages[0]);
+          alert(failureMessages[0]);
+        } else {
+          setDashboardSaveStatus('error', `Pegado parcial: ${successCount} guardadas, ${failureMessages.length} fallaron.`);
+          alert(`Se pegaron ${successCount} celdas, pero ${failureMessages.length} no se pudieron guardar.`);
+        }
+      } else {
+        setDashboardSaveStatus('saved', `Pegado guardado en ${successCount} celdas.`);
+      }
+    })();
+  }
+
+  return targetRows;
 };
 
 const setStoredSearchQuery = (persistKey: string, query: string) => {
@@ -223,6 +716,89 @@ const normalizeAttendanceInput = (value: any) => {
   return { valid: false, countRaw: null };
 };
 
+const resolvePersistableAttendanceCellContext = (cell: any, meta: DashboardMeta) => {
+  const field = normalizeText(cell?.getField?.() || cell?.getColumn?.()?.getDefinition?.()?.field || '');
+  const rowData = cell?.getData?.() || cell?.getRow?.()?.getData?.() || {};
+  const cellMeta = rowData?.__attendanceCellMeta?.[field];
+  const studentId = normalizeText(rowData?.studentId || '');
+  const dateKey = normalizeText(cellMeta?.dateKey || '');
+  if (!field || !cellMeta || !studentId || !dateKey || !meta?.courseId || !meta?.year) {
+    return null;
+  }
+
+  return {
+    field,
+    rowData,
+    cellMeta,
+    studentId,
+    dateKey,
+  };
+};
+
+const persistSingleAttendanceCellValue = async (
+  cell: any,
+  normalized: ReturnType<typeof normalizeAttendanceInput>,
+  meta: DashboardMeta,
+) => {
+  const context = resolvePersistableAttendanceCellContext(cell, meta);
+  if (!context) return false;
+
+  setDashboardSaveStatus('saving', `Guardando asistencia ${context.dateKey}...`);
+  const response = await fetch('/api/grade/course-attendance-manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      courseId: meta.courseId,
+      year: meta.year,
+      studentId: context.studentId,
+      date: context.dateKey,
+      countRaw: normalized.countRaw,
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    setDashboardSaveStatus('error', payload?.error || 'No se pudo guardar la asistencia manual');
+    throw new Error(payload?.error || 'No se pudo guardar la asistencia manual');
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  const nextCount = typeof payload?.meta?.count === 'number' ? payload.meta.count : null;
+  const nextDisplay = nextCount === null ? '' : formatAttendanceSymbol(nextCount);
+  const rowData = cell.getData?.() || {};
+  const nextCellMeta = rowData?.__attendanceCellMeta?.[context.field];
+  if (nextCellMeta) {
+    nextCellMeta.hasManualOverride = nextCount !== null;
+    nextCellMeta.manualValue = nextCount ?? 0;
+    nextCellMeta.effectiveValue = nextCount ?? Number(nextCellMeta.liveValue || 0);
+  }
+
+  let absenceUnits = 0;
+  let attendanceUnits = 0;
+  let scheduledDayCount = 0;
+  Object.values(rowData?.__attendanceCellMeta || {}).forEach((entry: any) => {
+    scheduledDayCount += 1;
+    attendanceUnits += Math.max(0, Number(entry?.effectiveValue || 0));
+    if (!entry?.countsTowardAbsence) return;
+    absenceUnits += Math.max(0, 1 - Number(entry?.effectiveValue || 0));
+  });
+  const attendanceRate = scheduledDayCount > 0
+    ? Math.round((attendanceUnits / scheduledDayCount) * 1000) / 10
+    : 0;
+
+  await cell.getRow()?.update?.({
+    [context.field]: nextDisplay,
+    attendanceRate,
+    attendanceCount: attendanceUnits,
+    attendanceTotalCount: scheduledDayCount,
+    absenceUnits,
+    absenceDisplay: formatAbsence(absenceUnits),
+  });
+
+  setDashboardSaveStatus('saved', `Asistencia guardada: ${context.dateKey}.`);
+  return true;
+};
+
 const getTurnoTitle = (value: string) => {
   const v = normalizeText(value).toUpperCase();
   if (v === 'M') return 'Mañana';
@@ -242,7 +818,36 @@ const getCommentShortcutLabel = () => {
 };
 
 const isAnnotationContextKind = (kind: GridKind) =>
-  ['overview', 'gradebook', 'attendance-summary', 'admin'].includes(kind);
+  ['teacher-main', 'overview', 'gradebook', 'attendance-summary', 'admin'].includes(kind);
+
+const resolveTeacherMainAnnotationSection = (field: string) => {
+  const normalizedField = normalizeText(field);
+  if (!normalizedField) {
+    return {
+      tabLabel: 'Tabla',
+      scopeType: 'overview_cell' as DashboardAnnotationScopeType,
+    };
+  }
+
+  if (normalizedField === 'absenceUnits' || normalizedField.startsWith('day_')) {
+    return {
+      tabLabel: 'Asistencia',
+      scopeType: 'attendance_cell' as DashboardAnnotationScopeType,
+    };
+  }
+
+  if (normalizedField.startsWith('eval__') || normalizedField.startsWith('__avg_')) {
+    return {
+      tabLabel: 'Gradebook',
+      scopeType: 'gradebook_cell' as DashboardAnnotationScopeType,
+    };
+  }
+
+  return {
+    tabLabel: 'Profile',
+    scopeType: 'overview_cell' as DashboardAnnotationScopeType,
+  };
+};
 
 const buildScopeContextFromCell = (cell: any, gridKind: GridKind): CellScopeContext | null => {
   const field = normalizeText(cell.getField?.() || '');
@@ -253,11 +858,15 @@ const buildScopeContextFromCell = (cell: any, gridKind: GridKind): CellScopeCont
 
   let tab: CellScopeContext['tab'] = 'overview';
   let tabLabel = 'Resumen';
-  if (gridKind === 'gradebook') {
+  if (gridKind === 'teacher-main') {
+    tab = 'main';
+    const teacherMainSection = resolveTeacherMainAnnotationSection(field);
+    tabLabel = teacherMainSection.tabLabel;
+  } else if (gridKind === 'gradebook') {
     tab = 'gradebook';
     tabLabel = 'Calificaciones';
   } else if (gridKind === 'attendance-summary') {
-    tab = 'attendance';
+    tab = 'attendance-summary';
     tabLabel = 'Asistencia';
   } else if (gridKind === 'admin') {
     tab = 'admin';
@@ -265,14 +874,13 @@ const buildScopeContextFromCell = (cell: any, gridKind: GridKind): CellScopeCont
   }
 
   let scopeType: DashboardAnnotationScopeType = 'overview_cell';
-  if (gridKind === 'gradebook') scopeType = 'gradebook_cell';
+  if (gridKind === 'teacher-main') {
+    scopeType = resolveTeacherMainAnnotationSection(field).scopeType;
+  } else if (gridKind === 'gradebook') scopeType = 'gradebook_cell';
   else if (gridKind === 'attendance-summary') scopeType = 'attendance_cell';
   else if (gridKind === 'admin') scopeType = 'admin_cell';
 
-  let scopeRef = field;
-  if (field === 'firstName' || field === 'lastName' || field === 'name' || field === 'email') {
-    scopeRef = subjectUserId;
-  }
+  const scopeRef = `${subjectUserId}::${field}`;
 
   return {
     tab,
@@ -282,7 +890,11 @@ const buildScopeContextFromCell = (cell: any, gridKind: GridKind): CellScopeCont
     subjectUserId,
     field,
     columnLabel: normalizeText(columnDefinition.title || field),
-    rowLabel: normalizeText(rowData.name || rowData.lastName || rowData.firstName || subjectUserId),
+    rowLabel: normalizeText(
+      [rowData.lastName, rowData.firstName].filter(Boolean).join(' ')
+      || rowData.name
+      || subjectUserId,
+    ),
     metadata: {
       ...rowData,
       __gradeState: undefined,
@@ -310,16 +922,23 @@ const getOwnAnnotation = (state: AnnotationState, context: CellScopeContext) => 
 
 const refreshAnnotationViews = (state: AnnotationState, targetTab?: string) => {
   if (targetTab) {
-    const table = state.registry.get(targetTab);
-    if (table) {
-      // redraw(true) is expensive; it re-renders the whole table DOM.
-      // Ideally we would use cell.update() but since annotations are drawn 
-      // by the formatter based on external state, we must redraw.
-      table.redraw(true);
+    const tables = new Set<Tabulator>();
+    const primary = state.registry.get(targetTab);
+    if (primary) tables.add(primary);
+    if (targetTab === 'main') {
+      ['teacher-main'].forEach((key) => {
+        const table = state.registry.get(key);
+        if (table) tables.add(table);
+      });
     }
+    tables.forEach((table) => {
+      if (!canRedrawTable(table)) return;
+      table.redraw(true);
+    });
     return;
   }
   state.registry.forEach((table) => {
+    if (!canRedrawTable(table)) return;
     table.redraw(true);
   });
 };
@@ -355,6 +974,7 @@ const setActiveSelection = (state: AnnotationState, cell: any, context: CellScop
   if (state.selectedCellEl) {
     state.selectedCellEl.classList.remove('dashboard-cell--selected');
   }
+  state.selectedCell = cell || null;
   state.selectedContext = context;
   state.selectedCellEl = cell?.getElement?.() || null;
   if (state.selectedCellEl) {
@@ -488,50 +1108,12 @@ const annotationColorFormatter = (cell: any) => {
 
 const roleFormatter = (cell: any) => {
   const value = cell.getValue();
-  return normalizeText(value).toLowerCase() === 'teacher' ? 'Teacher' : 'Student';
+  const normalized = normalizeText(value).toLowerCase();
+  const isTeacher = normalized === 'teacher';
+  return `<span class="role-badge ${isTeacher ? 'role-badge--teacher' : 'role-badge--student'}">${isTeacher ? 'Teacher' : 'Student'}</span>`;
 };
 
-const renderCourseRoleSelectMarkup = (cell: any) => {
-  const value = normalizeTextLower(cell.getValue());
-  const rowId = cell.getData()?.id;
-  const enrollmentId = cell.getData()?.enrollmentId;
-  return `
-    <div class="dashboard-inline-select-wrap">
-      <select class="dashboard-inline-select" data-dashboard-course-role-select data-row-id="${escapeHtml(rowId)}" data-enrollment-id="${escapeHtml(enrollmentId)}" data-role="${value === 'teacher' ? 'teacher' : 'student'}">
-        <option value="student" ${value === 'student' ? 'selected' : ''}>Student</option>
-        <option value="teacher" ${value === 'teacher' ? 'selected' : ''}>Teacher</option>
-      </select>
-    </div>
-  `;
-};
-
-const renderTurnoSelectMarkup = (cell: any) => {
-  const value = normalizeText(cell.getValue()).toUpperCase();
-  const rowId = cell.getData()?.id;
-  const studentId = cell.getData()?.studentId;
-  return `
-    <div class="dashboard-inline-select-wrap">
-      <select class="dashboard-inline-select" data-dashboard-turno-select data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" title="${getTurnoTitle(value)}">
-        <option value="M" ${value === 'M' ? 'selected' : ''}>M</option>
-        <option value="T" ${value === 'T' ? 'selected' : ''}>T</option>
-        <option value="N" ${value === 'N' ? 'selected' : ''}>N</option>
-      </select>
-    </div>
-  `;
-};
-
-const renderGrupoInputMarkup = (cell: any) => {
-  const value = normalizeGrupoDigits(cell.getValue());
-  const rowId = cell.getData()?.id;
-  const studentId = cell.getData()?.studentId;
-  return `
-    <div class="dashboard-inline-input-wrap">
-      <input type="text" class="dashboard-inline-input" data-dashboard-grupo-input value="${escapeHtml(value)}" data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" placeholder="—" />
-    </div>
-  `;
-};
-
-const normalizeConceptoInput = (value: any) => {
+const normalizeBoundedNumericInput = (value: any) => {
   const raw = String(value ?? '').replace(',', '.').trim();
   if (raw === '' || raw === '—') return '';
   const n = parseFloat(raw);
@@ -539,17 +1121,13 @@ const normalizeConceptoInput = (value: any) => {
   return String(Math.min(10, Math.max(0, Number(n.toFixed(2)))));
 };
 
-const renderConceptoInputMarkup = (cell: any) => {
-  const raw = cell.getValue();
-  const value = raw === '—' || raw === null || raw === undefined ? '' : normalizeConceptoInput(raw);
-  const rowId = cell.getData()?.id;
-  const studentId = cell.getData()?.studentId;
-  return `
-    <div class="dashboard-inline-input-wrap">
-      <input type="text" inputmode="decimal" class="dashboard-inline-input dashboard-inline-input--concepto" data-dashboard-concepto-input value="${escapeHtml(value)}" data-row-id="${escapeHtml(rowId)}" data-student-id="${escapeHtml(studentId)}" placeholder="—" />
-    </div>
-  `;
-};
+const normalizeConceptoInput = (value: any) => normalizeBoundedNumericInput(value);
+const normalizeFinalGradeInput = (value: any) => normalizeBoundedNumericInput(value);
+const normalizeNotesInput = (value: any) =>
+  String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 280);
 
 const renderAdminActionsMarkup = (cell: any) => {
   const data = cell.getData() || {};
@@ -587,16 +1165,987 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
     .join('');
 };
 
-const resolveContextMenuTargetCells = (cell: any, kind: GridKind): any[] => {
-  const table = cell.getTable?.();
-  const rangeState: RangeSelectionState | undefined = (table as any)?.__musikiRangeSelectionState;
-  const selectedCells = rangeState?.selectedCells;
-  // Use the range selection when there are multiple selected cells and the
-  // right-clicked cell is part of that selection.
-  if (selectedCells && selectedCells.size > 1 && selectedCells.has(cell)) {
-    return Array.from(selectedCells).filter((c) => buildScopeContextFromCell(c, kind) !== null);
+const buildCellSelectionKey = (cell: any) => {
+  const field = normalizeText(cell?.getField?.() || cell?.getColumn?.()?.getDefinition?.()?.field || '');
+  const rowData = cell?.getData?.() || {};
+  const rowId = normalizeText(
+    rowData?.id
+    || rowData?.studentId
+    || rowData?.userId
+    || cell?.getRow?.()?.getIndex?.()
+    || '',
+  );
+  if (!rowId || !field) return '';
+  return `${rowId}::${field}`;
+};
+
+const getCellField = (cell: any) =>
+  normalizeText(cell?.getField?.() || cell?.getColumn?.()?.getDefinition?.()?.field || '');
+
+const getCellKind = (cell: any) =>
+  normalizeText(getColumnDashboardMeta(cell?.getColumn?.()).kind || '');
+
+const appendCssClass = (...classNames: any[]) =>
+  classNames
+    .flatMap((value) => String(value || '').split(/\s+/))
+    .map((value) => normalizeText(value))
+    .filter(Boolean)
+    .join(' ');
+
+const COURSE_STUDENT_META_CELL_KINDS = [
+  'turno',
+  'grupo',
+  'concepto',
+  'notes',
+  'final-grade',
+];
+
+const isCourseStudentMetaCellKind = (kind: string) =>
+  COURSE_STUDENT_META_CELL_KINDS.includes(normalizeText(kind));
+
+const isNativeDashboardEditableKind = (kind: string) => {
+  const normalizedKind = normalizeText(kind);
+  return normalizedKind === 'course-role'
+    || normalizedKind === 'editable-text'
+    || isCourseStudentMetaCellKind(normalizedKind);
+};
+
+const getRowComponentId = (row: any) =>
+  normalizeText(row?.getData?.()?.id || row?.getIndex?.() || '');
+
+const normalizeCourseStudentMetaValue = (kind: string, value: any) => {
+  const normalizedKind = normalizeText(kind);
+  if (normalizedKind === 'turno') {
+    const turno = normalizeText(value).toUpperCase();
+    return ['M', 'T', 'N'].includes(turno) ? turno : 'M';
   }
-  return [cell];
+  if (normalizedKind === 'grupo') return normalizeGrupoDigits(value);
+  if (normalizedKind === 'concepto') return normalizeConceptoInput(value);
+  if (normalizedKind === 'notes') return normalizeNotesInput(value);
+  if (normalizedKind === 'final-grade') return normalizeFinalGradeInput(value);
+  return normalizeText(value);
+};
+
+const validateCourseStudentMetaValue = (kind: string, value: any) => {
+  const normalizedKind = normalizeText(kind);
+  const raw = normalizeText(value);
+  const normalized = normalizeCourseStudentMetaValue(normalizedKind, value);
+
+  if (normalizedKind === 'grupo' && raw && !normalized) {
+    return {
+      valid: false,
+      normalized,
+      message: 'Grupo debe ser un valor numérico.',
+    };
+  }
+
+  if (normalizedKind === 'concepto' && raw && !normalized) {
+    return {
+      valid: false,
+      normalized,
+      message: 'Concepto debe ser un número entre 0 y 10.',
+    };
+  }
+
+  if (normalizedKind === 'final-grade' && raw && !normalized) {
+    return {
+      valid: false,
+      normalized,
+      message: 'Nota final debe ser un número entre 0 y 10.',
+    };
+  }
+
+  return {
+    valid: true,
+    normalized,
+    message: '',
+  };
+};
+
+const getCourseStudentMetaPatchKey = (kind: string) => {
+  const normalizedKind = normalizeText(kind);
+  if (normalizedKind === 'turno') return 'turno';
+  if (normalizedKind === 'grupo') return 'grupo';
+  if (normalizedKind === 'concepto') return 'concepto';
+  if (normalizedKind === 'notes') return 'notes';
+  if (normalizedKind === 'final-grade') return 'notaFinal';
+  return '';
+};
+
+const getCourseStudentMetaResponseValue = (kind: string, payload: any, fallbackValue: string) => {
+  const normalizedKind = normalizeText(kind);
+  if (normalizedKind === 'turno') {
+    return normalizeCourseStudentMetaValue(kind, payload?.meta?.turno ?? fallbackValue);
+  }
+  if (normalizedKind === 'grupo') {
+    return normalizeText(payload?.meta?.grupo ?? fallbackValue);
+  }
+  if (normalizedKind === 'concepto') {
+    return normalizeCourseStudentMetaValue(kind, payload?.meta?.concepto ?? fallbackValue);
+  }
+  if (normalizedKind === 'notes') {
+    return normalizeCourseStudentMetaValue(kind, payload?.meta?.notes ?? fallbackValue);
+  }
+  if (normalizedKind === 'final-grade') {
+    return normalizeCourseStudentMetaValue(kind, payload?.meta?.notaFinal ?? fallbackValue);
+  }
+  return fallbackValue;
+};
+
+const getCourseStudentMetaFallbackError = (kind: string) => {
+  const normalizedKind = normalizeText(kind);
+  if (normalizedKind === 'turno') return 'No se pudo actualizar el turno';
+  if (normalizedKind === 'grupo') return 'No se pudo actualizar el grupo';
+  if (normalizedKind === 'concepto') return 'No se pudo guardar el concepto';
+  if (normalizedKind === 'notes') return 'No se pudieron guardar las notes';
+  if (normalizedKind === 'final-grade') return 'No se pudo guardar la nota final';
+  return 'No se pudo actualizar la celda';
+};
+
+const CUSTOM_INTERACTIVE_CELL_KINDS = [
+  'admin-actions',
+];
+
+const isCustomInteractiveCellKind = (kind: string) =>
+  CUSTOM_INTERACTIVE_CELL_KINDS.includes(normalizeText(kind));
+
+const getInteractiveElementFromTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return null;
+  if (target.matches('input, textarea, select, button, a')) return target;
+  return target.querySelector<HTMLElement>('input, textarea, select, button, a');
+};
+
+const shouldLetInteractiveMouseBubble = (target: EventTarget | null) =>
+  target instanceof HTMLElement
+  && Boolean(target.closest('.dashboard-admin-actions, [data-dashboard-unenroll], .enrollment-chip-remove'));
+
+const getSelectedRangeCells = (table: Tabulator | null | undefined) => {
+  const rangeState: RangeSelectionState | undefined = (table as any)?.__musikiRangeSelectionState;
+  const cellsByKey = new Map<string, any>();
+  Array.from(rangeState?.selectedCells || []).forEach((cell) => {
+    const key = buildCellSelectionKey(cell);
+    if (!key) return;
+    cellsByKey.set(key, cell);
+  });
+  return Array.from(cellsByKey.values());
+};
+
+const resolveSelectedTargetCells = (
+  anchorCell: any,
+  options?: {
+    sameField?: boolean;
+    sameKind?: boolean;
+    filter?: (cell: any) => boolean;
+  },
+) => {
+  if (!anchorCell) return [] as any[];
+
+  const anchorKey = buildCellSelectionKey(anchorCell);
+  const anchorField = getCellField(anchorCell);
+  const anchorKind = getCellKind(anchorCell);
+  const selectedCells = getSelectedRangeCells(anchorCell.getTable?.());
+  const anchorIsInsideSelection =
+    Boolean(anchorKey) && selectedCells.some((candidate) => buildCellSelectionKey(candidate) === anchorKey);
+
+  let targets = selectedCells.length > 1 && anchorIsInsideSelection
+    ? selectedCells
+    : [anchorCell];
+
+  if (options?.sameField && anchorField) {
+    targets = targets.filter((candidate) => getCellField(candidate) === anchorField);
+  }
+
+  if (options?.sameKind && anchorKind) {
+    targets = targets.filter((candidate) => getCellKind(candidate) === anchorKind);
+  }
+
+  if (options?.filter) {
+    targets = targets.filter((candidate) => options.filter?.(candidate));
+  }
+
+  if (!targets.length) {
+    if (!options?.filter || options.filter(anchorCell)) {
+      return [anchorCell];
+    }
+    return [];
+  }
+
+  const cellsByKey = new Map<string, any>();
+  targets.forEach((candidate) => {
+    const key = buildCellSelectionKey(candidate);
+    if (!key) return;
+    cellsByKey.set(key, candidate);
+  });
+
+  return Array.from(cellsByKey.values());
+};
+
+const resolveContextMenuTargetCells = (cell: any, kind: GridKind): any[] =>
+  resolveSelectedTargetCells(cell, {
+    filter: (candidate) => buildScopeContextFromCell(candidate, kind) !== null,
+  });
+
+const resolveSelectedTargetRows = (table: Tabulator, target: EventTarget | null) => {
+  const anchorCell = resolveCellComponentFromTarget(table, target, { allowInteractiveKinds: true });
+  const anchorRow = anchorCell?.getRow?.() || null;
+  if (!anchorRow) return [] as any[];
+
+  const anchorRowId = normalizeText(anchorRow.getData?.()?.id || anchorRow.getIndex?.() || '');
+  const rowsById = new Map<string, any>();
+  getSelectedRangeCells(table).forEach((cell) => {
+    const row = cell?.getRow?.();
+    const rowId = normalizeText(row?.getData?.()?.id || row?.getIndex?.() || '');
+    if (!row || !rowId) return;
+    rowsById.set(rowId, row);
+  });
+
+  if (rowsById.size > 1 && anchorRowId && rowsById.has(anchorRowId)) {
+    return Array.from(rowsById.values());
+  }
+
+  return [anchorRow];
+};
+
+const collectAdminUsersFromRows = (rows: any[]) => {
+  const usersById = new Map<string, {
+    id: string;
+    name: string;
+    email: string;
+    globalRole: string;
+    courseRole: string;
+  }>();
+
+  rows.forEach((row) => {
+    const data = row?.getData?.() || {};
+    const id = normalizeText(data.id || '');
+    if (!id) return;
+    usersById.set(id, {
+      id,
+      name: normalizeText(data.name || 'este usuario') || 'este usuario',
+      email: normalizeText(data.email || ''),
+      globalRole: normalizeTextLower(data.globalRole || ''),
+      courseRole: normalizeTextLower(data.courseRole || ''),
+    });
+  });
+
+  return Array.from(usersById.values());
+};
+
+const deleteAdminUsers = async (
+  table: Tabulator,
+  meta: DashboardMeta,
+  users: Array<{
+    id: string;
+    name: string;
+    email: string;
+    globalRole: string;
+    courseRole: string;
+  }>,
+  triggerButton?: HTMLButtonElement | null,
+) => {
+  const selectedUsers = users.filter((user) => normalizeText(user?.id || ''));
+  if (!selectedUsers.length) return false;
+
+  const isBatch = selectedUsers.length > 1;
+  const anyGlobalTeacher = selectedUsers.some((user) => user.globalRole === 'teacher');
+  const anyCourseTeacher = selectedUsers.some((user) => user.courseRole === 'teacher');
+  const warningBits = [
+    isBatch
+      ? `Usuarios: ${selectedUsers.slice(0, 5).map((user) => user.name || user.email || user.id).join(' · ')}${selectedUsers.length > 5 ? '…' : ''}`
+      : selectedUsers[0]?.email
+        ? `Email: ${selectedUsers[0].email}`
+        : '',
+    anyGlobalTeacher ? 'Hay usuarios con rol global teacher.' : '',
+    anyCourseTeacher ? 'Hay usuarios con rol teacher en este curso.' : '',
+    'Se borrarán también sus inscripciones y submissions.',
+  ].filter(Boolean);
+  const confirmMessage = [
+    isBatch
+      ? `¿Borrar ${selectedUsers.length} usuarios seleccionados?`
+      : `¿Borrar a ${selectedUsers[0]?.name || 'este usuario'}?`,
+    ...warningBits,
+  ].join('\n');
+
+  if (!window.confirm(confirmMessage)) return false;
+
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.dataset.state = 'saving';
+  }
+
+  setDashboardSaveStatus(
+    'saving',
+    isBatch
+      ? `Borrando ${selectedUsers.length} usuarios...`
+      : `Borrando a ${selectedUsers[0]?.name || 'usuario'}...`,
+  );
+
+  try {
+    const failures: string[] = [];
+    let successCount = 0;
+
+    for (const selectedUser of selectedUsers) {
+      try {
+        const requestUrl = new URL(`/api/admin/users/${encodeURIComponent(selectedUser.id)}`, window.location.origin);
+        if (normalizeText(meta?.courseId || '')) {
+          requestUrl.searchParams.set('courseId', normalizeText(meta.courseId));
+        }
+
+        const response = await fetch(requestUrl.toString(), {
+          method: 'DELETE',
+        });
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload?.error || `No se pudo borrar a ${selectedUser.name}`);
+        }
+
+        successCount += 1;
+        const row = table.getRow(selectedUser.id);
+        if (row) {
+          row.delete();
+        }
+      } catch (error: any) {
+        failures.push(error?.message || `No se pudo borrar a ${selectedUser.name}`);
+      }
+    }
+
+    if (failures.length > 0) {
+      const message = successCount > 0
+        ? `Se borraron ${successCount} usuarios, pero fallaron ${failures.length}.`
+        : failures[0] || 'No se pudo borrar el usuario';
+      setDashboardSaveStatus('error', message);
+      throw new Error(message);
+    }
+
+    setDashboardSaveStatus(
+      'saved',
+      isBatch
+        ? `${successCount} usuarios borrados.`
+        : `${selectedUsers[0]?.name || 'Usuario'} borrado.`,
+    );
+    window.location.reload();
+    return true;
+  } catch (error: any) {
+    console.error('Error deleting dashboard user:', error);
+    if (triggerButton) {
+      triggerButton.disabled = false;
+      triggerButton.dataset.state = 'error';
+    }
+    alert(error?.message || 'No se pudo borrar el usuario');
+    return false;
+  }
+};
+
+const postCourseStudentMetaUpdate = async (
+  meta: DashboardMeta,
+  studentId: string,
+  patch: Record<string, any>,
+  fallbackError: string,
+) => {
+  const patchLabel = Object.keys(patch || {})[0] || 'dato';
+  setDashboardSaveStatus('saving', `Guardando ${patchLabel}...`);
+  const response = await fetch('/api/grade/course-student-meta', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      courseId: meta.courseId,
+      year: meta.year,
+      studentId,
+      ...patch,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    setDashboardSaveStatus('error', payload?.error || fallbackError);
+    throw new Error(payload?.error || fallbackError);
+  }
+
+  setDashboardSaveStatus('saved', `${patchLabel} guardado.`);
+  return payload;
+};
+
+const normalizeCourseRoleValue = (value: any) =>
+  normalizeTextLower(value) === 'teacher' ? 'teacher' : 'student';
+
+const getCourseRoleLabel = (value: any) =>
+  normalizeCourseRoleValue(value) === 'teacher' ? 'Teacher' : 'Student';
+
+const postCourseRoleUpdate = async (
+  enrollmentId: string,
+  roleInCourse: string,
+  fallbackError = 'No se pudo actualizar el rol del curso',
+) => {
+  setDashboardSaveStatus('saving', 'Guardando rol del curso...');
+  const response = await fetch('/api/enroll', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      enrollmentId,
+      roleInCourse,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    setDashboardSaveStatus('error', payload?.error || fallbackError);
+    throw new Error(payload?.error || fallbackError);
+  }
+
+  setDashboardSaveStatus('saved', `Rol del curso guardado: ${roleInCourse}.`);
+  return payload;
+};
+
+const saveCourseRoleSelectionFromCell = async (
+  cell: any,
+  overrideNextValue?: any,
+  overridePreviousValue?: any,
+) => {
+  if (getCellKind(cell) !== 'course-role') return;
+
+  const field = getCellField(cell);
+  const previousValue = normalizeCourseRoleValue(
+    getCellPreviousValue(cell, overridePreviousValue),
+  );
+  const nextValue = normalizeCourseRoleValue(overrideNextValue ?? cell.getValue?.());
+
+  const restoreCellValue = async (targetCell: any, value: string) => {
+    const row = targetCell?.getRow?.();
+    if (!row) return;
+    await row.update({
+      [field]: value,
+      courseRoleLabel: getCourseRoleLabel(value),
+    });
+  };
+
+  if (nextValue === previousValue) {
+    await restoreCellValue(cell, nextValue);
+    return;
+  }
+
+  const targetCells = resolveSelectedTargetCells(cell, {
+    sameField: true,
+    sameKind: true,
+    filter: (candidate) => Boolean(normalizeText(candidate?.getData?.()?.enrollmentId || '')),
+  });
+
+  const targets = targetCells
+    .map((targetCell) => {
+      const rowData = targetCell?.getData?.() || {};
+      const rowId = normalizeText(rowData.id || targetCell?.getRow?.()?.getIndex?.() || '');
+      const enrollmentId = normalizeText(rowData.enrollmentId || '');
+      const existingValue = targetCell === cell
+        ? previousValue
+        : normalizeCourseRoleValue(targetCell?.getValue?.());
+      if (!rowId || !enrollmentId) return null;
+      return {
+        cell: targetCell,
+        rowId,
+        enrollmentId,
+        previousValue: existingValue,
+      };
+    })
+    .filter(Boolean) as Array<{
+      cell: any;
+      rowId: string;
+      enrollmentId: string;
+      previousValue: string;
+    }>;
+
+  if (!targets.length) {
+    await restoreCellValue(cell, previousValue);
+    return;
+  }
+
+  let successCount = 0;
+  const failureMessages: string[] = [];
+
+  for (const target of targets) {
+    try {
+      await saveSingleCourseRoleCellValue(target.cell, nextValue, target.previousValue);
+      successCount += 1;
+    } catch (error: any) {
+      failureMessages.push(error?.message || 'No se pudo actualizar el rol del curso');
+      await restoreCellValue(target.cell, target.previousValue);
+    }
+  }
+
+  if (failureMessages.length > 0) {
+    if (successCount === 0) {
+      alert(failureMessages[0]);
+    } else {
+      alert(`Se guardaron ${successCount} celdas, pero ${failureMessages.length} fallaron.`);
+    }
+  }
+};
+
+const saveCourseStudentMetaSelectionFromCell = async (
+  cell: any,
+  meta: DashboardMeta,
+  overrideNextValue?: any,
+  overridePreviousValue?: any,
+) => {
+  const kind = getCellKind(cell);
+  if (!isCourseStudentMetaCellKind(kind)) return;
+
+  const field = getCellField(cell);
+  const previousValue = normalizeCourseStudentMetaValue(
+    kind,
+    getCellPreviousValue(cell, overridePreviousValue),
+  );
+  const validation = validateCourseStudentMetaValue(kind, overrideNextValue ?? cell.getValue?.());
+  const nextValue = validation.normalized;
+
+  const restoreCellValue = async (targetCell: any, value: string) => {
+    const row = targetCell?.getRow?.();
+    if (!row) return;
+    await row.update({
+      [field]: value || '',
+    });
+  };
+
+  if (!validation.valid) {
+    await restoreCellValue(cell, previousValue);
+    alert(validation.message);
+    return;
+  }
+
+  if (!meta?.courseId || !meta?.year) {
+    await restoreCellValue(cell, previousValue);
+    return;
+  }
+
+  if (nextValue === previousValue) {
+    await restoreCellValue(cell, nextValue);
+    return;
+  }
+
+  const patchKey = getCourseStudentMetaPatchKey(kind);
+  if (!patchKey) return;
+
+  const targetCells = resolveSelectedTargetCells(cell, {
+    sameField: true,
+    sameKind: true,
+    filter: (candidate) => Boolean(normalizeText(candidate?.getData?.()?.studentId || '')),
+  });
+
+  const targets = targetCells
+    .map((targetCell) => {
+      const rowData = targetCell?.getData?.() || {};
+      const rowId = normalizeText(rowData.id || targetCell?.getRow?.()?.getIndex?.() || '');
+      const studentId = normalizeText(rowData.studentId || '');
+      const existingValue = targetCell === cell
+        ? previousValue
+        : normalizeCourseStudentMetaValue(kind, targetCell?.getValue?.());
+      if (!rowId || !studentId) return null;
+      return {
+        cell: targetCell,
+        rowId,
+        studentId,
+        previousValue: existingValue,
+      };
+    })
+    .filter(Boolean) as Array<{
+      cell: any;
+      rowId: string;
+      studentId: string;
+      previousValue: string;
+    }>;
+
+  if (!targets.length) {
+    await restoreCellValue(cell, previousValue);
+    return;
+  }
+
+  let successCount = 0;
+  const failureMessages: string[] = [];
+
+  for (const target of targets) {
+    try {
+      await saveSingleCourseStudentMetaCellValue(target.cell, meta, nextValue, target.previousValue);
+      successCount += 1;
+    } catch (error: any) {
+      failureMessages.push(error?.message || getCourseStudentMetaFallbackError(kind));
+      await restoreCellValue(target.cell, target.previousValue);
+    }
+  }
+
+  if (failureMessages.length > 0) {
+    if (successCount === 0) {
+      alert(failureMessages[0]);
+    } else {
+      alert(`Se guardaron ${successCount} celdas, pero ${failureMessages.length} fallaron.`);
+    }
+  }
+};
+
+const supportsNativeCellPersistence = (kind: GridKind) =>
+  ['teacher-main', 'overview', 'gradebook', 'attendance-summary', 'admin'].includes(kind);
+
+const bindNativeCellPersistence = (
+  _host: HTMLElement,
+  table: Tabulator,
+  context: { kind: GridKind; meta: DashboardMeta },
+) => {
+  if (!supportsNativeCellPersistence(context.kind)) return () => {};
+
+  const openEditorOnDoubleClick = (event: MouseEvent, cell: any) => {
+    const kind = getCellKind(cell);
+    if (!isNativeDashboardEditableKind(kind)) return;
+
+    window.getSelection?.()?.removeAllRanges?.();
+    event.preventDefault();
+
+    window.setTimeout(() => {
+      try {
+        if (typeof cell?.edit === 'function') {
+          cell.edit(true);
+          return;
+        }
+        cell?.getComponent?.()?.edit?.(true);
+      } catch {
+        // ignore edit races during redraw
+      }
+    }, 0);
+  };
+
+  const editingSnapshotHandler = (cell: any) => {
+    if (!isNativeDashboardEditableKind(getCellKind(cell))) return;
+    (cell as any).__musikiPreviousValue = cell?.getValue?.();
+  };
+
+  const editedHandler = async (cell: any) => {
+    const kind = getCellKind(cell);
+    if (!isNativeDashboardEditableKind(kind)) return;
+
+    try {
+      if (kind === 'course-role') {
+        await saveCourseRoleSelectionFromCell(cell);
+        return;
+      }
+
+      if (isCourseStudentMetaCellKind(kind)) {
+        await saveCourseStudentMetaSelectionFromCell(cell, context.meta);
+        return;
+      }
+
+      if (kind === 'editable-text') {
+        await saveSelectedUserFieldFromCell(cell);
+      }
+    } catch (error: any) {
+      console.error('Error saving native dashboard editor:', error);
+      try {
+        cell?.restoreOldValue?.();
+      } catch {
+        // ignore restore races
+      }
+      alert(error?.message || 'No se pudo guardar la celda');
+    } finally {
+      try {
+        delete (cell as any).__musikiPreviousValue;
+      } catch {
+        // ignore cleanup races
+      }
+    }
+  };
+
+  table.on('cellDblClick', openEditorOnDoubleClick);
+  table.on('cellEditing', editingSnapshotHandler);
+  table.on('cellEdited', editedHandler);
+
+  return () => {
+    try {
+      table.off('cellDblClick', openEditorOnDoubleClick);
+      table.off('cellEditing', editingSnapshotHandler);
+      table.off('cellEdited', editedHandler);
+    } catch {
+      // ignore teardown races
+    }
+  };
+};
+
+const bindNativeEditorFocus = (table: Tabulator) => {
+  const handler = (cell: any) => {
+    const kind = getCellKind(cell);
+    if (!isNativeDashboardEditableKind(kind)) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      const editor = cell?.getElement?.()?.querySelector?.('input, textarea, select');
+      if (
+        editor instanceof HTMLInputElement
+        || editor instanceof HTMLTextAreaElement
+        || editor instanceof HTMLSelectElement
+      ) {
+        try {
+          editor.focus();
+          if (editor instanceof HTMLInputElement || editor instanceof HTMLTextAreaElement) {
+            editor.select?.();
+          }
+        } catch {
+          // ignore focus races during redraw
+        }
+      }
+    }, 0);
+  };
+
+  table.on('cellEditing', handler);
+
+  return () => {
+    try {
+      table.off('cellEditing', handler);
+    } catch {
+      // ignore teardown races
+    }
+  };
+};
+
+const resolveAnnotationGridKind = (tab: CellScopeContext['tab']): GridKind | null => {
+  if (tab === 'main') return 'teacher-main';
+  if (tab === 'overview') return 'overview';
+  if (tab === 'gradebook') return 'gradebook';
+  if (tab === 'attendance-summary') return 'attendance-summary';
+  if (tab === 'admin') return 'admin';
+  return null;
+};
+
+const buildAnnotationContextKey = (context: CellScopeContext) =>
+  `${context.tab}::${context.subjectUserId}::${context.field}::${context.scopeType}::${context.scopeRef}`;
+
+const resolveSelectedAnnotationContexts = (state: AnnotationState, fallbackContext: CellScopeContext) => {
+  const gridKind = resolveAnnotationGridKind(fallbackContext.tab);
+  if (!gridKind || !state.selectedCell) return [fallbackContext];
+
+  const anchorContext = buildScopeContextFromCell(state.selectedCell, gridKind);
+  const anchorKey = anchorContext ? buildAnnotationContextKey(anchorContext) : '';
+  if (!anchorKey || anchorKey !== buildAnnotationContextKey(fallbackContext)) {
+    return [fallbackContext];
+  }
+
+  const contextsByKey = new Map<string, CellScopeContext>();
+  resolveSelectedTargetCells(state.selectedCell, {
+    filter: (cell) => buildScopeContextFromCell(cell, gridKind) !== null,
+  }).forEach((cell) => {
+    const context = buildScopeContextFromCell(cell, gridKind);
+    if (!context) return;
+    contextsByKey.set(buildDashboardAnnotationScopeKey(context.scopeType, context.scopeRef), context);
+  });
+
+  return Array.from(contextsByKey.values()).length
+    ? Array.from(contextsByKey.values())
+    : [fallbackContext];
+};
+
+const findFoldedAncestor = (column: any) => {
+  let current = column;
+  while (current && typeof current.getParentColumn === 'function') {
+    const parent = current.getParentColumn();
+    if (!parent) return null;
+    const parentElement = parent.getElement?.();
+    if (parentElement?.classList?.contains('group-folded')) return parent;
+    current = parent;
+  }
+
+  const resolvedColumn = resolveColumnComponent(column);
+  const element = resolvedColumn?.getElement?.();
+  const foldedAncestor = element?.parentElement?.closest?.('.tabulator-col.group-folded');
+  if (foldedAncestor) return foldedAncestor;
+
+  return null;
+};
+
+const shouldUseShortLeafLabel = (column: any) => {
+  const resolvedColumn = resolveColumnComponent(column);
+  if (!resolvedColumn) return false;
+  if (getGroupSubColumns(resolvedColumn).length > 0) return false;
+  return Boolean(findFoldedAncestor(resolvedColumn));
+};
+
+const safeShow = (column: any) => {
+  try {
+    column.show();
+  } catch {
+    // ignore transient Tabulator visibility errors
+  }
+};
+
+const safeHide = (column: any) => {
+  try {
+    column.hide();
+  } catch {
+    // ignore transient Tabulator visibility errors
+  }
+};
+
+const hideColumnBranch = (column: any) => {
+  getGroupSubColumns(column).forEach(hideColumnBranch);
+  safeHide(column);
+};
+
+const visitFoldMetaColumns = (columns: any[], visitor: (column: any, foldMeta: Record<string, any>) => void) => {
+  (columns || []).forEach((column) => {
+    const foldMeta = getFoldMeta(column);
+    if (foldMeta?.key) {
+      visitor(column, foldMeta);
+    }
+    const children = getGroupSubColumns(column);
+    if (children.length > 0) {
+      visitFoldMetaColumns(children, visitor);
+    }
+  });
+};
+
+const toggleFoldMetaGroup = (
+  column: any,
+  force?: boolean,
+  options?: { persist?: boolean; persistDescendants?: boolean },
+) => {
+  const definition = column.getDefinition?.() || {};
+  const foldMeta = getFoldMeta(column);
+  const children = getGroupSubColumns(column);
+
+  if (!Array.isArray(definition.columns) || children.length === 0) {
+    return;
+  }
+
+  if (foldMeta.disabled && force === undefined) {
+    return;
+  }
+
+  const headerElement = column.getElement?.();
+  if (!headerElement) return;
+
+  const folded = force !== undefined ? force : !headerElement.classList.contains('group-folded');
+  const visibleKeys = new Set(
+    Array.isArray(foldMeta.visibleChildren) ? foldMeta.visibleChildren.map(String) : [],
+  );
+  const shouldPersist = options?.persist !== false;
+  if (shouldPersist) {
+    setDashboardSaveStatus('saving', 'Guardando vista local de columnas...');
+  }
+
+  headerElement.classList.toggle('group-folded', folded);
+  safeShow(column);
+
+  children.forEach((child) => {
+    const childDefinition = child.getDefinition?.() || {};
+    const childMeta = getFoldMeta(child);
+    const childKey = String(childMeta.key || childDefinition.field || '');
+    const isGroup = Array.isArray(childDefinition.columns) && childDefinition.columns.length > 0;
+    const keepVisible = visibleKeys.size > 0 ? visibleKeys.has(childKey) : false;
+
+    if (isGroup) {
+      toggleFoldMetaGroup(
+        child,
+        folded,
+        options?.persistDescendants
+          ? options
+          : { ...options, persist: false },
+      );
+      if (folded && !keepVisible) {
+        hideColumnBranch(child);
+      } else {
+        safeShow(child);
+      }
+      return;
+    }
+
+    if (folded) {
+      if (keepVisible) safeShow(child);
+      else safeHide(child);
+      return;
+    }
+
+    if (childMeta.summaryOnly) {
+      safeHide(child);
+      return;
+    }
+
+    safeShow(child);
+  });
+
+  if (shouldPersist) {
+    storeCurrentFoldState(column.getTable?.(), `Vista guardada: ${folded ? 'grupo plegado' : 'grupo desplegado'}.`);
+  }
+};
+
+const unfoldAllColumns = (table: Tabulator, options?: { persist?: boolean }) => {
+  if (options?.persist !== false) {
+    setDashboardSaveStatus('saving', 'Guardando vista local de columnas...');
+  }
+  const showRecursive = (col: any) => {
+    const definition = col?.getDefinition?.() || {};
+    const foldMeta = getFoldMeta(col);
+    const children = getGroupSubColumns(col);
+
+    if (Array.isArray(definition.columns) && children.length > 0) {
+      safeShow(col);
+      const headerEl = col.getElement?.();
+      if (headerEl) headerEl.classList.remove('group-folded');
+      children.forEach(showRecursive);
+      return;
+    }
+
+    if (foldMeta.summaryOnly) {
+      safeHide(col);
+      return;
+    }
+
+    safeShow(col);
+  };
+  try { table.getColumns().forEach(showRecursive); } catch { /* ignore */ }
+  try {
+    if (canRedrawTable(table)) {
+      table.redraw(true);
+    }
+  } catch { /* ignore */ }
+  if (options?.persist !== false) {
+    storeCurrentFoldState(table, 'Vista guardada: todas las columnas desplegadas.');
+  }
+};
+
+const restoreStoredFoldState = (table: Tabulator) => {
+  const state = readStoredFoldState(table);
+  const keys = Object.keys(state);
+  if (keys.length === 0) return false;
+
+  const groupsByKey = new Map<string, { column: any; level: number }>();
+  visitFoldMetaColumns(table.getColumns(), (column, foldMeta) => {
+    const definition = column?.getDefinition?.() || {};
+    const children = getGroupSubColumns(column);
+    if (!Array.isArray(definition.columns) || children.length === 0) return;
+    const key = String(foldMeta.key || '');
+    if (!key) return;
+    groupsByKey.set(key, {
+      column,
+      level: Number(foldMeta.level || 0),
+    });
+  });
+
+  try {
+    unfoldAllColumns(table, { persist: false });
+  } catch {
+    // ignore unfold races during restore
+  }
+
+  Array.from(groupsByKey.entries())
+    .filter(([key]) => Boolean(state[key]))
+    .sort((left, right) => left[1].level - right[1].level)
+    .forEach(([, entry]) => {
+      toggleFoldMetaGroup(entry.column, true, { persist: false });
+    });
+
+  try {
+    if (canRedrawTable(table)) {
+      table.redraw(true);
+    }
+  } catch {
+    // ignore redraw errors during restore
+  }
+
+  return true;
 };
 
 const buildCellContextMenu = (
@@ -609,23 +2158,22 @@ const buildCellContextMenu = (
     if (!context) return [];
 
     setActiveSelection(annotationState, cell, context);
-    const ownAnnotation = getOwnAnnotation(annotationState, context);
-
     const targets = resolveContextMenuTargetCells(cell, kind);
+    const targetContexts = targets
+      .map((targetCell) => buildScopeContextFromCell(targetCell, kind))
+      .filter(Boolean) as CellScopeContext[];
     const count = targets.length;
     const multi = count > 1;
     const suffix = multi ? ` (${count})` : '';
+    const ownAnnotation = getOwnAnnotation(annotationState, context);
 
     // For the "clear" disabled state, check if ANY target has a color annotation.
-    const anyHasColor = targets.some((c) => {
-      const ctx = buildScopeContextFromCell(c, kind);
-      return ctx ? Boolean(normalizeDashboardAnnotationColor(getOwnAnnotation(annotationState, ctx)?.color)) : false;
-    });
+    const anyHasColor = targetContexts.some((ctx) =>
+      Boolean(normalizeDashboardAnnotationColor(getOwnAnnotation(annotationState, ctx)?.color)));
+    const anyOwnAnnotation = targetContexts.some((ctx) => Boolean(getOwnAnnotation(annotationState, ctx)?.id));
 
     const applyColorToAll = async (color: DashboardAnnotationColor | '') => {
-      for (const targetCell of targets) {
-        const ctx = buildScopeContextFromCell(targetCell, kind);
-        if (!ctx) continue;
+      for (const ctx of targetContexts) {
         const own = getOwnAnnotation(annotationState, ctx);
         // For "clear", skip cells that have no color.
         if (color === '' && !normalizeDashboardAnnotationColor(own?.color)) continue;
@@ -663,11 +2211,16 @@ const buildCellContextMenu = (
         action: () => modalRef.current?.open(context),
       },
       {
-        label: 'Borrar anotación',
-        disabled: !ownAnnotation,
+        label: `Borrar anotación${suffix}`,
+        disabled: !anyOwnAnnotation,
         action: async () => {
-          if (!ownAnnotation?.id) return;
-          await removeAnnotation(annotationState, ownAnnotation.id);
+          const annotationIds = new Set<string>();
+          for (const ctx of targetContexts) {
+            const own = getOwnAnnotation(annotationState, ctx);
+            if (!own?.id || annotationIds.has(own.id)) continue;
+            annotationIds.add(own.id);
+            await removeAnnotation(annotationState, own.id);
+          }
         },
       },
       {
@@ -690,36 +2243,98 @@ const buildCellContextMenu = (
 };
 
 // Helper to get sub-columns safely, falling back to manual lookup if getColumns() fails
-const getGroupSubColumns = (column: any): any[] => {
-  const def = column.getDefinition();
-  if (!def || !Array.isArray(def.columns)) return [];
+const resolveColumnComponent = (column: any) => {
+  if (!column) return null;
+  if (typeof column.getDefinition === 'function') return column;
 
-  const table = column.getTable();
-  if (!table) return [];
+  if (typeof column.getComponent === 'function') {
+    try {
+      const component = column.getComponent();
+      if (component && typeof component.getDefinition === 'function') return component;
+    } catch {
+      // fall through
+    }
+  }
+
+  if (typeof column._getSelf === 'function') {
+    try {
+      const self = column._getSelf();
+      const component = self?.getComponent?.();
+      if (component && typeof component.getDefinition === 'function') return component;
+    } catch {
+      // fall through
+    }
+  }
+
+  const nestedComponent = column?._column?.getComponent?.();
+  if (nestedComponent && typeof nestedComponent.getDefinition === 'function') {
+    return nestedComponent;
+  }
+
+  return null;
+};
+
+const getGroupSubColumns = (column: any): any[] => {
+  const resolvedColumn = resolveColumnComponent(column);
+  const definition = resolvedColumn?.getDefinition?.() || {};
+  if (!Array.isArray(definition.columns)) return [];
 
   let subCols: any[] = [];
-  if (typeof column.getColumns === 'function') {
+  if (typeof resolvedColumn?.getSubColumns === 'function') {
     try {
-      subCols = column.getColumns();
-    } catch (e) {
-      // Fallback below
+      subCols = resolvedColumn.getSubColumns();
+    } catch {
+      // fall through
+    }
+  }
+
+  if ((!subCols || subCols.length === 0) && typeof resolvedColumn?._getSelf === 'function') {
+    try {
+      const self = resolvedColumn._getSelf();
+      const rawChildren =
+        typeof self?.getSubColumns === 'function'
+          ? self.getSubColumns()
+          : Array.isArray(self?.columns)
+            ? self.columns
+            : [];
+      subCols = rawChildren
+        .map((child: any) => child?.getComponent?.() || child)
+        .filter(Boolean);
+    } catch {
+      // fall through
     }
   }
 
   if (!subCols || subCols.length === 0) {
-    subCols = def.columns
-      .map((colDef: any) => {
-        if (colDef.field) return table.getColumn(colDef.field);
-        return null;
-      })
-      .filter(Boolean);
+    const table = resolvedColumn?.getTable?.();
+    if (table && Array.isArray(definition.columns)) {
+      subCols = definition.columns
+        .map((colDef: any) => {
+          if (colDef?.field) return table.getColumn(colDef.field);
+          return null;
+        })
+        .filter(Boolean);
+    }
   }
 
-  return subCols;
+  return Array.isArray(subCols) ? subCols : [];
 };
 
 const toggleGroupFolding = (column: any) => {
   if (!column) return;
+  const foldMeta = getFoldMeta(column);
+  if (foldMeta?.key) {
+    toggleFoldMetaGroup(column);
+    try {
+      const table = column.getTable?.();
+      if (canRedrawTable(table)) {
+        table.redraw(true);
+      }
+    } catch {
+      // ignore redraw errors during header refresh
+    }
+    return;
+  }
   const def = column.getDefinition();
   const subCols = getGroupSubColumns(column);
 
@@ -778,7 +2393,9 @@ const toggleGroupFolding = (column: any) => {
     headerEl.classList.toggle('group-folded', !targetState);
   }
   
-  table?.redraw(true);
+  if (canRedrawTable(table)) {
+    table.redraw(true);
+  }
 };
 
 const configureColumns = (
@@ -809,7 +2426,30 @@ const configureColumns = (
       headerTooltip: column.headerTooltip != null ? column.headerTooltip : true,
     };
 
+    const foldMeta = getFoldMeta(baseColumn);
+
     if (Array.isArray(baseColumn?.columns) && baseColumn.columns.length > 0) {
+      if (foldMeta?.key) {
+        return {
+          ...baseColumn,
+          ...(isMobileNarrow || isRangeTable ? { frozen: false } : {}),
+          headerClick: function (_event: any, col: any) {
+            if (foldMeta.disabled) return;
+            toggleGroupFolding(col);
+          },
+          titleFormatter: function (col: any) {
+            const isFolded = col.getElement?.()?.classList?.contains('group-folded');
+            const fullLabel = String(foldMeta.fullLabel || baseColumn.title || '');
+            const shortLabel = String(foldMeta.shortLabel || formatAbletonLabel(fullLabel));
+            const tooltip = isFolded ? fullLabel : fullLabel;
+            return `<div class="group-header-content" title="${escapeHtml(tooltip)}">
+              <span class="group-header-title">${escapeHtml(isFolded ? shortLabel : fullLabel)}</span>
+              <span class="group-header-icon" aria-hidden="true"></span>
+            </div>`;
+          },
+          columns: configureColumns(baseColumn.columns, context, annotationState, modalRef),
+        };
+      }
       const isAttendanceMonth = String(baseColumn.cssClass || '').includes('dashboard-attendance-month-group');
       if (isAttendanceMonth) {
         return {
@@ -856,6 +2496,29 @@ const configureColumns = (
       ...restColumn,
       ...(isMobileNarrow || isRangeTable ? { frozen: false } : {}),
     };
+    if (kind || _dateKey) {
+      nextColumn.formatterParams = {
+        ...(restColumn?.formatterParams || {}),
+        __dashboardMeta: {
+          ...((restColumn?.formatterParams && typeof restColumn.formatterParams === 'object')
+            ? restColumn.formatterParams.__dashboardMeta || {}
+            : {}),
+          ...(kind ? { kind } : {}),
+          ...(_dateKey ? { dateKey: _dateKey } : {}),
+        },
+      };
+    }
+
+    if (foldMeta?.key) {
+      nextColumn.titleFormatter = (col: any) => {
+        const fullLabel = String(foldMeta.fullLabel || col.getValue() || '');
+        const shortLabel = String(foldMeta.shortLabel || formatAbletonLabel(fullLabel));
+        const useShort = Boolean(foldMeta.summaryOnly) || shouldUseShortLeafLabel(col);
+        const label = useShort ? shortLabel : fullLabel;
+        const tooltip = useShort ? fullLabel : fullLabel;
+        return `<span class="fold-header-label" title="${escapeHtml(tooltip)}">${escapeHtml(label)}</span>`;
+      };
+    }
 
     if (context.kind === 'gradebook') {
       if (kind === 'grade-score') {
@@ -916,7 +2579,7 @@ const configureColumns = (
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
     } else if (kind === 'datetime') {
       baseFormatter = renderDateTimeCellMarkup;
-    } else if (kind === 'attendance-day' && context.kind === 'attendance-summary') {
+    } else if (kind === 'attendance-day' && ['attendance-summary', 'teacher-main'].includes(context.kind)) {
       nextColumn.editor = 'input';
       nextColumn.headerSort = false;
       baseFormatter = renderAttendanceMarkup;
@@ -928,19 +2591,104 @@ const configureColumns = (
       baseFormatter = roleFormatter;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
+    } else if (kind === 'row-select') {
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-admin-row-select');
+      nextColumn.formatter = 'rowSelection';
+      nextColumn.titleFormatter = 'rowSelection';
+      nextColumn.titleFormatterParams = { rowRange: 'active' };
+      baseFormatter = null;
+      nextColumn.cellClick = (_event: MouseEvent, cell: any) => {
+        cell?.getRow?.()?.toggleSelect?.();
+      };
+      nextColumn.headerSort = false;
+      nextColumn.resizable = false;
+      nextColumn.download = false;
+      nextColumn.clipboard = false;
+      nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
+      nextColumn.hozAlign = nextColumn.hozAlign || 'center';
     } else if (kind === 'course-role') {
-      baseFormatter = renderCourseRoleSelectMarkup;
+      baseFormatter = roleFormatter;
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable', 'dashboard-cell--editable--course-role');
+      nextColumn.editor = 'list';
+      nextColumn.editorParams = {
+        values: {
+          student: 'Student',
+          teacher: 'Teacher',
+        },
+        autocomplete: false,
+        clearable: false,
+        maxWidth: true,
+        verticalNavigation: 'table',
+      };
+      nextColumn.editable = (cell: any) =>
+        Boolean(normalizeText(cell?.getRow?.()?.getData?.()?.enrollmentId || cell?.getData?.()?.enrollmentId || ''));
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
       nextColumn.headerSort = false;
     } else if (kind === 'turno') {
-      baseFormatter = renderTurnoSelectMarkup;
+      baseFormatter = renderPlainMarkup;
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable', 'dashboard-cell--editable--turno');
+      nextColumn.editor = 'list';
+      nextColumn.editorParams = {
+        values: ['M', 'T', 'N'],
+        autocomplete: false,
+        clearable: false,
+        maxWidth: true,
+        verticalNavigation: 'table',
+      };
+      nextColumn.editable = () => Boolean(context.meta?.courseId && context.meta?.year);
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
     } else if (kind === 'concepto') {
-      baseFormatter = renderConceptoInputMarkup;
+      baseFormatter = renderPlainMarkup;
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable', 'dashboard-cell--editable--concepto');
+      nextColumn.editor = 'input';
+      nextColumn.editorParams = {
+        selectContents: true,
+        elementAttributes: {
+          class: 'dashboard-native-editor dashboard-native-editor--concepto',
+          inputmode: 'decimal',
+        },
+      };
+      nextColumn.editable = () => Boolean(context.meta?.courseId && context.meta?.year);
+    } else if (kind === 'notes') {
+      baseFormatter = renderPlainMarkup;
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable', 'dashboard-cell--editable--notes');
+      nextColumn.editor = 'input';
+      nextColumn.editorParams = {
+        selectContents: true,
+        elementAttributes: {
+          class: 'dashboard-native-editor dashboard-native-editor--notes',
+          maxlength: '280',
+        },
+      };
+      nextColumn.editable = () => Boolean(context.meta?.courseId && context.meta?.year);
+    } else if (kind === 'final-grade') {
+      baseFormatter = renderPlainMarkup;
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable', 'dashboard-cell--editable--final-grade');
+      nextColumn.editor = 'input';
+      nextColumn.editorParams = {
+        selectContents: true,
+        elementAttributes: {
+          class: 'dashboard-native-editor dashboard-native-editor--final-grade',
+          inputmode: 'decimal',
+        },
+      };
+      nextColumn.editable = () => Boolean(context.meta?.courseId && context.meta?.year);
+      nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
+      nextColumn.hozAlign = nextColumn.hozAlign || 'center';
     } else if (kind === 'grupo') {
-      baseFormatter = renderGrupoInputMarkup;
+      baseFormatter = renderPlainMarkup;
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable', 'dashboard-cell--editable--grupo');
+      nextColumn.editor = 'input';
+      nextColumn.editorParams = {
+        selectContents: true,
+        elementAttributes: {
+          class: 'dashboard-native-editor dashboard-native-editor--grupo',
+          inputmode: 'numeric',
+        },
+      };
+      nextColumn.editable = () => Boolean(context.meta?.courseId && context.meta?.year);
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
     } else if (kind === 'enrollment-courses') {
@@ -953,13 +2701,16 @@ const configureColumns = (
       nextColumn.headerSort = false;
     } else if (kind === 'editable-text') {
       nextColumn.editor = 'input';
-      nextColumn.cellEdited = async (cell: any) => {
-        await saveUserFieldFromCell(cell);
-      };
     }
 
-    if (isAnnotationContextKind(context.kind) && normalizeText(nextColumn.field)) {
+    const isAnnotationCell = isAnnotationContextKind(context.kind) && normalizeText(nextColumn.field);
+    const keepAnnotationWrapper = isAnnotationCell && !isNativeDashboardEditableKind(kind);
+
+    if (isAnnotationCell) {
       nextColumn.contextMenu = buildCellContextMenu(context.kind, annotationState, modalRef);
+    }
+
+    if (keepAnnotationWrapper) {
       nextColumn.formatter = (cell: any) =>
         buildCellMarkup(cell, context.kind, annotationState, baseFormatter || renderPlainMarkup);
     } else if (baseFormatter) {
@@ -1033,29 +2784,55 @@ const buildTable = (
 ) => {
   const isComplexTable = context.kind === 'gradebook' || context.kind === 'attendance-summary';
   const isRangeTable = supportsRangeSelection(context.kind);
-
-  return new Tabulator(element, {
+  const fillPanelHeight = ['teacher-main', 'overview', 'gradebook', 'attendance-summary', 'admin'].includes(context.kind);
+  const maxHeight =
+    context.kind === 'comments'
+      ? '34vh'
+      : context.kind === 'attendance-log'
+        ? '50vh'
+        : false;
+  element.dataset.rangeSelection = isRangeTable ? 'true' : 'false';
+  const table = new Tabulator(element, {
     index: 'id',
     data: Array.isArray(projection?.rows) ? projection.rows : [],
     columns: configureColumns(Array.isArray(projection?.columns) ? projection.columns : [], context, annotationState, modalRef),
-    layout: context.kind === 'gradebook' ? 'fitDataTable' : 'fitColumns',
+    layout:
+      context.kind === 'teacher-main'
+        ? 'fitDataFill'
+        : context.kind === 'gradebook'
+          ? 'fitDataTable'
+          : 'fitColumns',
     // dblclick recommended by Tabulator docs when selectableRange is enabled,
     // to prevent editors from triggering on every range-start click.
     editTriggerEvent: isRangeTable ? 'dblclick' : 'focus',
     columnHeaderVertAlign: 'bottom',
-    pagination: 'local',
-    paginationSize: 25,
+    ...(fillPanelHeight ? { height: '100%' } : {}),
+    ...(!fillPanelHeight && maxHeight ? { maxHeight } : {}),
     movableColumns: !isComplexTable,
     headerSort: !isComplexTable,
     resizableColumnFit: false,
-    selectableRows: false,
+    selectableRows: context.kind === 'admin',
     // Native Tabulator range selection (SelectRange module, included in TabulatorFull).
-    selectableRange: isRangeTable ? 1 : false,
+    selectableRange: isRangeTable ? true : false,
     selectableRangeAutoFocus: false,
+    clipboard: isRangeTable ? true : false,
+    clipboardCopyRowRange: isRangeTable ? 'range' : 'active',
+    clipboardPasteParser: isRangeTable ? 'range' : false,
+    clipboardPasteAction: isRangeTable
+      ? function (this: any, rowData: Record<string, any>[]) {
+        return applyRangeClipboardPaste(this.table, rowData, context.meta);
+      }
+      : false,
+    clipboardCopyConfig: isRangeTable
+      ? {
+        rowHeaders: false,
+        columnHeaders: false,
+      }
+      : {},
+    clipboardCopyStyled: false,
     placeholder: projection?.emptyMessage || 'Sin datos.',
     persistence: {
       sort: true,
-      page: true,
       columns: ['title', 'width', 'visible'],
     },
     persistenceMode: 'local',
@@ -1063,6 +2840,10 @@ const buildTable = (
     popupContainer: root,
     rowHeight: context.kind === 'attendance-summary' ? 36 : 38,
   });
+
+  (table as DashboardTabulatorInstance).__musikiFoldStorageKey = buildFoldStorageKey(persistKey);
+
+  return table;
 };
 
 let foldLevel = 0;
@@ -1117,18 +2898,27 @@ const applyFoldLevel = (table: Tabulator, level: number) => {
        }
     }
   });
-  table.redraw(true);
+  if (canRedrawTable(table)) {
+    table.redraw(true);
+  }
 };
 
-const unfoldAllColumns = (table: Tabulator) => {
-  const showRecursive = (col: any) => {
-    try { col.show(); } catch { /* ignore */ }
-    getGroupSubColumns(col).forEach(showRecursive);
-    const headerEl = col.getElement?.();
-    if (headerEl) headerEl.classList.remove('group-folded');
-  };
-  try { table.getColumns().forEach(showRecursive); } catch { /* ignore */ }
-  try { table.redraw(true); } catch { /* ignore */ }
+const foldTeacherMainProfileByDefault = (table: Tabulator) => {
+  try {
+    const profileColumn = table.getColumns().find((column: any) => {
+      const foldMeta = getFoldMeta(column);
+      if (String(foldMeta?.key || '') === 'teacher_main_profile') return true;
+      return normalizeText(column?.getDefinition?.()?.title || '') === 'PROFILE';
+    });
+    if (!profileColumn) return;
+    if (getStoredFoldState(table, 'teacher_main_profile') !== undefined) return;
+    toggleFoldMetaGroup(profileColumn, true);
+    if (canRedrawTable(table)) {
+      table.redraw(true);
+    }
+  } catch {
+    // ignore startup folding races
+  }
 };
 
 const bindUnfoldAllButtons = (root: HTMLElement, registry: Map<string, Tabulator>) => {
@@ -1174,12 +2964,13 @@ const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
 
 const trackTableBuilt = (table: Tabulator, readyTables: WeakSet<Tabulator>) => {
   table.on('tableBuilt', () => {
+    (table as DashboardTabulatorInstance).__musikiTableBuilt = true;
     readyTables.add(table);
   });
 };
 
 const updateTeacherTabQuery = (tabName: string) => {
-  const nextTab = VALID_TEACHER_TABS.includes(tabName) ? tabName : 'overview';
+  const nextTab = VALID_TEACHER_TABS.includes(tabName) ? tabName : 'main';
   const url = new URL(window.location.href);
   url.searchParams.set('tab', nextTab);
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
@@ -1188,7 +2979,7 @@ const updateTeacherTabQuery = (tabName: string) => {
 const getActiveTeacherTab = (shell: ParentNode) => {
   const activeTab = shell.querySelector<HTMLElement>('[data-dashboard-tab].active');
   const nextTab = normalizeText(activeTab?.dataset.dashboardTab || '');
-  return VALID_TEACHER_TABS.includes(nextTab) ? nextTab : 'overview';
+  return VALID_TEACHER_TABS.includes(nextTab) ? nextTab : 'main';
 };
 
 const updateScopeQuery = (courseId: string, year: string, activeTab: string) => {
@@ -1293,6 +3084,8 @@ const buildCsvFilename = (key: string, meta: DashboardMeta) => {
   const course = normalizeText(meta?.courseId || 'curso').replace(/[^a-zA-Z0-9_-]+/g, '-');
   const year = normalizeText(meta?.year || 'year').replace(/[^a-zA-Z0-9_-]+/g, '-');
   switch (key) {
+    case 'teacher-main':
+      return `musiki-dashboard-main-${course}-${year}.csv`;
     case 'overview':
       return `musiki-overview-${course}-${year}.csv`;
     case 'gradebook':
@@ -1321,8 +3114,12 @@ const parseClipboardStudentList = (text: string): Array<{ name: string; email: s
       const rawName = normalizeText(parts[1] || '');
       const email = normalizeText(parts[4] || '').toLowerCase();
       if (!rawName || !email || !email.includes('@')) return [];
-      const [apellido, nombre] = rawName.split(',').map((s) => s.trim());
-      const name = toTitleCase([nombre, apellido].filter(Boolean).join(' ') || rawName);
+      const [rawApellido, ...rawNombreParts] = rawName.split(',').map((s) => s.trim()).filter(Boolean);
+      const apellido = toTitleCase(rawApellido || '');
+      const nombre = toTitleCase(rawNombreParts.join(' ').replace(/\s+/g, ' ').trim());
+      const name = apellido && nombre
+        ? `${apellido}, ${nombre}`
+        : toTitleCase(rawName);
       return [{ name, email }];
     });
 };
@@ -1390,6 +3187,61 @@ const bindCsvButtons = (root: HTMLElement, registry: Map<string, Tabulator>, met
   });
 };
 
+const bindAdminDeleteSelectedButton = (root: HTMLElement, table: Tabulator, meta: DashboardMeta) => {
+  const buttons = Array.from(
+    root.querySelectorAll<HTMLButtonElement>('[data-dashboard-admin-delete-selected]'),
+  );
+  if (!buttons.length) return () => {};
+
+  const syncButtons = () => {
+    if (!(table as DashboardTabulatorInstance).__musikiTableBuilt) return;
+    const selectedRows = Array.isArray(table.getSelectedRows?.()) ? table.getSelectedRows() : [];
+    const count = selectedRows.length;
+    buttons.forEach((button) => {
+      button.disabled = count === 0;
+      button.dataset.count = String(count);
+      button.title = count > 0
+        ? `Borrar ${count} usuario${count !== 1 ? 's' : ''} seleccionado${count !== 1 ? 's' : ''}.`
+        : 'Seleccioná usuarios con los checkboxes para borrarlos.';
+      button.setAttribute(
+        'aria-label',
+        count > 0
+          ? `Borrar ${count} usuarios seleccionados`
+          : 'Borrar usuarios seleccionados',
+      );
+    });
+  };
+
+  const clickHandler = async (event: Event) => {
+    const button = event.currentTarget instanceof HTMLButtonElement ? event.currentTarget : null;
+    const selectedRows = Array.isArray(table.getSelectedRows?.()) ? table.getSelectedRows() : [];
+    const selectedUsers = collectAdminUsersFromRows(selectedRows);
+    if (!selectedUsers.length) return;
+    await deleteAdminUsers(table, meta, selectedUsers, button);
+  };
+
+  buttons.forEach((button) => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+    button.addEventListener('click', clickHandler);
+  });
+
+  table.on('rowSelectionChanged', syncButtons);
+  table.on('tableBuilt', syncButtons);
+
+  return () => {
+    buttons.forEach((button) => {
+      button.removeEventListener('click', clickHandler);
+    });
+    try {
+      table.off('rowSelectionChanged', syncButtons);
+      table.off('tableBuilt', syncButtons);
+    } catch {
+      // ignore teardown races
+    }
+  };
+};
+
 const bindTeacherTabs = (
   shell: ParentNode,
   root: HTMLElement,
@@ -1402,9 +3254,14 @@ const bindTeacherTabs = (
   if (tabs.length === 0 || panels.length === 0) return;
 
   const showTab = (tabName: string) => {
-    const nextTab = VALID_TEACHER_TABS.includes(tabName) ? tabName : 'overview';
+    const nextTab = VALID_TEACHER_TABS.includes(tabName) ? tabName : 'main';
+    root.dataset.activeTeacherTab = nextTab;
     tabs.forEach((tab) => {
       tab.classList.toggle('active', normalizeText(tab.dataset.dashboardTab) === nextTab);
+    });
+    shell.querySelectorAll<HTMLElement>('[data-dashboard-topbar-context]').forEach((node) => {
+      const targetTab = normalizeText(node.dataset.dashboardTopbarContext);
+      node.hidden = targetTab !== nextTab;
     });
     let activePanel: HTMLElement | null = null;
     panels.forEach((panel) => {
@@ -1459,6 +3316,51 @@ const bindScopeSelectors = (shell: ParentNode) => {
       updateScopeQuery(courseSelect.value, yearSelect.value, getActiveTeacherTab(shell));
     });
   }
+};
+
+const bindLiveModeToggle = (
+  shell: ParentNode,
+  realtimeSync: RealtimeProjectionSyncController,
+) => {
+  const button = shell.querySelector('[data-dashboard-live-mode-toggle]');
+  const indicator = shell.querySelector('[data-dashboard-live-mode-indicator]');
+  if (!(button instanceof HTMLButtonElement)) {
+    realtimeSync.setEnabled(getStoredLiveModePreference());
+    return () => {};
+  }
+
+  const syncButtonState = () => {
+    const enabled = realtimeSync.isEnabled();
+    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    button.classList.toggle('dashboard-grid-btn--primary', enabled);
+    button.classList.toggle('is-active', enabled);
+    button.dataset.liveMode = enabled ? 'true' : 'false';
+    button.setAttribute('aria-label', enabled ? 'Live mode activado' : 'Live mode desactivado');
+    button.title = enabled
+      ? 'Live mode activado. Escucha cambios de la base y refresca el dashboard automaticamente.'
+      : 'Live mode desactivado. El dashboard solo se actualiza al recargar o cambiar curso, año o rango.';
+
+    if (indicator instanceof HTMLElement) {
+      indicator.dataset.state = enabled ? 'on' : 'off';
+      indicator.title = button.title;
+    }
+  };
+
+  const handleClick = () => {
+    const nextEnabled = !realtimeSync.isEnabled();
+    realtimeSync.setEnabled(nextEnabled);
+    setStoredLiveModePreference(nextEnabled);
+    syncButtonState();
+  };
+
+  realtimeSync.setEnabled(getStoredLiveModePreference());
+  syncButtonState();
+
+  button.addEventListener('click', handleClick);
+
+  return () => {
+    button.removeEventListener('click', handleClick);
+  };
 };
 
 const saveAnnotation = async (
@@ -1619,19 +3521,26 @@ const createAnnotationModal = (
       },
     };
 
+    const selectedContexts = resolveSelectedAnnotationContexts(state, currentContext);
+    const selectedCount = selectedContexts.length;
+    const batchMode = selectedCount > 1;
     const ownAnnotation = getOwnAnnotation(state, currentContext);
     const visibleAnnotation = getDisplayAnnotation(state, currentContext);
 
-    metaNode.textContent = `${currentContext.rowLabel} / ${currentContext.columnLabel}`;
+    metaNode.textContent = batchMode
+      ? `${currentContext.rowLabel} / ${currentContext.columnLabel} · ${selectedCount} celdas`
+      : `${currentContext.rowLabel} / ${currentContext.columnLabel}`;
     visibleNode.textContent =
-      visibleAnnotation && visibleAnnotation.authorUserId !== ownAnnotation?.authorUserId
+      batchMode
+        ? `Se aplicará a ${selectedCount} celdas seleccionadas. Shortcut: ${getCommentShortcutLabel()}`
+        : visibleAnnotation && visibleAnnotation.authorUserId !== ownAnnotation?.authorUserId
         ? `Visible ahora: ${visibleAnnotation.authorName || visibleAnnotation.authorEmail || 'Teacher'} · ${dashboardAnnotationVisibilityLabel(visibleAnnotation.visibility)}`
         : `Shortcut: ${getCommentShortcutLabel()}`;
 
     commentInput.value = ownAnnotation?.comment || '';
     colorSelect.value = ownAnnotation?.color || '';
     visibilitySelect.value = ownAnnotation?.visibility || 'teachers';
-    deleteButton.disabled = !ownAnnotation?.id;
+    deleteButton.disabled = !selectedContexts.some((selectedContext) => Boolean(getOwnAnnotation(state, selectedContext)?.id));
 
     overlay.hidden = false;
     window.setTimeout(() => {
@@ -1648,11 +3557,14 @@ const createAnnotationModal = (
     if (!currentContext) return;
     saveButton.disabled = true;
     try {
-      await saveAnnotation(state, currentContext, {
-        color: normalizeDashboardAnnotationColor(colorSelect.value),
-        comment: commentInput.value,
-        visibility: normalizeDashboardAnnotationVisibility(visibilitySelect.value),
-      });
+      const selectedContexts = resolveSelectedAnnotationContexts(state, currentContext);
+      for (const selectedContext of selectedContexts) {
+        await saveAnnotation(state, selectedContext, {
+          color: normalizeDashboardAnnotationColor(colorSelect.value),
+          comment: commentInput.value,
+          visibility: normalizeDashboardAnnotationVisibility(visibilitySelect.value),
+        });
+      }
       close();
     } catch (error: any) {
       console.error('Error saving dashboard annotation:', error);
@@ -1664,12 +3576,21 @@ const createAnnotationModal = (
 
   deleteButton.addEventListener('click', async () => {
     if (!currentContext) return;
-    const ownAnnotation = getOwnAnnotation(state, currentContext);
-    if (!ownAnnotation?.id) return;
+    const selectedContexts = resolveSelectedAnnotationContexts(state, currentContext);
+    const ownAnnotationsById = new Map<string, DashboardAnnotationRecord>();
+    selectedContexts.forEach((selectedContext) => {
+      const annotation = getOwnAnnotation(state, selectedContext);
+      if (!annotation?.id) return;
+      ownAnnotationsById.set(annotation.id, annotation);
+    });
+    const ownAnnotations = Array.from(ownAnnotationsById.values());
+    if (!ownAnnotations.length) return;
 
     deleteButton.disabled = true;
     try {
-      await removeAnnotation(state, ownAnnotation.id);
+      for (const annotation of ownAnnotations) {
+        await removeAnnotation(state, annotation.id);
+      }
       close();
     } catch (error: any) {
       console.error('Error deleting dashboard annotation:', error);
@@ -1749,13 +3670,18 @@ const bindAnnotationShortcut = (
       else if (key === 'b') color = 'yellow';
       else if (key === 'n') color = 'red';
       else if (key === 'm') color = '';
-      
-      const own = getOwnAnnotation(state, state.selectedContext);
-      void saveAnnotation(state, state.selectedContext, {
-        color,
-        comment: own?.comment || '',
-        visibility: own?.visibility || 'teachers'
-      });
+
+      const targetContexts = resolveSelectedAnnotationContexts(state, state.selectedContext);
+      void (async () => {
+        for (const targetContext of targetContexts) {
+          const own = getOwnAnnotation(state, targetContext);
+          await saveAnnotation(state, targetContext, {
+            color,
+            comment: own?.comment || '',
+            visibility: own?.visibility || 'teachers',
+          });
+        }
+      })();
       return;
     }
 
@@ -1800,282 +3726,8 @@ const bindTableSelection = (
   });
 };
 
-const bindTurnoSelects = (host: HTMLElement, table: Tabulator, meta: DashboardMeta) => {
-  const updateTurno = async (select: HTMLSelectElement) => {
-    const rowId = normalizeText(select.dataset.rowId || '');
-    const studentId = normalizeText(select.dataset.studentId || '');
-    const turno = ['M', 'T', 'N'].includes(normalizeText(select.value).toUpperCase())
-      ? normalizeText(select.value).toUpperCase()
-      : 'M';
-    const previousTurno = ['M', 'T', 'N'].includes(normalizeText(select.dataset.previousTurno).toUpperCase())
-      ? normalizeText(select.dataset.previousTurno).toUpperCase()
-      : 'M';
-    if (!rowId || !studentId || !meta?.courseId || !meta?.year) {
-      select.value = previousTurno;
-      return;
-    }
-    if (turno === previousTurno) return;
-
-    const setVisualState = (state: string, disabled: boolean) => {
-      select.dataset.state = state;
-      select.disabled = disabled;
-      select.title = getTurnoTitle(select.value);
-    };
-
-    setVisualState('saving', true);
-    try {
-      const response = await fetch('/api/grade/course-student-meta', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseId: meta.courseId,
-          year: meta.year,
-          studentId,
-          turno,
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo actualizar el turno');
-      }
-
-      const resolvedTurno = ['M', 'T', 'N'].includes(normalizeText(payload?.meta?.turno).toUpperCase())
-        ? normalizeText(payload.meta.turno).toUpperCase()
-        : turno;
-      const row = table.getRow(rowId);
-      if (row) {
-        await row.update({
-          turno: resolvedTurno,
-        });
-      }
-    } catch (error: any) {
-      console.error('Error updating turno:', error);
-      select.value = previousTurno;
-      alert(error?.message || 'No se pudo actualizar el turno');
-      setVisualState('error', false);
-      return;
-    }
-
-    setVisualState('idle', false);
-  };
-
-  const focusHandler = (event: FocusEvent) => {
-    const select = event.target;
-    if (!(select instanceof HTMLSelectElement)) return;
-    if (!select.matches('[data-dashboard-turno-select]')) return;
-    select.dataset.previousTurno = normalizeText(select.value).toUpperCase();
-    select.title = getTurnoTitle(select.value);
-  };
-
-  const changeHandler = (event: Event) => {
-    const select = event.target;
-    if (!(select instanceof HTMLSelectElement)) return;
-    if (!select.matches('[data-dashboard-turno-select]')) return;
-    void updateTurno(select);
-  };
-
-  host.addEventListener('focusin', focusHandler);
-  host.addEventListener('change', changeHandler);
-
-  return () => {
-    host.removeEventListener('focusin', focusHandler);
-    host.removeEventListener('change', changeHandler);
-  };
-};
-
-const bindGrupoInputs = (host: HTMLElement, table: Tabulator, meta: DashboardMeta) => {
-  const syncInputValue = (input: HTMLInputElement) => {
-    const normalized = normalizeGrupoDigits(input.value);
-    if (input.value !== normalized) {
-      input.value = normalized;
-    }
-    return normalized;
-  };
-
-  const updateGrupo = async (input: HTMLInputElement) => {
-    const rowId = normalizeText(input.dataset.rowId || '');
-    const studentId = normalizeText(input.dataset.studentId || '');
-    const grupo = syncInputValue(input);
-    const previousGrupo = normalizeGrupoDigits(input.dataset.previousGrupo || '');
-    if (!rowId || !studentId || !meta?.courseId || !meta?.year) {
-      input.value = previousGrupo;
-      return;
-    }
-    if (grupo === previousGrupo) return;
-
-    const setVisualState = (state: string, disabled: boolean) => {
-      input.dataset.state = state;
-      input.disabled = disabled;
-    };
-
-    setVisualState('saving', true);
-    try {
-      const response = await fetch('/api/grade/course-student-meta', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseId: meta.courseId,
-          year: meta.year,
-          studentId,
-          grupo,
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo actualizar el grupo');
-      }
-
-      const resolvedGrupo = normalizeGrupoDigits(payload?.meta?.grupo || grupo) || '';
-      const row = table.getRow(rowId);
-      if (row) {
-        await row.update({
-          grupo: resolvedGrupo || '—',
-        });
-      }
-      input.value = resolvedGrupo;
-      input.dataset.previousGrupo = resolvedGrupo;
-    } catch (error: any) {
-      console.error('Error updating grupo:', error);
-      input.value = previousGrupo;
-      alert(error?.message || 'No se pudo actualizar el grupo');
-      setVisualState('error', false);
-      return;
-    }
-
-    setVisualState('idle', false);
-  };
-
-  const focusHandler = (event: FocusEvent) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
-    if (!input.matches('[data-dashboard-grupo-input]')) return;
-    input.dataset.previousGrupo = normalizeGrupoDigits(input.value);
-    input.select();
-  };
-
-  const inputHandler = (event: Event) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
-    if (!input.matches('[data-dashboard-grupo-input]')) return;
-    syncInputValue(input);
-  };
-
-  const changeHandler = (event: Event) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
-    if (!input.matches('[data-dashboard-grupo-input]')) return;
-    void updateGrupo(input);
-  };
-
-  const keydownHandler = (event: KeyboardEvent) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
-    if (!input.matches('[data-dashboard-grupo-input]')) return;
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      input.blur();
-      return;
-    }
-    if (event.key === 'Escape') {
-      const previousGrupo = normalizeGrupoDigits(input.dataset.previousGrupo || '');
-      input.value = previousGrupo;
-      input.blur();
-    }
-  };
-
-  host.addEventListener('focusin', focusHandler);
-  host.addEventListener('input', inputHandler);
-  host.addEventListener('change', changeHandler);
-  host.addEventListener('keydown', keydownHandler);
-
-  return () => {
-    host.removeEventListener('focusin', focusHandler);
-    host.removeEventListener('input', inputHandler);
-    host.removeEventListener('change', changeHandler);
-    host.removeEventListener('keydown', keydownHandler);
-  };
-};
-
-const bindConceptoInputs = (host: HTMLElement, table: Tabulator, meta: DashboardMeta) => {
-  const syncInputValue = (input: HTMLInputElement) => {
-    const normalized = normalizeConceptoInput(input.value);
-    if (input.value !== normalized) input.value = normalized;
-    return normalized;
-  };
-
-  const updateConcepto = async (input: HTMLInputElement) => {
-    const rowId = normalizeText(input.dataset.rowId || '');
-    const studentId = normalizeText(input.dataset.studentId || '');
-    const concepto = syncInputValue(input);
-    const previous = normalizeConceptoInput(input.dataset.previousConcepto || '');
-    if (!rowId || !studentId || !meta?.courseId || !meta?.year) { input.value = previous; return; }
-    if (concepto === previous) return;
-
-    const setVisualState = (state: string, disabled: boolean) => {
-      input.dataset.state = state;
-      input.disabled = disabled;
-    };
-
-    setVisualState('saving', true);
-    try {
-      const response = await fetch('/api/grade/course-student-meta', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseId: meta.courseId, year: meta.year, studentId, concepto }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error || 'No se pudo guardar el concepto');
-
-      const resolved = normalizeConceptoInput(payload?.meta?.concepto ?? concepto);
-      const row = table.getRow(rowId);
-      if (row) await row.update({ conceptValue: resolved || '—' });
-      input.value = resolved;
-      input.dataset.previousConcepto = resolved;
-    } catch (error: any) {
-      console.error('Error updating concepto:', error);
-      input.value = previous;
-      alert(error?.message || 'No se pudo guardar el concepto');
-      setVisualState('error', false);
-      return;
-    }
-    setVisualState('idle', false);
-  };
-
-  const focusHandler = (event: FocusEvent) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement) || !input.matches('[data-dashboard-concepto-input]')) return;
-    input.dataset.previousConcepto = normalizeConceptoInput(input.value);
-    input.select();
-  };
-
-  const changeHandler = (event: Event) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement) || !input.matches('[data-dashboard-concepto-input]')) return;
-    void updateConcepto(input);
-  };
-
-  const keydownHandler = (event: KeyboardEvent) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement) || !input.matches('[data-dashboard-concepto-input]')) return;
-    if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
-    if (event.key === 'Escape') { input.value = input.dataset.previousConcepto || ''; input.blur(); }
-  };
-
-  host.addEventListener('focusin', focusHandler);
-  host.addEventListener('change', changeHandler);
-  host.addEventListener('keydown', keydownHandler);
-
-  return () => {
-    host.removeEventListener('focusin', focusHandler);
-    host.removeEventListener('change', changeHandler);
-    host.removeEventListener('keydown', keydownHandler);
-  };
-};
-
 const supportsRangeSelection = (kind: GridKind) =>
-  ['overview', 'gradebook', 'attendance-summary', 'admin'].includes(kind);
+  ['teacher-main', 'overview', 'gradebook', 'attendance-summary'].includes(kind);
 
 const isInteractiveDashboardTarget = (target: EventTarget | null) =>
   target instanceof HTMLInputElement
@@ -2087,11 +3739,15 @@ const isInteractiveDashboardTarget = (target: EventTarget | null) =>
   || target instanceof SVGPathElement
   || (target instanceof HTMLElement && Boolean(
     target.closest(
-      '.dashboard-inline-select-wrap, .dashboard-inline-input-wrap, .dashboard-admin-actions, .tabulator-editing, .enrollment-chip-remove',
+      '.dashboard-admin-actions, .tabulator-editing, .enrollment-chip-remove',
     ),
   ));
 
-const resolveCellComponentFromTarget = (table: Tabulator, target: EventTarget | null) => {
+const resolveCellComponentFromTarget = (
+  table: Tabulator,
+  target: EventTarget | null,
+  options?: { allowInteractiveKinds?: boolean },
+) => {
   if (!(target instanceof HTMLElement)) return null;
 
   const cellElement = target.closest<HTMLElement>('.tabulator-cell');
@@ -2103,11 +3759,14 @@ const resolveCellComponentFromTarget = (table: Tabulator, target: EventTarget | 
   if (!cell) return null;
 
   const field = normalizeText(cell.getField?.() || '');
-  if (!field || field.startsWith('__')) return null;
+  if (!field) return null;
+  if (field.startsWith('__') && !options?.allowInteractiveKinds) return null;
 
-  const columnDefinition = cell.getColumn?.()?.getDefinition?.() || {};
-  const cellKind = normalizeText(columnDefinition?.kind || '');
-  if (['turno', 'grupo', 'concepto', 'course-role', 'admin-actions'].includes(cellKind)) {
+  const cellKind = normalizeText(getColumnDashboardMeta(cell?.getColumn?.()).kind || '');
+  if (
+    !options?.allowInteractiveKinds
+    && isCustomInteractiveCellKind(cellKind)
+  ) {
     return null;
   }
 
@@ -2160,22 +3819,112 @@ const bindTableRangeSelection = (table: Tabulator, kind: GridKind) => {
  * Prevents Tabulator's range selection from blocking interaction with
  * custom interactive elements (selects, inputs, etc.) inside cells.
  */
-const bindInteractiveSuppression = (element: HTMLElement) => {
-  const handler = (event: MouseEvent) => {
-    if (isInteractiveDashboardTarget(event.target)) {
-      event.stopPropagation();
+const bindInteractiveSuppression = (element: HTMLElement, table?: Tabulator) => {
+  const setRangeKeydownBlocked = (blocked: boolean) => {
+    const rangeModule = (table as any)?.modules?.selectRange;
+    if (rangeModule) {
+      rangeModule.blockKeydown = blocked;
     }
   };
-  
+
+  const mouseHandler = (event: MouseEvent) => {
+    if (isInteractiveDashboardTarget(event.target)) {
+      const shouldBubble = shouldLetInteractiveMouseBubble(event.target);
+      if (!shouldBubble && (event.type === 'mousedown' || event.type === 'dblclick')) {
+        event.stopPropagation();
+      }
+      if (shouldBubble) {
+        return;
+      }
+      const control = getInteractiveElementFromTarget(event.target);
+      if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement) {
+        window.requestAnimationFrame(() => {
+          try {
+            control.focus({ preventScroll: true });
+            if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
+              control.select?.();
+            }
+          } catch {
+            // ignore focus races during redraw
+          }
+        });
+      }
+    }
+  };
+
+  const keyboardHandler = (event: KeyboardEvent) => {
+    if (isInteractiveDashboardTarget(event.target)) {
+      setRangeKeydownBlocked(true);
+    }
+  };
+
+  const focusInHandler = (event: FocusEvent) => {
+    if (isInteractiveDashboardTarget(event.target)) {
+      setRangeKeydownBlocked(true);
+    }
+  };
+
+  const focusOutHandler = (event: FocusEvent) => {
+    const nextTarget = event.relatedTarget;
+    if (isInteractiveDashboardTarget(nextTarget)) return;
+    setRangeKeydownBlocked(false);
+  };
+
   // Use capture to catch the event before Tabulator's internal listeners.
-  element.addEventListener('mousedown', handler, { capture: true });
-  element.addEventListener('dblclick', handler, { capture: true });
-  element.addEventListener('click', handler, { capture: true });
-  
+  element.addEventListener('mousedown', mouseHandler, { capture: true });
+  element.addEventListener('dblclick', mouseHandler, { capture: true });
+  element.addEventListener('click', mouseHandler, { capture: true });
+  element.addEventListener('keydown', keyboardHandler, { capture: true });
+  element.addEventListener('keyup', keyboardHandler, { capture: true });
+  element.addEventListener('focusin', focusInHandler);
+  element.addEventListener('focusout', focusOutHandler);
+
   return () => {
-    element.removeEventListener('mousedown', handler, { capture: true });
-    element.removeEventListener('dblclick', handler, { capture: true });
-    element.removeEventListener('click', handler, { capture: true });
+    setRangeKeydownBlocked(false);
+    element.removeEventListener('mousedown', mouseHandler, { capture: true });
+    element.removeEventListener('dblclick', mouseHandler, { capture: true });
+    element.removeEventListener('click', mouseHandler, { capture: true });
+    element.removeEventListener('keydown', keyboardHandler, { capture: true });
+    element.removeEventListener('keyup', keyboardHandler, { capture: true });
+    element.removeEventListener('focusin', focusInHandler);
+    element.removeEventListener('focusout', focusOutHandler);
+  };
+};
+
+const focusInteractiveControlInCell = (cell: any) => {
+  const cellElement = cell?.getElement?.();
+  if (!(cellElement instanceof HTMLElement)) return;
+
+  const control = cellElement.querySelector<HTMLElement>('input, textarea, select, button');
+  if (!(control instanceof HTMLElement)) return;
+
+  window.requestAnimationFrame(() => {
+    try {
+      control.focus({ preventScroll: true });
+      if (control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement) {
+        control.select?.();
+      }
+    } catch {
+      // ignore focus races during redraw
+    }
+  });
+};
+
+const bindCustomInteractiveCellFocus = (table: Tabulator) => {
+  const focusHandler = (_event: MouseEvent, cell: any) => {
+    const kind = getCellKind(cell);
+    if (!isCustomInteractiveCellKind(kind)) return;
+    focusInteractiveControlInCell(cell);
+  };
+
+  table.on('cellClick', focusHandler);
+
+  return () => {
+    try {
+      table.off('cellClick', focusHandler);
+    } catch {
+      // ignore teardown races
+    }
   };
 };
 
@@ -2183,81 +3932,8 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   const CLICK_TOGGLE_DELAY_MS = 180;
   const TOUCH_LONG_PRESS_DELAY_MS = 420;
 
-  const resolveAttendanceCellContext = (cell: any) => {
-    const field = normalizeText(cell.getField?.() || '');
-    const rowData = cell.getData?.() || {};
-    const cellMeta = rowData?.__attendanceCellMeta?.[field];
-    const studentId = normalizeText(rowData?.studentId || '');
-    const dateKey = normalizeText(cellMeta?.dateKey || '');
-    if (!field || !cellMeta || !studentId || !dateKey || !meta?.courseId || !meta?.year) {
-      return null;
-    }
-
-    return {
-      field,
-      rowData,
-      cellMeta,
-      studentId,
-      dateKey,
-    };
-  };
-
-  const persistAttendanceCellValue = async (cell: any, normalized: ReturnType<typeof normalizeAttendanceInput>) => {
-    const context = resolveAttendanceCellContext(cell);
-    if (!context) return false;
-
-    const response = await fetch('/api/grade/course-attendance-manual', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        courseId: meta.courseId,
-        year: meta.year,
-        studentId: context.studentId,
-        date: context.dateKey,
-        countRaw: normalized.countRaw,
-      }),
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(payload?.error || 'No se pudo guardar la asistencia manual');
-    }
-
-    const payload = await response.json().catch(() => ({}));
-    const nextCount = typeof payload?.meta?.count === 'number' ? payload.meta.count : null;
-    const nextDisplay = nextCount === null ? '' : formatAttendanceSymbol(nextCount);
-    const rowData = cell.getData?.() || {};
-    const nextCellMeta = rowData?.__attendanceCellMeta?.[context.field];
-    if (nextCellMeta) {
-      nextCellMeta.hasManualOverride = nextCount !== null;
-      nextCellMeta.manualValue = nextCount ?? 0;
-      nextCellMeta.effectiveValue = nextCount ?? Number(nextCellMeta.liveValue || 0);
-    }
-
-    let absenceUnits = 0;
-    let attendanceUnits = 0;
-    let scheduledDayCount = 0;
-    Object.values(rowData?.__attendanceCellMeta || {}).forEach((entry: any) => {
-      scheduledDayCount += 1;
-      attendanceUnits += Math.max(0, Number(entry?.effectiveValue || 0));
-      if (!entry?.countsTowardAbsence) return;
-      absenceUnits += Math.max(0, 1 - Number(entry?.effectiveValue || 0));
-    });
-    const attendanceRate = scheduledDayCount > 0
-      ? Math.round((attendanceUnits / scheduledDayCount) * 1000) / 10
-      : 0;
-
-    await cell.getRow().update({
-      [context.field]: nextDisplay,
-      attendanceRate,
-      attendanceCount: attendanceUnits,
-      attendanceTotalCount: scheduledDayCount,
-      absenceUnits,
-      absenceDisplay: formatAbsence(absenceUnits),
-    });
-
-    return true;
-  };
+  const resolveAttendanceCellContext = (cell: any) =>
+    resolvePersistableAttendanceCellContext(cell, meta);
 
   const getSelectedAttendanceCells = (activeCell: any) => {
     const state = (table as any).__musikiRangeSelectionState as RangeSelectionState | undefined;
@@ -2280,13 +3956,13 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     cell: any,
     normalized: ReturnType<typeof normalizeAttendanceInput>,
   ) => {
-    await persistAttendanceCellValue(cell, normalized);
+    await persistSingleAttendanceCellValue(cell, normalized, meta);
 
     const extraCells = getSelectedAttendanceCells(cell);
     const failures: string[] = [];
     for (const selectedCell of extraCells) {
       try {
-        await persistAttendanceCellValue(selectedCell, normalized);
+        await persistSingleAttendanceCellValue(selectedCell, normalized, meta);
       } catch (error: any) {
         failures.push(error?.message || 'No se pudo guardar una celda del rango');
       }
@@ -2463,82 +4139,6 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   };
 };
 
-const bindAdminRoleSelects = (host: HTMLElement, table: Tabulator) => {
-  const updateRole = async (select: HTMLSelectElement) => {
-    const rowId = normalizeText(select.dataset.rowId || '');
-    const enrollmentId = normalizeText(select.dataset.enrollmentId || '');
-    const nextRole = normalizeTextLower(select.value);
-    const previousRole = normalizeTextLower(select.dataset.previousRole || select.defaultValue || '');
-    if (!rowId || !enrollmentId || !['student', 'teacher'].includes(nextRole)) {
-      select.value = previousRole || 'student';
-      return;
-    }
-    if (nextRole === previousRole) return;
-
-    const setVisualState = (state: string, disabled: boolean) => {
-      select.dataset.state = state;
-      select.disabled = disabled;
-    };
-
-    setVisualState('saving', true);
-    try {
-      const response = await fetch('/api/enroll', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enrollmentId,
-          roleInCourse: nextRole,
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo actualizar el rol del curso');
-      }
-
-      const resolvedRole = normalizeTextLower(payload?.enrollment?.roleInCourse || nextRole) || 'student';
-      const row = table.getRow(rowId);
-      if (row) {
-        await row.update({
-          courseRole: resolvedRole,
-          courseRoleLabel: resolvedRole === 'teacher' ? 'Teacher' : 'Student',
-        });
-      }
-      select.dataset.role = resolvedRole;
-    } catch (error: any) {
-      console.error('Error updating course role:', error);
-      select.value = previousRole || 'student';
-      alert(error?.message || 'No se pudo actualizar el rol del curso');
-      setVisualState('error', false);
-      return;
-    }
-
-    setVisualState('idle', false);
-  };
-
-  const focusHandler = (event: FocusEvent) => {
-    const select = event.target;
-    if (!(select instanceof HTMLSelectElement)) return;
-    if (!select.matches('[data-dashboard-course-role-select]')) return;
-    select.dataset.previousRole = normalizeTextLower(select.value);
-  };
-
-  const changeHandler = (event: Event) => {
-    const select = event.target;
-    if (!(select instanceof HTMLSelectElement)) return;
-    if (!select.matches('[data-dashboard-course-role-select]')) return;
-    void updateRole(select);
-  };
-
-  host.addEventListener('focusin', focusHandler);
-  host.addEventListener('change', changeHandler);
-
-  return () => {
-    host.removeEventListener('focusin', focusHandler);
-    host.removeEventListener('change', changeHandler);
-  };
-};
-
 const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMeta) => {
   const clickHandler = async (event: Event) => {
     const target = event.target instanceof HTMLElement ? event.target : null;
@@ -2585,11 +4185,13 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
       return;
     }
 
-    // ── Edit button → navigate to /admin/user/[id] ───────────────────────────
+    // ── Edit button → navigate to Admin user detail ──────────────────────────
     const editButton = target.closest<HTMLButtonElement>('[data-dashboard-user-edit]');
     if (editButton) {
       const userId = normalizeText(editButton.dataset.userId || '');
-      if (userId) window.location.href = `/admin/user/${encodeURIComponent(userId)}`;
+      if (userId) {
+        window.location.href = `/admin/user/${encodeURIComponent(userId)}`;
+      }
       return;
     }
 
@@ -2597,62 +4199,36 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
     const deleteButton = target.closest<HTMLButtonElement>('[data-dashboard-user-delete]');
     if (!deleteButton) return;
 
-    const userId = normalizeText(deleteButton.dataset.userId || '');
-    const userName = normalizeText(deleteButton.dataset.userName || 'este usuario') || 'este usuario';
-    const userEmail = normalizeText(deleteButton.dataset.userEmail || '');
-    const globalRole = normalizeTextLower(deleteButton.dataset.userGlobalRole || '');
-    const courseRole = normalizeTextLower(deleteButton.dataset.userCourseRole || '');
-    if (!userId) return;
+    const selectedRows = Array.isArray(table.getSelectedRows?.()) ? table.getSelectedRows() : [];
+    const selectedRowIds = new Set(selectedRows.map((row: any) => getRowComponentId(row)).filter(Boolean));
+    const clickedRows = resolveSelectedTargetRows(table, deleteButton);
+    const clickedRowId = normalizeText(clickedRows[0]?.getData?.()?.id || '');
+    const rowsToDelete =
+      selectedRows.length > 1 && clickedRowId && selectedRowIds.has(clickedRowId)
+        ? selectedRows
+        : clickedRows;
 
-    const warningBits = [
-      userEmail ? `Email: ${userEmail}` : '',
-      globalRole === 'teacher' ? 'Tiene rol global teacher.' : '',
-      courseRole === 'teacher' ? 'Tiene rol teacher en este curso.' : '',
-      'Se borrarán también sus inscripciones y submissions.',
-    ].filter(Boolean);
-    const confirmMessage = [
-      `¿Borrar a ${userName}?`,
-      ...warningBits,
-    ].join('\n');
+    const selectedUsers = collectAdminUsersFromRows(rowsToDelete);
 
-    if (!window.confirm(confirmMessage)) return;
-
-    deleteButton.disabled = true;
-    deleteButton.dataset.state = 'saving';
-
-    try {
-      const requestUrl = new URL(`/api/admin/users/${encodeURIComponent(userId)}`, window.location.origin);
-      if (normalizeText(meta?.courseId || '')) {
-        requestUrl.searchParams.set('courseId', normalizeText(meta.courseId));
-      }
-
-      const response = await fetch(requestUrl.toString(), {
-        method: 'DELETE',
+    if (!selectedUsers.length) {
+      const userId = normalizeText(deleteButton.dataset.userId || '');
+      if (!userId) return;
+      selectedUsers.push({
+        id: userId,
+        name: normalizeText(deleteButton.dataset.userName || 'este usuario') || 'este usuario',
+        email: normalizeText(deleteButton.dataset.userEmail || ''),
+        globalRole: normalizeTextLower(deleteButton.dataset.userGlobalRole || ''),
+        courseRole: normalizeTextLower(deleteButton.dataset.userCourseRole || ''),
       });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo borrar el usuario');
-      }
-
-      const row = table.getRow(userId);
-      if (row) {
-        row.delete();
-      }
-
-      window.location.reload();
-    } catch (error: any) {
-      console.error('Error deleting dashboard user:', error);
-      deleteButton.disabled = false;
-      deleteButton.dataset.state = 'error';
-      alert(error?.message || 'No se pudo borrar el usuario');
     }
+
+    await deleteAdminUsers(table, meta, selectedUsers, deleteButton);
   };
 
-  host.addEventListener('click', clickHandler);
+  host.addEventListener('click', clickHandler, { capture: true });
 
   return () => {
-    host.removeEventListener('click', clickHandler);
+    host.removeEventListener('click', clickHandler, { capture: true });
   };
 };
 
@@ -2693,14 +4269,18 @@ const replaceProjectionScriptsFromHtml = (html: string) => {
   return updatedCount > 0;
 };
 
-const createRealtimeProjectionSync = (meta: DashboardMeta) => {
+const createRealtimeProjectionSync = (meta: DashboardMeta): RealtimeProjectionSyncController => {
   const supabaseUrl = normalizeText(meta?.supabaseUrl || '');
   const supabaseKey = normalizeText(meta?.supabaseKey || '');
   const isSafeClientKey =
     supabaseKey.startsWith('sb_publishable_')
     || (supabaseKey.includes('.') && !supabaseKey.startsWith('sb_secret_'));
   if (!supabaseUrl || !supabaseKey || !isSafeClientKey) {
-    return () => {};
+    return {
+      isEnabled: () => false,
+      setEnabled: () => {},
+      destroy: () => {},
+    };
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -2711,12 +4291,50 @@ const createRealtimeProjectionSync = (meta: DashboardMeta) => {
   });
 
   let disposed = false;
+  let enabled = false;
+  let channel: any = null;
   let refreshTimeout: number | null = null;
   let refreshInFlight = false;
   let refreshQueued = false;
 
+  const clearScheduledRefresh = () => {
+    if (refreshTimeout !== null) {
+      window.clearTimeout(refreshTimeout);
+      refreshTimeout = null;
+    }
+    refreshQueued = false;
+  };
+
+  const stopChannel = () => {
+    clearScheduledRefresh();
+
+    if (!channel) return;
+
+    const activeChannel = channel;
+    channel = null;
+    void supabase.removeChannel(activeChannel);
+  };
+
+  const ensureChannel = () => {
+    if (disposed || !enabled || channel) return;
+
+    channel = supabase
+      .channel(`musiki-dashboard:${normalizeText(meta.courseId)}:${normalizeText(meta.year)}:${Date.now()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'Assignment' }, handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'Submission' }, handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'Enrollment' }, handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'LiveClassSession' }, handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'LiveClassAttendance' }, handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'GradebookAnnotation' }, handleRealtimeEvent)
+      .subscribe();
+  };
+
   const runRefresh = async () => {
-    if (disposed || refreshInFlight) {
+    if (disposed || !enabled) {
+      return;
+    }
+
+    if (refreshInFlight) {
       refreshQueued = true;
       return;
     }
@@ -2733,6 +4351,10 @@ const createRealtimeProjectionSync = (meta: DashboardMeta) => {
       }
 
       const html = await response.text();
+      if (disposed || !enabled) {
+        return;
+      }
+
       const didUpdate = replaceProjectionScriptsFromHtml(html);
       if (didUpdate && typeof window.__musikiDashboardRemount === 'function') {
         window.__musikiDashboardRemount();
@@ -2741,7 +4363,7 @@ const createRealtimeProjectionSync = (meta: DashboardMeta) => {
       console.error('Error refreshing dashboard projections:', error);
     } finally {
       refreshInFlight = false;
-      if (refreshQueued && !disposed) {
+      if (refreshQueued && !disposed && enabled) {
         refreshQueued = false;
         scheduleRefresh();
       }
@@ -2749,10 +4371,8 @@ const createRealtimeProjectionSync = (meta: DashboardMeta) => {
   };
 
   const scheduleRefresh = () => {
-    if (disposed) return;
-    if (refreshTimeout !== null) {
-      window.clearTimeout(refreshTimeout);
-    }
+    if (disposed || !enabled) return;
+    clearScheduledRefresh();
     refreshTimeout = window.setTimeout(() => {
       refreshTimeout = null;
       void runRefresh();
@@ -2771,23 +4391,24 @@ const createRealtimeProjectionSync = (meta: DashboardMeta) => {
     scheduleRefresh();
   };
 
-  const channel = supabase
-    .channel(`musiki-dashboard:${normalizeText(meta.courseId)}:${normalizeText(meta.year)}:${Date.now()}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'Assignment' }, handleRealtimeEvent)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'Submission' }, handleRealtimeEvent)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'Enrollment' }, handleRealtimeEvent)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'LiveClassSession' }, handleRealtimeEvent)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'LiveClassAttendance' }, handleRealtimeEvent)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'GradebookAnnotation' }, handleRealtimeEvent)
-    .subscribe();
+  return {
+    isEnabled: () => enabled,
+    setEnabled: (next: boolean) => {
+      if (disposed) return;
 
-  return () => {
-    disposed = true;
-    if (refreshTimeout !== null) {
-      window.clearTimeout(refreshTimeout);
-      refreshTimeout = null;
-    }
-    void supabase.removeChannel(channel);
+      enabled = Boolean(next);
+      if (!enabled) {
+        stopChannel();
+        return;
+      }
+
+      ensureChannel();
+    },
+    destroy: () => {
+      disposed = true;
+      enabled = false;
+      stopChannel();
+    },
   };
 };
 
@@ -2802,6 +4423,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   if (!hasTeacherDashboard) return () => {};
 
   const meta = parseJsonScript<DashboardMeta>('dashboard-teacher-tabulator-meta', {});
+  const main = parseJsonScript<GridProjection>('dashboard-teacher-main', { columns: [], rows: [] });
   const overview = parseJsonScript<GridProjection>('dashboard-teacher-overview', { columns: [], rows: [] });
   const gradebook = parseJsonScript<GridProjection>('dashboard-teacher-gradebook', { columns: [], rows: [] });
   const attendance = parseJsonScript<AttendanceProjection>('dashboard-teacher-attendance', {
@@ -2821,6 +4443,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     annotationsByScope: new Map(),
     registry,
     selectedContext: null,
+    selectedCell: null,
     selectedCellEl: null,
     currentUserId: normalizeText(meta?.userId || ''),
     meta,
@@ -2830,7 +4453,32 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   const modalRef: { current: AnnotationModalApi | null } = { current: null };
   modalRef.current = createAnnotationModal(root, meta, annotationState);
   const destroyShortcut = bindAnnotationShortcut(annotationState, modalRef);
-  const destroyRealtimeSync = createRealtimeProjectionSync(meta);
+  const realtimeSync = createRealtimeProjectionSync(meta);
+  destroyers.push(bindLiveModeToggle(shell, realtimeSync));
+
+  const mainNode = root.querySelector<HTMLElement>('[data-dashboard-grid="teacher-main"]');
+  if (mainNode) {
+    const persistKey = buildPersistKey(meta, 'teacher-main');
+    const table = buildTable(root, mainNode, main, persistKey, { kind: 'teacher-main', meta }, annotationState, modalRef);
+    trackTableBuilt(table, readyTables);
+    bindTableSelection(table, 'teacher-main', annotationState);
+    destroyers.push(bindNativeEditorFocus(table));
+    destroyers.push(bindNativeCellPersistence(mainNode, table, { kind: 'teacher-main', meta }));
+    destroyers.push(bindAttendanceManualEditing(table, meta));
+    destroyers.push(bindTableRangeSelection(table, 'teacher-main'));
+    registry.set('main', table);
+    registry.set('teacher-main', table);
+    tables.push(table);
+    table.on('tableBuilt', () => {
+      window.requestAnimationFrame(() => {
+        unfoldAllColumns(table, { persist: false });
+        restoreStoredFoldState(table);
+        foldTeacherMainProfileByDefault(table);
+      });
+    });
+    const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="teacher-main"]');
+    if (searchInput) installGlobalSearch([table], searchInput, persistKey);
+  }
 
   const overviewNode = root.querySelector<HTMLElement>('[data-dashboard-grid="overview"]');
   if (overviewNode) {
@@ -2838,10 +4486,8 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     const table = buildTable(root, overviewNode, overview, persistKey, { kind: 'overview', meta }, annotationState, modalRef);
     trackTableBuilt(table, readyTables);
     bindTableSelection(table, 'overview', annotationState);
-    destroyers.push(bindInteractiveSuppression(overviewNode));
-    destroyers.push(bindTurnoSelects(overviewNode, table, meta));
-    destroyers.push(bindGrupoInputs(overviewNode, table, meta));
-    destroyers.push(bindConceptoInputs(overviewNode, table, meta));
+    destroyers.push(bindNativeEditorFocus(table));
+    destroyers.push(bindNativeCellPersistence(overviewNode, table, { kind: 'overview', meta }));
     destroyers.push(bindTableRangeSelection(table, 'overview'));
     registry.set('overview', table);
     tables.push(table);
@@ -2855,10 +4501,8 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     const table = buildTable(root, gradebookNode, gradebook, persistKey, { kind: 'gradebook', meta }, annotationState, modalRef);
     trackTableBuilt(table, readyTables);
     bindTableSelection(table, 'gradebook', annotationState);
-    destroyers.push(bindInteractiveSuppression(gradebookNode));
-    destroyers.push(bindTurnoSelects(gradebookNode, table, meta));
-    destroyers.push(bindGrupoInputs(gradebookNode, table, meta));
-    destroyers.push(bindConceptoInputs(gradebookNode, table, meta));
+    destroyers.push(bindNativeEditorFocus(table));
+    destroyers.push(bindNativeCellPersistence(gradebookNode, table, { kind: 'gradebook', meta }));
     destroyers.push(bindTableRangeSelection(table, 'gradebook'));
     registry.set('gradebook', table);
     tables.push(table);
@@ -2866,33 +4510,35 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     if (searchInput) installGlobalSearch([table], searchInput, persistKey);
   }
 
-  const attendanceNode = root.querySelector<HTMLElement>('[data-dashboard-grid="attendance-summary"]');
   const attendanceLogNode = root.querySelector<HTMLElement>('[data-dashboard-grid="attendance-log"]');
-  if (attendanceNode && attendanceLogNode) {
+  const attendanceNode = root.querySelector<HTMLElement>('[data-dashboard-grid="attendance-summary"]');
+  if (attendanceNode) {
     const summaryPersistKey = buildPersistKey(meta, 'attendance');
     const summaryTable = buildTable(root, attendanceNode, attendance.summary, summaryPersistKey, {
       kind: 'attendance-summary',
       meta,
     }, annotationState, modalRef);
+    trackTableBuilt(summaryTable, readyTables);
+    bindTableSelection(summaryTable, 'attendance-summary', annotationState);
+    destroyers.push(bindNativeEditorFocus(summaryTable));
+    destroyers.push(bindNativeCellPersistence(attendanceNode, summaryTable, { kind: 'attendance-summary', meta }));
+    destroyers.push(bindAttendanceManualEditing(summaryTable, meta));
+    destroyers.push(bindTableRangeSelection(summaryTable, 'attendance-summary'));
+    registry.set('attendance-summary', summaryTable);
+    tables.push(summaryTable);
+
+    const summarySearchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="attendance-summary"]');
+    if (summarySearchInput) installGlobalSearch([summaryTable], summarySearchInput, summaryPersistKey);
+  }
+  if (attendanceLogNode) {
+    const summaryPersistKey = buildPersistKey(meta, 'attendance');
     const logTable = buildTable(root, attendanceLogNode, attendance.log, `${summaryPersistKey}:log`, {
       kind: 'attendance-log',
       meta,
     }, annotationState, modalRef);
-    trackTableBuilt(summaryTable, readyTables);
     trackTableBuilt(logTable, readyTables);
-    bindTableSelection(summaryTable, 'attendance-summary', annotationState);
-    destroyers.push(bindInteractiveSuppression(attendanceNode));
-    destroyers.push(bindAttendanceManualEditing(summaryTable, meta));
-    destroyers.push(bindTurnoSelects(attendanceNode, summaryTable, meta));
-    destroyers.push(bindGrupoInputs(attendanceNode, summaryTable, meta));
-    destroyers.push(bindTableRangeSelection(summaryTable, 'attendance-summary'));
-    registry.set('attendance-summary', summaryTable);
     registry.set('attendance-log', logTable);
-    tables.push(summaryTable, logTable);
-
-    const summarySearchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="attendance-summary"]');
-    if (summarySearchInput) installGlobalSearch([summaryTable], summarySearchInput, summaryPersistKey);
-
+    tables.push(logTable);
     const logSearchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="attendance-log"]');
     if (logSearchInput) installGlobalSearch([logTable], logSearchInput, `${summaryPersistKey}:log-search`);
   }
@@ -2911,7 +4557,6 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     );
     trackTableBuilt(table, readyTables);
     registry.set('comments', table);
-    destroyers.push(bindInteractiveSuppression(commentsNode));
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="comments"]');
     if (searchInput) installGlobalSearch([table], searchInput, persistKey);
@@ -2923,9 +4568,11 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     const table = buildTable(root, adminNode, admin, persistKey, { kind: 'admin', meta }, annotationState, modalRef);
     trackTableBuilt(table, readyTables);
     bindTableSelection(table, 'admin', annotationState);
-    destroyers.push(bindInteractiveSuppression(adminNode));
-    destroyers.push(bindAdminRoleSelects(adminNode, table));
+    destroyers.push(bindNativeEditorFocus(table));
+    destroyers.push(bindCustomInteractiveCellFocus(table));
+    destroyers.push(bindNativeCellPersistence(adminNode, table, { kind: 'admin', meta }));
     destroyers.push(bindAdminActions(adminNode, table, meta));
+    destroyers.push(bindAdminDeleteSelectedButton(root, table, meta));
     destroyers.push(bindTableRangeSelection(table, 'admin'));
     registry.set('admin', table);
     tables.push(table);
@@ -2933,7 +4580,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     if (searchInput) installGlobalSearch([table], searchInput, persistKey);
   }
 
-  bindTeacherTabs(shell, root, normalizeText(meta?.initialTeacherTab || 'overview') || 'overview', registry, readyTables);
+  bindTeacherTabs(shell, root, normalizeText(meta?.initialTeacherTab || 'main') || 'main', registry, readyTables);
   bindScopeSelectors(shell);
   bindAttendanceConfig();
   bindCsvButtons(root, registry, meta);
@@ -2945,7 +4592,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
 
   return () => {
     destroyShortcut();
-    destroyRealtimeSync();
+    realtimeSync.destroy();
     destroyers.forEach((destroy) => {
       try {
         destroy();

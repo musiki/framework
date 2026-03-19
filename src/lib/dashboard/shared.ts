@@ -14,6 +14,8 @@ export interface DashboardGridColumn {
   kind?: string;
   dateKey?: string;
   cssClass?: string;
+  headerTooltip?: string | boolean;
+  titleFormatterParams?: Record<string, any>;
 }
 
 export interface DashboardGridProjection {
@@ -41,6 +43,18 @@ export const splitDashboardName = (value: unknown) => {
     return { firstName: '—', lastName: '' };
   }
 
+  if (normalized.includes(',')) {
+    const [rawLastName, ...rawFirstNameParts] = normalized
+      .split(',')
+      .map((part) => normalizeDashboardText(part))
+      .filter(Boolean);
+    const firstName = rawFirstNameParts.join(' ').replace(/\s+/g, ' ').trim();
+    return {
+      firstName: firstName || '—',
+      lastName: rawLastName || '',
+    };
+  }
+
   const parts = normalized.split(/\s+/).filter(Boolean);
   if (parts.length <= 1) {
     return {
@@ -50,8 +64,8 @@ export const splitDashboardName = (value: unknown) => {
   }
 
   return {
-    firstName: parts[0] || normalized,
-    lastName: parts.slice(1).join(' '),
+    firstName: parts.slice(0, -1).join(' ') || normalized,
+    lastName: parts.at(-1) || '',
   };
 };
 

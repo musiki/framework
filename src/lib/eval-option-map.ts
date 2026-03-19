@@ -1,4 +1,5 @@
 import { getCollection } from 'astro:content';
+import { extractEvalBlocks } from './eval/extract-eval-blocks.mjs';
 import { parseEvalBlock } from './eval/parse-eval-block.mjs';
 
 type EvalOptionMap = Map<string, string[]>;
@@ -16,18 +17,6 @@ function toOptionText(option: unknown): string {
   return '';
 }
 
-function extractEvalBlocks(markdown: string): string[] {
-  const blocks: string[] = [];
-  const pattern = /```eval\s*([\s\S]*?)```/g;
-  let match: RegExpExecArray | null = null;
-
-  while ((match = pattern.exec(markdown)) !== null) {
-    if (match[1]) blocks.push(match[1]);
-  }
-
-  return blocks;
-}
-
 export async function getEvalOptionMap(): Promise<EvalOptionMap> {
   const map: EvalOptionMap = new Map();
   const entries = await getCollection('cursos');
@@ -36,7 +25,10 @@ export async function getEvalOptionMap(): Promise<EvalOptionMap> {
     const markdown = typeof entry.body === 'string' ? entry.body : '';
     if (!markdown) continue;
 
-    const evalBlocks = extractEvalBlocks(markdown);
+    const evalBlocks = extractEvalBlocks(markdown, {
+      sourcePath: `cursos/${entry.id}`,
+      fallbackIdBase: `${entry.id}-eval`,
+    });
     if (evalBlocks.length === 0) continue;
 
     evalBlocks.forEach((block, index) => {

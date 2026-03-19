@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
+import { extractEvalBlocks } from '../lib/eval/extract-eval-blocks.mjs';
 import { parseEvalBlock } from '../lib/eval/parse-eval-block.mjs';
 
 const cwd = process.cwd();
@@ -12,18 +13,6 @@ const envPath = path.resolve(cwd, '.env');
 const normalizeText = (value) => String(value || '').trim();
 const normalizeSlugPath = (value) => normalizeText(value).replace(/^\/+|\/+$/g, '');
 const isMarkdownFile = (value) => /\.(md|mdx)$/i.test(String(value || ''));
-
-const extractEvalBlocks = (markdown) => {
-  const blocks = [];
-  const pattern = /```eval\s*([\s\S]*?)```/g;
-  let match = null;
-
-  while ((match = pattern.exec(markdown)) !== null) {
-    if (match[1]) blocks.push(match[1]);
-  }
-
-  return blocks;
-};
 
 const sanitizeFallbackId = (value) =>
   normalizeText(value)
@@ -124,7 +113,10 @@ const buildLiveAssignments = () => {
     const courseId = normalizeText(entryId.split('/')[0]);
     if (!entryId || !courseId) return;
 
-    extractEvalBlocks(raw).forEach((block, index) => {
+    extractEvalBlocks(raw, {
+      sourcePath: `cursos/${entryId}`,
+      fallbackIdBase: sanitizeFallbackId(entryId) || 'cursos-entry',
+    }).forEach((block, index) => {
       const parsed = parseEvalBlock(block, {
         fallbackId: `${sanitizeFallbackId(entryId) || 'cursos-entry'}-eval-${index + 1}`,
       });

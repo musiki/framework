@@ -27,6 +27,8 @@ import { buildAdminProjection } from '../lib/dashboard/admin-projection';
 import { buildCommentsProjection } from '../lib/dashboard/comments-projection';
 import { buildGradebookProjection } from '../lib/dashboard/gradebook-projection';
 import { buildOverviewProjection } from '../lib/dashboard/overview-projection';
+import { buildTeacherMainProjection } from '../lib/dashboard/teacher-main-projection';
+import { getCourseWelcomeFields, getWelcomeSubmissionAnswerText } from '../lib/dashboard/welcome-fields';
 import { toDashboardProjectionJson } from '../lib/dashboard/shared';
 import { getRoleBadgeLabel } from '../lib/dashboard-role';
 import 'tabulator-tables/dist/css/tabulator.min.css';
@@ -44,6 +46,7 @@ const dashboardUrl = new URL(Astro.request.url);
 const requestedCourseParam = String(dashboardUrl.searchParams.get('course') || '').trim();
 const requestedYearParam = String(dashboardUrl.searchParams.get('year') || '').trim();
 const requestedTabParam = String(dashboardUrl.searchParams.get('tab') || '').trim().toLowerCase();
+const requestedUserParam = String(dashboardUrl.searchParams.get('user') || '').trim();
 
 // Initialize Supabase
 const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
@@ -113,6 +116,56 @@ if (!dbUser) {
   matchedUsers = [dbUser];
 }
 
+const viewerMatchedUsers = matchedUsers.length > 0 ? matchedUsers : [dbUser];
+const viewerUserIds = Array.from(
+  new Set(
+    viewerMatchedUsers
+      .map((row) => row?.id)
+      .filter(Boolean),
+  ),
+);
+
+let viewerHasTeacherEnrollment = false;
+if (viewerUserIds.length > 0) {
+  const { data: teacherEnrollments, error: teacherEnrollmentError } = await supabase
+    .from('Enrollment')
+    .select('userId, roleInCourse')
+    .in('userId', viewerUserIds)
+    .limit(50);
+
+  if (teacherEnrollmentError) {
+    console.error('Error resolving teacher enrollment for dashboard viewer:', teacherEnrollmentError);
+  } else {
+    viewerHasTeacherEnrollment =
+      Array.isArray(teacherEnrollments) &&
+      teacherEnrollments.some((row) => normalizeRole(row?.roleInCourse) === 'teacher');
+  }
+}
+
+const viewerHasTeacherRole = viewerMatchedUsers.some(
+  (row) => normalizeRole(row?.role) === 'teacher'
+);
+const viewerIsTeacher = viewerHasTeacherRole || viewerHasTeacherEnrollment;
+
+if (requestedUserParam && viewerIsTeacher && requestedUserParam !== String(dbUser?.id || '')) {
+  try {
+    const { data: requestedUser, error: requestedUserError } = await supabase
+      .from('User')
+      .select('*')
+      .eq('id', requestedUserParam)
+      .maybeSingle();
+
+    if (requestedUserError) {
+      console.error('Error resolving requested dashboard user:', requestedUserError);
+    } else if (requestedUser) {
+      dbUser = requestedUser;
+      matchedUsers = [requestedUser];
+    }
+  } catch (error) {
+    console.error('Error loading requested dashboard user:', error);
+  }
+}
+
 const dashboardUserIds = Array.from(
   new Set(
     (matchedUsers.length > 0 ? matchedUsers : [dbUser])
@@ -142,9 +195,9 @@ const hasTeacherRole = (matchedUsers.length > 0 ? matchedUsers : [dbUser]).some(
   (row) => normalizeRole(row?.role) === 'teacher'
 );
 const isTeacher = hasTeacherRole || hasTeacherEnrollment;
-const initialTeacherDashboardTab = isTeacher && ['overview', 'gradebook', 'attendance', 'comments', 'admin'].includes(requestedTabParam)
+const initialTeacherDashboardTab = isTeacher && ['main', 'log', 'admin'].includes(requestedTabParam)
   ? requestedTabParam
-  : 'overview';
+  : 'main';
 
 if (isTeacher && normalizeRole(dbUser?.role) !== 'teacher') {
   const teacherRow = matchedUsers.find((row) => normalizeRole(row?.role) === 'teacher');
@@ -610,6 +663,18 @@ const splitAttendanceName = (value: unknown) => {
     return { firstName: '—', lastName: '' };
   }
 
+  if (normalized.includes(',')) {
+    const [rawLastName, ...rawFirstNameParts] = normalized
+      .split(',')
+      .map((part) => normalizeText(part))
+      .filter(Boolean);
+    const firstName = rawFirstNameParts.join(' ').replace(/\s+/g, ' ').trim();
+    return {
+      firstName: firstName || '—',
+      lastName: rawLastName || '',
+    };
+  }
+
   const parts = normalized.split(/\s+/).filter(Boolean);
   if (parts.length <= 1) {
     return {
@@ -619,8 +684,8 @@ const splitAttendanceName = (value: unknown) => {
   }
 
   return {
-    firstName: parts[0] || normalized,
-    lastName: parts.slice(1).join(' '),
+    firstName: parts.slice(0, -1).join(' ') || normalized,
+    lastName: parts.at(-1) || '',
   };
 };
 
@@ -718,6 +783,12 @@ const isSystemMetaAssignmentRef = (value: unknown) => {
   return normalized.includes('/__meta__/') || normalized.startsWith('__meta__:');
 };
 
+const isWelcomeAssignmentRef = (value: unknown) => {
+  const normalized = String(value || '').trim().replace(/^\/+|\/+$/g, '').toLowerCase();
+  if (!normalized) return false;
+  return normalized === '_welcome' || normalized.endsWith('/_welcome') || normalized.includes('/_welcome/');
+};
+
 const isVisibleCourseDeliveryAssignment = (assignment: any) => {
   if (!assignment || typeof assignment !== 'object') return false;
   return !isSystemMetaAssignmentRef(assignment?.slug || assignment?.id || '');
@@ -808,7 +879,14 @@ if (!isTeacher) {
   studentSubmissions = (studentSubmissions || []).filter((submission: any) => !isKnownCourseMetaSubmission(submission));
 }
 
-const courseStudentMetaByKey = new Map<string, { turno: string; concepto: string; grupo: string }>();
+const courseStudentMetaByKey = new Map<string, {
+  turno: string;
+  concepto: string;
+  grupo: string;
+  notes: string;
+  notaFinal: string;
+}>();
+const courseStudentMetaUpdatedAtByKey = new Map<string, string>();
 const courseAttendanceConfigByKey = new Map<string, { startDate: string; endDate: string; updatedAt: string }>();
 const courseAttendanceManualByKey = new Map<string, Record<string, number>>();
 if (isTeacher) {
@@ -822,15 +900,30 @@ if (isTeacher) {
     if (metaKind === COURSE_STUDENT_META_KIND) {
       const studentId = normalizeText(payload?.studentId || submission?.userId);
       if (!studentId) return;
+      const mapKey = `${normalizeTextLower(courseId)}::${year}::${studentId}`;
+      const nextUpdatedAt = normalizeText(
+        payload?.updatedAt
+          || submission?.submittedAt
+          || submission?.updatedAt
+          || submission?.createdAt
+          || '',
+      );
+      const existingUpdatedAt = courseStudentMetaUpdatedAtByKey.get(mapKey) || '';
+      if (existingUpdatedAt && getDateTimestamp(nextUpdatedAt) < getDateTimestamp(existingUpdatedAt)) {
+        return;
+      }
 
       courseStudentMetaByKey.set(
-        `${normalizeTextLower(courseId)}::${year}::${studentId}`,
+        mapKey,
         {
           turno: normalizeText(payload?.turno || '').toUpperCase(),
           concepto: normalizeText(payload?.concepto || payload?.concept || ''),
           grupo: normalizeText(payload?.grupo || payload?.group || ''),
+          notes: normalizeText(payload?.notes || ''),
+          notaFinal: normalizeText(payload?.notaFinal || payload?.finalGrade || ''),
         },
       );
+      courseStudentMetaUpdatedAtByKey.set(mapKey, nextUpdatedAt);
       return;
     }
 
@@ -996,6 +1089,26 @@ const activeCourseId = availableCourseMeta.some((course) => course.courseId === 
   : String(availableCourseMeta[0]?.courseId || '');
 const activeCourseMeta = availableCourseMeta.find((course) => course.courseId === activeCourseId) || null;
 const activeCourseCode = String(activeCourseMeta?.code || '').trim();
+const activeCourseWelcomeFields = activeCourseId
+  ? await getCourseWelcomeFields(activeCourseId)
+  : [];
+
+const buildCourseLessonHref = (courseIdInput, lessonPath = '') => {
+  const courseId = canonicalizeCourseId(courseIdInput);
+  if (!courseId) return '#';
+
+  const courseEntry = courseEntries.find((entry: any) => canonicalizeCourseId(entry?.courseId) === courseId);
+  const courseSlug = normalizeText(courseEntry?.slug || courseId);
+  const lessonSegments = normalizeText(lessonPath)
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+  return lessonSegments
+    ? `/cursos/${encodeURIComponent(courseSlug)}/${lessonSegments}`
+    : `/cursos/${encodeURIComponent(courseSlug)}`;
+};
 
 const activeCourseSubmissions = (() => {
   if (!activeCourseId) {
@@ -1058,6 +1171,72 @@ const scopedTeacherSubmissions = isTeacher
   : [];
 const scopedStudentSubmissions = !isTeacher
   ? (activeCourseSubmissions || []).filter((submission: any) => matchesActiveYear(submission))
+  : [];
+const activeCourseWelcomeFieldByEvalId = new Map(
+  (activeCourseWelcomeFields || [])
+    .map((field) => [normalizeText(field?.evalId || ''), field] as const)
+    .filter(([evalId]) => Boolean(evalId)),
+);
+const scopedStudentWelcomeSubmissions = !isTeacher
+  ? scopedStudentSubmissions.filter((submission: any) =>
+      activeCourseWelcomeFieldByEvalId.has(normalizeText(submission?.assignmentId || '')),
+    )
+  : [];
+const scopedStudentRegularSubmissions = !isTeacher
+  ? scopedStudentSubmissions.filter((submission: any) =>
+      !activeCourseWelcomeFieldByEvalId.has(normalizeText(submission?.assignmentId || '')),
+    )
+  : [];
+const studentWelcomeDeliveryRow = !isTeacher && activeCourseWelcomeFields.length > 0
+  ? (() => {
+      const submissionsByEvalId = new Map(
+        scopedStudentWelcomeSubmissions.map((submission: any) => [
+          normalizeText(submission?.assignmentId || ''),
+          submission,
+        ]),
+      );
+      const completedCount = activeCourseWelcomeFields.filter((field) =>
+        submissionsByEvalId.has(normalizeText(field?.evalId || '')),
+      ).length;
+      const latestSubmission = [...submissionsByEvalId.values()]
+        .sort((left: any, right: any) => getDateTimestamp(right?.submittedAt) - getDateTimestamp(left?.submittedAt))[0] || null;
+      const answersSummary = activeCourseWelcomeFields
+        .map((field) => {
+          const submission = submissionsByEvalId.get(normalizeText(field?.evalId || ''));
+          const answer = getWelcomeSubmissionAnswerText(submission);
+          if (!answer) return '';
+          return `${String(field?.title || field?.prompt || field?.evalId || 'Respuesta')}: ${answer}`;
+        })
+        .filter(Boolean)
+        .join(' · ');
+
+      return {
+        kind: 'welcome-form',
+        assignmentLabel: 'Formulario de bienvenida',
+        assignmentId: '_welcome',
+        courseLabel: String(activeCourseMeta?.title || decodeUriSafe(activeCourseId) || '—'),
+        submittedAt: latestSubmission?.submittedAt || latestSubmission?.updatedAt || '',
+        statusClass: completedCount === activeCourseWelcomeFields.length ? 'status-graded' : 'status-pending',
+        statusLabel:
+          completedCount === activeCourseWelcomeFields.length
+            ? '✓ Completado'
+            : completedCount > 0
+              ? `⏳ En progreso (${completedCount}/${activeCourseWelcomeFields.length})`
+              : '⏳ Pendiente',
+        scoreLabel: '—',
+        answerSummary: answersSummary || 'Formulario de bienvenida del curso.',
+        href: buildCourseLessonHref(activeCourseId, '_welcome'),
+      };
+    })()
+  : null;
+const studentDeliveryRows = !isTeacher
+  ? [
+      ...(studentWelcomeDeliveryRow ? [studentWelcomeDeliveryRow] : []),
+      ...scopedStudentRegularSubmissions.map((submission: any) => ({
+        kind: 'submission',
+        submission,
+      })),
+    ]
   : [];
 const scopedTeacherEnrollments = isTeacher
   ? (allEnrollments || []).filter((enrollment: any) => {
@@ -1915,6 +2094,7 @@ const teacherCourseGradeGroups = (() => {
       const courseAssignmentsMap = new Map<string, any>();
 
       (liveEvalEntriesByCourseId[courseId] || []).forEach((entry: any) => {
+        if (isWelcomeAssignmentRef(entry?.entryId || entry?.sourcePath || '')) return;
         const assignmentId = String(entry?.evalId || '').trim();
         if (!assignmentId) return;
         courseAssignmentsMap.set(assignmentId, {
@@ -1932,6 +2112,7 @@ const teacherCourseGradeGroups = (() => {
           || courseAssignmentsMap.has(assignmentId)
           || !liveEvalEntryById.has(assignmentId)
           || isSystemMetaAssignmentRef(meta.assignmentSlug || assignmentId)
+          || isWelcomeAssignmentRef(meta.assignmentSlug || assignmentId)
         ) return;
         courseAssignmentsMap.set(assignmentId, {
           id: assignmentId,
@@ -2060,6 +2241,8 @@ const teacherCourseGradeGroups = (() => {
                 || studentEnrollment?.concepto
                 || '',
             );
+            const notesValue = normalizeText(savedMeta?.notes || '');
+            const finalGrade = normalizeText(savedMeta?.notaFinal || '');
             const rowSearch = [
               courseId,
               year,
@@ -2069,6 +2252,8 @@ const teacherCourseGradeGroups = (() => {
               String(attendanceCount),
               groupValue,
               conceptValue,
+              notesValue,
+              finalGrade,
               ...lessonGroups.map((lesson: any) => lesson.lessonLabel),
               ...flatAssignments.map((assignment: any) => assignment.id),
             ]
@@ -2112,6 +2297,8 @@ const teacherCourseGradeGroups = (() => {
               turnoValue,
               groupValue,
               conceptValue,
+              notesValue,
+              finalGrade,
               attendanceCount,
               groupCompletion,
               rowSearch,
@@ -2328,6 +2515,8 @@ if (isTeacher && activeCourseId) {
   }
 }
 
+const teacherWelcomeFields = isTeacher ? activeCourseWelcomeFields : [];
+
 const teacherOverviewProjection = isTeacher
   ? buildOverviewProjection({
       activeCourseId,
@@ -2337,6 +2526,7 @@ const teacherOverviewProjection = isTeacher
       submissions: scopedTeacherSubmissions,
       todayDateKey: todayAttendanceDateKey,
       teacherCourseGradeGroups,
+      welcomeFields: teacherWelcomeFields,
     })
   : { columns: [], rows: [], emptyMessage: '' };
 
@@ -2359,6 +2549,14 @@ const teacherAttendanceProjection = isTeacher
       summary: { columns: [], rows: [], emptyMessage: '' },
       log: { columns: [], rows: [], emptyMessage: '' },
     };
+
+const teacherMainProjection = isTeacher
+  ? buildTeacherMainProjection({
+      overview: teacherOverviewProjection,
+      attendance: teacherAttendanceProjection,
+      gradebook: teacherGradebookProjection,
+    })
+  : { columns: [], rows: [], emptyMessage: '' };
 
 const teacherCommentsProjection = isTeacher
   ? buildCommentsProjection({
@@ -2384,6 +2582,7 @@ const teacherTabulatorMetaJson = toDashboardProjectionJson({
   supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.SUPABASE_URL,
   supabaseKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '',
 });
+const teacherMainProjectionJson = toDashboardProjectionJson(teacherMainProjection);
 const teacherOverviewProjectionJson = toDashboardProjectionJson(teacherOverviewProjection);
 const teacherGradebookProjectionJson = toDashboardProjectionJson(teacherGradebookProjection);
 const teacherAttendanceProjectionJson = toDashboardProjectionJson(teacherAttendanceProjection);
@@ -2398,15 +2597,16 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
     <meta charset="utf-8" />
     <style is:inline>
       .wrap {
+        --dashboard-control-height: 2rem;
         width: 100%;
         max-width: none;
         margin: 0;
-        padding: 0.9rem 1rem 1.4rem;
+        padding: 0.55rem 0.7rem 1rem;
       }
       .dashboard-shell {
         display: grid;
         grid-template-columns: clamp(176px, 13vw, 218px) minmax(0, 1fr);
-        gap: 0;
+        gap: 0.7rem;
         align-items: start;
         min-height: calc(100dvh - 7rem);
         transition: grid-template-columns 0.25s ease;
@@ -2414,6 +2614,13 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .dashboard-shell[data-left-open="false"] {
         grid-template-columns: 2.4rem minmax(0, 1fr);
+      }
+      .dashboard-shell--teacher,
+      .dashboard-shell--teacher[data-left-open="false"] {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0;
+        min-height: calc(100dvh - 6.2rem);
+        height: calc(100dvh - 6.2rem);
       }
       .dashboard-sidebar {
         position: sticky;
@@ -2476,6 +2683,13 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .dashboard-main {
         min-width: 0;
+      }
+      .dashboard-shell--teacher .dashboard-main {
+        width: 100%;
+        min-height: 0;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
       }
       .group-title { margin-top: 3rem; margin-bottom: 1rem; border-bottom: 1px solid var(--c-border); padding-bottom: 0.5rem; }
       .student-section { margin-bottom: 2.25rem; }
@@ -2601,9 +2815,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         background: transparent;
         color: var(--c-fg);
         font: inherit;
+        box-sizing: border-box;
       }
       .attendance-config-input,
       .attendance-log-search {
+        height: var(--dashboard-control-height);
         padding: 0.45rem 0.55rem;
       }
       .attendance-grid-wrap {
@@ -2738,21 +2954,25 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         line-height: 1;
         white-space: nowrap;
       }
+      .role-badge--teacher,
       .role-teacher {
         --role-badge-bg: rgba(25, 118, 210, 0.12);
         --role-badge-fg: #145ea8;
         --role-badge-border: rgba(25, 118, 210, 0.22);
       }
+      .role-badge--student,
       .role-student {
         --role-badge-bg: rgba(123, 31, 162, 0.1);
         --role-badge-fg: #6f1f93;
         --role-badge-border: rgba(123, 31, 162, 0.2);
       }
+      :root.dark .role-badge--teacher,
       :root.dark .role-teacher {
         --role-badge-bg: rgba(25, 118, 210, 0.24);
         --role-badge-fg: #d7ecff;
         --role-badge-border: rgba(147, 197, 253, 0.4);
       }
+      :root.dark .role-badge--student,
       :root.dark .role-student {
         --role-badge-bg: rgba(124, 58, 237, 0.24);
         --role-badge-fg: #efe1ff;
@@ -2839,19 +3059,142 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         margin: 0;
       }
       .dashboard-scope-field {
+        --dashboard-control-height: 2rem;
         display: grid;
         flex-direction: column;
         gap: 0.22rem;
         font-size: 0.78rem;
         color: var(--c-fg-dim);
       }
+      .dashboard-scope-field--action {
+        align-content: end;
+      }
       .dashboard-scope-field select {
         min-width: 150px;
+        height: var(--dashboard-control-height);
         border: 1px solid var(--c-border);
         border-radius: 7px;
         background: var(--c-bg);
         color: var(--c-fg);
         padding: 0.34rem 0.48rem;
+        box-sizing: border-box;
+      }
+      .dashboard-topbar {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 0.55rem 0.9rem;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        margin: 0 0 0.7rem 0;
+      }
+      .dashboard-topbar-tabs {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.15rem;
+        flex-wrap: nowrap;
+        min-width: max-content;
+      }
+      .dashboard-topbar .tab {
+        border-left: 0;
+        border-bottom: 2px solid transparent;
+        padding: 0.32rem 0.56rem;
+        font-size: 0.86rem;
+      }
+      .dashboard-topbar .tab.active {
+        border-left-color: transparent;
+        border-bottom-color: var(--c-link);
+      }
+      .dashboard-topbar-controls {
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        flex-wrap: nowrap;
+        margin-left: auto;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .dashboard-topbar-context {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 0.5rem;
+        flex-wrap: nowrap;
+        min-width: max-content;
+      }
+      .dashboard-topbar-context--search {
+        flex: 1 1 auto;
+        min-width: 12rem;
+      }
+      .dashboard-topbar-context[hidden] {
+        display: none !important;
+      }
+      .dashboard-topbar-search {
+        width: 100%;
+        min-width: 0;
+      }
+      .dashboard-scope-field--inline {
+        min-width: 11.5rem;
+      }
+      .dashboard-scope-field--year {
+        min-width: 6.2rem;
+      }
+      .dashboard-scope-field--inline select {
+        min-width: 0;
+        width: 100%;
+        border-radius: 0;
+        padding: 0.36rem 0.48rem;
+      }
+      .dashboard-live-mode-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--dashboard-control-height);
+        min-width: var(--dashboard-control-height);
+        padding: 0;
+      }
+      .dashboard-live-mode-indicator {
+        width: 0.64rem;
+        height: 0.64rem;
+        min-width: 0.64rem;
+        border: 1px solid color-mix(in srgb, var(--c-border) 88%, transparent);
+        background: color-mix(in srgb, var(--c-fg-dim) 36%, transparent);
+      }
+      .dashboard-live-mode-indicator[data-state="on"] {
+        background: #16a34a;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 2px color-mix(in srgb, #16a34a 18%, transparent);
+      }
+      .dashboard-save-indicator {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 3.15rem;
+        min-width: 3.15rem;
+        height: var(--dashboard-control-height);
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+      .dashboard-save-indicator-dot {
+        width: 6px;
+        height: 6px;
+        min-width: 6px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--c-fg-dim) 42%, transparent);
+      }
+      .dashboard-save-indicator[data-state="saving"] .dashboard-save-indicator-dot {
+        background: #eab308;
+        box-shadow: 0 0 0 2px color-mix(in srgb, #eab308 20%, transparent);
+      }
+      .dashboard-save-indicator[data-state="saved"] .dashboard-save-indicator-dot {
+        background: #16a34a;
+        box-shadow: 0 0 0 2px color-mix(in srgb, #16a34a 18%, transparent);
+      }
+      .dashboard-save-indicator[data-state="error"] .dashboard-save-indicator-dot {
+        background: #dc2626;
+        box-shadow: 0 0 0 2px color-mix(in srgb, #dc2626 18%, transparent);
       }
       .deliveries-toolbar {
         margin-bottom: 0.7rem;
@@ -2923,6 +3266,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .teacher-dashboard-panels {
         min-width: 0;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
       }
       .student-dashboard-panels {
         min-width: 0;
@@ -3263,23 +3611,72 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .teacher-panel {
         min-width: 0;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .teacher-panel[hidden],
+      [data-dashboard-tab-panel][hidden] {
+        display: none !important;
+      }
+      .teacher-panel:not([hidden]) {
+        display: flex;
       }
       .teacher-grid-shell {
         display: grid;
         gap: 0.55rem;
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+      }
+      .teacher-grid-shell--stacked {
+        gap: 0.95rem;
+        height: auto;
+      }
+      .teacher-grid-shell > .dashboard-tabulator {
+        min-height: 0;
+        height: 100%;
+      }
+      .teacher-log-section {
+        display: grid;
+        gap: 0.45rem;
+        min-height: 0;
+      }
+      .teacher-section-title {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.2;
       }
       .teacher-grid-toolbar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 0.45rem;
-        flex-wrap: wrap;
+        gap: 0.45rem 0.6rem;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+      .teacher-grid-toolbar--section {
+        display: flex;
+        align-items: center;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+      .teacher-grid-toolbar > .dashboard-grid-search,
+      .teacher-grid-toolbar--section > .dashboard-grid-search {
+        flex: 1 1 16rem;
+        min-width: 12rem;
       }
       .dashboard-grid-actions {
         display: inline-flex;
         align-items: center;
         gap: 0.45rem;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+        margin-left: auto;
+        flex: 0 0 auto;
       }
       .enrollment-chip {
         display: inline-flex;
@@ -3320,6 +3717,24 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         color: var(--c-fg-dim);
         font-size: 0.84rem;
       }
+      .attendance-config-bar--toolbar {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-wrap: nowrap;
+        min-width: 0;
+        flex: 0 0 auto;
+      }
+      .attendance-config-label {
+        font-size: 0.78rem;
+        color: var(--c-fg-dim);
+        white-space: nowrap;
+      }
+      .attendance-config-bar--toolbar .attendance-config-input {
+        width: 8.6rem;
+        min-width: 8.6rem;
+        max-width: 8.6rem;
+      }
       .attendance-config-state {
         min-height: 1rem;
       }
@@ -3339,18 +3754,42 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         background: transparent;
         color: var(--c-fg);
         font: inherit;
+        box-sizing: border-box;
       }
       .dashboard-grid-search {
-        min-width: min(420px, 100%);
+        height: var(--dashboard-control-height);
+        width: 100%;
+        min-width: 0;
         padding: 0.32rem 0.45rem;
       }
       .dashboard-grid-btn {
-        padding: 0.3rem 0.48rem;
+        height: var(--dashboard-control-height);
+        min-height: var(--dashboard-control-height);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.22rem;
+        padding: 0 0.48rem;
+        line-height: 1;
         cursor: pointer;
+      }
+      .dashboard-grid-btn svg {
+        width: 0.78rem;
+        height: 0.78rem;
+        flex-shrink: 0;
+      }
+      .dashboard-grid-btn--square {
+        width: var(--dashboard-control-height);
+        min-width: var(--dashboard-control-height);
+        padding: 0;
       }
       .dashboard-grid-btn--primary {
         border-color: var(--c-link);
         color: var(--c-link);
+      }
+      .dashboard-grid-btn--danger {
+        border-color: color-mix(in srgb, #dc2626 42%, var(--c-border));
+        color: #dc2626;
       }
       .dashboard-grid-btn--icon {
         display: inline-flex;
@@ -3360,6 +3799,15 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-grid-btn:hover {
         border-color: var(--c-link);
         color: var(--c-link);
+      }
+      .dashboard-grid-btn--danger:hover,
+      .dashboard-grid-btn--danger[data-state="error"] {
+        border-color: #dc2626;
+        color: #dc2626;
+      }
+      .dashboard-grid-btn:disabled {
+        opacity: 0.52;
+        cursor: not-allowed;
       }
       .dashboard-grid-icon-btn {
         width: 1.72rem;
@@ -3394,128 +3842,10 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         border-color: #dc2626;
         color: #dc2626;
       }
-      .dashboard-inline-select-wrap {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-      }
-      .dashboard-inline-input-wrap {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-      }
-      .dashboard-inline-select {
-        width: 100%;
-        min-width: 6.1rem;
-        max-width: 7.6rem;
-        min-height: 1.75rem;
-        border: 1px solid transparent;
-        border-radius: 0;
-        background-color: transparent;
-        color: var(--c-fg);
-        font: inherit;
-        font-size: 0.74rem;
-        line-height: 1.2;
-        padding: 0.18rem 1.45rem 0.18rem 0.42rem;
-        appearance: none;
-        -webkit-appearance: none;
-        background-image:
-          linear-gradient(45deg, transparent 50%, currentColor 50%),
-          linear-gradient(135deg, currentColor 50%, transparent 50%);
-        background-position:
-          calc(100% - 0.72rem) calc(50% - 0.12rem),
-          calc(100% - 0.48rem) calc(50% - 0.12rem);
-        background-size: 0.24rem 0.24rem, 0.24rem 0.24rem;
-        background-repeat: no-repeat;
-        transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
-      }
-      .dashboard-inline-select--turno {
-        min-width: 3.2rem;
-        max-width: 3.6rem;
-        padding-right: 1.2rem;
-        text-align: center;
-      }
-      .dashboard-inline-select[data-role="teacher"] {
-        color: #145ea8;
-        border-color: rgba(25, 118, 210, 0.35);
-        background-color: rgba(25, 118, 210, 0.07);
-      }
-      .dashboard-inline-select[data-role="student"] {
-        color: #6f1f93;
-        border-color: rgba(123, 31, 162, 0.28);
-        background-color: rgba(123, 31, 162, 0.07);
-      }
-      :root.dark .dashboard-inline-select[data-role="teacher"] {
-        color: #93c5fd;
-        border-color: rgba(147, 197, 253, 0.35);
-        background-color: rgba(25, 118, 210, 0.18);
-      }
-      :root.dark .dashboard-inline-select[data-role="student"] {
-        color: #d8b4fe;
-        border-color: rgba(196, 181, 253, 0.35);
-        background-color: rgba(124, 58, 237, 0.18);
-      }
-      .dashboard-inline-input {
-        width: 100%;
-        min-width: 3rem;
-        max-width: 3.6rem;
-        min-height: 1.75rem;
-        border: 1px solid transparent;
-        border-radius: 0;
-        background-color: transparent;
-        color: var(--c-fg);
-        font: inherit;
-        font-size: 0.74rem;
-        line-height: 1.2;
-        padding: 0.18rem 0.3rem;
-        text-align: center;
-        transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
-      }
-      .dashboard-inline-input:hover {
-        border-color: var(--c-border);
-        outline: none;
-      }
-      .dashboard-inline-input:focus {
-        border-color: var(--c-link);
-        outline: none;
-      }
-      .dashboard-inline-input[data-state="saving"] {
-        border-color: #f59e0b;
-        color: #f59e0b;
-      }
-      .dashboard-inline-input[data-state="error"] {
-        border-color: #dc2626;
-        color: #dc2626;
-      }
-      .dashboard-inline-input:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-      .dashboard-inline-input--concepto {
-        max-width: 4rem;
-      }
-      .dashboard-inline-select:hover {
-        border-color: var(--c-border);
-        outline: none;
-      }
-      .dashboard-inline-select:focus {
-        border-color: var(--c-link);
-        outline: none;
-      }
-      .dashboard-inline-select[data-state="saving"] {
-        border-color: #f59e0b;
-        color: #f59e0b;
-      }
-      .dashboard-inline-select[data-state="error"] {
-        border-color: #dc2626;
-        color: #dc2626;
-      }
-      .dashboard-inline-select:disabled,
-      .dashboard-inline-select[data-state="disabled"] {
-        opacity: 0.55;
-        cursor: not-allowed;
+      .dashboard-tabulator .tabulator-col.dashboard-admin-row-select,
+      .dashboard-tabulator .tabulator-cell.dashboard-admin-row-select {
+        padding-left: 0;
+        padding-right: 0;
       }
       .dashboard-cell--selected {
         box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-link) 60%, transparent);
@@ -3525,7 +3855,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         border: 1px solid var(--c-border);
         background: var(--c-bg);
         border-radius: 0;
-        overflow: auto;
+        overflow: hidden;
         overscroll-behavior-x: none;
       }
       .dashboard-tabulator .tabulator-tableholder {
@@ -3564,7 +3894,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         font-weight: 800;
         border-right: 2px solid var(--c-border) !important;
       }
-      .dashboard-tabulator .dashboard-grade-col-even { background-color: var(--c-bg-mute) !important; }
+      .dashboard-tabulator .dashboard-grade-col-even { background-color: transparent !important; }
       .dashboard-tabulator .dashboard-grade-col-odd { background-color: transparent !important; }
       /* Unfolded/expanded grade columns: allow text to wrap */
       .dashboard-tabulator .tabulator-cell.dashboard-grade-col-even,
@@ -3578,12 +3908,6 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         font-size: 1rem;
         color: var(--c-link);
         line-height: 1;
-      }
-      /* Suppress Tabulator range-selection outline on interactive cells */
-      .dashboard-tabulator .tabulator-cell:has(.dashboard-inline-select-wrap),
-      .dashboard-tabulator .tabulator-cell:has(.dashboard-inline-input-wrap) {
-        outline: none !important;
-        box-shadow: none !important;
       }
       .dashboard-tabulator .tabulator-col-title,
       .dashboard-tabulator .tabulator-col-content,
@@ -3631,7 +3955,17 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         text-overflow: ellipsis;
         white-space: nowrap;
         font-weight: 600;
-      }      .group-header-icon {
+      }
+      .tabulator-col.group-folded .group-header-title {
+        text-overflow: clip;
+      }
+      .fold-header-label {
+        display: block;
+        overflow: hidden;
+        text-overflow: clip;
+        white-space: nowrap;
+      }
+      .group-header-icon {
         width: 0;
         height: 0;
         border-top: 5px solid transparent;
@@ -3653,12 +3987,60 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-tabulator .tabulator-row {
         background: var(--c-bg) !important;
       }
+      .dashboard-tabulator .tabulator-row:nth-child(even) {
+        background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%) !important;
+      }
+      .dashboard-tabulator .tabulator-row:nth-child(odd) .tabulator-cell {
+        background: transparent !important;
+      }
+      .dashboard-tabulator .tabulator-row:nth-child(even) .tabulator-cell {
+        background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%) !important;
+      }
       .dashboard-tabulator .tabulator-row:hover {
         background: color-mix(in srgb, var(--c-link) 2%, var(--c-bg) 98%);
       }
+      .dashboard-tabulator .tabulator-row:hover .tabulator-cell {
+        background: color-mix(in srgb, var(--c-link) 2%, var(--c-bg) 98%) !important;
+      }
       .dashboard-tabulator .tabulator-cell {
         padding: 0.18rem 0.22rem;
-        background: var(--c-bg) !important;
+        background: transparent !important;
+      }
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable {
+        background: color-mix(in srgb, transparent 92%, var(--c-fg) 8%) !important;
+      }
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing {
+        padding: 0 !important;
+        background: color-mix(in srgb, var(--c-link) 8%, transparent) !important;
+      }
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing > input,
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing > textarea,
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing > select {
+        width: 100%;
+        min-height: 100%;
+        border: 0;
+        outline: none;
+        box-sizing: border-box;
+        background: transparent;
+        color: var(--c-fg);
+        font: inherit;
+        font-size: 0.74rem;
+        line-height: 1.2;
+        padding: 0.2rem 0.32rem;
+        border-radius: 0;
+      }
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing > textarea {
+        resize: none;
+      }
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--turno,
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--course-role,
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--grupo,
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--concepto,
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--final-grade {
+        text-align: center;
+      }
+      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--notes {
+        text-align: left;
       }
       .dashboard-tabulator[data-range-selection="true"] .tabulator-row,
       .dashboard-tabulator[data-range-selection="true"] .tabulator-cell,
@@ -3686,6 +4068,38 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-tabulator .tabulator-table {
         background: var(--c-bg) !important;
         width: 100%;
+      }
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-col[tabulator-field="lastName"] {
+        position: sticky;
+        left: 0;
+        z-index: 8;
+        background: var(--c-bg) !important;
+        box-shadow: 1px 0 0 var(--c-border);
+      }
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-cell[tabulator-field="lastName"] {
+        position: sticky;
+        left: 0;
+        z-index: 4;
+        background: var(--c-bg) !important;
+        box-shadow: 1px 0 0 var(--c-border);
+      }
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row:nth-child(even) .tabulator-cell[tabulator-field="lastName"] {
+        background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%) !important;
+      }
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row:hover .tabulator-cell[tabulator-field="lastName"] {
+        background: color-mix(in srgb, var(--c-link) 2%, var(--c-bg) 98%) !important;
+      }
+      .dashboard-tabulator .tabulator-row:nth-child(odd) .tabulator-cell.dashboard-grade-sub-avg {
+        background-color: var(--c-link-faded, rgba(11, 108, 255, 0.05)) !important;
+      }
+      .dashboard-tabulator .tabulator-row:nth-child(even) .tabulator-cell.dashboard-grade-sub-avg {
+        background-color: color-mix(in srgb, var(--c-link-faded, rgba(11, 108, 255, 0.05)) 78%, var(--c-bg) 22%) !important;
+      }
+      .dashboard-tabulator .tabulator-row:nth-child(odd) .tabulator-cell.dashboard-grade-lesson-avg {
+        background-color: var(--c-link-faded, rgba(11, 108, 255, 0.15)) !important;
+      }
+      .dashboard-tabulator .tabulator-row:nth-child(even) .tabulator-cell.dashboard-grade-lesson-avg {
+        background-color: color-mix(in srgb, var(--c-link-faded, rgba(11, 108, 255, 0.15)) 82%, var(--c-bg) 18%) !important;
       }
       .dashboard-tabulator .tabulator-menu,
       .dashboard-tabulator .tabulator-popup {
@@ -4102,9 +4516,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
 :root.dark .dashboard-grid-search,
       :root.dark .dashboard-grid-btn,
-      :root.dark .dashboard-grid-icon-btn,
-      :root.dark .dashboard-inline-select,
-      :root.dark .dashboard-inline-input {
+      :root.dark .dashboard-grid-icon-btn {
         background-color: transparent;
         color: var(--c-fg);
       }
@@ -4147,10 +4559,6 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       :root.dark .dashboard-annotation-modal__field,
       :root.dark .dashboard-annotation-modal__close {
         color: color-mix(in srgb, var(--c-fg) 78%, #ffffff 22%);
-      }
-      :root.dark .dashboard-inline-select:disabled,
-      :root.dark .dashboard-inline-select[data-state="disabled"] {
-        color: color-mix(in srgb, var(--c-fg) 62%, #ffffff 18%);
       }
       :root.dark .dashboard-pill--score {
         color: #dbeafe;
@@ -4277,7 +4685,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .eval-preview-tooltip code {
         font-size: 0.75rem;
       }
-      @media (max-width: 960px) {
+      @media (max-width: 900px) {
         .wrap {
           padding: 0;
         }
@@ -4340,6 +4748,48 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
           border-left-color: transparent;
           border-bottom-color: var(--c-link);
         }
+        .dashboard-topbar {
+          padding: 0.45rem 0.6rem 0;
+        }
+        .dashboard-topbar-tabs,
+        .dashboard-topbar-controls {
+          width: auto;
+          min-width: max-content;
+        }
+        .dashboard-topbar-controls {
+          justify-content: flex-start;
+          margin-left: 0;
+        }
+        .dashboard-scope-field--inline {
+          flex: 0 0 auto;
+          min-width: 9.2rem;
+        }
+        .dashboard-topbar-search {
+          width: 14rem;
+          min-width: 14rem;
+        }
+        .dashboard-live-mode-toggle {
+          flex: 0 0 auto;
+        }
+        .teacher-grid-toolbar,
+        .teacher-grid-toolbar--section {
+          display: flex;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
+        .attendance-config-bar--toolbar {
+          flex-wrap: nowrap;
+        }
+        .attendance-config-bar--toolbar .attendance-config-input {
+          width: 8.2rem;
+          min-width: 8.2rem;
+          max-width: 8.2rem;
+        }
+        .dashboard-grid-actions {
+          justify-content: flex-start;
+          margin-left: 0;
+        }
       }
     </style>
   </head>
@@ -4350,58 +4800,9 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       activeCourseCode={activeCourseCode}
     />
     <main class="wrap">
-      <div class="dashboard-shell" data-left-open="true">
-        <aside class="dashboard-sidebar" aria-label="Navegación del panel">
-          <div class="dashboard-sidebar-header">
-            <button
-              type="button"
-              class="dashboard-sidebar-handle"
-              aria-label="Open sidebar"
-              title="Open sidebar (⌘/Ctrl + \)"
-            >→</button>
-            <button
-              type="button"
-              class="dashboard-sidebar-toggle"
-              aria-label="Close sidebar"
-              title="Close sidebar (⌘/Ctrl + \)"
-            >←</button>
-          </div>
-          {isTeacher ? (
-            <>
-              <div class="tabs">
-                <div class:list={['tab', initialTeacherDashboardTab === 'overview' ? 'active' : '']} data-dashboard-tab="overview">Overview</div>
-                <div class:list={['tab', initialTeacherDashboardTab === 'gradebook' ? 'active' : '']} data-dashboard-tab="gradebook">Gradebook</div>
-                <div class:list={['tab', initialTeacherDashboardTab === 'attendance' ? 'active' : '']} data-dashboard-tab="attendance">Asistencia</div>
-                <div class:list={['tab', initialTeacherDashboardTab === 'comments' ? 'active' : '']} data-dashboard-tab="comments">Comments</div>
-                <div class:list={['tab', initialTeacherDashboardTab === 'admin' ? 'active' : '']} data-dashboard-tab="admin">Admin</div>
-                <div class="dashboard-scope-controls">
-                  <label class="dashboard-scope-field">
-                    <span>Curso</span>
-                    <select data-dashboard-scope="course">
-                      {availableCourseMeta.length === 0 ? (
-                        <option value="">Sin cursos</option>
-                      ) : (
-                        availableCourseMeta.map((course) => (
-                          <option value={course.courseId} selected={course.courseId === activeCourseId}>
-                            {course.title}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </label>
-                  <label class="dashboard-scope-field">
-                    <span>Año</span>
-                    <select data-dashboard-scope="year">
-                      {availableYears.map((year) => (
-                        <option value={year} selected={year === activeYear}>{year}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
+      <div class:list={['dashboard-shell', isTeacher ? 'dashboard-shell--teacher' : '']} data-left-open="true">
+          {!isTeacher && (
+            <aside class="dashboard-sidebar" aria-label="Navegacion del panel">
               <nav class="dashboard-sidebar-nav" aria-label="Secciones del panel">
                 <a href="#student-profile" class="tab active">Perfil</a>
                 <a href="#student-deliveries" class="tab">Entregas</a>
@@ -4432,155 +4833,202 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                   </select>
                 </label>
               </div>
-            </>
+            </aside>
           )}
-        </aside>
         <section class="dashboard-main" data-dashboard-root>
       {isTeacher && (
+        <>
+        <nav class="dashboard-topbar" aria-label="Navegacion del dashboard docente">
+          <div class="dashboard-topbar-tabs">
+            <div class:list={['tab', initialTeacherDashboardTab === 'main' ? 'active' : '']} data-dashboard-tab="main">Tabla</div>
+            <div class:list={['tab', initialTeacherDashboardTab === 'admin' ? 'active' : '']} data-dashboard-tab="admin">Admin</div>
+            <div class:list={['tab', initialTeacherDashboardTab === 'log' ? 'active' : '']} data-dashboard-tab="log">Log</div>
+          </div>
+          <div class="dashboard-topbar-controls">
+            <div class="dashboard-topbar-context dashboard-topbar-context--search" data-dashboard-topbar-context="main" hidden={initialTeacherDashboardTab !== 'main'}>
+              <input
+                type="search"
+                class="dashboard-grid-search dashboard-topbar-search"
+                data-dashboard-search="teacher-main"
+                placeholder="Buscar estudiante, email, turno, grupo, día, clase..."
+                aria-label="Buscar en tabla principal"
+              />
+            </div>
+            <div class="dashboard-topbar-context dashboard-topbar-context--search" data-dashboard-topbar-context="admin" hidden={initialTeacherDashboardTab !== 'admin'}>
+              <input
+                type="search"
+                class="dashboard-grid-search dashboard-topbar-search"
+                data-dashboard-search="admin"
+                placeholder="Buscar nombre, email, rol, actividad..."
+                aria-label="Buscar en admin"
+              />
+            </div>
+            <label class="dashboard-scope-field dashboard-scope-field--inline">
+              <span>Curso</span>
+              <select data-dashboard-scope="course">
+                {availableCourseMeta.length === 0 ? (
+                  <option value="">Sin cursos</option>
+                ) : (
+                  availableCourseMeta.map((course) => (
+                    <option value={course.courseId} selected={course.courseId === activeCourseId}>
+                      {course.title}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label class="dashboard-scope-field dashboard-scope-field--inline dashboard-scope-field--year">
+              <span>Año</span>
+              <select data-dashboard-scope="year">
+                {availableYears.map((year) => (
+                  <option value={year} selected={year === activeYear}>{year}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              class="dashboard-grid-btn dashboard-grid-btn--square dashboard-live-mode-toggle"
+              data-dashboard-live-mode-toggle
+              aria-pressed="false"
+              title="Activa o pausa la escucha en vivo de cambios de base de datos para refrescar el dashboard automaticamente."
+            >
+              <span class="dashboard-live-mode-indicator" data-dashboard-live-mode-indicator aria-hidden="true"></span>
+            </button>
+            <div
+              class="dashboard-topbar-context"
+              data-dashboard-topbar-context="admin"
+              hidden={initialTeacherDashboardTab !== 'admin'}
+            >
+              <div
+                class="attendance-config-bar attendance-config-bar--toolbar"
+                data-attendance-config
+                data-course-id={activeCourseId}
+                data-year={activeYear}
+              >
+                <span class="attendance-config-label">Rango</span>
+                <input
+                  type="date"
+                  class="attendance-config-input"
+                  data-attendance-config-input="startDate"
+                  value={activeAttendanceConfig.startDate}
+                  title="Fecha de comienzo de cursada"
+                />
+                <input
+                  type="date"
+                  class="attendance-config-input"
+                  data-attendance-config-input="endDate"
+                  value={activeAttendanceConfig.endDate}
+                  title="Fecha de fin de cuatrimestre"
+                />
+              </div>
+            </div>
+            <div class="dashboard-topbar-context" data-dashboard-topbar-context="main" hidden={initialTeacherDashboardTab !== 'main'}>
+              <button
+                type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square"
+                data-dashboard-unfold-all="teacher-main"
+                title="Despliega todas las columnas de la tabla principal."
+              >
+                U
+              </button>
+              <button
+                type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square dashboard-grid-btn--icon"
+                data-dashboard-import-clipboard
+                title="Importar estudiantes desde portapapeles."
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                <span>I</span>
+              </button>
+              <button type="button" class="dashboard-grid-btn" data-dashboard-download="teacher-main" title="Exportar la tabla principal como CSV.">CSV</button>
+              <button
+                type="button"
+                class="dashboard-save-indicator"
+                data-dashboard-save-indicator
+                data-state="idle"
+                title="Sin actividad de guardado reciente."
+                aria-label="Estado de guardado"
+              >
+                <span class="dashboard-save-indicator-dot" aria-hidden="true"></span>
+              </button>
+            </div>
+            <div class="dashboard-topbar-context" data-dashboard-topbar-context="admin" hidden={initialTeacherDashboardTab !== 'admin'}>
+              <button type="button" class="dashboard-grid-btn" data-dashboard-download="admin" title="Exportar la tabla de admin como CSV.">CSV</button>
+              <button
+                type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square dashboard-grid-btn--danger"
+                data-dashboard-admin-delete-selected
+                title="Seleccioná usuarios con los checkboxes para borrarlos."
+                aria-label="Borrar usuarios seleccionados"
+                disabled
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              </button>
+              <button
+                type="button"
+                class="dashboard-save-indicator"
+                data-dashboard-save-indicator
+                data-state="idle"
+                title="Sin actividad de guardado reciente."
+                aria-label="Estado de guardado"
+              >
+                <span class="dashboard-save-indicator-dot" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+        </nav>
         <div class="teacher-dashboard-panels">
           <div
             class="teacher-panel"
-            data-dashboard-tab-panel="overview"
-            hidden={initialTeacherDashboardTab !== 'overview'}
+            data-dashboard-tab-panel="main"
+            hidden={initialTeacherDashboardTab !== 'main'}
           >
             <div class="teacher-grid-shell">
-              <div class="teacher-grid-toolbar">
-                <input
-                  type="search"
-                  class="dashboard-grid-search"
-                  data-dashboard-search="overview"
-                  placeholder="Buscar estudiante, email, turno, grupo..."
-                  aria-label="Buscar en overview"
-                />
-                <div class="dashboard-grid-actions">
-                  <button
-                    type="button"
-                    class="dashboard-grid-btn dashboard-grid-btn--icon"
-                    data-dashboard-import-clipboard
-                    title="Importar estudiantes desde portapapeles"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-                    Importar
-                  </button>
-                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="overview">CSV</button>
-                </div>
-              </div>
-              <div class="dashboard-tabulator" data-dashboard-grid="overview"></div>
+              <div class="dashboard-tabulator" data-dashboard-grid="teacher-main"></div>
             </div>
           </div>
 
           <div
             class="teacher-panel"
-            data-dashboard-tab-panel="gradebook"
-            hidden={initialTeacherDashboardTab !== 'gradebook'}
+            data-dashboard-tab-panel="log"
+            hidden={initialTeacherDashboardTab !== 'log'}
           >
-            <div class="teacher-grid-shell">
-              <div class="teacher-grid-toolbar">
-                <input
-                  type="search"
-                  class="dashboard-grid-search"
-                  data-dashboard-search="gradebook"
-                  placeholder="Buscar estudiante, email, evaluación, clase..."
-                  aria-label="Buscar en gradebook"
-                />
-                <div class="dashboard-grid-actions">
-                  <button type="button" class="dashboard-grid-btn" data-dashboard-unfold-all="gradebook">Desplegar todo</button>
-                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="gradebook">CSV</button>
-                </div>
-              </div>
-              <div class="dashboard-tabulator" data-dashboard-grid="gradebook"></div>
-            </div>
-          </div>
-
-          <div
-            class="teacher-panel"
-            data-dashboard-tab-panel="attendance"
-            hidden={initialTeacherDashboardTab !== 'attendance'}
-          >
-            <div class="teacher-grid-shell">
-              {!activeCourseId ? (
-                <p class="student-empty">Selecciona un curso activo para ver la asistencia.</p>
-              ) : (
-                <section class="attendance-config-panel">
-                  <div
-                    class="attendance-config-bar"
-                    data-attendance-config
-                    data-course-id={activeCourseId}
-                    data-year={activeYear}
-                  >
-                    <label class="attendance-config-field">
-                      <span>Fecha de comienzo de cursada</span>
-                      <input
-                        type="date"
-                        class="attendance-config-input"
-                        data-attendance-config-input="startDate"
-                        value={activeAttendanceConfig.startDate}
-                        title="Inicio de cursada"
-                      />
-                    </label>
-                    <label class="attendance-config-field">
-                      <span>Fecha de fin de cuatrimestre</span>
-                      <input
-                        type="date"
-                        class="attendance-config-input"
-                        data-attendance-config-input="endDate"
-                        value={activeAttendanceConfig.endDate}
-                        title="Fin de cursada"
-                      />
-                    </label>
+            <div class="teacher-grid-shell teacher-grid-shell--stacked">
+              <section class="teacher-log-section">
+                <h3 class="teacher-section-title">Log de Asistencias al Room</h3>
+                <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
+                  <input
+                    type="search"
+                    class="dashboard-grid-search"
+                    data-dashboard-search="attendance-log"
+                    placeholder="Buscar en log: estudiante, email, clase, día..."
+                    aria-label="Buscar en log de asistencia"
+                  />
+                  <div class="dashboard-grid-actions">
+                    <button type="button" class="dashboard-grid-btn" data-dashboard-download="attendance-log" title="Exportar el log de asistencias como CSV.">CSV log</button>
                   </div>
-                </section>
-              )}
-              <div class="teacher-grid-toolbar">
-                <input
-                  type="search"
-                  class="dashboard-grid-search"
-                  data-dashboard-search="attendance-summary"
-                  placeholder="Buscar estudiante, email, clase, día..."
-                  aria-label="Buscar en asistencia"
-                />
-                <div class="dashboard-grid-actions">
-                  <button type="button" class="dashboard-grid-btn" data-dashboard-unfold-all="attendance-summary">Desplegar todo</button>
-                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="attendance-summary">CSV resumen</button>
-                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="attendance-log">CSV log</button>
                 </div>
-              </div>
-              <div class="dashboard-tabulator" data-dashboard-grid="attendance-summary"></div>
-              <div class="teacher-grid-toolbar">
-                <input
-                  type="search"
-                  class="dashboard-grid-search"
-                  data-dashboard-search="attendance-log"
-                  placeholder="Buscar en log: estudiante, email, clase, día..."
-                  aria-label="Buscar en log de asistencia"
-                />
-              </div>
-              <div class="dashboard-tabulator" data-dashboard-grid="attendance-log"></div>
-            </div>
-          </div>
-
-          <div
-            class="teacher-panel"
-            data-dashboard-tab-panel="comments"
-            hidden={initialTeacherDashboardTab !== 'comments'}
-          >
-            <div class="teacher-grid-shell">
-              <div class="teacher-grid-toolbar">
-                <input
-                  type="search"
-                  class="dashboard-grid-search"
-                  data-dashboard-search="comments"
-                  placeholder="Buscar estudiante, scope, color, comentario..."
-                  aria-label="Buscar en comments"
-                />
-                <div class="dashboard-grid-actions">
-                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="comments">CSV</button>
+                <div class="dashboard-tabulator" data-dashboard-grid="attendance-log"></div>
+              </section>
+              <section class="teacher-log-section">
+                <h3 class="teacher-section-title">Log de comentarios y anotaciones</h3>
+                <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
+                  <input
+                    type="search"
+                    class="dashboard-grid-search"
+                    data-dashboard-search="comments"
+                    placeholder="Buscar estudiante, scope, color, comentario..."
+                    aria-label="Buscar en comentarios y anotaciones"
+                  />
+                  <div class="dashboard-grid-actions">
+                    <button type="button" class="dashboard-grid-btn" data-dashboard-download="comments" title="Exportar comentarios y anotaciones como CSV.">CSV</button>
+                  </div>
                 </div>
-              </div>
-              <p class="teacher-grid-note">
-                Observaciones operativas compartidas entre teachers del curso activo.
-              </p>
-              <div class="dashboard-tabulator" data-dashboard-grid="comments"></div>
+                <p class="teacher-grid-note">
+                  Observaciones operativas compartidas entre docentes del curso activo.
+                </p>
+                <div class="dashboard-tabulator" data-dashboard-grid="comments"></div>
+              </section>
             </div>
           </div>
 
@@ -4590,23 +5038,12 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
             hidden={initialTeacherDashboardTab !== 'admin'}
           >
             <div class="teacher-grid-shell">
-              <div class="teacher-grid-toolbar">
-                <input
-                  type="search"
-                  class="dashboard-grid-search"
-                  data-dashboard-search="admin"
-                  placeholder="Buscar nombre, email, rol, actividad..."
-                  aria-label="Buscar en admin"
-                />
-                <div class="dashboard-grid-actions">
-                  <button type="button" class="dashboard-grid-btn" data-dashboard-download="admin">CSV</button>
-                </div>
-              </div>
               <div class="dashboard-tabulator" data-dashboard-grid="admin"></div>
             </div>
           </div>
 
         </div>
+        </>
       )}
       {!isTeacher && (
         <div class="student-dashboard-panels">
@@ -4635,7 +5072,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
 
           <section class="student-section" id="student-deliveries">
             <h2 class="group-title">Entregas</h2>
-            {scopedStudentSubmissions.length === 0 ? (
+            {studentDeliveryRows.length === 0 ? (
               <p class="student-empty">No registras entregas todavía.</p>
             ) : (
               <table class="admin-table">
@@ -4651,7 +5088,37 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                   </tr>
                 </thead>
                 <tbody>
-                  {scopedStudentSubmissions.map((sub) => {
+                  {studentDeliveryRows.map((row: any) => {
+                    if (row?.kind === 'welcome-form') {
+                      return (
+                        <tr
+                          data-student-welcome-row
+                          data-welcome-fields={encodeURIComponent(
+                            JSON.stringify(
+                              activeCourseWelcomeFields.map((field) => ({
+                                evalId: String(field?.evalId || ''),
+                                title: String(field?.title || ''),
+                                prompt: String(field?.prompt || ''),
+                              })),
+                            ),
+                          )}
+                        >
+                          <td><a href={row.href}>{row.assignmentLabel}</a></td>
+                          <td><a href={row.href}><code>{row.assignmentId}</code></a></td>
+                          <td>{row.courseLabel}</td>
+                          <td data-welcome-date>{formatSubmissionDate(row.submittedAt)}</td>
+                          <td><span class={row.statusClass} data-welcome-status>{row.statusLabel}</span></td>
+                          <td data-welcome-score>{row.scoreLabel}</td>
+                          <td>
+                            <span data-welcome-summary-text>{row.answerSummary}</span>
+                            <br />
+                            <a href={row.href} data-welcome-link>Ver / editar</a>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const sub = row.submission;
                     const assignment = studentAssignmentById.get(sub.assignmentId);
                     const assignmentSlug = String(assignment?.slug || sub.assignmentId || '');
                     const assignmentLabel = decodeUriSafe(assignmentSlug.split('/').pop() || assignmentSlug);
@@ -4832,6 +5299,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
     </main>
     <script type="application/json" id="dashboard-log-data" set:html={dashboardLogDataJson}></script>
     <script type="application/json" id="dashboard-teacher-tabulator-meta" set:html={teacherTabulatorMetaJson}></script>
+    <script type="application/json" id="dashboard-teacher-main" set:html={teacherMainProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-overview" set:html={teacherOverviewProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-gradebook" set:html={teacherGradebookProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-attendance" set:html={teacherAttendanceProjectionJson}></script>
@@ -5340,6 +5808,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       };
 
       let teardownDashboardTabulators = null;
+      let teardownStudentWelcomeSync = null;
 
       const bootDashboardSidebar = () => {
         const shell = document.querySelector('.dashboard-shell');
@@ -5371,9 +5840,215 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         });
       };
 
+      const initializeStudentWelcomeSync = () => {
+        const row = document.querySelector('[data-student-welcome-row]');
+        if (!(row instanceof HTMLTableRowElement)) return () => {};
+
+        let welcomeFields = [];
+        try {
+          const rawFields = String(row.dataset.welcomeFields || '').trim();
+          welcomeFields = rawFields
+            ? JSON.parse(decodeURIComponent(rawFields))
+            : [];
+        } catch (error) {
+          console.error('Error parsing welcome fields:', error);
+          welcomeFields = [];
+        }
+
+        if (!Array.isArray(welcomeFields) || welcomeFields.length === 0) {
+          return () => {};
+        }
+
+        const dateNode = row.querySelector('[data-welcome-date]');
+        const statusNode = row.querySelector('[data-welcome-status]');
+        const scoreNode = row.querySelector('[data-welcome-score]');
+        const summaryTextNode = row.querySelector('[data-welcome-summary-text]');
+        let refreshPromise = null;
+        let lastRefreshAt = 0;
+
+        const normalizeTextValue = (value) => String(value || '').trim();
+
+        const formatDashboardDate = (value) => {
+          if (!value) return '—';
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return '—';
+          return date.toLocaleString('es-ES', {
+            day: '2-digit',
+            month: '2-digit',
+            year: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        };
+
+        const getWelcomeAnswerText = (submission) => {
+          const payload =
+            submission?.answer && typeof submission.answer === 'object' && !Array.isArray(submission.answer)
+              ? submission.answer
+              : {};
+          const nestedAnswer =
+            payload?.answer && typeof payload.answer === 'object' && !Array.isArray(payload.answer)
+              ? payload.answer
+              : null;
+
+          const answerOptions = [
+            ...(Array.isArray(payload?.answerOptions) ? payload.answerOptions : []),
+            ...(Array.isArray(nestedAnswer?.answerOptions) ? nestedAnswer.answerOptions : []),
+          ]
+            .map((option) => normalizeTextValue(option))
+            .filter(Boolean);
+
+          if (answerOptions.length > 0) {
+            return answerOptions.join(', ');
+          }
+
+          const directTextCandidates = [
+            nestedAnswer?.text,
+            nestedAnswer?.answerText,
+            nestedAnswer?.word,
+            nestedAnswer?.value,
+            payload?.text,
+            payload?.answerText,
+            payload?.answerLabel,
+          ];
+
+          for (const candidate of directTextCandidates) {
+            const normalized = normalizeTextValue(candidate);
+            if (normalized) return normalized;
+          }
+
+          if (Array.isArray(payload?.answer)) {
+            const normalizedValues = payload.answer
+              .map((value) => normalizeTextValue(value))
+              .filter(Boolean);
+            if (normalizedValues.length > 0) return normalizedValues.join(', ');
+          }
+
+          const rawAnswer = normalizeTextValue(payload?.answer);
+          if (rawAnswer && rawAnswer !== '[object Object]') {
+            return rawAnswer;
+          }
+
+          return '';
+        };
+
+        const refreshWelcomeRow = async (force = false) => {
+          const now = Date.now();
+          if (!force && now - lastRefreshAt < 800) return refreshPromise;
+          if (refreshPromise) return refreshPromise;
+
+          refreshPromise = (async () => {
+            try {
+              const response = await fetch('/api/submissions/my-submissions', {
+                headers: { Accept: 'application/json' },
+              });
+              if (!response.ok) return;
+
+              const data = await response.json().catch(() => ({}));
+              const submissions = data?.submissions && typeof data.submissions === 'object'
+                ? data.submissions
+                : {};
+
+              const submissionByEvalId = new Map(
+                Object.values(submissions)
+                  .filter((submission) => {
+                    const assignmentId = normalizeTextValue(submission?.assignmentId);
+                    return welcomeFields.some((field) => normalizeTextValue(field?.evalId) === assignmentId);
+                  })
+                  .map((submission) => [normalizeTextValue(submission?.assignmentId), submission]),
+              );
+
+              const completedCount = welcomeFields.filter((field) =>
+                submissionByEvalId.has(normalizeTextValue(field?.evalId)),
+              ).length;
+              const latestSubmission = [...submissionByEvalId.values()]
+                .sort((left, right) => {
+                  const rightTime = new Date(
+                    right?.submittedAt
+                    || right?.updatedAt
+                    || '',
+                  ).getTime();
+                  const leftTime = new Date(
+                    left?.submittedAt
+                    || left?.updatedAt
+                    || '',
+                  ).getTime();
+                  return rightTime - leftTime;
+                })[0] || null;
+              const answersSummary = welcomeFields
+                .map((field) => {
+                  const submission = submissionByEvalId.get(normalizeTextValue(field?.evalId));
+                  const answer = getWelcomeAnswerText(submission);
+                  if (!answer) return '';
+                  return `${String(field?.title || field?.prompt || field?.evalId || 'Respuesta')}: ${answer}`;
+                })
+                .filter(Boolean)
+                .join(' · ');
+
+              if (dateNode instanceof HTMLElement) {
+                dateNode.textContent = formatDashboardDate(
+                  latestSubmission?.submittedAt
+                  || latestSubmission?.updatedAt
+                  || '',
+                );
+              }
+
+              if (statusNode instanceof HTMLElement) {
+                const isComplete = completedCount === welcomeFields.length;
+                statusNode.textContent = isComplete
+                  ? '✓ Completado'
+                  : completedCount > 0
+                    ? `⏳ En progreso (${completedCount}/${welcomeFields.length})`
+                    : '⏳ Pendiente';
+                statusNode.className = isComplete ? 'status-graded' : 'status-pending';
+              }
+
+              if (scoreNode instanceof HTMLElement) {
+                scoreNode.textContent = '—';
+              }
+
+              if (summaryTextNode instanceof HTMLElement) {
+                summaryTextNode.textContent = answersSummary || 'Formulario de bienvenida del curso.';
+              }
+
+              lastRefreshAt = Date.now();
+            } catch (error) {
+              console.error('Error refreshing welcome row:', error);
+            } finally {
+              refreshPromise = null;
+            }
+          })();
+
+          return refreshPromise;
+        };
+
+        const handleFocus = () => {
+          void refreshWelcomeRow();
+        };
+        const handleVisibility = () => {
+          if (document.visibilityState === 'visible') {
+            void refreshWelcomeRow();
+          }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        window.addEventListener('pageshow', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+
+        return () => {
+          window.removeEventListener('focus', handleFocus);
+          window.removeEventListener('pageshow', handleFocus);
+          document.removeEventListener('visibilitychange', handleVisibility);
+        };
+      };
+
       const bootDashboardEnhancements = () => {
         const dashboardRoot = document.querySelector('[data-dashboard-root]');
         bootDashboardSidebar();
+        if (typeof teardownStudentWelcomeSync === 'function') {
+          teardownStudentWelcomeSync();
+          teardownStudentWelcomeSync = null;
+        }
         if (dashboardRoot instanceof HTMLElement) {
           if (typeof teardownDashboardTabulators === 'function') {
             teardownDashboardTabulators();
@@ -5381,6 +6056,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
           }
           teardownDashboardTabulators = mountDashboardTabulators(dashboardRoot);
         }
+        teardownStudentWelcomeSync = initializeStudentWelcomeSync();
         initializeDashboardLogPanels();
         initializeEnrollButtons();
         initializeUnenrollButtons();

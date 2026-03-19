@@ -123,6 +123,17 @@ export function buildAdminProjection({
 
   return {
     columns: [
+      {
+        title: '',
+        field: '__rowSelect',
+        width: 44,
+        minWidth: 44,
+        headerSort: false,
+        hozAlign: 'center',
+        headerHozAlign: 'center',
+        resizable: false,
+        kind: 'row-select',
+      },
       { title: 'Nombre', field: 'name', frozen: true, minWidth: 180 },
       { title: 'Email', field: 'email', minWidth: 220 },
       { title: 'Rol global', field: 'globalRole', width: 110, hozAlign: 'center', headerHozAlign: 'center', kind: 'role' },
