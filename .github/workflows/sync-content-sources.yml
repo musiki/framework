@@ -67,6 +67,11 @@ jobs:
       VPS_INSTALL_COMMAND: ${{ vars.VPS_INSTALL_COMMAND || 'npm ci' }}
       VPS_CONTENT_SOURCE_STRATEGY: ${{ vars.VPS_CONTENT_SOURCE_STRATEGY || 'remote-only' }}
     steps:
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Zero Downtime Sync and Build on VPS
         run: |
           cd "$VPS_FRAMEWORK_DIR"
@@ -76,15 +81,8 @@ jobs:
           git checkout "$VPS_GIT_BRANCH"
           git reset --hard "origin/$VPS_GIT_BRANCH"
           
-          # Load NVM and use version from .nvmrc
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          if [ -f ".nvmrc" ]; then
-            nvm install || true
-            nvm use
-          fi
-          
-          # Ensure PM2 and Node are in PATH
+          # Ensure PM2 and Node are in PATH (common issue in non-interactive shells)
+          # We check if local npm/node are available, otherwise use global ones
           export PATH=$PATH:$(npm config get prefix)/bin
           
           echo ">>> Installing dependencies..."
