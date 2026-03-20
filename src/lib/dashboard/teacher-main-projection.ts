@@ -334,7 +334,7 @@ const buildGradebookColumns = (gradebookColumns: DashboardGridColumn[]): Dashboa
       {
         key: 'teacher_main_gradebook_concept',
         level: 0,
-        shortLabel: 'C',
+        shortLabel: 'Co',
       },
     ),
     makeFoldMeta(

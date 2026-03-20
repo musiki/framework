@@ -154,10 +154,44 @@ const parseJsonScript = <T>(id: string, fallback: T): T => {
 const canRedrawTable = (table: Tabulator | null | undefined) =>
   Boolean((table as DashboardTabulatorInstance | null | undefined)?.__musikiTableBuilt);
 
+const getTableHolderElement = (table: Tabulator | null | undefined): HTMLElement | null => {
+  if (!table) return null;
+  const tableElement =
+    (table as any)?.element
+    || (typeof (table as any)?.getElement === 'function' ? (table as any).getElement() : null);
+  if (!(tableElement instanceof HTMLElement)) return null;
+  return tableElement.querySelector('.tabulator-tableholder');
+};
+
+const redrawTablePreservingScroll = (table: Tabulator | null | undefined) => {
+  if (!table || !canRedrawTable(table)) return;
+
+  const holder = getTableHolderElement(table);
+  const scrollLeft = holder?.scrollLeft ?? 0;
+  const scrollTop = holder?.scrollTop ?? 0;
+
+  table.redraw(true);
+
+  const restoreScroll = () => {
+    const nextHolder = getTableHolderElement(table);
+    if (!nextHolder) return;
+    nextHolder.scrollLeft = scrollLeft;
+    nextHolder.scrollTop = scrollTop;
+  };
+
+  restoreScroll();
+  window.requestAnimationFrame(restoreScroll);
+};
+
 const buildPersistKey = (meta: DashboardMeta, grid: string) =>
   `musiki:dashboard:${normalizeText(meta?.courseId)}:${normalizeText(meta?.year)}:${grid}`;
 
 const buildFoldStorageKey = (persistKey: string) => `${persistKey}:folds`;
+const TEACHER_MAIN_TOP_LEVEL_FOLD_KEYS = [
+  'teacher_main_profile',
+  'teacher_main_attendance',
+  'teacher_main_gradebook',
+];
 
 const getTableFoldStorageKey = (table: Tabulator | null | undefined) =>
   normalizeText((table as DashboardTabulatorInstance | null | undefined)?.__musikiFoldStorageKey || '');
@@ -726,7 +760,7 @@ const formatAttendanceSymbol = (
   options: { blankWhenZero?: boolean } = {},
 ) => {
   const units = Number(value ?? 0);
-  if (units >= 1) return '/';
+  if (units >= 1) return '✓';
   if (units >= 0.5) return '~';
   if (options.blankWhenZero) return '';
   return 'x';
@@ -735,7 +769,7 @@ const formatAttendanceSymbol = (
 const normalizeAttendanceInput = (value: any) => {
   const raw = normalizeText(value).toLowerCase();
   if (raw === '' || raw === '—') return { valid: true, countRaw: null };
-  if (['/', '1'].includes(raw)) return { valid: true, countRaw: 1 };
+  if (['/', '1', '✓', '✔'].includes(raw)) return { valid: true, countRaw: 1 };
   if (['-', '~', '0.5', '0,5'].includes(raw)) return { valid: true, countRaw: 0.5 };
   if (['x', '0'].includes(raw)) return { valid: true, countRaw: 0 };
   return { valid: false, countRaw: null };
@@ -964,14 +998,12 @@ const refreshAnnotationViews = (state: AnnotationState, targetTab?: string) => {
       });
     }
     tables.forEach((table) => {
-      if (!canRedrawTable(table)) return;
-      table.redraw(true);
+      redrawTablePreservingScroll(table);
     });
     return;
   }
   state.registry.forEach((table) => {
-    if (!canRedrawTable(table)) return;
-    table.redraw(true);
+    redrawTablePreservingScroll(table);
   });
 };
 
@@ -1998,6 +2030,58 @@ const shouldUseShortLeafLabel = (column: any) => {
   return Boolean(findFoldedAncestor(resolvedColumn));
 };
 
+const syncFoldedLeafLabels = (table: Tabulator | null | undefined) => {
+  if (!table) return;
+
+  const visit = (columns: any[], foldedDepth: number) => {
+    (columns || []).forEach((column) => {
+      const resolvedColumn = resolveColumnComponent(column);
+      if (!resolvedColumn) return;
+
+      const definition = resolvedColumn.getDefinition?.() || {};
+      const foldMeta = getFoldMeta(resolvedColumn);
+      const children = getGroupSubColumns(resolvedColumn);
+      const headerElement = resolvedColumn.getElement?.();
+      const isFoldedGroup = Boolean(headerElement?.classList?.contains('group-folded'));
+
+      if (Array.isArray(definition.columns) && children.length > 0) {
+        visit(children, foldedDepth + (isFoldedGroup ? 1 : 0));
+        return;
+      }
+
+      if (!foldMeta?.key || !headerElement) return;
+
+      const fullLabel = String(foldMeta.fullLabel || definition.title || '');
+      const shortLabel = String(foldMeta.shortLabel || formatAbletonLabel(fullLabel) || fullLabel);
+      const useShort = Boolean(foldMeta.summaryOnly) || foldedDepth > 0;
+      const nextLabel = useShort ? shortLabel : fullLabel;
+      const textTarget =
+        headerElement.querySelector<HTMLElement>('.fold-header-label')
+        || headerElement.querySelector<HTMLElement>('.dashboard-grade-meta-title__label');
+
+      if (textTarget) {
+        textTarget.textContent = nextLabel;
+        textTarget.title = fullLabel;
+      } else {
+        headerElement.title = fullLabel;
+      }
+    });
+  };
+
+  try {
+    visit(table.getColumns?.() || [], 0);
+  } catch {
+    // ignore transient header sync errors
+  }
+};
+
+const refreshFoldedLeafLabels = (table: Tabulator | null | undefined) => {
+  if (!table) return;
+  const sync = () => syncFoldedLeafLabels(table);
+  sync();
+  window.requestAnimationFrame(sync);
+};
+
 const safeShow = (column: any) => {
   try {
     column.show();
@@ -2047,6 +2131,24 @@ const visitFoldMetaColumns = (columns: any[], visitor: (column: any, foldMeta: R
       visitFoldMetaColumns(children, visitor);
     }
   });
+};
+
+const findFoldMetaColumnsByKey = (table: Tabulator | null | undefined, keys: string[]) => {
+  const keySet = new Set(keys.map((key) => normalizeText(key)));
+  const result = new Map<string, any>();
+  if (!table || keySet.size === 0) return result;
+
+  try {
+    visitFoldMetaColumns(table.getColumns?.() || [], (column, foldMeta) => {
+      const key = normalizeText(foldMeta?.key || '');
+      if (!key || !keySet.has(key) || result.has(key)) return;
+      result.set(key, column);
+    });
+  } catch {
+    return result;
+  }
+
+  return result;
 };
 
 const toggleFoldMetaGroup = (
@@ -2155,9 +2257,91 @@ const unfoldAllColumns = (table: Tabulator, options?: { persist?: boolean }) => 
       table.redraw(true);
     }
   } catch { /* ignore */ }
+  refreshFoldedLeafLabels(table);
   if (options?.persist !== false) {
     storeCurrentFoldState(table, 'Vista guardada: todas las columnas desplegadas.');
   }
+};
+
+const foldAllColumns = (table: Tabulator, options?: { persist?: boolean }) => {
+  if (options?.persist !== false) {
+    setDashboardSaveStatus('saving', 'Guardando vista local de columnas...');
+  }
+
+  const visit = (columns: any[]) => {
+    (columns || []).forEach((column) => {
+      const definition = column?.getDefinition?.() || {};
+      const children = getGroupSubColumns(column);
+      if (!Array.isArray(definition.columns) || children.length === 0) return;
+
+      const foldMeta = getFoldMeta(column);
+      if (!foldMeta?.key || foldMeta.disabled) {
+        visit(children);
+        return;
+      }
+
+      toggleFoldMetaGroup(column, true, { persist: false });
+    });
+  };
+
+  try {
+    visit(table.getColumns?.() || []);
+  } catch {
+    // ignore transient folding errors
+  }
+
+  try {
+    if (canRedrawTable(table)) {
+      table.redraw(true);
+    }
+  } catch {
+    // ignore redraw errors during fold-all
+  }
+
+  refreshFoldedLeafLabels(table);
+
+  if (options?.persist !== false) {
+    storeCurrentFoldState(table, 'Vista guardada: todas las columnas plegadas.');
+  }
+};
+
+const foldTeacherMainAllColumns = (table: Tabulator, options?: { persist?: boolean }) => {
+  const columnsByKey = findFoldMetaColumnsByKey(table, TEACHER_MAIN_TOP_LEVEL_FOLD_KEYS);
+
+  try {
+    TEACHER_MAIN_TOP_LEVEL_FOLD_KEYS.forEach((key) => {
+      const column = columnsByKey.get(normalizeText(key));
+      if (!column) return;
+      toggleFoldMetaGroup(column, true, { persist: false });
+    });
+  } catch {
+    // ignore transient top-level folding errors
+  }
+
+  try {
+    if (canRedrawTable(table)) {
+      table.redraw(true);
+    }
+  } catch {
+    // ignore redraw errors during teacher-main fold-all
+  }
+
+  refreshFoldedLeafLabels(table);
+
+  if (options?.persist !== false) {
+    storeCurrentFoldState(table, 'Vista guardada: todas las columnas plegadas.');
+  }
+};
+
+const isTeacherMainFullyFolded = (table: Tabulator | null | undefined) => {
+  const columnsByKey = findFoldMetaColumnsByKey(table, TEACHER_MAIN_TOP_LEVEL_FOLD_KEYS);
+  if (columnsByKey.size !== TEACHER_MAIN_TOP_LEVEL_FOLD_KEYS.length) return false;
+
+  return TEACHER_MAIN_TOP_LEVEL_FOLD_KEYS.every((key) => {
+    const column = columnsByKey.get(normalizeText(key));
+    const headerElement = column?.getElement?.();
+    return Boolean(headerElement?.classList?.contains('group-folded'));
+  });
 };
 
 const restoreStoredFoldState = (table: Tabulator) => {
@@ -2198,6 +2382,7 @@ const restoreStoredFoldState = (table: Tabulator) => {
   } catch {
     // ignore redraw errors during restore
   }
+  refreshFoldedLeafLabels(table);
 
   return true;
 };
@@ -2384,6 +2569,7 @@ const toggleGroupFolding = (column: any) => {
       if (canRedrawTable(table)) {
         table.redraw(true);
       }
+      refreshFoldedLeafLabels(table);
     } catch {
       // ignore redraw errors during header refresh
     }
@@ -2450,6 +2636,7 @@ const toggleGroupFolding = (column: any) => {
   if (canRedrawTable(table)) {
     table.redraw(true);
   }
+  refreshFoldedLeafLabels(table);
 };
 
 const configureColumns = (
@@ -2962,7 +3149,7 @@ const buildTable = (
     popupContainer: root,
     rowHeight:
       context.kind === 'teacher-main' || context.kind === 'attendance-summary'
-        ? 24
+        ? 27
         : 38,
     ...(context.kind === 'teacher-main'
       ? {
@@ -2978,94 +3165,32 @@ const buildTable = (
   return table;
 };
 
-let foldLevel = 0;
-
-const applyFoldLevel = (table: Tabulator, level: number) => {
-  const topCols = table.getColumns();
-  topCols.forEach((topCol: any) => {
-    const field = topCol.getDefinition().field;
-    if (field === '__group_student') {
-      const studentCols = getGroupSubColumns(topCol);
-      studentCols.forEach((c: any) => {
-         const f = c.getDefinition().field;
-         if (f === 'lastName') c.show();
-         else if (level >= 3) c.hide();
-         else c.show();
-      });
-      const headerEl = topCol.getElement();
-      if (headerEl) headerEl.classList.toggle('group-folded', level >= 3);
-      return;
-    }
-    if (field?.startsWith('__group_lesson')) {
-       const lessonCols = getGroupSubColumns(topCol);
-       const isLessonAvg = (c: any) => c.getDefinition().field?.startsWith('__avg_lesson') && !c.getDefinition().field?.includes('_group_');
-       if (level >= 2) {
-          lessonCols.forEach((c: any) => {
-             if (isLessonAvg(c)) c.show();
-             else c.hide(); 
-          });
-          const headerEl = topCol.getElement();
-          if (headerEl) headerEl.classList.add('group-folded');
-       } else {
-          lessonCols.forEach((c: any) => {
-             if (isLessonAvg(c)) {
-                 c.show();
-             } else if (Array.isArray(c.getDefinition().columns)) {
-                 c.show();
-                 const sgCols = getGroupSubColumns(c);
-                 const isGroupAvg = (sc: any) => sc.getDefinition().cssClass?.includes('dashboard-grade-sub-avg');
-                 sgCols.forEach((sc: any) => {
-                    if (isGroupAvg(sc)) sc.show();
-                    else if (level >= 1) sc.hide();
-                    else sc.show();
-                 });
-                 const sgHeaderEl = c.getElement();
-                 if (sgHeaderEl) sgHeaderEl.classList.toggle('group-folded', level >= 1);
-             } else {
-                 if (level >= 1) c.hide(); else c.show();
-             }
-          });
-          const headerEl = topCol.getElement();
-          if (headerEl) headerEl.classList.remove('group-folded');
-       }
-    }
-  });
-  if (canRedrawTable(table)) {
-    table.redraw(true);
-  }
-};
-
 const foldTeacherMainGroupsByDefault = (table: Tabulator) => {
   try {
-    const defaultGroupKeys = ['teacher_main_profile', 'teacher_main_attendance'];
-    let changed = false;
-    defaultGroupKeys.forEach((groupKey) => {
-      if (getStoredFoldState(table, groupKey) !== undefined) return;
-
-      const groupColumn = table.getColumns().find((column: any) => {
-        const foldMeta = getFoldMeta(column);
-        return String(foldMeta?.key || '') === groupKey;
-      });
-
-      if (!groupColumn) return;
-      toggleFoldMetaGroup(groupColumn, true, { persist: false });
-      setStoredFoldState(table, groupKey, true);
-      changed = true;
-    });
-
-    if (canRedrawTable(table)) {
-      table.redraw(true);
-    }
-
-    if (changed) {
-      writeStoredFoldState(table, {
-        ...readStoredFoldState(table),
-        ...snapshotCurrentFoldState(table),
-      });
-    }
+    const storedState = readStoredFoldState(table);
+    if (Object.keys(storedState).length > 0) return;
+    foldTeacherMainAllColumns(table, { persist: false });
+    writeStoredFoldState(table, snapshotCurrentFoldState(table));
   } catch {
     // ignore startup folding races
   }
+};
+
+const bindFoldAllButtons = (root: HTMLElement, registry: Map<string, Tabulator>) => {
+  root.querySelectorAll<HTMLButtonElement>('[data-dashboard-fold-all]').forEach((button) => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+    button.addEventListener('click', () => {
+      const key = normalizeText(button.getAttribute('data-dashboard-fold-all'));
+      const table = registry.get(key);
+      if (!table) return;
+      if (key === 'teacher-main') {
+        foldTeacherMainAllColumns(table);
+      } else {
+        foldAllColumns(table);
+      }
+    });
+  });
 };
 
 const bindUnfoldAllButtons = (root: HTMLElement, registry: Map<string, Tabulator>) => {
@@ -3077,36 +3202,8 @@ const bindUnfoldAllButtons = (root: HTMLElement, registry: Map<string, Tabulator
       const table = registry.get(key);
       if (!table) return;
       unfoldAllColumns(table);
-      if (key === 'gradebook') foldLevel = 0;
     });
   });
-};
-
-const bindFoldingShortcuts = (registry: Map<string, Tabulator>) => {
-  const handler = (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement | null;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable) return;
-
-    const table = registry.get('gradebook');
-    if (!table) return;
-
-    const key = e.key;
-
-    if (key === '0') { e.preventDefault(); e.stopPropagation(); foldLevel = 0; applyFoldLevel(table, foldLevel); return; }
-    if (key === '9') { e.preventDefault(); e.stopPropagation(); foldLevel = 3; applyFoldLevel(table, foldLevel); return; }
-    if (key === 'ArrowLeft' || key === 'ArrowRight') {
-        const targetInner = e.target as HTMLElement | null;
-        if (targetInner && (targetInner.tagName === 'INPUT' || targetInner.tagName === 'TEXTAREA')) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (key === 'ArrowLeft') foldLevel = 3; // Fold all
-        if (key === 'ArrowRight') foldLevel = 0; // Unfold all
-        applyFoldLevel(table, foldLevel);
-    }
-  };
-
-  window.addEventListener('keydown', handler);
-  return () => window.removeEventListener('keydown', handler);
 };
 
 const trackTableBuilt = (table: Tabulator, readyTables: WeakSet<Tabulator>) => {
@@ -3769,8 +3866,7 @@ const bindAnnotationShortcut = (
 ) => {
   const handler = (event: KeyboardEvent) => {
     const key = String(event.key || '').toLowerCase();
-    
-    // Toggle help HUD shortcut A
+
     if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'a') {
       const target = event.target as HTMLElement | null;
       if (
@@ -3788,6 +3884,30 @@ const bindAnnotationShortcut = (
       }
     }
 
+    if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'f') {
+      const target = event.target as HTMLElement | null;
+      if (
+        !target || (
+          !(target instanceof HTMLInputElement)
+          && !(target instanceof HTMLTextAreaElement)
+          && !(target instanceof HTMLSelectElement)
+          && !(target?.isContentEditable)
+        )
+      ) {
+        const teacherMainTable = state.registry.get('teacher-main');
+        if (teacherMainTable) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (isTeacherMainFullyFolded(teacherMainTable)) {
+            unfoldAllColumns(teacherMainTable);
+          } else {
+            foldTeacherMainAllColumns(teacherMainTable);
+          }
+          return;
+        }
+      }
+    }
+    
     const isVBNM = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && ['v', 'b', 'n', 'm'].includes(key);
     const isC = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && key === 'c';
     const isChordM = (event.metaKey || event.ctrlKey) && event.altKey && key === 'm';
@@ -4734,7 +4854,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   bindCsvButtons(root, registry, meta);
   bindImportClipboardButton(root, meta);
   bindUnfoldAllButtons(root, registry);
-  destroyers.push(bindFoldingShortcuts(registry));
+  bindFoldAllButtons(root, registry);
 
   root.dataset.dashboardTabulatorMounted = 'true';
 

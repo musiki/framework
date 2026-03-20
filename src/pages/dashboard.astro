@@ -628,12 +628,12 @@ const formatAttendanceGridDayLabel = (value: string) => {
   });
 };
 
-const ATTENDANCE_VALUE_HELP = 'Input: / o 1 -> ✔ • -, ~ o 0.5 -> ~ • x o 0 -> ✖';
+const ATTENDANCE_VALUE_HELP = 'Input: /, ✓ o 1 -> ✓ • -, ~ o 0.5 -> ~ • x o 0 -> ✖';
 
 const normalizeAttendanceValue = (value: unknown) => {
   const raw = normalizeText(String(value ?? '').replace(',', '.')).toLowerCase();
   if (!raw) return 0;
-  if (raw === '/' || raw === '1' || raw === '✔') return 1;
+  if (raw === '/' || raw === '1' || raw === '✓' || raw === '✔') return 1;
   if (raw === '-' || raw === '~' || raw === '0.5' || raw === '.5') return 0.5;
   if (raw === 'x' || raw === '0' || raw === '✖') return 0;
   const parsed = Number(raw);
@@ -645,7 +645,7 @@ const normalizeAttendanceValue = (value: unknown) => {
 const formatAttendanceValue = (value: unknown, options: { isFuture?: boolean } = {}) => {
   const normalized = normalizeAttendanceValue(value);
   if (options.isFuture && normalized <= 0) return '';
-  if (normalized >= 1) return '✔';
+  if (normalized >= 1) return '✓';
   if (normalized > 0) return '~';
   return '✖';
 };
@@ -3282,17 +3282,32 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         font-size: 0.84rem;
         color: var(--c-fg-dim);
       }
-      .fold-shortcuts,
-      .course-grades-shortcuts {
-        margin: 0 0 0.8rem 0;
-        padding: 0.6rem 0.7rem;
+      .dashboard-shortcuts-hud {
+        position: fixed;
+        right: 1rem;
+        bottom: 1rem;
+        z-index: 80;
+        max-width: 280px;
+        padding: 0.75rem 0.8rem;
         border: 1px solid var(--c-border);
-        border-radius: 8px;
-        background: var(--c-bg-mute);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--c-bg) 94%, #000 6%);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.18);
         font-size: 0.82rem;
       }
-      .fold-shortcuts kbd,
-      .course-grades-shortcuts kbd {
+      .dashboard-shortcuts-hud h4 {
+        margin: 0 0 0.45rem 0;
+        font-size: 0.88rem;
+      }
+      .dashboard-shortcuts-hud hr {
+        border: none;
+        border-top: 1px solid var(--c-border);
+        margin: 0.5rem 0;
+      }
+      .dashboard-shortcuts-hud p {
+        margin: 0.2rem 0;
+      }
+      .dashboard-shortcuts-hud kbd {
         border: 1px solid var(--c-border);
         border-bottom-width: 2px;
         border-radius: 4px;
@@ -4010,7 +4025,25 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-tabulator .tabulator-cell {
         padding: 0.18rem 0.22rem;
         background: transparent !important;
+        vertical-align: middle !important;
       }
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-cell,
+      .dashboard-tabulator[data-dashboard-grid="admin"] .tabulator-cell {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        line-height: 24px;
+      }
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .dashboard-annotation-shell,
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .dashboard-annotation-shell__content,
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .dashboard-attendance-chip,
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .dashboard-pill,
+      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .role-badge,
+      .dashboard-tabulator[data-dashboard-grid="admin"] .dashboard-annotation-shell,
+      .dashboard-tabulator[data-dashboard-grid="admin"] .dashboard-annotation-shell__content,
+      .dashboard-tabulator[data-dashboard-grid="admin"] .role-badge {
+        line-height: 1;
+      }
+      
       .dashboard-tabulator .tabulator-cell.dashboard-cell--editable {
         background: color-mix(in srgb, transparent 92%, var(--c-fg) 8%) !important;
       }
@@ -4094,6 +4127,8 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         background: var(--c-bg) !important;
         box-shadow: 1px 0 0 var(--c-border);
       }
+     
+
       .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row:nth-child(even) .tabulator-cell[tabulator-field="lastName"] {
         background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%) !important;
       }
@@ -4587,7 +4622,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         text-overflow: clip;
         white-space: nowrap;
         text-align: center;
-        font-size: 0.68rem;
+        font-size: 0.74rem;
         font-weight: 600;
         line-height: 1.02;
       }
@@ -4606,12 +4641,12 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         padding: 0 !important;
       }
       .dashboard-tabulator [tabulator-field^="day_"] .dashboard-annotation-shell {
-        min-height: 24px;
+        min-height: 27px;
         padding: 0;
       }
       .dashboard-tabulator [tabulator-field^="day_"] .dashboard-attendance-chip {
-        min-width: 24px;
-        min-height: 24px;
+        min-width: 27px;
+        min-height: 27px;
         padding: 0;
       }
 :root.dark .dashboard-grid-search,
@@ -5026,6 +5061,14 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
               <button
                 type="button"
                 class="dashboard-grid-btn dashboard-grid-btn--square"
+                data-dashboard-fold-all="teacher-main"
+                title="Pliega todas las columnas de la tabla principal."
+              >
+                F
+              </button>
+              <button
+                type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square"
                 data-dashboard-unfold-all="teacher-main"
                 title="Despliega todas las columnas de la tabla principal."
               >
@@ -5392,20 +5435,20 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         <hr>
         <p style="color: var(--musiki-primary-color, var(--c-link)); font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">Visibilidad</p>
         <p><kbd>A</kbd> Mostrar / ocultar panel de ayuda</p>
-        <p><kbd>←</kbd> Colapsar <kbd>→</kbd> Expandir columnas un nivel</p>
-        <p><kbd>0</kbd> Expandir todo &nbsp;&nbsp; <kbd>9</kbd> Colapsar todo</p>
+        <p><kbd>F</kbd> Alternar plegado total de Tabla</p>
         <p><kbd>C</kbd> Ocultar columna interactiva</p>
         <hr>
         <p style="color: var(--musiki-primary-color, var(--c-link)); font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">Anotaciones</p>
         <p><kbd>V</kbd> Verde &nbsp;&nbsp; <kbd>B</kbd> Amarillo</p>
-        <p><kbd>N</kbd> Rojo  &nbsp;&nbsp; <kbd>M</kbd> Limpiar color</p>
+        <p><kbd>N</kbd> Rojo &nbsp;&nbsp; <kbd>M</kbd> Limpiar color</p>
         <p><kbd>Enter</kbd> Comentarios en celdas</p>
         <hr>
         <p style="color: var(--musiki-primary-color, var(--c-link)); font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">Asistencia</p>
         <p style="font-size: 0.78rem;">
-          Input veloz de celdas: <strong>/</strong> o <strong>1</strong> → ✔ | <strong>~</strong> o <strong>0.5</strong> → ~ | <strong>x</strong> o <strong>0</strong> → ✖
+          Input veloz de celdas: <strong>/</strong> o <strong>1</strong> → ✓ | <strong>~</strong> o <strong>0.5</strong> → ~ | <strong>x</strong> o <strong>0</strong> → x
         </p>
       </div>
+
     </main>
     <script type="application/json" id="dashboard-log-data" set:html={dashboardLogDataJson}></script>
     <script type="application/json" id="dashboard-teacher-tabulator-meta" set:html={teacherTabulatorMetaJson}></script>
