@@ -531,6 +531,8 @@ const withActiveCourse = (href: string) => {
 
 		if (userMenuButton && userDropdown && !userMenuButton.dataset.bound) {
 			userMenuButton.dataset.bound = 'true';
+			
+			// Normal click for desktop
 			userMenuButton.addEventListener('click', (event) => {
 				event.stopPropagation();
 				if (courseDropdown) {
@@ -539,6 +541,28 @@ const withActiveCourse = (href: string) => {
 				}
 				userDropdown.classList.toggle('show');
 			});
+
+			// Long press for mobile (2 seconds)
+			let pressTimer: number | undefined;
+			const startPress = (event: TouchEvent) => {
+				if (pressTimer) window.clearTimeout(pressTimer);
+				pressTimer = window.setTimeout(() => {
+					event.preventDefault();
+					if (courseDropdown) {
+						courseDropdown.classList.remove('show');
+						courseMenuButton?.setAttribute('aria-expanded', 'false');
+					}
+					userDropdown.classList.toggle('show');
+				}, 2000);
+			};
+			const cancelPress = () => {
+				if (pressTimer) window.clearTimeout(pressTimer);
+			};
+
+			userMenuButton.addEventListener('touchstart', startPress, { passive: false });
+			userMenuButton.addEventListener('touchend', cancelPress);
+			userMenuButton.addEventListener('touchcancel', cancelPress);
+			userMenuButton.addEventListener('touchmove', cancelPress);
 		}
 
 		if (courseMenuButton && courseDropdown && !courseMenuButton.dataset.bound) {
@@ -882,6 +906,7 @@ const withActiveCourse = (href: string) => {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: 0.5em;
 	}
 	nav a {
 		padding: 1em 0.5em;
@@ -902,8 +927,11 @@ const withActiveCourse = (href: string) => {
 		display: flex;
 		align-items: center;
 		flex-wrap: nowrap;
-		overflow: visible;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none;
 		min-width: 0;
+		flex: 1 1 auto;
 	}
 	.internal-links::-webkit-scrollbar {
 		display: none;
@@ -1609,6 +1637,19 @@ const withActiveCourse = (href: string) => {
 			justify-content: flex-end;
 			width: auto;
 			flex: 0 0 auto;
+			position: sticky;
+			right: 0;
+			background: inherit;
+			z-index: 1210;
+		}
+		.user-menu {
+			position: relative;
+		}
+		.user-dropdown {
+			right: 0;
+			left: auto;
+			width: max-content;
+			min-width: 160px;
 		}
 		.user-button {
 			padding: 0.35em 0.28em;

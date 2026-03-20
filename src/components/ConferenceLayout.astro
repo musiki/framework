@@ -979,6 +979,49 @@ if (
                 </select>
               </div>
 
+              <details class="conference-streaming-setup" data-streaming-setup>
+                <summary class="conference-streaming-setup-summary">
+                  <span class="conference-sidebar-heading">STREAMING SETUP</span>
+                </summary>
+                <div class="conference-streaming-setup-body">
+                  <div class="conference-field">
+                    <label for="conference-streaming-profile-select">Quality Profile</label>
+                    <select id="conference-streaming-profile-select" data-streaming-profile-select>
+                      <option value="auto">Auto (Adaptive)</option>
+                      <option value="high">High (Teacher)</option>
+                      <option value="medium">Medium (Balanced)</option>
+                      <option value="low">Low (Bandwidth Saver)</option>
+                    </select>
+                  </div>
+
+                  <div class="conference-field conference-field--checkbox">
+                    <label class="conference-checkbox-row" for="conference-optimize-speaker-input">
+                      <input
+                        id="conference-optimize-speaker-input"
+                        name="optimize-speaker"
+                        type="checkbox"
+                        checked
+                        data-optimize-speaker-input
+                      />
+                      <span>Prioritize Speaker</span>
+                    </label>
+                  </div>
+
+                  <div class="conference-field conference-field--checkbox">
+                    <label class="conference-checkbox-row" for="conference-limit-grid-input">
+                      <input
+                        id="conference-limit-grid-input"
+                        name="limit-grid"
+                        type="checkbox"
+                        checked
+                        data-limit-grid-input
+                      />
+                      <span>Limit Grid Quality</span>
+                    </label>
+                  </div>
+                </div>
+              </details>
+
               <div class="conference-session-controls" data-session-controls-field hidden>
                 <div class="conference-session-controls-heading">SESSION CONTROL</div>
 
@@ -1165,6 +1208,17 @@ if (
               </div>
             </div>
           </details>
+        </div>
+
+        <div class="conference-vps-monitor">
+          <div class="conference-vps-stat" title="VPS CPU Load" data-vps-cpu>
+            <span class="conference-vps-stat-label">CPU</span>
+            <span class="conference-vps-stat-value">--</span>
+          </div>
+          <div class="conference-vps-stat" title="VPS Outbound Bandwidth" data-vps-bandwidth>
+            <span class="conference-vps-stat-label">NET</span>
+            <span class="conference-vps-stat-value">--</span>
+          </div>
         </div>
 
         <p class="conference-statusline" data-room-status>
@@ -3174,55 +3228,138 @@ if (
     line-height: 1.4;
   }
 
+  .conference-vps-monitor {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.4rem;
+    padding: 0.2rem 0;
+    border-bottom: 1px solid var(--conference-line-soft);
+  }
+
+  .conference-vps-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    cursor: help;
+    font-family: var(--font-mono);
+  }
+
+  .conference-vps-stat-label {
+    font-size: 0.6rem;
+    color: var(--conference-muted);
+    font-weight: 700;
+  }
+
+  .conference-vps-stat-value {
+    font-size: 0.75rem;
+    color: var(--conference-fg);
+    font-weight: 500;
+  }
+
+  .conference-vps-stat[data-state='warning'] .conference-vps-stat-value {
+    color: #ffca28;
+  }
+
+  .conference-vps-stat[data-state='danger'] .conference-vps-stat-value {
+    color: #ef5350;
+  }
+
   .conference-chat {
     min-height: 0;
-    display: grid;
-    gap: 0.14rem;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    overflow: hidden;
   }
 
   .conference-chat-list {
     margin: 0;
-    padding: 0;
+    padding: 0.5rem;
     list-style: none;
     min-height: 10rem;
-    max-height: 34vh;
+    max-height: 40vh;
     overflow-y: auto;
-    display: grid;
-    gap: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1 1 auto;
   }
 
-  :global(.conference-chat-item),
+  :global(.conference-chat-item) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0;
+    border-bottom: none;
+  }
+
   :global(.conference-chat-empty) {
-    display: grid;
-    gap: 0.04rem;
-    padding: 0.08rem 0;
-    border-bottom: 1px solid var(--conference-line-soft);
+    padding: 1rem;
+    text-align: center;
+    color: var(--conference-muted);
+    font-size: 0.85rem;
+    font-style: italic;
   }
 
   :global(.conference-chat-header) {
     display: flex;
-    align-items: baseline;
-    gap: 0.28rem;
-    margin-bottom: 0.02rem;
-    color: rgba(245, 247, 251, 0.62) !important;
-    font-size: 0.8rem !important;
-    line-height: 1 !important;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.1rem;
   }
 
-  :global(.conference-chat-item .conference-chat-author) {
-    display: inline;
-    color: rgba(245, 247, 251, 0.6) !important;
-    font-size: 0.77rem !important;
+  :global(.conference-chat-author) {
+    color: var(--accent) !important;
+    font-size: 0.75rem !important;
     font-weight: 700 !important;
-    font-style: normal !important;
-    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
   }
 
-  :global(.conference-chat-header-separator) {
-    display: inline;
-    color: rgba(245, 247, 251, 0.46) !important;
-    font-size: 0.62rem !important;
-    opacity: 0.46 !important;
+  :global(.conference-chat-time) {
+    color: var(--conference-muted) !important;
+    font-size: 0.65rem !important;
+  }
+
+  :global(.conference-chat-body) {
+    color: #e0e0e0 !important;
+    font-size: 0.9rem !important;
+    line-height: 1.4 !important;
+    padding-left: 0.1rem;
+    word-break: break-word;
+  }
+
+  .conference-chat-compose {
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05); /* Slightly lighter dark gray */
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .conference-chat-compose textarea {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: white;
+    padding: 0.5rem;
+    font-size: 0.9rem;
+    resize: none;
+    transition: border-color 0.2s;
+  }
+
+  .conference-chat-compose textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .conference-chat-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
   }
 
   :global(.conference-chat-item .conference-chat-stamp) {

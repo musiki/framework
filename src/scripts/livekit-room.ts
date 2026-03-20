@@ -157,6 +157,7 @@ type PersistedRoomSetup = {
   previewInvert?: boolean;
   previewZoom?: number;
   recordingPreset?: RecordingPresetKey;
+  streamingSetup?: StreamingSetup;
   reverbMix?: number;
   reverbTime?: number;
   showCircle?: boolean;
@@ -275,6 +276,47 @@ type HandControlValues = Record<HandControlKey, number>;
 type VideoMixKey = 'brightness' | 'contrast' | 'luma' | 'saturation' | 'tint';
 type VideoMixSettings = Record<VideoMixKey, number>;
 type RecordingPresetKey = 'landscape-1080' | 'instagram-story' | 'tiktok';
+type StreamingProfileKey = 'auto' | 'high' | 'medium' | 'low';
+
+type StreamingSetup = {
+  limitGridQuality?: boolean;
+  optimizeSpeaker?: boolean;
+  profile?: StreamingProfileKey;
+};
+
+const BANDWIDTH_PROFILES: Record<StreamingProfileKey, BandwidthProfile> = {
+  auto: {
+    fps: 24,
+    height: 720,
+    maxBitrate: 1_200_000, // 1.2 Mbps
+    width: 1280,
+  },
+  high: {
+    fps: 30,
+    height: 1080,
+    maxBitrate: 2_500_000, // 2.5 Mbps
+    width: 1920,
+  },
+  medium: {
+    fps: 24,
+    height: 480,
+    maxBitrate: 800_000, // 800 kbps
+    width: 854,
+  },
+  low: {
+    fps: 15,
+    height: 360,
+    maxBitrate: 300_000, // 300 kbps
+    width: 640,
+  },
+};
+
+type BandwidthProfile = {
+  fps: number;
+  height: number;
+  maxBitrate: number;
+  width: number;
+};
 type RecordingPresetConfig = {
   height: number;
   key: RecordingPresetKey;
@@ -1167,6 +1209,19 @@ const createClientGuestIdentity = () => {
 };
 
 const getFirstName = (value: string) => normalizeText(value).split(/\s+/).filter(Boolean)[0] || normalizeText(value);
+
+const getStreamingProfile = (
+  role: ParticipantRole,
+  profileKey: StreamingProfileKey = 'auto',
+): BandwidthProfile => {
+  if (profileKey === 'high') return BANDWIDTH_PROFILES.high;
+  if (profileKey === 'medium') return BANDWIDTH_PROFILES.medium;
+  if (profileKey === 'low') return BANDWIDTH_PROFILES.low;
+
+  // Auto/Adaptive logic
+  if (role === 'teacher') return BANDWIDTH_PROFILES.high;
+  return BANDWIDTH_PROFILES.medium;
+};
 
 const DIRECT_IMAGE_URL_REGEX =
   /\.(png|jpe?g|gif|webp|svg|avif)(?:$|[?#])/i;
@@ -3303,6 +3358,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const previewBlurInput = root.querySelector('[data-preview-blur-input]');
   const previewInvertInput = root.querySelector('[data-preview-invert-input]');
   const showCircleInput = root.querySelector('[data-show-circle-input]');
+  const streamingSetupDetails = root.querySelector('[data-streaming-setup]');
+  const streamingProfileSelect = root.querySelector('[data-streaming-profile-select]');
+  const optimizeSpeakerInput = root.querySelector('[data-optimize-speaker-input]');
+  const limitGridQualityInput = root.querySelector('[data-limit-grid-input]');
+  const vpsCpuNode = root.querySelector('[data-vps-cpu]');
+  const vpsBandwidthNode = root.querySelector('[data-vps-bandwidth]');
   const statusNode = root.querySelector('[data-room-status]');
   const stateNode = root.querySelector('[data-room-state]');
   const countNode = root.querySelector('[data-participant-count]');
@@ -3549,6 +3610,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     nameInput.value = normalizeText(persistedSetup.name);
   }
 
+  if (streamingProfileSelect instanceof HTMLSelectElement && persistedSetup.streamingSetup?.profile) {
+    streamingProfileSelect.value = persistedSetup.streamingSetup.profile;
+  }
+  if (optimizeSpeakerInput instanceof HTMLInputElement) {
+    optimizeSpeakerInput.checked = persistedSetup.streamingSetup?.optimizeSpeaker ?? true;
+  }
+  if (limitGridQualityInput instanceof HTMLInputElement) {
+    limitGridQualityInput.checked = persistedSetup.streamingSetup?.limitGridQuality ?? true;
+  }
+
   if (isExternalInviteMode) {
     roomInput.value = serverDefaultRoom;
     roomInput.readOnly = true;
@@ -3635,6 +3706,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let unsubscribeLiveActivity: (() => void) | null = null;
   let activeLiveSnapshot: LiveSnapshot | null = null;
   let liveActivityTickId = 0;
+  let vpsStatsTickId = 0;
   let immersiveFullscreenActive = false;
   let connectedAtMs = 0;
   let recordingAnimationId = 0;
@@ -5473,6 +5545,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       previewInvert,
       previewZoom,
       recordingPreset,
+      streamingSetup: {
+        profile: (streamingProfileSelect as HTMLSelectElement)?.value as StreamingProfileKey || 'auto',
+        optimizeSpeaker: (optimizeSpeakerInput as HTMLInputElement)?.checked ?? true,
+        limitGridQuality: (limitGridQualityInput as HTMLInputElement)?.checked ?? true,
+      },
       showCircle: showPresentationCircle,
       mixerIncomingGain,
       mixerIncomingMuted,
@@ -5662,7 +5739,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const ensureHandLandmarker = async () => {
     if (handTrackingLandmarker) return handTrackingLandmarker;
-    handTrackingLandmarker = await createHandLandmarker();
+    try {
+      handTrackingLandmarker = await createHandLandmarker();
+    } catch (error) {
+      console.error('Failed to create hand landmarker:', error);
+      throw error;
+    }
     return handTrackingLandmarker;
   };
 
@@ -5987,16 +6069,34 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const syncPreferredRemoteVideoDimensions = () => {
     const currentLayout = getCurrentLayout();
+    const optimizeSpeaker = (optimizeSpeakerInput as HTMLInputElement)?.checked ?? true;
+    const limitGridQuality = (limitGridQualityInput as HTMLInputElement)?.checked ?? true;
+    const activeSpeakers = new Set(room.activeSpeakers.map((p) => p.identity));
 
     allParticipants().forEach((participant) => {
+      if (isLocalParticipant(room, participant)) return;
+
+      const isSpeaker = activeSpeakers.has(participant.identity);
+      const isFocused = participant.identity === focusedParticipantIdentity;
+
       participant.videoTrackPublications.forEach((publication) => {
         if (publication.source === Track.Source.ScreenShare) {
           requestRemotePublicationDimensions(publication, screenSlot, 1920, 1080);
           return;
         }
 
-        if (currentLayout === 'teacher' && participant.identity === focusedParticipantIdentity) {
-          requestRemotePublicationDimensions(publication, teacherSlot, 1280, 720);
+        // Active Speaker / Focus Prioritization
+        if (isFocused || (optimizeSpeaker && isSpeaker)) {
+          const target = isFocused ? teacherSlot : gridSlot;
+          requestRemotePublicationDimensions(publication, target, 1280, 720);
+          return;
+        }
+
+        // Grid Quality Limiting
+        if (limitGridQuality) {
+          requestRemotePublicationDimensions(publication, gridSlot, 320, 180);
+        } else {
+          requestRemotePublicationDimensions(publication, gridSlot, 640, 360);
         }
       });
     });
@@ -8253,22 +8353,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sender.textContent = getFirstName(message.name);
 
       const body = document.createElement('div');
-      body.className = 'conference-chat-text';
+      body.className = 'conference-chat-body';
       setConferenceChatBody(body, message.text);
 
-      const separator = document.createElement('span');
-      separator.className = 'conference-chat-header-separator';
-      separator.textContent = '·';
-
       const sentAt = document.createElement('time');
-      sentAt.className = 'conference-chat-stamp';
+      sentAt.className = 'conference-chat-time';
       sentAt.dateTime = message.sentAt;
       sentAt.textContent = new Date(message.sentAt).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
       });
 
-      header.append(sender, separator, sentAt);
+      header.append(sender, sentAt);
       item.append(header, body);
       chatList.appendChild(item);
     });
@@ -9249,7 +9345,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     try {
-      await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled);
+      const selectedProfile = (streamingProfileSelect as HTMLSelectElement)?.value as StreamingProfileKey || 'auto';
+      const profile = getStreamingProfile(localRole, selectedProfile);
+
+      await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled, {
+        resolution: {
+          width: profile.width,
+          height: profile.height,
+          frameRate: profile.fps,
+        },
+        videoEncoding: {
+          maxBitrate: profile.maxBitrate,
+        },
+        simulcast: true,
+      });
       await syncLocalBackgroundBlurProcessor().catch(() => undefined);
       syncAllParticipants();
       setControlState();
@@ -9461,6 +9570,42 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (room.state === ConnectionState.Connected) {
         void syncLocalParticipantMetadata().catch(() => undefined);
       }
+    });
+  }
+
+  if (streamingProfileSelect instanceof HTMLSelectElement) {
+    streamingProfileSelect.addEventListener('change', async () => {
+      persistSetupState();
+      if (room.localParticipant.isCameraEnabled) {
+        const selectedProfile = streamingProfileSelect.value as StreamingProfileKey;
+        const profile = getStreamingProfile(localRole, selectedProfile);
+        
+        const publication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+        if (publication?.videoTrack) {
+          await publication.videoTrack.setVideoEncoding({
+            maxBitrate: profile.maxBitrate,
+          });
+          await publication.videoTrack.setVideoDimensions({
+            width: profile.width,
+            height: profile.height,
+          });
+        }
+      }
+      syncAllParticipants();
+    });
+  }
+
+  if (optimizeSpeakerInput instanceof HTMLInputElement) {
+    optimizeSpeakerInput.addEventListener('change', () => {
+      persistSetupState();
+      syncAllParticipants();
+    });
+  }
+
+  if (limitGridQualityInput instanceof HTMLInputElement) {
+    limitGridQualityInput.addEventListener('change', () => {
+      persistSetupState();
+      syncAllParticipants();
     });
   }
 
@@ -10685,6 +10830,33 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     renderSessionTimer();
   };
 
+  const handleVpsStatsTick = async () => {
+    if (!vpsCpuNode && !vpsBandwidthNode) return;
+    try {
+      const response = await fetch('/api/internal/vps-stats');
+      if (!response.ok) return;
+      const stats = await response.json();
+
+      if (vpsCpuNode instanceof HTMLElement) {
+        const val = vpsCpuNode.querySelector('.conference-vps-stat-value');
+        if (val) val.textContent = `${stats.cpu.percent}%`;
+        const percent = Number.parseInt(stats.cpu.percent, 10);
+        vpsCpuNode.dataset.state = percent > 90 ? 'danger' : percent > 70 ? 'warning' : 'ok';
+        vpsCpuNode.title = `Load: ${stats.cpu.load} (${stats.cpu.cores} cores)`;
+      }
+
+      if (vpsBandwidthNode instanceof HTMLElement) {
+        const val = vpsBandwidthNode.querySelector('.conference-vps-stat-value');
+        if (val) val.textContent = `${stats.bandwidth.mbps}M`;
+        const mbps = Number.parseFloat(stats.bandwidth.mbps);
+        vpsBandwidthNode.dataset.state = mbps > 300 ? 'danger' : mbps > 150 ? 'warning' : 'ok';
+        vpsBandwidthNode.title = `Outbound: ${stats.bandwidth.mbps} Mbps\nTotal TX: ${stats.bandwidth.totalTxGb} GB`;
+      }
+    } catch {
+      // ignore fetch errors
+    }
+  };
+
   const handleViewportResize = () => {
     updateRecordingGuideLayout();
     queuePreferredRemoteVideoDimensionsSync();
@@ -10692,6 +10864,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
   liveActivityTickId = window.setInterval(handleLiveActivityTick, 1000);
+  vpsStatsTickId = window.setInterval(handleVpsStatsTick, 5000);
+  void handleVpsStatsTick(); // Immediate first run
   window.addEventListener('resize', handleViewportResize);
 
   const teardown = () => {
@@ -10726,6 +10900,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (liveActivityTickId) {
       window.clearInterval(liveActivityTickId);
       liveActivityTickId = 0;
+    }
+    if (vpsStatsTickId) {
+      window.clearInterval(vpsStatsTickId);
+      vpsStatsTickId = 0;
     }
     stopMixerMeters();
     stopHandTracking();
