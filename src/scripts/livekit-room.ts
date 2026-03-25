@@ -2095,50 +2095,27 @@ const normalizeGravityBallGravity = (value: unknown, fallback = GRAVITY_BALL_EAR
 };
 
 const createGravityBallMesh = () => {
-  const latitudeSegments = 9;
-  const longitudeSegments = 14;
+  // 24×32 segments — smooth sphere, ~1 500 triangles, similar to Three.js default quality
+  const latitudeSegments = 24;
+  const longitudeSegments = 32;
   const positions: number[] = [];
   const normals: number[] = [];
 
-  const createVertex = (u: number, v: number) => {
+  // For a perfect sphere the smooth normal equals the unit-sphere position.
+  // Returning [x, y, z, nx, ny, nz] avoids re-computing trig in the normal step.
+  const createVertex = (u: number, v: number): readonly [number, number, number, number, number, number] => {
     const theta = u * Math.PI * 2;
     const phi = v * Math.PI;
     const sinPhi = Math.sin(phi);
-    const radius =
-      1 +
-      0.06 * Math.sin(theta * 5 + v * 7.4) * Math.cos(phi * 3.6) +
-      0.03 * Math.sin(theta * 11 - v * 9.1);
-
-    return [
-      Math.cos(theta) * sinPhi * radius,
-      Math.cos(phi) * radius,
-      Math.sin(theta) * sinPhi * radius,
-    ] as const;
+    const nx = Math.cos(theta) * sinPhi;
+    const ny = Math.cos(phi);
+    const nz = Math.sin(theta) * sinPhi;
+    return [nx, ny, nz, nx, ny, nz] as const;
   };
 
-  const pushTriangle = (
-    pointA: readonly [number, number, number],
-    pointB: readonly [number, number, number],
-    pointC: readonly [number, number, number],
-  ) => {
-    const abX = pointB[0] - pointA[0];
-    const abY = pointB[1] - pointA[1];
-    const abZ = pointB[2] - pointA[2];
-    const acX = pointC[0] - pointA[0];
-    const acY = pointC[1] - pointA[1];
-    const acZ = pointC[2] - pointA[2];
-    const normalX = abY * acZ - abZ * acY;
-    const normalY = abZ * acX - abX * acZ;
-    const normalZ = abX * acY - abY * acX;
-    const length = Math.hypot(normalX, normalY, normalZ) || 1;
-    const nx = normalX / length;
-    const ny = normalY / length;
-    const nz = normalZ / length;
-
-    [pointA, pointB, pointC].forEach((point) => {
-      positions.push(point[0], point[1], point[2]);
-      normals.push(nx, ny, nz);
-    });
+  const pushVert = (v: readonly [number, number, number, number, number, number]) => {
+    positions.push(v[0], v[1], v[2]);
+    normals.push(v[3], v[4], v[5]);
   };
 
   for (let lat = 0; lat < latitudeSegments; lat += 1) {
@@ -2147,12 +2124,14 @@ const createGravityBallMesh = () => {
       const u1 = (lon + 1) / longitudeSegments;
       const v0 = lat / latitudeSegments;
       const v1 = (lat + 1) / latitudeSegments;
-      const pointA = createVertex(u0, v0);
-      const pointB = createVertex(u1, v0);
-      const pointC = createVertex(u1, v1);
-      const pointD = createVertex(u0, v1);
-      pushTriangle(pointA, pointB, pointC);
-      pushTriangle(pointA, pointC, pointD);
+      const a = createVertex(u0, v0);
+      const b = createVertex(u1, v0);
+      const c = createVertex(u1, v1);
+      const d = createVertex(u0, v1);
+      // Triangle 1
+      pushVert(a); pushVert(b); pushVert(c);
+      // Triangle 2
+      pushVert(a); pushVert(c); pushVert(d);
     }
   }
 
@@ -2544,30 +2523,59 @@ class GravityBallRenderer {
         uniform vec3 uLightDir;
         varying vec3 vNormal;
 
+        const float PI = 3.14159265;
+
+        // GGX normal distribution function
+        float D_GGX(float NdotH, float a2) {
+          float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
+          return a2 / (PI * d * d + 0.0001);
+        }
+
+        // Schlick-Smith visibility (height-correlated, simplified)
+        float V_SmithGGX(float NdotL, float NdotV, float a2) {
+          float GGXL = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
+          float GGXV = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
+          return 0.5 / (GGXL + GGXV + 0.0001);
+        }
+
+        // Schlick Fresnel — for metallic F0 = baseColor
+        vec3 F_Schlick(float VdotH, vec3 F0) {
+          return F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
+        }
+
         void main() {
-          vec3 normal = normalize(vNormal);
-          vec3 lightDir = normalize(uLightDir);
-          vec3 viewDir = vec3(0.0, 0.0, 1.0);
+          vec3 N = normalize(vNormal);
+          vec3 L = normalize(uLightDir);
+          vec3 V = vec3(0.0, 0.0, 1.0); // orthographic camera faces +Z
+          vec3 H = normalize(L + V);
 
-          // Blinn-Phong specular — very high shininess = mirror-like (roughness near 0)
-          vec3 halfVec = normalize(lightDir + viewDir);
-          float spec = pow(max(dot(normal, halfVec), 0.0), 220.0);
+          float NdotL = max(dot(N, L), 0.0);
+          float NdotV = max(dot(N, V), 0.001);
+          float NdotH = max(dot(N, H), 0.0);
+          float VdotH = max(dot(V, H), 0.0);
 
-          // Minimal diffuse for metallic look
-          float diffuse = max(dot(normal, lightDir), 0.0) * 0.12;
+          // metalness = 1, roughness = 0.5  (matching Three.js MeshStandardMaterial)
+          float roughness = 0.5;
+          float a2 = roughness * roughness * roughness * roughness; // a = r^2, a2 = a^2
 
-          // Hemisphere sky/ground fake env map tinted by base color
-          float hemi = normal.y * 0.5 + 0.5;
-          vec3 envSky = uBaseColor * vec3(0.48, 0.62, 0.22);
-          vec3 envGnd = uBaseColor * vec3(0.06, 0.08, 0.02);
-          vec3 env = mix(envGnd, envSky, hemi);
+          // Metallic: F0 = baseColor (no dielectric contribution)
+          vec3 F0 = uBaseColor;
+          vec3 F   = F_Schlick(VdotH, F0);
+          float D  = D_GGX(NdotH, a2);
+          float Vis = V_SmithGGX(NdotL, NdotV, a2);
 
-          // Chrome rim — narrow glancing angle highlight
-          float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.4);
+          // Cook-Torrance specular BRDF
+          vec3 specular = F * D * Vis * PI; // * PI balances energy with env light scale
 
-          vec3 color = env * (0.18 + diffuse);
-          color += vec3(0.95, 0.98, 1.00) * spec * 1.20; // mirror highlight
-          color += uBaseColor * rim * 0.28;               // rim tinted by color
+          // Procedural env map — hemisphere sky/ground tinted by base color
+          // approximates an HDRI envMap with a neutral outdoor lighting
+          float hemi = N.y * 0.5 + 0.5;
+          vec3 envSky = uBaseColor * vec3(0.52, 0.66, 0.28);
+          vec3 envGnd = uBaseColor * vec3(0.05, 0.06, 0.02);
+          vec3 envLight = mix(envGnd, envSky, hemi) * 0.60;
+
+          // Combine: env IBL + direct light specular (no diffuse — metalness = 1)
+          vec3 color = envLight + specular * NdotL * 2.8;
 
           gl_FragColor = vec4(color, 0.97);
         }
