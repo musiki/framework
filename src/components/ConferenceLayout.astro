@@ -979,6 +979,47 @@ if (
                 </select>
               </div>
 
+              <details class="conference-streaming-setup" data-streaming-setup>
+                <summary class="conference-streaming-setup-summary">
+                  <span class="conference-session-controls-heading">STREAMING</span>
+                </summary>
+                <div class="conference-streaming-setup-body">
+                  <div class="conference-field">
+                    <label for="conference-streaming-profile-select">Quality Profile</label>
+                    <select id="conference-streaming-profile-select" data-streaming-profile-select>
+                      <option value="auto">Auto (Adaptive)</option>
+                      <option value="high">High — 1080p · 2.5 Mbps</option>
+                      <option value="medium">Medium — 480p · 800 kbps</option>
+                      <option value="low">Low — 360p · 300 kbps</option>
+                    </select>
+                  </div>
+                  <div class="conference-field conference-field--checkbox">
+                    <label class="conference-checkbox-row" for="conference-optimize-speaker-input">
+                      <input
+                        id="conference-optimize-speaker-input"
+                        name="optimize-speaker"
+                        type="checkbox"
+                        checked
+                        data-optimize-speaker-input
+                      />
+                      <span>Prioritize Speaker</span>
+                    </label>
+                  </div>
+                  <div class="conference-field conference-field--checkbox">
+                    <label class="conference-checkbox-row" for="conference-limit-grid-input">
+                      <input
+                        id="conference-limit-grid-input"
+                        name="limit-grid"
+                        type="checkbox"
+                        checked
+                        data-limit-grid-input
+                      />
+                      <span>Limit Grid Quality</span>
+                    </label>
+                  </div>
+                </div>
+              </details>
+
               <div class="conference-session-controls" data-session-controls-field hidden>
                 <div class="conference-session-controls-heading">SESSION CONTROL</div>
 
@@ -1186,6 +1227,29 @@ if (
       <section class="conference-sidebar-section conference-sidebar-section--chat">
         <div class="conference-sidebar-heading conference-sidebar-heading--chat">
           <span>CHAT</span>
+          <div class="conference-reaction-buttons">
+            <button
+              type="button"
+              class="conference-reaction-button"
+              data-reaction="clap"
+              aria-label="Aplaudir"
+              title="Aplaudir 👏"
+            >👏</button>
+            <button
+              type="button"
+              class="conference-reaction-button"
+              data-reaction="heart"
+              aria-label="Corazón"
+              title="Corazón ❤️"
+            >❤️</button>
+            <button
+              type="button"
+              class="conference-reaction-button"
+              data-reaction="tada"
+              aria-label="Celebrar"
+              title="Celebrar 🎉"
+            >🎉</button>
+          </div>
           <button
             type="button"
             class="conference-hand-button"
@@ -2285,6 +2349,39 @@ if (
     color: rgba(245, 247, 251, 0.78);
   }
 
+  .conference-reaction-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+  }
+
+  .conference-reaction-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: rgba(245, 247, 251, 0.36);
+    cursor: pointer;
+    font-size: 0.95rem;
+    filter: grayscale(1) opacity(0.45);
+    transition: filter 200ms ease, transform 120ms ease;
+  }
+
+  .conference-reaction-button:hover,
+  .conference-reaction-button:focus-visible {
+    filter: grayscale(0.2) opacity(0.85);
+    transform: scale(1.18);
+    outline: none;
+  }
+
+  .conference-reaction-button:active {
+    transform: scale(0.92);
+  }
+
   .conference-slot,
   .conference-presentation,
   .conference-self-preview {
@@ -2752,8 +2849,8 @@ if (
 
   .conference-mixer {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(72px, 0.72fr);
-    gap: 0.45rem;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.3rem;
     align-items: stretch;
     min-height: 0;
   }
@@ -2762,16 +2859,16 @@ if (
     display: grid;
     justify-items: center;
     grid-template-rows: auto auto 1fr auto;
-    gap: 0.28rem;
+    gap: 0.22rem;
     min-height: 0;
-    padding: 0.28rem 0.22rem 0.22rem;
+    padding: 0.2rem 0.15rem 0.15rem;
     border: 0;
     background: transparent;
   }
 
   .conference-mixer-channel--video {
-    align-items: stretch;
-    justify-items: stretch;
+    align-items: center;
+    justify-items: center;
     grid-template-rows: auto 1fr;
     min-width: 0;
   }
@@ -2827,7 +2924,7 @@ if (
 
   .conference-mixer-fader-shell {
     position: relative;
-    width: 18px;
+    width: 13px;
     height: 5.2rem;
     display: grid;
     place-items: center;
@@ -2980,15 +3077,22 @@ if (
   .conference-video-mixer-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.34rem 0.28rem;
+    gap: 0.18rem 0.12rem;
     align-content: start;
     min-height: 0;
+    width: 100%;
+    height: 5.2rem;
+    padding: 0.18rem 0.1rem;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.02);
+    overflow: hidden;
   }
 
   .conference-video-mixer-control {
     display: grid;
     justify-items: center;
-    gap: 0.14rem;
+    gap: 0.1rem;
     min-width: 0;
   }
 
@@ -2998,9 +3102,9 @@ if (
 
   .conference-video-mixer-label {
     color: var(--conference-muted);
-    font-size: 0.42rem;
+    font-size: 0.38rem;
     line-height: 1;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     text-align: center;
     white-space: nowrap;
@@ -3232,6 +3336,39 @@ if (
     line-height: 1;
     letter-spacing: 0.16em;
     text-transform: uppercase;
+  }
+
+  .conference-streaming-setup {
+    border-top: 1px solid var(--conference-line-soft);
+    padding-top: 0.24rem;
+  }
+
+  .conference-streaming-setup-summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    user-select: none;
+  }
+
+  .conference-streaming-setup-summary::-webkit-details-marker { display: none; }
+
+  .conference-streaming-setup-summary::before {
+    content: '▸';
+    font-size: 0.5rem;
+    color: var(--conference-muted);
+    transition: transform 200ms ease;
+  }
+
+  .conference-streaming-setup[open] .conference-streaming-setup-summary::before {
+    transform: rotate(90deg);
+  }
+
+  .conference-streaming-setup-body {
+    display: grid;
+    gap: 0.5rem;
+    padding-top: 0.4rem;
   }
 
   .conference-session-action {
@@ -3541,7 +3678,7 @@ if (
     text-wrap: pretty;
   }
 
-  :global(.conference-chat-item .conference-chat-text::before) {
+  :global(.conference-chat-text::before) {
     content: '›';
     position: absolute;
     left: 0;
@@ -3592,6 +3729,10 @@ if (
 
   :global(.conference-chat-text ol > li::before) {
     left: -0.1em;
+  }
+
+  :global(.conference-chat-line) {
+    font-size: 0.85em;
   }
 
   :global(.conference-chat-line + .conference-chat-line) {
@@ -3652,7 +3793,7 @@ if (
   .conference-chat-compose textarea {
     min-height: 3rem;
     resize: vertical;
-    font-size: 0.72rem;
+    font-size: 0.88rem;
     line-height: 1.04;
     background: rgba(40, 40, 40, 0.20) !important;
   }
@@ -4841,18 +4982,9 @@ if (
       padding: 0.22rem 0.14rem 0.16rem;
     }
 
-    .conference-mixer-channel--video {
-      grid-column: 1 / -1;
-      gap: 0.22rem;
-    }
-
     .conference-video-mixer-grid {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 0.28rem 0.2rem;
-    }
-
-    .conference-video-mixer-control--wide {
-      grid-column: auto;
+      height: auto;
+      min-height: 5.2rem;
     }
 
     .conference-mixer-fx {

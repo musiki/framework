@@ -195,6 +195,33 @@ type PersistedRoomSetup = {
   videoTint?: number;
   synthControlRanges?: Partial<Record<HandControlKey, Partial<HandControlRange>>>;
   room?: string;
+  streamingProfile?: StreamingProfileKey;
+  optimizeSpeaker?: boolean;
+  limitGridQuality?: boolean;
+};
+
+type StreamingProfileKey = 'auto' | 'high' | 'medium' | 'low';
+
+type BandwidthProfile = {
+  fps: number;
+  height: number;
+  maxBitrate: number;
+  width: number;
+};
+
+const BANDWIDTH_PROFILES: Record<StreamingProfileKey, BandwidthProfile> = {
+  auto:   { fps: 24, height: 720,  maxBitrate: 1_200_000, width: 1280 },
+  high:   { fps: 30, height: 1080, maxBitrate: 2_500_000, width: 1920 },
+  medium: { fps: 24, height: 480,  maxBitrate: 800_000,   width: 854  },
+  low:    { fps: 15, height: 360,  maxBitrate: 300_000,   width: 640  },
+};
+
+const getStreamingProfile = (
+  role: string,
+  profileKey: StreamingProfileKey = 'auto',
+): BandwidthProfile => {
+  if (profileKey !== 'auto') return BANDWIDTH_PROFILES[profileKey];
+  return role === 'teacher' ? BANDWIDTH_PROFILES.high : BANDWIDTH_PROFILES.medium;
 };
 
 type VideoTrackProcessorLike = {
@@ -3389,6 +3416,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const sessionControlsField = root.querySelector('[data-session-controls-field]');
   const sessionAllowInstrumentsInput = root.querySelector('[data-session-allow-instruments-input]');
   const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
+  const streamingProfileSelect = root.querySelector('[data-streaming-profile-select]');
+  const optimizeSpeakerInput = root.querySelector('[data-optimize-speaker-input]');
+  const limitGridQualityInput = root.querySelector('[data-limit-grid-input]');
   const synthCarrierInput = root.querySelector('[data-synth-carrier-input]');
   const synthCarrierOutput = root.querySelector('[data-synth-carrier-output]');
   const synthModulatorInput = root.querySelector('[data-synth-modulator-input]');
@@ -3693,6 +3723,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   );
   let presentationCircleZoom = previewZoom;
   let showPresentationCircle = persistedSetup.showCircle !== false;
+  if (streamingProfileSelect instanceof HTMLSelectElement && persistedSetup.streamingProfile) {
+    streamingProfileSelect.value = persistedSetup.streamingProfile;
+  }
+  if (optimizeSpeakerInput instanceof HTMLInputElement && persistedSetup.optimizeSpeaker !== undefined) {
+    optimizeSpeakerInput.checked = persistedSetup.optimizeSpeaker;
+  }
+  if (limitGridQualityInput instanceof HTMLInputElement && persistedSetup.limitGridQuality !== undefined) {
+    limitGridQualityInput.checked = persistedSetup.limitGridQuality;
+  }
   let instrumentsOpen = persistedSetup.instrumentsOpen === true;
   let handTrackEnabled = Boolean(persistedSetup.handTrackEnabled);
   let handRampMs = clampNumber(persistedSetup.handRampMs, 10, 4000, 500, 0);
@@ -5999,16 +6038,37 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const syncPreferredRemoteVideoDimensions = () => {
     const currentLayout = getCurrentLayout();
+    const optimizeSpeaker = (optimizeSpeakerInput as HTMLInputElement)?.checked ?? true;
+    const limitGridQuality = (limitGridQualityInput as HTMLInputElement)?.checked ?? true;
+    const activeSpeakers = new Set(room.activeSpeakers.map((p) => p.identity));
 
     allParticipants().forEach((participant) => {
+      if (isLocalParticipant(room, participant)) return;
+
+      const isSpeaker = activeSpeakers.has(participant.identity);
+      const isFocused = participant.identity === focusedParticipantIdentity;
+
       participant.videoTrackPublications.forEach((publication) => {
         if (publication.source === Track.Source.ScreenShare) {
           requestRemotePublicationDimensions(publication, screenSlot, 1920, 1080);
           return;
         }
 
+        if (isFocused || (optimizeSpeaker && isSpeaker)) {
+          const target = isFocused ? teacherSlot : gridSlot;
+          requestRemotePublicationDimensions(publication, target, 1280, 720);
+          return;
+        }
+
         if (currentLayout === 'teacher' && participant.identity === focusedParticipantIdentity) {
           requestRemotePublicationDimensions(publication, teacherSlot, 1280, 720);
+          return;
+        }
+
+        if (limitGridQuality) {
+          requestRemotePublicationDimensions(publication, gridSlot, 320, 180);
+        } else {
+          requestRemotePublicationDimensions(publication, gridSlot, 640, 360);
         }
       });
     });
@@ -6457,7 +6517,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const createRecordingDisplayConstraints = () => ({
     video: {
-      displaySurface: 'browser',
       frameRate: 30,
       width: { ideal: 2560, max: 3840 },
       height: { ideal: 1440, max: 2160 },
@@ -6469,9 +6528,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sampleRate: 48_000,
       suppressLocalAudioPlayback: false,
     },
-    preferCurrentTab: true,
     selfBrowserSurface: 'include',
     surfaceSwitching: 'include',
+    systemAudio: 'include',
   });
 
   const startRecordingDisplayCapture = async () => {
@@ -9413,9 +9472,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             noiseSuppression: false,
             autoGainControl: false,
           },
-          video: {
-            displaySurface: 'browser',
-          },
           resolution: {
             width: 1920,
             height: 1080,
@@ -9423,7 +9479,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             aspectRatio: 16 / 9,
           },
           contentHint: 'detail',
-          preferCurrentTab: true,
           selfBrowserSurface: 'include',
           surfaceSwitching: 'include',
           systemAudio: 'include',
@@ -10261,6 +10316,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
+  for (const btn of root.querySelectorAll<HTMLButtonElement>('[data-reaction]')) {
+    btn.addEventListener('click', () => {
+      const reaction = btn.dataset.reaction as ReactionKind;
+      if (reaction in REACTION_EMOJIS) {
+        void publishReaction(reaction).catch((error) => {
+          setStatus(safeErrorMessage(error));
+        });
+      }
+    });
+  }
+
   const sendChatMessage = async () => {
     if (room.state !== ConnectionState.Connected) return;
 
@@ -10681,6 +10747,35 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   document.addEventListener('keydown', handleRoomShortcutKeydown);
   document.addEventListener('keyup', handleRoomShortcutKeyup);
   window.addEventListener('graph:statechange', handleGraphStateChange as EventListener);
+
+  if (streamingProfileSelect instanceof HTMLSelectElement) {
+    streamingProfileSelect.addEventListener('change', async () => {
+      persistSetupState();
+      if (room.localParticipant.isCameraEnabled) {
+        const profile = getStreamingProfile(localRole, streamingProfileSelect.value as StreamingProfileKey);
+        const publication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+        if (publication?.videoTrack) {
+          await publication.videoTrack.setVideoEncoding({ maxBitrate: profile.maxBitrate });
+          await publication.videoTrack.setVideoDimensions({ width: profile.width, height: profile.height });
+        }
+      }
+      queuePreferredRemoteVideoDimensionsSync();
+    });
+  }
+
+  if (optimizeSpeakerInput instanceof HTMLInputElement) {
+    optimizeSpeakerInput.addEventListener('change', () => {
+      persistSetupState();
+      queuePreferredRemoteVideoDimensionsSync();
+    });
+  }
+
+  if (limitGridQualityInput instanceof HTMLInputElement) {
+    limitGridQualityInput.addEventListener('change', () => {
+      persistSetupState();
+      queuePreferredRemoteVideoDimensionsSync();
+    });
+  }
 
   [roomInput, identityInput, nameInput].forEach((input) => {
     input.addEventListener('change', () => {
