@@ -2464,6 +2464,8 @@ class GravityBallRenderer {
   private lastGrabAnchor = { at: 0, x: 0, y: 0 };
   private previousHandPoints = new Map<number, { x: number; y: number; at: number }>();
   private lastFrameAt = 0;
+  private prevCanvasWidth = 0;
+  private prevCanvasHeight = 0;
   private position = { x: 0, y: 0, z: 0 };
   private velocity = { x: 140, y: -90, z: 0.14 };
   private radius = 42;
@@ -2544,13 +2546,30 @@ class GravityBallRenderer {
 
         void main() {
           vec3 normal = normalize(vNormal);
-          vec3 lightDirection = normalize(uLightDir);
-          float diffuse = max(dot(normal, lightDirection), 0.0);
+          vec3 lightDir = normalize(uLightDir);
+          vec3 viewDir = vec3(0.0, 0.0, 1.0);
+
+          // Blinn-Phong specular — very high shininess = mirror-like (roughness near 0)
+          vec3 halfVec = normalize(lightDir + viewDir);
+          float spec = pow(max(dot(normal, halfVec), 0.0), 220.0);
+
+          // Minimal diffuse for metallic look
+          float diffuse = max(dot(normal, lightDir), 0.0) * 0.12;
+
+          // Hemisphere sky/ground fake env map tinted by base color
           float hemi = normal.y * 0.5 + 0.5;
-          float rim = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), 2.4);
-          vec3 color = uBaseColor * (0.24 + diffuse * 0.82 + hemi * 0.22);
-          color += vec3(0.26, 0.34, 0.12) * rim * 0.32;
-          gl_FragColor = vec4(color, 0.96);
+          vec3 envSky = uBaseColor * vec3(0.48, 0.62, 0.22);
+          vec3 envGnd = uBaseColor * vec3(0.06, 0.08, 0.02);
+          vec3 env = mix(envGnd, envSky, hemi);
+
+          // Chrome rim — narrow glancing angle highlight
+          float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.4);
+
+          vec3 color = env * (0.18 + diffuse);
+          color += vec3(0.95, 0.98, 1.00) * spec * 1.20; // mirror highlight
+          color += uBaseColor * rim * 0.28;               // rim tinted by color
+
+          gl_FragColor = vec4(color, 0.97);
         }
       `,
     );
@@ -2946,7 +2965,14 @@ class GravityBallRenderer {
     if (this.position.x <= 0 || this.position.y <= 0) {
       this.position.x = width * 0.56;
       this.position.y = height * 0.34;
+    } else if (this.prevCanvasWidth > 0 && this.prevCanvasHeight > 0 &&
+               (width !== this.prevCanvasWidth || height !== this.prevCanvasHeight)) {
+      // Rescale position proportionally on window resize so the ball doesn't warp
+      this.position.x = (this.position.x / this.prevCanvasWidth) * width;
+      this.position.y = (this.position.y / this.prevCanvasHeight) * height;
     }
+    this.prevCanvasWidth = width;
+    this.prevCanvasHeight = height;
 
     this.applyPhysics(deltaSeconds, width, height);
 

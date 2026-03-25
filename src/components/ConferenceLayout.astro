@@ -2869,8 +2869,9 @@ if (
   .conference-mixer-channel--video {
     align-items: center;
     justify-items: center;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto auto;
     min-width: 0;
+    align-self: start;
   }
 
   .conference-mixer-channel-label {
@@ -3076,12 +3077,12 @@ if (
 
   .conference-video-mixer-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.18rem 0.12rem;
+    grid-template-columns: 1fr;
+    gap: 0.16rem;
     align-content: start;
     min-height: 0;
     width: 100%;
-    height: 5.2rem;
+    height: auto;
     padding: 0.18rem 0.1rem;
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 3px;
@@ -3092,12 +3093,12 @@ if (
   .conference-video-mixer-control {
     display: grid;
     justify-items: center;
-    gap: 0.1rem;
+    gap: 0.08rem;
     min-width: 0;
   }
 
   .conference-video-mixer-control--wide {
-    grid-column: 1 / -1;
+    /* no span needed in single-column layout */
   }
 
   .conference-video-mixer-label {
@@ -3639,14 +3640,14 @@ if (
     gap: 0.28rem;
     margin-bottom: 0.02rem;
     color: rgba(245, 247, 251, 0.62) !important;
-    font-size: 0.96rem !important;
-    line-height: 1 !important;
+    font-size: 0.75rem !important;
+    line-height: 1.1 !important;
   }
 
   :global(.conference-chat-item .conference-chat-author) {
     display: inline;
     color: rgba(245, 247, 251, 0.6) !important;
-    font-size: 0.92rem !important;
+    font-size: 0.75rem !important;
     font-weight: 700 !important;
     font-style: normal !important;
     letter-spacing: 0.01em;
@@ -3655,14 +3656,14 @@ if (
   :global(.conference-chat-header-separator) {
     display: inline;
     color: rgba(245, 247, 251, 0.46) !important;
-    font-size: 0.74rem !important;
+    font-size: 0.75rem !important;
     opacity: 0.46 !important;
   }
 
   :global(.conference-chat-item .conference-chat-stamp) {
     display: inline;
     color: rgba(245, 247, 251, 0.5) !important;
-    font-size: 0.74rem !important;
+    font-size: 0.75rem !important;
     font-style: italic !important;
     font-weight: 400 !important;
     opacity: 0.5 !important;
@@ -3671,21 +3672,14 @@ if (
   :global(.conference-chat-item .conference-chat-text) {
     position: relative;
     margin: 0 !important;
-    padding-left: 0.94rem;
     color: rgba(245, 247, 251, 0.78) !important;
-    font-size: 1.08rem !important;
-    line-height: 1.04 !important;
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
     text-wrap: pretty;
   }
 
   :global(.conference-chat-text::before) {
-    content: '›';
-    position: absolute;
-    left: 0;
-    top: 0;
-    line-height: inherit;
-    color: rgba(245, 247, 251, 0.30);
-    font-size: 0.85em;
+    content: none;
   }
 
   :global(.conference-chat-text p),
@@ -3732,7 +3726,7 @@ if (
   }
 
   :global(.conference-chat-line) {
-    font-size: 0.85em;
+    font-size: 0.75rem;
   }
 
   :global(.conference-chat-line + .conference-chat-line) {
@@ -4046,6 +4040,12 @@ if (
   @media (max-width: 720px) {
     .conference-mixer-fx-pair {
       flex-direction: column;
+    }
+
+    .conference-mixer-fx {
+      margin-top: 0.4rem;
+      padding-top: 0.4rem;
+      border-top: 1px solid var(--conference-line);
     }
   }
 
@@ -4961,10 +4961,11 @@ if (
     }
 
     .conference-sidebar-section--mixer {
-      height: 100%;
-      max-height: none;
+      height: auto;
+      max-height: 60dvh;
+      overflow-y: auto;
       overflow-x: hidden;
-      padding-bottom: 0.8rem;
+      padding-bottom: 1rem;
     }
 
     .conference-sidebar-section--mixer > .conference-sidebar-heading {
@@ -4974,17 +4975,20 @@ if (
     }
 
     .conference-mixer {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 0.4rem 0.28rem;
+      /* 5 equal columns — all channels in one row, video channel is narrow/tall */
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.3rem 0.2rem;
+      align-items: start;
     }
 
     .conference-mixer-channel {
-      padding: 0.22rem 0.14rem 0.16rem;
+      padding: 0.18rem 0.1rem 0.14rem;
     }
 
-    .conference-video-mixer-grid {
-      height: auto;
-      min-height: 5.2rem;
+    .conference-mixer-fx {
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--conference-line);
     }
 
     .conference-mixer-fx {
