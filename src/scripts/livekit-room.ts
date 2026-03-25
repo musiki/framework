@@ -2578,11 +2578,10 @@ class GravityBallRenderer {
           float TdotH = dot(T, H);
           float BdotH = dot(B, H);
 
-          // roughness = 0.4, anisotropy: tighter along T, wider along B
-          // gives rotating metallic streaks as the ball spins
-          float ax = 0.28;  // roughness_T²  (tighter highlight axis)
-          float ay = 0.52;  // roughness_B²  (wider  highlight axis)
-          float a2_vis = ax * ay; // geometric mean for isotropic Smith
+          // roughness = 0.6, anisotropy: tighter along T, wider along B
+          float ax = 0.32;  // tighter axis (roughness_T ≈ 0.57)
+          float ay = 0.62;  // wider  axis (roughness_B ≈ 0.79)
+          float a2_vis = ax * ay;
 
           vec3 F0  = uBaseColor;
           vec3 F   = F_Schlick(VdotH, F0);
@@ -2590,13 +2589,20 @@ class GravityBallRenderer {
           float Vis = V_SmithGGX(NdotL, NdotV, a2_vis * a2_vis);
           vec3 specular = F * D * Vis * PI;
 
-          // ── Escher sphere-map ─────────────────────────────────────────────
-          // Blinn sphere-map: R = reflect(-V, N), then
-          //   m = 2·|R+(0,0,1)|,  uv = R.xy/m + 0.5
-          // Ball's own canvas is never in the texture (only <video> elements)
+          // ── Escher sphere-map with zoom + anisotropic UV warp ─────────────
+          // Blinn sphere-map: R = reflect(-V, N)
+          //   m = 2·|R+(0,0,1)|,  base UV = R.xy/m + 0.5
           vec3 R = reflect(-V, N);
           float m = 2.0 * sqrt(R.x*R.x + R.y*R.y + (R.z + 1.0)*(R.z + 1.0));
-          vec2 sphereUV = clamp(vec2(R.x / m + 0.5, R.y / m + 0.5), 0.002, 0.998);
+          vec2 baseUV = vec2(R.x / m + 0.5, R.y / m + 0.5);
+          // Anisotropic warp: T/B-frame offsets stretch the reflection
+          // along the rotating tangent, giving the "brushed" Escher distortion
+          float warpT = dot(T.xy, R.xy) * 0.14;
+          float warpB = dot(B.xy, R.xy) * 0.07;
+          vec2 warpedUV = baseUV + vec2(warpT, warpB);
+          // Zoom in: envZoom < 1 samples a smaller window → magnified reflection
+          float envZoom = 0.42;
+          vec2 sphereUV = clamp((warpedUV - 0.5) * envZoom + 0.5, 0.002, 0.998);
           vec3 envSample = texture2D(uEnvMap, sphereUV).rgb;
 
           vec3 Fenv = F_Schlick(NdotV, F0);
@@ -3144,6 +3150,32 @@ class GravityBallRenderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
+    const aspect = width / Math.max(1, height);
+    const centerX = (this.position.x / width) * 2 - 1;
+    const centerY = 1 - (this.position.y / height) * 2;
+    const scale = (this.radius / height) * 2;
+    const rotationMatrix = this.buildRotationMatrix();
+
+    // ── Halo shadow: soft dark disc AT ball position, dims video behind it ──
+    // Unlike a floor shadow this sits right behind the ball in screen space,
+    // giving the impression the ball is blocking/absorbing ambient light from
+    // the video — like a real opaque object over a lit surface.
+    if (this.shadowProgram && this.shadowBuffer) {
+      gl.useProgram(this.shadowProgram);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer);
+      gl.enableVertexAttribArray(this.shadowAttribCorner);
+      gl.vertexAttribPointer(this.shadowAttribCorner, 2, gl.FLOAT, false, 0, 0);
+      // Radius ~1.6× the ball so shadow bleeds softly past the edge
+      const haloRX = (scale / aspect) * 1.6;
+      const haloRY = scale * 1.6;
+      gl.uniform2f(this.shadowUniformCenter, centerX, centerY);
+      gl.uniform2f(this.shadowUniformRadius, haloRX, haloRY);
+      gl.uniform1f(this.shadowUniformAlpha, 0.42);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.disableVertexAttribArray(this.shadowAttribCorner);
+    }
+
+    // ── Ball: restore ball program + attrib state after shadow pass ──────────
     gl.useProgram(program);
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.enableVertexAttribArray(this.attribPosition);
@@ -3151,40 +3183,6 @@ class GravityBallRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
     gl.enableVertexAttribArray(this.attribNormal);
     gl.vertexAttribPointer(this.attribNormal, 3, gl.FLOAT, false, 0, 0);
-
-    const aspect = width / Math.max(1, height);
-    const centerX = (this.position.x / width) * 2 - 1;
-    const centerY = 1 - (this.position.y / height) * 2;
-    const scale = (this.radius / height) * 2;
-    const rotationMatrix = this.buildRotationMatrix();
-
-    // ── Projected shadow (drawn first, underneath ball) ──────────────────────
-    // Cast along light direction (-0.4, 0.72, ...) onto the "floor" (bottom wall).
-    // Shadow flattens and fades as ball rises higher.
-    if (this.shadowProgram && this.shadowBuffer) {
-      const LIGHT_X = -0.4;
-      const LIGHT_Y =  0.72;
-      const floorY   = height - this.radius * 0.6;
-      const distUp   = Math.max(0, floorY - this.position.y) / Math.max(1, height);
-      // Project ball center onto floor along inverse-light direction
-      const shadowPx  = this.position.x + LIGHT_X / Math.max(0.01, LIGHT_Y) * (floorY - this.position.y);
-      const shadowNdcX = (shadowPx / width) * 2 - 1;
-      const shadowNdcY = 1 - (floorY / height) * 2;
-      // Scale: squashed ellipse, stretches wider as ball rises
-      const shadowRX   = (scale / aspect) * (1.0 + distUp * 1.8);
-      const shadowRY   = scale * 0.18;
-      const shadowAlpha = Math.max(0, 0.52 - distUp * 0.48);
-
-      gl.useProgram(this.shadowProgram);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer);
-      gl.enableVertexAttribArray(this.shadowAttribCorner);
-      gl.vertexAttribPointer(this.shadowAttribCorner, 2, gl.FLOAT, false, 0, 0);
-      gl.uniform2f(this.shadowUniformCenter, shadowNdcX, shadowNdcY);
-      gl.uniform2f(this.shadowUniformRadius, shadowRX, shadowRY);
-      gl.uniform1f(this.shadowUniformAlpha, shadowAlpha);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-      gl.disableVertexAttribArray(this.shadowAttribCorner);
-    }
 
     // Update and bind Escher env-map texture
     this.updateEnvTexture();
