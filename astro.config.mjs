@@ -51,7 +51,7 @@ const remoteDevHmrHost = (
   ''
 ).trim();
 const viteServerConfig = {
-  allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', 'dev.musiki.org.ar', '85.31.234.141'],
+  allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', 'dev.musiki.org.ar', '85.31.234.141', '.ngrok-free.app', '.ngrok.io'],
 };
 
 if (remoteDevHmrHost) {

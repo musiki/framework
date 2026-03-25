@@ -1019,7 +1019,17 @@ if (
                 <details class="conference-room-invite-panel">
                   <summary class="conference-room-invite-panel-summary">INVITAR</summary>
 
-                  <div class="conference-room-invite-controls">
+                  <!-- Invite role switch -->
+                  <div class="conference-invite-role-switch">
+                    <span class="conference-invite-role-label" data-role-label-external>Externos</span>
+                    <label class="conference-switch">
+                      <input type="checkbox" id="conference-invite-role-toggle" data-invite-role-toggle />
+                      <span class="conference-switch-slider"></span>
+                    </label>
+                    <span class="conference-invite-role-label" data-role-label-student>Estudiantes</span>
+                  </div>
+
+                  <div class="conference-room-invite-controls" data-invite-panel="external">
                     <div class="conference-session-controls-heading">INVITE USERS</div>
 
                     <div class="conference-field">
@@ -1096,7 +1106,7 @@ if (
                       Genera un link con password para invitados externos sin login.
                     </p>
                   </div>
-                  <div class="conference-room-invite-controls">
+                  <div class="conference-room-invite-controls conference-room-invite-controls--hidden" data-invite-panel="student">
                     <div class="conference-session-controls-heading">INVITE ESTUDIANTES</div>
 
                     <div class="conference-field">
@@ -1395,6 +1405,18 @@ if (
     </div>
 
     <div class="conference-bar-group conference-bar-group--exit">
+      <span
+        class="conference-stat-indicator"
+        data-stat-cpu
+        title="CPU · uso del hilo principal estimado por RAF"
+        aria-label="CPU usage"
+      >--</span>
+      <span
+        class="conference-stat-indicator"
+        data-stat-bw
+        title="Ancho de banda · bytes/s WebRTC"
+        aria-label="Bandwidth"
+      >--</span>
       <span class="conference-session-timer" data-session-timer>00:00:00</span>
       <button
         type="button"
@@ -1677,6 +1699,214 @@ if (
     if (typeof teardown === 'function') teardown();
     teardown = null;
   });
+</script>
+
+<script>
+  // ── Invite role switch (Externos / Estudiantes) ──────────────────────
+  function initInviteSwitch() {
+    const toggle = document.querySelector('[data-invite-role-toggle]');
+    if (!(toggle instanceof HTMLInputElement)) return;
+
+    const panelExternal = document.querySelector('[data-invite-panel="external"]');
+    const panelStudent  = document.querySelector('[data-invite-panel="student"]');
+    const labelExternal = document.querySelector('[data-role-label-external]');
+    const labelStudent  = document.querySelector('[data-role-label-student]');
+
+    const updateSwitch = () => {
+      const isStudent = toggle.checked;
+      panelExternal?.classList.toggle('conference-room-invite-controls--hidden',  isStudent);
+      panelStudent?.classList.toggle('conference-room-invite-controls--hidden',  !isStudent);
+      labelExternal?.classList.toggle('active', !isStudent);
+      labelStudent?.classList.toggle('active',   isStudent);
+    };
+
+    toggle.addEventListener('change', updateSwitch);
+    updateSwitch(); // init state
+  }
+
+  // ── Draggable camera circle preview ──────────────────────────────────
+  function initDraggableCircle() {
+    // The circle preview is the local tile in circle/presentation mode.
+    // We target the wrapper element that has position:absolute inside the stage.
+    const root = document.querySelector('[data-conference-root]');
+    if (!root) return;
+
+    // Observe DOM for the circle element (rendered after connection)
+    const observer = new MutationObserver(() => {
+      const circle = root.querySelector('.conference-tile--circle') as HTMLElement
+                  || root.querySelector('[data-local-circle]') as HTMLElement;
+      if (!circle || circle.dataset.draggableInit) return;
+      circle.dataset.draggableInit = 'true';
+      makeDraggable(circle);
+    });
+    observer.observe(root, { childList: true, subtree: true });
+  }
+
+  function makeDraggable(el: HTMLElement) {
+    el.style.cursor = 'grab';
+    el.style.userSelect = 'none';
+    el.style.position = 'absolute';
+
+    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+    const onStart = (clientX: number, clientY: number) => {
+      const computed = window.getComputedStyle(el);
+      startLeft = parseInt(computed.left) || el.offsetLeft;
+      startTop  = parseInt(computed.top)  || el.offsetTop;
+      startX = clientX;
+      startY = clientY;
+      el.style.cursor = 'grabbing';
+      el.style.transition = 'none';
+    };
+
+    const onMove = (clientX: number, clientY: number) => {
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+      el.style.left = `${startLeft + dx}px`;
+      el.style.top  = `${startTop  + dy}px`;
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+    };
+
+    const onEnd = () => {
+      el.style.cursor = 'grab';
+    };
+
+    // Mouse
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      onStart(e.clientX, e.clientY);
+      const move = (ev: MouseEvent) => onMove(ev.clientX, ev.clientY);
+      const up   = () => { onEnd(); window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+    });
+
+    // Touch
+    el.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      onStart(t.clientX, t.clientY);
+      const move = (ev: TouchEvent) => { const tt = ev.touches[0]; onMove(tt.clientX, tt.clientY); };
+      const end  = () => { onEnd(); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', end); };
+      window.addEventListener('touchmove', move, { passive: true });
+      window.addEventListener('touchend', end);
+    });
+  }
+
+  // ── Session Stats: CPU (RAF) + Bandwidth (WebRTC getStats hook) ─────
+  let pcInstances: RTCPeerConnection[] = [];
+  let prevBytesTotal = 0;
+  let prevStatsTime = 0;
+
+  // Intercept RTCPeerConnection to track all instances (must run before LiveKit)
+  const OriginalRTCPC = window.RTCPeerConnection;
+  class TrackedRTCPeerConnection extends OriginalRTCPC {
+    constructor(...args: ConstructorParameters<typeof RTCPeerConnection>) {
+      super(...args);
+      pcInstances.push(this);
+      this.addEventListener('connectionstatechange', () => {
+        if (this.connectionState === 'closed' || this.connectionState === 'failed') {
+          pcInstances = pcInstances.filter(pc => pc !== this);
+        }
+      });
+    }
+  }
+  // @ts-ignore
+  window.RTCPeerConnection = TrackedRTCPeerConnection;
+
+  // CPU via RAF timing (measures main-thread lag)
+  let rafFrameTimes: number[] = [];
+  let lastRafTime = performance.now();
+  const rafLoop = (now: number) => {
+    const delta = now - lastRafTime;
+    lastRafTime = now;
+    if (delta > 0 && delta < 500) rafFrameTimes.push(delta);
+    if (rafFrameTimes.length > 60) rafFrameTimes.shift();
+    requestAnimationFrame(rafLoop);
+  };
+  requestAnimationFrame(rafLoop);
+
+  const estimateCpuPct = (): number => {
+    if (rafFrameTimes.length < 5) return 0;
+    const avg = rafFrameTimes.reduce((a, b) => a + b, 0) / rafFrameTimes.length;
+    // At 60fps ideal = 16.67ms. Higher avg = more lag = more CPU load.
+    const lag = Math.max(0, avg - 16.67);
+    return Math.min(100, Math.round((lag / 150) * 100));
+  };
+
+  const getRiskLevel = (pct: number): string => {
+    if (pct < 30) return 'ok';
+    if (pct < 60) return 'warn';
+    if (pct < 85) return 'high';
+    return 'crit';
+  };
+
+  const formatBw = (bps: number): string => {
+    if (bps < 1000) return `${bps}B`;
+    if (bps < 1_000_000) return `${(bps / 1000).toFixed(0)}K`;
+    return `${(bps / 1_000_000).toFixed(1)}M`;
+  };
+
+  const updateStats = async () => {
+    const cpuEl = document.querySelector('[data-stat-cpu]') as HTMLElement | null;
+    const bwEl  = document.querySelector('[data-stat-bw]')  as HTMLElement | null;
+    if (!cpuEl || !bwEl) return;
+
+    // CPU
+    const cpu = estimateCpuPct();
+    cpuEl.textContent = `${cpu}%`;
+    cpuEl.dataset.risk = getRiskLevel(cpu);
+    cpuEl.title = `CPU (RAF) · ${cpu}% main thread lag · green <30, yellow <60, orange <85, red ≥85`;
+
+    // Bandwidth via WebRTC
+    let totalBytes = 0;
+    for (const pc of pcInstances) {
+      try {
+        const stats = await pc.getStats();
+        stats.forEach((s: RTCStats) => {
+          if (s.type === 'outbound-rtp' || s.type === 'inbound-rtp') {
+            // @ts-ignore
+            totalBytes += (s.bytesSent ?? 0) + (s.bytesReceived ?? 0);
+          }
+        });
+      } catch { /* pc may be closed */ }
+    }
+
+    const now = Date.now();
+    const bps = prevStatsTime
+      ? Math.round((totalBytes - prevBytesTotal) / ((now - prevStatsTime) / 1000))
+      : 0;
+    prevBytesTotal = totalBytes;
+    prevStatsTime = now;
+
+    if (bps >= 0) {
+      const bwPct = Math.min(100, Math.round((bps / 2_000_000) * 100)); // 2Mbps = 100%
+      bwEl.textContent = formatBw(bps) + '/s';
+      bwEl.dataset.risk = getRiskLevel(bwPct);
+      bwEl.title = `Ancho de banda WebRTC · ${formatBw(bps)}/s · verde <600K, amarillo <1.2M, naranja <1.7M, rojo ≥1.7M`;
+    }
+  };
+
+  let statsIntervalId = 0;
+
+  const initStats = () => {
+    if (statsIntervalId) window.clearInterval(statsIntervalId);
+    statsIntervalId = window.setInterval(updateStats, 2000);
+    updateStats();
+  };
+
+  const initExtras = () => {
+    initInviteSwitch();
+    initDraggableCircle();
+    initStats();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initExtras, { once: true });
+  } else {
+    initExtras();
+  }
+  document.addEventListener('astro:page-load', initExtras);
 </script>
 
 <style>
@@ -3055,6 +3285,73 @@ if (
     padding-top: 0.08rem;
   }
 
+  .conference-room-invite-controls--hidden {
+    display: none;
+  }
+
+  /* Invite role switch */
+  .conference-invite-role-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0 0.2rem;
+  }
+
+  .conference-invite-role-label {
+    font-size: calc(var(--conference-font-body) * 0.85);
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .conference-invite-role-label.active {
+    opacity: 1;
+    font-weight: 600;
+  }
+
+  .conference-switch {
+    position: relative;
+    display: inline-block;
+    width: 2.4rem;
+    height: 1.2rem;
+    flex-shrink: 0;
+  }
+
+  .conference-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .conference-switch-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--conference-color-border, #555);
+    border-radius: 1.2rem;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .conference-switch-slider::before {
+    content: '';
+    position: absolute;
+    height: 0.9rem;
+    width: 0.9rem;
+    left: 0.15rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+
+  .conference-switch input:checked + .conference-switch-slider {
+    background: var(--conference-color-accent, #6a8);
+  }
+
+  .conference-switch input:checked + .conference-switch-slider::before {
+    transform: translateY(-50%) translateX(1.2rem);
+  }
+
   .conference-invite-link-output {
     font-size: calc(var(--conference-font-body) * 0.9) !important;
   }
@@ -4175,6 +4472,40 @@ if (
     font-size: 0.72rem;
     letter-spacing: 0.08em;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Session stat indicators (CPU, bandwidth) */
+  .conference-stat-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3rem;
+    padding: 0 0.4rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    border-radius: 0.2rem;
+    color: var(--conference-stat-color, var(--conference-muted));
+    background: var(--conference-stat-bg, transparent);
+    cursor: default;
+    transition: color 0.4s, background 0.4s;
+  }
+
+  .conference-stat-indicator[data-risk='ok'] {
+    --conference-stat-color: #5d9;
+    --conference-stat-bg: rgba(80, 200, 120, 0.08);
+  }
+  .conference-stat-indicator[data-risk='warn'] {
+    --conference-stat-color: #db8;
+    --conference-stat-bg: rgba(210, 180, 80, 0.10);
+  }
+  .conference-stat-indicator[data-risk='high'] {
+    --conference-stat-color: #f86;
+    --conference-stat-bg: rgba(255, 100, 60, 0.12);
+  }
+  .conference-stat-indicator[data-risk='crit'] {
+    --conference-stat-color: #f44;
+    --conference-stat-bg: rgba(255, 60, 60, 0.15);
   }
 
   .conference-record-button {
