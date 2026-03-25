@@ -2446,6 +2446,12 @@ class GravityBallRenderer {
   private prevCanvasWidth = 0;
   private prevCanvasHeight = 0;
   private position = { x: 0, y: 0, z: 0 };
+  // Escher env-map: offscreen composite canvas + WebGL texture
+  private envCanvas: HTMLCanvasElement | null = null;
+  private envCtx: CanvasRenderingContext2D | null = null;
+  private envTexture: WebGLTexture | null = null;
+  private uniformEnvMap: WebGLUniformLocation | null = null;
+  private extraEnvCanvases: HTMLCanvasElement[] = [];
   private velocity = { x: 140, y: -90, z: 0.14 };
   private radius = 42;
   private rotation = { x: 0.34, y: -0.26, z: 0.18 };
@@ -2521,32 +2527,30 @@ class GravityBallRenderer {
         precision mediump float;
         uniform vec3 uBaseColor;
         uniform vec3 uLightDir;
+        uniform sampler2D uEnvMap;
         varying vec3 vNormal;
 
         const float PI = 3.14159265;
 
-        // GGX normal distribution function
         float D_GGX(float NdotH, float a2) {
           float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
           return a2 / (PI * d * d + 0.0001);
         }
 
-        // Schlick-Smith visibility (height-correlated, simplified)
         float V_SmithGGX(float NdotL, float NdotV, float a2) {
           float GGXL = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
           float GGXV = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
           return 0.5 / (GGXL + GGXV + 0.0001);
         }
 
-        // Schlick Fresnel — for metallic F0 = baseColor
-        vec3 F_Schlick(float VdotH, vec3 F0) {
-          return F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
+        vec3 F_Schlick(float cosTheta, vec3 F0) {
+          return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
         }
 
         void main() {
           vec3 N = normalize(vNormal);
           vec3 L = normalize(uLightDir);
-          vec3 V = vec3(0.0, 0.0, 1.0); // orthographic camera faces +Z
+          vec3 V = vec3(0.0, 0.0, 1.0);
           vec3 H = normalize(L + V);
 
           float NdotL = max(dot(N, L), 0.0);
@@ -2554,28 +2558,41 @@ class GravityBallRenderer {
           float NdotH = max(dot(N, H), 0.0);
           float VdotH = max(dot(V, H), 0.0);
 
-          // metalness = 1, roughness = 0.5  (matching Three.js MeshStandardMaterial)
           float roughness = 0.5;
-          float a2 = roughness * roughness * roughness * roughness; // a = r^2, a2 = a^2
+          float a2 = roughness * roughness * roughness * roughness;
 
-          // Metallic: F0 = baseColor (no dielectric contribution)
           vec3 F0 = uBaseColor;
           vec3 F   = F_Schlick(VdotH, F0);
           float D  = D_GGX(NdotH, a2);
           float Vis = V_SmithGGX(NdotL, NdotV, a2);
+          vec3 specular = F * D * Vis * PI;
 
-          // Cook-Torrance specular BRDF
-          vec3 specular = F * D * Vis * PI; // * PI balances energy with env light scale
+          // ── Escher sphere-map ─────────────────────────────────────────────
+          // R = reflection of view ray off N.  With orthographic V=(0,0,1):
+          //   R = 2·(N·V)·N − V  =  2·Nz·N − (0,0,1)
+          // Classic Blinn sphere-map UV:
+          //   m = 2·|R + (0,0,1)|,  uv = R.xy/m + 0.5
+          vec3 R = reflect(-V, N);
+          float m = 2.0 * sqrt(R.x*R.x + R.y*R.y + (R.z + 1.0)*(R.z + 1.0));
+          vec2 sphereUV = clamp(vec2(R.x / m + 0.5, R.y / m + 0.5), 0.002, 0.998);
+          vec3 envSample = texture2D(uEnvMap, sphereUV).rgb;
 
-          // Procedural env map — hemisphere sky/ground tinted by base color
-          // approximates an HDRI envMap with a neutral outdoor lighting
+          // Fresnel at viewing angle weights how much env map is visible
+          vec3 Fenv = F_Schlick(NdotV, F0);
+
+          // Fallback tinted env for when no video is in the texture yet
           float hemi = N.y * 0.5 + 0.5;
-          vec3 envSky = uBaseColor * vec3(0.52, 0.66, 0.28);
-          vec3 envGnd = uBaseColor * vec3(0.05, 0.06, 0.02);
-          vec3 envLight = mix(envGnd, envSky, hemi) * 0.60;
+          vec3 envFallback = mix(
+            uBaseColor * vec3(0.04, 0.05, 0.02),
+            uBaseColor * vec3(0.40, 0.52, 0.20),
+            hemi
+          ) * 0.55;
 
-          // Combine: env IBL + direct light specular (no diffuse — metalness = 1)
-          vec3 color = envLight + specular * NdotL * 2.8;
+          // Blend live env sample with fallback (env always wins when present)
+          vec3 envLight = mix(envFallback, envSample * 1.1, 0.78) * Fenv;
+
+          // No diffuse (metalness=1): env reflection + direct specular highlight
+          vec3 color = envLight + specular * NdotL * 2.4;
 
           gl_FragColor = vec4(color, 0.97);
         }
@@ -2623,6 +2640,27 @@ class GravityBallRenderer {
     this.uniformLightDir = gl.getUniformLocation(program, 'uLightDir');
     this.uniformRotation = gl.getUniformLocation(program, 'uRotation');
     this.uniformScale = gl.getUniformLocation(program, 'uScale');
+    this.uniformEnvMap = gl.getUniformLocation(program, 'uEnvMap');
+
+    // Offscreen canvas used each frame to composite video + hand canvas → env texture
+    const envCanvas = document.createElement('canvas');
+    envCanvas.width = 128;
+    envCanvas.height = 128;
+    this.envCanvas = envCanvas;
+    this.envCtx = envCanvas.getContext('2d');
+
+    const envTex = gl.createTexture();
+    if (envTex) {
+      gl.bindTexture(gl.TEXTURE_2D, envTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      // Seed with a 1×1 transparent pixel so the sampler never reads garbage
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      this.envTexture = envTex;
+    }
   }
 
   private resizeCanvas() {
@@ -2691,6 +2729,49 @@ class GravityBallRenderer {
     }
     void this.foley.prime().catch(() => undefined);
     this.start();
+  }
+
+  /** Pass extra canvas sources (e.g. the hand overlay) to be composited into the env texture. */
+  setEnvCanvases(canvases: HTMLCanvasElement[]) {
+    this.extraEnvCanvases = canvases;
+  }
+
+  /**
+   * Each frame: draw all live <video> elements inside the ball's parent stage +
+   * any extra canvases (hand overlay) onto a small offscreen canvas, then
+   * upload it as the WebGL environment texture for the sphere-map reflection.
+   */
+  private updateEnvTexture() {
+    const gl = this.gl;
+    const ctx = this.envCtx;
+    const envCanvas = this.envCanvas;
+    if (!gl || !ctx || !envCanvas || !this.envTexture) return;
+
+    const W = envCanvas.width;
+    const H = envCanvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw every playing <video> visible in the ball's stage container
+    const stage = this.canvas.parentElement;
+    if (stage) {
+      for (const video of stage.querySelectorAll<HTMLVideoElement>('video')) {
+        if (video.readyState >= 2) {
+          try { ctx.drawImage(video, 0, 0, W, H); } catch { /* source not ready */ }
+        }
+      }
+    }
+
+    // Composite hand-overlay canvas and any extra sources on top
+    for (const src of this.extraEnvCanvases) {
+      try { ctx.drawImage(src, 0, 0, W, H); } catch { /* skip */ }
+    }
+
+    // Upload — flip Y so canvas top = texture top (sphere-map UV convention)
+    gl.bindTexture(gl.TEXTURE_2D, this.envTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, envCanvas);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   setGravity(value: number) {
@@ -3005,6 +3086,12 @@ class GravityBallRenderer {
     const scale = (this.radius / height) * 2;
     const rotationMatrix = this.buildRotationMatrix();
 
+    // Update and bind Escher env-map texture
+    this.updateEnvTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.envTexture);
+    gl.uniform1i(this.uniformEnvMap, 0);
+
     gl.uniform1f(this.uniformAspect, aspect);
     if (this.isGrabbed) {
       gl.uniform3f(this.uniformBaseColor, 1.0, 0.64, 0.24);
@@ -3026,10 +3113,14 @@ class GravityBallRenderer {
     if (gl) {
       if (this.vertexBuffer) gl.deleteBuffer(this.vertexBuffer);
       if (this.normalBuffer) gl.deleteBuffer(this.normalBuffer);
+      if (this.envTexture) gl.deleteTexture(this.envTexture);
       if (this.program) gl.deleteProgram(this.program);
     }
     this.vertexBuffer = null;
     this.normalBuffer = null;
+    this.envTexture = null;
+    this.envCanvas = null;
+    this.envCtx = null;
     this.program = null;
     this.gl = null;
     this.handPoints = null;
@@ -3842,6 +3933,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const gravityBallRenderer =
     gravityBallCanvas instanceof HTMLCanvasElement ? new GravityBallRenderer(gravityBallCanvas) : null;
   localCameraGravityBallStreamState.canvas = gravityBallCanvas instanceof HTMLCanvasElement ? gravityBallCanvas : null;
+  // Feed hand-overlay canvas into Escher env-map composite
+  if (gravityBallRenderer && stageHandOverlay instanceof HTMLCanvasElement) {
+    gravityBallRenderer.setEnvCanvases([stageHandOverlay]);
+  }
   localCameraGravityBallStreamState.enabled = gravityBallEnabled;
 
   const getLocalCameraTrack = (): LocalCameraTrackLike | null => {
