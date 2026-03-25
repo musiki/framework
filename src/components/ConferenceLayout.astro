@@ -1999,7 +1999,7 @@ if (
 
   .conference-instruments-sidebar {
     position: absolute;
-    inset: 0 auto var(--conference-bar-height) 0;
+    inset: 0 auto var(--conference-bar-height) 0 !important;
     z-index: 18;
     width: var(--conference-instruments-size);
     min-width: 0;
@@ -3502,14 +3502,14 @@ if (
     gap: 0.28rem;
     margin-bottom: 0.02rem;
     color: rgba(245, 247, 251, 0.62) !important;
-    font-size: 0.8rem !important;
+    font-size: 0.96rem !important;
     line-height: 1 !important;
   }
 
   :global(.conference-chat-item .conference-chat-author) {
     display: inline;
     color: rgba(245, 247, 251, 0.6) !important;
-    font-size: 0.77rem !important;
+    font-size: 0.92rem !important;
     font-weight: 700 !important;
     font-style: normal !important;
     letter-spacing: 0.01em;
@@ -3518,26 +3518,37 @@ if (
   :global(.conference-chat-header-separator) {
     display: inline;
     color: rgba(245, 247, 251, 0.46) !important;
-    font-size: 0.62rem !important;
+    font-size: 0.74rem !important;
     opacity: 0.46 !important;
   }
 
   :global(.conference-chat-item .conference-chat-stamp) {
     display: inline;
     color: rgba(245, 247, 251, 0.5) !important;
-    font-size: 0.62rem !important;
+    font-size: 0.74rem !important;
     font-style: italic !important;
     font-weight: 400 !important;
     opacity: 0.5 !important;
   }
 
   :global(.conference-chat-item .conference-chat-text) {
+    position: relative;
     margin: 0 !important;
     padding-left: 0.94rem;
     color: rgba(245, 247, 251, 0.78) !important;
-    font-size: 0.9rem !important;
+    font-size: 1.08rem !important;
     line-height: 1.04 !important;
     text-wrap: pretty;
+  }
+
+  :global(.conference-chat-item .conference-chat-text::before) {
+    content: '›';
+    position: absolute;
+    left: 0;
+    top: 0;
+    line-height: inherit;
+    color: rgba(245, 247, 251, 0.30);
+    font-size: 0.85em;
   }
 
   :global(.conference-chat-text p),
@@ -3630,7 +3641,7 @@ if (
 
   :global(.conference-chat-empty) {
     color: rgba(245, 247, 251, 0.5);
-    font-size: 0.56rem;
+    font-size: 0.67rem;
   }
 
   .conference-chat-compose {
@@ -3643,6 +3654,7 @@ if (
     resize: vertical;
     font-size: 0.72rem;
     line-height: 1.04;
+    background: rgba(40, 40, 40, 0.20) !important;
   }
 
   .conference-chat-compose textarea::placeholder {
