@@ -73,9 +73,16 @@ type ConferenceMessage =
       sentAt: string;
       type: 'reaction';
     }
-  | ({
-      type: 'slide-state';
-    } & SlideState);
+  | {
+      type: 'presentation-zoom';
+      zoom: number;
+    }
+  | {
+      type: 'circle-move';
+      x: number;
+      y: number;
+      identity: string;
+    };
 
 type LiveSnapshot = {
   active?: boolean;
@@ -156,6 +163,7 @@ type PersistedRoomSetup = {
   previewBlur?: boolean;
   previewInvert?: boolean;
   previewZoom?: number;
+  circleY?: number;
   recordingPreset?: RecordingPresetKey;
   streamingSetup?: StreamingSetup;
   reverbMix?: number;
@@ -276,7 +284,7 @@ type HandControlValues = Record<HandControlKey, number>;
 type VideoMixKey = 'brightness' | 'contrast' | 'luma' | 'saturation' | 'tint';
 type VideoMixSettings = Record<VideoMixKey, number>;
 type RecordingPresetKey = 'landscape-1080' | 'instagram-story' | 'tiktok';
-type StreamingProfileKey = 'auto' | 'high' | 'medium' | 'low';
+type StreamingProfileKey = 'auto' | 'full' | 'high' | 'medium' | 'low';
 
 type StreamingSetup = {
   limitGridQuality?: boolean;
@@ -290,6 +298,12 @@ const BANDWIDTH_PROFILES: Record<StreamingProfileKey, BandwidthProfile> = {
     height: 720,
     maxBitrate: 1_200_000, // 1.2 Mbps
     width: 1280,
+  },
+  full: {
+    fps: 30,
+    height: 1080,
+    maxBitrate: 4_000_000, // 4 Mbps
+    width: 1920,
   },
   high: {
     fps: 30,
@@ -1214,6 +1228,7 @@ const getStreamingProfile = (
   role: ParticipantRole,
   profileKey: StreamingProfileKey = 'auto',
 ): BandwidthProfile => {
+  if (profileKey === 'full') return BANDWIDTH_PROFILES.full;
   if (profileKey === 'high') return BANDWIDTH_PROFILES.high;
   if (profileKey === 'medium') return BANDWIDTH_PROFILES.medium;
   if (profileKey === 'low') return BANDWIDTH_PROFILES.low;
@@ -3355,6 +3370,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const sessionSetupDetails = root.querySelector('[data-session-setup]');
   const previewZoomInput = root.querySelector('[data-preview-zoom-input]');
   const previewZoomOutput = root.querySelector('[data-preview-zoom-output]');
+  const circleYInput = root.querySelector('[data-circle-y-input]');
+  const circleYOutput = root.querySelector('[data-circle-y-output]');
+  const teacherPanel = root.querySelector('[data-panel="teacher"]');
+
   const previewBlurInput = root.querySelector('[data-preview-blur-input]');
   const previewInvertInput = root.querySelector('[data-preview-invert-input]');
   const showCircleInput = root.querySelector('[data-show-circle-input]');
@@ -3368,8 +3387,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const stateNode = root.querySelector('[data-room-state]');
   const countNode = root.querySelector('[data-participant-count]');
   const connectToggleButton = root.querySelector('[data-action="connect-toggle"]');
-  const connectButton = root.querySelector('[data-action="connect"]');
-  const disconnectButton = root.querySelector('[data-action="disconnect"]');
+  const connectButton = root.querySelector('[data-action-connect]') || connectToggleButton;
+  const disconnectButton = root.querySelector('[data-action-disconnect]') || connectToggleButton;
   const cameraButton = root.querySelector('[data-action="camera"]');
   const microphoneButton = root.querySelector('[data-action="microphone"]');
   const micMeter = root.querySelector('[data-mic-meter]');
@@ -3742,6 +3761,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       ? previewZoomInput.value
       : persistedSetup.previewZoom,
     normalizePreviewZoom(persistedSetup.previewZoom, 1),
+  );
+  let circleY = clampNumber(
+    circleYInput instanceof HTMLInputElement
+      ? circleYInput.value
+      : persistedSetup.circleY,
+    0,
+    1,
+    0.42,
+    2,
   );
   let previewBlur = Boolean(persistedSetup.previewBlur);
   let previewInvert = Boolean(persistedSetup.previewInvert);
@@ -4362,6 +4390,91 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
+  const setUnifiedInviteStatus = (msg: string, isError = false) => {
+    if (inviteStatus instanceof HTMLElement) {
+      inviteStatus.textContent = msg;
+      inviteStatus.dataset.state = isError ? 'error' : 'ok';
+    }
+  };
+
+  if (inviteCreateButton instanceof HTMLButtonElement) {
+    inviteCreateButton.addEventListener('click', () => createInviteLink(activeInviteType));
+  }
+  if (inviteCopyButton instanceof HTMLButtonElement) {
+    inviteCopyButton.addEventListener('click', async () => {
+      if (inviteLinkOutput instanceof HTMLInputElement && inviteLinkOutput.value) {
+        await navigator.clipboard.writeText(inviteLinkOutput.value);
+        setUnifiedInviteStatus('¡Copiado!');
+        setTimeout(() => setUnifiedInviteStatus(activeInviteType === 'external' ? 'Genera un link con password para invitados.' : 'Link directo para estudiantes.'), 2000);
+      }
+    });
+  }
+  if (inviteRevokeButton instanceof HTMLButtonElement) {
+    inviteRevokeButton.addEventListener('click', () => revokeInviteLink(activeInviteType));
+  }
+
+  const makeMovable = (element: HTMLElement, isLocal: boolean) => {
+    let dragging = false;
+    let startX = 0, startY = 0, currentX = 0, currentY = 0;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.stopPropagation();
+      dragging = true;
+      const style = window.getComputedStyle(element);
+      const matrix = new DOMMatrix(style.transform !== 'none' ? style.transform : '');
+      currentX = matrix.m41;
+      currentY = matrix.m42;
+      startX = e.clientX - currentX;
+      startY = e.clientY - currentY;
+      element.style.cursor = 'grabbing';
+      element.setPointerCapture(e.pointerId);
+      document.body.style.userSelect = 'none';
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      currentX = e.clientX - startX;
+      currentY = e.clientY - startY;
+      
+      const rect = element.getBoundingClientRect();
+      currentX = Math.max(-rect.left, Math.min(currentX, window.innerWidth - rect.right + currentX));
+      currentY = Math.max(-rect.top, Math.min(currentY, window.innerHeight - rect.bottom + currentY));
+
+      element.style.transform = `translate(${currentX}px, ${currentY}px)`;
+
+      if (isRoomConnected() && isTeacherRole()) {
+        void sendData({
+          type: 'circle-move',
+          x: currentX / window.innerWidth,
+          y: currentY / window.innerHeight,
+          identity: isLocal ? localParticipant?.identity : 'focus-slot'
+        });
+      }
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      element.style.cursor = 'grab';
+      element.releasePointerCapture(e.pointerId);
+      document.body.style.userSelect = '';
+    };
+
+    element.style.cursor = 'grab';
+    element.style.touchAction = 'none';
+    element.addEventListener('pointerdown', onDown);
+    element.addEventListener('pointermove', onMove);
+    element.addEventListener('pointerup', onUp);
+    element.addEventListener('pointercancel', onUp);
+  };
+
+  const isRoomConnected = () => room.state === ConnectionState.Connected;
+  const isTeacherRole = () => localRole === 'teacher';
+
+  if (localCircle instanceof HTMLElement) makeMovable(localCircle, true);
+  if (focusCircle instanceof HTMLElement) makeMovable(focusCircle, false);
+
   const loadInviteLink = async (inviteType: 'external' | 'student') => {
     if (localRole !== 'teacher') return;
 
@@ -4516,8 +4629,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const applyShowCircleState = () => {
     root.dataset.showCircle = showPresentationCircle ? 'true' : 'false';
+    root.style.setProperty('--conference-circle-y', circleY.toFixed(3));
     if (showCircleInput instanceof HTMLInputElement) {
       showCircleInput.checked = showPresentationCircle;
+    }
+    if (circleYInput instanceof HTMLInputElement) {
+      circleYInput.value = circleY.toFixed(3);
+    }
+    if (circleYOutput instanceof HTMLOutputElement || circleYOutput instanceof HTMLElement) {
+      circleYOutput.textContent = `${Math.round(circleY * 100)}%`;
     }
   };
 
@@ -5544,6 +5664,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       previewBlur,
       previewInvert,
       previewZoom,
+      circleY,
       recordingPreset,
       streamingSetup: {
         profile: (streamingProfileSelect as HTMLSelectElement)?.value as StreamingProfileKey || 'auto',
@@ -7024,7 +7145,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           video.closest('.conference-stage-panel--screen')
             ? 'contain'
             : 'cover',
-        offsetY: isPresentationCircleVideo(video) || isSelfPreviewVideo(video) ? 0.42 : 0.5,
+        offsetY: isPresentationCircleVideo(video) || isSelfPreviewVideo(video) ? circleY : 0.5,
         rect: localRect,
         video,
       });
@@ -8334,10 +8455,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     chatDownloadButton.disabled = chatMessages.length === 0;
 
     if (chatMessages.length === 0) {
-      const empty = document.createElement('li');
-      empty.className = 'conference-chat-empty';
-      empty.textContent = 'No hay mensajes todavia.';
-      chatList.appendChild(empty);
       return;
     }
 
@@ -9146,7 +9263,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (message.type === 'presentation') {
         schedulePresentationLoad({
           href: message.href,
-          successMessage: message.href ? 'Escena actualizada por teacher.' : 'Escena limpia por teacher.',
+          successMessage:
+            localRole === 'teacher'
+              ? message.href
+                ? 'Escena actualizada por teacher.'
+                : 'Escena limpia por teacher.'
+              : null,
         });
         return;
       }
@@ -9163,6 +9285,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           zoom: message.zoom,
         };
         applyRemoteSlideState(currentSlideState);
+        return;
+      }
+
+      if (message.type === 'circle-move') {
+        let target: HTMLElement | null = null;
+        if (message.identity === 'focus-slot') {
+          target = teacherPanel instanceof HTMLElement ? teacherPanel : null;
+        } else if (message.identity === room.localParticipant.identity) {
+          target = identityPreviewSlot instanceof HTMLElement ? identityPreviewSlot : null;
+        }
+
+        if (target) {
+          const absX = message.x * window.innerWidth;
+          const absY = message.y * window.innerHeight;
+          target.style.transform = `translate(${absX}px, ${absY}px)`;
+        }
       }
     });
 
@@ -9403,9 +9541,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             noiseSuppression: false,
             autoGainControl: false,
           },
-          video: {
-            displaySurface: 'browser',
-          },
           resolution: {
             width: 1920,
             height: 1080,
@@ -9413,7 +9548,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             aspectRatio: 16 / 9,
           },
           contentHint: 'detail',
-          preferCurrentTab: true,
           selfBrowserSurface: 'include',
           surfaceSwitching: 'include',
           systemAudio: 'include',
@@ -9562,6 +9696,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
+  if (circleYInput instanceof HTMLInputElement) {
+    circleYInput.addEventListener('input', () => {
+      circleY = clampNumber(circleYInput.value, 0, 1, circleY, 2);
+      applyShowCircleState();
+      persistSetupState();
+      if (room.state === ConnectionState.Connected) {
+        void syncLocalParticipantMetadata().catch(() => undefined);
+      }
+    });
+  }
+
   if (showCircleInput instanceof HTMLInputElement) {
     showCircleInput.addEventListener('change', () => {
       showPresentationCircle = showCircleInput.checked;
@@ -9571,6 +9716,93 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         void syncLocalParticipantMetadata().catch(() => undefined);
       }
     });
+  }
+
+  // Drag logic for Camera Circle (Teacher Panel and Self Preview)
+  const setupDraggable = (el: HTMLElement, isSelf: boolean) => {
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let currentY = 0;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      
+      isDragging = true;
+      
+      const transform = window.getComputedStyle(el).transform;
+      if (transform !== 'none') {
+        const matrix = new DOMMatrix(transform);
+        currentX = matrix.m41;
+        currentY = matrix.m42;
+      }
+
+      startX = e.clientX - currentX;
+      startY = e.clientY - currentY;
+      
+      el.style.cursor = 'grabbing';
+      el.setPointerCapture(e.pointerId);
+      document.body.style.userSelect = 'none';
+      document.body.style.webkitUserSelect = 'none';
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isDragging) return;
+      if (e.cancelable) e.preventDefault();
+      
+      currentX = e.clientX - startX;
+      currentY = e.clientY - startY;
+      
+      // Constraints: prevent getting lost outside screen
+      const rect = el.getBoundingClientRect();
+      const nextX = Math.max(-rect.left, Math.min(currentX, window.innerWidth - rect.right + currentX));
+      const nextY = Math.max(-rect.top, Math.min(currentY, window.innerHeight - rect.bottom + currentY));
+      
+      currentX = nextX;
+      currentY = nextY;
+      
+      el.style.transform = `translate(${currentX}px, ${currentY}px)`;
+
+      // Teacher broadcast
+      if (canLeadSession()) {
+        const pctX = currentX / window.innerWidth;
+        const pctY = currentY / window.innerHeight;
+        void publishMessage({
+          type: 'circle-move',
+          x: pctX,
+          y: pctY,
+          identity: isSelf ? room.localParticipant.identity : 'focus-slot',
+        });
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!isDragging) return;
+      isDragging = false;
+      el.style.cursor = 'grab';
+      el.releasePointerCapture(e.pointerId);
+      document.body.style.userSelect = '';
+      document.body.style.webkitUserSelect = '';
+    };
+
+    el.style.cursor = 'grab';
+    el.style.touchAction = 'none';
+    el.style.pointerEvents = 'auto';
+    
+    el.addEventListener('pointerdown', onPointerDown, { passive: false });
+    el.addEventListener('pointermove', onPointerMove, { passive: false });
+    el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointercancel', onPointerUp);
+  };
+
+  if (identityPreviewSlot instanceof HTMLElement) {
+    setupDraggable(identityPreviewSlot, true);
+  }
+  if (teacherPanel instanceof HTMLElement) {
+    setupDraggable(teacherPanel, false);
   }
 
   if (streamingProfileSelect instanceof HTMLSelectElement) {
@@ -10287,6 +10519,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
+  // Reaction buttons
+  root.querySelectorAll('[data-action^="reaction:"]').forEach((button) => {
+    if (button instanceof HTMLButtonElement) {
+      button.addEventListener('click', () => {
+        const reaction = button.dataset.action?.split(':')[1] as ReactionKind;
+        if (reaction) {
+          void publishReaction(reaction).catch((error) => {
+            setStatus(safeErrorMessage(error));
+          });
+        }
+      });
+    }
+  });
+
   const sendChatMessage = async () => {
     if (room.state !== ConnectionState.Connected) return;
 
@@ -10580,6 +10826,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (ignoreShortcutTarget) return;
 
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'j') {
+      console.log('Shortcut triggered: Cmd/Ctrl + J (toggle-connect)');
       event.preventDefault();
       executeRoomShortcutCommand('toggle-connect');
       return;
@@ -10781,8 +11028,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   void refreshDeviceOptions(false);
   syncLiveActivityTransport();
 
-  syncInviteLinkOutput('external', '', '');
-  syncInviteLinkOutput('student', '', '');
+  updateInviteUI();
   if (isExternalInviteMode) {
     if (externalInviteNameInput instanceof HTMLInputElement && !externalInviteNameInput.value.trim()) {
       externalInviteNameInput.value = normalizeText(nameInput.value);
@@ -10793,12 +11039,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       isInvalidInviteMode,
     );
   }
-  if (localRole === 'teacher') {
-    setExternalInviteStatusMessage('Genera un link con password para invitados externos.');
-    setStudentInviteStatusMessage('Genera un link directo para estudiantes.');
-    void loadInviteLink('external');
-    void loadInviteLink('student');
-  }
 
   if (shouldRunHandTracking()) {
     void startHandTracking();
@@ -10807,7 +11047,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   if (presentationSelect.value) {
     schedulePresentationLoad({
       href: normalizeText(presentationSelect.value) || null,
-      successMessage: 'Escena Reveal lista.',
+      successMessage: localRole === 'teacher' ? 'Escena Reveal lista.' : null,
     });
   }
 
@@ -10838,19 +11078,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       const stats = await response.json();
 
       if (vpsCpuNode instanceof HTMLElement) {
-        const val = vpsCpuNode.querySelector('.conference-vps-stat-value');
-        if (val) val.textContent = `${stats.cpu.percent}%`;
+        vpsCpuNode.textContent = `${stats.cpu.percent}%`;
         const percent = Number.parseInt(stats.cpu.percent, 10);
         vpsCpuNode.dataset.state = percent > 90 ? 'danger' : percent > 70 ? 'warning' : 'ok';
-        vpsCpuNode.title = `Load: ${stats.cpu.load} (${stats.cpu.cores} cores)`;
+        vpsCpuNode.title = `CPU Load: ${stats.cpu.load} (${stats.cpu.cores} cores)`;
       }
 
       if (vpsBandwidthNode instanceof HTMLElement) {
-        const val = vpsBandwidthNode.querySelector('.conference-vps-stat-value');
-        if (val) val.textContent = `${stats.bandwidth.mbps}M`;
+        vpsBandwidthNode.textContent = `${stats.bandwidth.mbps}M`;
         const mbps = Number.parseFloat(stats.bandwidth.mbps);
         vpsBandwidthNode.dataset.state = mbps > 300 ? 'danger' : mbps > 150 ? 'warning' : 'ok';
-        vpsBandwidthNode.title = `Outbound: ${stats.bandwidth.mbps} Mbps\nTotal TX: ${stats.bandwidth.totalTxGb} GB`;
+        vpsBandwidthNode.title = `NET Outbound: ${stats.bandwidth.mbps} Mbps\nTotal TX: ${stats.bandwidth.totalTxGb} GB`;
       }
     } catch {
       // ignore fetch errors

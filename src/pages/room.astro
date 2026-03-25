@@ -75,10 +75,14 @@ const defaultPresentation =
     : normalizeText(liveInvite && 'presentationHref' in liveInvite ? liveInvite.presentationHref : '')) ||
   normalizeText(Astro.url.searchParams.get('slides')) ||
   normalizeText(Astro.url.searchParams.get('presentation'));
-const livekitUrl = normalizeText(import.meta.env.LIVEKIT_URL);
+
+// Servidor propio de Musiki (recuperado de la build de ayer)
+const livekitUrl = normalizeText("wss://live.musiki.org.ar");
+
 const courseHomeHref = inviteMode === 'external'
   ? '/'
   : activeCourseId ? buildCourseHref(activeCourseId, {}) : '/cursos';
+
 const presentationOptions = inviteMode === 'external'
   ? []
   : await listRoomPresentationOptions({

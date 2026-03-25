@@ -976,14 +976,14 @@ if (
                   <option value="landscape-1080">1080p</option>
                   <option value="instagram-story">Instagram Story</option>
                   <option value="tiktok">TikTok</option>
-                </select>
-              </div>
+                  </select>
+                  </div>
 
-              <details class="conference-streaming-setup" data-streaming-setup>
-                <summary class="conference-streaming-setup-summary">
+                  <details class="conference-streaming-setup" data-streaming-setup>
+                  <summary class="conference-streaming-setup-summary">
                   <span class="conference-sidebar-heading">STREAMING SETUP</span>
-                </summary>
-                <div class="conference-streaming-setup-body">
+                  </summary>
+                  <div class="conference-streaming-setup-body">
                   <div class="conference-field">
                     <label for="conference-streaming-profile-select">Quality Profile</label>
                     <select id="conference-streaming-profile-select" data-streaming-profile-select>
@@ -993,7 +993,6 @@ if (
                       <option value="low">Low (Bandwidth Saver)</option>
                     </select>
                   </div>
-
                   <div class="conference-field conference-field--checkbox">
                     <label class="conference-checkbox-row" for="conference-optimize-speaker-input">
                       <input
@@ -1006,7 +1005,6 @@ if (
                       <span>Prioritize Speaker</span>
                     </label>
                   </div>
-
                   <div class="conference-field conference-field--checkbox">
                     <label class="conference-checkbox-row" for="conference-limit-grid-input">
                       <input
@@ -1019,11 +1017,31 @@ if (
                       <span>Limit Grid Quality</span>
                     </label>
                   </div>
-                </div>
-              </details>
+                  </div>
+                  </details>
 
-              <div class="conference-session-controls" data-session-controls-field hidden>
-                <div class="conference-session-controls-heading">SESSION CONTROL</div>
+                  <div class="conference-field conference-presentation-controls">
+                    <label for="conference-presentation-select-sidebar">Escena Presentación</label>
+                    <div class="conference-presentation-row">
+                      <select id="conference-presentation-select-sidebar" name="presentation-sidebar" data-presentation-select>
+                        <option value="">none</option>
+                        {normalizedPresentationOptions.map((option) => (
+                          <option
+                            value={option.value}
+                            data-course-id={option.courseId}
+                            data-lesson-id={option.lessonId}
+                            selected={option.value === defaultPresentation}
+                          >
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" class="conference-icon-button" data-action="presentation" title="Open presentation">P</button>
+                      <button type="button" class="conference-icon-button" data-action="presentation-clear" title="Clear presentation">×</button>
+                    </div>
+                  </div>
+
+                  <div class="conference-session-controls" data-session-controls-field hidden>                <div class="conference-session-controls-heading">SESSION CONTROL</div>
 
                 <div class="conference-field" data-session-leader-field>
                   <label for="conference-session-leader-select">DELEGAR SESION</label>
@@ -1062,11 +1080,20 @@ if (
                 <details class="conference-room-invite-panel">
                   <summary class="conference-room-invite-panel-summary">INVITAR</summary>
 
-                  <div class="conference-room-invite-controls">
-                    <div class="conference-session-controls-heading">INVITE USERS</div>
+                  <div class="conference-invite-type-switch">
+                    <label class="conference-invite-type-label">
+                      <input type="radio" name="invite-type-toggle" value="student" checked data-invite-type-toggle />
+                      <span>ESTUDIANTES</span>
+                    </label>
+                    <label class="conference-invite-type-label">
+                      <input type="radio" name="invite-type-toggle" value="external" data-invite-type-toggle />
+                      <span>EXTERNOS</span>
+                    </label>
+                  </div>
 
-                    <div class="conference-field">
-                      <label for="conference-external-password-input">Password externos</label>
+                  <div class="conference-room-invite-controls">
+                    <div class="conference-field" data-invite-field="external" hidden>
+                      <label for="conference-external-password-input">Password invitados</label>
                       <input
                         id="conference-external-password-input"
                         name="external-password"
@@ -1078,11 +1105,11 @@ if (
                     </div>
 
                     <div class="conference-field">
-                      <label for="conference-external-expiry-select">Vencimiento</label>
+                      <label for="conference-invite-expiry-select">Vencimiento</label>
                       <select
-                        id="conference-external-expiry-select"
-                        name="external-expiry"
-                        data-external-expiry-select
+                        id="conference-invite-expiry-select"
+                        name="invite-expiry"
+                        data-invite-expiry-select
                       >
                         <option value="">Sin vencimiento</option>
                         <option value="60">1 hora</option>
@@ -1092,16 +1119,16 @@ if (
                     </div>
 
                     <div class="conference-field">
-                      <label for="conference-external-invite-link-output">Link users</label>
+                      <label for="conference-invite-link-output" data-invite-link-label>Link estudiantes</label>
                       <input
-                        id="conference-external-invite-link-output"
-                        name="external-invite-link"
+                        id="conference-invite-link-output"
+                        name="invite-link"
                         class="conference-invite-link-output"
                         type="text"
                         value=""
                         readonly
-                        placeholder="Crea un link para invitados"
-                        data-external-invite-link-output
+                        placeholder="Generando link..."
+                        data-invite-link-output
                       />
                     </div>
 
@@ -1109,116 +1136,40 @@ if (
                       <button
                         type="button"
                         class="conference-session-action conference-session-action--compact"
-                        data-action="external-invite-create"
-                        title="Guardar link"
-                        aria-label="Guardar link"
+                        data-action="invite-create"
+                        title="Guardar / Regenerar link"
+                        aria-label="Guardar"
                       >
                         G
                       </button>
                       <button
                         type="button"
                         class="conference-session-action conference-session-action--compact"
-                        data-action="external-invite-copy"
+                        data-action="invite-copy"
                         title="Copiar link"
-                        aria-label="Copiar link"
+                        aria-label="Copiar"
                       >
                         C
                       </button>
                       <button
                         type="button"
                         class="conference-session-action conference-session-action--compact"
-                        data-action="external-invite-revoke"
+                        data-action="invite-revoke"
                         title="Revocar link"
-                        aria-label="Revocar link"
+                        aria-label="Revocar"
                       >
                         R
                       </button>
                     </div>
 
-                    <p class="conference-session-note" data-external-invite-status>
-                      Genera un link con password para invitados externos sin login.
-                    </p>
-                  </div>
-                  <div class="conference-room-invite-controls">
-                    <div class="conference-session-controls-heading">INVITE ESTUDIANTES</div>
-
-                    <div class="conference-field">
-                      <label for="conference-student-expiry-select">Vencimiento</label>
-                      <select
-                        id="conference-student-expiry-select"
-                        name="student-expiry"
-                        data-student-expiry-select
-                      >
-                        <option value="">Sin vencimiento</option>
-                        <option value="60">1 hora</option>
-                        <option value="1440">24 horas</option>
-                        <option value="10080">7 dias</option>
-                      </select>
-                    </div>
-
-                    <div class="conference-field">
-                      <label for="conference-student-invite-link-output">Link estudiantes</label>
-                      <input
-                        id="conference-student-invite-link-output"
-                        name="student-invite-link"
-                        class="conference-invite-link-output"
-                        type="text"
-                        value=""
-                        readonly
-                        placeholder="Crea un acceso directo para estudiantes"
-                        data-student-invite-link-output
-                      />
-                    </div>
-
-                    <div class="conference-session-action-row conference-session-action-row--triple">
-                      <button
-                        type="button"
-                        class="conference-session-action conference-session-action--compact"
-                        data-action="student-invite-create"
-                        title="Guardar link"
-                        aria-label="Guardar link"
-                      >
-                        G
-                      </button>
-                      <button
-                        type="button"
-                        class="conference-session-action conference-session-action--compact"
-                        data-action="student-invite-copy"
-                        title="Copiar link"
-                        aria-label="Copiar link"
-                      >
-                        C
-                      </button>
-                      <button
-                        type="button"
-                        class="conference-session-action conference-session-action--compact"
-                        data-action="student-invite-revoke"
-                        title="Revocar link"
-                        aria-label="Revocar link"
-                      >
-                        R
-                      </button>
-                    </div>
-
-                    <p class="conference-session-note" data-student-invite-status>
-                      Link directo para estudiantes sin navegar por curso ni leccion.
+                    <p class="conference-session-note" data-invite-status>
+                      Link directo para estudiantes sin navegar por curso ni lección.
                     </p>
                   </div>
                 </details>
               </div>
             </div>
           </details>
-        </div>
-
-        <div class="conference-vps-monitor">
-          <div class="conference-vps-stat" title="VPS CPU Load" data-vps-cpu>
-            <span class="conference-vps-stat-label">CPU</span>
-            <span class="conference-vps-stat-value">--</span>
-          </div>
-          <div class="conference-vps-stat" title="VPS Outbound Bandwidth" data-vps-bandwidth>
-            <span class="conference-vps-stat-label">NET</span>
-            <span class="conference-vps-stat-value">--</span>
-          </div>
         </div>
 
         <p class="conference-statusline" data-room-status>
@@ -1358,6 +1309,15 @@ if (
       </button>
     </div>
 
+    <div class="conference-bar-group conference-bar-group--reactions">
+      <button type="button" class="conference-layout-button conference-layout-button--reaction" data-action="reaction:clap" title="Clap (Shift + 4)">👏</button>
+      <button type="button" class="conference-layout-button conference-layout-button--reaction" data-action="reaction:thumbsup" title="Thumbs up (Shift + 5)">👍</button>
+      <button type="button" class="conference-layout-button conference-layout-button--reaction" data-action="reaction:heart" title="Heart (Shift + 6)">❤️</button>
+      <button type="button" class="conference-layout-button conference-layout-button--reaction" data-action="reaction:joy" title="Joy (Shift + 7)">😂</button>
+      <button type="button" class="conference-layout-button conference-layout-button--reaction" data-action="reaction:wow" title="Wow (Shift + 8)">😮</button>
+      <button type="button" class="conference-layout-button conference-layout-button--reaction" data-action="reaction:tada" title="Tada (Shift + 9)">🎉</button>
+    </div>
+
     <div class="conference-bar-group conference-bar-group--layout">
       <button type="button" class="conference-layout-button" data-layout-choice="teacher">F</button>
       <button type="button" class="conference-layout-button" data-layout-choice="screenshare">S</button>
@@ -1431,24 +1391,17 @@ if (
       </button>
     </div>
 
-    <div class="conference-bar-group conference-bar-group--presentation">
-      <label class="conference-sr-only" for="conference-presentation-select">Presentacion</label>
-      <select id="conference-presentation-select" name="presentation" data-presentation-select>
-        <option value="">none</option>
-        {normalizedPresentationOptions.map((option) => (
-          <option
-            value={option.value}
-            data-course-id={option.courseId}
-            data-lesson-id={option.lessonId}
-            selected={option.value === defaultPresentation}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
-
     <div class="conference-bar-group conference-bar-group--exit">
+      <div class="conference-vps-monitor-compact">
+        <div class="conference-vps-stat" title="VPS CPU Load">
+          <span class="conference-vps-stat-label">CPU</span>
+          <span class="conference-vps-stat-value" data-vps-cpu>--</span>
+        </div>
+        <div class="conference-vps-stat" title="VPS Outbound Bandwidth">
+          <span class="conference-vps-stat-label">NET</span>
+          <span class="conference-vps-stat-value" data-vps-bandwidth>--</span>
+        </div>
+      </div>
       <span class="conference-session-timer" data-session-timer>00:00:00</span>
       <button
         type="button"
@@ -1823,7 +1776,7 @@ if (
 
   .conference-instruments-sidebar {
     position: absolute;
-    inset: 0 auto var(--conference-bar-height) 0;
+    inset: 0 auto var(--conference-bar-height) 0 !important;
     z-index: 18;
     width: var(--conference-instruments-size);
     min-width: 0;
@@ -3228,138 +3181,55 @@ if (
     line-height: 1.4;
   }
 
-  .conference-vps-monitor {
-    display: flex;
-    gap: 0.75rem;
-    margin-bottom: 0.4rem;
-    padding: 0.2rem 0;
-    border-bottom: 1px solid var(--conference-line-soft);
-  }
-
-  .conference-vps-stat {
-    display: flex;
-    align-items: baseline;
-    gap: 0.25rem;
-    cursor: help;
-    font-family: var(--font-mono);
-  }
-
-  .conference-vps-stat-label {
-    font-size: 0.6rem;
-    color: var(--conference-muted);
-    font-weight: 700;
-  }
-
-  .conference-vps-stat-value {
-    font-size: 0.75rem;
-    color: var(--conference-fg);
-    font-weight: 500;
-  }
-
-  .conference-vps-stat[data-state='warning'] .conference-vps-stat-value {
-    color: #ffca28;
-  }
-
-  .conference-vps-stat[data-state='danger'] .conference-vps-stat-value {
-    color: #ef5350;
-  }
-
   .conference-chat {
     min-height: 0;
-    display: flex;
-    flex-direction: column;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 4px;
-    overflow: hidden;
+    display: grid;
+    gap: 0.14rem;
   }
 
   .conference-chat-list {
     margin: 0;
-    padding: 0.5rem;
+    padding: 0;
     list-style: none;
     min-height: 10rem;
-    max-height: 40vh;
+    max-height: 34vh;
     overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    flex: 1 1 auto;
+    display: grid;
+    gap: 0;
   }
 
-  :global(.conference-chat-item) {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    padding: 0;
-    border-bottom: none;
-  }
-
+  :global(.conference-chat-item),
   :global(.conference-chat-empty) {
-    padding: 1rem;
-    text-align: center;
-    color: var(--conference-muted);
-    font-size: 0.85rem;
-    font-style: italic;
+    display: grid;
+    gap: 0.04rem;
+    padding: 0.08rem 0;
+    border-bottom: 1px solid var(--conference-line-soft);
   }
 
   :global(.conference-chat-header) {
     display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    margin-bottom: 0.1rem;
+    align-items: baseline;
+    gap: 0.28rem;
+    margin-bottom: 0.02rem;
+    color: rgba(245, 247, 251, 0.62) !important;
+    font-size: 0.8rem !important;
+    line-height: 1 !important;
   }
 
-  :global(.conference-chat-author) {
-    color: var(--accent) !important;
-    font-size: 0.75rem !important;
+  :global(.conference-chat-item .conference-chat-author) {
+    display: inline;
+    color: rgba(245, 247, 251, 0.6) !important;
+    font-size: 0.77rem !important;
     font-weight: 700 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    font-style: normal !important;
+    letter-spacing: 0.01em;
   }
 
-  :global(.conference-chat-time) {
-    color: var(--conference-muted) !important;
-    font-size: 0.65rem !important;
-  }
-
-  :global(.conference-chat-body) {
-    color: #e0e0e0 !important;
-    font-size: 0.9rem !important;
-    line-height: 1.4 !important;
-    padding-left: 0.1rem;
-    word-break: break-word;
-  }
-
-  .conference-chat-compose {
-    padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.05); /* Slightly lighter dark gray */
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .conference-chat-compose textarea {
-    width: 100%;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    color: white;
-    padding: 0.5rem;
-    font-size: 0.9rem;
-    resize: none;
-    transition: border-color 0.2s;
-  }
-
-  .conference-chat-compose textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-    background: rgba(0, 0, 0, 0.4);
-  }
-
-  .conference-chat-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
+  :global(.conference-chat-header-separator) {
+    display: inline;
+    color: rgba(245, 247, 251, 0.46) !important;
+    font-size: 0.62rem !important;
+    opacity: 0.46 !important;
   }
 
   :global(.conference-chat-item .conference-chat-stamp) {
@@ -3730,6 +3600,36 @@ if (
     }
   }
 
+  .conference-invite-type-switch {
+    display: flex;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    padding: 2px;
+    margin: 0 1rem 1rem 1rem;
+  }
+
+  .conference-invite-type-label {
+    flex: 1;
+    text-align: center;
+    cursor: pointer;
+    padding: 0.45rem 0;
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--conference-muted);
+    transition: all 120ms ease;
+    border-radius: 3px;
+    letter-spacing: 0.05em;
+  }
+
+  .conference-invite-type-label:has(input:checked) {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  .conference-invite-type-label input {
+    display: none;
+  }
+
   @media (max-width: 720px) {
     .conference-mixer-fx-pair {
       flex-direction: column;
@@ -3859,10 +3759,28 @@ if (
     z-index: 80;
     min-height: var(--conference-bar-height);
     display: grid;
-    grid-template-columns: auto auto auto auto minmax(180px, 1fr) auto;
+    grid-template-columns: auto auto auto auto 1fr;
     align-items: stretch;
     border-top: 1px solid var(--conference-line);
     background: rgba(0, 0, 0, 0.98);
+  }
+
+  .conference-vps-monitor-compact {
+    display: flex;
+    gap: 0.65rem;
+    padding: 0 0.75rem;
+    margin-right: auto;
+    font-size: 0.62rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-family: var(--font-mono);
+    border-right: 1px solid var(--conference-line);
+  }
+
+  .conference-bar-group--exit {
+    min-width: 0;
+    display: flex;
+    align-items: stretch;
+    border-right: 0;
   }
 
   .conference-bar-group {
@@ -3870,6 +3788,43 @@ if (
     display: flex;
     align-items: stretch;
     border-right: 1px solid var(--conference-line);
+  }
+
+  .conference-bar-group--vps {
+    padding: 0 0.75rem;
+    gap: 0.75rem;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.45);
+    letter-spacing: 0.05em;
+    font-family: var(--font-mono);
+  }
+
+  .conference-vps-stat {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.2;
+  }
+
+  .conference-vps-stat-value {
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 600;
+  }
+
+  .conference-layout-button--reaction {
+    font-size: 1.15rem;
+    padding: 0 0.45rem;
+    filter: grayscale(1) opacity(0.6);
+    transition: filter 120ms ease, transform 120ms ease;
+  }
+
+  .conference-layout-button--reaction:hover {
+    filter: grayscale(0) opacity(1);
+    transform: translateY(-1px);
+  }
+
+  .conference-layout-button--reaction:active {
+    transform: translateY(0) scale(0.92);
   }
 
   .conference-bar-group--presentation {
