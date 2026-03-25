@@ -75,7 +75,17 @@ type ConferenceMessage =
     }
   | ({
       type: 'slide-state';
-    } & SlideState);
+    } & SlideState)
+  | {
+      type: 'presentation-zoom';
+      zoom: number;
+    }
+  | {
+      type: 'circle-move';
+      x: number;
+      y: number;
+      identity: string;
+    };
 
 type LiveSnapshot = {
   active?: boolean;
@@ -3323,6 +3333,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const studentsSlot = root.querySelector('[data-slot="students"]');
   const screenSlot = root.querySelector('[data-slot="screen"]');
   const identityPreviewSlot = root.querySelector('[data-slot="identity-preview"]');
+  const teacherPanel = root.querySelector('[data-panel="teacher"]');
   const participantList = root.querySelector('[data-participant-list]');
   const stage = root.querySelector('[data-stage]');
   const stageFrameNode = root.querySelector('.conference-stage-frame');
@@ -7898,6 +7909,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         };
       }
 
+      if (parsed.type === 'circle-move') {
+        return {
+          type: 'circle-move',
+          x: Number((parsed as { x?: number }).x) || 0,
+          y: Number((parsed as { y?: number }).y) || 0,
+          identity: normalizeText((parsed as { identity?: string }).identity),
+        };
+      }
+
+      if (parsed.type === 'presentation-zoom') {
+        return {
+          type: 'presentation-zoom',
+          zoom: Number((parsed as { zoom?: number }).zoom) || 1,
+        };
+      }
+
       return null;
     } catch {
       return null;
@@ -9067,8 +9094,99 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           zoom: message.zoom,
         };
         applyRemoteSlideState(currentSlideState);
+        return;
+      }
+
+      if (message.type === 'circle-move') {
+        let target: HTMLElement | null = null;
+        if (message.identity === 'focus-slot') {
+          target = teacherPanel instanceof HTMLElement ? teacherPanel : null;
+        } else if (message.identity === room.localParticipant.identity) {
+          target = identityPreviewSlot instanceof HTMLElement ? identityPreviewSlot : null;
+        }
+        if (target) {
+          const absX = message.x * window.innerWidth;
+          const absY = message.y * window.innerHeight;
+          target.style.transform = `translate(${absX}px, ${absY}px)`;
+        }
+        return;
       }
     });
+
+  // Drag logic for Camera Circle (Teacher Panel and Self Preview)
+  const setupDraggable = (el: HTMLElement, isSelf: boolean) => {
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let currentY = 0;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      isDragging = true;
+      const transform = window.getComputedStyle(el).transform;
+      if (transform !== 'none') {
+        const matrix = new DOMMatrix(transform);
+        currentX = matrix.m41;
+        currentY = matrix.m42;
+      }
+      startX = e.clientX - currentX;
+      startY = e.clientY - currentY;
+      el.style.cursor = 'grabbing';
+      el.setPointerCapture(e.pointerId);
+      document.body.style.userSelect = 'none';
+      (document.body.style as any).webkitUserSelect = 'none';
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isDragging) return;
+      if (e.cancelable) e.preventDefault();
+      currentX = e.clientX - startX;
+      currentY = e.clientY - startY;
+      const rect = el.getBoundingClientRect();
+      const nextX = Math.max(-rect.left, Math.min(currentX, window.innerWidth - rect.right + currentX));
+      const nextY = Math.max(-rect.top, Math.min(currentY, window.innerHeight - rect.bottom + currentY));
+      currentX = nextX;
+      currentY = nextY;
+      el.style.transform = `translate(${currentX}px, ${currentY}px)`;
+      if (canLeadSession()) {
+        const pctX = currentX / window.innerWidth;
+        const pctY = currentY / window.innerHeight;
+        void publishMessage({
+          type: 'circle-move',
+          x: pctX,
+          y: pctY,
+          identity: isSelf ? room.localParticipant.identity : 'focus-slot',
+        });
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!isDragging) return;
+      isDragging = false;
+      el.style.cursor = 'grab';
+      el.releasePointerCapture(e.pointerId);
+      document.body.style.userSelect = '';
+      (document.body.style as any).webkitUserSelect = '';
+    };
+
+    el.style.cursor = 'grab';
+    el.style.touchAction = 'none';
+    el.style.pointerEvents = 'auto';
+    el.addEventListener('pointerdown', onPointerDown, { passive: false });
+    el.addEventListener('pointermove', onPointerMove, { passive: false });
+    el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointercancel', onPointerUp);
+  };
+
+  if (identityPreviewSlot instanceof HTMLElement) {
+    setupDraggable(identityPreviewSlot, true);
+  }
+  if (teacherPanel instanceof HTMLElement) {
+    setupDraggable(teacherPanel, false);
+  }
 
   if (connectButton instanceof HTMLButtonElement) {
     connectButton.addEventListener('click', () => {
