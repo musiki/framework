@@ -3646,6 +3646,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let unsubscribeLiveActivity: (() => void) | null = null;
   let activeLiveSnapshot: LiveSnapshot | null = null;
   let liveActivityTickId = 0;
+  let vpsStatsTickId = 0;
   let immersiveFullscreenActive = false;
   let connectedAtMs = 0;
   let recordingAnimationId = 0;
@@ -10803,6 +10804,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     renderSessionTimer();
   };
 
+  const handleVpsStatsTick = async () => {
+    const cpuEl = root.querySelector('[data-stat-cpu]') as HTMLElement | null;
+    const bwEl = root.querySelector('[data-stat-bw]') as HTMLElement | null;
+    if (!cpuEl && !bwEl) return;
+    try {
+      const response = await fetch('/api/internal/vps-stats');
+      if (!response.ok) return;
+      const stats = await response.json();
+      if (cpuEl) {
+        const percent = Number.parseInt(stats.cpu.percent, 10);
+        cpuEl.textContent = `${stats.cpu.percent}%`;
+        cpuEl.dataset.risk = percent > 85 ? 'crit' : percent > 60 ? 'high' : percent > 30 ? 'warn' : 'ok';
+        cpuEl.title = `VPS CPU: ${stats.cpu.load} load · ${stats.cpu.cores} cores`;
+      }
+      if (bwEl) {
+        const mbps = Number.parseFloat(stats.bandwidth.mbps);
+        bwEl.textContent = `${stats.bandwidth.mbps}M/s`;
+        bwEl.dataset.risk = mbps > 300 ? 'crit' : mbps > 150 ? 'high' : mbps > 50 ? 'warn' : 'ok';
+        bwEl.title = `VPS Outbound: ${stats.bandwidth.mbps} Mbps · Total TX: ${stats.bandwidth.totalTxGb} GB`;
+      }
+    } catch {
+      // ignore fetch errors
+    }
+  };
+
   const handleViewportResize = () => {
     updateRecordingGuideLayout();
     queuePreferredRemoteVideoDimensionsSync();
@@ -10810,6 +10836,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
   liveActivityTickId = window.setInterval(handleLiveActivityTick, 1000);
+  vpsStatsTickId = window.setInterval(handleVpsStatsTick, 5000);
+  void handleVpsStatsTick();
   window.addEventListener('resize', handleViewportResize);
 
   const teardown = () => {
@@ -10844,6 +10872,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (liveActivityTickId) {
       window.clearInterval(liveActivityTickId);
       liveActivityTickId = 0;
+    }
+    if (vpsStatsTickId) {
+      window.clearInterval(vpsStatsTickId);
+      vpsStatsTickId = 0;
     }
     stopMixerMeters();
     stopHandTracking();
