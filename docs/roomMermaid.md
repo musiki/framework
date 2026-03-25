@@ -225,16 +225,16 @@ flowchart TD
 
 ## Legend
 
-| Color | Layer |
-|---|---|
-| 🟢 **Cyan** `#00ffc8` | Core LiveKit path — room, tokens, WebRTC |
-| 🟢 **Lime** `#00ff66` | Audio engine — FM Synth, Gravity Ball |
-| 🟣 **Magenta** `#ff00cc` | UI / Right sidebar — session, chat, invites |
-| 🟠 **Orange** `#ff8800` | Video engine — blur, hand tracking, recording |
-| 🔵 **Blue** `#4488ff` | Presentation, SSE, Supabase queries |
-| 🟡 **Yellow** `#ffe000` | Token generation API |
-| 🔴 **Red** `#ff4466` | Webhooks — incoming events from LiveKit |
-| ⬛ **Ghost** `#2a3a4a` | Internal state, helpers, minor nodes |
+| Color                    | Layer                                         |
+| ------------------------ | --------------------------------------------- |
+| 🟢 **Cyan** `#00ffc8`    | Core LiveKit path — room, tokens, WebRTC      |
+| 🟢 **Lime** `#00ff66`    | Audio engine — FM Synth, Gravity Ball         |
+| 🟣 **Magenta** `#ff00cc` | UI / Right sidebar — session, chat, invites   |
+| 🟠 **Orange** `#ff8800`  | Video engine — blur, hand tracking, recording |
+| 🔵 **Blue** `#4488ff`    | Presentation, SSE, Supabase queries           |
+| 🟡 **Yellow** `#ffe000`  | Token generation API                          |
+| 🔴 **Red** `#ff4466`     | Webhooks — incoming events from LiveKit       |
+| ⬛ **Ghost** `#2a3a4a`    | Internal state, helpers, minor nodes          |
 
 ---
 
@@ -274,5 +274,7 @@ VPS stats
   → reads os.loadavg() + /proc/net/dev
   → [data-stat-cpu] and [data-stat-bw] updated with data-risk level
 ```
+
+
 
 > ① SESSION CONTROL and INVITAR only visible to `role="teacher"` — `sessionControlsField.hidden = localRole !== 'teacher'`
