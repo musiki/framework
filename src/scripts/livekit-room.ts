@@ -2452,6 +2452,13 @@ class GravityBallRenderer {
   private envTexture: WebGLTexture | null = null;
   private uniformEnvMap: WebGLUniformLocation | null = null;
   private extraEnvCanvases: HTMLCanvasElement[] = [];
+  // Projected shadow
+  private shadowProgram: WebGLProgram | null = null;
+  private shadowBuffer: WebGLBuffer | null = null;
+  private shadowAttribCorner = -1;
+  private shadowUniformCenter: WebGLUniformLocation | null = null;
+  private shadowUniformRadius: WebGLUniformLocation | null = null;
+  private shadowUniformAlpha: WebGLUniformLocation | null = null;
   private velocity = { x: 140, y: -90, z: 0.14 };
   private radius = 42;
   private rotation = { x: 0.34, y: -0.26, z: 0.18 };
@@ -2532,11 +2539,15 @@ class GravityBallRenderer {
 
         const float PI = 3.14159265;
 
-        float D_GGX(float NdotH, float a2) {
-          float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
-          return a2 / (PI * d * d + 0.0001);
+        // Anisotropic GGX NDF — different roughness along tangent (ax) and bitangent (ay)
+        float D_GGX_aniso(float NdotH, float TdotH, float BdotH, float ax, float ay) {
+          float a = TdotH / ax;
+          float b = BdotH / ay;
+          float d = a*a + b*b + NdotH*NdotH;
+          return 1.0 / (PI * ax * ay * d * d + 0.0001);
         }
 
+        // Smith visibility (isotropic approx, using geometric mean of ax/ay)
         float V_SmithGGX(float NdotL, float NdotV, float a2) {
           float GGXL = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
           float GGXV = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
@@ -2558,29 +2569,38 @@ class GravityBallRenderer {
           float NdotH = max(dot(N, H), 0.0);
           float VdotH = max(dot(V, H), 0.0);
 
-          float roughness = 0.5;
-          float a2 = roughness * roughness * roughness * roughness;
+          // Tangent frame from normal (rotates with the ball spin via uRotation)
+          // Avoids the pole singularity at N = (0,±1,0)
+          vec3 up = abs(N.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+          vec3 T  = normalize(cross(up, N));
+          vec3 B  = cross(N, T);
 
-          vec3 F0 = uBaseColor;
+          float TdotH = dot(T, H);
+          float BdotH = dot(B, H);
+
+          // roughness = 0.4, anisotropy: tighter along T, wider along B
+          // gives rotating metallic streaks as the ball spins
+          float ax = 0.28;  // roughness_T²  (tighter highlight axis)
+          float ay = 0.52;  // roughness_B²  (wider  highlight axis)
+          float a2_vis = ax * ay; // geometric mean for isotropic Smith
+
+          vec3 F0  = uBaseColor;
           vec3 F   = F_Schlick(VdotH, F0);
-          float D  = D_GGX(NdotH, a2);
-          float Vis = V_SmithGGX(NdotL, NdotV, a2);
+          float D  = D_GGX_aniso(NdotH, TdotH, BdotH, ax, ay);
+          float Vis = V_SmithGGX(NdotL, NdotV, a2_vis * a2_vis);
           vec3 specular = F * D * Vis * PI;
 
           // ── Escher sphere-map ─────────────────────────────────────────────
-          // R = reflection of view ray off N.  With orthographic V=(0,0,1):
-          //   R = 2·(N·V)·N − V  =  2·Nz·N − (0,0,1)
-          // Classic Blinn sphere-map UV:
-          //   m = 2·|R + (0,0,1)|,  uv = R.xy/m + 0.5
+          // Blinn sphere-map: R = reflect(-V, N), then
+          //   m = 2·|R+(0,0,1)|,  uv = R.xy/m + 0.5
+          // Ball's own canvas is never in the texture (only <video> elements)
           vec3 R = reflect(-V, N);
           float m = 2.0 * sqrt(R.x*R.x + R.y*R.y + (R.z + 1.0)*(R.z + 1.0));
           vec2 sphereUV = clamp(vec2(R.x / m + 0.5, R.y / m + 0.5), 0.002, 0.998);
           vec3 envSample = texture2D(uEnvMap, sphereUV).rgb;
 
-          // Fresnel at viewing angle weights how much env map is visible
           vec3 Fenv = F_Schlick(NdotV, F0);
 
-          // Fallback tinted env for when no video is in the texture yet
           float hemi = N.y * 0.5 + 0.5;
           vec3 envFallback = mix(
             uBaseColor * vec3(0.04, 0.05, 0.02),
@@ -2588,10 +2608,8 @@ class GravityBallRenderer {
             hemi
           ) * 0.55;
 
-          // Blend live env sample with fallback (env always wins when present)
           vec3 envLight = mix(envFallback, envSample * 1.1, 0.78) * Fenv;
 
-          // No diffuse (metalness=1): env reflection + direct specular highlight
           vec3 color = envLight + specular * NdotL * 2.4;
 
           gl_FragColor = vec4(color, 0.97);
@@ -2660,6 +2678,59 @@ class GravityBallRenderer {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
       gl.bindTexture(gl.TEXTURE_2D, null);
       this.envTexture = envTex;
+    }
+
+    // Shadow: simple flat quad rendered before the ball
+    const shadowVert = compileShader(gl.VERTEX_SHADER, `
+      attribute vec2 aCorner;
+      uniform vec2 uCenter;
+      uniform vec2 uRadius;
+      varying vec2 vCorner;
+      void main() {
+        vCorner = aCorner;
+        gl_Position = vec4(uCenter + aCorner * uRadius, 0.9, 1.0);
+      }
+    `);
+    const shadowFrag = compileShader(gl.FRAGMENT_SHADER, `
+      precision mediump float;
+      uniform float uAlpha;
+      varying vec2 vCorner;
+      void main() {
+        float d = length(vCorner);
+        float a = (1.0 - smoothstep(0.15, 1.0, d)) * uAlpha;
+        gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+      }
+    `);
+    if (shadowVert && shadowFrag) {
+      const sp = gl.createProgram();
+      if (sp) {
+        gl.attachShader(sp, shadowVert);
+        gl.attachShader(sp, shadowFrag);
+        gl.linkProgram(sp);
+        if (gl.getProgramParameter(sp, gl.LINK_STATUS)) {
+          this.shadowProgram = sp;
+          this.shadowAttribCorner = gl.getAttribLocation(sp, 'aCorner');
+          this.shadowUniformCenter = gl.getUniformLocation(sp, 'uCenter');
+          this.shadowUniformRadius = gl.getUniformLocation(sp, 'uRadius');
+          this.shadowUniformAlpha = gl.getUniformLocation(sp, 'uAlpha');
+        } else {
+          gl.deleteProgram(sp);
+        }
+      }
+    }
+    if (shadowVert) gl.deleteShader(shadowVert);
+    if (shadowFrag) gl.deleteShader(shadowFrag);
+
+    const shadowBuf = gl.createBuffer();
+    if (shadowBuf) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, shadowBuf);
+      // Two triangles forming a unit quad, corners [-1,1]²
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1, -1,  1, -1,  1,  1,
+        -1, -1,  1,  1, -1,  1,
+      ]), gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      this.shadowBuffer = shadowBuf;
     }
   }
 
@@ -2751,7 +2822,8 @@ class GravityBallRenderer {
     const H = envCanvas.height;
     ctx.clearRect(0, 0, W, H);
 
-    // Draw every playing <video> visible in the ball's stage container
+    // Draw every playing <video> visible in the ball's stage container.
+    // Videos only — the ball canvas itself is excluded (it's a <canvas>, not a <video>).
     const stage = this.canvas.parentElement;
     if (stage) {
       for (const video of stage.querySelectorAll<HTMLVideoElement>('video')) {
@@ -3086,6 +3158,34 @@ class GravityBallRenderer {
     const scale = (this.radius / height) * 2;
     const rotationMatrix = this.buildRotationMatrix();
 
+    // ── Projected shadow (drawn first, underneath ball) ──────────────────────
+    // Cast along light direction (-0.4, 0.72, ...) onto the "floor" (bottom wall).
+    // Shadow flattens and fades as ball rises higher.
+    if (this.shadowProgram && this.shadowBuffer) {
+      const LIGHT_X = -0.4;
+      const LIGHT_Y =  0.72;
+      const floorY   = height - this.radius * 0.6;
+      const distUp   = Math.max(0, floorY - this.position.y) / Math.max(1, height);
+      // Project ball center onto floor along inverse-light direction
+      const shadowPx  = this.position.x + LIGHT_X / Math.max(0.01, LIGHT_Y) * (floorY - this.position.y);
+      const shadowNdcX = (shadowPx / width) * 2 - 1;
+      const shadowNdcY = 1 - (floorY / height) * 2;
+      // Scale: squashed ellipse, stretches wider as ball rises
+      const shadowRX   = (scale / aspect) * (1.0 + distUp * 1.8);
+      const shadowRY   = scale * 0.18;
+      const shadowAlpha = Math.max(0, 0.52 - distUp * 0.48);
+
+      gl.useProgram(this.shadowProgram);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer);
+      gl.enableVertexAttribArray(this.shadowAttribCorner);
+      gl.vertexAttribPointer(this.shadowAttribCorner, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform2f(this.shadowUniformCenter, shadowNdcX, shadowNdcY);
+      gl.uniform2f(this.shadowUniformRadius, shadowRX, shadowRY);
+      gl.uniform1f(this.shadowUniformAlpha, shadowAlpha);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.disableVertexAttribArray(this.shadowAttribCorner);
+    }
+
     // Update and bind Escher env-map texture
     this.updateEnvTexture();
     gl.activeTexture(gl.TEXTURE0);
@@ -3113,11 +3213,15 @@ class GravityBallRenderer {
     if (gl) {
       if (this.vertexBuffer) gl.deleteBuffer(this.vertexBuffer);
       if (this.normalBuffer) gl.deleteBuffer(this.normalBuffer);
+      if (this.shadowBuffer) gl.deleteBuffer(this.shadowBuffer);
       if (this.envTexture) gl.deleteTexture(this.envTexture);
+      if (this.shadowProgram) gl.deleteProgram(this.shadowProgram);
       if (this.program) gl.deleteProgram(this.program);
     }
     this.vertexBuffer = null;
     this.normalBuffer = null;
+    this.shadowBuffer = null;
+    this.shadowProgram = null;
     this.envTexture = null;
     this.envCanvas = null;
     this.envCtx = null;
