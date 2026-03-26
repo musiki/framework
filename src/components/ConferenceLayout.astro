@@ -1306,7 +1306,10 @@ if (
       </section>
 
       <section class="conference-sidebar-section conference-sidebar-section--notes" data-notes-section>
-        <div class="conference-sidebar-heading">NOTAS</div>
+        <div class="conference-notes-heading-row">
+          <div class="conference-sidebar-heading">NOTAS</div>
+          <button type="button" class="conference-notes-new-btn" data-notes-new title="Nueva nota">+</button>
+        </div>
 
         <div class="conference-notes-list" data-notes-list aria-live="polite"></div>
 
@@ -2088,6 +2091,9 @@ if (
     --conference-accent: #2a87ff;
     --conference-green: #25cf6b;
     --conference-red: #ff4d4d;
+    /* Establish conference-specific font base so children don't inherit body's clamp(1.02rem) */
+    font-size: var(--conference-font-body);
+    line-height: 1.4;
     position: relative;
     height: 100vh;
     height: 100dvh;
@@ -2434,7 +2440,35 @@ if (
     overflow-y: auto;
   }
 
-  .conference-notes-item {
+  .conference-notes-heading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .conference-notes-new-btn {
+    width: 1.4rem;
+    height: 1.4rem;
+    padding: 0;
+    border: 1px solid var(--conference-line);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--conference-muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 120ms, color 120ms;
+  }
+
+  .conference-notes-new-btn:hover {
+    border-color: rgba(245, 247, 251, 0.4);
+    color: rgba(245, 247, 251, 0.85);
+  }
+
+  :global(.conference-notes-item) {
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: baseline;
@@ -2443,28 +2477,35 @@ if (
     border: 1px solid transparent;
     border-radius: 2px;
     cursor: pointer;
-    font-size: 0.68rem;
-    color: var(--conference-muted);
-    letter-spacing: 0.01em;
+    font-size: 0.68rem !important;
+    font-weight: 400 !important;
+    color: var(--conference-muted) !important;
+    letter-spacing: 0.03em;
+    line-height: 1.4 !important;
     transition: border-color 120ms, color 120ms;
   }
 
-  .conference-notes-item:hover {
+  :global(.conference-notes-item:hover) {
     border-color: var(--conference-line);
-    color: rgba(245, 247, 251, 0.72);
+    color: rgba(245, 247, 251, 0.72) !important;
   }
 
-  .conference-notes-item-title {
-    font-weight: 500;
+  :global(.conference-notes-item-title) {
+    font-weight: 400 !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .conference-notes-item-date {
-    font-size: 0.6rem;
+  :global(.conference-notes-item-date) {
+    font-size: 0.6rem !important;
     opacity: 0.4;
     white-space: nowrap;
+  }
+
+  :global(.conference-notes-item--active) {
+    border-color: var(--conference-line) !important;
+    color: rgba(245, 247, 251, 0.85) !important;
   }
 
   .conference-notes-form {
@@ -2829,8 +2870,8 @@ if (
 
   .conference-sidebar-section {
     display: grid;
-    gap: 0.48rem;
-    padding: 0.58rem 0.82rem 0.68rem;
+    gap: clamp(0.44rem, 0.6vw, 0.52rem);
+    padding: clamp(0.52rem, 0.7vw, 0.62rem) clamp(0.65rem, 1vw, 0.86rem) clamp(0.55rem, 0.8vw, 0.72rem);
     border-bottom: 1px solid var(--conference-line);
   }
 
@@ -3906,7 +3947,7 @@ if (
   .conference-statusline {
     margin: 0;
     color: var(--conference-muted);
-    font-size: 0.76rem;
+    font-size: clamp(0.68rem, 0.8vw, 0.78rem);
     line-height: 1.4;
   }
 
@@ -3959,7 +4000,6 @@ if (
     font-weight: 700 !important;
     font-style: normal !important;
     letter-spacing: 0.01em;
-    opacity: 0.7;
   }
 
   :global(.conference-chat-header-separator) {
@@ -5191,10 +5231,6 @@ if (
       gap: 0.6rem;
     }
 
-    .conference-sidebar-section {
-      padding: 0.6rem 0.72rem 0.72rem;
-    }
-
     .conference-slot--sidebar {
       min-height: 10rem;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5296,11 +5332,6 @@ if (
       grid-template-rows: minmax(0, 1fr) minmax(0, 56%);
     }
 
-    .conference-sidebar-section {
-      gap: 0.55rem;
-      padding: 0.55rem 0.68rem 0.68rem;
-    }
-
     .conference-sidebar-section--mixer {
       height: auto;
       max-height: 60dvh;
@@ -5320,10 +5351,6 @@ if (
       grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 0.3rem 0.2rem;
       align-items: start;
-    }
-
-    .conference-mixer-channel {
-      padding: 0.18rem 0.1rem 0.14rem;
     }
 
     .conference-mixer-fx {
@@ -5348,10 +5375,6 @@ if (
 
     .conference-self-preview {
       aspect-ratio: 1;
-    }
-
-    .conference-statusline {
-      font-size: 0.7rem;
     }
 
     .conference-chat-list {

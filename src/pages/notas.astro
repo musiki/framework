@@ -1,0 +1,504 @@
+---
+// src/pages/notas.astro
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
+import { createSupabaseServerClient, ensureDbUserFromSession } from '../lib/forum-server';
+import '../styles/theme.css';
+
+export const prerender = false;
+
+const session = (Astro.locals as any).session;
+if (!session?.user) {
+  return Astro.redirect('/login?redirect=/notas');
+}
+
+const supabase = createSupabaseServerClient();
+const user = await ensureDbUserFromSession(supabase, session);
+if (!user) {
+  return Astro.redirect('/login?redirect=/notas');
+}
+
+const url = new URL(Astro.request.url);
+const activeId = url.searchParams.get('id') || null;
+
+const { data: notes } = await supabase
+  .from('LiveClassNote')
+  .select('id, title, body, renderedHtml, noteDate, courseId, roomName, createdAt, updatedAt')
+  .eq('userId', user.id)
+  .order('noteDate', { ascending: false })
+  .order('updatedAt', { ascending: false })
+  .limit(200);
+
+const allNotes = notes ?? [];
+const activeNote = activeId
+  ? allNotes.find(n => n.id === activeId) ?? allNotes[0] ?? null
+  : allNotes[0] ?? null;
+
+// Group: courseId → dateGroup → notes[]
+const byCourse: Record<string, Record<string, typeof allNotes>> = {};
+for (const note of allNotes) {
+  const course = note.courseId || 'sin_curso';
+  const date   = note.noteDate ?? 'sin fecha';
+  if (!byCourse[course]) byCourse[course] = {};
+  if (!byCourse[course][date]) byCourse[course][date] = [];
+  byCourse[course][date].push(note);
+}
+---
+
+<html lang="es">
+  <head>
+    <BaseHead title="Mis notas" description="Notas de clase personal" />
+    <style>
+      .notas-shell {
+        display: grid;
+        grid-template-columns: 210px 1fr;
+        min-height: calc(100dvh - var(--musiki-header-height, 4rem));
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 1.5rem 1rem;
+        gap: 1.5rem;
+        align-items: start;
+      }
+
+      @media (max-width: 640px) {
+        .notas-shell { grid-template-columns: 1fr; padding: 0.75rem 0.5rem; gap: 1rem; }
+        .notas-sidebar { order: 2; }
+        .notas-main   { order: 1; }
+      }
+
+      /* ── Sidebar ── */
+      .notas-sidebar {
+        position: sticky;
+        top: calc(var(--musiki-header-height, 4rem) + 1rem);
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        max-height: calc(100dvh - var(--musiki-header-height, 4rem) - 2rem);
+        overflow-y: auto;
+      }
+
+      .notas-sidebar-heading {
+        font-size: 0.62rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--gray, #6c7a9e);
+        opacity: 0.5;
+        padding: 0.5rem 0 0.2rem;
+        position: sticky;
+        top: 0;
+        background: var(--c-bg, #fff);
+      }
+
+      .notas-course-block { margin-bottom: 0.5rem; }
+
+      .notas-course-label {
+        font-size: 0.6rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--gray, #6c7a9e);
+        opacity: 0.6;
+        padding: 0.25rem 0.3rem;
+        border-bottom: 1px solid rgba(100,100,120,0.12);
+        margin-bottom: 0.15rem;
+      }
+
+      .notas-date-label {
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--gray, #6c7a9e);
+        opacity: 0.4;
+        padding: 0.2rem 0.3rem 0.05rem;
+      }
+
+      .notas-list-item {
+        display: block;
+        padding: 0.22rem 0.5rem;
+        font-size: 0.75rem;
+        color: var(--c-fg, #333);
+        text-decoration: none;
+        border-radius: 3px;
+        border-left: 2px solid transparent;
+        opacity: 0.55;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: opacity 120ms, border-color 120ms;
+      }
+
+      .notas-list-item:hover { opacity: 0.85; }
+      .notas-list-item.active {
+        opacity: 1;
+        border-left-color: var(--accent, #2337ff);
+        color: var(--accent, #2337ff);
+      }
+
+      .notas-empty-sidebar { font-size: 0.78rem; opacity: 0.4; padding: 0.5rem 0; }
+
+      /* ── Main ── */
+      .notas-main { min-width: 0; }
+
+      .notas-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.6rem;
+        border-bottom: 1px solid rgba(100,100,120,0.12);
+        flex-wrap: wrap;
+      }
+
+      .notas-toolbar-title {
+        font-size: 1rem;
+        font-weight: 700;
+        margin: 0;
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .notas-toolbar-meta {
+        font-size: 0.68rem;
+        opacity: 0.4;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+
+      .notas-room-tag {
+        font-size: 0.62rem;
+        padding: 0.1rem 0.38rem;
+        border: 1px solid rgba(100,100,120,0.28);
+        border-radius: 2px;
+        opacity: 0.5;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      /* wireframe action buttons — same style as G/V in room */
+      .notas-btn {
+        padding: 0.22rem 0.6rem;
+        border-radius: 2px;
+        background: transparent;
+        font: inherit;
+        font-size: 0.68rem;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: border-color 150ms, color 150ms, background 150ms;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .notas-btn--save {
+        border: 1px solid rgba(160,160,170,0.35);
+        color: rgba(60,60,80,0.6);
+      }
+      .notas-btn--save:hover {
+        border-color: rgba(160,160,170,0.7);
+        color: rgba(20,20,40,0.9);
+      }
+
+      .notas-btn--edit {
+        border: 1px solid rgba(80,140,220,0.4);
+        color: rgba(60,110,200,0.7);
+      }
+      .notas-btn--edit:hover {
+        border-color: rgba(80,140,220,0.8);
+        color: rgba(40,90,200,0.95);
+        background: rgba(60,120,200,0.05);
+      }
+
+      .notas-btn--delete {
+        border: 1px solid rgba(200,70,70,0.35);
+        color: rgba(180,60,60,0.6);
+      }
+      .notas-btn--delete:hover {
+        border-color: rgba(220,80,80,0.7);
+        color: rgba(200,50,50,0.9);
+        background: rgba(200,60,60,0.05);
+      }
+
+      .notas-btn[hidden] { display: none; }
+
+      /* Edit form */
+      .notas-edit-form { display: flex; flex-direction: column; gap: 0.5rem; }
+      .notas-edit-form[hidden] { display: none; }
+
+      .notas-input-title {
+        font-size: 1rem;
+        font-weight: 700;
+        padding: 0.3rem 0;
+        border: 0;
+        border-bottom: 1px solid rgba(100,100,120,0.2);
+        background: transparent;
+        width: 100%;
+        color: inherit;
+        font-family: inherit;
+      }
+      .notas-input-title:focus { outline: none; border-bottom-color: var(--accent, #2337ff); }
+
+      .notas-input-body {
+        font-size: 0.9rem;
+        padding: 0.5rem;
+        border: 1px solid rgba(100,100,120,0.2);
+        border-radius: 3px;
+        background: transparent;
+        width: 100%;
+        min-height: 12rem;
+        resize: vertical;
+        color: inherit;
+        font-family: var(--font-family-mono, monospace);
+        line-height: 1.6;
+      }
+      .notas-input-body:focus { outline: none; border-color: var(--accent, #2337ff); }
+
+      /* Rendered content */
+      .notas-body {
+        font-size: var(--font-size-base, 1rem);
+        line-height: var(--line-height-base, 1.72);
+      }
+      .notas-body[hidden] { display: none; }
+      .notas-body img { max-width: 100%; height: auto; }
+      .notas-body pre { overflow-x: auto; }
+      .notas-body .mermaid {
+        padding: 0.5rem;
+        border: 1px dashed rgba(100,100,120,0.2);
+        border-radius: 3px;
+        font-size: 0.8rem;
+        opacity: 0.6;
+      }
+
+      /* Empty state */
+      .notas-empty {
+        padding: 2.5rem 1rem;
+        opacity: 0.38;
+        font-size: 0.9rem;
+      }
+
+      .notas-status {
+        font-size: 0.72rem;
+        opacity: 0;
+        transition: opacity 200ms;
+        color: var(--accent, #2337ff);
+        padding-left: 0.25rem;
+      }
+      .notas-status.visible { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <Header />
+    <main>
+      <div class="notas-shell">
+
+        <!-- Sidebar -->
+        <aside class="notas-sidebar">
+          <div class="notas-sidebar-heading">Notas</div>
+
+          {allNotes.length === 0 ? (
+            <p class="notas-empty-sidebar">Sin notas aún.</p>
+          ) : (
+            Object.entries(byCourse).map(([courseKey, dateGroups]) => (
+              <div class="notas-course-block">
+                {Object.keys(byCourse).length > 1 && (
+                  <div class="notas-course-label">
+                    {courseKey === 'sin_curso' ? 'General' : courseKey}
+                  </div>
+                )}
+                {Object.entries(dateGroups).map(([date, dateNotes]) => (
+                  <div>
+                    <div class="notas-date-label">{date}</div>
+                    {dateNotes.map(note => (
+                      <a
+                        href={`/notas?id=${note.id}`}
+                        class:list={['notas-list-item', activeNote?.id === note.id ? 'active' : '']}
+                        title={note.title || '(sin título)'}
+                      >
+                        {note.title || '(sin título)'}
+                      </a>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </aside>
+
+        <!-- Main -->
+        <section class="notas-main">
+          {!activeNote ? (
+            <!-- New note form when no notes exist -->
+            <div>
+              <div class="notas-toolbar">
+                <h1 class="notas-toolbar-title" style="opacity:0.35">Nueva nota</h1>
+              </div>
+              <form class="notas-edit-form" id="notas-form">
+                <input class="notas-input-title" id="notas-input-title" type="text" placeholder="Título" maxlength="160" />
+                <textarea class="notas-input-body" id="notas-input-body" placeholder="Escribe tu nota… (markdown, ```mermaid, ```lilypond)" rows="10"></textarea>
+                <div style="display:flex;gap:0.4rem;align-items:center">
+                  <button type="submit" class="notas-btn notas-btn--save">Guardar</button>
+                  <span class="notas-status" id="notas-status"></span>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div>
+              <!-- Toolbar -->
+              <div class="notas-toolbar">
+                <h1 class="notas-toolbar-title" id="notas-display-title">{activeNote.title || '(sin título)'}</h1>
+                <span class="notas-toolbar-meta">{activeNote.noteDate}</span>
+                {activeNote.roomName && <span class="notas-room-tag">{activeNote.roomName}</span>}
+                <button type="button" class="notas-btn notas-btn--edit" id="notas-edit-btn">Editar</button>
+                <button type="submit" class="notas-btn notas-btn--save" id="notas-save-btn" hidden>Guardar</button>
+                <button type="button" class="notas-btn notas-btn--delete" id="notas-delete-btn">Borrar</button>
+                <span class="notas-status" id="notas-status"></span>
+              </div>
+
+              <!-- Edit form (hidden by default) -->
+              <form class="notas-edit-form" id="notas-form" hidden>
+                <input
+                  class="notas-input-title"
+                  id="notas-input-title"
+                  type="text"
+                  value={activeNote.title || ''}
+                  placeholder="Título"
+                  maxlength="160"
+                />
+                <textarea
+                  class="notas-input-body"
+                  id="notas-input-body"
+                  rows="14"
+                  placeholder="Escribe tu nota…"
+                >{activeNote.body || ''}</textarea>
+              </form>
+
+              <!-- Rendered view -->
+              <div class="notas-body" id="notas-body">
+                {activeNote.renderedHtml ? (
+                  <Fragment set:html={activeNote.renderedHtml} />
+                ) : (
+                  <pre style="white-space:pre-wrap;font-size:0.9rem;opacity:0.7">{activeNote.body}</pre>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+
+    <script define:vars={{ activeNoteId: activeNote?.id ?? null }}>
+      // ── Inline edit/save/delete ────────────────────────────────────
+      const editBtn   = document.getElementById('notas-edit-btn');
+      const saveBtn   = document.getElementById('notas-save-btn');
+      const deleteBtn = document.getElementById('notas-delete-btn');
+      const form      = document.getElementById('notas-form');
+      const bodyEl    = document.getElementById('notas-body');
+      const titleInput = document.getElementById('notas-input-title');
+      const bodyInput  = document.getElementById('notas-input-body');
+      const statusEl   = document.getElementById('notas-status');
+      const displayTitle = document.getElementById('notas-display-title');
+
+      let statusTimer = 0;
+      const setStatus = (msg, ok = true) => {
+        if (!statusEl) return;
+        statusEl.textContent = msg;
+        statusEl.style.color = ok ? 'var(--accent, #2337ff)' : '#c03030';
+        statusEl.classList.add('visible');
+        clearTimeout(statusTimer);
+        statusTimer = setTimeout(() => statusEl.classList.remove('visible'), 2800);
+      };
+
+      // Toggle edit mode
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          form?.removeAttribute('hidden');
+          bodyEl?.setAttribute('hidden', '');
+          editBtn.setAttribute('hidden', '');
+          saveBtn?.removeAttribute('hidden');
+          titleInput?.focus();
+        });
+      }
+
+      // Save
+      const doSave = async () => {
+        const title = titleInput?.value?.trim() ?? '';
+        const body  = bodyInput?.value ?? '';
+        if (!body.trim()) { setStatus('El cuerpo no puede estar vacío', false); return; }
+
+        const payload = { title, body, noteDate: new Date().toISOString().slice(0, 10) };
+        if (activeNoteId) payload.id = activeNoteId;
+
+        const res = await fetch('/api/live/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(() => null);
+
+        if (!res?.ok) { setStatus('Error al guardar', false); return; }
+        const data = await res.json().catch(() => null);
+        const savedId = data?.note?.id;
+
+        setStatus('Guardado');
+        if (displayTitle) displayTitle.textContent = title || '(sin título)';
+
+        // Update rendered view if server returned HTML
+        if (data?.note?.renderedHtml && bodyEl) {
+          bodyEl.innerHTML = data.note.renderedHtml;
+          runMermaid(bodyEl);
+        }
+
+        // Switch back to read mode
+        form?.setAttribute('hidden', '');
+        bodyEl?.removeAttribute('hidden');
+        editBtn?.removeAttribute('hidden');
+        saveBtn?.setAttribute('hidden', '');
+
+        // If was a new note, update URL
+        if (!activeNoteId && savedId) {
+          history.replaceState(null, '', `/notas?id=${savedId}`);
+        }
+      };
+
+      if (saveBtn) saveBtn.addEventListener('click', doSave);
+      if (form && !activeNoteId) form.addEventListener('submit', e => { e.preventDefault(); doSave(); });
+
+      // Delete
+      if (deleteBtn && activeNoteId) {
+        deleteBtn.addEventListener('click', async () => {
+          if (!confirm('¿Borrar esta nota?')) return;
+          const res = await fetch(`/api/live/notes?id=${activeNoteId}`, { method: 'DELETE' }).catch(() => null);
+          if (!res?.ok) { setStatus('Error al borrar', false); return; }
+          window.location.href = '/notas';
+        });
+      }
+
+      // Mermaid helper
+      function runMermaid(container) {
+        const nodes = Array.from(container.querySelectorAll('.mermaid'));
+        if (!nodes.length) return;
+        const load = () => {
+          if (window.mermaid?.run) return Promise.resolve(window.mermaid);
+          if (window.__notesPageMermaid) return window.__notesPageMermaid;
+          window.__notesPageMermaid = new Promise(resolve => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+            s.onload = () => resolve(window.mermaid ?? null);
+            s.onerror = () => resolve(null);
+            document.head.appendChild(s);
+          });
+          return window.__notesPageMermaid;
+        };
+        load().then(m => {
+          if (!m?.run) return;
+          try { m.initialize({ startOnLoad: false, theme: 'default' }); m.run({ nodes }); } catch {}
+        });
+      }
+
+      // Run mermaid on initial load
+      const initialBody = document.getElementById('notas-body');
+      if (initialBody) runMermaid(initialBody);
+    </script>
+  </body>
+</html>

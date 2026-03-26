@@ -356,6 +356,7 @@ const withActiveCourse = (href: string) => {
 						</button>
 						<div class="user-dropdown" id="user-dropdown">
 							<a href={withActiveCourse('/dashboard')}>Dashboard</a>
+							<a href="/notas">Notas</a>
 							<a href="/logout">Cerrar Sesión</a>
 						</div>
 					</div>
@@ -1504,6 +1505,12 @@ const withActiveCourse = (href: string) => {
 		.user-button span {
 			max-width: 6.1rem;
 		}
+		.user-dropdown {
+			position: fixed;
+			top: var(--musiki-header-height, 4.5rem);
+			right: 0.5rem;
+			left: auto;
+		}
 	}
 
 	@media (max-width: 500px) {
@@ -1524,11 +1531,11 @@ const withActiveCourse = (href: string) => {
 			height: 34px;
 		}
 		.internal-links {
-			order: 2;
-			width: auto;
+			order: 3;
+			flex: 1 0 100%;
+			width: 100%;
 			justify-content: flex-start;
 			gap: 0 0.08rem;
-			flex: 1 1 0;
 			min-width: 0;
 			margin-top: 0;
 			padding-bottom: 0;
@@ -1564,13 +1571,14 @@ const withActiveCourse = (href: string) => {
 			font-size: 0.46rem;
 		}
 		.social-links {
-			order: 3;
-			width: 100%;
+			order: 2;
+			width: auto;
+			flex: 0 0 auto;
+			margin-left: auto;
 			justify-content: flex-end;
 			gap: 0.15rem;
 			flex-wrap: nowrap;
-			flex: 0 0 100%;
-			padding-top: 0.02rem;
+			padding-top: 0;
 		}
 		.social-links a {
 			padding: 0;

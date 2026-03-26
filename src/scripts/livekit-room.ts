@@ -2454,6 +2454,7 @@ class GravityBallRenderer {
   private uniformEnvMap: WebGLUniformLocation | null = null;
   private uniformEnvBlend: WebGLUniformLocation | null = null;
   private envMirrorEnabled = false;
+  private _envFrameCounter = 0;
   private extraEnvCanvases: HTMLCanvasElement[] = [];
   // Projected shadow
   private shadowProgram: WebGLProgram | null = null;
@@ -3194,8 +3195,8 @@ class GravityBallRenderer {
     gl.enableVertexAttribArray(this.attribNormal);
     gl.vertexAttribPointer(this.attribNormal, 3, gl.FLOAT, false, 0, 0);
 
-    // Env-map: only capture video frames when mirror mode is on (saves GPU/CPU)
-    if (this.envMirrorEnabled) this.updateEnvTexture();
+    // Env-map: capture video frames every 3rd frame when mirror mode is on (saves GPU/CPU)
+    if (this.envMirrorEnabled && ++this._envFrameCounter % 3 === 0) this.updateEnvTexture();
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.envTexture);
     gl.uniform1i(this.uniformEnvMap, 0);
@@ -4709,8 +4710,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const setStatus = (message: string) => {
+  let _statusClearTimer: ReturnType<typeof setTimeout> | null = null;
+  const setStatus = (message: string, autoClearMs = 4000) => {
     statusNode.textContent = message;
+    if (_statusClearTimer) clearTimeout(_statusClearTimer);
+    if (autoClearMs > 0 && message) {
+      _statusClearTimer = setTimeout(() => {
+        statusNode.textContent = '';
+        _statusClearTimer = null;
+      }, autoClearMs);
+    }
   };
 
   const applySidebarCollapsedState = () => {
@@ -10620,9 +10629,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const notesPreviewEl    = root.querySelector<HTMLElement>('[data-notes-preview]');
   const notesPreviewBtn   = root.querySelector<HTMLButtonElement>('[data-notes-preview-btn]');
   const notesDownloadBtn  = root.querySelector<HTMLButtonElement>('[data-notes-download]');
+  const notesNewBtn       = root.querySelector<HTMLButtonElement>('[data-notes-new]');
   let notesCurrentId: string | null = null;
   const noteCourseId    = root.dataset.courseId || null;
   const noteRoomName    = (root.querySelector('[data-room-input]') as HTMLInputElement | null)?.value.trim() || null;
+
+  const syncActiveNoteItem = () => {
+    notesListEl?.querySelectorAll('[data-note-id]').forEach(el => {
+      el.classList.toggle('conference-notes-item--active', (el as HTMLElement).dataset.noteId === (notesCurrentId ?? ''));
+    });
+  };
 
   const renderNoteItem = (note: { id: string; title: string; noteDate: string }): HTMLElement => {
     const el = document.createElement('div');
@@ -10632,6 +10648,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       <span class="conference-notes-item-date">${note.noteDate}</span>`;
     el.addEventListener('click', () => void loadNote(note.id));
     return el;
+  };
+
+  const resetNoteForm = () => {
+    notesCurrentId = null;
+    if (notesTitleInput) notesTitleInput.value = '';
+    if (notesBodyInput)  notesBodyInput.value  = '';
+    if (notesPreviewEl)  notesPreviewEl.innerHTML = '';
+    setNotesMode(true);
+    syncActiveNoteItem();
+    notesTitleInput?.focus();
   };
 
   const loadNotesList = async () => {
@@ -10665,6 +10691,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       runMermaidIn(notesPreviewEl);
     }
     setNotesMode(true);
+    syncActiveNoteItem();
   };
 
   let notesEditMode = true; // true = editing, false = previewing
@@ -10687,10 +10714,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   if (notesPreviewBtn && notesPreviewEl && notesBodyInput) {
     notesPreviewBtn.addEventListener('click', () => {
       if (notesEditMode && !notesPreviewEl.innerHTML.trim()) {
-        notesPreviewEl.innerHTML = '<p style="opacity:0.35;font-size:0.7rem;margin:0">Guardá con G para ver el render.</p>';
+        const body = notesBodyInput.value;
+        if (body.trim()) {
+          const w = window as any;
+          const doPreview = async () => {
+            if (!w.marked) {
+              await new Promise<void>(resolve => {
+                if (document.querySelector('script[src*="marked"]')) { resolve(); return; }
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/marked@9/marked.min.js';
+                s.onload = () => resolve(); s.onerror = () => resolve();
+                document.head.appendChild(s);
+              });
+            }
+            notesPreviewEl.innerHTML = w.marked?.parse ? String(w.marked.parse(body)) : `<pre>${body}</pre>`;
+            runMermaidIn(notesPreviewEl);
+          };
+          void doPreview();
+        }
       }
       setNotesMode(!notesEditMode);
     });
+  }
+
+  if (notesNewBtn) {
+    notesNewBtn.addEventListener('click', resetNoteForm);
   }
 
   if (notesDownloadBtn) {
@@ -10732,10 +10780,41 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         if (!res?.ok) { setStatus('Error al guardar nota'); return; }
         const data = await res.json().catch(() => null);
         notesCurrentId = data?.note?.id ?? notesCurrentId;
-        if (notesPreviewEl && data?.note?.renderedHtml) {
-          notesPreviewEl.innerHTML = data.note.renderedHtml;
+
+        // Show instant client-side preview while server renders in background
+        if (notesPreviewEl) {
+          const body = notesBodyInput?.value ?? '';
+          const w = window as any;
+          const renderClientPreview = async () => {
+            // Use marked.js for immediate client-side render
+            if (!w.marked) {
+              await new Promise<void>(resolve => {
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/marked@9/marked.min.js';
+                s.onload = () => resolve(); s.onerror = () => resolve();
+                document.head.appendChild(s);
+              });
+            }
+            return w.marked?.parse ? String(w.marked.parse(body)) : `<pre>${body}</pre>`;
+          };
+          const preview = await renderClientPreview();
+          notesPreviewEl.innerHTML = preview;
           runMermaidIn(notesPreviewEl);
           setNotesMode(false);
+
+          // Poll once after ~3s for server-rendered HTML (has lilypond/katex)
+          const savedNoteId = notesCurrentId;
+          setTimeout(async () => {
+            if (notesCurrentId !== savedNoteId) return; // user navigated away
+            const pollRes = await fetch(`/api/live/notes?limit=1&id=${savedNoteId}`).catch(() => null);
+            if (!pollRes?.ok) return;
+            const pollData = await pollRes.json().catch(() => null);
+            const updated = (pollData?.notes ?? []).find((n: any) => n.id === savedNoteId);
+            if (updated?.renderedHtml && notesPreviewEl && notesCurrentId === savedNoteId) {
+              notesPreviewEl.innerHTML = updated.renderedHtml;
+              runMermaidIn(notesPreviewEl);
+            }
+          }, 3000);
         }
         void loadNotesList();
       })();
@@ -11358,8 +11437,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
   liveActivityTickId = window.setInterval(handleLiveActivityTick, 1000);
-  vpsStatsTickId = window.setInterval(handleVpsStatsTick, 5000);
-  void handleVpsStatsTick();
+  if (localRole === 'teacher') {
+    vpsStatsTickId = window.setInterval(handleVpsStatsTick, 5000);
+    void handleVpsStatsTick();
+  }
   window.addEventListener('resize', handleViewportResize);
 
   const teardown = () => {

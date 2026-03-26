@@ -1801,6 +1801,17 @@ order:
         line-height: 0.78;
       }
 
+      :global(#course-forum-subnav .forum-switcher-notes-btn) {
+        --forum-switcher-color: rgba(160, 160, 170, 0.5);
+        font-size: 0.9rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      :global(#course-forum-subnav .forum-switcher-notes-btn:hover) {
+        --forum-switcher-color: rgba(200, 200, 210, 0.85);
+      }
+
       .forum-board-create-panel {
         margin: 0.02rem 0 0.1rem;
         padding: 0.16rem 0 0.25rem;
@@ -3113,6 +3124,14 @@ order:
                     <span class="forum-switcher-mark">?</span>
                   </span>
                 )}
+                <a
+                  href="/notas"
+                  class="forum-switcher-link forum-switcher-notes-btn"
+                  title="Mis notas"
+                  aria-label="Mis notas"
+                >
+                  N
+                </a>
                 <button
                   id="forum-new-board-toggle"
                   type="button"
