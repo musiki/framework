@@ -64,6 +64,7 @@ if (remoteDevHmrHost) {
 
 export default defineConfig({
   site,
+  devToolbar: { enabled: false },
   output: 'server',
   adapter: node({
     mode: 'standalone'

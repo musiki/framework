@@ -10585,13 +10585,41 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   // ── NOTAS ────────────────────────────────────────────────────────────────
-  const notesSection    = root.querySelector('[data-notes-section]');
-  const notesForm       = root.querySelector<HTMLFormElement>('[data-notes-form]');
-  const notesTitleInput = root.querySelector<HTMLInputElement>('[data-notes-title]');
-  const notesBodyInput  = root.querySelector<HTMLTextAreaElement>('[data-notes-body]');
-  const notesListEl     = root.querySelector('[data-notes-list]');
-  const notesPreviewEl  = root.querySelector<HTMLElement>('[data-notes-preview]');
-  const notesPreviewBtn = root.querySelector<HTMLButtonElement>('[data-notes-preview-btn]');
+
+  // Lazy-load mermaid and render any .mermaid divs inside a container
+  const runMermaidIn = (container: HTMLElement) => {
+    const nodes = Array.from(container.querySelectorAll<HTMLElement>('.mermaid'));
+    if (nodes.length === 0) return;
+    const w = window as any;
+    const load = () => {
+      if (w.mermaid?.run) return Promise.resolve(w.mermaid);
+      if (w.__notesMermaidPromise) return w.__notesMermaidPromise as Promise<any>;
+      w.__notesMermaidPromise = new Promise<any>(resolve => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+        s.onload = () => resolve(w.mermaid ?? null);
+        s.onerror = () => resolve(null);
+        document.head.appendChild(s);
+      });
+      return w.__notesMermaidPromise as Promise<any>;
+    };
+    load().then((m: any) => {
+      if (!m?.run) return;
+      try {
+        m.initialize({ startOnLoad: false, theme: 'dark' });
+        m.run({ nodes });
+      } catch { /* ignore */ }
+    });
+  };
+
+  const notesSection      = root.querySelector('[data-notes-section]');
+  const notesForm         = root.querySelector<HTMLFormElement>('[data-notes-form]');
+  const notesTitleInput   = root.querySelector<HTMLInputElement>('[data-notes-title]');
+  const notesBodyInput    = root.querySelector<HTMLTextAreaElement>('[data-notes-body]');
+  const notesListEl       = root.querySelector('[data-notes-list]');
+  const notesPreviewEl    = root.querySelector<HTMLElement>('[data-notes-preview]');
+  const notesPreviewBtn   = root.querySelector<HTMLButtonElement>('[data-notes-preview-btn]');
+  const notesDownloadBtn  = root.querySelector<HTMLButtonElement>('[data-notes-download]');
   let notesCurrentId: string | null = null;
   const noteCourseId    = root.dataset.courseId || null;
   const noteRoomName    = (root.querySelector('[data-room-input]') as HTMLInputElement | null)?.value.trim() || null;
@@ -10634,13 +10662,51 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (notesBodyInput)  notesBodyInput.value  = note.body  ?? '';
     if (notesPreviewEl && note.renderedHtml) {
       notesPreviewEl.innerHTML = note.renderedHtml;
-      notesPreviewEl.hidden = false;
+      runMermaidIn(notesPreviewEl);
+    }
+    setNotesMode(true);
+  };
+
+  let notesEditMode = true; // true = editing, false = previewing
+
+  const setNotesMode = (edit: boolean) => {
+    notesEditMode = edit;
+    if (!notesPreviewBtn || !notesPreviewEl || !notesTitleInput || !notesBodyInput) return;
+    notesTitleInput.hidden = !edit;
+    notesBodyInput.hidden  = !edit;
+    notesPreviewEl.hidden  = edit;
+    if (edit) {
+      notesPreviewBtn.textContent = 'V';
+      notesPreviewBtn.title = 'Vista previa';
+    } else {
+      notesPreviewBtn.textContent = 'E';
+      notesPreviewBtn.title = 'Editar';
     }
   };
 
   if (notesPreviewBtn && notesPreviewEl && notesBodyInput) {
     notesPreviewBtn.addEventListener('click', () => {
-      notesPreviewEl.hidden = !notesPreviewEl.hidden;
+      if (notesEditMode && !notesPreviewEl.innerHTML.trim()) {
+        notesPreviewEl.innerHTML = '<p style="opacity:0.35;font-size:0.7rem;margin:0">Guardá con G para ver el render.</p>';
+      }
+      setNotesMode(!notesEditMode);
+    });
+  }
+
+  if (notesDownloadBtn) {
+    notesDownloadBtn.addEventListener('click', () => {
+      const title = notesTitleInput?.value.trim() || 'nota';
+      const body  = notesBodyInput?.value ?? '';
+      if (!body.trim()) return;
+      const content = title ? `# ${title}\n\n${body}` : body;
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+      a.href     = url;
+      a.download = `nota-${date}-${title.replace(/[^a-z0-9]/gi, '_').slice(0, 40) || 'sin_titulo'}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
     });
   }
 
@@ -10668,10 +10734,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         notesCurrentId = data?.note?.id ?? notesCurrentId;
         if (notesPreviewEl && data?.note?.renderedHtml) {
           notesPreviewEl.innerHTML = data.note.renderedHtml;
-          notesPreviewEl.hidden = false;
+          runMermaidIn(notesPreviewEl);
+          setNotesMode(false);
         }
         void loadNotesList();
-        setStatus('Nota guardada');
       })();
     });
   }
@@ -11272,13 +11338,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         const percent = Number.parseInt(stats.cpu.percent, 10);
         cpuEl.textContent = `${stats.cpu.percent}%`;
         cpuEl.dataset.risk = percent > 85 ? 'crit' : percent > 60 ? 'high' : percent > 30 ? 'warn' : 'ok';
-        cpuEl.title = `VPS CPU: ${stats.cpu.load} load · ${stats.cpu.cores} cores`;
+        cpuEl.dataset.statTooltip = `VPS CPU\t${stats.cpu.percent}%\nLoad avg\t${stats.cpu.load}\nCores\t${stats.cpu.cores}`;
       }
       if (bwEl) {
         const mbps = Number.parseFloat(stats.bandwidth.mbps);
         bwEl.textContent = `${stats.bandwidth.mbps}M/s`;
         bwEl.dataset.risk = mbps > 300 ? 'crit' : mbps > 150 ? 'high' : mbps > 50 ? 'warn' : 'ok';
-        bwEl.title = `VPS Outbound: ${stats.bandwidth.mbps} Mbps · Total TX: ${stats.bandwidth.totalTxGb} GB`;
+        bwEl.dataset.statTooltip = `VPS Out\t${stats.bandwidth.mbps} Mbps\nTotal TX\t${stats.bandwidth.totalTxGb} GB`;
       }
     } catch {
       // ignore fetch errors

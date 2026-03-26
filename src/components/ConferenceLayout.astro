@@ -1074,8 +1074,6 @@ if (
                   </div>
 
                   <div class="conference-room-invite-controls" data-invite-panel="external">
-                    <div class="conference-session-controls-heading">INVITE USERS</div>
-
                     <div class="conference-field">
                       <label for="conference-external-password-input">Password externos</label>
                       <input
@@ -1151,8 +1149,6 @@ if (
                     </p>
                   </div>
                   <div class="conference-room-invite-controls conference-room-invite-controls--hidden" data-invite-panel="student">
-                    <div class="conference-session-controls-heading">INVITE ESTUDIANTES</div>
-
                     <div class="conference-field">
                       <label for="conference-student-expiry-select">Vencimiento</label>
                       <select
@@ -1329,11 +1325,13 @@ if (
             rows="5"
           ></textarea>
           <div class="conference-notes-actions">
-            <button type="submit" class="conference-notes-save" data-notes-save>
-              Guardar
-            </button>
-            <button type="button" class="conference-notes-preview-btn" data-notes-preview-btn>
-              Vista previa
+            <button type="submit" class="conference-notes-save" data-notes-save title="Guardar">G</button>
+            <button type="button" class="conference-notes-preview-btn" data-notes-preview-btn title="Vista previa">V</button>
+            <button type="button" class="conference-notes-download" data-notes-download aria-label="Descargar nota" title="Descargar nota (.txt)">
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+                <path d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z" fill="currentColor"/>
+              </svg>
+              <span class="conference-sr-only">Descargar nota</span>
             </button>
           </div>
         </form>
@@ -1955,7 +1953,7 @@ if (
     const cpu = estimateCpuPct();
     cpuEl.textContent = `${cpu}%`;
     cpuEl.dataset.risk = getRiskLevel(cpu);
-    cpuEl.title = `CPU (RAF) · ${cpu}% main thread lag · green <30, yellow <60, orange <85, red ≥85`;
+    cpuEl.dataset.statTooltip = `CPU\t${cpu}%\nHilo principal\testimado RAF`;
 
     // Bandwidth via WebRTC
     let totalBytes = 0;
@@ -1982,7 +1980,7 @@ if (
       const bwPct = Math.min(100, Math.round((bps / 2_000_000) * 100)); // 2Mbps = 100%
       bwEl.textContent = formatBw(bps) + '/s';
       bwEl.dataset.risk = getRiskLevel(bwPct);
-      bwEl.title = `Ancho de banda WebRTC · ${formatBw(bps)}/s · verde <600K, amarillo <1.2M, naranja <1.7M, rojo ≥1.7M`;
+      bwEl.dataset.statTooltip = `WebRTC BW\t${formatBw(bps)}/s\nTotal acum.\t${(totalBytes / 1_000_000).toFixed(1)} MB`;
     }
   };
 
@@ -1994,10 +1992,47 @@ if (
     updateStats();
   };
 
+  // ── Stat tooltip ─────────────────────────────────────────────────────────
+  const initStatTooltip = () => {
+    const tip = document.createElement('div');
+    tip.className = 'conference-stat-tooltip';
+    tip.hidden = true;
+    document.body.appendChild(tip);
+
+    const accent = getComputedStyle(document.documentElement)
+      .getPropertyValue('--conference-accent').trim() || '#00ffc8';
+
+    const showTip = (el: HTMLElement) => {
+      const raw = el.dataset.statTooltip;
+      if (!raw) return;
+      const lines = raw.split('\n').map(line => {
+        const [label, value] = line.split('\t');
+        return `<span class="cst-row"><span class="cst-label">${label ?? ''}</span><b class="cst-value">${value ?? ''}</b></span>`;
+      });
+      tip.innerHTML = lines.join('');
+      tip.hidden = false;
+      const r = el.getBoundingClientRect();
+      tip.style.left = `${r.left + r.width / 2}px`;
+      tip.style.top  = `${r.top - 8}px`;
+    };
+
+    const hideTip = () => { tip.hidden = true; };
+
+    document.addEventListener('mouseover', (e) => {
+      const el = (e.target as Element)?.closest('[data-stat-tooltip]') as HTMLElement | null;
+      if (el) showTip(el);
+    });
+    document.addEventListener('mouseout', (e) => {
+      const el = (e.target as Element)?.closest('[data-stat-tooltip]');
+      if (el) hideTip();
+    });
+  };
+
   const initExtras = () => {
     initInviteSwitch();
     initDraggableCircle();
     initStats();
+    initStatTooltip();
   };
 
   if (document.readyState === 'loading') {
@@ -2402,31 +2437,33 @@ if (
   .conference-notes-item {
     display: grid;
     grid-template-columns: 1fr auto;
-    align-items: start;
-    gap: 0.2rem;
-    padding: 0.28rem 0.4rem;
-    border: 1px solid var(--conference-line);
-    border-radius: 4px;
+    align-items: baseline;
+    gap: 0.3rem;
+    padding: 0.2rem 0.3rem;
+    border: 1px solid transparent;
+    border-radius: 2px;
     cursor: pointer;
-    font-size: 0.75rem;
-    color: rgba(245, 247, 251, 0.65);
+    font-size: 0.68rem;
+    color: var(--conference-muted);
+    letter-spacing: 0.01em;
+    transition: border-color 120ms, color 120ms;
   }
 
   .conference-notes-item:hover {
-    border-color: var(--conference-accent);
-    color: rgba(245, 247, 251, 0.9);
+    border-color: var(--conference-line);
+    color: rgba(245, 247, 251, 0.72);
   }
 
   .conference-notes-item-title {
-    font-weight: 600;
+    font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .conference-notes-item-date {
-    font-size: 0.65rem;
-    opacity: 0.5;
+    font-size: 0.6rem;
+    opacity: 0.4;
     white-space: nowrap;
   }
 
@@ -2467,26 +2504,100 @@ if (
 
   .conference-notes-save,
   .conference-notes-preview-btn {
-    flex: 1;
-    padding: 0.3rem 0.5rem;
-    border: 1px solid var(--conference-line);
-    border-radius: 3px;
+    position: relative;
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+    border-radius: 2px;
     background: transparent;
-    color: var(--conference-fg);
-    font-size: 0.7rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0;
     cursor: pointer;
-    transition: border-color 150ms, color 150ms;
+    transition: border-color 150ms, color 150ms, background 150ms;
+    overflow: visible;
+  }
+
+  .conference-notes-save::after,
+  .conference-notes-preview-btn::after {
+    content: attr(title);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 0.62rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 0.18rem 0.4rem;
+    border-radius: 2px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 100ms;
+  }
+
+  .conference-notes-save:hover::after,
+  .conference-notes-preview-btn:hover::after {
+    opacity: 1;
   }
 
   .conference-notes-save {
-    border-color: var(--conference-accent);
-    color: var(--conference-accent);
+    border: 1px solid rgba(160, 160, 170, 0.35);
+    color: rgba(245, 247, 251, 0.55);
   }
 
-  .conference-notes-save:hover { background: rgba(0, 255, 200, 0.08); }
-  .conference-notes-preview-btn:hover { border-color: rgba(245, 247, 251, 0.4); }
+  .conference-notes-save::after {
+    background: rgba(40, 42, 50, 0.92);
+    border: 1px solid rgba(160, 160, 170, 0.3);
+    color: rgba(245, 247, 251, 0.75);
+  }
+
+  .conference-notes-save:hover {
+    border-color: rgba(160, 160, 170, 0.7);
+    color: rgba(245, 247, 251, 0.85);
+  }
+
+  .conference-notes-preview-btn {
+    border: 1px solid rgba(160, 100, 220, 0.45);
+    color: rgba(180, 120, 240, 0.75);
+  }
+
+  .conference-notes-preview-btn::after {
+    background: rgba(30, 20, 45, 0.92);
+    border: 1px solid rgba(160, 100, 220, 0.4);
+    color: rgba(200, 150, 255, 0.9);
+  }
+
+  .conference-notes-preview-btn:hover {
+    border-color: rgba(180, 120, 240, 0.75);
+    color: rgba(200, 150, 255, 0.95);
+    background: rgba(140, 80, 200, 0.07);
+  }
+
+  .conference-notes-download {
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--conference-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: color 150ms;
+    flex-shrink: 0;
+  }
+
+  .conference-notes-download:hover { color: var(--conference-fg); }
+  .conference-notes-download:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .conference-notes-download .conference-icon {
+    width: 1rem;
+    height: 1rem;
+  }
 
   .conference-notes-preview-pane {
     padding: 0.5rem;
@@ -3287,10 +3398,13 @@ if (
   }
 
   .conference-mixer-fx {
+    grid-column: 1 / -1;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 10px;
+    gap: 0.5rem;
+    padding: 0.5rem 0 0;
+    border-top: 1px solid var(--conference-line);
+    margin-top: 0.25rem;
   }
 
   .conference-mixer-fx-pair {
@@ -3558,6 +3672,37 @@ if (
     outline: none;
   }
 
+  /* Invite G/C/R wireframe colors */
+  .conference-session-action[data-action$="-create"],
+  .conference-session-action[data-action$="-invite-create"] {
+    border-color: rgba(160, 160, 170, 0.35);
+    color: rgba(245, 247, 251, 0.55);
+  }
+  .conference-session-action[data-action$="-create"]:hover {
+    border-color: rgba(160, 160, 170, 0.7);
+    color: rgba(245, 247, 251, 0.85);
+  }
+
+  .conference-session-action[data-action$="-copy"] {
+    border-color: rgba(80, 160, 220, 0.4);
+    color: rgba(100, 180, 240, 0.7);
+  }
+  .conference-session-action[data-action$="-copy"]:hover {
+    border-color: rgba(100, 180, 240, 0.75);
+    color: rgba(140, 210, 255, 0.95);
+    background: rgba(60, 140, 200, 0.07);
+  }
+
+  .conference-session-action[data-action$="-revoke"] {
+    border-color: rgba(220, 80, 80, 0.4);
+    color: rgba(240, 100, 100, 0.65);
+  }
+  .conference-session-action[data-action$="-revoke"]:hover {
+    border-color: rgba(240, 100, 100, 0.7);
+    color: rgba(255, 130, 130, 0.9);
+    background: rgba(200, 60, 60, 0.07);
+  }
+
   .conference-session-action:disabled {
     opacity: 0.38;
     cursor: not-allowed;
@@ -3779,15 +3924,22 @@ if (
     max-height: 34vh;
     overflow-y: auto;
     display: grid;
+    align-content: start;
     gap: 0;
   }
 
   :global(.conference-chat-item),
   :global(.conference-chat-empty) {
     display: grid;
+    align-content: start;
     gap: 0.04rem;
     padding: 0.08rem 0;
+    margin: 0;
     border-bottom: 1px solid var(--conference-line-soft);
+  }
+
+  :global(.conference-chat-item::before) {
+    content: none;
   }
 
   :global(.conference-chat-header) {
@@ -3802,11 +3954,12 @@ if (
 
   :global(.conference-chat-item .conference-chat-author) {
     display: inline;
-    color: rgba(245, 247, 251, 0.6) !important;
+    color: rgba(245, 247, 251, 0.7) !important;
     font-size: 0.75rem !important;
     font-weight: 700 !important;
     font-style: normal !important;
     letter-spacing: 0.01em;
+    opacity: 0.7;
   }
 
   :global(.conference-chat-header-separator) {
@@ -4196,12 +4349,6 @@ if (
   @media (max-width: 720px) {
     .conference-mixer-fx-pair {
       flex-direction: column;
-    }
-
-    .conference-mixer-fx {
-      margin-top: 0.4rem;
-      padding-top: 0.4rem;
-      border-top: 1px solid var(--conference-line);
     }
   }
 
@@ -4817,6 +4964,44 @@ if (
     --conference-stat-bg: rgba(255, 60, 60, 0.15);
   }
 
+  /* ── Stat tooltip ────────────────────────────────────────────── */
+  .conference-stat-tooltip {
+    position: fixed;
+    z-index: 9999;
+    transform: translate(-50%, -100%);
+    padding: 0.3rem 0.6rem;
+    background: rgba(18, 20, 28, 0.96);
+    border: 1px solid var(--conference-line);
+    border-radius: 3px;
+    font-size: 0.65rem;
+    line-height: 1.6;
+    pointer-events: none;
+    white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .conference-stat-tooltip[hidden] { display: none; }
+
+  .cst-row {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: space-between;
+  }
+
+  .cst-label {
+    color: var(--conference-muted);
+    letter-spacing: 0.04em;
+  }
+
+  .cst-value {
+    font-weight: 700;
+    color: var(--conference-accent);
+    letter-spacing: 0.02em;
+  }
+  /* ── end stat tooltip ─────────────────────────────────────────── */
+
   .conference-record-button {
     color: var(--conference-muted);
   }
@@ -5142,10 +5327,8 @@ if (
     }
 
     .conference-mixer-fx {
-      margin-top: 0.5rem;
-      padding-top: 0.5rem;
-      border-top: 1px solid var(--conference-line);
-      gap: 0.45rem;
+      gap: 0.35rem;
+      padding-top: 0.4rem;
     }
 
     .conference-mixer-fx-pair {
@@ -5155,7 +5338,7 @@ if (
 
     .conference-mixer-fx-card {
       width: 100%;
-      padding: 0.42rem 0;
+      padding: 0.35rem 0;
     }
 
     .conference-meta-top {
@@ -5196,6 +5379,8 @@ if (
     }
 
     .conference-bottombar {
+      position: fixed;
+      inset: auto 0 0 0;
       display: flex;
       align-items: stretch;
       overflow-x: auto;
