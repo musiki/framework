@@ -283,6 +283,16 @@ if (
               <span>Gravity ball</span>
             </label>
 
+            <label class="conference-checkbox-row" for="conference-gravity-ball-mirror-input">
+              <input
+                id="conference-gravity-ball-mirror-input"
+                name="gravity-ball-mirror"
+                type="checkbox"
+                data-gravity-ball-mirror-input
+              />
+              <span>Escher mirror</span>
+            </label>
+
             <label class="conference-ramp-row" for="conference-gravity-ball-gravity-input">
               <span>Gravity</span>
               <input
@@ -851,13 +861,6 @@ if (
               <input id="conference-room-input" name="room" type="text" value={defaultRoom} data-room-input />
             </div>
 
-            <div class="conference-self-preview-shell">
-              <div
-                class="conference-self-preview"
-                data-slot="identity-preview"
-                data-empty-label="Camera preview"
-              ></div>
-            </div>
           </div>
 
           <details class="conference-session-setup" aria-label="Session setup" data-session-setup>
@@ -1304,6 +1307,38 @@ if (
           data-slot="students"
           data-empty-label=""
         ></div>
+      </section>
+
+      <section class="conference-sidebar-section conference-sidebar-section--notes" data-notes-section>
+        <div class="conference-sidebar-heading">NOTAS</div>
+
+        <div class="conference-notes-list" data-notes-list aria-live="polite"></div>
+
+        <form class="conference-notes-form" data-notes-form autocomplete="off">
+          <input
+            class="conference-notes-title"
+            data-notes-title
+            type="text"
+            placeholder="Título de la nota"
+            maxlength="160"
+          />
+          <textarea
+            class="conference-notes-body"
+            data-notes-body
+            placeholder="Escribe tu nota… (markdown, ```mermaid, ```lilypond)"
+            rows="5"
+          ></textarea>
+          <div class="conference-notes-actions">
+            <button type="submit" class="conference-notes-save" data-notes-save>
+              Guardar
+            </button>
+            <button type="button" class="conference-notes-preview-btn" data-notes-preview-btn>
+              Vista previa
+            </button>
+          </div>
+        </form>
+
+        <div class="conference-notes-preview-pane" data-notes-preview hidden></div>
       </section>
     </div>
   </aside>
@@ -2348,6 +2383,127 @@ if (
   .conference-hand-button[data-active='true'] {
     color: rgba(245, 247, 251, 0.78);
   }
+
+  /* ── NOTAS ────────────────────────────────────────────────────── */
+  .conference-sidebar-section--notes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .conference-notes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-height: 9rem;
+    overflow-y: auto;
+  }
+
+  .conference-notes-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 0.2rem;
+    padding: 0.28rem 0.4rem;
+    border: 1px solid var(--conference-line);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: rgba(245, 247, 251, 0.65);
+  }
+
+  .conference-notes-item:hover {
+    border-color: var(--conference-accent);
+    color: rgba(245, 247, 251, 0.9);
+  }
+
+  .conference-notes-item-title {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .conference-notes-item-date {
+    font-size: 0.65rem;
+    opacity: 0.5;
+    white-space: nowrap;
+  }
+
+  .conference-notes-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .conference-notes-title,
+  .conference-notes-body {
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--conference-line);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--conference-fg);
+    font-family: inherit;
+    font-size: 0.75rem;
+    resize: vertical;
+  }
+
+  .conference-notes-title:focus,
+  .conference-notes-body:focus {
+    outline: none;
+    border-color: var(--conference-accent);
+  }
+
+  .conference-notes-body {
+    min-height: 4.5rem;
+    line-height: 1.4;
+  }
+
+  .conference-notes-actions {
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .conference-notes-save,
+  .conference-notes-preview-btn {
+    flex: 1;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--conference-line);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--conference-fg);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 150ms, color 150ms;
+  }
+
+  .conference-notes-save {
+    border-color: var(--conference-accent);
+    color: var(--conference-accent);
+  }
+
+  .conference-notes-save:hover { background: rgba(0, 255, 200, 0.08); }
+  .conference-notes-preview-btn:hover { border-color: rgba(245, 247, 251, 0.4); }
+
+  .conference-notes-preview-pane {
+    padding: 0.5rem;
+    border: 1px solid var(--conference-line);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: rgba(245, 247, 251, 0.82);
+    overflow-x: auto;
+    max-height: 14rem;
+    overflow-y: auto;
+  }
+
+  .conference-notes-preview-pane[hidden] { display: none; }
+
+  /* ── END NOTAS ─────────────────────────────────────────────────── */
 
   .conference-reaction-buttons {
     display: inline-flex;
@@ -4989,14 +5145,16 @@ if (
       margin-top: 0.5rem;
       padding-top: 0.5rem;
       border-top: 1px solid var(--conference-line);
+      gap: 0.45rem;
     }
 
-    .conference-mixer-fx {
-      gap: 0.45rem;
-      padding: 0.5rem 0 0;
+    .conference-mixer-fx-pair {
+      flex-direction: column;
+      gap: 0;
     }
 
     .conference-mixer-fx-card {
+      width: 100%;
       padding: 0.42rem 0;
     }
 

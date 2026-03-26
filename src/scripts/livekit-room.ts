@@ -155,6 +155,7 @@ type PersistedRoomSetup = {
   handRampMs?: number;
   gravityBallEnabled?: boolean;
   gravityBallGravity?: number;
+  gravityBallMirror?: boolean;
   identity?: string;
   instrumentsOpen?: boolean;
   limiterEnabled?: boolean;
@@ -2451,6 +2452,8 @@ class GravityBallRenderer {
   private envCtx: CanvasRenderingContext2D | null = null;
   private envTexture: WebGLTexture | null = null;
   private uniformEnvMap: WebGLUniformLocation | null = null;
+  private uniformEnvBlend: WebGLUniformLocation | null = null;
+  private envMirrorEnabled = false;
   private extraEnvCanvases: HTMLCanvasElement[] = [];
   // Projected shadow
   private shadowProgram: WebGLProgram | null = null;
@@ -2532,10 +2535,11 @@ class GravityBallRenderer {
       gl.FRAGMENT_SHADER,
       `
         precision mediump float;
-        uniform vec3 uBaseColor;
-        uniform vec3 uLightDir;
+        uniform vec3  uBaseColor;
+        uniform vec3  uLightDir;
         uniform sampler2D uEnvMap;
-        varying vec3 vNormal;
+        uniform float uEnvBlend;
+        varying vec3  vNormal;
 
         const float PI = 3.14159265;
 
@@ -2614,7 +2618,7 @@ class GravityBallRenderer {
             hemi
           ) * 0.55;
 
-          vec3 envLight = mix(envFallback, envSample * 1.1, 0.78) * Fenv;
+          vec3 envLight = mix(envFallback, envSample * 1.1, uEnvBlend * 0.78) * Fenv;
 
           vec3 color = envLight + specular * NdotL * 2.4;
 
@@ -2664,7 +2668,8 @@ class GravityBallRenderer {
     this.uniformLightDir = gl.getUniformLocation(program, 'uLightDir');
     this.uniformRotation = gl.getUniformLocation(program, 'uRotation');
     this.uniformScale = gl.getUniformLocation(program, 'uScale');
-    this.uniformEnvMap = gl.getUniformLocation(program, 'uEnvMap');
+    this.uniformEnvMap   = gl.getUniformLocation(program, 'uEnvMap');
+    this.uniformEnvBlend = gl.getUniformLocation(program, 'uEnvBlend');
 
     // Offscreen canvas used each frame to composite video + hand canvas → env texture
     const envCanvas = document.createElement('canvas');
@@ -2811,6 +2816,11 @@ class GravityBallRenderer {
   /** Pass extra canvas sources (e.g. the hand overlay) to be composited into the env texture. */
   setEnvCanvases(canvases: HTMLCanvasElement[]) {
     this.extraEnvCanvases = canvases;
+  }
+
+  /** Toggle Escher mirror reflection. Off by default (uses procedural fallback only). */
+  setEnvMirrorEnabled(value: boolean) {
+    this.envMirrorEnabled = Boolean(value);
   }
 
   /**
@@ -3184,11 +3194,12 @@ class GravityBallRenderer {
     gl.enableVertexAttribArray(this.attribNormal);
     gl.vertexAttribPointer(this.attribNormal, 3, gl.FLOAT, false, 0, 0);
 
-    // Update and bind Escher env-map texture
-    this.updateEnvTexture();
+    // Env-map: only capture video frames when mirror mode is on (saves GPU/CPU)
+    if (this.envMirrorEnabled) this.updateEnvTexture();
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.envTexture);
     gl.uniform1i(this.uniformEnvMap, 0);
+    gl.uniform1f(this.uniformEnvBlend, this.envMirrorEnabled ? 1.0 : 0.0);
 
     gl.uniform1f(this.uniformAspect, aspect);
     if (this.isGrabbed) {
@@ -3638,6 +3649,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const handRampInput = root.querySelector('[data-hand-ramp-input]');
   const gravityBallInput = root.querySelector('[data-gravity-ball-input]');
   const gravityBallGravityInput = root.querySelector('[data-gravity-ball-gravity-input]');
+  const gravityBallMirrorInput = root.querySelector('[data-gravity-ball-mirror-input]');
   const synthMappingResetButton = root.querySelector('[data-synth-mapping-reset]');
   const recordingPresetSelect = root.querySelector('[data-recording-preset-select]');
   const sessionControlsField = root.querySelector('[data-session-controls-field]');
@@ -3963,6 +3975,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let handTrackEnabled = Boolean(persistedSetup.handTrackEnabled);
   let handRampMs = clampNumber(persistedSetup.handRampMs, 10, 4000, 500, 0);
   let gravityBallEnabled = Boolean(persistedSetup.gravityBallEnabled);
+  let gravityBallMirror = Boolean(persistedSetup.gravityBallMirror);
+  if (gravityBallMirrorInput instanceof HTMLInputElement) {
+    gravityBallMirrorInput.checked = gravityBallMirror;
+  }
   let gravityBallGravity = normalizeGravityBallGravity(
     persistedSetup.gravityBallGravity,
     GRAVITY_BALL_EARTH_MS2,
@@ -4927,6 +4943,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     gravityBallRenderer?.setGravity(gravityBallGravity);
     gravityBallRenderer?.setEnabled(gravityBallEnabled);
+    gravityBallRenderer?.setEnvMirrorEnabled(gravityBallMirror);
     if (gravityBallRenderer) {
       gravityBallRenderer.setAudioChannelGain(mixerBallMuted ? 0 : mixerBallGain);
       gravityBallRenderer.setAudioChannelPan(mixerBallPan);
@@ -5745,6 +5762,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       handRampMs,
       gravityBallEnabled,
       gravityBallGravity,
+      gravityBallMirror,
       room: normalizeText(roomInput.value),
       identity: normalizeText(identityInput.value),
       instrumentsOpen,
@@ -9982,6 +10000,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
+  if (gravityBallMirrorInput instanceof HTMLInputElement) {
+    gravityBallMirrorInput.addEventListener('change', () => {
+      gravityBallMirror = gravityBallMirrorInput.checked;
+      gravityBallRenderer?.setEnvMirrorEnabled(gravityBallMirror);
+      persistSetupState();
+    });
+  }
+
   if (gravityBallGravityInput instanceof HTMLInputElement) {
     const syncGravityBallGravity = () => {
       gravityBallGravity = normalizeGravityBallGravity(gravityBallGravityInput.value, gravityBallGravity);
@@ -10557,6 +10583,110 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
     });
   }
+
+  // ── NOTAS ────────────────────────────────────────────────────────────────
+  const notesSection    = root.querySelector('[data-notes-section]');
+  const notesForm       = root.querySelector<HTMLFormElement>('[data-notes-form]');
+  const notesTitleInput = root.querySelector<HTMLInputElement>('[data-notes-title]');
+  const notesBodyInput  = root.querySelector<HTMLTextAreaElement>('[data-notes-body]');
+  const notesListEl     = root.querySelector('[data-notes-list]');
+  const notesPreviewEl  = root.querySelector<HTMLElement>('[data-notes-preview]');
+  const notesPreviewBtn = root.querySelector<HTMLButtonElement>('[data-notes-preview-btn]');
+  let notesCurrentId: string | null = null;
+  const noteCourseId    = root.dataset.courseId || null;
+  const noteRoomName    = (root.querySelector('[data-room-input]') as HTMLInputElement | null)?.value.trim() || null;
+
+  const renderNoteItem = (note: { id: string; title: string; noteDate: string }): HTMLElement => {
+    const el = document.createElement('div');
+    el.className = 'conference-notes-item';
+    el.dataset.noteId = note.id;
+    el.innerHTML = `<span class="conference-notes-item-title">${note.title || '(sin título)'}</span>
+      <span class="conference-notes-item-date">${note.noteDate}</span>`;
+    el.addEventListener('click', () => void loadNote(note.id));
+    return el;
+  };
+
+  const loadNotesList = async () => {
+    if (!notesListEl) return;
+    const params = new URLSearchParams();
+    if (noteCourseId) params.set('courseId', noteCourseId);
+    if (noteRoomName) params.set('roomName', noteRoomName);
+    const res = await fetch(`/api/live/notes?${params}`).catch(() => null);
+    if (!res?.ok) return;
+    const data = await res.json().catch(() => null);
+    if (!data?.notes) return;
+    notesListEl.innerHTML = '';
+    for (const note of data.notes) {
+      notesListEl.appendChild(renderNoteItem(note));
+    }
+  };
+
+  const loadNote = async (id: string) => {
+    const params = new URLSearchParams();
+    if (noteCourseId) params.set('courseId', noteCourseId);
+    const res = await fetch(`/api/live/notes?${params}&limit=100`).catch(() => null);
+    if (!res?.ok) return;
+    const data = await res.json().catch(() => null);
+    const note = (data?.notes ?? []).find((n: any) => n.id === id);
+    if (!note) return;
+    notesCurrentId = note.id;
+    if (notesTitleInput) notesTitleInput.value = note.title ?? '';
+    if (notesBodyInput)  notesBodyInput.value  = note.body  ?? '';
+    if (notesPreviewEl && note.renderedHtml) {
+      notesPreviewEl.innerHTML = note.renderedHtml;
+      notesPreviewEl.hidden = false;
+    }
+  };
+
+  if (notesPreviewBtn && notesPreviewEl && notesBodyInput) {
+    notesPreviewBtn.addEventListener('click', () => {
+      notesPreviewEl.hidden = !notesPreviewEl.hidden;
+    });
+  }
+
+  if (notesForm) {
+    notesForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const title = notesTitleInput?.value.trim() ?? '';
+      const body  = notesBodyInput?.value  ?? '';
+      if (!body.trim()) return;
+      void (async () => {
+        const payload: Record<string, string | null> = {
+          title, body,
+          courseId: noteCourseId,
+          roomName: noteRoomName,
+          noteDate: new Date().toISOString().slice(0, 10),
+        };
+        if (notesCurrentId) payload.id = notesCurrentId;
+        const res = await fetch('/api/live/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(() => null);
+        if (!res?.ok) { setStatus('Error al guardar nota'); return; }
+        const data = await res.json().catch(() => null);
+        notesCurrentId = data?.note?.id ?? notesCurrentId;
+        if (notesPreviewEl && data?.note?.renderedHtml) {
+          notesPreviewEl.innerHTML = data.note.renderedHtml;
+          notesPreviewEl.hidden = false;
+        }
+        void loadNotesList();
+        setStatus('Nota guardada');
+      })();
+    });
+  }
+
+  // Load notes once the section is first revealed (lazy)
+  if (notesSection) {
+    const notesObserver = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) {
+        void loadNotesList();
+        notesObserver.disconnect();
+      }
+    }, { threshold: 0.1 });
+    notesObserver.observe(notesSection);
+  }
+  // ── END NOTAS ─────────────────────────────────────────────────────────────
 
   const sendChatMessage = async () => {
     if (room.state !== ConnectionState.Connected) return;
