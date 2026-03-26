@@ -11,7 +11,11 @@
       "Bash(head -20 grep -rn \"mermaid.run\\\\|mermaid.init\\\\|import.*mermaid\" /Users/zztt/projects/26-musiki/framework/src/)",
       "Bash(ls -la /Users/zztt/projects/26-musiki/framework/src/pages/dashboard*)",
       "Bash(xxd)",
-      "Bash(npx astro:*)"
+      "Bash(npx astro:*)",
+      "Bash(find /Users/zztt/projects/26-musiki/framework -type f \\\\\\(-name *.prisma -o -name *schema* \\\\\\))",
+      "Bash(find /Users/zztt/projects/26-musiki/framework/src/components -type f \\\\\\(-name *.astro -o -name *.ts -o -name *.tsx \\\\\\))",
+      "Bash(grep -n \"<script\" /Users/zztt/projects/26-musiki/framework/src/pages/cursos/[...slug].astro)",
+      "Bash(awk:*)"
     ]
   }
 }

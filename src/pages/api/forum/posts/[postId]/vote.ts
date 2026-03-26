@@ -7,6 +7,7 @@ import {
   getForumCourseAccess,
   json,
 } from '../../../../../lib/forum-server';
+import { broadcastForumEvent } from '../../../../../lib/forum-broadcast';
 
 type PostRow = {
   id: string;
@@ -186,6 +187,14 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
 
     const snapshot = await getVoteSnapshot(supabase, postId, dbUser.id);
+
+    // Broadcast updated counts to all clients (excluding myReaction — private per user)
+    void broadcastForumEvent(context.post.threadId, 'forum_reaction_updated', {
+      postId,
+      reactionCounts: snapshot.reactionCounts,
+      reactionTotal: snapshot.reactionTotal,
+    });
+
     return json(
       {
         success: true,

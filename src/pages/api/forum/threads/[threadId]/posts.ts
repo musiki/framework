@@ -9,6 +9,7 @@ import {
   json,
 } from '../../../../../lib/forum-server';
 import { renderForumMarkdown } from '../../../../../lib/forum-markdown';
+import { broadcastForumEvent } from '../../../../../lib/forum-broadcast';
 
 const POST_BODY_MAX = 4000;
 const POSTS_LIMIT = 500;
@@ -372,28 +373,24 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       bodyHtml = `<p>${escapeHtml((insertedPost as PostRow).body || '')}</p>`;
     }
 
-    return json(
-      {
-        success: true,
-        post: {
-          ...(insertedPost as PostRow),
-          authorName: dbUser.name || dbUser.email || 'Usuario',
-          authorImage: null,
-          bodyHtml,
-          canEdit: true,
-          reactionCounts: {
-            useful: 0,
-            clarifies: 0,
-            reference: 0,
-          },
-          myReaction: 0,
-          reactionTotal: 0,
-          voteScore: 0,
-          myVote: 0,
-        },
-      },
-      201,
-    );
+    const postPayload = {
+      ...(insertedPost as PostRow),
+      authorName: dbUser.name || dbUser.email || 'Usuario',
+      authorRole: dbUser.role ?? null,
+      authorImage: null,
+      bodyHtml,
+      canEdit: true,
+      reactionCounts: { useful: 0, clarifies: 0, reference: 0 },
+      myReaction: 0,
+      reactionTotal: 0,
+      voteScore: 0,
+      myVote: 0,
+    };
+
+    // Broadcast to realtime subscribers (best-effort, non-blocking)
+    void broadcastForumEvent(threadId, 'forum_post_created', { post: postPayload });
+
+    return json({ success: true, post: postPayload }, 201);
   } catch (error: any) {
     console.error('Forum post create error:', error?.message || error);
     return json({ error: resolveForumErrorMessage(error, 'Failed to create post') }, 500);

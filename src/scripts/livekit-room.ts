@@ -99,6 +99,11 @@ type ConferenceMessage =
       /** seconds until auto-return */
       countdown: number;
       mainRoom: string;
+    }
+  | {
+      type: 'break-rooms-kill';
+      /** main room to return to immediately */
+      mainRoom: string;
     };
 
 type LiveSnapshot = {
@@ -3734,6 +3739,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const breakRoomsCustomInputsContainer = root.querySelector('[data-break-rooms-custom-inputs]');
   const breakRoomsBBtn = root.querySelector('[data-break-rooms-btn]');
   const breakRoomsEndBtn = root.querySelector('[data-break-rooms-end-btn]');
+  const breakRoomsKillBtn = root.querySelector('[data-break-rooms-kill-btn]');
   const brCountdownEl = root.querySelector('[data-br-countdown]');
   const brCountdownText = root.querySelector('[data-br-countdown-text]');
   const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
@@ -4032,7 +4038,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     previewZoomInput instanceof HTMLInputElement
       ? previewZoomInput.value
       : persistedSetup.previewZoom,
-    normalizePreviewZoom(persistedSetup.previewZoom, 1),
+    normalizePreviewZoom(persistedSetup.previewZoom, 2.25),
   );
   let previewBlur = Boolean(persistedSetup.previewBlur);
   let previewInvert = Boolean(persistedSetup.previewInvert);
@@ -5225,9 +5231,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       breakRoomsBBtn.title = label ? `Break Rooms — ${label}` : 'Break Rooms';
     }
 
-    // T button visible only to teachers when break rooms are active
+    // C/T buttons visible only to teachers when break rooms are active
+    const teacherActive = localRole === 'teacher' && (breakRoomsActive.length > 0 || isInBreakRoom());
     if (breakRoomsEndBtn instanceof HTMLElement) {
-      breakRoomsEndBtn.hidden = !(localRole === 'teacher' && (breakRoomsActive.length > 0 || isInBreakRoom()));
+      breakRoomsEndBtn.hidden = !teacherActive;
+    }
+    if (breakRoomsKillBtn instanceof HTMLElement) {
+      breakRoomsKillBtn.hidden = !teacherActive;
     }
   };
 
@@ -5252,6 +5262,59 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   let _brCountdownTimer: ReturnType<typeof setInterval> | null = null;
+  let _brPollTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** Start polling server state so students in break rooms detect when teacher ends them. */
+  const startBreakRoomPoll = () => {
+    if (_brPollTimer) return;
+    _brPollTimer = setInterval(async () => {
+      if (!isInBreakRoom()) {
+        stopBreakRoomPoll();
+        return;
+      }
+      const cid = getEffectiveCourseId();
+      const savedMain = mainRoomName;
+      if (!cid || !savedMain) return;
+      try {
+        const res = await fetch(
+          `/api/live/break-rooms/state?room=${encodeURIComponent(savedMain)}&courseId=${encodeURIComponent(cid)}`,
+        );
+        const payload = await res.json().catch(() => null);
+        const state = payload?.state;
+
+        // Kill: state cleared immediately
+        if (payload && state === null) {
+          stopBreakRoomPoll();
+          breakRoomsActive = [];
+          breakRoomsMode = '';
+          breakRoomAssignments = {};
+          syncBreakRoomsShell();
+          void joinBreakRoom(savedMain, true);
+          return;
+        }
+
+        // Countdown started: show overlay and start local timer
+        if (state?.terminatingAt && !_brCountdownTimer) {
+          stopBreakRoomPoll();
+          const remaining = Math.max(0, Math.round((state.terminatingAt - Date.now()) / 1000));
+          breakRoomsActive = [];
+          breakRoomsMode = '';
+          breakRoomAssignments = {};
+          syncBreakRoomsShell();
+          startBreakRoomsCountdown(remaining || 1, savedMain);
+        }
+      } catch {
+        // best-effort
+      }
+    }, 4000);
+  };
+
+  const stopBreakRoomPoll = () => {
+    if (_brPollTimer) {
+      clearInterval(_brPollTimer);
+      _brPollTimer = null;
+    }
+  };
 
   /** Show the N-second countdown overlay and auto-return everyone. */
   const startBreakRoomsCountdown = (seconds: number, targetRoom: string) => {
@@ -5265,9 +5328,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const updateOverlay = () => {
       if (!(brCountdownEl instanceof HTMLElement) || !(brCountdownText instanceof HTMLElement)) return;
       brCountdownEl.hidden = remaining <= 0;
-      brCountdownText.textContent = remaining > 0
-        ? `Volviendo a sala principal\nen ${remaining}s`
-        : '';
+      brCountdownText.textContent = remaining > 0 ? `${remaining}s` : '';
     };
 
     updateOverlay();
@@ -5304,7 +5365,46 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     breakRoomAssignments = {};
     syncBreakRoomsShell();
 
+    // Signal countdown to students in break rooms via server state
+    const terminatingAt = Date.now() + COUNTDOWN_SECS * 1000;
+    void (async () => {
+      const cid = getEffectiveCourseId();
+      if (!cid) return;
+      try {
+        await fetch('/api/live/break-rooms/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId: cid, room: target, terminatingAt }),
+        });
+        // Clear after countdown elapses
+        window.setTimeout(() => void syncBreakRoomsStateToServer(target, null), COUNTDOWN_SECS * 1000 + 2000);
+      } catch { /* best-effort */ }
+    })();
+
     startBreakRoomsCountdown(COUNTDOWN_SECS, target);
+  };
+
+  /** Teacher: terminate break rooms immediately, no countdown. */
+  const handleBreakRoomsKill = async () => {
+    const target = mainRoomName || (roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) : '');
+    if (!target) return;
+
+    if (room.state === ConnectionState.Connected && localRole === 'teacher') {
+      await publishMessage({
+        type: 'break-rooms-kill',
+        mainRoom: target,
+      }).catch(() => undefined);
+    }
+
+    breakRoomsActive = [];
+    breakRoomsMode = '';
+    breakRoomAssignments = {};
+    syncBreakRoomsShell();
+
+    void syncBreakRoomsStateToServer(target, null);
+
+    // Return teacher to main room immediately
+    void joinBreakRoom(target, true);
   };
 
   /** Join a room by name. isMain = returning to main room. */
@@ -5313,6 +5413,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (!(breakRoomsPopup instanceof HTMLElement)) return;
 
     breakRoomsPopup.hidden = true;
+
+    // Switch to grid layout when entering a break room
+    if (!isMain) {
+      layoutInput.value = 'grid';
+      setLayout(stage, 'grid');
+      layoutBeforeAutoScreenshare = 'grid';
+    }
 
     if (!isMain && !mainRoomName) {
       mainRoomName = normalizeText(roomInput.value);
@@ -5331,6 +5438,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     // Clear mainRoomName when actually returning to the main room
     if (isMain) {
       mainRoomName = '';
+      stopBreakRoomPoll();
+    } else {
+      // Entering a break room — start polling so we detect when teacher ends rooms
+      startBreakRoomPoll();
     }
 
     syncBreakRoomsShell();
@@ -5345,6 +5456,28 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     void connectRoom();
+  };
+
+  /** Persist/clear break rooms state server-side so late-joining students can discover it. */
+  const syncBreakRoomsStateToServer = async (
+    roomName: string,
+    state: { rooms: any[]; assignments: Record<string, string>; mode: string } | null,
+  ) => {
+    const effectiveCourseId = getEffectiveCourseId();
+    if (!effectiveCourseId || !roomName) return;
+    try {
+      await fetch('/api/live/break-rooms/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          state
+            ? { courseId: effectiveCourseId, room: roomName, ...state }
+            : { courseId: effectiveCourseId, room: roomName, clear: true },
+        ),
+      });
+    } catch {
+      // best-effort, non-blocking
+    }
   };
 
   /** Build break rooms from a list of labels, broadcast to students. */
@@ -5378,6 +5511,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     syncBreakRoomsShell();
     renderBreakRoomsPopup();
     setBreakRoomsStatus(`${rooms.length} break rooms creados.`, false);
+
+    // Persist state server-side for late-joining students
+    void syncBreakRoomsStateToServer(base, { rooms, assignments, mode });
 
     // Broadcast to connected students
     if (room.state === ConnectionState.Connected && localRole === 'teacher') {
@@ -5469,18 +5605,42 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
-      type StudentMeta = { userId: string; name: string; grupo: string };
+      type StudentMeta = { userId: string; name: string; email: string; grupo: string };
       const students: StudentMeta[] = payload.students;
-      const byGrupo = new Map<string, string[]>();
 
+      // Sanitize email → LiveKit identity (mirrors livekit-token.ts sanitizeIdentity)
+      const sanitizeIdentity = (v: string) =>
+        v.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 96);
+
+      // Map sanitized-email → grupo
+      const emailToGrupo = new Map<string, string>();
+      for (const s of students) {
+        if (s.email && s.grupo) {
+          emailToGrupo.set(sanitizeIdentity(s.email), s.grupo);
+        }
+      }
+
+      const byGrupo = new Map<string, string[]>();
       for (const s of students) {
         const g = s.grupo || 'Sin grupo';
         if (!byGrupo.has(g)) byGrupo.set(g, []);
         byGrupo.get(g)!.push(s.name);
       }
 
+      const base = roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) : '';
       const labels = Array.from(byGrupo.keys()).sort().map((g) => `GRUPO ${g}`);
-      await activateBreakRooms(labels, 'grupos');
+
+      // Build assignments: identity → break room name
+      const assignments: Record<string, string> = {};
+      for (const p of allParticipants()) {
+        const grupo = emailToGrupo.get(p.identity);
+        if (grupo) {
+          const label = `GRUPO ${grupo}`;
+          assignments[p.identity] = toBreakRoomName(base, label);
+        }
+      }
+
+      await activateBreakRooms(labels, 'grupos', assignments);
     } catch {
       setBreakRoomsStatus('Error al cargar grupos.', true);
     }
@@ -8088,21 +8248,29 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return gridSlot;
     }
 
+    // Hide self from the sidebar only when teacher is the session leader and the
+    // circle camera is active — the circle already serves as their self-preview.
+    const selfHiddenByCircle =
+      isLocal &&
+      localRole === 'teacher' &&
+      canLeadSession() &&
+      showPresentationCircle;
+
     if (layout === 'teacher') {
       if (participant.identity === focusedParticipantIdentity) {
         return teacherSlot;
       }
-      return isLocal ? null : studentsSlot;
+      return selfHiddenByCircle ? null : studentsSlot;
     }
 
     if (layout === 'presentation') {
       if (participant.identity === getPresentationCircleIdentity()) {
         return teacherSlot;
       }
-      return isLocal ? null : studentsSlot;
+      return selfHiddenByCircle ? null : studentsSlot;
     }
 
-    return isLocal ? null : studentsSlot;
+    return selfHiddenByCircle ? null : studentsSlot;
   };
 
   const clearIdentityPreviewSlot = () => {
@@ -8701,6 +8869,32 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         };
       }
 
+      if (parsed.type === 'break-rooms') {
+        return {
+          type: 'break-rooms',
+          rooms: Array.isArray((parsed as { rooms?: unknown }).rooms)
+            ? (parsed as { rooms: { name: string; label: string }[] }).rooms
+            : [],
+          assignments: (parsed as { assignments?: Record<string, string> }).assignments ?? {},
+          mode: normalizeText((parsed as { mode?: string }).mode),
+        };
+      }
+
+      if (parsed.type === 'break-rooms-end') {
+        return {
+          type: 'break-rooms-end',
+          countdown: Number((parsed as { countdown?: number }).countdown) || 60,
+          mainRoom: normalizeText((parsed as { mainRoom?: string }).mainRoom),
+        };
+      }
+
+      if (parsed.type === 'break-rooms-kill') {
+        return {
+          type: 'break-rooms-kill',
+          mainRoom: normalizeText((parsed as { mainRoom?: string }).mainRoom),
+        };
+      }
+
       if (parsed.type === 'circle-move') {
         return {
           type: 'circle-move',
@@ -9048,6 +9242,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  // Deterministic neon color per participant identity (stable across reconnects).
+  // Color is applied to the author name only — best practice (Discord/Slack/IRC pattern).
+  const CHAT_COLORS = [
+    '#00f5ff', // neon cyan
+    '#39ff14', // neon green
+    '#ff6ec7', // neon pink
+    '#ff9d00', // neon orange
+    '#ffe600', // neon yellow
+    '#c264ff', // neon violet
+    '#4da8ff', // neon sky blue
+    '#ff4f4f', // neon red
+    '#ccff00', // neon lime
+    '#00ffcc', // neon teal
+    '#ee00cc', // neon magenta
+    '#ffb300', // neon amber
+  ] as const;
+
+  const chatUserColor = (identity: string): string => {
+    let h = 0;
+    for (let i = 0; i < identity.length; i++) {
+      h = (h * 31 + identity.charCodeAt(i)) >>> 0;
+    }
+    return CHAT_COLORS[h % CHAT_COLORS.length];
+  };
+
   const renderChat = () => {
     chatList.innerHTML = '';
     chatDownloadButton.disabled = chatMessages.length === 0;
@@ -9070,6 +9289,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       const sender = document.createElement('span');
       sender.className = 'conference-chat-author';
       sender.textContent = getFirstName(message.name);
+      sender.style.color = chatUserColor(message.identity);
 
       const body = document.createElement('div');
       body.className = 'conference-chat-text';
@@ -9715,6 +9935,43 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           mode: breakRoomsMode,
         }).catch(() => undefined);
       }
+      // Late-join: student connects to main room while break rooms are already active
+      // (teacher may be in a break room so can't re-broadcast — fetch state from server)
+      if (localRole === 'student' && breakRoomsActive.length === 0 && !isInBreakRoom()) {
+        const currentRoom = roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) : '';
+        const cid = getEffectiveCourseId();
+        if (currentRoom && cid) {
+          void (async () => {
+            try {
+              const res = await fetch(
+                `/api/live/break-rooms/state?room=${encodeURIComponent(currentRoom)}&courseId=${encodeURIComponent(cid)}`,
+              );
+              const payload = await res.json().catch(() => null);
+              const state = payload?.state;
+              if (!state || !Array.isArray(state.rooms) || state.rooms.length === 0) return;
+              // Apply the fetched state as if we'd received a break-rooms message
+              breakRoomsActive = state.rooms;
+              breakRoomsMode = state.mode ?? '';
+              breakRoomAssignments = state.assignments ?? {};
+              syncBreakRoomsShell();
+              renderBreakRoomsPopup();
+              const myAssignment = breakRoomAssignments[room.localParticipant.identity];
+              if (myAssignment) {
+                startBBtnBlink(false);
+                window.setTimeout(() => { void joinBreakRoom(myAssignment, false); }, 2000);
+              } else if (breakRoomsMode === 'custom') {
+                startBBtnBlink(true);
+                if (breakRoomsPopup instanceof HTMLElement) {
+                  renderBreakRoomsPopup();
+                  breakRoomsPopup.hidden = false;
+                }
+              }
+            } catch {
+              // best-effort
+            }
+          })();
+        }
+      }
     })
     .on(RoomEvent.Disconnected, () => {
       if (destroyed) return;
@@ -9842,8 +10099,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'break-rooms') {
-        // Only accept from teachers
-        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
         breakRoomsActive = message.rooms ?? [];
         breakRoomsMode = message.mode ?? '';
         breakRoomAssignments = message.assignments ?? {};
@@ -9872,15 +10127,32 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'break-rooms-end') {
-        // Only accept from teachers
-        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
         const target = normalizeText(message.mainRoom);
         const secs = Math.max(5, Math.min(120, Number(message.countdown) || 60));
         breakRoomsActive = [];
         breakRoomsMode = '';
         breakRoomAssignments = {};
+        stopBreakRoomPoll();
         syncBreakRoomsShell();
         startBreakRoomsCountdown(secs, target || mainRoomName);
+        return;
+      }
+
+      if (message.type === 'break-rooms-kill') {
+        const target = normalizeText(message.mainRoom) || mainRoomName;
+        breakRoomsActive = [];
+        breakRoomsMode = '';
+        breakRoomAssignments = {};
+        stopBreakRoomPoll();
+        syncBreakRoomsShell();
+        // Stop any running countdown overlay
+        if (_brCountdownTimer) {
+          clearInterval(_brCountdownTimer);
+          _brCountdownTimer = null;
+        }
+        if (brCountdownEl instanceof HTMLElement) brCountdownEl.hidden = true;
+        // Return immediately to main room
+        void joinBreakRoom(target, true);
         return;
       }
 
@@ -10418,6 +10690,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       showPresentationCircle = showCircleInput.checked;
       applyShowCircleState();
       persistSetupState();
+      syncAllParticipants(); // recompute self-in-sidebar when circle toggles
       if (room.state === ConnectionState.Connected) {
         void syncLocalParticipantMetadata().catch(() => undefined);
       }
@@ -11075,9 +11348,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     addCustomGroupInput();
   });
 
-  // T — end break rooms
+  // C — end break rooms with countdown
   root.querySelector('[data-action="break-rooms-end"]')?.addEventListener('click', () => {
     void handleBreakRoomsEnd();
+  });
+
+  // T — terminate break rooms immediately
+  root.querySelector('[data-action="break-rooms-kill"]')?.addEventListener('click', () => {
+    void handleBreakRoomsKill();
   });
 
   layoutChoiceButtons.forEach((button) => {

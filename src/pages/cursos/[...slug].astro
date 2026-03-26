@@ -3256,6 +3256,8 @@ order:
             data-forum-mode={initialSidebarForumMode}
             data-initial-board-slug={initialSidebarBoardSlug}
             data-has-session={hasSessionUser ? 'true' : 'false'}
+            data-supabase-url={import.meta.env.SUPABASE_URL}
+            data-supabase-anon-key={import.meta.env.SUPABASE_ANON_KEY}
           >
             <div id="forum-new-board-panel" class="forum-board-create-panel" hidden>
               <form id="forum-new-board-form" class="forum-form forum-board-create-form">
@@ -3850,6 +3852,7 @@ order:
       import { subscribeToLive } from '../../lib/live/client.mjs';
       import { formatCountdown, getRemainingMs } from '../../lib/live/countdown.mjs';
       import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
+      import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
       const courseLayoutRoot = document.querySelector('[data-course-layout-root]');
       const canManageLiveInteractions =
@@ -7173,6 +7176,7 @@ order:
           ? preferredBoardSlug
           : (availableSlugs[0] || 'general');
         const persistentAddButton = node.querySelector('#forum-new-board-toggle');
+        const persistentNotesButton = node.querySelector('.forum-switcher-notes-btn');
 
         node.dataset.activeMode = activeMode;
         node.dataset.activeBoardSlug = activeBoardSlug;
@@ -7271,6 +7275,10 @@ order:
           emptyLink.title = 'Sin subforos disponibles';
           emptyLink.appendChild(createForumSwitcherMark('?'));
           node.appendChild(emptyLink);
+        }
+
+        if (persistentNotesButton instanceof HTMLElement) {
+          node.appendChild(persistentNotesButton);
         }
 
         if (persistentAddButton instanceof HTMLElement) {
@@ -9567,6 +9575,7 @@ a[node] -->|edge| b[hub]
             children.forEach((post) => {
               const card = document.createElement('article');
               card.className = 'forum-post';
+              card.dataset.postId = post.id;
               if (depth > 0) {
                 card.classList.add('forum-post-reply');
                 card.style.marginLeft = `${Math.min(depth, 2) * 0.72}rem`;
@@ -9744,6 +9753,7 @@ a[node] -->|edge| b[hub]
 
                     const countEl = document.createElement('span');
                     countEl.className = 'forum-post-reaction-count';
+                    countEl.dataset.countKey = def.key; // for realtime updates
                     reactionCountEls[def.key] = countEl;
 
                     buttonByReactionValue.set(def.value, reactionButton);
@@ -9934,9 +9944,11 @@ a[node] -->|edge| b[hub]
 
         async function loadPosts(threadId) {
           if (!threadId) {
+            unsubscribeForumRealtime();
             renderPosts([], false, false);
             return;
           }
+          subscribeForumRealtime(threadId);
 
           const requestToken = ++latestPostRequestToken;
           const cacheKey = getForumPostsCacheKey(threadId);
@@ -9987,6 +9999,78 @@ a[node] -->|edge| b[hub]
             return null;
           }
         }
+
+        // ─── Forum Realtime ───────────────────────────────────────────────────────
+        // Subscribe to a thread channel via Supabase Broadcast.
+        // One lightweight WebSocket per page, swapped when the active thread changes.
+
+        let _forumRtChannel = null;
+        let _forumRtClient  = null;
+
+        function unsubscribeForumRealtime() {
+          if (_forumRtChannel && _forumRtClient) {
+            _forumRtClient.removeChannel(_forumRtChannel).catch(() => {});
+          }
+          _forumRtChannel = null;
+        }
+
+        function subscribeForumRealtime(threadId) {
+          unsubscribeForumRealtime();
+          if (!threadId) return;
+
+          const supabaseUrl     = forumRoot.dataset.supabaseUrl     || '';
+          const supabaseAnonKey = forumRoot.dataset.supabaseAnonKey || '';
+          if (!supabaseUrl || !supabaseAnonKey) return;
+
+          _forumRtClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+            realtime: { log_level: 'error' },
+          });
+
+          _forumRtChannel = _forumRtClient.channel(`forum-thread:${threadId}`);
+
+          // New post → invalidate cache + soft-refetch if this thread is still active
+          _forumRtChannel.on('broadcast', { event: 'forum_post_created' }, () => {
+            if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
+            invalidateForumPostsCache(threadId);
+            void loadPosts(threadId);
+          });
+
+          // Edited post → same: just re-fetch to get fresh bodyHtml
+          _forumRtChannel.on('broadcast', { event: 'forum_post_updated' }, () => {
+            if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
+            invalidateForumPostsCache(threadId);
+            void loadPosts(threadId);
+          });
+
+          // Deleted post → same
+          _forumRtChannel.on('broadcast', { event: 'forum_post_deleted' }, () => {
+            if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
+            invalidateForumPostsCache(threadId);
+            void loadPosts(threadId);
+          });
+
+          // Reaction update → patch counts in DOM directly (no re-render needed)
+          _forumRtChannel.on('broadcast', { event: 'forum_reaction_updated' }, ({ payload }) => {
+            if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
+            const postId = String(payload?.postId || '').trim();
+            const counts = payload?.reactionCounts;
+            if (!postId || !counts) return;
+
+            const postEl = postListEl.querySelector(`[data-post-id="${CSS.escape(postId)}"]`);
+            if (!postEl) return;
+
+            for (const key of ['useful', 'clarifies', 'reference']) {
+              const countEl = postEl.querySelector(`[data-count-key="${key}"]`);
+              if (countEl) {
+                countEl.textContent = String(Math.max(0, Number(counts[key]) || 0));
+              }
+            }
+          });
+
+          _forumRtChannel.subscribe();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
 
         async function fetchForumBoards({ forceNetwork = false, silent = false } = {}) {
           const cacheKey = getForumBoardsCacheKey();

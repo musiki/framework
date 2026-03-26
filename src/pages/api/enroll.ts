@@ -38,6 +38,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const user = await ensureDbUserFromSession(supabase, session);
     if (!user) return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
 
+    // Teachers can always enroll; students need a CourseInvite
+    if (user.role !== 'teacher') {
+      const email = String(currentUser?.email || '').trim().toLowerCase();
+      const { data: invite } = await supabase
+        .from('CourseInvite')
+        .select('id')
+        .eq('courseId', normalizedCourseId)
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (!invite) {
+        return new Response(
+          JSON.stringify({ error: 'No estás pre-registrado en este curso. Contactá al docente.' }),
+          { status: 403 },
+        );
+      }
+    }
+
     // Check existing enrollment
     const { data: existing, error: existingError } = await supabase
       .from('Enrollment')
@@ -46,7 +64,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .eq('courseId', normalizedCourseId)
       .maybeSingle();
     if (existingError) throw existingError;
-    
+
     if (existing) {
       return new Response(JSON.stringify({ message: 'Already enrolled' }), { status: 200 });
     }

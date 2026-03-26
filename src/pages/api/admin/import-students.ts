@@ -47,15 +47,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const isTeacher =
       requesterUser.role === 'teacher' ||
-      (requesterEnrollments || []).some((e: any) => {
-        return normalizeRole(e.roleInCourse) === 'teacher';
-      });
+      (requesterEnrollments || []).some((e: any) => normalizeRole(e.roleInCourse) === 'teacher');
 
     if (!isTeacher) {
       return new Response(JSON.stringify({ error: 'Only teachers can import students' }), { status: 403 });
     }
 
-    let imported = 0;
+    let invited = 0;
+    let alreadyInvited = 0;
     let alreadyEnrolled = 0;
 
     for (const student of students as Array<{ name: string; email: string }>) {
@@ -63,61 +62,62 @@ export const POST: APIRoute = async ({ request, locals }) => {
       const name = normalizeText(student.name);
       if (!email || !email.includes('@')) continue;
 
-      // Find or create user
+      // Ensure User record exists so they can log in and find their invite
       const { data: existingUsers } = await supabase
         .from('User')
         .select('id')
         .ilike('email', email);
 
-      let userId: string;
-
       if (!existingUsers || existingUsers.length === 0) {
-        const { data: newUser, error: createError } = await supabase
-          .from('User')
-          .insert([{
-            id: crypto.randomUUID(),
-            email,
-            name: name || email,
-            emailVerified: false,
-            role: 'student',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          }])
-          .select('id')
-          .single();
-
-        if (createError || !newUser) continue;
-        userId = newUser.id;
-      } else {
-        userId = existingUsers[0].id;
+        await supabase.from('User').insert([{
+          id: crypto.randomUUID(),
+          email,
+          name: name || email,
+          emailVerified: false,
+          role: 'student',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }]);
       }
 
-      // Check existing enrollment
-      const { data: existing } = await supabase
-        .from('Enrollment')
+      // If already fully enrolled, skip
+      const userId = existingUsers?.[0]?.id;
+      if (userId) {
+        const { data: existingEnrollment } = await supabase
+          .from('Enrollment')
+          .select('id')
+          .eq('userId', userId)
+          .eq('courseId', canonicalCourse)
+          .maybeSingle();
+
+        if (existingEnrollment) {
+          alreadyEnrolled++;
+          continue;
+        }
+      }
+
+      // Check if invite already exists
+      const { data: existingInvite } = await supabase
+        .from('CourseInvite')
         .select('id')
-        .eq('userId', userId)
         .eq('courseId', canonicalCourse)
+        .ilike('email', email)
         .maybeSingle();
 
-      if (existing) {
-        alreadyEnrolled++;
+      if (existingInvite) {
+        alreadyInvited++;
         continue;
       }
 
-      // Create enrollment
-      const { error: enrollError } = await supabase
-        .from('Enrollment')
-        .insert([{
-          userId,
-          courseId: canonicalCourse,
-          roleInCourse: 'student',
-        }]);
+      // Insert new invite
+      const { error: insertError } = await supabase
+        .from('CourseInvite')
+        .insert([{ courseId: canonicalCourse, email, createdByUserId: requesterUser.id }]);
 
-      if (!enrollError) imported++;
+      if (!insertError) invited++;
     }
 
-    return new Response(JSON.stringify({ success: true, imported, alreadyEnrolled }), { status: 200 });
+    return new Response(JSON.stringify({ success: true, invited, alreadyInvited, alreadyEnrolled }), { status: 200 });
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }

@@ -3405,7 +3405,7 @@ const bindImportClipboardButton = (root: HTMLElement, meta: DashboardMeta) => {
           button.disabled = false;
           button.innerHTML = originalContent;
         } else {
-          alert(`Importación completada: ${result.imported} importado${result.imported !== 1 ? 's' : ''}, ${result.alreadyEnrolled} ya inscripto${result.alreadyEnrolled !== 1 ? 's' : ''}.`);
+          alert(`Pre-registro completado: ${result.invited} pre-registrado${result.invited !== 1 ? 's' : ''}, ${result.alreadyInvited} ya pre-registrado${result.alreadyInvited !== 1 ? 's' : ''}, ${result.alreadyEnrolled} ya inscripto${result.alreadyEnrolled !== 1 ? 's' : ''}.`);
           window.location.reload();
         }
       } catch {

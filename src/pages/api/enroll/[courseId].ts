@@ -14,7 +14,6 @@ export const POST: APIRoute = async ({ params, locals }) => {
   }
 
   const courseId = params.courseId;
-
   if (!courseId) {
     return new Response(JSON.stringify({ error: 'Course ID required' }), {
       status: 400,
@@ -31,6 +30,24 @@ export const POST: APIRoute = async ({ params, locals }) => {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
+    }
+
+    // Teachers can always enroll themselves; students need a CourseInvite
+    if (user.role !== 'teacher') {
+      const email = String(currentUser.email || '').trim().toLowerCase();
+      const { data: invite } = await supabase
+        .from('CourseInvite')
+        .select('id')
+        .eq('courseId', normalizedCourseId)
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (!invite) {
+        return new Response(
+          JSON.stringify({ error: 'No estás pre-registrado en este curso. Contactá al docente.' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
     }
 
     // Check if already enrolled

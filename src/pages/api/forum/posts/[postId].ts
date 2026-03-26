@@ -8,6 +8,7 @@ import {
   json,
 } from '../../../../lib/forum-server';
 import { renderForumMarkdown } from '../../../../lib/forum-markdown';
+import { broadcastForumEvent } from '../../../../lib/forum-broadcast';
 
 const POST_BODY_MAX = 4000;
 
@@ -151,25 +152,23 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
       bodyHtml = `<p>${escapeHtml(updatedPost.body || '')}</p>`;
     }
 
-    return json(
-      {
-        success: true,
-        post: {
-          id: updatedPost.id,
-          threadId: updatedPost.threadId,
-          parentPostId: updatedPost.parentPostId,
-          authorUserId: updatedPost.authorUserId,
-          body: updatedPost.body,
-          status: updatedPost.status || 'published',
-          bodyHtml,
-          createdAt: updatedPost.createdAt,
-          updatedAt: updatedPost.updatedAt,
-          canEdit: canModerate,
-          canDelete: canModerate,
-        },
-      },
-      200,
-    );
+    const editedPost = {
+      id: updatedPost.id,
+      threadId: updatedPost.threadId,
+      parentPostId: updatedPost.parentPostId,
+      authorUserId: updatedPost.authorUserId,
+      body: updatedPost.body,
+      status: updatedPost.status || 'published',
+      bodyHtml,
+      createdAt: updatedPost.createdAt,
+      updatedAt: updatedPost.updatedAt,
+      canEdit: canModerate,
+      canDelete: canModerate,
+    };
+
+    void broadcastForumEvent(updatedPost.threadId, 'forum_post_updated', { post: editedPost });
+
+    return json({ success: true, post: editedPost }, 200);
   } catch (error: any) {
     console.error('Forum post edit error:', error?.message || error);
     return json({ error: resolveForumErrorMessage(error, 'Failed to edit post') }, 500);
@@ -229,16 +228,14 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
 
     if (threadUpdateError) throw threadUpdateError;
 
+    void broadcastForumEvent(
+      (updatedRaw as PostRow).threadId,
+      'forum_post_deleted',
+      { postId },
+    );
+
     return json(
-      {
-        success: true,
-        post: {
-          ...(updatedRaw as PostRow),
-          bodyHtml: '',
-          canEdit: false,
-          canDelete: false,
-        },
-      },
+      { success: true, post: { ...(updatedRaw as PostRow), bodyHtml: '', canEdit: false, canDelete: false } },
       200,
     );
   } catch (error: any) {

@@ -11,44 +11,52 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const courseId = url.searchParams.get('courseId') ?? '';
   if (!courseId) return json({ error: 'courseId required' }, 400);
 
-  const role = await resolveLiveParticipantRole(session, courseId);
-  if (role !== 'teacher') return json({ error: 'Teachers only' }, 403);
+  try {
+    const role = await resolveLiveParticipantRole(session, courseId);
+    if (role !== 'teacher') return json({ error: 'Teachers only' }, 403);
 
-  const year = (url.searchParams.get('year') ?? String(new Date().getFullYear()));
-  const supabase = createSupabaseServerClient();
+    const year = (url.searchParams.get('year') ?? String(new Date().getFullYear()));
+    const supabase = createSupabaseServerClient();
 
-  // Find the meta assignment for this course+year
-  const assignmentId = `__meta__:course-student-profile:${encodeURIComponent(courseId)}:${year}`;
+    // Find the meta assignment for this course+year
+    const assignmentId = `__meta__:course-student-profile:${encodeURIComponent(courseId)}:${year}`;
 
-  const { data: subs, error } = await supabase
-    .from('Submission')
-    .select('userId, payload')
-    .eq('assignmentId', assignmentId);
+    const { data: subs, error } = await supabase
+      .from('Submission')
+      .select('userId, payload')
+      .eq('assignmentId', assignmentId);
 
-  if (error) return json({ error: error.message }, 500);
+    if (error) return json({ error: error.message }, 500);
 
-  // Also fetch user names for each userId
-  const userIds = (subs ?? []).map((s: any) => s.userId).filter(Boolean);
-  let userNames: Record<string, string> = {};
+    // Also fetch user names for each userId
+    const userIds = (subs ?? []).map((s: any) => s.userId).filter(Boolean);
+    let userNames: Record<string, string> = {};
+    let userEmails: Record<string, string> = {};
 
-  if (userIds.length > 0) {
-    const { data: users } = await supabase
-      .from('User')
-      .select('id, name, email')
-      .in('id', userIds);
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('User')
+        .select('id, name, email')
+        .in('id', userIds);
 
-    if (users) {
-      for (const u of users) {
-        userNames[u.id] = u.name || u.email || u.id;
+      if (users) {
+        for (const u of users) {
+          userNames[u.id] = u.name || u.email || u.id;
+          userEmails[u.id] = u.email || '';
+        }
       }
     }
+
+    const students = (subs ?? []).map((s: any) => ({
+      userId: s.userId,
+      name: userNames[s.userId] ?? s.userId,
+      email: userEmails[s.userId] ?? '',
+      grupo: String((s.payload as any)?.grupo ?? ''),
+    }));
+
+    return json({ students });
+  } catch (err: any) {
+    console.error('break-rooms/students error:', err?.message || err);
+    return json({ error: 'Failed to load students' }, 500);
   }
-
-  const students = (subs ?? []).map((s: any) => ({
-    userId: s.userId,
-    name: userNames[s.userId] ?? s.userId,
-    grupo: String((s.payload as any)?.grupo ?? ''),
-  }));
-
-  return json({ students });
 };

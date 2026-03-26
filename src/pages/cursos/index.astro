@@ -54,16 +54,42 @@ const courses = allCourseFiles
 const session = (Astro.locals as any).session;
 const currentUser = session?.user;
 
-// Get user enrollment status
+// Get user enrollment and invite status
 let userEnrollments: string[] = [];
+let userInvites: string[] = [];   // courseIds where user has a pending invite
+let isTeacher = false;
+
 if (currentUser?.email) {
   const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-  const { data: user } = await supabase.from('User').select('id').eq('email', currentUser.email).maybeSingle();
-  
+  const email = String(currentUser.email).trim().toLowerCase();
+
+  const { data: user } = await supabase
+    .from('User')
+    .select('id, role')
+    .ilike('email', email)
+    .maybeSingle();
+
   if (user) {
-    const { data: enrollments } = await supabase.from('Enrollment').select('courseId').eq('userId', user.id);
+    isTeacher = user.role === 'teacher';
+
+    const { data: enrollments } = await supabase
+      .from('Enrollment')
+      .select('courseId')
+      .eq('userId', user.id);
     if (enrollments) {
       userEnrollments = enrollments.map((e: any) => e.courseId);
+    }
+
+    if (!isTeacher) {
+      const { data: invites } = await supabase
+        .from('CourseInvite')
+        .select('courseId')
+        .ilike('email', email);
+      if (invites) {
+        userInvites = invites
+          .map((i: any) => i.courseId)
+          .filter((id: string) => !userEnrollments.includes(id));
+      }
     }
   }
 }
@@ -174,6 +200,11 @@ if (currentUser?.email) {
 			.course-status.not-enrolled {
 				color: var(--c-fg-dim);
 			}
+			.no-access-label {
+				font-size: 0.82rem;
+				color: var(--c-fg-dim);
+				font-style: italic;
+			}
 			.course-tags {
 				display: flex;
 				flex-wrap: wrap;
@@ -275,27 +306,26 @@ if (currentUser?.email) {
 							<div class="course-actions">
 								{!session ? (
 									<a href="/login" class="button">
-										Inicia sesión para inscribirte
+										Inicia sesión
 									</a>
 								) : userEnrollments.includes(course.id) ? (
 									<a href={course.href} class="button">
 										Ver curso
 									</a>
+								) : isTeacher ? (
+									<a href={course.href} class="button">
+										Ver curso
+									</a>
+								) : userInvites.includes(course.id) ? (
+									<button
+										class="button enroll-btn"
+										data-course-id={course.id}
+										data-course-title={course.title}
+									>
+										Inscribirse
+									</button>
 								) : (
-									<>
-										<button 
-											class="button enroll-btn" 
-											data-course-id={course.id}
-											data-course-title={course.title}
-										>
-											Inscribirse
-										</button>
-										{course.public && (
-											<a href={course.href} class="button secondary">
-												Vista previa
-											</a>
-										)}
-									</>
+									<span class="no-access-label">Sin acceso — contactá al docente</span>
 								)}
 							</div>
 						</div>
