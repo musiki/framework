@@ -2047,6 +2047,27 @@ if (
 </script>
 
 <style>
+  /*
+   * Architecture: Astro scoped CSS — all selectors get a data-astro-cid-xxx
+   * attribute automatically. JS-created DOM nodes lack this attribute, so they
+   * must use :global() wrappers (see Chat, Notes, Roster sections below).
+   *
+   * Design tokens: all colors, sizes, and spacing are CSS custom properties
+   * defined on .conference-shell so every descendant can reference them.
+   * Token naming: --conference-<category>-<variant>
+   *
+   * Layout strategy: CSS Grid for the outer shell (stage | sidebar),
+   * Flexbox for bars and inline controls, absolute positioning for overlays.
+   *
+   * Responsive: 4 breakpoints (1080 / 900landscape / 760 / 500px).
+   * Prefer clamp() over redundant breakpoint overrides where possible.
+   *
+   * !important usage: only two legitimate cases remain —
+   *   1. Overriding LiveKit SDK inline styles on <video> elements.
+   *   2. Overriding :global() rules where specificity alone is insufficient.
+   *      These are clearly marked; avoid adding new !important uses.
+   */
+
   :global(body.room-page) {
     margin: 0;
     background: #000;
@@ -2074,24 +2095,30 @@ if (
   }
 
   .conference-shell {
+    /* ── Layout metrics ───────────────────────────────────────────────── */
     --conference-bar-height: 42px;
     --conference-sidebar-size: clamp(300px, 22vw, 420px);
     --conference-instruments-size: clamp(320px, 24vw, 400px);
-    --conference-font-caption: 0.62rem;
-    --conference-font-body: 0.72rem;
-    --conference-font-title: 0.82rem;
-    --conference-local-video-flip: 1;
-    --conference-self-preview-zoom: 1;
-    --conference-circle-preview-zoom: 1;
-    --conference-line: rgba(255, 255, 255, 0.12);
-    --conference-line-soft: rgba(255, 255, 255, 0.06);
+    /* ── Typography scale ─────────────────────────────────────────────── */
+    --conference-font-caption: 0.62rem;   /* tiny labels, timestamps */
+    --conference-font-body: 0.72rem;      /* default UI text */
+    --conference-font-ui: 0.75rem;        /* action text, chat content */
+    --conference-font-title: 0.82rem;     /* section titles */
+    /* ── Color palette ────────────────────────────────────────────────── */
     --conference-fg: #f5f7fb;
-    --conference-muted: rgba(245, 247, 251, 0.58);
-    --conference-dim: rgba(245, 247, 251, 0.32);
+    --conference-fg-hi: var(--conference-fg-hi);  /* high-emphasis text */
+    --conference-muted: rgba(245, 247, 251, 0.58);  /* secondary text */
+    --conference-dim: rgba(245, 247, 251, 0.32);    /* disabled / hint */
+    --conference-line: rgba(255, 255, 255, 0.12);   /* border / divider */
+    --conference-line-soft: rgba(255, 255, 255, 0.06);
     --conference-accent: #2a87ff;
     --conference-green: #25cf6b;
     --conference-red: #ff4d4d;
-    /* Establish conference-specific font base so children don't inherit body's clamp(1.02rem) */
+    /* ── Runtime overrides (set by JS) ────────────────────────────────── */
+    --conference-local-video-flip: 1;
+    --conference-self-preview-zoom: 1;
+    --conference-circle-preview-zoom: 1;
+    /* ── Base: override global.css body clamp(1.02rem) for this shell ─── */
     font-size: var(--conference-font-body);
     line-height: 1.4;
     position: relative;
@@ -2105,6 +2132,15 @@ if (
     color: var(--conference-fg);
     overflow: hidden;
     padding-bottom: var(--conference-bar-height);
+  }
+
+  /* global.css resets button/input font-size to 1rem; undo that inside the shell */
+  .conference-shell button,
+  .conference-shell input,
+  .conference-shell select,
+  .conference-shell textarea {
+    font-size: inherit;
+    line-height: inherit;
   }
 
   .conference-shell[data-show-circle='false'] .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
@@ -2129,6 +2165,7 @@ if (
     z-index: 999;
   }
 
+  /* ── Layout: outer shell grid (stage | sidebar) ──────────────────── */
   .conference-stage-frame,
   .conference-sidebar {
     min-width: 0;
@@ -2168,6 +2205,7 @@ if (
     background: transparent;
   }
 
+  /* ── Stage: fullscreen video canvas, absolute-positioned panels ──── */
   .conference-stage {
     position: relative;
     width: 100%;
@@ -2465,7 +2503,7 @@ if (
 
   .conference-notes-new-btn:hover {
     border-color: rgba(245, 247, 251, 0.4);
-    color: rgba(245, 247, 251, 0.85);
+    color: var(--conference-fg-hi);
   }
 
   :global(.conference-notes-item) {
@@ -2477,35 +2515,35 @@ if (
     border: 1px solid transparent;
     border-radius: 2px;
     cursor: pointer;
-    font-size: 0.68rem !important;
-    font-weight: 400 !important;
-    color: var(--conference-muted) !important;
+    font-size: 0.68rem;
+    font-weight: 400;
+    color: var(--conference-muted);
     letter-spacing: 0.03em;
-    line-height: 1.4 !important;
+    line-height: 1.4;
     transition: border-color 120ms, color 120ms;
   }
 
   :global(.conference-notes-item:hover) {
     border-color: var(--conference-line);
-    color: rgba(245, 247, 251, 0.72) !important;
+    color: rgba(245, 247, 251, 0.72);
   }
 
   :global(.conference-notes-item-title) {
-    font-weight: 400 !important;
+    font-weight: 400;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   :global(.conference-notes-item-date) {
-    font-size: 0.6rem !important;
+    font-size: 0.6rem;
     opacity: 0.4;
     white-space: nowrap;
   }
 
   :global(.conference-notes-item--active) {
-    border-color: var(--conference-line) !important;
-    color: rgba(245, 247, 251, 0.85) !important;
+    border-color: var(--conference-line);
+    color: var(--conference-fg-hi);
   }
 
   .conference-notes-form {
@@ -2523,7 +2561,7 @@ if (
     background: rgba(255, 255, 255, 0.04);
     color: var(--conference-fg);
     font-family: inherit;
-    font-size: 0.75rem;
+    font-size: var(--conference-font-ui);
     resize: vertical;
   }
 
@@ -2552,7 +2590,7 @@ if (
     border-radius: 2px;
     background: transparent;
     font: inherit;
-    font-size: 0.75rem;
+    font-size: var(--conference-font-ui);
     font-weight: 600;
     letter-spacing: 0;
     cursor: pointer;
@@ -2596,7 +2634,7 @@ if (
 
   .conference-notes-save:hover {
     border-color: rgba(160, 160, 170, 0.7);
-    color: rgba(245, 247, 251, 0.85);
+    color: var(--conference-fg-hi);
   }
 
   .conference-notes-preview-btn {
@@ -2645,7 +2683,7 @@ if (
     border: 1px solid var(--conference-line);
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.03);
-    font-size: 0.75rem;
+    font-size: var(--conference-font-ui);
     line-height: 1.5;
     color: rgba(245, 247, 251, 0.82);
     overflow-x: auto;
@@ -2891,6 +2929,7 @@ if (
     min-width: 0;
   }
 
+  /* ── Sidebar fields: label + input rows for device selects, checkboxes ── */
   .conference-field {
     display: grid;
     gap: 0.28rem;
@@ -3155,6 +3194,7 @@ if (
     font-variant-numeric: tabular-nums;
   }
 
+  /* ── Mixer: 5-column grid of channel strips + FX row spanning all cols ── */
   .conference-mixer {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -3721,7 +3761,7 @@ if (
   }
   .conference-session-action[data-action$="-create"]:hover {
     border-color: rgba(160, 160, 170, 0.7);
-    color: rgba(245, 247, 251, 0.85);
+    color: var(--conference-fg-hi);
   }
 
   .conference-session-action[data-action$="-copy"] {
@@ -3788,6 +3828,7 @@ if (
     font-weight: 600;
   }
 
+  /* ── Toggle switch: CSS-only checkbox → pill slider pattern ──────── */
   .conference-switch {
     position: relative;
     display: inline-block;
@@ -3833,7 +3874,7 @@ if (
   }
 
   .conference-invite-link-output {
-    font-size: calc(var(--conference-font-body) * 0.9) !important;
+    font-size: calc(var(--conference-font-body) * 0.9);
   }
 
   .conference-invite-link-output::placeholder {
@@ -3944,6 +3985,7 @@ if (
     transform-origin: center center;
   }
 
+  /* ── Status bar + Chat: :global() required — JS inserts these nodes ── */
   .conference-statusline {
     margin: 0;
     color: var(--conference-muted);
@@ -3988,42 +4030,40 @@ if (
     align-items: baseline;
     gap: 0.28rem;
     margin-bottom: 0.02rem;
-    color: rgba(245, 247, 251, 0.62) !important;
-    font-size: 0.75rem !important;
-    line-height: 1.1 !important;
+    color: rgba(245, 247, 251, 0.62);
+    font-size: var(--conference-font-ui);
+    line-height: 1.1;
   }
 
   :global(.conference-chat-item .conference-chat-author) {
     display: inline;
-    color: rgba(245, 247, 251, 0.7) !important;
-    font-size: 0.75rem !important;
-    font-weight: 700 !important;
-    font-style: normal !important;
+    color: rgba(245, 247, 251, 0.7);
+    font-size: var(--conference-font-ui);
+    font-weight: 700;
+    font-style: normal;
     letter-spacing: 0.01em;
   }
 
   :global(.conference-chat-header-separator) {
     display: inline;
-    color: rgba(245, 247, 251, 0.46) !important;
-    font-size: 0.75rem !important;
-    opacity: 0.46 !important;
+    color: rgba(245, 247, 251, 0.46);  /* alpha in color; no extra opacity needed */
+    font-size: var(--conference-font-ui);
   }
 
   :global(.conference-chat-item .conference-chat-stamp) {
     display: inline;
-    color: rgba(245, 247, 251, 0.5) !important;
-    font-size: 0.75rem !important;
-    font-style: italic !important;
-    font-weight: 400 !important;
-    opacity: 0.5 !important;
+    color: rgba(245, 247, 251, 0.5);   /* alpha in color; no extra opacity needed */
+    font-size: var(--conference-font-ui);
+    font-style: italic;
+    font-weight: 400;
   }
 
   :global(.conference-chat-item .conference-chat-text) {
     position: relative;
-    margin: 0 !important;
-    color: rgba(245, 247, 251, 0.78) !important;
-    font-size: 0.75rem !important;
-    line-height: 1.2 !important;
+    margin: 0;
+    color: rgba(245, 247, 251, 0.78);
+    font-size: var(--conference-font-ui);
+    line-height: 1.2;
     text-wrap: pretty;
   }
 
@@ -4036,14 +4076,14 @@ if (
   :global(.conference-chat-text ol),
   :global(.conference-chat-text pre),
   :global(.conference-chat-text blockquote) {
-    margin-top: 0.04rem !important;
-    margin-bottom: 0.04rem !important;
+    margin-top: 0.04rem;
+    margin-bottom: 0.04rem;
   }
 
   :global(.conference-chat-text ul),
   :global(.conference-chat-text ol) {
     padding-left: 0;
-    margin-left: 0 !important;
+    margin-left: 0;
   }
 
   :global(.conference-chat-text ul > li) {
@@ -4075,7 +4115,7 @@ if (
   }
 
   :global(.conference-chat-line) {
-    font-size: 0.75rem;
+    font-size: var(--conference-font-ui);
   }
 
   :global(.conference-chat-line + .conference-chat-line) {
@@ -4195,6 +4235,7 @@ if (
     cursor: not-allowed;
   }
 
+  /* ── Tile/media system: video cards in grid and presentation layouts ── */
   .conference-tile {
     min-height: 0;
     position: relative;
@@ -4509,6 +4550,7 @@ if (
     font-weight: 600;
   }
 
+  /* ── Bottom bar: control groups in a horizontal scrollable flex row ── */
   .conference-bottombar {
     position: fixed;
     inset: auto 0 0 0;
@@ -4919,6 +4961,7 @@ if (
     pointer-events: auto;
   }
 
+  /* ── Roster: :global() — participant list injected by JS ─────────── */
   .conference-roster {
     margin: 0;
     padding: 0;
@@ -5155,6 +5198,16 @@ if (
     white-space: nowrap;
     border: 0;
   }
+
+  /*
+   * ── Responsive breakpoints ────────────────────────────────────────────
+   * 1080px  sidebar moves below stage (portrait tablets / small laptops)
+   * 900px   landscape phones — sidebar returns to side at narrow height
+   * 760px   small phones — sidebar hidden, bottom bar stacks
+   * 500px   mobile portrait — sidebar re-enabled below stage, bar scrolls
+   *
+   * Prefer clamp() in token values over duplicating rules per breakpoint.
+   */
 
   @media (max-width: 1080px) {
     .conference-shell {

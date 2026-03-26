@@ -2455,7 +2455,11 @@ class GravityBallRenderer {
   private uniformEnvBlend: WebGLUniformLocation | null = null;
   private envMirrorEnabled = false;
   private _envFrameCounter = 0;
+  private _envCanvasRect: DOMRect | null = null;
+  private _envRectsCacheTime = 0;
   private extraEnvCanvases: HTMLCanvasElement[] = [];
+  // ResizeObserver keeps forcedCanvasWidth/Height in sync with CSS layout
+  private canvasObserver: ResizeObserver | null = null;
   // Projected shadow
   private shadowProgram: WebGLProgram | null = null;
   private shadowBuffer: WebGLBuffer | null = null;
@@ -2673,9 +2677,10 @@ class GravityBallRenderer {
     this.uniformEnvBlend = gl.getUniformLocation(program, 'uEnvBlend');
 
     // Offscreen canvas used each frame to composite video + hand canvas → env texture
+    // 256×256 gives enough texel density for the sphere-map reflection detail
     const envCanvas = document.createElement('canvas');
-    envCanvas.width = 128;
-    envCanvas.height = 128;
+    envCanvas.width = 256;
+    envCanvas.height = 256;
     this.envCanvas = envCanvas;
     this.envCtx = envCanvas.getContext('2d');
 
@@ -2743,6 +2748,21 @@ class GravityBallRenderer {
       ]), gl.STATIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
       this.shadowBuffer = shadowBuf;
+    }
+
+    // Keep forcedCanvasWidth/Height in sync with CSS layout so resizeCanvas()
+    // always has a correct aspect ratio even when clientWidth/clientHeight is 0.
+    if (typeof ResizeObserver !== 'undefined') {
+      this.canvasObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0) {
+            this.forcedCanvasWidth = Math.round(width);
+            this.forcedCanvasHeight = Math.round(height);
+          }
+        }
+      });
+      this.canvasObserver.observe(this.canvas);
     }
   }
 
@@ -2825,9 +2845,22 @@ class GravityBallRenderer {
   }
 
   /**
-   * Each frame: draw all live <video> elements inside the ball's parent stage +
-   * any extra canvases (hand overlay) onto a small offscreen canvas, then
-   * upload it as the WebGL environment texture for the sphere-map reflection.
+   * Build the sphere-map environment texture for the Escher reflection.
+   *
+   * The shader samples this texture using Blinn sphere-map UVs derived from
+   * the reflection vector R = reflect(-V, N).  UV (0.5, 0.5) corresponds to
+   * the "straight back" direction — i.e., what is directly behind the ball.
+   *
+   * Previous bug: every video was stretched to fill the full 128×128 env
+   * canvas, so env-center always showed the video frame's center rather than
+   * what's spatially behind the ball.
+   *
+   * Fix: each video is drawn at its actual screen position relative to the
+   * ball, so the ball's own position maps to env canvas center (W/2, H/2).
+   * We cache getBoundingClientRect every 500 ms to avoid layout thrash.
+   *
+   * captureRadius controls how much of the scene (in ball-radii) is mapped
+   * into the 128×128 env.  Larger = wider "field of view" of the reflection.
    */
   private updateEnvTexture() {
     const gl = this.gl;
@@ -2835,24 +2868,48 @@ class GravityBallRenderer {
     const envCanvas = this.envCanvas;
     if (!gl || !ctx || !envCanvas || !this.envTexture) return;
 
-    const W = envCanvas.width;
-    const H = envCanvas.height;
+    const W = envCanvas.width;   // 256
+    const H = envCanvas.height;  // 256
     ctx.clearRect(0, 0, W, H);
 
-    // Draw every playing <video> visible in the ball's stage container.
-    // Videos only — the ball canvas itself is excluded (it's a <canvas>, not a <video>).
+    // Capture window: ball center ± captureRadius canvas pixels → full env canvas
+    // 3× ball radius gives ~180° field of view for the sphere-map hemisphere
+    const captureRadius = this.radius * 3;
+    const captureScale  = W / (captureRadius * 2);
+
     const stage = this.canvas.parentElement;
     if (stage) {
+      // Refresh the canvas's bounding rect every 500 ms (cheap layout read)
+      const now = performance.now();
+      if (!this._envCanvasRect || now - this._envRectsCacheTime > 500) {
+        this._envCanvasRect = this.canvas.getBoundingClientRect();
+        this._envRectsCacheTime = now;
+      }
+      const canvasRect = this._envCanvasRect;
+
       for (const video of stage.querySelectorAll<HTMLVideoElement>('video')) {
-        if (video.readyState >= 2) {
-          try { ctx.drawImage(video, 0, 0, W, H); } catch { /* source not ready */ }
-        }
+        if (video.readyState < 2) continue;
+
+        // Video's CSS rect relative to the ball canvas
+        const vr    = video.getBoundingClientRect();
+        const vLeft = vr.left - canvasRect.left;
+        const vTop  = vr.top  - canvasRect.top;
+
+        // Map the capture window to env-canvas coordinates:
+        //   env_x = (canvas_x − (ballX − captureRadius)) * captureScale
+        const envX  = (vLeft - (this.position.x - captureRadius)) * captureScale;
+        const envY  = (vTop  - (this.position.y - captureRadius)) * captureScale;
+
+        try { ctx.drawImage(video, envX, envY, vr.width * captureScale, vr.height * captureScale); } catch { /* not ready */ }
       }
     }
 
-    // Composite hand-overlay canvas and any extra sources on top
+    // Composite hand-overlay and any extra canvases with the same transform.
+    // These share the main canvas pixel space, so the same captureScale applies.
     for (const src of this.extraEnvCanvases) {
-      try { ctx.drawImage(src, 0, 0, W, H); } catch { /* skip */ }
+      const ex = -(this.position.x - captureRadius) * captureScale;
+      const ey = -(this.position.y - captureRadius) * captureScale;
+      try { ctx.drawImage(src, ex, ey, src.width * captureScale, src.height * captureScale); } catch { /* skip */ }
     }
 
     // Upload — flip Y so canvas top = texture top (sphere-map UV convention)
