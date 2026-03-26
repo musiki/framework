@@ -6,7 +6,8 @@
       "Bash(find /Users/zztt/projects/26-musiki/framework -maxdepth 2 -type f \\\\\\(-name .env* -o -name *config* -o -name astro.config.* \\\\\\))",
       "Bash(npx tsc:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(supabase projects:*)"
     ]
   }
 }
