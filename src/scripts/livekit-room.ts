@@ -5290,7 +5290,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     const COUNTDOWN_SECS = 60;
 
-    if (room.state === ConnectionState.Connected && canLeadSession()) {
+    if (room.state === ConnectionState.Connected && localRole === 'teacher') {
       await publishMessage({
         type: 'break-rooms-end',
         countdown: COUNTDOWN_SECS,
@@ -5380,7 +5380,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     setBreakRoomsStatus(`${rooms.length} break rooms creados.`, false);
 
     // Broadcast to connected students
-    if (room.state === ConnectionState.Connected && canLeadSession()) {
+    if (room.state === ConnectionState.Connected && localRole === 'teacher') {
       await publishMessage({
         type: 'break-rooms',
         rooms,
@@ -9841,6 +9841,49 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
+      if (message.type === 'break-rooms') {
+        // Only accept from teachers
+        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+        breakRoomsActive = message.rooms ?? [];
+        breakRoomsMode = message.mode ?? '';
+        breakRoomAssignments = message.assignments ?? {};
+        syncBreakRoomsShell();
+        renderBreakRoomsPopup();
+
+        if (localRole === 'student') {
+          const myAssignment = breakRoomAssignments[room.localParticipant.identity];
+
+          if (myAssignment) {
+            // Random / grupos: blink 2 s then auto-join assigned room
+            startBBtnBlink(false);
+            window.setTimeout(() => {
+              void joinBreakRoom(myAssignment, false);
+            }, 2000);
+          } else if (breakRoomsMode === 'custom') {
+            // Custom: keep blinking, open popup so student can choose
+            startBBtnBlink(true);
+            if (breakRoomsPopup instanceof HTMLElement) {
+              renderBreakRoomsPopup();
+              breakRoomsPopup.hidden = false;
+            }
+          }
+        }
+        return;
+      }
+
+      if (message.type === 'break-rooms-end') {
+        // Only accept from teachers
+        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+        const target = normalizeText(message.mainRoom);
+        const secs = Math.max(5, Math.min(120, Number(message.countdown) || 60));
+        breakRoomsActive = [];
+        breakRoomsMode = '';
+        breakRoomAssignments = {};
+        syncBreakRoomsShell();
+        startBreakRoomsCountdown(secs, target || mainRoomName);
+        return;
+      }
+
       if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
       if (!isSessionLeader(participant)) return;
 
@@ -9914,44 +9957,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
-      if (message.type === 'break-rooms') {
-        breakRoomsActive = message.rooms ?? [];
-        breakRoomsMode = message.mode ?? '';
-        breakRoomAssignments = message.assignments ?? {};
-        syncBreakRoomsShell();
-        renderBreakRoomsPopup();
-
-        if (localRole === 'student') {
-          const myAssignment = breakRoomAssignments[room.localParticipant.identity];
-
-          if (myAssignment) {
-            // Random / grupos: blink 2 s then auto-join assigned room
-            startBBtnBlink(false);
-            window.setTimeout(() => {
-              void joinBreakRoom(myAssignment, false);
-            }, 2000);
-          } else if (breakRoomsMode === 'custom') {
-            // Custom: keep blinking, open popup so student can choose
-            startBBtnBlink(true);
-            if (breakRoomsPopup instanceof HTMLElement) {
-              renderBreakRoomsPopup();
-              breakRoomsPopup.hidden = false;
-            }
-          }
-        }
-        return;
-      }
-
-      if (message.type === 'break-rooms-end') {
-        const target = normalizeText(message.mainRoom);
-        const secs = Math.max(5, Math.min(120, Number(message.countdown) || 60));
-        breakRoomsActive = [];
-        breakRoomsMode = '';
-        breakRoomAssignments = {};
-        syncBreakRoomsShell();
-        startBreakRoomsCountdown(secs, target || mainRoomName);
-        return;
-      }
     });
 
   // Drag logic for Camera Circle (Teacher Panel and Self Preview)
