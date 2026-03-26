@@ -10,7 +10,8 @@
       "Bash(supabase projects:*)",
       "Bash(head -20 grep -rn \"mermaid.run\\\\|mermaid.init\\\\|import.*mermaid\" /Users/zztt/projects/26-musiki/framework/src/)",
       "Bash(ls -la /Users/zztt/projects/26-musiki/framework/src/pages/dashboard*)",
-      "Bash(xxd)"
+      "Bash(xxd)",
+      "Bash(npx astro:*)"
     ]
   }
 }

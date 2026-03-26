@@ -801,6 +801,9 @@ if (
   </aside>
 
   <section class="conference-stage-frame">
+    <div class="conference-br-countdown" data-br-countdown hidden>
+      <span class="conference-br-countdown-text" data-br-countdown-text></span>
+    </div>
     <section class="conference-stage" data-stage data-layout={defaultLayout}>
       <section class="conference-stage-panel conference-stage-panel--presentation" data-panel="presentation">
         <div class="conference-stage-label">Presentation</div>
@@ -1212,6 +1215,74 @@ if (
                     </p>
                   </div>
                 </details>
+
+                <!-- ── BREAK ROOMS ─────────────────────────────────────── -->
+                <details class="conference-break-rooms-panel" data-break-rooms-setup>
+                  <summary class="conference-room-invite-panel-summary">BREAK ROOMS</summary>
+
+                  <!-- 3.1 Random groups -->
+                  <div class="conference-break-rooms-section">
+                    <div class="conference-session-action-row">
+                      <button
+                        type="button"
+                        class="conference-session-action conference-session-action--compact"
+                        data-action="break-rooms-random"
+                        title="Random Groups"
+                        aria-label="Random Groups"
+                      >R</button>
+                      <input
+                        type="number"
+                        class="conference-break-rooms-size-input"
+                        data-break-rooms-size
+                        min="2"
+                        max="20"
+                        value="3"
+                        title="Tamaño del grupo"
+                        aria-label="Tamaño del grupo"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- 3.2 Student group rooms -->
+                  <div class="conference-break-rooms-section">
+                    <div class="conference-session-action-row">
+                      <button
+                        type="button"
+                        class="conference-session-action conference-session-action--compact"
+                        data-action="break-rooms-grupos"
+                        title="Group Rooms"
+                        aria-label="Group Rooms"
+                      >G</button>
+                    </div>
+                  </div>
+
+                  <!-- 3.3 Custom groups -->
+                  <div class="conference-break-rooms-section">
+                    <div class="conference-break-rooms-custom-inputs" data-break-rooms-custom-inputs>
+                      <input type="text" class="conference-break-rooms-custom-name" placeholder="Grupo A" />
+                      <input type="text" class="conference-break-rooms-custom-name" placeholder="Grupo B" />
+                      <input type="text" class="conference-break-rooms-custom-name" placeholder="Grupo C" />
+                    </div>
+                    <div class="conference-session-action-row">
+                      <button
+                        type="button"
+                        class="conference-session-action conference-session-action--compact"
+                        data-action="break-rooms-add-custom"
+                        title="Agregar grupo"
+                        aria-label="Agregar grupo"
+                      >+</button>
+                      <button
+                        type="button"
+                        class="conference-session-action conference-session-action--compact"
+                        data-action="break-rooms-custom"
+                        title="Create Break Rooms"
+                        aria-label="Create Break Rooms"
+                      >C</button>
+                    </div>
+                  </div>
+
+                  <p class="conference-session-note" data-break-rooms-status></p>
+                </details>
               </div>
             </div>
           </details>
@@ -1419,6 +1490,29 @@ if (
       <button type="button" class="conference-layout-button" data-layout-choice="screenshare">S</button>
       <button type="button" class="conference-layout-button" data-layout-choice="presentation">P</button>
       <button type="button" class="conference-layout-button" data-layout-choice="grid">G</button>
+
+      <div class="conference-break-rooms-shell" data-break-rooms-shell hidden>
+        <button
+          type="button"
+          class="conference-layout-button conference-break-rooms-btn"
+          data-action="break-rooms-toggle"
+          data-break-rooms-btn
+          title="Break Rooms"
+          aria-label="Break Rooms"
+        >B</button>
+        <button
+          type="button"
+          class="conference-layout-button conference-break-rooms-end-btn"
+          data-action="break-rooms-end"
+          data-break-rooms-end-btn
+          title="Terminar Break Rooms"
+          aria-label="Terminar Break Rooms"
+          hidden
+        >T</button>
+        <div class="conference-break-rooms-popup" data-break-rooms-popup hidden>
+          <ul class="conference-break-rooms-list" data-break-rooms-list></ul>
+        </div>
+      </div>
       <select class="conference-sr-only" data-layout-input aria-hidden="true" tabindex="-1">
         <option value="teacher" selected={defaultLayout === 'teacher'}>Focus</option>
         <option value="screenshare" selected={defaultLayout === 'screenshare'}>Share</option>
@@ -2981,7 +3075,7 @@ if (
   }
 
   .conference-session-setup {
-    padding-top: 0.04rem;
+    padding-top: 0.55rem;
   }
 
   .conference-session-setup-summary {
@@ -3932,6 +4026,222 @@ if (
   .conference-session-note[data-error='true'],
   .conference-invite-note[data-error='true'] {
     color: #ff8787;
+  }
+
+  /* ── Break rooms ──────────────────────────────────────────────────── */
+  .conference-break-rooms-panel {
+    display: grid;
+    gap: 0.28rem;
+    padding-top: 0.06rem;
+  }
+
+  .conference-break-rooms-section {
+    display: grid;
+    gap: 0.3rem;
+    padding-top: 0.2rem;
+  }
+
+  .conference-break-rooms-section .conference-session-action-row {
+    grid-template-columns: auto 1fr;
+  }
+
+  /* R = green (create), G = blue (group), matches INVITAR palette */
+  .conference-session-action[data-action='break-rooms-random'] {
+    border-color: rgba(100, 220, 140, 0.4);
+    color: rgba(120, 220, 150, 0.7);
+  }
+  .conference-session-action[data-action='break-rooms-random']:hover {
+    border-color: rgba(120, 240, 160, 0.7);
+    color: rgba(160, 255, 180, 0.95);
+    background: rgba(60, 180, 100, 0.07);
+  }
+  .conference-session-action[data-action='break-rooms-grupos'] {
+    border-color: rgba(80, 160, 220, 0.4);
+    color: rgba(100, 180, 240, 0.7);
+  }
+  .conference-session-action[data-action='break-rooms-grupos']:hover {
+    border-color: rgba(100, 180, 240, 0.75);
+    color: rgba(140, 210, 255, 0.95);
+    background: rgba(60, 140, 200, 0.07);
+  }
+  .conference-session-action[data-action='break-rooms-custom'] {
+    border-color: rgba(160, 160, 170, 0.35);
+    color: rgba(245, 247, 251, 0.55);
+  }
+  .conference-session-action[data-action='break-rooms-custom']:hover {
+    border-color: rgba(160, 160, 170, 0.7);
+    color: var(--conference-fg-hi);
+  }
+
+  .conference-break-rooms-size-input {
+    width: 3.4rem;
+    background: transparent;
+    color: var(--conference-fg);
+    border: 1px solid var(--conference-line-soft);
+    padding: 0.1rem 0.3rem;
+    text-align: center;
+    font-size: var(--conference-font-ui);
+  }
+
+  .conference-break-rooms-custom-inputs {
+    display: grid;
+    gap: 0.24rem;
+  }
+
+  .conference-break-rooms-custom-name {
+    background: transparent;
+    color: var(--conference-fg);
+    border: 0;
+    border-bottom: 1px solid var(--conference-line-soft);
+    padding: 0.18rem 0.1rem;
+    width: 100%;
+    font: inherit;
+    font-size: var(--conference-font-ui);
+  }
+
+  .conference-break-rooms-custom-name:focus {
+    outline: none;
+    border-bottom-color: rgba(143, 227, 255, 0.45);
+  }
+
+  .conference-break-rooms-custom-name::placeholder {
+    color: var(--conference-muted);
+    opacity: 0.45;
+  }
+
+  /* B / T buttons shell: keep inline with layout bar */
+  .conference-break-rooms-shell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* B active = yellow when break rooms are active */
+  .conference-break-rooms-shell[data-active='true'] .conference-break-rooms-btn {
+    color: rgba(255, 226, 107, 0.9);
+  }
+
+  @keyframes conference-br-blink {
+    0%, 100% { color: rgba(255, 226, 107, 0.95); }
+    50%       { color: rgba(255, 226, 107, 0.1);  }
+  }
+
+  .conference-break-rooms-btn--blink {
+    animation: conference-br-blink 0.55s ease-in-out infinite;
+  }
+
+  /* T button: red-ish tone */
+  .conference-break-rooms-end-btn {
+    color: rgba(240, 100, 100, 0.65) !important;
+  }
+  .conference-break-rooms-end-btn:hover {
+    color: rgba(255, 130, 130, 0.9) !important;
+  }
+
+  /* Drop-up popup — same chrome as .conference-roster-popup */
+  .conference-break-rooms-popup {
+    position: absolute;
+    bottom: calc(100% + 1px);
+    left: 0;
+    min-width: 240px;
+    max-width: 320px;
+    max-height: 40vh;
+    overflow-y: auto;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.98);
+    z-index: 60;
+  }
+
+  .conference-break-rooms-popup[hidden] {
+    display: none;
+  }
+
+  .conference-break-rooms-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .conference-break-rooms-list li {
+    display: block;
+  }
+
+  /* Each room entry mirrors .conference-roster-item */
+  .conference-break-rooms-list button {
+    display: block;
+    width: 100%;
+    background: transparent;
+    color: var(--conference-fg);
+    font: inherit;
+    font-size: 0.72rem;
+    line-height: 0.87;
+    padding: 0.12rem 0;
+    text-align: left;
+    cursor: pointer;
+    border: 0;
+    border-bottom: 1px solid var(--conference-line-soft);
+    letter-spacing: 0.02em;
+  }
+
+  .conference-break-rooms-list button:hover:not(:disabled) {
+    color: var(--conference-fg-hi);
+  }
+
+  .conference-break-rooms-list button:disabled {
+    color: rgba(245, 247, 251, 0.5);
+    font-size: 0.53rem;
+    line-height: 0.92;
+    cursor: default;
+  }
+
+  .conference-break-rooms-list button[data-active='true'] {
+    color: rgba(143, 227, 255, 0.9);
+  }
+
+  /* "Terminar" option — red, mirrors .conference-session-action revoke palette */
+  .conference-break-rooms-list button[data-end='true'] {
+    color: rgba(240, 100, 100, 0.65);
+    font-size: 0.54rem;
+  }
+  .conference-break-rooms-list button[data-end='true']:hover {
+    color: rgba(255, 130, 130, 0.9);
+  }
+
+  .conference-break-rooms-list .conference-break-rooms-divider {
+    height: 1px;
+    background: var(--conference-line-soft);
+    margin: 0.14rem 0;
+    list-style: none;
+  }
+
+  /* Break rooms countdown overlay — upper-right of stage */
+  .conference-br-countdown {
+    position: absolute;
+    top: 0.8rem;
+    right: 1rem;
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  .conference-br-countdown[hidden] {
+    display: none;
+  }
+
+  .conference-br-countdown-text {
+    display: block;
+    background: rgba(0, 0, 0, 0.72);
+    color: rgba(255, 226, 107, 0.95);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.65rem;
+    line-height: 1.5;
+    text-align: center;
+    white-space: pre-line;
   }
 
   .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument {
@@ -4976,23 +5286,23 @@ if (
     gap: 0.02rem;
     padding: 0.12rem 0;
     border-bottom: 1px solid var(--conference-line-soft);
-    line-height: 1.02;
+    line-height: 0.87;
   }
 
   :global(.conference-roster-item span:first-child) {
     color: var(--conference-fg);
-    font-size: 0.65rem;
+    font-size: 0.72rem;
   }
 
   :global(.conference-roster-item span:last-child) {
     color: var(--conference-muted);
-    font-size: 0.49rem;
+    font-size: 0.54rem;
   }
 
   :global(.conference-roster-empty) {
     color: rgba(245, 247, 251, 0.5);
-    font-size: 0.48rem;
-    line-height: 1.08;
+    font-size: 0.53rem;
+    line-height: 0.92;
   }
 
   .conference-live-activity {
@@ -5407,6 +5717,7 @@ if (
     }
 
     .conference-mixer-fx {
+      display: block;
       gap: 0.35rem;
       padding-top: 0.4rem;
     }

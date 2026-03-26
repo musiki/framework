@@ -85,6 +85,20 @@ type ConferenceMessage =
       x: number;
       y: number;
       identity: string;
+    }
+  | {
+      type: 'break-rooms';
+      rooms: Array<{ name: string; label: string }>;
+      /** identity → break room name (empty = student chooses) */
+      assignments: Record<string, string>;
+      /** 'random' | 'grupos' | 'custom' */
+      mode: string;
+    }
+  | {
+      type: 'break-rooms-end';
+      /** seconds until auto-return */
+      countdown: number;
+      mainRoom: string;
     };
 
 type LiveSnapshot = {
@@ -3712,6 +3726,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const recordingPresetSelect = root.querySelector('[data-recording-preset-select]');
   const sessionControlsField = root.querySelector('[data-session-controls-field]');
   const sessionAllowInstrumentsInput = root.querySelector('[data-session-allow-instruments-input]');
+  const breakRoomsShell = root.querySelector('[data-break-rooms-shell]');
+  const breakRoomsPopup = root.querySelector('[data-break-rooms-popup]');
+  const breakRoomsList = root.querySelector('[data-break-rooms-list]');
+  const breakRoomsStatusNote = root.querySelector('[data-break-rooms-status]');
+  const breakRoomsSizeInput = root.querySelector('[data-break-rooms-size]');
+  const breakRoomsCustomInputsContainer = root.querySelector('[data-break-rooms-custom-inputs]');
+  const breakRoomsBBtn = root.querySelector('[data-break-rooms-btn]');
+  const breakRoomsEndBtn = root.querySelector('[data-break-rooms-end-btn]');
+  const brCountdownEl = root.querySelector('[data-br-countdown]');
+  const brCountdownText = root.querySelector('[data-br-countdown-text]');
   const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
   const streamingProfileSelect = root.querySelector('[data-streaming-profile-select]');
   const optimizeSpeakerInput = root.querySelector('[data-optimize-speaker-input]');
@@ -4070,6 +4094,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   >();
   let manualSessionLeaderIdentity = '';
   let focusChangedAtMs = 0;
+
+  // ── Break rooms state ─────────────────────────────────────────────
+  let breakRoomsActive: Array<{ name: string; label: string }> = [];
+  /** Room name before entering any break room — used to return. */
+  let mainRoomName = '';
+  /** mode: 'random' | 'grupos' | 'custom' | '' */
+  let breakRoomsMode = '';
+  /** identity → break room name, for teacher-assigned rooms. */
+  let breakRoomAssignments: Record<string, string> = {};
   let sessionLeaderIdentity = '';
   let mixerSynthGain = normalizeMasterGain(persistedSetup.mixerSynthGain, 1);
   let mixerSynthMuted = Boolean(persistedSetup.mixerSynthMuted);
@@ -5089,6 +5122,390 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         button.disabled = !instrumentsEnabled;
       }
     });
+  };
+
+  // ── Break rooms ───────────────────────────────────────────────────
+
+  const toBreakRoomSlug = (label: string) =>
+    label.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 40) || 'sala';
+
+  const toBreakRoomName = (base: string, label: string) =>
+    `${base}__br__${toBreakRoomSlug(label)}`;
+
+  const isInBreakRoom = () => Boolean(mainRoomName);
+
+  const currentBreakRoomLabel = () => {
+    const current = normalizeText(roomInput instanceof HTMLInputElement ? roomInput.value : '');
+    return breakRoomsActive.find((r) => r.name === current)?.label ?? '';
+  };
+
+  /** Render the B-button popup. */
+  const renderBreakRoomsPopup = () => {
+    if (!(breakRoomsList instanceof HTMLElement)) return;
+
+    breakRoomsList.innerHTML = '';
+
+    const currentRoom = normalizeText(roomInput instanceof HTMLInputElement ? roomInput.value : '');
+
+    // "Return to main room" at top
+    if (isInBreakRoom()) {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '← Sala principal';
+      btn.dataset.active = currentRoom === mainRoomName ? 'true' : 'false';
+      btn.addEventListener('click', () => {
+        void joinBreakRoom(mainRoomName, true);
+      });
+      li.appendChild(btn);
+      breakRoomsList.appendChild(li);
+
+      const div = document.createElement('li');
+      div.className = 'conference-break-rooms-divider';
+      div.setAttribute('aria-hidden', 'true');
+      breakRoomsList.appendChild(div);
+    }
+
+    breakRoomsActive.forEach((br) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = br.label;
+      btn.dataset.active = currentRoom === br.name ? 'true' : 'false';
+      btn.addEventListener('click', () => {
+        void joinBreakRoom(br.name, false);
+      });
+      li.appendChild(btn);
+      breakRoomsList.appendChild(li);
+    });
+
+    if (breakRoomsActive.length === 0 && !isInBreakRoom()) {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = 'Sin break rooms activos';
+      btn.disabled = true;
+      li.appendChild(btn);
+      breakRoomsList.appendChild(li);
+    }
+
+    // "Terminar" option — teachers only
+    if (localRole === 'teacher' && (breakRoomsActive.length > 0 || isInBreakRoom())) {
+      const divEnd = document.createElement('li');
+      divEnd.className = 'conference-break-rooms-divider';
+      divEnd.setAttribute('aria-hidden', 'true');
+      breakRoomsList.appendChild(divEnd);
+
+      const liEnd = document.createElement('li');
+      const btnEnd = document.createElement('button');
+      btnEnd.type = 'button';
+      btnEnd.textContent = 'Terminar Break Rooms';
+      btnEnd.dataset.end = 'true';
+      btnEnd.addEventListener('click', () => {
+        if (breakRoomsPopup instanceof HTMLElement) breakRoomsPopup.hidden = true;
+        void handleBreakRoomsEnd();
+      });
+      liEnd.appendChild(btnEnd);
+      breakRoomsList.appendChild(liEnd);
+    }
+  };
+
+  /** Show/hide the B button shell + active state + T button. */
+  const syncBreakRoomsShell = () => {
+    if (!(breakRoomsShell instanceof HTMLElement)) return;
+    const show = breakRoomsActive.length > 0 || isInBreakRoom();
+    breakRoomsShell.hidden = !show;
+
+    // Yellow B when break rooms are active (created or inside one)
+    breakRoomsShell.dataset.active = (breakRoomsActive.length > 0 || isInBreakRoom()) ? 'true' : 'false';
+
+    // Hover title on B shows current break room name
+    if (breakRoomsBBtn instanceof HTMLElement) {
+      const label = currentBreakRoomLabel();
+      breakRoomsBBtn.title = label ? `Break Rooms — ${label}` : 'Break Rooms';
+    }
+
+    // T button visible only to teachers when break rooms are active
+    if (breakRoomsEndBtn instanceof HTMLElement) {
+      breakRoomsEndBtn.hidden = !(localRole === 'teacher' && (breakRoomsActive.length > 0 || isInBreakRoom()));
+    }
+  };
+
+  let _brBlinkTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const startBBtnBlink = (continuous: boolean) => {
+    if (!(breakRoomsBBtn instanceof HTMLElement)) return;
+    if (_brBlinkTimer) { clearTimeout(_brBlinkTimer); _brBlinkTimer = null; }
+    breakRoomsBBtn.classList.add('conference-break-rooms-btn--blink');
+    if (!continuous) {
+      _brBlinkTimer = setTimeout(() => {
+        breakRoomsBBtn.classList.remove('conference-break-rooms-btn--blink');
+        _brBlinkTimer = null;
+      }, 2000);
+    }
+  };
+
+  const stopBBtnBlink = () => {
+    if (!(breakRoomsBBtn instanceof HTMLElement)) return;
+    if (_brBlinkTimer) { clearTimeout(_brBlinkTimer); _brBlinkTimer = null; }
+    breakRoomsBBtn.classList.remove('conference-break-rooms-btn--blink');
+  };
+
+  let _brCountdownTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** Show the N-second countdown overlay and auto-return everyone. */
+  const startBreakRoomsCountdown = (seconds: number, targetRoom: string) => {
+    if (_brCountdownTimer) {
+      clearInterval(_brCountdownTimer);
+      _brCountdownTimer = null;
+    }
+
+    let remaining = seconds;
+
+    const updateOverlay = () => {
+      if (!(brCountdownEl instanceof HTMLElement) || !(brCountdownText instanceof HTMLElement)) return;
+      brCountdownEl.hidden = remaining <= 0;
+      brCountdownText.textContent = remaining > 0
+        ? `Volviendo a sala principal\nen ${remaining}s`
+        : '';
+    };
+
+    updateOverlay();
+
+    _brCountdownTimer = setInterval(() => {
+      remaining -= 1;
+      updateOverlay();
+      if (remaining <= 0) {
+        clearInterval(_brCountdownTimer!);
+        _brCountdownTimer = null;
+        void joinBreakRoom(targetRoom, true);
+      }
+    }, 1000);
+  };
+
+  /** Teacher: end break rooms, broadcast countdown, start own countdown. */
+  const handleBreakRoomsEnd = async () => {
+    const target = mainRoomName || (roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) : '');
+    if (!target) return;
+
+    const COUNTDOWN_SECS = 60;
+
+    if (room.state === ConnectionState.Connected && canLeadSession()) {
+      await publishMessage({
+        type: 'break-rooms-end',
+        countdown: COUNTDOWN_SECS,
+        mainRoom: target,
+      }).catch(() => undefined);
+    }
+
+    // Clear break rooms list so they don't reappear
+    breakRoomsActive = [];
+    breakRoomsMode = '';
+    breakRoomAssignments = {};
+    syncBreakRoomsShell();
+
+    startBreakRoomsCountdown(COUNTDOWN_SECS, target);
+  };
+
+  /** Join a room by name. isMain = returning to main room. */
+  const joinBreakRoom = async (targetRoomName: string, isMain: boolean) => {
+    if (!(roomInput instanceof HTMLInputElement)) return;
+    if (!(breakRoomsPopup instanceof HTMLElement)) return;
+
+    breakRoomsPopup.hidden = true;
+
+    if (!isMain && !mainRoomName) {
+      mainRoomName = normalizeText(roomInput.value);
+    }
+
+    // Stop blink and any running countdown
+    stopBBtnBlink();
+    if (_brCountdownTimer) {
+      clearInterval(_brCountdownTimer);
+      _brCountdownTimer = null;
+    }
+    if (brCountdownEl instanceof HTMLElement) brCountdownEl.hidden = true;
+
+    roomInput.value = targetRoomName;
+
+    // Clear mainRoomName when actually returning to the main room
+    if (isMain) {
+      mainRoomName = '';
+    }
+
+    syncBreakRoomsShell();
+
+    if (room.state === ConnectionState.Connected) {
+      room.disconnect();
+      // wait for disconnect to propagate, then reconnect
+      await new Promise<void>((resolve) => {
+        room.once(RoomEvent.Disconnected, () => { resolve(); });
+        window.setTimeout(() => { resolve(); }, 1200);
+      });
+    }
+
+    void connectRoom();
+  };
+
+  /** Build break rooms from a list of labels, broadcast to students. */
+  const activateBreakRooms = async (
+    labels: string[],
+    mode: string,
+    assignments: Record<string, string> = {},
+  ) => {
+    if (!(roomInput instanceof HTMLInputElement)) return;
+    const base = normalizeText(roomInput.value);
+    if (!base) {
+      setBreakRoomsStatus('Necesitás estar en una sala para crear break rooms.', true);
+      return;
+    }
+
+    const rooms = labels
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((label) => ({ name: toBreakRoomName(base, label), label }));
+
+    if (rooms.length === 0) {
+      setBreakRoomsStatus('Ingresá al menos un nombre de grupo.', true);
+      return;
+    }
+
+    breakRoomsActive = rooms;
+    breakRoomsMode = mode;
+    breakRoomAssignments = assignments;
+    mainRoomName = mainRoomName || base;
+
+    syncBreakRoomsShell();
+    renderBreakRoomsPopup();
+    setBreakRoomsStatus(`${rooms.length} break rooms creados.`, false);
+
+    // Broadcast to connected students
+    if (room.state === ConnectionState.Connected && canLeadSession()) {
+      await publishMessage({
+        type: 'break-rooms',
+        rooms,
+        assignments,
+        mode,
+      }).catch(() => undefined);
+    }
+  };
+
+  const setBreakRoomsStatus = (msg: string, isError: boolean) => {
+    if (!(breakRoomsStatusNote instanceof HTMLElement)) return;
+    breakRoomsStatusNote.textContent = msg;
+    breakRoomsStatusNote.dataset.error = isError ? 'true' : 'false';
+  };
+
+  /** Slug from last name(s) of connected student participants. */
+  const buildRandomGroupLabel = (names: string[]) => {
+    const lastNames = names
+      .map((n) => {
+        const parts = n.trim().split(/\s+/);
+        return parts[parts.length - 1] ?? n;
+      })
+      .filter(Boolean);
+    return lastNames.join('-') || 'grupo';
+  };
+
+  /** Handler: 3.1 Random groups */
+  const handleBreakRoomsRandom = async () => {
+    const size = Math.max(2, Math.min(20, Number(
+      breakRoomsSizeInput instanceof HTMLInputElement ? breakRoomsSizeInput.value : 3,
+    ) || 3));
+
+    const students = allParticipants().filter(
+      (p) => readParticipantRole(room, p, localRole) === 'student',
+    );
+
+    if (students.length === 0) {
+      setBreakRoomsStatus('No hay estudiantes conectados.', true);
+      return;
+    }
+
+    // Fisher-Yates shuffle
+    const shuffled = [...students];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const assignments: Record<string, string> = {};
+    const labels: string[] = [];
+
+    for (let i = 0; i < shuffled.length; i += size) {
+      const group = shuffled.slice(i, i + size);
+      const label = buildRandomGroupLabel(group.map(readParticipantName));
+      labels.push(label);
+      for (const p of group) {
+        const rName = toBreakRoomName(
+          normalizeText(roomInput instanceof HTMLInputElement ? roomInput.value : ''),
+          label,
+        );
+        assignments[p.identity] = rName;
+      }
+    }
+
+    await activateBreakRooms(labels, 'random', assignments);
+  };
+
+  /** Handler: 3.2 Student grupos from Supabase */
+  const handleBreakRoomsGrupos = async () => {
+    const effectiveCourseId = getEffectiveCourseId();
+    if (!effectiveCourseId) {
+      setBreakRoomsStatus('Seleccioná un curso primero.', true);
+      return;
+    }
+
+    setBreakRoomsStatus('Cargando grupos...', false);
+
+    try {
+      const res = await fetch(
+        `/api/live/break-rooms/students?courseId=${encodeURIComponent(effectiveCourseId)}`,
+        { headers: { Accept: 'application/json' } },
+      );
+      const payload = await res.json().catch(() => null);
+      if (!res.ok || !payload?.students) {
+        setBreakRoomsStatus(normalizeText(payload?.error) || 'Error al cargar grupos.', true);
+        return;
+      }
+
+      type StudentMeta = { userId: string; name: string; grupo: string };
+      const students: StudentMeta[] = payload.students;
+      const byGrupo = new Map<string, string[]>();
+
+      for (const s of students) {
+        const g = s.grupo || 'Sin grupo';
+        if (!byGrupo.has(g)) byGrupo.set(g, []);
+        byGrupo.get(g)!.push(s.name);
+      }
+
+      const labels = Array.from(byGrupo.keys()).sort().map((g) => `GRUPO ${g}`);
+      await activateBreakRooms(labels, 'grupos');
+    } catch {
+      setBreakRoomsStatus('Error al cargar grupos.', true);
+    }
+  };
+
+  /** Handler: 3.3 Custom groups */
+  const handleBreakRoomsCustom = async () => {
+    if (!(breakRoomsCustomInputsContainer instanceof HTMLElement)) return;
+    const inputs = Array.from(
+      breakRoomsCustomInputsContainer.querySelectorAll<HTMLInputElement>('.conference-break-rooms-custom-name'),
+    );
+    const labels = inputs.map((i) => i.value.trim()).filter(Boolean);
+    await activateBreakRooms(labels, 'custom');
+  };
+
+  /** Add a new custom group input field */
+  const addCustomGroupInput = () => {
+    if (!(breakRoomsCustomInputsContainer instanceof HTMLElement)) return;
+    const count = breakRoomsCustomInputsContainer.querySelectorAll('.conference-break-rooms-custom-name').length;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'conference-break-rooms-custom-name';
+    input.placeholder = `Grupo ${String.fromCharCode(65 + count)}`;
+    breakRoomsCustomInputsContainer.appendChild(input);
+    input.focus();
   };
 
   const applyMixerState = () => {
@@ -9288,6 +9705,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       void refreshDeviceOptions(true);
       requestPresentationState();
       renderSessionTimer();
+      syncBreakRoomsShell();
+      // Re-broadcast break rooms info to participants who joined after creation
+      if (localRole === 'teacher' && breakRoomsActive.length > 0 && canLeadSession()) {
+        void publishMessage({
+          type: 'break-rooms',
+          rooms: breakRoomsActive,
+          assignments: breakRoomAssignments,
+          mode: breakRoomsMode,
+        }).catch(() => undefined);
+      }
     })
     .on(RoomEvent.Disconnected, () => {
       if (destroyed) return;
@@ -9484,6 +9911,45 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           const absY = message.y * window.innerHeight;
           target.style.transform = `translate(${absX}px, ${absY}px)`;
         }
+        return;
+      }
+
+      if (message.type === 'break-rooms') {
+        breakRoomsActive = message.rooms ?? [];
+        breakRoomsMode = message.mode ?? '';
+        breakRoomAssignments = message.assignments ?? {};
+        syncBreakRoomsShell();
+        renderBreakRoomsPopup();
+
+        if (localRole === 'student') {
+          const myAssignment = breakRoomAssignments[room.localParticipant.identity];
+
+          if (myAssignment) {
+            // Random / grupos: blink 2 s then auto-join assigned room
+            startBBtnBlink(false);
+            window.setTimeout(() => {
+              void joinBreakRoom(myAssignment, false);
+            }, 2000);
+          } else if (breakRoomsMode === 'custom') {
+            // Custom: keep blinking, open popup so student can choose
+            startBBtnBlink(true);
+            if (breakRoomsPopup instanceof HTMLElement) {
+              renderBreakRoomsPopup();
+              breakRoomsPopup.hidden = false;
+            }
+          }
+        }
+        return;
+      }
+
+      if (message.type === 'break-rooms-end') {
+        const target = normalizeText(message.mainRoom);
+        const secs = Math.max(5, Math.min(120, Number(message.countdown) || 60));
+        breakRoomsActive = [];
+        breakRoomsMode = '';
+        breakRoomAssignments = {};
+        syncBreakRoomsShell();
+        startBreakRoomsCountdown(secs, target || mainRoomName);
         return;
       }
     });
@@ -10565,6 +11031,49 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       });
     });
   }
+
+  // ── Break rooms event wiring ──────────────────────────────────────
+  // B button toggle popup
+  root.querySelector('[data-action="break-rooms-toggle"]')?.addEventListener('click', () => {
+    if (!(breakRoomsPopup instanceof HTMLElement)) return;
+    const willOpen = breakRoomsPopup.hidden;
+    if (willOpen) renderBreakRoomsPopup();
+    breakRoomsPopup.hidden = !willOpen;
+  });
+
+  // Close popup when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!(breakRoomsPopup instanceof HTMLElement) || breakRoomsPopup.hidden) return;
+    if (!(breakRoomsShell instanceof HTMLElement)) return;
+    if (!breakRoomsShell.contains(e.target as Node)) {
+      breakRoomsPopup.hidden = true;
+    }
+  });
+
+  // 3.1 Random
+  root.querySelector('[data-action="break-rooms-random"]')?.addEventListener('click', () => {
+    void handleBreakRoomsRandom();
+  });
+
+  // 3.2 Grupos
+  root.querySelector('[data-action="break-rooms-grupos"]')?.addEventListener('click', () => {
+    void handleBreakRoomsGrupos();
+  });
+
+  // 3.3 Custom create
+  root.querySelector('[data-action="break-rooms-custom"]')?.addEventListener('click', () => {
+    void handleBreakRoomsCustom();
+  });
+
+  // 3.3 Add field
+  root.querySelector('[data-action="break-rooms-add-custom"]')?.addEventListener('click', () => {
+    addCustomGroupInput();
+  });
+
+  // T — end break rooms
+  root.querySelector('[data-action="break-rooms-end"]')?.addEventListener('click', () => {
+    void handleBreakRoomsEnd();
+  });
 
   layoutChoiceButtons.forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) return;
