@@ -74,8 +74,8 @@ if (
   <aside class="conference-instruments-sidebar" data-instruments-sidebar>
     <div class="conference-instruments-layout">
       <div class="conference-instruments-scroll">
-        <section class="conference-sidebar-section conference-sidebar-section--instrument">
-          <div class="conference-sidebar-heading">FM SYNTH</div>
+        <details class="conference-sidebar-section conference-sidebar-section--instrument" open>
+          <summary class="conference-sidebar-heading">FM SYNTH</summary>
 
         <div class="conference-field conference-field--checkbox conference-field--hand-controls">
           <label class="conference-checkbox-row" for="conference-hand-track-input">
@@ -267,10 +267,10 @@ if (
             </div>
           </div>
         </div>
-        </section>
+        </details>
 
-        <section class="conference-sidebar-section conference-sidebar-section--instrument">
-          <div class="conference-sidebar-heading">GRAVITY BALL</div>
+        <details class="conference-sidebar-section conference-sidebar-section--instrument" open>
+          <summary class="conference-sidebar-heading">GRAVITY BALL</summary>
 
           <div class="conference-field conference-field--checkbox conference-field--hand-controls">
             <label class="conference-checkbox-row" for="conference-gravity-ball-input">
@@ -308,11 +308,12 @@ if (
               <span>m/s²</span>
             </label>
           </div>
-        </section>
+        </details>
       </div>
 
       <section class="conference-sidebar-section conference-sidebar-section--instrument conference-sidebar-section--mixer">
-        <div class="conference-sidebar-heading">MIXER</div>
+        <details class="conference-mixer-foldable" open>
+          <summary class="conference-sidebar-heading conference-mixer-summary">MIXER</summary>
         <div class="conference-mixer">
           <div class="conference-mixer-channel">
             <div class="conference-mixer-channel-label" data-mixer-reset-scope="synth" title="Double click to reset CH1">
@@ -607,7 +608,10 @@ if (
             </div>
           </div>
         </div>
+        </details>
 
+        <details class="conference-mixer-fx-details">
+          <summary class="conference-sidebar-heading conference-mixer-fx-summary">FX</summary>
         <div class="conference-mixer-fx">
           <article class="conference-mixer-fx-card">
             <div class="conference-mixer-fx-head">
@@ -796,6 +800,7 @@ if (
             </article>
           </div>
         </div>
+        </details>
       </section>
     </div>
   </aside>
@@ -2296,13 +2301,18 @@ if (
   }
 
   .conference-instruments-layout {
+    display: flex;
+    flex-direction: column;
     height: 100%;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    min-height: 0;
   }
 
   .conference-instruments-scroll {
-    background: transparent;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: rgba(0, 0, 0, 0.98);
   }
 
   /* ── Stage: fullscreen video canvas, absolute-positioned panels ──── */
@@ -2518,13 +2528,42 @@ if (
 
   .conference-stage-label,
   .conference-sidebar-heading {
-    padding: 0.45rem 0.75rem;
+    padding: 3px 0.65rem;
     color: var(--conference-muted);
-    font-size: var(--conference-font-caption);
+    font-size: 0.56rem;
     line-height: 1;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    border-bottom: 1px solid var(--conference-line);
+  }
+
+  /* Foldable sections: summary acts as heading */
+  summary.conference-sidebar-heading {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  summary.conference-sidebar-heading::-webkit-details-marker { display: none; }
+
+  summary.conference-sidebar-heading::before {
+    content: '';
+    width: 0.42rem;
+    height: 0.42rem;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    transform: rotate(-45deg);
+    transform-origin: center;
+    opacity: 0.72;
+    flex-shrink: 0;
+    align-self: center;
+    transition: transform 140ms ease;
+  }
+
+  details[open] > summary.conference-sidebar-heading::before {
+    transform: rotate(45deg);
   }
 
   .conference-sidebar-heading--chat {
@@ -2968,8 +3007,21 @@ if (
     overscroll-behavior: contain;
   }
 
+  /* Eurorack module style: compact title strip, content flush below */
   .conference-sidebar-section--instrument {
-    gap: 0.9rem;
+    gap: 0;
+    padding: 0;
+    margin: 0;                /* reset any browser <details> default margin */
+  }
+
+  .conference-sidebar-section--instrument > summary.conference-sidebar-heading {
+    padding: 3px 0.65rem;
+    margin: 0;
+  }
+
+  .conference-sidebar-section--instrument > div,
+  .conference-sidebar-section--instrument > .conference-field {
+    padding: 0.55rem 0.65rem;
   }
 
   .conference-sidebar-section--meta {
@@ -2982,25 +3034,25 @@ if (
   }
 
   .conference-sidebar-section--mixer {
+    flex: 0 0 auto;
     position: relative;
     z-index: 2;
-    gap: 0.58rem;
+    gap: 0;
+    padding: 0;
     border-top: 1px solid var(--conference-line);
     border-bottom: 0;
-    background: transparent;
-    box-shadow: none;
+    background: rgba(0, 0, 0, 0.98);
   }
 
-  .conference-sidebar-section--mixer > .conference-sidebar-heading {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    margin: 0 -0.9rem;
-    padding: 0.55rem 0.9rem 0.55rem;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.9) 100%);
+  .conference-mixer-foldable {
+    margin: 0;
   }
 
-  .conference-sidebar-section {
+  .conference-mixer-summary {
+    padding: 3px 0.65rem;
+  }
+
+.conference-sidebar-section {
     display: grid;
     gap: clamp(0.44rem, 0.6vw, 0.52rem);
     padding: clamp(0.52rem, 0.7vw, 0.62rem) clamp(0.65rem, 1vw, 0.86rem) clamp(0.55rem, 0.8vw, 0.72rem);
@@ -3295,6 +3347,7 @@ if (
     gap: 0.3rem;
     align-items: stretch;
     min-height: 0;
+    padding: 0.3rem 0.5rem 0.4rem;
   }
 
   .conference-mixer-channel {
@@ -3572,13 +3625,24 @@ if (
     box-shadow: 0 0 8px rgba(143, 227, 255, 0.42);
   }
 
+  /* FX — independent bottom module, sibling of MIXER */
+  .conference-mixer-fx-details {
+    margin: 0;
+    border-top: 1px solid var(--conference-line);
+  }
+
+  /* FX summary inherits .conference-sidebar-heading — only need to clear defaults */
+  .conference-mixer-fx-summary::-webkit-details-marker { display: none; }
+
+  .conference-mixer-fx-details[open] .conference-mixer-fx-summary::before {
+    transform: rotate(45deg);
+  }
+
   .conference-mixer-fx {
     display: grid;
     grid-template-columns: 1fr;
     gap: 0.5rem;
-    padding: 0.5rem 0 0;
-    border-top: 1px solid var(--conference-line);
-    margin-top: 0.25rem;
+    padding: 0.3rem 0.5rem 0.5rem;
   }
 
   .conference-mixer-fx-pair {
