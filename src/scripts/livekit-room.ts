@@ -3742,6 +3742,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const breakRoomsBBtn = root.querySelector('[data-break-rooms-btn]');
   const breakRoomsEndBtn = root.querySelector('[data-break-rooms-end-btn]');
   const breakRoomsKillBtn = root.querySelector('[data-break-rooms-kill-btn]');
+  const breakRoomsSetupPanel = root.querySelector('[data-break-rooms-setup]');
   const brCountdownEl = root.querySelector('[data-br-countdown]');
   const brCountdownText = root.querySelector('[data-br-countdown-text]');
   const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
@@ -5222,11 +5223,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   /** Show/hide the B button shell + active state + T button. */
   const syncBreakRoomsShell = () => {
     if (!(breakRoomsShell instanceof HTMLElement)) return;
-    const show = breakRoomsActive.length > 0 || isInBreakRoom();
+    const hasActive = breakRoomsActive.length > 0 || isInBreakRoom();
+    // Teachers always see B; students only see it when rooms are active
+    const show = localRole === 'teacher' ? true : hasActive;
     breakRoomsShell.hidden = !show;
 
     // Yellow B when break rooms are active (created or inside one)
-    breakRoomsShell.dataset.active = (breakRoomsActive.length > 0 || isInBreakRoom()) ? 'true' : 'false';
+    breakRoomsShell.dataset.active = hasActive ? 'true' : 'false';
 
     // Hover title on B shows current break room name
     if (breakRoomsBBtn instanceof HTMLElement) {
@@ -11351,8 +11354,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   // ── Break rooms event wiring ──────────────────────────────────────
-  // B button toggle popup
+  // B button toggle popup (or open setup panel for teachers when no rooms active)
   root.querySelector('[data-action="break-rooms-toggle"]')?.addEventListener('click', () => {
+    const hasActive = breakRoomsActive.length > 0 || isInBreakRoom();
+    if (!hasActive && localRole === 'teacher') {
+      // Open sidebar and scroll to break rooms setup panel
+      if (sidebarCollapsed) toggleSidebarCollapsed();
+      if (breakRoomsSetupPanel instanceof HTMLDetailsElement) {
+        breakRoomsSetupPanel.open = true;
+        breakRoomsSetupPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      return;
+    }
     if (!(breakRoomsPopup instanceof HTMLElement)) return;
     const willOpen = breakRoomsPopup.hidden;
     if (willOpen) renderBreakRoomsPopup();
