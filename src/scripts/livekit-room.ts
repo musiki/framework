@@ -3719,6 +3719,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const studentInviteRevokeButton = root.querySelector('[data-action="student-invite-revoke"]');
   const chatList = root.querySelector('[data-chat-list]');
   const chatInput = root.querySelector('[data-chat-input]');
+  const chatFocusButton = root.querySelector('[data-action="chat-focus"]');
+  const chatUnreadDot = root.querySelector('[data-chat-unread]');
   const chatSendButton = root.querySelector('[data-action="chat-send"]');
   const chatDownloadButton = root.querySelector('[data-action="chat-download"]');
   const raiseHandButton = root.querySelector('[data-action="raise-hand"]');
@@ -4073,6 +4075,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   );
   let sessionAllowsInstruments = true;
   let sidebarCollapsed = root.dataset.sidebarCollapsed === 'true';
+  let chatUnreadCount = 0;
   let graphVisible = false;
   let handTrackingAnimationId = 0;
   let handTrackingGeneration = 0;
@@ -6868,6 +6871,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     queuePreferredRemoteVideoDimensionsSync();
   };
 
+  const syncChatUnreadDot = () => {
+    if (!(chatUnreadDot instanceof HTMLElement)) return;
+    if (chatUnreadCount <= 0) {
+      chatUnreadDot.hidden = true;
+      chatUnreadDot.textContent = '';
+    } else {
+      chatUnreadDot.hidden = false;
+      chatUnreadDot.textContent = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
+    }
+  };
+
+  const resetChatUnread = () => {
+    chatUnreadCount = 0;
+    syncChatUnreadDot();
+  };
+
   const toggleInstrumentsOpen = () => {
     instrumentsOpen = !instrumentsOpen;
     applyInstrumentsOpenState();
@@ -9350,6 +9369,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (chatMessages.length > 80) {
       chatMessages.splice(0, chatMessages.length - 80);
     }
+    if (sidebarCollapsed) {
+      chatUnreadCount += 1;
+      syncChatUnreadDot();
+    }
     renderChat();
   };
 
@@ -10599,6 +10622,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   if (sidebarToggleButton instanceof HTMLButtonElement) {
     sidebarToggleButton.addEventListener('click', () => {
       toggleSidebarCollapsed();
+      if (!sidebarCollapsed) resetChatUnread();
+    });
+  }
+
+  if (chatFocusButton instanceof HTMLButtonElement) {
+    chatFocusButton.addEventListener('click', () => {
+      if (sidebarCollapsed) toggleSidebarCollapsed();
+      resetChatUnread();
+      if (chatInput instanceof HTMLTextAreaElement || chatInput instanceof HTMLInputElement) {
+        chatInput.focus();
+      }
+    });
+  }
+
+  if (chatInput instanceof HTMLElement) {
+    chatInput.addEventListener('focus', () => {
+      resetChatUnread();
     });
   }
 

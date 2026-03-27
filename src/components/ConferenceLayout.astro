@@ -1496,6 +1496,7 @@ if (
       <button type="button" class="conference-layout-button" data-layout-choice="screenshare">S</button>
       <button type="button" class="conference-layout-button" data-layout-choice="presentation">P</button>
       <button type="button" class="conference-layout-button" data-layout-choice="grid">G</button>
+      <button type="button" class="conference-layout-button conference-chat-focus-btn" data-action="chat-focus" title="Chat">C<span class="conference-chat-unread-dot" data-chat-unread hidden></span></button>
 
       <div class="conference-break-rooms-shell" data-break-rooms-shell hidden>
         <button
@@ -5558,6 +5559,22 @@ if (
   .conference-icon-button[data-open='true'] {
     color: var(--conference-fg);
     background: rgba(255, 255, 255, 0.04);
+  }
+
+  .conference-chat-unread-dot {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.2rem;
+    min-width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--conference-red, #e05);
+    font-size: 0.42rem;
+    line-height: 5px;
+    padding: 0 1.5px;
+    color: #fff;
+    font-weight: 700;
+    pointer-events: none;
   }
 
   .conference-device-stack {
