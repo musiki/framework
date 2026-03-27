@@ -2296,16 +2296,12 @@ if (
   }
 
   .conference-instruments-layout {
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
     height: 100%;
-    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .conference-instruments-scroll {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
     background: transparent;
   }
 
@@ -2989,12 +2985,6 @@ if (
     position: relative;
     z-index: 2;
     gap: 0.58rem;
-    min-height: 0;
-    max-height: min(52vh, 36rem);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
     border-top: 1px solid var(--conference-line);
     border-bottom: 0;
     background: transparent;
@@ -3003,10 +2993,10 @@ if (
 
   .conference-sidebar-section--mixer > .conference-sidebar-heading {
     position: sticky;
-    top: -0.75rem;
+    top: 0;
     z-index: 3;
-    margin: -0.75rem -0.9rem 0;
-    padding: 0.75rem 0.9rem 0.55rem;
+    margin: 0 -0.9rem;
+    padding: 0.55rem 0.9rem 0.55rem;
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.9) 100%);
   }
 
@@ -3583,9 +3573,8 @@ if (
   }
 
   .conference-mixer-fx {
-    grid-column: 1 / -1;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 0.5rem;
     padding: 0.5rem 0 0;
     border-top: 1px solid var(--conference-line);
@@ -5732,22 +5721,8 @@ if (
       border-right: 0;
     }
 
-    .conference-instruments-layout {
-      grid-template-rows: minmax(0, 1fr) minmax(0, 56%);
-    }
-
     .conference-sidebar-section--mixer {
-      height: auto;
-      max-height: 60dvh;
-      overflow-y: auto;
-      overflow-x: hidden;
       padding-bottom: 1rem;
-    }
-
-    .conference-sidebar-section--mixer > .conference-sidebar-heading {
-      top: -0.55rem;
-      margin: -0.55rem -0.68rem 0;
-      padding: 0.55rem 0.68rem 0.42rem;
     }
 
     .conference-mixer {
@@ -5758,7 +5733,6 @@ if (
     }
 
     .conference-mixer-fx {
-      display: block;
       gap: 0.35rem;
       padding-top: 0.4rem;
     }
