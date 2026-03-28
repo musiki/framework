@@ -295,7 +295,12 @@ for (const note of allNotes) {
 
         <!-- Sidebar -->
         <aside class="notas-sidebar">
-          <div class="notas-sidebar-heading">Notas</div>
+          <div class="notas-sidebar-heading" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Notas</span>
+            {allNotes.length > 0 && (
+              <button type="button" class="notas-btn notas-btn--save" id="notas-dump-btn" title="Descargar todas las notas" style="font-size:0.6rem;padding:0.1rem 0.4rem">↓ todo</button>
+            )}
+          </div>
 
           {allNotes.length === 0 ? (
             <p class="notas-empty-sidebar">Sin notas aún.</p>
@@ -388,7 +393,7 @@ for (const note of allNotes) {
       </div>
     </main>
 
-    <script define:vars={{ activeNoteId: activeNote?.id ?? null }}>
+    <script define:vars={{ activeNoteId: activeNote?.id ?? null, allNotesData: allNotes.map(n => ({ title: n.title, body: n.body, noteDate: n.noteDate, courseId: n.courseId, roomName: n.roomName })) }}>
       // ── Inline edit/save/delete ────────────────────────────────────
       const editBtn   = document.getElementById('notas-edit-btn');
       const saveBtn   = document.getElementById('notas-save-btn');
@@ -499,6 +504,25 @@ for (const note of allNotes) {
       // Run mermaid on initial load
       const initialBody = document.getElementById('notas-body');
       if (initialBody) runMermaid(initialBody);
+
+      // Dump all notes as markdown
+      const dumpBtn = document.getElementById('notas-dump-btn');
+      if (dumpBtn) {
+        dumpBtn.addEventListener('click', () => {
+          const chunks = allNotesData.map(n => {
+            const meta = [n.noteDate, n.courseId, n.roomName].filter(Boolean).join(' · ');
+            return `# ${n.title || '(sin título)'}\n${meta ? `_${meta}_\n` : ''}\n${n.body || ''}`;
+          });
+          const text = chunks.join('\n\n---\n\n');
+          const blob = new Blob([text], { type: 'text/markdown; charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `notas-${new Date().toISOString().slice(0, 10)}.md`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      }
     </script>
   </body>
 </html>
