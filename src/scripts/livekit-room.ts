@@ -9293,13 +9293,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     chatList.innerHTML = '';
     chatDownloadButton.disabled = chatMessages.length === 0;
 
-    if (chatMessages.length === 0) {
-      const empty = document.createElement('li');
-      empty.className = 'conference-chat-empty';
-      empty.textContent = 'No hay mensajes todavia.';
-      chatList.appendChild(empty);
-      return;
-    }
+    if (chatMessages.length === 0) return;
 
     chatMessages.slice(-60).forEach((message) => {
       const item = document.createElement('li');
@@ -9366,13 +9360,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }, 1000);
   };
 
-  const appendChatMessage = (message: Extract<ConferenceMessage, { type: 'chat' }>) => {
+  const appendChatMessage = (message: Extract<ConferenceMessage, { type: 'chat' }>, isSent = false) => {
     if (chatMessages.some((entry) => entry.id === message.id)) return;
     chatMessages.push(message);
     if (chatMessages.length > 80) {
       chatMessages.splice(0, chatMessages.length - 80);
     }
-    if (sidebarCollapsed) {
+    if (!isSent) {
       chatUnreadCount += 1;
       syncChatUnreadDot();
     }

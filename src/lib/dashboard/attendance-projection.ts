@@ -108,17 +108,18 @@ export function buildAttendanceProjection({
     const isPast = (column: any) =>
       String(column?.dateKey || '') <= String(todayDateKey || '');
 
+    const isClassDay = (column: any) => Boolean(column?.isClassDay);
     const absenceUnits = scheduledColumns.reduce(
       (sum: number, column: any) =>
-        // absenceValue is 0 for future dates (set in dashboard.astro), use it directly
+        // absenceValue is 0 for future/non-class dates (set in dashboard.astro), use it directly
         sum + (typeof column?.absenceValue === 'number'
           ? Math.max(0, column.absenceValue)
-          : isPast(column) ? Math.max(0, 1 - Number(column?.effectiveValue || 0)) : 0),
+          : (isPast(column) && isClassDay(column)) ? Math.max(0, 1 - Number(column?.effectiveValue || 0)) : 0),
       0,
     );
-    const scheduledDayCount = scheduledColumns.filter(isPast).length;
+    const scheduledDayCount = scheduledColumns.filter(c => isPast(c) && isClassDay(c)).length;
     const attendedUnits = scheduledColumns
-      .filter(isPast)
+      .filter(c => isPast(c) && isClassDay(c))
       .reduce(
         (sum: number, column: any) => sum + Math.max(0, Number(column?.effectiveValue || 0)),
         0,
@@ -154,7 +155,8 @@ export function buildAttendanceProjection({
         manualValue: Number(column?.manualValue || 0),
         effectiveValue: Number(column?.effectiveValue || 0),
         hasManualOverride: Boolean(column?.hasManualOverride),
-        countsTowardAbsence: colIsPast,
+        isClassDay: Boolean(column?.isClassDay),
+        countsTowardAbsence: colIsPast && Boolean(column?.isClassDay),
         isFuture: !colIsPast,
       };
     });

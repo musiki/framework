@@ -879,6 +879,10 @@ const persistSingleAttendanceCellValue = async (
     nextCellMeta.hasManualOverride = nextCount !== null;
     nextCellMeta.manualValue = nextCount;
     nextCellMeta.effectiveValue = nextEffectiveValue;
+    // Setting any override marks this date as a class day; removing reverts to live-based
+    if (nextCount !== null) nextCellMeta.isClassDay = true;
+    else if (liveValue > 0) nextCellMeta.isClassDay = true;
+    nextCellMeta.countsTowardAbsence = !nextCellMeta.isFuture && Boolean(nextCellMeta.isClassDay);
     nextCellMeta.title = `Room: ${formatAttendanceSymbol(liveValue, { blankWhenZero: true }) || '—'} • Override: ${nextCount === null ? 'auto' : formatAttendanceSymbol(nextCount)} • Final: ${formatAttendanceSymbol(nextEffectiveValue, { blankWhenZero: true }) || '—'}`;
   }
 

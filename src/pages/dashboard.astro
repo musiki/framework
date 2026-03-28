@@ -1962,6 +1962,31 @@ const attendanceLiveValueByStudentDayKey = (() => {
   return values;
 })();
 
+// Dates where a class actually happened: at least one live join OR any manual override.
+// Only these dates contribute to absence counts.
+const activeDateKeysForCourse = (() => {
+  const active = new Set<string>();
+  const courseYearPrefix = `${normalizeTextLower(activeCourseId)}::${activeYear}::`;
+
+  attendanceLiveValueByStudentDayKey.forEach((_val, key) => {
+    if (!key.startsWith(courseYearPrefix)) return;
+    const remainder = key.slice(courseYearPrefix.length); // userId::dateKey
+    const sep = remainder.lastIndexOf('::');
+    if (sep < 0) return;
+    const dateKey = remainder.slice(sep + 2);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) active.add(dateKey);
+  });
+
+  courseAttendanceManualByKey.forEach((manualDays, key) => {
+    if (!key.startsWith(courseYearPrefix)) return;
+    Object.keys(manualDays || {}).forEach((dateKey) => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) active.add(dateKey);
+    });
+  });
+
+  return active;
+})();
+
 const attendanceGridRows = (() => {
   if (!isTeacher) return [] as any[];
   const studentEnrollmentsById = new Map<string, any>();
@@ -2001,7 +2026,8 @@ const attendanceGridRows = (() => {
         const hasManualOverride = Object.prototype.hasOwnProperty.call(manualDays, column.dateKey);
         const manualValue = hasManualOverride ? normalizeAttendanceValue(manualDays?.[column.dateKey]) : 0;
         const effectiveValue = hasManualOverride ? manualValue : liveValue;
-        const absenceValue = column.dateKey <= todayAttendanceDateKey
+        const isClassDay = activeDateKeysForCourse.has(column.dateKey);
+        const absenceValue = (column.dateKey <= todayAttendanceDateKey && isClassDay)
           ? Math.max(0, 1 - effectiveValue)
           : 0;
         const isFuture = column.dateKey > todayAttendanceDateKey;
@@ -2020,6 +2046,7 @@ const attendanceGridRows = (() => {
           hasManualOverride,
           effectiveValue,
           absenceValue,
+          isClassDay,
           displayValue: hasManualOverride
             ? formatAttendanceValue(manualValue, { isFuture })
             : formatAttendanceValue(liveValue, { isFuture }),
