@@ -213,6 +213,9 @@ const withActiveCourse = (href: string) => {
 							<a
 								href={activeCourseHref}
 								class="course-menu-trigger course-menu-trigger--label"
+								id="course-menu-trigger-label"
+								aria-haspopup="menu"
+								aria-expanded="false"
 								aria-label={resolvedActiveCourseLabel ? `Ir a ${resolvedActiveCourseLabel}` : 'Ir a Cursos'}
 							>
 								<span class="course-menu-trigger-label">{courseMenuLabel}</span>
@@ -528,17 +531,38 @@ const withActiveCourse = (href: string) => {
 		const userMenuButton = document.getElementById('user-menu-button');
 		const userDropdown = document.getElementById('user-dropdown');
 		const courseMenuButton = document.getElementById('course-menu-button');
+		const courseMenuLabel = document.getElementById('course-menu-trigger-label');
 		const courseDropdown = document.getElementById('course-dropdown');
+		const syncCourseMenuOpen = (isOpen: boolean) => {
+			if (userDropdown) userDropdown.classList.remove('show');
+			courseDropdown?.classList.toggle('show', isOpen);
+			courseMenuButton?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+			courseMenuLabel?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+		};
+		const isCompactCourseMenuTrigger = () =>
+			typeof window !== 'undefined'
+			&& typeof window.matchMedia === 'function'
+			&& window.matchMedia('(max-width: 900px), (hover: none), (pointer: coarse)').matches;
 
 		if (userMenuButton && userDropdown && !userMenuButton.dataset.bound) {
 			userMenuButton.dataset.bound = 'true';
 			userMenuButton.addEventListener('click', (event) => {
 				event.stopPropagation();
 				if (courseDropdown) {
-					courseDropdown.classList.remove('show');
-					courseMenuButton?.setAttribute('aria-expanded', 'false');
+					syncCourseMenuOpen(false);
 				}
 				userDropdown.classList.toggle('show');
+			});
+		}
+
+		if (courseMenuLabel instanceof HTMLAnchorElement && courseDropdown && !courseMenuLabel.dataset.bound) {
+			courseMenuLabel.dataset.bound = 'true';
+			courseMenuLabel.addEventListener('click', (event) => {
+				if (!isCompactCourseMenuTrigger()) return;
+				if (courseDropdown.classList.contains('show')) return;
+				event.preventDefault();
+				event.stopPropagation();
+				syncCourseMenuOpen(true);
 			});
 		}
 
@@ -547,9 +571,7 @@ const withActiveCourse = (href: string) => {
 			courseMenuButton.addEventListener('click', (event) => {
 				event.stopPropagation();
 				const willOpen = !courseDropdown.classList.contains('show');
-				if (userDropdown) userDropdown.classList.remove('show');
-				courseDropdown.classList.toggle('show', willOpen);
-				courseMenuButton.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+				syncCourseMenuOpen(willOpen);
 			});
 		}
 
@@ -560,10 +582,7 @@ const withActiveCourse = (href: string) => {
 		const docClickHandler = (_event: MouseEvent) => {
 			const dropdown = document.getElementById('user-dropdown');
 			dropdown?.classList.remove('show');
-			const nextCourseDropdown = document.getElementById('course-dropdown');
-			nextCourseDropdown?.classList.remove('show');
-			const nextCourseMenuButton = document.getElementById('course-menu-button');
-			nextCourseMenuButton?.setAttribute('aria-expanded', 'false');
+			syncCourseMenuOpen(false);
 		};
 
 		document.addEventListener('click', docClickHandler);

@@ -9732,7 +9732,7 @@ a[node] -->|edge| b[hub]
                   card.addEventListener('pointerdown', (event) => {
                     if (!isTouchReveal()) return;
                     if (event.pointerType === 'mouse') return;
-                    if (event.target instanceof Element && event.target.closest('button, a, input, textarea, select, summary')) return;
+                    if (event.target instanceof Element && event.target.closest('button, a, input, textarea, select, summary, .forum-post-body')) return;
                     longPressTriggered = false;
                     clearLongPress();
                     longPressTimer = window.setTimeout(() => {

@@ -1269,6 +1269,28 @@ ol ol ol ol > li::marker {
   white-space: nowrap !important;
 }
 
+:is(#lesson-forum, #forum-reader-root) :is(
+  .forum-post-identity,
+  .forum-post-identity *,
+  .forum-post-header,
+  .forum-post-header *,
+  .forum-post-meta-inline,
+  .forum-post-meta-inline *,
+  .forum-post-actions,
+  .forum-post-actions *,
+  .forum-post-reactions,
+  .forum-post-reactions *,
+  .forum-post-quick-actions,
+  .forum-post-quick-actions *,
+  .forum-thread-more-btn,
+  .forum-thread-actions-menu,
+  .forum-thread-actions-menu *
+) {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
 :is(#lesson-forum, #forum-reader-root) .forum-post-badges,
 :is(#lesson-forum, #forum-reader-root) .forum-role-badge {
   display: none !important;
@@ -1357,6 +1379,12 @@ ol ol ol ol > li::marker {
   color: var(--forum-text-primary, var(--c-fg, #1c1f23)) !important;
   opacity: 1 !important;
   visibility: visible !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-body,
+:is(#lesson-forum, #forum-reader-root) .forum-post-body * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-body :is(p, ul, ol, pre, blockquote, table, .mermaid, .katex-display, .lily-score, .callout) {
