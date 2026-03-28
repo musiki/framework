@@ -16,6 +16,7 @@ export interface DashboardGridColumn {
   cssClass?: string;
   headerTooltip?: string | boolean;
   titleFormatterParams?: Record<string, any>;
+  resizable?: boolean;
 }
 
 export interface DashboardGridProjection {

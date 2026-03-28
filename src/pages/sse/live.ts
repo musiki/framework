@@ -46,7 +46,7 @@ export const GET: APIRoute = async ({ request, url }) => {
 
       unsubscribe = subscribeToLiveEvents({
         courseId,
-        callback: (eventName, payload) => {
+        callback: (eventName: string, payload: unknown) => {
           send(eventName, payload);
         },
       });

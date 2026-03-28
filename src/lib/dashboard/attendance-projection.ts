@@ -117,9 +117,9 @@ export function buildAttendanceProjection({
           : (isPast(column) && isClassDay(column)) ? Math.max(0, 1 - Number(column?.effectiveValue || 0)) : 0),
       0,
     );
-    const scheduledDayCount = scheduledColumns.filter(c => isPast(c) && isClassDay(c)).length;
+    const scheduledDayCount = scheduledColumns.filter((c: any) => isPast(c) && isClassDay(c)).length;
     const attendedUnits = scheduledColumns
-      .filter(c => isPast(c) && isClassDay(c))
+      .filter((c: any) => isPast(c) && isClassDay(c))
       .reduce(
         (sum: number, column: any) => sum + Math.max(0, Number(column?.effectiveValue || 0)),
         0,

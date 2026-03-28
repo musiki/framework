@@ -311,219 +311,27 @@ if (
         </details>
       </div>
 
-      <section class="conference-sidebar-section conference-sidebar-section--instrument conference-sidebar-section--mixer">
-        <details class="conference-mixer-foldable" open>
-          <summary class="conference-sidebar-heading conference-mixer-summary">MIXER</summary>
-        <div class="conference-mixer">
-          <div class="conference-mixer-channel">
-            <div class="conference-mixer-channel-label" data-mixer-reset-scope="synth" title="Double click to reset CH1">
-              <strong>CH1</strong>
-            </div>
-            <div class="conference-mixer-knob-stack">
-              <div
-                class="conference-mixer-knob-control"
-                data-mixer-synth-pan-knob
-                role="slider"
-                tabindex="0"
-                aria-label="FM pan"
-                aria-valuemin="-1"
-                aria-valuemax="1"
-                aria-valuenow="0"
+      <div class="conference-instruments-footer">
+        <details class="conference-sidebar-section conference-sidebar-section--instrument conference-sidebar-section--video" open>
+          <summary class="conference-sidebar-heading">VIDEO</summary>
+
+          <div class="conference-video-module">
+            <div class="conference-video-module-head">
+              <button
+                type="button"
+                class="conference-ramp-reset conference-video-module-reset"
+                data-mixer-reset-button="video"
+                title="Reset video"
+                aria-label="Reset video"
               >
-                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
-              </div>
-              <input
-                type="range"
-                min="-1"
-                max="1"
-                step="0.01"
-                value="0"
-                class="conference-mixer-pan-input"
-                data-mixer-synth-pan
-              />
+                R
+              </button>
             </div>
-            <div class="conference-mixer-fader-shell">
-              <span class="conference-mixer-vumeter" data-mixer-meter="synth" aria-hidden="true"></span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value="1"
-                class="conference-mixer-fader"
-                data-mixer-synth-gain
-              />
-            </div>
-            <button
-              type="button"
-              class="conference-mixer-channel-toggle"
-              data-mixer-synth-mute
-              aria-label="Mute FM channel"
-              title="Mute FM"
-            >
-              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
-            </button>
-          </div>
 
-          <div class="conference-mixer-channel">
-            <div class="conference-mixer-channel-label" data-mixer-reset-scope="ball" title="Double click to reset B">
-              <strong>CH2</strong>
-            </div>
-            <div class="conference-mixer-knob-stack">
+            <div class="conference-video-mixer-grid conference-video-mixer-grid--module">
+            <div class="conference-video-mixer-control">
               <div
-                class="conference-mixer-knob-control"
-                data-mixer-ball-pan-knob
-                role="slider"
-                tabindex="0"
-                aria-label="Ball pan"
-                aria-valuemin="-1"
-                aria-valuemax="1"
-                aria-valuenow="0"
-              >
-                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
-              </div>
-              <input
-                type="range"
-                min="-1"
-                max="1"
-                step="0.01"
-                value="0"
-                class="conference-mixer-pan-input"
-                data-mixer-ball-pan
-              />
-            </div>
-            <div class="conference-mixer-fader-shell">
-              <span class="conference-mixer-vumeter" data-mixer-meter="ball" aria-hidden="true"></span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value="1"
-                class="conference-mixer-fader"
-                data-mixer-ball-gain
-              />
-            </div>
-            <button
-              type="button"
-              class="conference-mixer-channel-toggle"
-              data-mixer-ball-mute
-              aria-label="Mute ball channel"
-              title="Mute ball"
-            >
-              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
-            </button>
-          </div>
-
-          <div class="conference-mixer-channel">
-            <div class="conference-mixer-channel-label" data-mixer-reset-scope="incoming" title="Double click to reset IN">
-              <strong>IN</strong>
-            </div>
-            <div class="conference-mixer-knob-stack">
-              <div
-                class="conference-mixer-knob-control"
-                data-mixer-incoming-pan-knob
-                role="slider"
-                tabindex="0"
-                aria-label="Incoming pan"
-                aria-valuemin="-1"
-                aria-valuemax="1"
-                aria-valuenow="0"
-              >
-                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
-              </div>
-              <input
-                type="range"
-                min="-1"
-                max="1"
-                step="0.01"
-                value="0"
-                class="conference-mixer-pan-input"
-                data-mixer-incoming-pan
-              />
-            </div>
-            <div class="conference-mixer-fader-shell">
-              <span class="conference-mixer-vumeter" data-mixer-meter="incoming" aria-hidden="true"></span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value="1"
-                class="conference-mixer-fader"
-                data-mixer-incoming-gain
-              />
-            </div>
-            <button
-              type="button"
-              class="conference-mixer-channel-toggle"
-              data-mixer-incoming-mute
-              aria-label="Mute incoming channel"
-              title="Mute incoming"
-            >
-              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
-            </button>
-          </div>
-
-          <div class="conference-mixer-channel">
-            <div class="conference-mixer-channel-label" data-mixer-reset-scope="master" title="Double click to reset Master">
-              <strong>M</strong>
-            </div>
-            <div class="conference-mixer-knob-stack">
-              <div
-                class="conference-mixer-knob-control"
-                data-mixer-master-pan-knob
-                role="slider"
-                tabindex="0"
-                aria-label="Master pan"
-                aria-valuemin="-1"
-                aria-valuemax="1"
-                aria-valuenow="0"
-              >
-                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
-              </div>
-              <input
-                type="range"
-                min="-1"
-                max="1"
-                step="0.01"
-                value="0"
-                class="conference-mixer-pan-input"
-                data-mixer-master-pan
-              />
-            </div>
-            <div class="conference-mixer-fader-shell">
-              <span class="conference-mixer-vumeter" data-mixer-meter="master" aria-hidden="true"></span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value="1"
-                class="conference-mixer-fader"
-                data-mixer-master-gain
-              />
-            </div>
-            <button
-              type="button"
-              class="conference-mixer-channel-toggle"
-              data-mixer-master-mute
-              aria-label="Mute master channel"
-              title="Mute master"
-            >
-              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
-            </button>
-          </div>
-
-          <div class="conference-mixer-channel conference-mixer-channel--video">
-            <div class="conference-mixer-channel-label" data-mixer-reset-scope="video" title="Double click to reset Video">
-              <strong>V</strong>
-            </div>
-
-            <div class="conference-video-mixer-grid">
-              <div class="conference-video-mixer-control">
-                <div
-                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+                class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
                   data-mixer-video-luma-knob
                   role="slider"
                   tabindex="0"
@@ -589,7 +397,7 @@ if (
                 <span class="conference-video-mixer-label" data-mixer-reset-control="video:contrast" title="Double click to reset Contrast">Cont</span>
               </div>
 
-              <div class="conference-video-mixer-control conference-video-mixer-control--wide">
+              <div class="conference-video-mixer-control">
                 <div
                   class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
                   data-mixer-video-brightness-knob
@@ -607,53 +415,681 @@ if (
               </div>
             </div>
           </div>
+        </details>
+
+      <section class="conference-sidebar-section conference-sidebar-section--instrument conference-sidebar-section--mixer">
+        <details class="conference-mixer-foldable" open>
+          <summary class="conference-sidebar-heading conference-mixer-summary">MIXER</summary>
+        <div class="conference-mixer">
+          <div class="conference-mixer-channel">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="synth" title="Double click to reset CH1">
+              <strong>CH1</strong>
+            </div>
+            <div class="conference-mixer-send-row">
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb"
+                  data-mixer-synth-reverb-send-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="CH1 reverb send"
+                  aria-valuemin="0"
+                  aria-valuemax="1"
+                  aria-valuenow="0.55"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0.55"
+                  class="conference-mixer-pan-input"
+                  data-mixer-synth-reverb-send
+                />
+              </div>
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay"
+                  data-mixer-synth-delay-send-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="CH1 delay send"
+                  aria-valuemin="0"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0"
+                  class="conference-mixer-pan-input"
+                  data-mixer-synth-delay-send
+                />
+              </div>
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter" data-mixer-meter="synth" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+                class="conference-mixer-fader"
+                data-mixer-synth-gain
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              data-mixer-synth-mute
+              aria-label="Mute FM channel"
+              title="Mute FM"
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+            <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
+              <div
+                class="conference-mixer-knob-control"
+                data-mixer-synth-pan-knob
+                role="slider"
+                tabindex="0"
+                aria-label="FM pan"
+                aria-valuemin="-1"
+                aria-valuemax="1"
+                aria-valuenow="0"
+              >
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-pan-input"
+                data-mixer-synth-pan
+              />
+            </div>
+          </div>
+
+          <div class="conference-mixer-channel">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="ball" title="Double click to reset CH2">
+              <strong>CH2</strong>
+            </div>
+            <div class="conference-mixer-send-row">
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb"
+                  data-mixer-ball-reverb-send-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="CH2 reverb send"
+                  aria-valuemin="0"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0"
+                  class="conference-mixer-pan-input"
+                  data-mixer-ball-reverb-send
+                />
+              </div>
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay"
+                  data-mixer-ball-delay-send-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="CH2 delay send"
+                  aria-valuemin="0"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0"
+                  class="conference-mixer-pan-input"
+                  data-mixer-ball-delay-send
+                />
+              </div>
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter" data-mixer-meter="ball" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+                class="conference-mixer-fader"
+                data-mixer-ball-gain
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              data-mixer-ball-mute
+              aria-label="Mute ball channel"
+              title="Mute ball"
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+            <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
+              <div
+                class="conference-mixer-knob-control"
+                data-mixer-ball-pan-knob
+                role="slider"
+                tabindex="0"
+                aria-label="Ball pan"
+                aria-valuemin="-1"
+                aria-valuemax="1"
+                aria-valuenow="0"
+              >
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-pan-input"
+                data-mixer-ball-pan
+              />
+            </div>
+          </div>
+
+          <div class="conference-mixer-channel">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="incoming" title="Double click to reset CH3">
+              <strong>CH3</strong>
+            </div>
+            <div class="conference-mixer-send-row">
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb"
+                  data-mixer-incoming-reverb-send-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="CH3 reverb send"
+                  aria-valuemin="0"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0"
+                  class="conference-mixer-pan-input"
+                  data-mixer-incoming-reverb-send
+                />
+              </div>
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
+                <div
+                  class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay"
+                  data-mixer-incoming-delay-send-knob
+                  role="slider"
+                  tabindex="0"
+                  aria-label="CH3 delay send"
+                  aria-valuemin="0"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                >
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0"
+                  class="conference-mixer-pan-input"
+                  data-mixer-incoming-delay-send
+                />
+              </div>
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter" data-mixer-meter="incoming" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+                class="conference-mixer-fader"
+                data-mixer-incoming-gain
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              data-mixer-incoming-mute
+              aria-label="Mute incoming channel"
+              title="Mute incoming"
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+            <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
+              <div
+                class="conference-mixer-knob-control"
+                data-mixer-incoming-pan-knob
+                role="slider"
+                tabindex="0"
+                aria-label="Incoming pan"
+                aria-valuemin="-1"
+                aria-valuemax="1"
+                aria-valuenow="0"
+              >
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-pan-input"
+                data-mixer-incoming-pan
+              />
+            </div>
+          </div>
+
+          <div class="conference-mixer-channel conference-mixer-channel--placeholder" aria-hidden="true">
+            <div class="conference-mixer-channel-label">
+              <strong>CH4</strong>
+            </div>
+            <div class="conference-mixer-send-row">
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter conference-mixer-vumeter--placeholder" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-fader"
+                disabled
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              aria-label="Reserved channel"
+              title="Reserved channel"
+              disabled
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+            <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
+              <div class="conference-mixer-knob-control conference-mixer-knob-control--disabled" role="presentation">
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="conference-mixer-channel conference-mixer-channel--placeholder" aria-hidden="true">
+            <div class="conference-mixer-channel-label">
+              <strong>CH5</strong>
+            </div>
+            <div class="conference-mixer-send-row">
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter conference-mixer-vumeter--placeholder" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-fader"
+                disabled
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              aria-label="Reserved channel"
+              title="Reserved channel"
+              disabled
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+            <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
+              <div class="conference-mixer-knob-control conference-mixer-knob-control--disabled" role="presentation">
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="conference-mixer-channel conference-mixer-channel--placeholder" aria-hidden="true">
+            <div class="conference-mixer-channel-label">
+              <strong>CH6</strong>
+            </div>
+            <div class="conference-mixer-send-row">
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter conference-mixer-vumeter--placeholder" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-fader"
+                disabled
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              aria-label="Reserved channel"
+              title="Reserved channel"
+              disabled
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+            <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
+              <div class="conference-mixer-knob-control conference-mixer-knob-control--disabled" role="presentation">
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="conference-mixer-channel conference-mixer-channel--placeholder" aria-hidden="true">
+            <div class="conference-mixer-channel-label">
+              <strong>CH7</strong>
+            </div>
+            <div class="conference-mixer-send-row">
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter conference-mixer-vumeter--placeholder" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-fader"
+                disabled
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              aria-label="Reserved channel"
+              title="Reserved channel"
+              disabled
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+            <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
+              <div class="conference-mixer-knob-control conference-mixer-knob-control--disabled" role="presentation">
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="conference-mixer-channel conference-mixer-channel--master">
+            <div class="conference-mixer-channel-label" data-mixer-reset-scope="master" title="Double click to reset Master">
+              <strong>M</strong>
+            </div>
+            <div class="conference-mixer-send-row conference-mixer-send-row--disabled" aria-hidden="true">
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+              <div class="conference-mixer-send">
+                <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
+                <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay conference-mixer-knob-control--disabled" role="presentation">
+                  <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
+            <div class="conference-mixer-fader-shell">
+              <span class="conference-mixer-vumeter" data-mixer-meter="master" aria-hidden="true"></span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+                class="conference-mixer-fader"
+                data-mixer-master-gain
+              />
+            </div>
+            <button
+              type="button"
+              class="conference-mixer-channel-toggle"
+              data-mixer-master-mute
+              aria-label="Mute master channel"
+              title="Mute master"
+            >
+              <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
+            </button>
+            <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
+              <div
+                class="conference-mixer-knob-control"
+                data-mixer-master-pan-knob
+                role="slider"
+                tabindex="0"
+                aria-label="Master pan"
+                aria-valuemin="-1"
+                aria-valuemax="1"
+                aria-valuenow="0"
+              >
+                <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+              </div>
+              <input
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value="0"
+                class="conference-mixer-pan-input"
+                data-mixer-master-pan
+              />
+            </div>
+          </div>
+
         </div>
         </details>
 
         <details class="conference-mixer-fx-details">
           <summary class="conference-sidebar-heading conference-mixer-fx-summary">FX</summary>
         <div class="conference-mixer-fx">
-          <article class="conference-mixer-fx-card">
-            <div class="conference-mixer-fx-head">
-              <h4>REVERB</h4>
-              <span class="conference-mixer-fx-badge">FX</span>
-            </div>
+          <div class="conference-mixer-fx-pair">
+            <article class="conference-mixer-fx-card conference-mixer-fx-card--reverb">
+              <div class="conference-mixer-fx-head">
+                <h4>REVERB</h4>
+                <span class="conference-mixer-fx-badge conference-mixer-fx-badge--reverb">FX</span>
+              </div>
 
-            <label class="conference-mixer-fx-control" for="conference-synth-reverb-time-input">
-              <span class="conference-mixer-fx-label-row">
-                <span>Time</span>
-                <output for="conference-synth-reverb-time-input" data-synth-reverb-time-output>3.0s</output>
-              </span>
-              <input
-                id="conference-synth-reverb-time-input"
-                type="range"
-                min="0.4"
-                max="8"
-                step="0.1"
-                value="3"
-                data-synth-reverb-time-input
-              />
-            </label>
+              <label class="conference-mixer-fx-control" for="conference-synth-reverb-time-input">
+                <span class="conference-mixer-fx-label-row">
+                  <span>Time</span>
+                  <output for="conference-synth-reverb-time-input" data-synth-reverb-time-output>3.0s</output>
+                </span>
+                <input
+                  id="conference-synth-reverb-time-input"
+                  type="range"
+                  min="0.4"
+                  max="8"
+                  step="0.1"
+                  value="3"
+                  data-synth-reverb-time-input
+                />
+              </label>
 
-            <label class="conference-mixer-fx-control" for="conference-synth-reverb-mix-input">
-              <span class="conference-mixer-fx-label-row">
-                <span>Mix</span>
-                <output for="conference-synth-reverb-mix-input" data-synth-reverb-mix-output>50%</output>
-              </span>
-              <input
-                id="conference-synth-reverb-mix-input"
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value="0.5"
-                data-synth-reverb-mix-input
-              />
-            </label>
-          </article>
+              <label class="conference-mixer-fx-control" for="conference-synth-reverb-mix-input">
+                <span class="conference-mixer-fx-label-row">
+                  <span>Mix</span>
+                  <output for="conference-synth-reverb-mix-input" data-synth-reverb-mix-output>50%</output>
+                </span>
+                <input
+                  id="conference-synth-reverb-mix-input"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0.5"
+                  data-synth-reverb-mix-input
+                />
+              </label>
+            </article>
+
+            <article class="conference-mixer-fx-card conference-mixer-fx-card--delay">
+              <div class="conference-mixer-fx-head">
+                <h4>DELAY</h4>
+                <span class="conference-mixer-fx-badge conference-mixer-fx-badge--delay">FX</span>
+              </div>
+
+              <label class="conference-mixer-fx-control" for="conference-synth-delay-time-input">
+                <span class="conference-mixer-fx-label-row">
+                  <span>Time</span>
+                  <output for="conference-synth-delay-time-input" data-synth-delay-time-output>380ms</output>
+                </span>
+                <input
+                  id="conference-synth-delay-time-input"
+                  type="range"
+                  min="0.05"
+                  max="1.2"
+                  step="0.01"
+                  value="0.38"
+                  data-synth-delay-time-input
+                />
+              </label>
+
+              <label class="conference-mixer-fx-control" for="conference-synth-delay-feedback-input">
+                <span class="conference-mixer-fx-label-row">
+                  <span>Feedback</span>
+                  <output for="conference-synth-delay-feedback-input" data-synth-delay-feedback-output>38%</output>
+                </span>
+                <input
+                  id="conference-synth-delay-feedback-input"
+                  type="range"
+                  min="0"
+                  max="0.95"
+                  step="0.01"
+                  value="0.38"
+                  data-synth-delay-feedback-input
+                />
+              </label>
+
+              <label class="conference-mixer-fx-control" for="conference-synth-delay-mix-input">
+                <span class="conference-mixer-fx-label-row">
+                  <span>Mix</span>
+                  <output for="conference-synth-delay-mix-input" data-synth-delay-mix-output>32%</output>
+                </span>
+                <input
+                  id="conference-synth-delay-mix-input"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0.32"
+                  data-synth-delay-mix-input
+                />
+              </label>
+
+              <label class="conference-mixer-fx-control" for="conference-synth-delay-tone-input">
+                <span class="conference-mixer-fx-label-row">
+                  <span>Tone</span>
+                  <output for="conference-synth-delay-tone-input" data-synth-delay-tone-output>4.2kHz</output>
+                </span>
+                <input
+                  id="conference-synth-delay-tone-input"
+                  type="range"
+                  min="400"
+                  max="8000"
+                  step="50"
+                  value="4200"
+                  data-synth-delay-tone-input
+                />
+              </label>
+            </article>
+
+          </div>
 
           <div class="conference-mixer-fx-pair">
-            <article class="conference-mixer-fx-card">
+            <article class="conference-mixer-fx-card conference-mixer-fx-card--comp">
               <div class="conference-mixer-fx-head">
                 <h4>COMP</h4>
                 <button
@@ -750,7 +1186,7 @@ if (
               </div>
             </article>
 
-            <article class="conference-mixer-fx-card">
+            <article class="conference-mixer-fx-card conference-mixer-fx-card--limiter">
               <div class="conference-mixer-fx-head">
                 <h4>LIMITER</h4>
                 <button
@@ -802,6 +1238,7 @@ if (
         </div>
         </details>
       </section>
+      </div>
     </div>
   </aside>
 
@@ -1873,7 +2310,7 @@ if (
 <script>
   import { mountLiveKitRoom } from '../scripts/livekit-room.ts';
 
-  let teardown = null;
+  let teardown: ReturnType<typeof mountLiveKitRoom> | null = null;
 
   const mount = () => {
     const root = document.querySelector('[data-conference-root]');
@@ -2220,6 +2657,8 @@ if (
     --conference-line: rgba(255, 255, 255, 0.12);   /* border / divider */
     --conference-line-soft: rgba(255, 255, 255, 0.06);
     --conference-accent: #2a87ff;
+    --conference-fx-delay: #76d3ff;
+    --conference-fx-reverb: #ffd166;
     --conference-green: #25cf6b;
     --conference-red: #ff4d4d;
     /* ── Runtime overrides (set by JS) ────────────────────────────────── */
@@ -2311,6 +2750,18 @@ if (
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    background: rgba(0, 0, 0, 0.98);
+  }
+
+  .conference-instruments-footer {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: min(70%, 34rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--conference-line);
     background: rgba(0, 0, 0, 0.98);
   }
 
@@ -2527,6 +2978,9 @@ if (
 
   .conference-stage-label,
   .conference-sidebar-heading {
+    --conference-sidebar-strip-padding-y: 3px;
+    --conference-sidebar-strip-padding-x: 0.65rem;
+    --conference-sidebar-strip-height: calc((0.56rem + (var(--conference-sidebar-strip-padding-y) * 2)) * 1.2);
     padding: 3px 0.65rem;
     color: var(--conference-muted);
     font-size: 0.56rem;
@@ -2543,12 +2997,15 @@ if (
     display: flex;
     align-items: center;
     gap: 0.35rem;
+    box-sizing: border-box;
   }
 
   summary.conference-sidebar-heading::-webkit-details-marker { display: none; }
 
   summary.conference-sidebar-heading::before {
     content: '';
+    position: relative;
+    top: -1px;
     width: 0.42rem;
     height: 0.42rem;
     border-right: 1px solid currentColor;
@@ -2558,11 +3015,12 @@ if (
     opacity: 0.72;
     flex-shrink: 0;
     align-self: center;
-    transition: transform 140ms ease;
+    transition: transform 140ms ease, top 140ms ease;
   }
 
   details[open] > summary.conference-sidebar-heading::before {
     transform: rotate(45deg);
+    top: -2px;
   }
 
   .conference-sidebar-heading--chat {
@@ -3007,15 +3465,15 @@ if (
   }
 
   /* Eurorack module style: compact title strip, content flush below */
-  .conference-sidebar-section--instrument {
-    gap: 0;
-    padding: 0;
-    margin: 0;                /* reset any browser <details> default margin */
-  }
-
-  .conference-sidebar-section--instrument > summary.conference-sidebar-heading {
-    padding: 3px 0.65rem;
+  .conference-sidebar-section--instrument > summary.conference-sidebar-heading,
+  .conference-mixer-summary,
+  .conference-mixer-fx-summary {
+    width: 100%;
+    height: var(--conference-sidebar-strip-height);
+    min-height: var(--conference-sidebar-strip-height);
+    padding: 0 var(--conference-sidebar-strip-padding-x);
     margin: 0;
+    box-sizing: border-box;
   }
 
   .conference-sidebar-section--instrument > div,
@@ -3045,10 +3503,10 @@ if (
 
   .conference-mixer-foldable {
     margin: 0;
-  }
-
-  .conference-mixer-summary {
-    padding: 3px 0.65rem;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
 .conference-sidebar-section {
@@ -3056,6 +3514,23 @@ if (
     gap: clamp(0.44rem, 0.6vw, 0.52rem);
     padding: clamp(0.52rem, 0.7vw, 0.62rem) clamp(0.65rem, 1vw, 0.86rem) clamp(0.55rem, 0.8vw, 0.72rem);
     border-bottom: 1px solid var(--conference-line);
+  }
+
+  .conference-sidebar-section.conference-sidebar-section--instrument {
+    gap: 0;
+    padding: 0;
+    margin: 0;                /* reset any browser <details> default margin */
+  }
+
+  .conference-sidebar-section.conference-sidebar-section--mixer {
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 2;
+    gap: 0;
+    padding: 0;
+    border-top: 1px solid var(--conference-line);
+    border-bottom: 0;
+    background: rgba(0, 0, 0, 0.98);
   }
 
   .conference-meta-shell {
@@ -3339,33 +3814,29 @@ if (
     font-variant-numeric: tabular-nums;
   }
 
-  /* ── Mixer: 5-column grid of channel strips + FX row spanning all cols ── */
+  /* ── Mixer: 4-column audio bus ───────────────────────────────── */
   .conference-mixer {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0.3rem;
-    align-items: stretch;
+    grid-template-columns: repeat(8, minmax(2.5rem, 1fr));
+    gap: 0.34rem 0.22rem;
+    align-items: start;
     min-height: 0;
-    padding: 0.3rem 0.5rem 0.4rem;
+    padding: 0.34rem 0.42rem 0.48rem;
   }
 
   .conference-mixer-channel {
     display: grid;
     justify-items: center;
-    grid-template-rows: auto auto 1fr auto;
-    gap: 0.22rem;
+    grid-template-rows: auto auto 1fr auto auto;
+    gap: 0.18rem;
     min-height: 0;
-    padding: 0.2rem 0.15rem 0.15rem;
+    padding: 0.18rem 0.08rem 0.14rem;
     border: 0;
     background: transparent;
   }
 
-  .conference-mixer-channel--video {
-    align-items: center;
-    justify-items: center;
-    grid-template-rows: auto auto;
-    min-width: 0;
-    align-self: start;
+  .conference-mixer-channel--placeholder {
+    opacity: 0.38;
   }
 
   .conference-mixer-channel-label {
@@ -3373,7 +3844,7 @@ if (
     gap: 0.1rem;
     justify-items: center;
     color: var(--conference-muted);
-    font-size: 0.56rem;
+    font-size: 0.48rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     text-align: center;
@@ -3381,7 +3852,43 @@ if (
 
   .conference-mixer-channel-label strong {
     color: var(--conference-fg);
-    font-size: 0.6rem;
+    font-size: 0.56rem;
+  }
+
+  .conference-mixer-send-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.12rem;
+    width: 100%;
+    justify-items: center;
+  }
+
+  .conference-mixer-send-row--disabled {
+    opacity: 0.34;
+  }
+
+  .conference-mixer-send {
+    display: grid;
+    justify-items: center;
+    gap: 0.08rem;
+    min-width: 0;
+  }
+
+  .conference-mixer-send-label {
+    color: var(--conference-muted);
+    font-size: 0.32rem;
+    line-height: 1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .conference-mixer-send-label--reverb {
+    color: var(--conference-fx-reverb);
+  }
+
+  .conference-mixer-send-label--delay {
+    color: var(--conference-fx-delay);
   }
 
   .conference-mixer-fader {
@@ -3420,7 +3927,7 @@ if (
   .conference-mixer-fader-shell {
     position: relative;
     width: 13px;
-    height: 5.2rem;
+    height: 4.8rem;
     display: grid;
     place-items: center;
   }
@@ -3461,6 +3968,12 @@ if (
     transform: scaleY(var(--conference-meter-level));
     transform-origin: bottom center;
     box-shadow: 0 0 10px rgba(143, 227, 255, 0.18);
+  }
+
+  .conference-mixer-vumeter--placeholder::before {
+    transform: scaleY(0.08);
+    box-shadow: none;
+    opacity: 0.18;
   }
 
   .conference-mixer-led {
@@ -3507,6 +4020,15 @@ if (
     min-height: 12px;
   }
 
+  .conference-mixer-channel-toggle:disabled {
+    cursor: default;
+  }
+
+  .conference-mixer-channel-toggle:disabled .conference-mixer-led {
+    opacity: 0.16;
+    box-shadow: none;
+  }
+
   .conference-mixer-channel-toggle[data-active='false'] .conference-mixer-led,
   .conference-mixer-fx-led-toggle[data-active='false'] .conference-mixer-led {
     opacity: 0.2;
@@ -3517,6 +4039,10 @@ if (
     display: grid;
     justify-items: center;
     gap: 0.12rem;
+  }
+
+  .conference-mixer-knob-stack--pan {
+    margin-top: 0.02rem;
   }
 
   .conference-mixer-pan-input {
@@ -3530,6 +4056,7 @@ if (
   }
 
   .conference-mixer-knob-control {
+    --conference-knob-color: var(--conference-accent);
     --angle: 0deg;
     position: relative;
     width: 30px;
@@ -3565,8 +4092,72 @@ if (
     justify-self: center;
   }
 
+  .conference-mixer-knob-control--send {
+    width: 26px;
+    height: 26px;
+  }
+
+  .conference-mixer-knob-control--send .conference-mixer-knob-indicator {
+    height: 7px;
+  }
+
+  .conference-mixer-knob-control--send-reverb {
+    --conference-knob-color: var(--conference-fx-reverb);
+  }
+
+  .conference-mixer-knob-control--send-delay {
+    --conference-knob-color: var(--conference-fx-delay);
+  }
+
+  .conference-mixer-knob-control--disabled {
+    --conference-knob-color: rgba(245, 247, 251, 0.28);
+    opacity: 0.42;
+    cursor: default;
+  }
+
   .conference-mixer-knob-control--video .conference-mixer-knob-indicator {
     height: 6px;
+  }
+
+  .conference-video-module {
+    display: grid;
+    gap: 0.42rem;
+  }
+
+  .conference-video-module-head {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .conference-video-module-reset {
+    margin-left: auto;
+    position: relative;
+    min-width: 1.5rem;
+    transition: min-width 140ms ease, color 140ms ease;
+  }
+
+  .conference-video-module-reset::after {
+    content: 'RESET';
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    opacity: 0;
+    color: var(--conference-fg);
+    transition: opacity 140ms ease;
+    pointer-events: none;
+  }
+
+  .conference-video-module-reset:hover,
+  .conference-video-module-reset:focus-visible {
+    min-width: 4.1rem;
+    color: transparent;
+  }
+
+  .conference-video-module-reset:hover::after,
+  .conference-video-module-reset:focus-visible::after {
+    opacity: 1;
   }
 
   .conference-video-mixer-grid {
@@ -3582,6 +4173,12 @@ if (
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.02);
     overflow: hidden;
+  }
+
+  .conference-video-mixer-grid--module {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.34rem 0.24rem;
+    padding: 0.26rem 0.18rem 0.22rem;
   }
 
   .conference-video-mixer-control {
@@ -3607,7 +4204,7 @@ if (
 
   .conference-mixer-knob-control:hover,
   .conference-mixer-knob-control:focus-visible {
-    border-color: rgba(143, 227, 255, 0.34);
+    border-color: color-mix(in srgb, var(--conference-knob-color) 38%, rgba(255, 255, 255, 0.22));
     outline: none;
   }
 
@@ -3618,15 +4215,19 @@ if (
     width: 2px;
     height: 9px;
     border-radius: 999px;
-    background: var(--conference-accent);
+    background: var(--conference-knob-color);
     transform: translate(-50%, -100%) rotate(var(--angle));
     transform-origin: 50% 100%;
-    box-shadow: 0 0 8px rgba(143, 227, 255, 0.42);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--conference-knob-color) 48%, transparent);
   }
 
   /* FX — independent bottom module, sibling of MIXER */
   .conference-mixer-fx-details {
     margin: 0;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     border-top: 1px solid var(--conference-line);
   }
 
@@ -3657,6 +4258,14 @@ if (
     background: transparent;
   }
 
+  .conference-mixer-fx-card--reverb .conference-mixer-fx-head h4 {
+    color: var(--conference-fx-reverb);
+  }
+
+  .conference-mixer-fx-card--delay .conference-mixer-fx-head h4 {
+    color: var(--conference-fx-delay);
+  }
+
   .conference-mixer-fx-head {
     display: flex;
     justify-content: space-between;
@@ -3680,6 +4289,14 @@ if (
     line-height: 1;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+  }
+
+  .conference-mixer-fx-badge--reverb {
+    color: color-mix(in srgb, var(--conference-fx-reverb) 78%, white 22%);
+  }
+
+  .conference-mixer-fx-badge--delay {
+    color: color-mix(in srgb, var(--conference-fx-delay) 78%, white 22%);
   }
 
   .conference-mixer-fx-grid {
@@ -3822,6 +4439,14 @@ if (
     place-items: center;
     flex: 0 0 auto;
     margin-left: auto;
+  }
+
+  .conference-ramp-reset--wide {
+    width: auto;
+    min-width: 4.1rem;
+    padding: 0 0.42rem;
+    font-size: 0.5rem;
+    letter-spacing: 0.12em;
   }
 
   .conference-ramp-reset:hover,
@@ -5810,10 +6435,15 @@ if (
     }
 
     .conference-mixer {
-      /* 5 equal columns — all channels in one row, video channel is narrow/tall */
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 0.3rem 0.2rem;
+      grid-template-columns: repeat(8, minmax(2.4rem, 1fr));
+      gap: 0.26rem 0.16rem;
       align-items: start;
+    }
+
+    .conference-video-mixer-grid--module {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.28rem 0.18rem;
+      padding-top: 0.22rem;
     }
 
     .conference-mixer-fx {

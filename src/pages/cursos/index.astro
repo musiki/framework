@@ -41,6 +41,8 @@ const normalizeCourseYear = (yearValue: unknown, legacyLevel: unknown): string =
   return '';
 };
 
+const normalizeCourseCardId = (value: unknown) => String(value ?? '');
+
 const courses = allCourseFiles
   .filter(entry => entry.id.endsWith('_index'))
   .map(entry => ({
@@ -51,7 +53,7 @@ const courses = allCourseFiles
     year: normalizeCourseYear((entry.data as any).year, (entry.data as any).level),
   }));
 
-const session = (Astro.locals as any).session;
+const session = Astro.locals.session;
 const currentUser = session?.user;
 
 // Get user enrollment and invite status
@@ -262,11 +264,11 @@ if (currentUser?.email) {
 									<span
 										class:list={[
 											'course-status',
-											userEnrollments.includes(course.id) ? 'is-enrolled' : 'not-enrolled',
+											userEnrollments.includes(normalizeCourseCardId(course.id)) ? 'is-enrolled' : 'not-enrolled',
 										]}
-										title={userEnrollments.includes(course.id) ? 'Inscrito' : 'No inscrito'}
+										title={userEnrollments.includes(normalizeCourseCardId(course.id)) ? 'Inscrito' : 'No inscrito'}
 									>
-										{userEnrollments.includes(course.id) ? 'Inscrito' : 'No inscrito'}
+										{userEnrollments.includes(normalizeCourseCardId(course.id)) ? 'Inscrito' : 'No inscrito'}
 									</span>
 								</span>
 								{!course.public && (
@@ -308,7 +310,7 @@ if (currentUser?.email) {
 									<a href="/login" class="button">
 										Inicia sesión
 									</a>
-								) : userEnrollments.includes(course.id) ? (
+								) : userEnrollments.includes(normalizeCourseCardId(course.id)) ? (
 									<a href={course.href} class="button">
 										Ver curso
 									</a>
@@ -316,10 +318,10 @@ if (currentUser?.email) {
 									<a href={course.href} class="button">
 										Ver curso
 									</a>
-								) : userInvites.includes(course.id) ? (
+								) : userInvites.includes(normalizeCourseCardId(course.id)) ? (
 									<button
 										class="button enroll-btn"
-										data-course-id={course.id}
+										data-course-id={normalizeCourseCardId(course.id)}
 										data-course-title={course.title}
 									>
 										Inscribirse

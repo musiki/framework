@@ -6,7 +6,13 @@ import { createSupabaseServerClient, ensureDbUserFromSession } from '../../lib/f
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeRole = (value: unknown) => normalizeText(value).toLowerCase();
 
-const resolveSessionUsers = async (supabase: ReturnType<typeof createClient>, email: string) => {
+type SessionUserRow = {
+  id?: string | null;
+  role?: string | null;
+  email?: string | null;
+};
+
+const resolveSessionUsers = async (supabase: any, email: string): Promise<SessionUserRow[]> => {
   const normalizedEmail = normalizeText(email).toLowerCase();
   if (!normalizedEmail) return [];
 
@@ -16,7 +22,7 @@ const resolveSessionUsers = async (supabase: ReturnType<typeof createClient>, em
     .ilike('email', normalizedEmail);
 
   if (error) throw error;
-  return Array.isArray(data) ? data : [];
+  return Array.isArray(data) ? (data as SessionUserRow[]) : [];
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {

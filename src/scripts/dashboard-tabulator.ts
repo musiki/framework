@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+// @ts-expect-error tabulator-tables does not expose usable declarations in this build.
 import { TabulatorFull as Tabulator } from 'tabulator-tables';
 import {
   buildDashboardAnnotationScopeKey,
@@ -2106,8 +2107,8 @@ const syncFoldedLeafLabels = (table: Tabulator | null | undefined) => {
       const useShort = Boolean(foldMeta.summaryOnly) || foldedDepth > 0;
       const nextLabel = useShort ? shortLabel : fullLabel;
       const textTarget =
-        headerElement.querySelector<HTMLElement>('.fold-header-label')
-        || headerElement.querySelector<HTMLElement>('.dashboard-grade-meta-title__label');
+        (headerElement.querySelector('.fold-header-label') as HTMLElement | null)
+        || (headerElement.querySelector('.dashboard-grade-meta-title__label') as HTMLElement | null);
 
       if (textTarget) {
         textTarget.textContent = nextLabel;
@@ -2222,7 +2223,7 @@ const toggleFoldMetaGroup = (
   if (!headerElement) return;
 
   const folded = force !== undefined ? force : !headerElement.classList.contains('group-folded');
-  const visibleKeys = new Set(
+  const visibleKeys = new Set<string>(
     Array.isArray(foldMeta.visibleChildren) ? foldMeta.visibleChildren.map(String) : [],
   );
   const shouldPersist = options?.persist !== false;

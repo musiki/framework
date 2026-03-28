@@ -140,11 +140,11 @@ function extractColumnNameFromError(message: string): string {
 }
 
 async function updateAssignmentSafe(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   assignmentId: string,
   payload: Record<string, unknown>,
 ) {
-  let draft = { ...payload };
+  let draft: Record<string, unknown> = { ...payload };
   let attempts = 0;
 
   while (Object.keys(draft).length > 0 && attempts < 12) {

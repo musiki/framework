@@ -11,6 +11,8 @@ type Props = CollectionEntry<'content'>['data'] & { id?: string; tags?: string[]
 const { title, description, heroImage, id: contentId, presentationHref = '' } = Astro.props as Props & {
   presentationHref?: string;
 };
+const pageTitle = String(title ?? '');
+const pageDescription = String(description ?? '');
 const resolvedHeroImage = heroImage && typeof heroImage === 'object' && 'src' in heroImage
   ? heroImage as ImageMetadata
   : undefined;
@@ -158,7 +160,8 @@ try {
     }
   }
 } catch (e) {
-  console.warn(`Failed to get git info for ${contentId || 'unknown id'}: ${e.message}`);
+  const errorMessage = e instanceof Error ? e.message : String(e);
+  console.warn(`Failed to get git info for ${contentId || 'unknown id'}: ${errorMessage}`);
 }
 const commitUrl =
   commitSha !== 'Unknown' && repoOwner !== 'unknown' && repoSlug !== 'unknown'
@@ -168,7 +171,7 @@ const commitUrl =
 
 <html lang="es" class="scroll-smooth">
   <head>
-    <BaseHead title={title} description={description} image={resolvedHeroImage} />
+    <BaseHead title={pageTitle} description={pageDescription} image={resolvedHeroImage} />
 
     <!-- Mermaid -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" defer></script>
@@ -593,8 +596,21 @@ const commitUrl =
       // ────────────────────────────────────────────────
       // Lenis smooth scrolling
       // ────────────────────────────────────────────────
+      type LenisInstance = {
+        raf: (time: number) => void;
+      };
+
+      type LenisWindow = Window & {
+        Lenis?: new (options: {
+          duration: number;
+          easing: (t: number) => number;
+          smoothWheel: boolean;
+          smoothTouch: boolean;
+        }) => LenisInstance;
+      };
+
       const initLenis = () => {
-        const LenisCtor = window.Lenis;
+        const LenisCtor = (window as LenisWindow).Lenis;
         if (typeof LenisCtor !== 'function') {
           console.warn('Lenis is not available, skipping smooth scroll.');
           return;
@@ -602,12 +618,12 @@ const commitUrl =
 
         const lenis = new LenisCtor({
           duration: 1.1,
-          easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+          easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
           smoothWheel: true,
           smoothTouch: false,
         });
 
-        const raf = (time) => {
+        const raf = (time: number) => {
           lenis.raf(time);
           requestAnimationFrame(raf);
         };
@@ -668,11 +684,13 @@ const commitUrl =
       // ────────────────────────────────────────────────
       function addCopyButtons() {
         document.querySelectorAll('pre').forEach((pre) => {
-          if (pre.parentNode.classList.contains('code-wrapper')) return;
+          if (!(pre instanceof HTMLElement)) return;
+          const parent = pre.parentElement;
+          if (!parent || parent.classList.contains('code-wrapper')) return;
 
           const wrapper = document.createElement('div');
           wrapper.className = 'code-wrapper relative';
-          pre.parentNode.insertBefore(wrapper, pre);
+          parent.insertBefore(wrapper, pre);
           wrapper.appendChild(pre);
 
           const btn = document.createElement('button');

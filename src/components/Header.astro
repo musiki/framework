@@ -737,7 +737,7 @@ const withActiveCourse = (href: string) => {
 
 		const fallbackRoomHref = String(roomButton?.dataset.fallbackHref || roomButton?.dataset.href || '').trim();
 		const interactionTimerNode = interactionButton?.querySelector('[data-header-live-timer]');
-		let latestSnapshot = null;
+		let latestSnapshot: Record<string, unknown> | null = null;
 
 		const openHeaderHref = (button: HTMLButtonElement | null) => {
 			if (!(button instanceof HTMLButtonElement)) return;
@@ -786,7 +786,7 @@ const withActiveCourse = (href: string) => {
 
 		const unsubscribe = subscribeToClassActivity({
 			courseId,
-			onEvent: (_eventName, snapshot) => {
+			onEvent: (_eventName: string, snapshot: Record<string, unknown>) => {
 				latestSnapshot = snapshot;
 				render();
 			},

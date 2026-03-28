@@ -187,6 +187,10 @@ type PersistedRoomSetup = {
   previewInvert?: boolean;
   previewZoom?: number;
   recordingPreset?: RecordingPresetKey;
+  delayFeedback?: number;
+  delayMix?: number;
+  delayTime?: number;
+  delayTone?: number;
   reverbMix?: number;
   reverbTime?: number;
   showCircle?: boolean;
@@ -200,14 +204,20 @@ type PersistedRoomSetup = {
   mixerIncomingMuted?: boolean;
   mixerIncomingPan?: number;
   mixerBallGain?: number;
+  mixerBallDelaySend?: number;
   mixerBallMuted?: boolean;
   mixerBallPan?: number;
+  mixerBallReverbSend?: number;
   mixerMasterGain?: number;
   mixerMasterMuted?: boolean;
   mixerMasterPan?: number;
   mixerSynthGain?: number;
+  mixerSynthDelaySend?: number;
   mixerSynthMuted?: boolean;
   mixerSynthPan?: number;
+  mixerSynthReverbSend?: number;
+  mixerIncomingDelaySend?: number;
+  mixerIncomingReverbSend?: number;
   videoBrightness?: number;
   videoContrast?: number;
   videoLuma?: number;
@@ -534,6 +544,33 @@ const clampNumber = (value: unknown, minimum: number, maximum: number, fallback:
   return Math.round(Math.min(maximum, Math.max(minimum, parsed)) * factor) / factor;
 };
 
+const createImpulseResponseBuffer = (
+  context: AudioContext,
+  durationSeconds: number,
+  decay: number,
+) => {
+  const sampleRate = context.sampleRate;
+  const frameCount = Math.max(1, Math.round(sampleRate * durationSeconds));
+  const buffer = context.createBuffer(2, frameCount, sampleRate);
+
+  for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
+    const channel = buffer.getChannelData(channelIndex);
+    for (let index = 0; index < frameCount; index += 1) {
+      const t = index / frameCount;
+      const envelope = Math.pow(1 - t, decay);
+      channel[index] = (Math.random() * 2 - 1) * envelope;
+    }
+  }
+
+  return buffer;
+};
+
+const formatDelayTimeLabel = (value: number) =>
+  value >= 1 ? `${value.toFixed(2)}s` : `${Math.round(value * 1000)}ms`;
+
+const formatFrequencyLabel = (value: number) =>
+  value >= 1000 ? `${(value / 1000).toFixed(1)}kHz` : `${Math.round(value)}Hz`;
+
 const createDefaultHandControlRanges = (): Record<HandControlKey, HandControlRange> => ({
   carrier: { min: 0, max: 1 },
   modulator: { min: 0, max: 1 },
@@ -587,6 +624,16 @@ class FMSynthVoice {
   private carrierGains: GainNode[] = [];
   private carrierOscillators: OscillatorNode[] = [];
   private convolverNode: ConvolverNode | null = null;
+  private delayFeedback = 0.38;
+  private delayFeedbackNode: GainNode | null = null;
+  private delayFilterNode: BiquadFilterNode | null = null;
+  private delayMix = 0.32;
+  private delayNode: DelayNode | null = null;
+  private delaySend = 0;
+  private delaySendNode: GainNode | null = null;
+  private delayTone = 4200;
+  private delayTime = 0.38;
+  private delayReturnGainNode: GainNode | null = null;
   private dryGainNode: GainNode | null = null;
   private distortionAmount = 0;
   private distortionNode: WaveShaperNode | null = null;
@@ -610,6 +657,8 @@ class FMSynthVoice {
   private ready = false;
   private masterGain = 0.35;
   private reverbMix = 0.5;
+  private reverbSend = 0.55;
+  private reverbSendNode: GainNode | null = null;
   private reverbTime = 3;
   private wetGainNode: GainNode | null = null;
   private readonly waveformTypes: OscillatorType[] = ['sine', 'triangle', 'sawtooth', 'square'];
@@ -662,11 +711,25 @@ class FMSynthVoice {
     masterMeterAnalyser.fftSize = 256;
     masterMeterAnalyser.smoothingTimeConstant = 0.88;
     const dryGainNode = context.createGain();
-    dryGainNode.gain.value = 1 - this.reverbMix;
+    dryGainNode.gain.value = 1;
+    const reverbSendNode = context.createGain();
+    reverbSendNode.gain.value = this.reverbSend;
     const wetGainNode = context.createGain();
     wetGainNode.gain.value = this.reverbMix;
     const convolverNode = context.createConvolver();
-    convolverNode.buffer = this.createImpulseResponse(context, this.reverbTime, 2.8);
+    convolverNode.buffer = createImpulseResponseBuffer(context, this.reverbTime, 2.8);
+    const delaySendNode = context.createGain();
+    delaySendNode.gain.value = this.delaySend;
+    const delayNode = context.createDelay(2);
+    delayNode.delayTime.value = this.delayTime;
+    const delayFeedbackNode = context.createGain();
+    delayFeedbackNode.gain.value = this.delayFeedback;
+    const delayFilterNode = context.createBiquadFilter();
+    delayFilterNode.type = 'lowpass';
+    delayFilterNode.frequency.value = this.delayTone;
+    delayFilterNode.Q.value = 0.2;
+    const delayReturnGainNode = context.createGain();
+    delayReturnGainNode.gain.value = this.delayMix;
     const distortionNode = context.createWaveShaper();
     distortionNode.oversample = '4x';
     const compressorNode = context.createDynamicsCompressor();
@@ -705,10 +768,18 @@ class FMSynthVoice {
     filterNode.connect(dynamicGain);
     dynamicGain.connect(distortionNode);
     distortionNode.connect(dryGainNode);
-    distortionNode.connect(convolverNode);
+    distortionNode.connect(reverbSendNode);
+    reverbSendNode.connect(convolverNode);
     convolverNode.connect(wetGainNode);
+    distortionNode.connect(delaySendNode);
+    delaySendNode.connect(delayNode);
+    delayNode.connect(delayFilterNode);
+    delayFilterNode.connect(delayReturnGainNode);
+    delayFilterNode.connect(delayFeedbackNode);
+    delayFeedbackNode.connect(delayNode);
     dryGainNode.connect(compressorNode);
     wetGainNode.connect(compressorNode);
+    delayReturnGainNode.connect(compressorNode);
     compressorNode.connect(limiterNode);
     limiterNode.connect(channelGainNode);
     channelGainNode.connect(channelPanNode);
@@ -725,6 +796,11 @@ class FMSynthVoice {
     this.channelPanNode = channelPanNode;
     this.compressorNode = compressorNode;
     this.convolverNode = convolverNode;
+    this.delayFeedbackNode = delayFeedbackNode;
+    this.delayFilterNode = delayFilterNode;
+    this.delayNode = delayNode;
+    this.delaySendNode = delaySendNode;
+    this.delayReturnGainNode = delayReturnGainNode;
     this.dryGainNode = dryGainNode;
     this.distortionNode = distortionNode;
     this.filterNode = filterNode;
@@ -735,10 +811,13 @@ class FMSynthVoice {
     this.masterMeterData = new Uint8Array(masterMeterAnalyser.fftSize);
     this.masterPanNode = masterPanNode;
     this.outputDestination = outputDestination;
+    this.reverbSendNode = reverbSendNode;
     this.wetGainNode = wetGainNode;
     this.ready = true;
 
-    this.applyReverbState();
+    this.applyReverbLevels();
+    this.refreshReverbImpulse();
+    this.applyDelayState();
     this.applyDistortionState();
     this.applyCompressorState();
     this.applyLimiterState();
@@ -746,23 +825,6 @@ class FMSynthVoice {
     if (context.state !== 'running') {
       await context.resume().catch(() => undefined);
     }
-  }
-
-  private createImpulseResponse(context: AudioContext, durationSeconds: number, decay: number) {
-    const sampleRate = context.sampleRate;
-    const frameCount = Math.max(1, Math.round(sampleRate * durationSeconds));
-    const buffer = context.createBuffer(2, frameCount, sampleRate);
-
-    for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
-      const channel = buffer.getChannelData(channelIndex);
-      for (let index = 0; index < frameCount; index += 1) {
-        const t = index / frameCount;
-        const envelope = Math.pow(1 - t, decay);
-        channel[index] = (Math.random() * 2 - 1) * envelope;
-      }
-    }
-
-    return buffer;
   }
 
   private getWaveformWeights(morph: number) {
@@ -824,26 +886,81 @@ class FMSynthVoice {
     }
   }
 
-  private applyReverbState() {
+  private applyReverbLevels() {
     if (this.dryGainNode && this.context) {
-      this.dryGainNode.gain.setTargetAtTime(1 - this.reverbMix, this.context.currentTime, 0.03);
+      this.dryGainNode.gain.setTargetAtTime(1, this.context.currentTime, 0.03);
+    }
+    if (this.reverbSendNode && this.context) {
+      this.reverbSendNode.gain.setTargetAtTime(this.reverbSend, this.context.currentTime, 0.03);
     }
     if (this.wetGainNode && this.context) {
       this.wetGainNode.gain.setTargetAtTime(this.reverbMix, this.context.currentTime, 0.03);
     }
+  }
+
+  private refreshReverbImpulse() {
     if (this.convolverNode && this.context) {
-      this.convolverNode.buffer = this.createImpulseResponse(this.context, this.reverbTime, 2.8);
+      this.convolverNode.buffer = createImpulseResponseBuffer(this.context, this.reverbTime, 2.8);
     }
   }
 
   setReverbMix(value: number) {
     this.reverbMix = clampNumber(value, 0, 1, this.reverbMix, 2);
-    this.applyReverbState();
+    this.applyReverbLevels();
+  }
+
+  setReverbSend(value: number) {
+    this.reverbSend = clampNumber(value, 0, 1, this.reverbSend, 2);
+    this.applyReverbLevels();
   }
 
   setReverbTime(value: number) {
     this.reverbTime = clampNumber(value, 0.4, 8, this.reverbTime, 2);
-    this.applyReverbState();
+    this.refreshReverbImpulse();
+  }
+
+  private applyDelayState() {
+    if (!this.context) return;
+    if (this.delaySendNode) {
+      this.delaySendNode.gain.setTargetAtTime(this.delaySend, this.context.currentTime, 0.03);
+    }
+    if (this.delayNode) {
+      this.delayNode.delayTime.setTargetAtTime(this.delayTime, this.context.currentTime, 0.03);
+    }
+    if (this.delayFeedbackNode) {
+      this.delayFeedbackNode.gain.setTargetAtTime(this.delayFeedback, this.context.currentTime, 0.03);
+    }
+    if (this.delayFilterNode) {
+      this.delayFilterNode.frequency.setTargetAtTime(this.delayTone, this.context.currentTime, 0.03);
+    }
+    if (this.delayReturnGainNode) {
+      this.delayReturnGainNode.gain.setTargetAtTime(this.delayMix, this.context.currentTime, 0.03);
+    }
+  }
+
+  setDelaySend(value: number) {
+    this.delaySend = clampNumber(value, 0, 1, this.delaySend, 2);
+    this.applyDelayState();
+  }
+
+  setDelayTime(value: number) {
+    this.delayTime = clampNumber(value, 0.05, 1.2, this.delayTime, 2);
+    this.applyDelayState();
+  }
+
+  setDelayFeedback(value: number) {
+    this.delayFeedback = clampNumber(value, 0, 0.95, this.delayFeedback, 2);
+    this.applyDelayState();
+  }
+
+  setDelayMix(value: number) {
+    this.delayMix = clampNumber(value, 0, 1, this.delayMix, 2);
+    this.applyDelayState();
+  }
+
+  setDelayTone(value: number) {
+    this.delayTone = clampNumber(value, 400, 8000, this.delayTone, 0);
+    this.applyDelayState();
   }
 
   setHandRampTimeMs(value: number) {
@@ -1083,10 +1200,22 @@ class FMSynthVoice {
 
     this.dryGainNode?.disconnect();
     this.dryGainNode = null;
+    this.delaySendNode?.disconnect();
+    this.delaySendNode = null;
+    this.delayNode?.disconnect();
+    this.delayNode = null;
+    this.delayFeedbackNode?.disconnect();
+    this.delayFeedbackNode = null;
+    this.delayFilterNode?.disconnect();
+    this.delayFilterNode = null;
+    this.delayReturnGainNode?.disconnect();
+    this.delayReturnGainNode = null;
     this.distortionNode?.disconnect();
     this.distortionNode = null;
     this.convolverNode?.disconnect();
     this.convolverNode = null;
+    this.reverbSendNode?.disconnect();
+    this.reverbSendNode = null;
     this.wetGainNode?.disconnect();
     this.wetGainNode = null;
     this.compressorNode?.disconnect();
@@ -2173,10 +2302,26 @@ class GravityBallFoley {
   private channelPan = 0;
   private channelPanNode: StereoPannerNode | null = null;
   private context: AudioContext | null = null;
+  private delayFeedback = 0.38;
+  private delayFeedbackNode: GainNode | null = null;
+  private delayFilterNode: BiquadFilterNode | null = null;
+  private delayMix = 0.32;
+  private delayNode: DelayNode | null = null;
+  private delaySend = 0;
+  private delaySendNode: GainNode | null = null;
+  private delayTone = 4200;
+  private delayTime = 0.38;
+  private delayReturnGainNode: GainNode | null = null;
   private initPromise: Promise<void> | null = null;
   private lastImpactAt = 0;
   private outputNode: AudioNode | null = null;
   private outputDestination: MediaStreamAudioDestinationNode | null = null;
+  private reverbMix = 0.5;
+  private reverbSend = 0;
+  private reverbTime = 3;
+  private reverbSendNode: GainNode | null = null;
+  private reverbReturnGainNode: GainNode | null = null;
+  private reverbConvolverNode: ConvolverNode | null = null;
   private spatialPannerNode: PannerNode | null = null;
 
   private async ensureReady() {
@@ -2218,6 +2363,15 @@ class GravityBallFoley {
       const outputDestination = context.createMediaStreamDestination();
       const airBandpassNode = context.createBiquadFilter();
       const airGainNode = context.createGain();
+      const dryGainNode = context.createGain();
+      const reverbSendNode = context.createGain();
+      const reverbConvolverNode = context.createConvolver();
+      const reverbReturnGainNode = context.createGain();
+      const delaySendNode = context.createGain();
+      const delayNode = context.createDelay(2);
+      const delayFeedbackNode = context.createGain();
+      const delayFilterNode = context.createBiquadFilter();
+      const delayReturnGainNode = context.createGain();
 
       const noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
       const noiseData = noiseBuffer.getChannelData(0);
@@ -2232,11 +2386,34 @@ class GravityBallFoley {
       airBandpassNode.frequency.value = 900;
       airBandpassNode.Q.value = 2.4;
       airGainNode.gain.value = 0.00001;
+      dryGainNode.gain.value = 1;
+      reverbSendNode.gain.value = this.reverbSend;
+      reverbConvolverNode.buffer = createImpulseResponseBuffer(context, this.reverbTime, 2.8);
+      reverbReturnGainNode.gain.value = this.reverbMix;
+      delaySendNode.gain.value = this.delaySend;
+      delayNode.delayTime.value = this.delayTime;
+      delayFeedbackNode.gain.value = this.delayFeedback;
+      delayFilterNode.type = 'lowpass';
+      delayFilterNode.frequency.value = this.delayTone;
+      delayFilterNode.Q.value = 0.2;
+      delayReturnGainNode.gain.value = this.delayMix;
 
       airNoiseSource.connect(airBandpassNode);
       airBandpassNode.connect(airGainNode);
       airGainNode.connect(spatialPannerNode);
-      spatialPannerNode.connect(channelPanNode);
+      spatialPannerNode.connect(dryGainNode);
+      spatialPannerNode.connect(reverbSendNode);
+      reverbSendNode.connect(reverbConvolverNode);
+      reverbConvolverNode.connect(reverbReturnGainNode);
+      spatialPannerNode.connect(delaySendNode);
+      delaySendNode.connect(delayNode);
+      delayNode.connect(delayFilterNode);
+      delayFilterNode.connect(delayReturnGainNode);
+      delayFilterNode.connect(delayFeedbackNode);
+      delayFeedbackNode.connect(delayNode);
+      dryGainNode.connect(channelPanNode);
+      reverbReturnGainNode.connect(channelPanNode);
+      delayReturnGainNode.connect(channelPanNode);
       channelPanNode.connect(channelGainNode);
       channelGainNode.connect(channelAnalyser);
       channelAnalyser.connect(context.destination);
@@ -2254,9 +2431,20 @@ class GravityBallFoley {
       this.channelAnalyser = channelAnalyser;
       this.channelMeterData = new Uint8Array(channelAnalyser.fftSize);
       this.context = context;
+      this.delayFeedbackNode = delayFeedbackNode;
+      this.delayFilterNode = delayFilterNode;
+      this.delayNode = delayNode;
+      this.delaySendNode = delaySendNode;
+      this.delayReturnGainNode = delayReturnGainNode;
       this.outputNode = spatialPannerNode;
       this.outputDestination = outputDestination;
+      this.reverbSendNode = reverbSendNode;
+      this.reverbReturnGainNode = reverbReturnGainNode;
+      this.reverbConvolverNode = reverbConvolverNode;
       airNoiseSource.start();
+      this.applyReverbLevels();
+      this.refreshReverbImpulse();
+      this.applyDelayState();
     })().finally(() => {
       this.initPromise = null;
     });
@@ -2293,6 +2481,82 @@ class GravityBallFoley {
     this.airGainNode.gain.setTargetAtTime(gain, context.currentTime, 0.08);
     this.airBandpassNode.frequency.setTargetAtTime(frequency, context.currentTime, 0.09);
     this.airBandpassNode.Q.setTargetAtTime(q, context.currentTime, 0.1);
+  }
+
+  private applyReverbLevels() {
+    if (!this.context) return;
+    if (this.reverbSendNode) {
+      this.reverbSendNode.gain.setTargetAtTime(this.reverbSend, this.context.currentTime, 0.03);
+    }
+    if (this.reverbReturnGainNode) {
+      this.reverbReturnGainNode.gain.setTargetAtTime(this.reverbMix, this.context.currentTime, 0.03);
+    }
+  }
+
+  private refreshReverbImpulse() {
+    if (!this.context) return;
+    if (this.reverbConvolverNode) {
+      this.reverbConvolverNode.buffer = createImpulseResponseBuffer(this.context, this.reverbTime, 2.8);
+    }
+  }
+
+  setReverbMix(value: number) {
+    this.reverbMix = clampNumber(value, 0, 1, this.reverbMix, 2);
+    this.applyReverbLevels();
+  }
+
+  setReverbSend(value: number) {
+    this.reverbSend = clampNumber(value, 0, 1, this.reverbSend, 2);
+    this.applyReverbLevels();
+  }
+
+  setReverbTime(value: number) {
+    this.reverbTime = clampNumber(value, 0.4, 8, this.reverbTime, 2);
+    this.refreshReverbImpulse();
+  }
+
+  private applyDelayState() {
+    if (!this.context) return;
+    if (this.delaySendNode) {
+      this.delaySendNode.gain.setTargetAtTime(this.delaySend, this.context.currentTime, 0.03);
+    }
+    if (this.delayNode) {
+      this.delayNode.delayTime.setTargetAtTime(this.delayTime, this.context.currentTime, 0.03);
+    }
+    if (this.delayFeedbackNode) {
+      this.delayFeedbackNode.gain.setTargetAtTime(this.delayFeedback, this.context.currentTime, 0.03);
+    }
+    if (this.delayFilterNode) {
+      this.delayFilterNode.frequency.setTargetAtTime(this.delayTone, this.context.currentTime, 0.03);
+    }
+    if (this.delayReturnGainNode) {
+      this.delayReturnGainNode.gain.setTargetAtTime(this.delayMix, this.context.currentTime, 0.03);
+    }
+  }
+
+  setDelaySend(value: number) {
+    this.delaySend = clampNumber(value, 0, 1, this.delaySend, 2);
+    this.applyDelayState();
+  }
+
+  setDelayTime(value: number) {
+    this.delayTime = clampNumber(value, 0.05, 1.2, this.delayTime, 2);
+    this.applyDelayState();
+  }
+
+  setDelayFeedback(value: number) {
+    this.delayFeedback = clampNumber(value, 0, 0.95, this.delayFeedback, 2);
+    this.applyDelayState();
+  }
+
+  setDelayMix(value: number) {
+    this.delayMix = clampNumber(value, 0, 1, this.delayMix, 2);
+    this.applyDelayState();
+  }
+
+  setDelayTone(value: number) {
+    this.delayTone = clampNumber(value, 400, 8000, this.delayTone, 0);
+    this.applyDelayState();
   }
 
   async playBounce(
@@ -2438,6 +2702,11 @@ class GravityBallFoley {
     this.channelGainNode = null;
     this.channelPanNode = null;
     this.context = null;
+    this.delayFeedbackNode = null;
+    this.delayFilterNode = null;
+    this.delayNode = null;
+    this.delaySendNode = null;
+    this.delayReturnGainNode = null;
     this.outputDestination = null;
     this.spatialPannerNode = null;
     this.airBandpassNode = null;
@@ -2445,6 +2714,9 @@ class GravityBallFoley {
     this.airNoiseSource?.stop?.();
     this.airNoiseSource = null;
     this.outputNode = null;
+    this.reverbSendNode = null;
+    this.reverbReturnGainNode = null;
+    this.reverbConvolverNode = null;
     this.initPromise = null;
   }
 }
@@ -2958,12 +3230,44 @@ class GravityBallRenderer {
     this.foley.setChannelPan(value);
   }
 
+  setAudioDelaySend(value: number) {
+    this.foley.setDelaySend(value);
+  }
+
+  setAudioReverbSend(value: number) {
+    this.foley.setReverbSend(value);
+  }
+
+  setDelayFeedback(value: number) {
+    this.foley.setDelayFeedback(value);
+  }
+
+  setDelayMix(value: number) {
+    this.foley.setDelayMix(value);
+  }
+
+  setDelayTime(value: number) {
+    this.foley.setDelayTime(value);
+  }
+
+  setDelayTone(value: number) {
+    this.foley.setDelayTone(value);
+  }
+
   getAudioMeterLevel() {
     return this.foley.getMeterLevel();
   }
 
   getOutputTrack() {
     return this.foley.getOutputTrack();
+  }
+
+  setReverbMix(value: number) {
+    this.foley.setReverbMix(value);
+  }
+
+  setReverbTime(value: number) {
+    this.foley.setReverbTime(value);
   }
 
   setHandState(state: GravityBallHandState | null, at = performance.now()) {
@@ -3774,16 +4078,28 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const mixerSynthMuteButton = root.querySelector('[data-mixer-synth-mute]');
   const mixerSynthPanInput = root.querySelector('[data-mixer-synth-pan]');
   const mixerSynthPanKnob = root.querySelector('[data-mixer-synth-pan-knob]');
+  const mixerSynthReverbSendInput = root.querySelector('[data-mixer-synth-reverb-send]');
+  const mixerSynthReverbSendKnob = root.querySelector('[data-mixer-synth-reverb-send-knob]');
+  const mixerSynthDelaySendInput = root.querySelector('[data-mixer-synth-delay-send]');
+  const mixerSynthDelaySendKnob = root.querySelector('[data-mixer-synth-delay-send-knob]');
   const mixerBallGainInput = root.querySelector('[data-mixer-ball-gain]');
   const mixerBallMeter = root.querySelector('[data-mixer-meter="ball"]');
   const mixerBallMuteButton = root.querySelector('[data-mixer-ball-mute]');
   const mixerBallPanInput = root.querySelector('[data-mixer-ball-pan]');
   const mixerBallPanKnob = root.querySelector('[data-mixer-ball-pan-knob]');
+  const mixerBallReverbSendInput = root.querySelector('[data-mixer-ball-reverb-send]');
+  const mixerBallReverbSendKnob = root.querySelector('[data-mixer-ball-reverb-send-knob]');
+  const mixerBallDelaySendInput = root.querySelector('[data-mixer-ball-delay-send]');
+  const mixerBallDelaySendKnob = root.querySelector('[data-mixer-ball-delay-send-knob]');
   const mixerIncomingGainInput = root.querySelector('[data-mixer-incoming-gain]');
   const mixerIncomingMeter = root.querySelector('[data-mixer-meter="incoming"]');
   const mixerIncomingMuteButton = root.querySelector('[data-mixer-incoming-mute]');
   const mixerIncomingPanInput = root.querySelector('[data-mixer-incoming-pan]');
   const mixerIncomingPanKnob = root.querySelector('[data-mixer-incoming-pan-knob]');
+  const mixerIncomingReverbSendInput = root.querySelector('[data-mixer-incoming-reverb-send]');
+  const mixerIncomingReverbSendKnob = root.querySelector('[data-mixer-incoming-reverb-send-knob]');
+  const mixerIncomingDelaySendInput = root.querySelector('[data-mixer-incoming-delay-send]');
+  const mixerIncomingDelaySendKnob = root.querySelector('[data-mixer-incoming-delay-send-knob]');
   const mixerMasterGainInput = root.querySelector('[data-mixer-master-gain]');
   const mixerMasterMeter = root.querySelector('[data-mixer-meter="master"]');
   const mixerMasterMuteButton = root.querySelector('[data-mixer-master-mute]');
@@ -3799,12 +4115,21 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const mixerVideoContrastKnob = root.querySelector('[data-mixer-video-contrast-knob]');
   const mixerVideoBrightnessInput = root.querySelector('[data-mixer-video-brightness]');
   const mixerVideoBrightnessKnob = root.querySelector('[data-mixer-video-brightness-knob]');
+  const mixerResetButtonNodes = Array.from(root.querySelectorAll('[data-mixer-reset-button]'));
   const mixerResetScopeNodes = Array.from(root.querySelectorAll('[data-mixer-reset-scope]'));
   const mixerResetControlNodes = Array.from(root.querySelectorAll('[data-mixer-reset-control]'));
   const synthReverbTimeInput = root.querySelector('[data-synth-reverb-time-input]');
   const synthReverbTimeOutput = root.querySelector('[data-synth-reverb-time-output]');
   const synthReverbMixInput = root.querySelector('[data-synth-reverb-mix-input]');
   const synthReverbMixOutput = root.querySelector('[data-synth-reverb-mix-output]');
+  const synthDelayTimeInput = root.querySelector('[data-synth-delay-time-input]');
+  const synthDelayTimeOutput = root.querySelector('[data-synth-delay-time-output]');
+  const synthDelayFeedbackInput = root.querySelector('[data-synth-delay-feedback-input]');
+  const synthDelayFeedbackOutput = root.querySelector('[data-synth-delay-feedback-output]');
+  const synthDelayMixInput = root.querySelector('[data-synth-delay-mix-input]');
+  const synthDelayMixOutput = root.querySelector('[data-synth-delay-mix-output]');
+  const synthDelayToneInput = root.querySelector('[data-synth-delay-tone-input]');
+  const synthDelayToneOutput = root.querySelector('[data-synth-delay-tone-output]');
   const synthCompToggle = root.querySelector('[data-synth-comp-toggle]');
   const synthCompThresholdInput = root.querySelector('[data-synth-comp-threshold-input]');
   const synthCompThresholdOutput = root.querySelector('[data-synth-comp-threshold-output]');
@@ -4093,10 +4418,19 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let incomingAudioGroupMeterData: Uint8Array | null = null;
   let incomingAudioGroupGainNode: GainNode | null = null;
   let incomingAudioGroupPannerNode: StereoPannerNode | null = null;
+  let incomingAudioDelayFeedbackGainNode: GainNode | null = null;
+  let incomingAudioDelayFilterNode: BiquadFilterNode | null = null;
+  let incomingAudioDelayNode: DelayNode | null = null;
+  let incomingAudioDelayReturnGainNode: GainNode | null = null;
+  let incomingAudioDelaySendNode: GainNode | null = null;
+  let incomingAudioDryGainNode: GainNode | null = null;
   let incomingAudioMasterAnalyser: AnalyserNode | null = null;
   let incomingAudioMasterMeterData: Uint8Array | null = null;
   let incomingAudioMasterGainNode: GainNode | null = null;
   let incomingAudioMasterPannerNode: StereoPannerNode | null = null;
+  let incomingAudioReverbConvolverNode: ConvolverNode | null = null;
+  let incomingAudioReverbReturnGainNode: GainNode | null = null;
+  let incomingAudioReverbSendNode: GainNode | null = null;
   const incomingAudioSources = new Map<
     string,
     {
@@ -4118,12 +4452,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let breakRoomAssignments: Record<string, string> = {};
   let sessionLeaderIdentity = '';
   let mixerSynthGain = normalizeMasterGain(persistedSetup.mixerSynthGain, 1);
+  let mixerSynthReverbSend = clampNumber(persistedSetup.mixerSynthReverbSend, 0, 1, 0.55, 2);
+  let mixerSynthDelaySend = clampNumber(persistedSetup.mixerSynthDelaySend, 0, 1, 0, 2);
   let mixerSynthMuted = Boolean(persistedSetup.mixerSynthMuted);
   let mixerSynthPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerSynthPan) || 0));
   let mixerBallGain = normalizeMasterGain(persistedSetup.mixerBallGain, 1);
+  let mixerBallReverbSend = clampNumber(persistedSetup.mixerBallReverbSend, 0, 1, 0, 2);
+  let mixerBallDelaySend = clampNumber(persistedSetup.mixerBallDelaySend, 0, 1, 0, 2);
   let mixerBallMuted = Boolean(persistedSetup.mixerBallMuted);
   let mixerBallPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerBallPan) || 0));
   let mixerIncomingGain = normalizeMasterGain(persistedSetup.mixerIncomingGain, 1);
+  let mixerIncomingReverbSend = clampNumber(persistedSetup.mixerIncomingReverbSend, 0, 1, 0, 2);
+  let mixerIncomingDelaySend = clampNumber(persistedSetup.mixerIncomingDelaySend, 0, 1, 0, 2);
   let mixerIncomingMuted = Boolean(persistedSetup.mixerIncomingMuted);
   let mixerIncomingPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerIncomingPan) || 0));
   let mixerMasterGain = normalizeMasterGain(persistedSetup.mixerMasterGain, 1);
@@ -4138,6 +4478,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   } satisfies VideoMixSettings;
   let mixerMeterAnimationId = 0;
   let synthControlRanges = readPersistedHandControlRanges(persistedSetup.synthControlRanges);
+  let synthDelayTime = clampNumber(persistedSetup.delayTime, 0.05, 1.2, 0.38, 2);
+  let synthDelayFeedback = clampNumber(persistedSetup.delayFeedback, 0, 0.95, 0.38, 2);
+  let synthDelayMix = clampNumber(persistedSetup.delayMix, 0, 1, 0.32, 2);
+  let synthDelayTone = clampNumber(persistedSetup.delayTone, 400, 8000, 4200, 0);
   let synthReverbTime = clampNumber(persistedSetup.reverbTime, 0.4, 8, 3, 2);
   let synthReverbMix = clampNumber(persistedSetup.reverbMix, 0, 1, 0.5, 2);
   let synthCompressorEnabled = persistedSetup.compressorEnabled !== false;
@@ -5677,6 +6021,67 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     input.focus();
   };
 
+  const applyIncomingFxState = (refreshReverbImpulse = false) => {
+    if (!incomingAudioContext) return;
+
+    if (incomingAudioReverbSendNode) {
+      incomingAudioReverbSendNode.gain.setTargetAtTime(
+        mixerIncomingReverbSend,
+        incomingAudioContext.currentTime,
+        0.03,
+      );
+    }
+    if (incomingAudioReverbReturnGainNode) {
+      incomingAudioReverbReturnGainNode.gain.setTargetAtTime(
+        synthReverbMix,
+        incomingAudioContext.currentTime,
+        0.03,
+      );
+    }
+    if (refreshReverbImpulse && incomingAudioReverbConvolverNode) {
+      incomingAudioReverbConvolverNode.buffer = createImpulseResponseBuffer(
+        incomingAudioContext,
+        synthReverbTime,
+        2.8,
+      );
+    }
+    if (incomingAudioDelaySendNode) {
+      incomingAudioDelaySendNode.gain.setTargetAtTime(
+        mixerIncomingDelaySend,
+        incomingAudioContext.currentTime,
+        0.03,
+      );
+    }
+    if (incomingAudioDelayNode) {
+      incomingAudioDelayNode.delayTime.setTargetAtTime(
+        synthDelayTime,
+        incomingAudioContext.currentTime,
+        0.03,
+      );
+    }
+    if (incomingAudioDelayFeedbackGainNode) {
+      incomingAudioDelayFeedbackGainNode.gain.setTargetAtTime(
+        synthDelayFeedback,
+        incomingAudioContext.currentTime,
+        0.03,
+      );
+    }
+    if (incomingAudioDelayFilterNode) {
+      incomingAudioDelayFilterNode.frequency.setTargetAtTime(
+        synthDelayTone,
+        incomingAudioContext.currentTime,
+        0.03,
+      );
+    }
+    if (incomingAudioDelayReturnGainNode) {
+      incomingAudioDelayReturnGainNode.gain.setTargetAtTime(
+        synthDelayMix,
+        incomingAudioContext.currentTime,
+        0.03,
+      );
+    }
+  };
+
   const applyMixerState = () => {
     if (mixerSynthGainInput instanceof HTMLInputElement) {
       mixerSynthGainInput.value = mixerSynthGain.toFixed(2);
@@ -5684,17 +6089,35 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (mixerSynthPanInput instanceof HTMLInputElement) {
       mixerSynthPanInput.value = mixerSynthPan.toFixed(2);
     }
+    if (mixerSynthReverbSendInput instanceof HTMLInputElement) {
+      mixerSynthReverbSendInput.value = mixerSynthReverbSend.toFixed(2);
+    }
+    if (mixerSynthDelaySendInput instanceof HTMLInputElement) {
+      mixerSynthDelaySendInput.value = mixerSynthDelaySend.toFixed(2);
+    }
     if (mixerBallGainInput instanceof HTMLInputElement) {
       mixerBallGainInput.value = mixerBallGain.toFixed(2);
     }
     if (mixerBallPanInput instanceof HTMLInputElement) {
       mixerBallPanInput.value = mixerBallPan.toFixed(2);
     }
+    if (mixerBallReverbSendInput instanceof HTMLInputElement) {
+      mixerBallReverbSendInput.value = mixerBallReverbSend.toFixed(2);
+    }
+    if (mixerBallDelaySendInput instanceof HTMLInputElement) {
+      mixerBallDelaySendInput.value = mixerBallDelaySend.toFixed(2);
+    }
     if (mixerIncomingGainInput instanceof HTMLInputElement) {
       mixerIncomingGainInput.value = mixerIncomingGain.toFixed(2);
     }
     if (mixerIncomingPanInput instanceof HTMLInputElement) {
       mixerIncomingPanInput.value = mixerIncomingPan.toFixed(2);
+    }
+    if (mixerIncomingReverbSendInput instanceof HTMLInputElement) {
+      mixerIncomingReverbSendInput.value = mixerIncomingReverbSend.toFixed(2);
+    }
+    if (mixerIncomingDelaySendInput instanceof HTMLInputElement) {
+      mixerIncomingDelaySendInput.value = mixerIncomingDelaySend.toFixed(2);
     }
     if (mixerMasterGainInput instanceof HTMLInputElement) {
       mixerMasterGainInput.value = mixerMasterGain.toFixed(2);
@@ -5723,13 +6146,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     syncPanKnob(mixerBallPanKnob, mixerBallPan);
     syncPanKnob(mixerIncomingPanKnob, mixerIncomingPan);
     syncPanKnob(mixerMasterPanKnob, mixerMasterPan);
+    syncValueKnob(mixerSynthReverbSendKnob, mixerSynthReverbSendInput, mixerSynthReverbSend);
+    syncValueKnob(mixerSynthDelaySendKnob, mixerSynthDelaySendInput, mixerSynthDelaySend);
+    syncValueKnob(mixerBallReverbSendKnob, mixerBallReverbSendInput, mixerBallReverbSend);
+    syncValueKnob(mixerBallDelaySendKnob, mixerBallDelaySendInput, mixerBallDelaySend);
+    syncValueKnob(mixerIncomingReverbSendKnob, mixerIncomingReverbSendInput, mixerIncomingReverbSend);
+    syncValueKnob(mixerIncomingDelaySendKnob, mixerIncomingDelaySendInput, mixerIncomingDelaySend);
 
     fmSynth.setChannelGain(mixerSynthMuted ? 0 : mixerSynthGain);
     fmSynth.setChannelPan(mixerSynthPan);
+    fmSynth.setReverbSend(mixerSynthReverbSend);
+    fmSynth.setDelaySend(mixerSynthDelaySend);
     gravityBallRenderer?.setAudioChannelGain(
       Math.min(1, Math.max(0, (mixerBallMuted ? 0 : mixerBallGain) * (mixerMasterMuted ? 0 : mixerMasterGain))),
     );
     gravityBallRenderer?.setAudioChannelPan(Math.max(-1, Math.min(1, mixerBallPan + mixerMasterPan * 0.5)));
+    gravityBallRenderer?.setAudioReverbSend(mixerBallReverbSend);
+    gravityBallRenderer?.setAudioDelaySend(mixerBallDelaySend);
     fmSynth.setMasterPan(mixerMasterPan);
     fmSynth.setMasterGain(
       Math.min(1, Math.max(0, SYNTH_BASE_MASTER_GAIN * (mixerMasterMuted ? 0 : mixerMasterGain))),
@@ -5755,6 +6188,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (incomingAudioMasterPannerNode && incomingAudioContext) {
       incomingAudioMasterPannerNode.pan.setTargetAtTime(mixerMasterPan, incomingAudioContext.currentTime, 0.03);
     }
+
+    applyIncomingFxState();
   };
 
   const syncValueKnob = (
@@ -5876,6 +6311,30 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (synthReverbMixOutput instanceof HTMLOutputElement || synthReverbMixOutput instanceof HTMLElement) {
       synthReverbMixOutput.textContent = `${Math.round(synthReverbMix * 100)}%`;
     }
+    if (synthDelayTimeInput instanceof HTMLInputElement) {
+      synthDelayTimeInput.value = synthDelayTime.toFixed(2);
+    }
+    if (synthDelayTimeOutput instanceof HTMLOutputElement || synthDelayTimeOutput instanceof HTMLElement) {
+      synthDelayTimeOutput.textContent = formatDelayTimeLabel(synthDelayTime);
+    }
+    if (synthDelayFeedbackInput instanceof HTMLInputElement) {
+      synthDelayFeedbackInput.value = synthDelayFeedback.toFixed(2);
+    }
+    if (synthDelayFeedbackOutput instanceof HTMLOutputElement || synthDelayFeedbackOutput instanceof HTMLElement) {
+      synthDelayFeedbackOutput.textContent = `${Math.round(synthDelayFeedback * 100)}%`;
+    }
+    if (synthDelayMixInput instanceof HTMLInputElement) {
+      synthDelayMixInput.value = synthDelayMix.toFixed(2);
+    }
+    if (synthDelayMixOutput instanceof HTMLOutputElement || synthDelayMixOutput instanceof HTMLElement) {
+      synthDelayMixOutput.textContent = `${Math.round(synthDelayMix * 100)}%`;
+    }
+    if (synthDelayToneInput instanceof HTMLInputElement) {
+      synthDelayToneInput.value = synthDelayTone.toFixed(0);
+    }
+    if (synthDelayToneOutput instanceof HTMLOutputElement || synthDelayToneOutput instanceof HTMLElement) {
+      synthDelayToneOutput.textContent = formatFrequencyLabel(synthDelayTone);
+    }
     if (synthCompToggle instanceof HTMLButtonElement) {
       synthCompToggle.dataset.active = synthCompressorEnabled ? 'true' : 'false';
     }
@@ -5933,11 +6392,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     syncPanKnob(mixerSynthPanKnob, mixerSynthPan);
+    syncPanKnob(mixerBallPanKnob, mixerBallPan);
     syncPanKnob(mixerIncomingPanKnob, mixerIncomingPan);
     syncPanKnob(mixerMasterPanKnob, mixerMasterPan);
 
     fmSynth.setReverbTime(synthReverbTime);
     fmSynth.setReverbMix(synthReverbMix);
+    fmSynth.setDelayTime(synthDelayTime);
+    fmSynth.setDelayFeedback(synthDelayFeedback);
+    fmSynth.setDelayMix(synthDelayMix);
+    fmSynth.setDelayTone(synthDelayTone);
+    gravityBallRenderer?.setReverbTime(synthReverbTime);
+    gravityBallRenderer?.setReverbMix(synthReverbMix);
+    gravityBallRenderer?.setDelayTime(synthDelayTime);
+    gravityBallRenderer?.setDelayFeedback(synthDelayFeedback);
+    gravityBallRenderer?.setDelayMix(synthDelayMix);
+    gravityBallRenderer?.setDelayTone(synthDelayTone);
+    applyIncomingFxState(true);
     fmSynth.setCompressorEnabled(synthCompressorEnabled);
     fmSynth.setCompressorThreshold(synthCompressorThreshold);
     fmSynth.setCompressorRatio(synthCompressorRatio);
@@ -5961,6 +6432,30 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       incomingAudioContext = new AudioContextCtor({ sampleRate: 48_000 });
       incomingAudioGroupGainNode = incomingAudioContext.createGain();
       incomingAudioGroupPannerNode = incomingAudioContext.createStereoPanner();
+      incomingAudioDryGainNode = incomingAudioContext.createGain();
+      incomingAudioDryGainNode.gain.value = 1;
+      incomingAudioReverbSendNode = incomingAudioContext.createGain();
+      incomingAudioReverbSendNode.gain.value = mixerIncomingReverbSend;
+      incomingAudioReverbConvolverNode = incomingAudioContext.createConvolver();
+      incomingAudioReverbConvolverNode.buffer = createImpulseResponseBuffer(
+        incomingAudioContext,
+        synthReverbTime,
+        2.8,
+      );
+      incomingAudioReverbReturnGainNode = incomingAudioContext.createGain();
+      incomingAudioReverbReturnGainNode.gain.value = synthReverbMix;
+      incomingAudioDelaySendNode = incomingAudioContext.createGain();
+      incomingAudioDelaySendNode.gain.value = mixerIncomingDelaySend;
+      incomingAudioDelayNode = incomingAudioContext.createDelay(2);
+      incomingAudioDelayNode.delayTime.value = synthDelayTime;
+      incomingAudioDelayFeedbackGainNode = incomingAudioContext.createGain();
+      incomingAudioDelayFeedbackGainNode.gain.value = synthDelayFeedback;
+      incomingAudioDelayFilterNode = incomingAudioContext.createBiquadFilter();
+      incomingAudioDelayFilterNode.type = 'lowpass';
+      incomingAudioDelayFilterNode.frequency.value = synthDelayTone;
+      incomingAudioDelayFilterNode.Q.value = 0.2;
+      incomingAudioDelayReturnGainNode = incomingAudioContext.createGain();
+      incomingAudioDelayReturnGainNode.gain.value = synthDelayMix;
       incomingAudioGroupAnalyser = incomingAudioContext.createAnalyser();
       incomingAudioGroupAnalyser.fftSize = 256;
       incomingAudioGroupAnalyser.smoothingTimeConstant = 0.86;
@@ -5973,7 +6468,19 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       incomingAudioMasterMeterData = new Uint8Array(incomingAudioMasterAnalyser.fftSize);
 
       incomingAudioGroupGainNode.connect(incomingAudioGroupPannerNode);
-      incomingAudioGroupPannerNode.connect(incomingAudioGroupAnalyser);
+      incomingAudioGroupPannerNode.connect(incomingAudioDryGainNode);
+      incomingAudioGroupPannerNode.connect(incomingAudioReverbSendNode);
+      incomingAudioReverbSendNode.connect(incomingAudioReverbConvolverNode);
+      incomingAudioReverbConvolverNode.connect(incomingAudioReverbReturnGainNode);
+      incomingAudioGroupPannerNode.connect(incomingAudioDelaySendNode);
+      incomingAudioDelaySendNode.connect(incomingAudioDelayNode);
+      incomingAudioDelayNode.connect(incomingAudioDelayFilterNode);
+      incomingAudioDelayFilterNode.connect(incomingAudioDelayReturnGainNode);
+      incomingAudioDelayFilterNode.connect(incomingAudioDelayFeedbackGainNode);
+      incomingAudioDelayFeedbackGainNode.connect(incomingAudioDelayNode);
+      incomingAudioDryGainNode.connect(incomingAudioGroupAnalyser);
+      incomingAudioReverbReturnGainNode.connect(incomingAudioGroupAnalyser);
+      incomingAudioDelayReturnGainNode.connect(incomingAudioGroupAnalyser);
       incomingAudioGroupAnalyser.connect(incomingAudioMasterGainNode);
       incomingAudioMasterGainNode.connect(incomingAudioMasterPannerNode);
       incomingAudioMasterPannerNode.connect(incomingAudioMasterAnalyser);
@@ -6036,6 +6543,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       void incomingAudioContext.close().catch(() => undefined);
     }
     incomingAudioContext = null;
+    incomingAudioDelayFeedbackGainNode = null;
+    incomingAudioDelayFilterNode = null;
+    incomingAudioDelayNode = null;
+    incomingAudioDelayReturnGainNode = null;
+    incomingAudioDelaySendNode = null;
+    incomingAudioDryGainNode = null;
     incomingAudioGroupAnalyser = null;
     incomingAudioGroupMeterData = null;
     incomingAudioGroupGainNode = null;
@@ -6044,6 +6557,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     incomingAudioMasterMeterData = null;
     incomingAudioMasterGainNode = null;
     incomingAudioMasterPannerNode = null;
+    incomingAudioReverbConvolverNode = null;
+    incomingAudioReverbReturnGainNode = null;
+    incomingAudioReverbSendNode = null;
   };
 
   const getParticipantJoinedAtMs = (participant: Participant | null | undefined) => {
@@ -6427,23 +6943,33 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       recordingPreset,
       showCircle: showPresentationCircle,
       mixerIncomingGain,
+      mixerIncomingDelaySend,
       mixerIncomingMuted,
       mixerIncomingPan,
+      mixerIncomingReverbSend,
       mixerBallGain,
+      mixerBallDelaySend,
       mixerBallMuted,
       mixerBallPan,
+      mixerBallReverbSend,
       mixerMasterGain,
       mixerMasterMuted,
       mixerMasterPan,
       mixerSynthGain,
+      mixerSynthDelaySend,
       mixerSynthMuted,
       mixerSynthPan,
+      mixerSynthReverbSend,
       videoBrightness: videoMix.brightness,
       videoContrast: videoMix.contrast,
       videoLuma: videoMix.luma,
       videoSaturation: videoMix.saturation,
       videoTint: videoMix.tint,
       synthControlRanges,
+      delayFeedback: synthDelayFeedback,
+      delayMix: synthDelayMix,
+      delayTime: synthDelayTime,
+      delayTone: synthDelayTone,
       reverbMix: synthReverbMix,
       reverbTime: synthReverbTime,
       compressorAttack: synthCompressorAttack,
@@ -8402,6 +8928,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     disconnectedStagePreviewMount = null;
   };
 
+  const forceDisconnectedPreviewLayout = () => {
+    if (room.state !== ConnectionState.Disconnected) return;
+    const nextLayout = setLayout(stage, 'teacher');
+    layoutInput.value = nextLayout;
+    syncLayoutChoiceButtons();
+    writeQueryState();
+  };
+
   const syncDisconnectedStagePreview = () => {
     if (
       room.state !== ConnectionState.Disconnected ||
@@ -8558,6 +9092,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     disconnectedCameraPreviewEnabled = true;
+    forceDisconnectedPreviewLayout();
     await mountLocalPreviewStream(stream);
     await refreshDeviceOptions(true);
   };
@@ -11003,6 +11538,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     persistSetupState();
   });
 
+  bindMixerRange(mixerSynthReverbSendInput, () => {
+    if (!(mixerSynthReverbSendInput instanceof HTMLInputElement)) return;
+    mixerSynthReverbSend = clampNumber(mixerSynthReverbSendInput.value, 0, 1, mixerSynthReverbSend, 2);
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerSynthDelaySendInput, () => {
+    if (!(mixerSynthDelaySendInput instanceof HTMLInputElement)) return;
+    mixerSynthDelaySend = clampNumber(mixerSynthDelaySendInput.value, 0, 1, mixerSynthDelaySend, 2);
+    applyMixerState();
+    persistSetupState();
+  });
+
   bindMixerRange(mixerBallGainInput, () => {
     if (!(mixerBallGainInput instanceof HTMLInputElement)) return;
     mixerBallGain = normalizeMasterGain(mixerBallGainInput.value, mixerBallGain);
@@ -11017,6 +11566,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     persistSetupState();
   });
 
+  bindMixerRange(mixerBallReverbSendInput, () => {
+    if (!(mixerBallReverbSendInput instanceof HTMLInputElement)) return;
+    mixerBallReverbSend = clampNumber(mixerBallReverbSendInput.value, 0, 1, mixerBallReverbSend, 2);
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerBallDelaySendInput, () => {
+    if (!(mixerBallDelaySendInput instanceof HTMLInputElement)) return;
+    mixerBallDelaySend = clampNumber(mixerBallDelaySendInput.value, 0, 1, mixerBallDelaySend, 2);
+    applyMixerState();
+    persistSetupState();
+  });
+
   bindMixerRange(mixerIncomingGainInput, () => {
     if (!(mixerIncomingGainInput instanceof HTMLInputElement)) return;
     mixerIncomingGain = normalizeMasterGain(mixerIncomingGainInput.value, mixerIncomingGain);
@@ -11027,6 +11590,32 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   bindMixerRange(mixerIncomingPanInput, () => {
     if (!(mixerIncomingPanInput instanceof HTMLInputElement)) return;
     mixerIncomingPan = Math.min(1, Math.max(-1, Number(mixerIncomingPanInput.value) || 0));
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerIncomingReverbSendInput, () => {
+    if (!(mixerIncomingReverbSendInput instanceof HTMLInputElement)) return;
+    mixerIncomingReverbSend = clampNumber(
+      mixerIncomingReverbSendInput.value,
+      0,
+      1,
+      mixerIncomingReverbSend,
+      2,
+    );
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerIncomingDelaySendInput, () => {
+    if (!(mixerIncomingDelaySendInput instanceof HTMLInputElement)) return;
+    mixerIncomingDelaySend = clampNumber(
+      mixerIncomingDelaySendInput.value,
+      0,
+      1,
+      mixerIncomingDelaySend,
+      2,
+    );
     applyMixerState();
     persistSetupState();
   });
@@ -11095,6 +11684,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (scope === 'synth') {
       mixerSynthPan = 0;
       mixerSynthGain = 0;
+      mixerSynthReverbSend = 0;
+      mixerSynthDelaySend = 0;
       mixerSynthMuted = false;
       applyMixerState();
       persistSetupState();
@@ -11105,6 +11696,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (scope === 'ball') {
       mixerBallPan = 0;
       mixerBallGain = 0;
+      mixerBallReverbSend = 0;
+      mixerBallDelaySend = 0;
       mixerBallMuted = false;
       applyMixerState();
       persistSetupState();
@@ -11115,10 +11708,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (scope === 'incoming') {
       mixerIncomingPan = 0;
       mixerIncomingGain = 0;
+      mixerIncomingReverbSend = 0;
+      mixerIncomingDelaySend = 0;
       mixerIncomingMuted = false;
       applyMixerState();
       persistSetupState();
-      setStatus('IN reset.');
+      setStatus('CH3 reset.');
       return;
     }
 
@@ -11200,11 +11795,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   bindRangeKnob(mixerBallPanKnob, mixerBallPanInput, 0);
   bindRangeKnob(mixerIncomingPanKnob, mixerIncomingPanInput, 0);
   bindRangeKnob(mixerMasterPanKnob, mixerMasterPanInput, 0);
+  bindRangeKnob(mixerSynthReverbSendKnob, mixerSynthReverbSendInput, 0);
+  bindRangeKnob(mixerSynthDelaySendKnob, mixerSynthDelaySendInput, 0);
+  bindRangeKnob(mixerBallReverbSendKnob, mixerBallReverbSendInput, 0);
+  bindRangeKnob(mixerBallDelaySendKnob, mixerBallDelaySendInput, 0);
+  bindRangeKnob(mixerIncomingReverbSendKnob, mixerIncomingReverbSendInput, 0);
+  bindRangeKnob(mixerIncomingDelaySendKnob, mixerIncomingDelaySendInput, 0);
   bindRangeKnob(mixerVideoLumaKnob, mixerVideoLumaInput, 0);
   bindRangeKnob(mixerVideoTintKnob, mixerVideoTintInput, 0);
   bindRangeKnob(mixerVideoSaturationKnob, mixerVideoSaturationInput, 0);
   bindRangeKnob(mixerVideoContrastKnob, mixerVideoContrastInput, 0);
   bindRangeKnob(mixerVideoBrightnessKnob, mixerVideoBrightnessInput, 0);
+
+  mixerResetButtonNodes.forEach((node) => {
+    if (!(node instanceof HTMLElement)) return;
+    node.addEventListener('click', () => {
+      resetMixerScope(normalizeText(node.dataset.mixerResetButton));
+    });
+  });
 
   mixerResetScopeNodes.forEach((node) => {
     if (!(node instanceof HTMLElement)) return;
@@ -11230,6 +11838,34 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   bindMixerRange(synthReverbMixInput, () => {
     if (!(synthReverbMixInput instanceof HTMLInputElement)) return;
     synthReverbMix = clampNumber(synthReverbMixInput.value, 0, 1, synthReverbMix, 2);
+    applySynthFxState();
+    persistSetupState();
+  });
+
+  bindMixerRange(synthDelayTimeInput, () => {
+    if (!(synthDelayTimeInput instanceof HTMLInputElement)) return;
+    synthDelayTime = clampNumber(synthDelayTimeInput.value, 0.05, 1.2, synthDelayTime, 2);
+    applySynthFxState();
+    persistSetupState();
+  });
+
+  bindMixerRange(synthDelayFeedbackInput, () => {
+    if (!(synthDelayFeedbackInput instanceof HTMLInputElement)) return;
+    synthDelayFeedback = clampNumber(synthDelayFeedbackInput.value, 0, 0.95, synthDelayFeedback, 2);
+    applySynthFxState();
+    persistSetupState();
+  });
+
+  bindMixerRange(synthDelayMixInput, () => {
+    if (!(synthDelayMixInput instanceof HTMLInputElement)) return;
+    synthDelayMix = clampNumber(synthDelayMixInput.value, 0, 1, synthDelayMix, 2);
+    applySynthFxState();
+    persistSetupState();
+  });
+
+  bindMixerRange(synthDelayToneInput, () => {
+    if (!(synthDelayToneInput instanceof HTMLInputElement)) return;
+    synthDelayTone = clampNumber(synthDelayToneInput.value, 400, 8000, synthDelayTone, 0);
     applySynthFxState();
     persistSetupState();
   });

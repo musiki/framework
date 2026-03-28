@@ -488,9 +488,10 @@ export function buildTeacherMainProjection({
 
   const lessonCount = Math.max(0, gradebookColumns.length - 1);
   const rows = buildMergedRows(overviewRows, attendanceSummaryRows, gradebookRows).map((row) => {
-    const nextRow = { ...row };
+    const rowRecord = row as Record<string, unknown>;
+    const nextRow = { ...rowRecord } as Record<string, unknown>;
     for (let lessonIndex = 0; lessonIndex < lessonCount; lessonIndex += 1) {
-      nextRow[getTeacherMainLessonSummaryField(lessonIndex)] = row[`__avg_lesson_${lessonIndex}`] ?? null;
+      nextRow[getTeacherMainLessonSummaryField(lessonIndex)] = rowRecord[`__avg_lesson_${lessonIndex}`] ?? null;
     }
     return nextRow;
   });
