@@ -262,7 +262,7 @@ const withActiveCourse = (href: string) => {
 					</button>
 				) : null
 			}
-		<Search />
+		</div>
 		<div class="social-links">
 			{
 				hasPresentationLink && (
@@ -353,6 +353,9 @@ const withActiveCourse = (href: string) => {
 						<button
 							class="user-button"
 							id="user-menu-button"
+							type="button"
+							aria-haspopup="menu"
+							aria-expanded="false"
 							aria-label={user.name || user.email || 'Cuenta'}
 						>
 							{
@@ -382,6 +385,7 @@ const withActiveCourse = (href: string) => {
 		</div>
 	</nav>
 </header>
+<Search />
 <GraphModal />
 <script>
 	declare global {
@@ -545,8 +549,12 @@ const withActiveCourse = (href: string) => {
 		const courseMenuButton = document.getElementById('course-menu-button');
 		const courseMenuLabel = document.getElementById('course-menu-trigger-label');
 		const courseDropdown = document.getElementById('course-dropdown');
+		const syncUserMenuOpen = (isOpen: boolean) => {
+			userDropdown?.classList.toggle('show', isOpen);
+			userMenuButton?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+		};
 		const syncCourseMenuOpen = (isOpen: boolean) => {
-			if (userDropdown) userDropdown.classList.remove('show');
+			syncUserMenuOpen(false);
 			courseDropdown?.classList.toggle('show', isOpen);
 			courseMenuButton?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
 			courseMenuLabel?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
@@ -560,10 +568,9 @@ const withActiveCourse = (href: string) => {
 			userMenuButton.dataset.bound = 'true';
 			userMenuButton.addEventListener('click', (event) => {
 				event.stopPropagation();
-				if (courseDropdown) {
-					syncCourseMenuOpen(false);
-				}
-				userDropdown.classList.toggle('show');
+				const willOpen = !userDropdown.classList.contains('show');
+				syncCourseMenuOpen(false);
+				syncUserMenuOpen(willOpen);
 			});
 		}
 
@@ -592,8 +599,7 @@ const withActiveCourse = (href: string) => {
 		}
 
 		const docClickHandler = (_event: MouseEvent) => {
-			const dropdown = document.getElementById('user-dropdown');
-			dropdown?.classList.remove('show');
+			syncUserMenuOpen(false);
 			syncCourseMenuOpen(false);
 		};
 
@@ -910,10 +916,13 @@ const withActiveCourse = (href: string) => {
 			transform: scale(1.08);
 			filter: drop-shadow(0 0 0.8rem rgba(255, 191, 0, 0.9));
 		}
-	}	nav {
-		display: flex;
+	}
+	nav {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
-		justify-content: space-between;
+		column-gap: 0.45rem;
+		min-width: 0;
 	}
 	nav a {
 		padding: 1em 0.5em;
@@ -931,11 +940,22 @@ const withActiveCourse = (href: string) => {
 		color: var(--accent);
 	}
 	.internal-links {
+		grid-column: 2;
 		display: flex;
 		align-items: center;
 		flex-wrap: nowrap;
-		overflow: visible;
+		gap: 0;
 		min-width: 0;
+		overflow-x: auto;
+		overflow-y: hidden;
+		overscroll-behavior-x: contain;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none;
+		white-space: nowrap;
+		touch-action: pan-x;
+	}
+	.internal-links > * {
+		flex: 0 0 auto;
 	}
 	.internal-links::-webkit-scrollbar {
 		display: none;
@@ -961,6 +981,7 @@ const withActiveCourse = (href: string) => {
 		border-bottom: 4px solid transparent;
 		white-space: nowrap;
 		text-decoration: none;
+		touch-action: manipulation;
 	}
 	.course-menu-trigger:hover,
 	.course-menu-trigger:focus-visible {
@@ -1027,11 +1048,17 @@ const withActiveCourse = (href: string) => {
 		overflow-wrap: anywhere;
 	}
 	.social-links {
+		grid-column: 3;
 		display: flex;
 		align-items: center;
+		justify-content: flex-end;
 		gap: 0.5em;
 		flex-wrap: nowrap;
 		white-space: nowrap;
+		min-width: max-content;
+	}
+	.social-links > * {
+		flex: 0 0 auto;
 	}
 	.auth-links {
 		display: inline-flex;
@@ -1054,6 +1081,7 @@ const withActiveCourse = (href: string) => {
 		border-bottom: 4px solid transparent;
 		text-decoration: none;
 		white-space: nowrap;
+		touch-action: manipulation;
 	}
 	.header-forum-toggle:hover {
 		color: var(--accent);
@@ -1105,6 +1133,7 @@ const withActiveCourse = (href: string) => {
 		gap: 0.34rem;
 		cursor: pointer;
 		line-height: 1;
+		touch-action: manipulation;
 	}
 	.header-activity-led-btn[hidden] {
 		display: none !important;
@@ -1240,6 +1269,7 @@ const withActiveCourse = (href: string) => {
 		align-items: center;
 		justify-content: center;
 		transition: opacity 0.2s;
+		touch-action: manipulation;
 	}
 	.theme-toggle:hover {
 		opacity: 0.7;
@@ -1258,6 +1288,7 @@ const withActiveCourse = (href: string) => {
 		align-items: center;
 		justify-content: center;
 		transition: opacity 0.2s;
+		touch-action: manipulation;
 	}
 	.graph-toggle-btn:hover {
 		opacity: 0.7;
@@ -1276,6 +1307,7 @@ const withActiveCourse = (href: string) => {
 		align-items: center;
 		justify-content: center;
 		transition: opacity 0.2s;
+		touch-action: manipulation;
 	}
 	.presentation-toggle-btn:hover {
 		opacity: 0.7;
@@ -1294,6 +1326,7 @@ const withActiveCourse = (href: string) => {
 		align-items: center;
 		justify-content: center;
 		transition: opacity 0.2s;
+		touch-action: manipulation;
 	}
 	.page-info-toggle-btn:hover {
 		opacity: 0.7;
@@ -1327,6 +1360,7 @@ const withActiveCourse = (href: string) => {
 		line-height: 1;
 		border-bottom: 4px solid transparent;
 		white-space: nowrap;
+		touch-action: manipulation;
 	}
 	.user-button:hover {
 		color: var(--accent);
@@ -1396,38 +1430,21 @@ const withActiveCourse = (href: string) => {
 			padding: 0 0.65rem;
 		}
 		nav {
-			flex-wrap: wrap;
-			justify-content: space-between;
-			gap: 0.08rem 0.35rem;
+			column-gap: 0.3rem;
 			padding-top: 0;
-			align-items: center;
 		}
 		h2 {
-			order: 1;
-			width: auto;
-			display: flex;
-			justify-content: flex-start;
-			flex: 0 0 auto;
+			min-width: 0;
+		}
+		.brand-logo {
+			height: 38px;
 		}
 		.internal-links {
-			order: 3;
-			width: 100%;
 			justify-content: flex-start;
-			flex: 1 0 100%;
-			min-width: 0;
-			white-space: nowrap;
-			gap: 0;
-			margin-top: 0;
-			padding-bottom: 0.05rem;
+			padding-bottom: 0;
 		}
 		.social-links {
-			order: 2;
-			flex: 0 0 auto;
-			flex-wrap: nowrap;
-			white-space: nowrap;
 			gap: 0.2rem;
-			margin-left: auto;
-			align-items: center;
 		}
 		.course-menu-trigger {
 			padding: 0.46em 0.34em;
@@ -1450,72 +1467,6 @@ const withActiveCourse = (href: string) => {
 			min-height: 1.22rem;
 		}
 		.user-button {
-			padding: 0.46em 0.34em;
-			gap: 0.32rem;
-		}
-		.user-button-label {
-			max-width: 5.8rem;
-		}
-	}
-
-	@media (max-width: 900px) {
-		nav {
-			display: grid;
-			grid-template-columns: auto minmax(0, 1fr) auto;
-			grid-template-rows: auto auto;
-			gap: 0.06rem 0.24rem;
-			align-items: center;
-		}
-		h2 {
-			grid-column: 1;
-			grid-row: 1;
-			order: 1;
-			flex: 0 0 auto;
-		}
-		.internal-links {
-			grid-column: 1 / -1;
-			grid-row: 2;
-			order: 2;
-			width: 100%;
-			flex: 0 0 auto;
-			justify-content: flex-start;
-			overflow-x: auto;
-			overflow-y: hidden;
-			overscroll-behavior-x: contain;
-			touch-action: pan-x;
-			-webkit-overflow-scrolling: touch;
-			scrollbar-width: none;
-			white-space: nowrap;
-			margin-top: 0;
-			padding-bottom: 0;
-			align-items: center;
-		}
-		.internal-links::-webkit-scrollbar {
-			display: none;
-		}
-		.course-menu-trigger {
-			padding: 0.42em 0.32em;
-		}
-		.course-menu-trigger-label {
-			max-width: min(10.6rem, 40vw);
-		}
-		nav a,
-		.header-forum-toggle {
-			padding: 0.42em 0.32em;
-			font-size: 0.9rem;
-		}
-		.social-links {
-			grid-column: 3;
-			grid-row: 1;
-			order: 3;
-			flex: 0 0 auto;
-			width: auto;
-			justify-content: flex-end;
-			margin-left: auto;
-			padding-top: 0;
-			align-self: center;
-		}
-		.user-button {
 			padding: 0.18rem 0;
 			gap: 0;
 		}
@@ -1529,22 +1480,47 @@ const withActiveCourse = (href: string) => {
 		}
 	}
 
-	@media (max-width: 720px) {
+	@media (max-width: 900px) {
 		nav {
-			gap: 0.06rem 0.2rem;
+			column-gap: 0.24rem;
 		}
-		.social-links {
-			display: flex;
-			width: auto;
-			justify-content: flex-end;
-			gap: 0.25rem;
-			flex-wrap: nowrap;
+		h2 {
+			min-width: 0;
+		}
+		.brand-logo {
+			height: 34px;
 		}
 		.internal-links {
-			gap: 0 0.08rem;
-			margin-top: 0;
-			flex: 1 1 auto;
-			min-width: 0;
+			justify-content: flex-start;
+			padding-bottom: 0;
+			align-items: center;
+		}
+		.course-menu-trigger {
+			padding: 0.42em 0.32em;
+		}
+		.course-menu-trigger-label {
+			max-width: min(10.6rem, 40vw);
+		}
+		nav a,
+		.header-forum-toggle {
+			padding: 0.42em 0.32em;
+			font-size: 0.9rem;
+		}
+		.social-links {
+			gap: 0.14rem;
+			padding-top: 0;
+		}
+	}
+
+	@media (max-width: 720px) {
+		nav {
+			column-gap: 0.2rem;
+		}
+		.social-links {
+			gap: 0.25rem;
+		}
+		.internal-links {
+			gap: 0 0.06rem;
 		}
 		.course-menu-trigger {
 			padding: 0.4em 0.3em;
@@ -1567,13 +1543,6 @@ const withActiveCourse = (href: string) => {
 			min-width: 1.2rem;
 			min-height: 1.2rem;
 		}
-		.user-button {
-			padding: 0.45em 0.35em;
-			gap: 0.32rem;
-		}
-		.user-button-label {
-			max-width: 6.1rem;
-		}
 		.user-dropdown {
 			position: fixed;
 			top: var(--musiki-header-height, 4.5rem);
@@ -1587,35 +1556,18 @@ const withActiveCourse = (href: string) => {
 			padding: 0 0.4rem;
 		}
 		nav {
-			flex-wrap: wrap;
-			align-items: center;
-			gap: 0.06rem 0.18rem;
+			column-gap: 0.18rem;
 		}
 		h2 {
-			order: 1;
-			flex: 0 0 auto;
 			min-width: 0;
 		}
 		.brand-logo {
-			height: 34px;
+			height: 30px;
 		}
 		.internal-links {
-			order: 3;
-			flex: 1 0 100%;
-			width: 100%;
 			justify-content: flex-start;
 			gap: 0 0.08rem;
-			min-width: 0;
-			margin-top: 0;
 			padding-bottom: 0;
-			overflow-x: auto;
-			overscroll-behavior-x: contain;
-			scrollbar-width: none;
-			white-space: nowrap;
-			flex-wrap: nowrap;
-		}
-		.internal-links::-webkit-scrollbar {
-			display: none;
 		}
 		.course-menu-trigger {
 			padding: 0.35em 0.28em;
@@ -1640,13 +1592,7 @@ const withActiveCourse = (href: string) => {
 			font-size: 0.46rem;
 		}
 		.social-links {
-			order: 2;
-			width: auto;
-			flex: 0 0 auto;
-			margin-left: auto;
-			justify-content: flex-end;
 			gap: 0.15rem;
-			flex-wrap: nowrap;
 			padding-top: 0;
 		}
 		.social-links a {
@@ -1688,11 +1634,12 @@ const withActiveCourse = (href: string) => {
 			flex: 0 0 auto;
 		}
 		.user-button {
-			padding: 0.35em 0.28em;
-			gap: 0.24rem;
+			padding: 0.18rem 0;
+			gap: 0;
 		}
-		.user-button-label {
-			max-width: 4.8rem;
+		.user-avatar {
+			width: 26px;
+			height: 26px;
 		}
 	}
 

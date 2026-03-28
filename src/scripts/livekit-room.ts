@@ -14,6 +14,8 @@ import { subscribeToLive } from '../lib/live/client.mjs';
 import { formatCountdown, getRemainingMs } from '../lib/live/countdown.mjs';
 import { normalizeLayoutMode, setLayout } from './layout-controller';
 import { createPresentationController } from './presentation';
+import { createRoomChatController } from './room/chat';
+import { createRoomNotesController } from './room/notes';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { buildRoomQueryUrl } from './room/layout';
 import {
@@ -294,8 +296,6 @@ const RECORDING_PRESET_CONFIGS: Record<RecordingPresetKey, RecordingPresetConfig
   },
 };
 const ROOM_SETUP_STORAGE_KEY = 'musiki:room:setup:v1';
-const ROOM_NOTES_DRAFT_STORAGE_KEY = 'musiki:room:notes:draft:v1';
-const ROOM_NOTES_CACHE_STORAGE_KEY = 'musiki:room:notes:cache:v1';
 const BACKGROUND_BLUR_PROCESSOR_NAME = 'musiki-background-blur';
 const BACKGROUND_BLUR_MODEL_ASSET =
   'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite';
@@ -1216,27 +1216,6 @@ const createClientGuestIdentity = () => {
 };
 
 const getFirstName = (value: string) => normalizeText(value).split(/\s+/).filter(Boolean)[0] || normalizeText(value);
-
-const DIRECT_IMAGE_URL_REGEX =
-  /\.(png|jpe?g|gif|webp|svg|avif)(?:$|[?#])/i;
-const DIRECT_AUDIO_URL_REGEX =
-  /\.(mp3|wav|ogg|m4a|aac|flac)(?:$|[?#])/i;
-const DIRECT_VIDEO_URL_REGEX =
-  /\.(mp4|webm|mov|m4v|ogv)(?:$|[?#])/i;
-const KNOWN_IMAGE_HOST_REGEX =
-  /(imagedelivery\.net|cdn\.shopify\.com|images\.unsplash\.com|res\.cloudinary\.com)/i;
-const URL_TOKEN_REGEX = /(https?:\/\/[^\s<]+)/gi;
-const CHAT_EMOTICON_REGEX = /:\)|:\(|:>/g;
-const CHAT_EMOTICON_MAP: Record<string, { glyph: string; label: string }> = {
-  ':)': { glyph: '☺︎', label: 'sonrisa' },
-  ':(': { glyph: '☹︎', label: 'triste' },
-  ':>': { glyph: '☻', label: 'sonrisa lateral' },
-};
-
-const isLikelyImageUrl = (value: string) =>
-  DIRECT_IMAGE_URL_REGEX.test(value) || KNOWN_IMAGE_HOST_REGEX.test(value);
-const isLikelyAudioUrl = (value: string) => DIRECT_AUDIO_URL_REGEX.test(value);
-const isLikelyVideoUrl = (value: string) => DIRECT_VIDEO_URL_REGEX.test(value);
 
 const normalizeCoursePathPart = (value: string) => {
   try {
@@ -3843,8 +3822,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     screenAudioMounts: new Map(),
     screenVideoMounts: new Map(),
   };
-  const chatMessages: Extract<ConferenceMessage, { type: 'chat' }>[] = [];
-  let chatAttentionFlashTimer = 0;
   const reactionBursts = new Map<string, number>();
 
   let destroyed = false;
@@ -3939,7 +3916,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   );
   let sessionAllowsInstruments = true;
   let sidebarCollapsed = root.dataset.sidebarCollapsed === 'true';
-  let chatUnreadCount = 0;
   let graphVisible = false;
   let handTrackingAnimationId = 0;
   let handTrackingGeneration = 0;
@@ -4187,34 +4163,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (sessionSetupDetails instanceof HTMLDetailsElement) {
       sessionSetupDetails.open = true;
     }
-  };
-
-  const focusChatComposer = () => {
-    if (sidebarCollapsed) {
-      sidebarCollapsed = false;
-      applySidebarCollapsedState();
-    }
-    if (chatSection instanceof HTMLDetailsElement) {
-      chatSection.open = true;
-    }
-    if (chatSection instanceof HTMLElement) {
-      if (chatAttentionFlashTimer) {
-        window.clearTimeout(chatAttentionFlashTimer);
-        chatAttentionFlashTimer = 0;
-      }
-      chatSection.classList.remove('is-attention-flash');
-      void chatSection.offsetWidth;
-      chatSection.classList.add('is-attention-flash');
-      chatAttentionFlashTimer = window.setTimeout(() => {
-        chatSection.classList.remove('is-attention-flash');
-        chatAttentionFlashTimer = 0;
-      }, 90);
-    }
-    resetChatUnread();
-    window.requestAnimationFrame(() => {
-      chatInput.focus();
-      chatInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
   };
 
   const toggleCheckboxInput = (input: Element | null) => {
@@ -6977,22 +6925,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     queuePreferredRemoteVideoDimensionsSync();
   };
 
-  const syncChatUnreadDot = () => {
-    if (!(chatUnreadDot instanceof HTMLElement)) return;
-    if (chatUnreadCount <= 0) {
-      chatUnreadDot.hidden = true;
-      chatUnreadDot.textContent = '';
-    } else {
-      chatUnreadDot.hidden = false;
-      chatUnreadDot.textContent = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
-    }
-  };
-
-  const resetChatUnread = () => {
-    chatUnreadCount = 0;
-    syncChatUnreadDot();
-  };
-
   const toggleInstrumentsOpen = () => {
     instrumentsOpen = !instrumentsOpen;
     applyInstrumentsOpenState();
@@ -8867,6 +8799,55 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  const chatController = createRoomChatController({
+    chatDownloadButton,
+    chatFocusButton: chatFocusButton instanceof HTMLButtonElement ? chatFocusButton : null,
+    chatInput,
+    chatList,
+    chatSection,
+    chatSendButton,
+    chatUnreadDot,
+    ensureSidebarOpen: () => {
+      if (!sidebarCollapsed) return;
+      sidebarCollapsed = false;
+      applySidebarCollapsedState();
+    },
+    formatError: safeErrorMessage,
+    getIdentity: () => identityInput.value.trim(),
+    getName: () => nameInput.value.trim(),
+    getRole: () => localRole,
+    getRoomName: () => roomInput.value,
+    isConnected: () => room.state === ConnectionState.Connected,
+    publishMessage: async (message) => {
+      await publishMessage(message);
+    },
+    reportStatus: (message) => {
+      setStatus(message);
+    },
+  });
+
+  const focusChatComposer = () => {
+    chatController.focusComposer();
+  };
+
+  const resetChatUnread = () => {
+    chatController.resetUnread();
+  };
+
+  const appendChatMessage = (message: Extract<ConferenceMessage, { type: 'chat' }>, isSent = false) => {
+    chatController.appendMessage(message, isSent);
+  };
+
+  const downloadChatTranscript = () => {
+    chatController.downloadTranscript();
+  };
+
+  const sendChatMessage = async () => {
+    await chatController.sendMessage();
+  };
+
+  chatController.bind();
+
   const publishTeacherState = async () => {
     if (!canLeadSession()) return;
 
@@ -9024,229 +9005,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }, nextHref ? 48 : 0);
   };
 
-  const appendConferenceTextNode = (container: HTMLElement, text: string) => {
-    if (!text) return;
-    let lastIndex = 0;
-
-    text.replace(CHAT_EMOTICON_REGEX, (match, offset) => {
-      const chunk = text.slice(lastIndex, offset);
-      if (chunk) {
-        container.appendChild(document.createTextNode(chunk));
-      }
-
-      const emojiConfig = CHAT_EMOTICON_MAP[match];
-      if (emojiConfig) {
-        const emoji = document.createElement('span');
-        emoji.className = 'conference-chat-emoji';
-        emoji.textContent = emojiConfig.glyph;
-        emoji.title = emojiConfig.label;
-        emoji.setAttribute('aria-label', emojiConfig.label);
-        container.appendChild(emoji);
-      } else {
-        container.appendChild(document.createTextNode(match));
-      }
-
-      lastIndex = offset + match.length;
-      return match;
-    });
-
-    const trailing = text.slice(lastIndex);
-    if (trailing) {
-      container.appendChild(document.createTextNode(trailing));
-    }
-  };
-
-  const appendConferenceUrlNode = (container: HTMLElement, rawUrl: string) => {
-    const href = normalizeText(rawUrl);
-    if (!href) return;
-
-    if (isLikelyImageUrl(href)) {
-      const anchor = document.createElement('a');
-      anchor.href = href;
-      anchor.target = '_blank';
-      anchor.rel = 'noreferrer noopener';
-      anchor.className = 'conference-chat-link conference-chat-link--media';
-
-      const image = document.createElement('img');
-      image.src = href;
-      image.alt = 'Media compartido en el chat';
-      image.loading = 'lazy';
-      anchor.appendChild(image);
-      container.appendChild(anchor);
-      return;
-    }
-
-    if (isLikelyVideoUrl(href)) {
-      const video = document.createElement('video');
-      video.className = 'conference-chat-media conference-chat-media--video';
-      video.src = href;
-      video.controls = true;
-      video.preload = 'metadata';
-      container.appendChild(video);
-      return;
-    }
-
-    if (isLikelyAudioUrl(href)) {
-      const audio = document.createElement('audio');
-      audio.className = 'conference-chat-media conference-chat-media--audio';
-      audio.src = href;
-      audio.controls = true;
-      audio.preload = 'metadata';
-      container.appendChild(audio);
-      return;
-    }
-
-    const anchor = document.createElement('a');
-    anchor.href = href;
-    anchor.target = '_blank';
-    anchor.rel = 'noreferrer noopener';
-    anchor.className = 'conference-chat-link';
-    anchor.textContent = href;
-    container.appendChild(anchor);
-  };
-
-  const setConferenceChatBody = (container: HTMLElement, text: string) => {
-    container.replaceChildren();
-    const normalizedText = String(text || '');
-    const lines = normalizedText.split(/\n/g);
-
-    lines.forEach((line, lineIndex) => {
-      const lineWrapper = document.createElement('div');
-      lineWrapper.className = 'conference-chat-line';
-      let lastIndex = 0;
-      let hasContent = false;
-
-      line.replace(URL_TOKEN_REGEX, (match, _capture, offset) => {
-        appendConferenceTextNode(lineWrapper, line.slice(lastIndex, offset));
-        appendConferenceUrlNode(lineWrapper, match);
-        lastIndex = offset + match.length;
-        hasContent = true;
-        return match;
-      });
-
-      appendConferenceTextNode(lineWrapper, line.slice(lastIndex));
-      hasContent = hasContent || lineWrapper.childNodes.length > 0;
-
-      if (!hasContent) {
-        lineWrapper.appendChild(document.createElement('br'));
-      }
-
-      container.appendChild(lineWrapper);
-      if (lineIndex < lines.length - 1 && !hasContent) {
-        container.appendChild(document.createElement('br'));
-      }
-    });
-  };
-
-  // Deterministic neon color per participant identity (stable across reconnects).
-  // Color is applied to the author name only — best practice (Discord/Slack/IRC pattern).
-  const CHAT_COLORS = [
-    '#00f5ff', // neon cyan
-    '#39ff14', // neon green
-    '#ff6ec7', // neon pink
-    '#ff9d00', // neon orange
-    '#ffe600', // neon yellow
-    '#c264ff', // neon violet
-    '#4da8ff', // neon sky blue
-    '#ff4f4f', // neon red
-    '#ccff00', // neon lime
-    '#00ffcc', // neon teal
-    '#ee00cc', // neon magenta
-    '#ffb300', // neon amber
-  ] as const;
-
-  const chatUserColor = (identity: string): string => {
-    let h = 0;
-    for (let i = 0; i < identity.length; i++) {
-      h = (h * 31 + identity.charCodeAt(i)) >>> 0;
-    }
-    return CHAT_COLORS[h % CHAT_COLORS.length];
-  };
-
-  const renderChat = () => {
-    chatList.innerHTML = '';
-    chatDownloadButton.disabled = chatMessages.length === 0;
-
-    if (chatMessages.length === 0) return;
-
-    chatMessages.slice(-60).forEach((message) => {
-      const item = document.createElement('li');
-      item.className = 'conference-chat-item';
-
-      const header = document.createElement('div');
-      header.className = 'conference-chat-header';
-
-      const sender = document.createElement('span');
-      sender.className = 'conference-chat-author';
-      sender.textContent = getFirstName(message.name);
-      sender.style.color = chatUserColor(message.identity);
-
-      const body = document.createElement('div');
-      body.className = 'conference-chat-text';
-      setConferenceChatBody(body, message.text);
-
-      const separator = document.createElement('span');
-      separator.className = 'conference-chat-header-separator';
-      separator.textContent = '·';
-
-      const sentAt = document.createElement('time');
-      sentAt.className = 'conference-chat-stamp';
-      sentAt.dateTime = message.sentAt;
-      sentAt.textContent = new Date(message.sentAt).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-
-      header.append(sender, separator, sentAt);
-      item.append(header, body);
-      chatList.appendChild(item);
-    });
-
-    chatList.scrollTop = chatList.scrollHeight;
-  };
-
-  const downloadChatTranscript = () => {
-    if (chatMessages.length === 0) return;
-
-    const roomName = normalizeText(roomInput.value) || 'room';
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const lines = chatMessages.map((message) => {
-      const timeLabel = new Date(message.sentAt).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-      return `${message.name} ${timeLabel}\n${message.text}\n`;
-    });
-
-    const blob = new Blob([lines.join('\n')], {
-      type: 'text/plain;charset=utf-8',
-    });
-    const href = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = href;
-    anchor.download = `${roomName}-chat-${stamp}.txt`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => {
-      URL.revokeObjectURL(href);
-    }, 1000);
-  };
-
-  const appendChatMessage = (message: Extract<ConferenceMessage, { type: 'chat' }>, isSent = false) => {
-    if (chatMessages.some((entry) => entry.id === message.id)) return;
-    chatMessages.push(message);
-    if (chatMessages.length > 80) {
-      chatMessages.splice(0, chatMessages.length - 80);
-    }
-    if (!isSent) {
-      chatUnreadCount += 1;
-      syncChatUnreadDot();
-    }
-    renderChat();
-  };
-
   const appendReactionBurst = (reaction: ReactionKind, name: string) => {
     if (!(reactionsLayer instanceof HTMLElement)) return;
 
@@ -9387,9 +9145,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         (connected && localRole !== 'teacher') ||
         (!presentation.getHref() && !normalizeText(presentationSelect.value));
     }
-    chatInput.disabled = !connected;
-    chatSendButton.disabled = !connected;
-    chatDownloadButton.disabled = chatMessages.length === 0;
+    chatController.syncControlState();
     if (raiseHandButton instanceof HTMLButtonElement) {
       raiseHandButton.disabled = !connected;
     }
@@ -10415,18 +10171,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  if (chatFocusButton instanceof HTMLButtonElement) {
-    chatFocusButton.addEventListener('click', () => {
-      focusChatComposer();
-    });
-  }
-
-  if (chatInput instanceof HTMLElement) {
-    chatInput.addEventListener('focus', () => {
-      resetChatUnread();
-    });
-  }
-
   if (instrumentsToggleButton instanceof HTMLButtonElement) {
     instrumentsToggleButton.addEventListener('click', () => {
       toggleInstrumentsOpen();
@@ -11369,512 +11113,27 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   // ── NOTAS ────────────────────────────────────────────────────────────────
-
-  // Lazy-load mermaid and render any .mermaid divs inside a container
-  const runMermaidIn = (container: HTMLElement) => {
-    const nodes = Array.from(container.querySelectorAll<HTMLElement>('.mermaid'));
-    if (nodes.length === 0) return;
-    const w = window as any;
-    const load = () => {
-      if (w.mermaid?.run) return Promise.resolve(w.mermaid);
-      if (w.__notesMermaidPromise) return w.__notesMermaidPromise as Promise<any>;
-      w.__notesMermaidPromise = new Promise<any>(resolve => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
-        s.onload = () => resolve(w.mermaid ?? null);
-        s.onerror = () => resolve(null);
-        document.head.appendChild(s);
-      });
-      return w.__notesMermaidPromise as Promise<any>;
-    };
-    load().then((m: any) => {
-      if (!m?.run) return;
-      try {
-        m.initialize({ startOnLoad: false, theme: 'dark' });
-        m.run({ nodes });
-      } catch { /* ignore */ }
-    });
-  };
-
-  const notesSection      = root.querySelector('[data-notes-section]');
-  const notesForm         = root.querySelector<HTMLFormElement>('[data-notes-form]');
-  const notesTitleInput   = root.querySelector<HTMLInputElement>('[data-notes-title]');
-  const notesBodyInput    = root.querySelector<HTMLTextAreaElement>('[data-notes-body]');
-  const notesListEl       = root.querySelector('[data-notes-list]');
-  const notesPreviewEl    = root.querySelector<HTMLElement>('[data-notes-preview]');
-  const notesPreviewBtn   = root.querySelector<HTMLButtonElement>('[data-notes-preview-btn]');
-  const notesSaveBtn      = root.querySelector<HTMLButtonElement>('[data-notes-save]');
-  const notesDownloadBtn  = root.querySelector<HTMLButtonElement>('[data-notes-download]');
-  const notesNewBtn       = root.querySelector<HTMLButtonElement>('[data-notes-new]');
-  let notesCurrentId: string | null = null;
-
-  type RoomNoteRecord = {
-    body?: string | null;
-    courseId?: string | null;
-    createdAt?: string | null;
-    id: string;
-    noteDate: string;
-    renderedHtml?: string | null;
-    roomName?: string | null;
-    title: string;
-    updatedAt?: string | null;
-  };
-
-  type RoomNoteDraft = {
-    body: string;
-    id: string | null;
-    title: string;
-    updatedAt: string;
-  };
-
-  const getCurrentNoteCourseId = () => normalizeText(root.dataset.courseId) || null;
-  const getCurrentNoteRoomName = () =>
-    roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) || null : null;
-  const buildNotesScopeKey = (courseId: string | null, roomName: string | null) =>
-    `${courseId || '_'}::${roomName || '_'}`;
-  const getCurrentNotesScopeKey = () => buildNotesScopeKey(getCurrentNoteCourseId(), getCurrentNoteRoomName());
-  const getNotesDraftStorageKey = (scopeKey = getCurrentNotesScopeKey()) =>
-    `${ROOM_NOTES_DRAFT_STORAGE_KEY}:${scopeKey}`;
-  const getNotesCacheStorageKey = (scopeKey = getCurrentNotesScopeKey()) =>
-    `${ROOM_NOTES_CACHE_STORAGE_KEY}:${scopeKey}`;
-  let notesScopeKey = getCurrentNotesScopeKey();
-
-  const readNotesDraft = (scopeKey = notesScopeKey): RoomNoteDraft | null => {
-    try {
-      const raw = window.localStorage.getItem(getNotesDraftStorageKey(scopeKey));
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object'
-        ? {
-            body: typeof parsed.body === 'string' ? parsed.body : '',
-            id: normalizeText(parsed.id) || null,
-            title: typeof parsed.title === 'string' ? parsed.title : '',
-            updatedAt: normalizeText(parsed.updatedAt) || new Date().toISOString(),
-          }
-        : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const writeNotesDraft = (scopeKey = notesScopeKey) => {
-    try {
-      const title = notesTitleInput?.value ?? '';
-      const body = notesBodyInput?.value ?? '';
-      if (!title.trim() && !body.trim()) {
-        window.localStorage.removeItem(getNotesDraftStorageKey(scopeKey));
-        return;
-      }
-      const draft: RoomNoteDraft = {
-        body,
-        id: notesCurrentId,
-        title,
-        updatedAt: new Date().toISOString(),
-      };
-      window.localStorage.setItem(getNotesDraftStorageKey(scopeKey), JSON.stringify(draft));
-    } catch {
-      // ignore storage failures
-    }
-  };
-
-  const clearNotesDraft = (scopeKey = notesScopeKey) => {
-    try {
-      window.localStorage.removeItem(getNotesDraftStorageKey(scopeKey));
-    } catch {
-      // ignore storage failures
-    }
-  };
-
-  const readNotesCache = (scopeKey = notesScopeKey): RoomNoteRecord[] => {
-    try {
-      const raw = window.localStorage.getItem(getNotesCacheStorageKey(scopeKey));
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed)
-        ? parsed
-            .filter((entry) => entry && typeof entry === 'object')
-            .map((entry) => ({
-              body: typeof entry.body === 'string' ? entry.body : '',
-              courseId: normalizeText(entry.courseId) || null,
-              createdAt: normalizeText(entry.createdAt) || null,
-              id: normalizeText(entry.id),
-              noteDate: normalizeText(entry.noteDate) || new Date().toISOString().slice(0, 10),
-              renderedHtml: typeof entry.renderedHtml === 'string' ? entry.renderedHtml : null,
-              roomName: normalizeText(entry.roomName) || null,
-              title: typeof entry.title === 'string' ? entry.title : '',
-              updatedAt: normalizeText(entry.updatedAt) || null,
-            }))
-            .filter((entry) => entry.id)
-        : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const writeNotesCache = (notes: RoomNoteRecord[], scopeKey = notesScopeKey) => {
-    try {
-      window.localStorage.setItem(getNotesCacheStorageKey(scopeKey), JSON.stringify(notes));
-    } catch {
-      // ignore storage failures
-    }
-  };
-
-  const sortNotes = (notes: RoomNoteRecord[]) =>
-    [...notes].sort((left, right) =>
-      normalizeText(right.updatedAt || right.noteDate).localeCompare(
-        normalizeText(left.updatedAt || left.noteDate),
-      ),
-    );
-
-  const upsertNotesCache = (note: RoomNoteRecord, scopeKey = notesScopeKey) => {
-    const cached = readNotesCache(scopeKey).filter((entry) => entry.id !== note.id);
-    cached.push(note);
-    writeNotesCache(sortNotes(cached), scopeKey);
-  };
-
-  const renderNotesList = (notes: RoomNoteRecord[]) => {
-    if (!notesListEl) return;
-    notesListEl.innerHTML = '';
-    for (const note of sortNotes(notes)) {
-      notesListEl.appendChild(renderNoteItem(note));
-    }
-  };
-
-  const syncActiveNoteItem = () => {
-    notesListEl?.querySelectorAll('[data-note-id]').forEach(el => {
-      el.classList.toggle('conference-notes-item--active', (el as HTMLElement).dataset.noteId === (notesCurrentId ?? ''));
-    });
-  };
-
-  const renderNoteItem = (note: { id: string; title: string; noteDate: string }): HTMLElement => {
-    const el = document.createElement('div');
-    el.className = 'conference-notes-item';
-    el.dataset.noteId = note.id;
-    el.innerHTML = `<span class="conference-notes-item-title">${note.title || '(sin título)'}</span>
-      <span class="conference-notes-item-date">${note.noteDate}</span>`;
-    el.addEventListener('click', () => void loadNote(note.id));
-    return el;
-  };
-
-  const resetNoteForm = () => {
-    notesCurrentId = null;
-    if (notesTitleInput) notesTitleInput.value = '';
-    if (notesBodyInput)  notesBodyInput.value  = '';
-    if (notesPreviewEl)  notesPreviewEl.innerHTML = '';
-    clearNotesDraft();
-    setNotesMode(true);
-    syncActiveNoteItem();
-    notesTitleInput?.focus();
-  };
-
-  const hydrateNotesDraft = () => {
-    const draft = readNotesDraft();
-    if (!draft) return;
-    notesCurrentId = draft.id;
-    if (notesTitleInput) notesTitleInput.value = draft.title;
-    if (notesBodyInput) notesBodyInput.value = draft.body;
-    if (notesPreviewEl) notesPreviewEl.innerHTML = '';
-    setNotesMode(true);
-    syncActiveNoteItem();
-  };
-
-  const syncNotesScope = () => {
-    const nextScopeKey = getCurrentNotesScopeKey();
-    if (nextScopeKey === notesScopeKey) return;
-    writeNotesDraft(notesScopeKey);
-    notesScopeKey = nextScopeKey;
-    notesCurrentId = null;
-    if (notesTitleInput) notesTitleInput.value = '';
-    if (notesBodyInput) notesBodyInput.value = '';
-    if (notesPreviewEl) notesPreviewEl.innerHTML = '';
-    setNotesMode(true);
-    syncActiveNoteItem();
-    renderNotesList(readNotesCache());
-    hydrateNotesDraft();
-    void loadNotesList();
-  };
-
-  const loadNotesList = async () => {
-    if (!notesListEl) return;
-    const cachedNotes = readNotesCache();
-    if (cachedNotes.length > 0) {
-      renderNotesList(cachedNotes);
-    }
-    const params = new URLSearchParams();
-    const noteCourseId = getCurrentNoteCourseId();
-    const noteRoomName = getCurrentNoteRoomName();
-    if (noteCourseId) params.set('courseId', noteCourseId);
-    if (noteRoomName) params.set('roomName', noteRoomName);
-    const res = await fetch(`/api/live/notes?${params}`).catch(() => null);
-    if (!res?.ok) return;
-    const data = await res.json().catch(() => null);
-    if (!data?.notes) return;
-    const scopedNotes = (data.notes as RoomNoteRecord[]).map((note) => ({
-      ...note,
-      courseId: noteCourseId,
-      roomName: noteRoomName,
-    }));
-    writeNotesCache(scopedNotes);
-    renderNotesList(scopedNotes);
-  };
-
-  const loadNote = async (id: string) => {
-    const cached = readNotesCache().find((note) => note.id === id);
-    if (cached) {
-      notesCurrentId = cached.id;
-      if (notesTitleInput) notesTitleInput.value = cached.title ?? '';
-      if (notesBodyInput)  notesBodyInput.value  = cached.body  ?? '';
-      if (notesPreviewEl) {
-        notesPreviewEl.innerHTML = cached.renderedHtml ?? '';
-        if (cached.renderedHtml) runMermaidIn(notesPreviewEl);
-      }
-      setNotesMode(true);
-      syncActiveNoteItem();
-    }
-    const params = new URLSearchParams();
-    params.set('id', id);
-    const noteCourseId = getCurrentNoteCourseId();
-    if (noteCourseId) params.set('courseId', noteCourseId);
-    const res = await fetch(`/api/live/notes?${params}&limit=1`).catch(() => null);
-    if (!res?.ok) return;
-    const data = await res.json().catch(() => null);
-    const note = (data?.notes ?? []).find((n: any) => n.id === id);
-    if (!note) return;
-    notesCurrentId = note.id;
-    if (notesTitleInput) notesTitleInput.value = note.title ?? '';
-    if (notesBodyInput)  notesBodyInput.value  = note.body  ?? '';
-    if (notesPreviewEl && note.renderedHtml) {
-      notesPreviewEl.innerHTML = note.renderedHtml;
-      runMermaidIn(notesPreviewEl);
-    }
-    upsertNotesCache({
-      ...note,
-      courseId: getCurrentNoteCourseId(),
-      roomName: getCurrentNoteRoomName(),
-    });
-    setNotesMode(true);
-    syncActiveNoteItem();
-    writeNotesDraft();
-  };
-
-  let notesEditMode = true; // true = editing, false = previewing
-
-  const setNotesMode = (edit: boolean) => {
-    notesEditMode = edit;
-    if (!notesPreviewBtn || !notesPreviewEl || !notesTitleInput || !notesBodyInput) return;
-    notesTitleInput.hidden = !edit;
-    notesBodyInput.hidden  = !edit;
-    notesPreviewEl.hidden  = edit;
-    if (edit) {
-      notesPreviewBtn.textContent = 'V';
-      notesPreviewBtn.title = 'Vista previa';
-    } else {
-      notesPreviewBtn.textContent = 'E';
-      notesPreviewBtn.title = 'Editar';
-    }
-  };
-
-  if (notesPreviewBtn && notesPreviewEl && notesBodyInput) {
-    notesPreviewBtn.addEventListener('click', () => {
-      if (notesEditMode && !notesPreviewEl.innerHTML.trim()) {
-        const body = notesBodyInput.value;
-        if (body.trim()) {
-          const w = window as any;
-          const doPreview = async () => {
-            if (!w.marked) {
-              await new Promise<void>(resolve => {
-                if (document.querySelector('script[src*="marked"]')) { resolve(); return; }
-                const s = document.createElement('script');
-                s.src = 'https://cdn.jsdelivr.net/npm/marked@9/marked.min.js';
-                s.onload = () => resolve(); s.onerror = () => resolve();
-                document.head.appendChild(s);
-              });
-            }
-            notesPreviewEl.innerHTML = w.marked?.parse ? String(w.marked.parse(body)) : `<pre>${body}</pre>`;
-            runMermaidIn(notesPreviewEl);
-          };
-          void doPreview();
-        }
-      }
-      setNotesMode(!notesEditMode);
-    });
-  }
-
-  if (notesNewBtn) {
-    notesNewBtn.addEventListener('click', resetNoteForm);
-  }
-
-  if (notesDownloadBtn) {
-    notesDownloadBtn.addEventListener('click', () => {
-      const title = notesTitleInput?.value.trim() || 'nota';
-      const body  = notesBodyInput?.value ?? '';
-      if (!body.trim()) return;
-      const content = title ? `# ${title}\n\n${body}` : body;
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      const date = new Date().toISOString().slice(0, 10);
-      a.href     = url;
-      a.download = `nota-${date}-${title.replace(/[^a-z0-9]/gi, '_').slice(0, 40) || 'sin_titulo'}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  }
-
-  const submitNotesForm = () => {
-    if (typeof notesForm?.requestSubmit === 'function') {
-      notesForm.requestSubmit(notesSaveBtn ?? undefined);
-      return;
-    }
-    if (notesSaveBtn) {
-      notesSaveBtn.click();
-      return;
-    }
-    notesForm?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-  };
-
-  const persistNotesDraft = () => {
-    writeNotesDraft();
-  };
-
-  [notesTitleInput, notesBodyInput].forEach((input) => {
-    input?.addEventListener('input', persistNotesDraft);
-    input?.addEventListener('change', persistNotesDraft);
-    input?.addEventListener('keydown', (e) => {
-      const event = e as KeyboardEvent;
-      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-        event.preventDefault();
-        submitNotesForm();
-      }
-    });
+  const notesController = createRoomNotesController({
+    getCourseId: () => normalizeText(root.dataset.courseId) || null,
+    getRoomName: () =>
+      roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) || null : null,
+    notesBodyInput: root.querySelector<HTMLTextAreaElement>('[data-notes-body]'),
+    notesDownloadBtn: root.querySelector<HTMLButtonElement>('[data-notes-download]'),
+    notesForm: root.querySelector<HTMLFormElement>('[data-notes-form]'),
+    notesListEl: root.querySelector<HTMLElement>('[data-notes-list]'),
+    notesNewBtn: root.querySelector<HTMLButtonElement>('[data-notes-new]'),
+    notesPreviewBtn: root.querySelector<HTMLButtonElement>('[data-notes-preview-btn]'),
+    notesPreviewEl: root.querySelector<HTMLElement>('[data-notes-preview]'),
+    notesSaveBtn: root.querySelector<HTMLButtonElement>('[data-notes-save]'),
+    notesSection: root.querySelector('[data-notes-section]'),
+    notesTitleInput: root.querySelector<HTMLInputElement>('[data-notes-title]'),
+    reportStatus: (message) => {
+      setStatus(message);
+    },
   });
 
-  if (notesForm) {
-    notesForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const title = notesTitleInput?.value.trim() ?? '';
-      const body  = notesBodyInput?.value  ?? '';
-      if (!body.trim()) return;
-      void (async () => {
-        const currentNotesScopeKey = getCurrentNotesScopeKey();
-        if (currentNotesScopeKey !== notesScopeKey) {
-          notesScopeKey = currentNotesScopeKey;
-        }
-        const noteCourseId = getCurrentNoteCourseId();
-        const noteRoomName = getCurrentNoteRoomName();
-        const payload: Record<string, string | null> = {
-          title, body,
-          courseId: noteCourseId,
-          roomName: noteRoomName,
-          noteDate: new Date().toISOString().slice(0, 10),
-        };
-        if (notesCurrentId) payload.id = notesCurrentId;
-        const res = await fetch('/api/live/notes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }).catch(() => null);
-        if (!res?.ok) { setStatus('Error al guardar nota'); return; }
-        const data = await res.json().catch(() => null);
-        notesCurrentId = data?.note?.id ?? notesCurrentId;
-        upsertNotesCache({
-          body,
-          courseId: noteCourseId,
-          createdAt: normalizeText(data?.note?.createdAt) || null,
-          id: notesCurrentId || crypto.randomUUID(),
-          noteDate: payload.noteDate || new Date().toISOString().slice(0, 10),
-          renderedHtml: notesPreviewEl?.innerHTML || null,
-          roomName: noteRoomName,
-          title,
-          updatedAt: normalizeText(data?.note?.updatedAt) || new Date().toISOString(),
-        });
-        clearNotesDraft();
-
-        // Show instant client-side preview while server renders in background
-        if (notesPreviewEl) {
-          const body = notesBodyInput?.value ?? '';
-          const w = window as any;
-          const renderClientPreview = async () => {
-            // Use marked.js for immediate client-side render
-            if (!w.marked) {
-              await new Promise<void>(resolve => {
-                const s = document.createElement('script');
-                s.src = 'https://cdn.jsdelivr.net/npm/marked@9/marked.min.js';
-                s.onload = () => resolve(); s.onerror = () => resolve();
-                document.head.appendChild(s);
-              });
-            }
-            return w.marked?.parse ? String(w.marked.parse(body)) : `<pre>${body}</pre>`;
-          };
-          const preview = await renderClientPreview();
-          notesPreviewEl.innerHTML = preview;
-          runMermaidIn(notesPreviewEl);
-          setNotesMode(false);
-
-          // Poll once after ~3s for server-rendered HTML (has lilypond/katex)
-          const savedNoteId = notesCurrentId;
-          setTimeout(async () => {
-            if (notesCurrentId !== savedNoteId) return; // user navigated away
-            const pollRes = await fetch(`/api/live/notes?limit=1&id=${savedNoteId}`).catch(() => null);
-            if (!pollRes?.ok) return;
-            const pollData = await pollRes.json().catch(() => null);
-            const updated = (pollData?.notes ?? []).find((n: any) => n.id === savedNoteId);
-            if (updated?.renderedHtml && notesPreviewEl && notesCurrentId === savedNoteId) {
-              notesPreviewEl.innerHTML = updated.renderedHtml;
-              runMermaidIn(notesPreviewEl);
-              upsertNotesCache({
-                ...updated,
-                courseId: getCurrentNoteCourseId(),
-                roomName: getCurrentNoteRoomName(),
-              });
-            }
-          }, 3000);
-        }
-        void loadNotesList();
-      })();
-    });
-  }
-
-  hydrateNotesDraft();
-  renderNotesList(readNotesCache());
-
-  // Load notes once the section is first revealed (lazy)
-  if (notesSection) {
-    const notesObserver = new IntersectionObserver((entries) => {
-      if (entries.some(e => e.isIntersecting)) {
-        void loadNotesList();
-        notesObserver.disconnect();
-      }
-    }, { threshold: 0.1 });
-    notesObserver.observe(notesSection);
-  }
+  notesController.bind();
   // ── END NOTAS ─────────────────────────────────────────────────────────────
-
-  const sendChatMessage = async () => {
-    if (room.state !== ConnectionState.Connected) return;
-
-    const text = normalizeText(chatInput.value);
-    if (!text) return;
-
-    const message: Extract<ConferenceMessage, { type: 'chat' }> = {
-      type: 'chat',
-      id: `chat-${crypto.randomUUID()}`,
-      identity: identityInput.value.trim(),
-      name: nameInput.value.trim() || identityInput.value.trim() || 'Participant',
-      role: localRole,
-      sentAt: new Date().toISOString(),
-      text,
-    };
-
-    appendChatMessage(message, true);
-    chatInput.value = '';
-
-    try {
-      await publishMessage(message);
-    } catch (error) {
-      setStatus(safeErrorMessage(error));
-    }
-  };
 
   const beginReverseMicState = async () => {
     if (room.state !== ConnectionState.Connected || reverseMicKeyActive) return;
@@ -11906,20 +11165,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       setStatus(safeErrorMessage(error));
     }
   };
-
-  chatSendButton.addEventListener('click', () => {
-    void sendChatMessage();
-  });
-
-  chatDownloadButton.addEventListener('click', () => {
-    downloadChatTranscript();
-  });
-
-  chatInput.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' || event.shiftKey) return;
-    event.preventDefault();
-    void sendChatMessage();
-  });
 
   const executeRoomShortcutCommand = (command: string) => {
     const normalizedCommand = normalizeText(command);
@@ -12330,7 +11575,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   roomInput.addEventListener('change', () => {
-    syncNotesScope();
+    notesController.syncScope();
   });
 
   const handlePresentationLoad = () => {
@@ -12372,7 +11617,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   clearHandTrackingOutput();
   setLayout(stage, layoutInput.value);
   renderParticipantList();
-  renderChat();
+  chatController.syncControlState();
   syncPresentationSelection(normalizeText(presentationSelect.value) || null);
   void refreshDeviceOptions(false);
   syncLiveActivityTransport();

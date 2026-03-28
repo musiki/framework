@@ -1,7 +1,9 @@
 // Room runtime root entrypoint.
 export { mountLiveKitRoom } from './core';
+export { createRoomChatController } from './chat';
 export { normalizePreviewZoom, normalizeText } from './core/normalize';
 export { buildRoomQueryUrl } from './layout';
+export { createRoomNotesController } from './notes';
 export {
   chooseFocusParticipantIdentity,
   cloneTemplate,
@@ -43,6 +45,8 @@ export type {
   ReactionKind,
   SlideState,
 } from './session';
+export type { RoomChatController } from './chat';
+export type { RoomNotesController } from './notes';
 export type {
   MediaMount,
   MountCollection,
