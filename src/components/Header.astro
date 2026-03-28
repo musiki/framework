@@ -350,10 +350,22 @@ const withActiveCourse = (href: string) => {
 			<div class="auth-links">
 				{user ? (
 					<div class="user-menu">
-						<button class="user-button" id="user-menu-button">
-							{user.image && <img src={user.image} alt={user.name || 'User'} class="user-avatar" />}
-							<span>{user.name || user.email}</span>
-							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<button
+							class="user-button"
+							id="user-menu-button"
+							aria-label={user.name || user.email || 'Cuenta'}
+						>
+							{
+								user.image ? (
+									<img src={user.image} alt="" class="user-avatar" />
+								) : (
+									<span class="user-avatar user-avatar--fallback" aria-hidden="true">
+										{String(user.name || user.email || 'U').trim().charAt(0).toUpperCase()}
+									</span>
+								)
+							}
+							<span class="user-button-label">{user.name || user.email}</span>
+							<svg class="user-button-caret" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 								<polyline points="6 9 12 15 18 9"></polyline>
 							</svg>
 						</button>
@@ -1324,7 +1336,17 @@ const withActiveCourse = (href: string) => {
 		height: 24px;
 		border-radius: 50%;
 	}
-	.user-button span {
+	.user-avatar--fallback {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: color-mix(in srgb, var(--c-bg-mute) 78%, transparent);
+		color: var(--c-fg);
+		font-size: 0.68rem;
+		font-weight: 700;
+		line-height: 1;
+	}
+	.user-button-label {
 		display: inline-block;
 		max-width: 11rem;
 		overflow: hidden;
@@ -1431,30 +1453,42 @@ const withActiveCourse = (href: string) => {
 			padding: 0.46em 0.34em;
 			gap: 0.32rem;
 		}
-		.user-button span {
+		.user-button-label {
 			max-width: 5.8rem;
 		}
 	}
 
 	@media (max-width: 900px) {
 		nav {
+			display: grid;
+			grid-template-columns: auto minmax(0, 1fr) auto;
+			grid-template-rows: auto auto;
 			gap: 0.06rem 0.24rem;
+			align-items: center;
 		}
 		h2 {
+			grid-column: 1;
+			grid-row: 1;
 			order: 1;
 			flex: 0 0 auto;
 		}
 		.internal-links {
+			grid-column: 1 / -1;
+			grid-row: 2;
 			order: 2;
-			width: auto;
-			flex: 1 1 auto;
+			width: 100%;
+			flex: 0 0 auto;
 			justify-content: flex-start;
 			overflow-x: auto;
+			overflow-y: hidden;
 			overscroll-behavior-x: contain;
+			touch-action: pan-x;
+			-webkit-overflow-scrolling: touch;
 			scrollbar-width: none;
 			white-space: nowrap;
 			margin-top: 0;
 			padding-bottom: 0;
+			align-items: center;
 		}
 		.internal-links::-webkit-scrollbar {
 			display: none;
@@ -1471,11 +1505,27 @@ const withActiveCourse = (href: string) => {
 			font-size: 0.9rem;
 		}
 		.social-links {
+			grid-column: 3;
+			grid-row: 1;
 			order: 3;
-			flex: 0 0 100%;
+			flex: 0 0 auto;
+			width: auto;
 			justify-content: flex-end;
-			margin-left: 0;
-			padding-top: 0.06rem;
+			margin-left: auto;
+			padding-top: 0;
+			align-self: center;
+		}
+		.user-button {
+			padding: 0.18rem 0;
+			gap: 0;
+		}
+		.user-button-label,
+		.user-button-caret {
+			display: none;
+		}
+		.user-avatar {
+			width: 28px;
+			height: 28px;
 		}
 	}
 
@@ -1521,7 +1571,7 @@ const withActiveCourse = (href: string) => {
 			padding: 0.45em 0.35em;
 			gap: 0.32rem;
 		}
-		.user-button span {
+		.user-button-label {
 			max-width: 6.1rem;
 		}
 		.user-dropdown {
@@ -1641,7 +1691,7 @@ const withActiveCourse = (href: string) => {
 			padding: 0.35em 0.28em;
 			gap: 0.24rem;
 		}
-		.user-button span {
+		.user-button-label {
 			max-width: 4.8rem;
 		}
 	}

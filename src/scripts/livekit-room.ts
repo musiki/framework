@@ -3558,6 +3558,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const studentInviteRevokeButton = root.querySelector('[data-action="student-invite-revoke"]');
   const chatList = root.querySelector('[data-chat-list]');
   const chatInput = root.querySelector('[data-chat-input]');
+  const chatSection = root.querySelector('[data-chat-section]');
   const chatFocusButton = root.querySelector('[data-action="chat-focus"]');
   const chatUnreadDot = root.querySelector('[data-chat-unread]');
   const chatSendButton = root.querySelector('[data-action="chat-send"]');
@@ -3843,6 +3844,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     screenVideoMounts: new Map(),
   };
   const chatMessages: Extract<ConferenceMessage, { type: 'chat' }>[] = [];
+  let chatAttentionFlashTimer = 0;
   const reactionBursts = new Map<string, number>();
 
   let destroyed = false;
@@ -4192,8 +4194,27 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sidebarCollapsed = false;
       applySidebarCollapsedState();
     }
-    chatInput.focus();
-    chatInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (chatSection instanceof HTMLDetailsElement) {
+      chatSection.open = true;
+    }
+    if (chatSection instanceof HTMLElement) {
+      if (chatAttentionFlashTimer) {
+        window.clearTimeout(chatAttentionFlashTimer);
+        chatAttentionFlashTimer = 0;
+      }
+      chatSection.classList.remove('is-attention-flash');
+      void chatSection.offsetWidth;
+      chatSection.classList.add('is-attention-flash');
+      chatAttentionFlashTimer = window.setTimeout(() => {
+        chatSection.classList.remove('is-attention-flash');
+        chatAttentionFlashTimer = 0;
+      }, 90);
+    }
+    resetChatUnread();
+    window.requestAnimationFrame(() => {
+      chatInput.focus();
+      chatInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
   };
 
   const toggleCheckboxInput = (input: Element | null) => {
@@ -10396,11 +10417,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   if (chatFocusButton instanceof HTMLButtonElement) {
     chatFocusButton.addEventListener('click', () => {
-      if (sidebarCollapsed) toggleSidebarCollapsed();
-      resetChatUnread();
-      if (chatInput instanceof HTMLTextAreaElement || chatInput instanceof HTMLInputElement) {
-        chatInput.focus();
-      }
+      focusChatComposer();
     });
   }
 
