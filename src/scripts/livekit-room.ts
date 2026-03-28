@@ -2787,14 +2787,17 @@ class GravityBallRenderer {
 
   private resizeCanvas() {
     const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const width = Math.max(
-      2,
-      Math.round((this.canvas.clientWidth > 0 ? this.canvas.clientWidth : this.forcedCanvasWidth || this.canvas.width || 2) * dpr),
-    );
-    const height = Math.max(
-      2,
-      Math.round((this.canvas.clientHeight > 0 ? this.canvas.clientHeight : this.forcedCanvasHeight || this.canvas.height || 2) * dpr),
-    );
+    // Prefer forcedCanvasWidth/Height (set by ResizeObserver on layout changes)
+    // over clientWidth/Height which can be 0 or stale mid-layout.
+    // Never fall back to canvas.width/height — those are buffer pixels and
+    // would get double-multiplied by dpr, producing a wrong aspect ratio.
+    const cssW = this.forcedCanvasWidth > 0 ? this.forcedCanvasWidth
+      : this.canvas.clientWidth > 0 ? this.canvas.clientWidth : 0;
+    const cssH = this.forcedCanvasHeight > 0 ? this.forcedCanvasHeight
+      : this.canvas.clientHeight > 0 ? this.canvas.clientHeight : 0;
+    if (cssW <= 0 || cssH <= 0) return { width: this.canvas.width || 2, height: this.canvas.height || 2 };
+    const width = Math.max(2, Math.round(cssW * dpr));
+    const height = Math.max(2, Math.round(cssH * dpr));
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
@@ -10088,6 +10091,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     })
     .on(RoomEvent.DataReceived, (payload, participant, kind, topic) => {
       if (kind !== DataPacket_Kind.RELIABLE || topic !== MESSAGE_TOPIC || !participant) return;
+      if (isLocalParticipant(room, participant)) return;
 
       const message = readMessage(payload);
       if (!message) return;
@@ -11654,6 +11658,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
+  if (notesBodyInput) {
+    notesBodyInput.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        notesForm?.requestSubmit();
+      }
+    });
+  }
+
   if (notesForm) {
     notesForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -11745,7 +11758,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       text,
     };
 
-    appendChatMessage(message);
+    appendChatMessage(message, true);
     chatInput.value = '';
 
     try {
