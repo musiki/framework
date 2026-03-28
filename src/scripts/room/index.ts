@@ -3,11 +3,14 @@ export { mountLiveKitRoom } from './core';
 export { normalizePreviewZoom, normalizeText } from './core/normalize';
 export { buildRoomQueryUrl } from './layout';
 export {
+  chooseFocusParticipantIdentity,
   cloneTemplate,
   createMediaElement,
   ensureParticipantCard,
+  getPresentationCircleIdentity,
   getTrackSid,
   hasCameraTrack,
+  hasActiveScreenShare,
   isLocalParticipant,
   listRoomParticipants,
   readParticipantHandRaisedFromMetadata,
@@ -18,6 +21,7 @@ export {
   readParticipantShowCircle,
   removeParticipantCards,
   removeMount,
+  resolveParticipantTargetSlot,
   renderParticipantRoster,
   syncParticipantAudio,
   syncParticipantVideo,

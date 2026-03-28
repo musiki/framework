@@ -100,6 +100,24 @@ pm2 save
 pm2 startup
 ```
 
+Disciplina mínima antes de tocar producción:
+
+```bash
+cd /opt/musiki/framework
+bash scripts/db-backup.sh --label pre-deploy
+```
+
+Referencia real tomada el `2026-03-28`:
+
+- [20260328-175207Z-pre-forum-fix](/Users/zztt/projects/26-musiki/framework/.tmp/db-backups/20260328-175207Z-pre-forum-fix)
+- `projectRef`: `dkybbahdecnqpwctxzit`
+- `supabaseHost`: `dkybbahdecnqpwctxzit.supabase.co`
+
+Nota importante:
+
+- al `2026-03-28`, Supabase seguía con `PITR` apagado
+- por eso este backup manual es obligatorio antes de deploys que toquen datos vivos
+
 ## 4. Caddy
 
 Archivo de referencia:
@@ -139,6 +157,22 @@ Luego:
 source ~/.config/fish/config.fish
 musiki-deploy
 ```
+
+## 5.1 Build manual útil en este VPS
+
+En este servidor, `npm run build:local` puede fallar si `content:pull` intenta fetch remoto sin credenciales GitHub. La secuencia que sí funcionó en la actualización del `2026-03-28` fue:
+
+```bash
+cd /opt/musiki/framework
+rm -rf node_modules
+npm ci
+npm run content:assemble
+npm run eval:sync:db
+npx astro build
+pm2 reload musiki-framework
+```
+
+Usar esta variante cuando el cambio no requiere refrescar contenido remoto y solo necesitas rebuild del runtime actual.
 
 ## 6. Ollama local
 

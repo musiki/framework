@@ -1,5 +1,33 @@
 # Database Management - CYMP LMS
 
+## Estado actual 2026-03-28
+
+El runtime activo de `framework` ya no depende solo de Astro DB local. La parte viva del LMS y del foro está hoy en **Supabase**.
+
+Snapshot operativo confirmado el `2026-03-28`:
+
+- `projectRef`: `dkybbahdecnqpwctxzit`
+- `supabaseHost`: `dkybbahdecnqpwctxzit.supabase.co`
+- backup manual real tomado antes del fix de recuperación del foro:
+  - [20260328-175207Z-pre-forum-fix](/Users/zztt/projects/26-musiki/framework/.tmp/db-backups/20260328-175207Z-pre-forum-fix)
+- artifacts del backup:
+  - [schema.sql](/Users/zztt/projects/26-musiki/framework/.tmp/db-backups/20260328-175207Z-pre-forum-fix/schema.sql)
+  - [data.sql](/Users/zztt/projects/26-musiki/framework/.tmp/db-backups/20260328-175207Z-pre-forum-fix/data.sql)
+  - [metadata.json](/Users/zztt/projects/26-musiki/framework/.tmp/db-backups/20260328-175207Z-pre-forum-fix/metadata.json)
+- método usado: `supabase-cli-dry-run`
+- contexto de datos observado al momento del backup:
+  - `ForumBoard=7`
+  - `ForumThread=1`
+  - `ForumPost=1`
+  - `User=83`
+  - `Enrollment=85`
+
+Importante:
+
+- el backup lógico actual vive en `.tmp/db-backups/` y no se commitea
+- `PITR`/physical backups de Supabase estaban `false` al momento de este snapshot
+- hasta activar PITR, estos dumps manuales son la red mínima de seguridad
+
 ## Persistencia de la Base de Datos
 
 ### ⚠️ Problema Anterior
@@ -68,10 +96,10 @@ npm run db:seed
 ### Backups
 
 ```bash
-# Crear backup de la DB actual
+# Crear backup lógico del runtime actual
 npm run db:backup
 
-# Restaurar desde backup
+# Restaurar desde backup lógico
 npm run db:restore
 ```
 
@@ -101,12 +129,46 @@ sqlite3 .astro/content.db "SELECT COUNT(*) FROM Enrollment;"
 npm run db:backup
 ```
 
-Esto crea un archivo timestamped en `db/backups/`:
-```
-db/backups/content_20251213_161045.db
+Por defecto crea un bundle timestamped en `.tmp/db-backups/`:
+
+```text
+.tmp/db-backups/20260328-175207Z-pre-forum-fix/
 ```
 
-**Auto-limpieza**: Solo mantiene los últimos 10 backups.
+Contenido típico:
+
+- `schema.sql`
+- `data.sql`
+- `metadata.json`
+
+Opciones útiles:
+
+```bash
+# Etiqueta legible
+bash scripts/db-backup.sh --label pre-deploy
+
+# Ver sin ejecutar
+bash scripts/db-backup.sh --dry-run
+
+# Usar otro env
+bash scripts/db-backup.sh --env-file .env.production
+```
+
+Resolución de conexión:
+
+1. `DATABASE_URL`
+2. `SUPABASE_DB_URL`
+3. `SUPABASE_DB_PASSWORD` + `supabase/.temp/pooler-url`
+
+Fallback actual:
+
+- si no hay connection string directa, el script deriva un dump a partir de `supabase db dump --linked --dry-run`
+- esto evitó depender de Docker Desktop en el backup de `2026-03-28`
+
+Nota:
+
+- el dump de datos puede advertir FK circular en `ForumPost` por replies encadenadas
+- el restore ya contempla esto aplicando el `data.sql` con `session_replication_role = replica`
 
 ### Restaurar Backup
 
@@ -114,11 +176,24 @@ db/backups/content_20251213_161045.db
 npm run db:restore
 ```
 
-Proceso interactivo:
-1. Muestra lista de backups disponibles
-2. Solicita cuál restaurar
-3. Crea backup de seguridad del estado actual
-4. Restaura el backup seleccionado
+Restore explícito:
+
+```bash
+# Restore desde bundle de schema+data
+bash scripts/db-restore.sh --input .tmp/db-backups/20260328-175207Z-pre-forum-fix --yes
+
+# Restore desde .dump/.backup
+bash scripts/db-restore.sh --input /ruta/al/backup.dump --clean --yes
+
+# Ver comando sin ejecutar
+bash scripts/db-restore.sh --input .tmp/db-backups/20260328-175207Z-pre-forum-fix --dry-run
+```
+
+Protecciones:
+
+- `--yes` es obligatorio
+- `--clean` solo aplica a restores con `pg_restore`
+- para bundles de directorio, primero se aplica `schema.sql` y luego `data.sql`
 
 ### Backup Automático (Git)
 
@@ -155,7 +230,7 @@ npm run dev
 ### Desarrollo Regular
 
 ```bash
-# Antes de cambios importantes
+# Antes de cambios importantes o deploys
 npm run db:backup
 
 # Trabajar normalmente
@@ -180,19 +255,41 @@ npm run db:seed
 ### Antes de Deploy
 
 ```bash
-# 1. Backup de producción
+# 1. Backup lógico de producción
 npm run db:backup
 
-# 2. Commit DB actual
-git add .astro/content.db
-git commit -m "db: pre-deploy backup"
-
-# 3. Deploy
+# 2. Deploy
 ```
+
+Checklist mínimo para Supabase:
+
+- verificar que el backup nuevo exista en `.tmp/db-backups/`
+- abrir `metadata.json` y confirmar `projectRef` correcto
+- si el cambio toca foros, notas o enrollments, registrar conteos clave antes y después
+- activar PITR en Supabase sigue siendo una tarea pendiente de prioridad alta
 
 ---
 
 ## Troubleshooting
+
+### "Quiero verificar rápido el estado del foro antes de tocar algo"
+
+Conteos orientativos usados en la incidencia del `2026-03-28`:
+
+```bash
+node --input-type=module <<'EOF'
+import { createClient } from '@supabase/supabase-js';
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
+for (const table of ['ForumBoard', 'ForumThread', 'ForumPost', 'User', 'Enrollment']) {
+  const { count } = await supabase.from(table).select('*', { count: 'exact', head: true });
+  console.log(table, count);
+}
+EOF
+```
+
+Si `ForumBoard` existe pero `ForumThread` / `ForumPost` están absurdamente bajos, no asumir primero un bug visual: verificar la base activa.
 
 ### "Mi usuario teacher desapareció"
 
@@ -257,15 +354,15 @@ framework/
 ├── .astro/
 │   ├── content.db          ← DB principal (en git)
 │   └── ...                 ← Otros (ignorados)
-├── db/
-│   ├── config.ts           ← Schema de tablas
-│   ├── seed.ts             ← Auto-seed de teacher
-│   └── backups/            ← Backups locales (ignorado)
-│       ├── content_20251213_161045.db
-│       └── ...
 └── scripts/
-    ├── db-backup.sh        ← Script de backup
-    └── db-restore.sh       ← Script de restore
+    ├── db-backup.sh        ← Dump lógico Supabase / Postgres
+    └── db-restore.sh       ← Restore lógico Supabase / Postgres
+```
+
+Runtime backup path actual:
+
+```text
+framework/.tmp/db-backups/
 ```
 
 ---

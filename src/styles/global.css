@@ -938,6 +938,7 @@ ol ol ol ol > li::marker {
   min-width: 0 !important;
   box-sizing: border-box !important;
   justify-self: stretch !important;
+  position: relative !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-item:nth-child(odd) {
@@ -1020,9 +1021,9 @@ ol ol ol ol > li::marker {
 :is(#lesson-forum, #forum-reader-root) .forum-thread-trailing {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 0.38rem !important;
+  gap: 0.24rem !important;
   justify-self: end !important;
-  margin-right: 5px !important;
+  margin-right: 0 !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-counts {
@@ -1103,6 +1104,24 @@ ol ol ol ol > li::marker {
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-actions[hidden] {
   display: none !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-thread-actions-menu {
+  position: absolute !important;
+  top: 0.56rem !important;
+  right: 2.2rem !important;
+  z-index: 8 !important;
+  display: inline-flex !important;
+  gap: 0.22rem !important;
+  padding: 0.2rem !important;
+  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  background: color-mix(in srgb, var(--forum-bg-panel, rgba(255,255,255,0.94)) 92%, transparent) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-thread-item.is-thread-menu-open .forum-thread-more-btn {
+  background: color-mix(in srgb, var(--forum-bg-subtle, #eef2f5) 78%, transparent) !important;
+  color: var(--forum-text-primary, var(--c-fg, #1c1f23)) !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-inline-panel[hidden] {
@@ -1188,7 +1207,8 @@ ol ol ol ol > li::marker {
   min-width: 0 !important;
   max-width: 100% !important;
   overflow: visible !important;
-  padding: 0.04rem 0.12rem 0.08rem 10px !important;
+  position: relative !important;
+  padding: 0.04rem 2.7rem 0.08rem 10px !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-avatar {
@@ -1401,34 +1421,47 @@ ol ol ol ol > li::marker {
 :is(#lesson-forum, #forum-reader-root) .forum-post-actions {
   width: 100% !important;
   margin-left: 0 !important;
-  margin-top: 0.25rem !important;
+  margin-top: 0.34rem !important;
   display: flex !important;
   justify-content: flex-end !important;
   align-items: center !important;
+  flex-wrap: wrap !important;
   gap: 0.3rem !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-actions[hidden] {
+  display: none !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-reactions {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 0.38rem !important;
-  margin-right: auto !important;
+  gap: 0.22rem !important;
+  margin-right: 0 !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-reactions[hidden] {
+  display: none !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-item {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 0.16rem !important;
+  gap: 0.12rem !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-reaction-item[hidden] {
+  display: none !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-count {
   min-width: 1.2ch;
-  text-align: right;
-  font-size: 0.6rem !important;
+  text-align: left;
+  font-size: 0.62rem !important;
   line-height: 1 !important;
   font-weight: 700 !important;
   color: var(--forum-text-secondary, #64748b);
-  opacity: 0.58;
+  opacity: 0.62;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-action-btn {
@@ -1511,8 +1544,25 @@ ol ol ol ol > li::marker {
   border-color: color-mix(in srgb, #b3261e 42%, var(--forum-border-soft, #d8dee6) 58%) !important;
 }
 
+:is(#lesson-forum, #forum-reader-root) .forum-action-more {
+  color: color-mix(in srgb, var(--forum-text-secondary, #6b7480) 82%, #9ca3af 18%) !important;
+  border-color: transparent !important;
+  font-size: 0.96rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+  padding-bottom: 0.08rem !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-more-btn {
+  margin-right: auto !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-more-btn[hidden] {
+  display: none !important;
+}
+
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-btn {
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 86%, transparent) !important;
+  border-color: transparent !important;
   background: transparent !important;
   color: var(--forum-text-secondary, #64748b) !important;
   font-size: 0.78rem !important;
@@ -1523,11 +1573,12 @@ ol ol ol ol > li::marker {
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-btn:hover,
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-btn:focus-visible {
   opacity: 1 !important;
+  background: color-mix(in srgb, var(--forum-bg-subtle, #eef2f5) 82%, transparent) !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-btn.is-active {
   color: var(--forum-text-primary, var(--c-fg, #1c1f23)) !important;
-  border-color: color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 60%, var(--forum-border-soft, #d8dee6) 40%) !important;
+  border-color: transparent !important;
   opacity: 1 !important;
   box-shadow: none !important;
 }
@@ -1542,6 +1593,57 @@ ol ol ol ol > li::marker {
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-reference.is-active {
   background: transparent !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-quick-actions {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translateY(-0.18rem) !important;
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s ease !important;
+  z-index: 6 !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-quick-tray {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.18rem !important;
+  padding: 0.18rem !important;
+  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  background: color-mix(in srgb, var(--forum-bg-panel, rgba(255,255,255,0.94)) 92%, transparent) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post.is-quick-open .forum-post-quick-actions {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transform: translateY(0) !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-quick-reaction-btn {
+  font-size: 0.82rem !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-post-reaction-summary-btn {
+  width: 1.42rem !important;
+  height: 1.42rem !important;
+  min-width: 1.42rem !important;
+  min-height: 1.42rem !important;
+  font-size: 0.76rem !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :is(#lesson-forum, #forum-reader-root) .forum-post:hover .forum-post-quick-actions,
+  :is(#lesson-forum, #forum-reader-root) .forum-post:focus-within .forum-post-quick-actions {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transform: translateY(0) !important;
+  }
 }
 
 /* Keep non-action secondary buttons (e.g. edit form save/cancel) usable. */
@@ -1565,11 +1667,24 @@ ol ol ol ol > li::marker {
   :is(#lesson-forum, #forum-reader-root) .forum-post-actions {
     justify-content: flex-end !important;
   }
+  :is(#lesson-forum, #forum-reader-root) .forum-thread-actions-menu {
+    right: 1.92rem !important;
+  }
+  :is(#lesson-forum, #forum-reader-root) .forum-post-main {
+    padding-right: 2.44rem !important;
+  }
   :is(#lesson-forum, #forum-reader-root) .forum-action-btn {
     width: 1.72rem !important;
     height: 1.72rem !important;
     min-width: 1.72rem !important;
     min-height: 1.72rem !important;
     font-size: 0.6rem !important;
+  }
+  :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-summary-btn {
+    width: 1.6rem !important;
+    height: 1.6rem !important;
+    min-width: 1.6rem !important;
+    min-height: 1.6rem !important;
+    font-size: 0.8rem !important;
   }
 }

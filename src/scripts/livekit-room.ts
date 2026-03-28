@@ -17,11 +17,13 @@ import { createPresentationController } from './presentation';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { buildRoomQueryUrl } from './room/layout';
 import {
+  chooseFocusParticipantIdentity as chooseRoomFocusParticipantIdentity,
   cloneTemplate,
   createMediaElement,
   ensureParticipantCard as ensureRoomParticipantCard,
+  getPresentationCircleIdentity as resolvePresentationCircleIdentity,
   getTrackSid,
-  hasCameraTrack,
+  hasActiveScreenShare as hasParticipantScreenshare,
   isLocalParticipant,
   listRoomParticipants,
   removeMount,
@@ -29,6 +31,7 @@ import {
   readParticipantMetadata,
   readParticipantName,
   readParticipantRole as resolveParticipantRole,
+  resolveParticipantTargetSlot as resolveRoomParticipantTargetSlot,
   removeParticipantCards,
   renderParticipantRoster,
   syncParticipantAudio,
@@ -8236,47 +8239,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const chooseFocusParticipantIdentity = () => {
-    const now = performance.now();
-    const liveSpeakers = room.activeSpeakers.filter(hasCameraTrack);
-    if (liveSpeakers.some((participant) => participant.identity === focusedParticipantIdentity)) {
-      return focusedParticipantIdentity;
-    }
-
-    if (liveSpeakers[0]) {
-      if (
-        focusedParticipantIdentity &&
-        now - focusChangedAtMs < 1400 &&
-        allParticipants().some(
-          (participant) =>
-            participant.identity === focusedParticipantIdentity &&
-            hasCameraTrack(participant),
-        )
-      ) {
-        return focusedParticipantIdentity;
-      }
-      return liveSpeakers[0].identity;
-    }
-
-    const focusedParticipant = allParticipants().find(
-      (participant) =>
-        participant.identity === focusedParticipantIdentity &&
-        hasCameraTrack(participant),
-    );
-    if (focusedParticipant) {
-      return focusedParticipant.identity;
-    }
-
-    const teacherParticipant = allParticipants().find(
-      (participant) => readParticipantRole(room, participant, localRole) === 'teacher' && hasCameraTrack(participant),
-    );
-    if (teacherParticipant) {
-      return teacherParticipant.identity;
-    }
-
-    const firstParticipantWithCamera = allParticipants().find(hasCameraTrack);
-    return firstParticipantWithCamera?.identity || '';
-  };
+  const chooseFocusParticipantIdentity = () =>
+    chooseRoomFocusParticipantIdentity({
+      activeSpeakers: room.activeSpeakers as Participant[],
+      focusChangedAtMs,
+      focusedParticipantIdentity,
+      now: performance.now(),
+      participants: allParticipants(),
+      readRole: (participant) => readParticipantRole(room, participant, localRole),
+    });
 
   const refreshFocusIdentity = () => {
     const nextIdentity = chooseFocusParticipantIdentity();
@@ -8286,28 +8257,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const hasActiveScreenShare = () =>
-    allParticipants().some((participant) =>
-      Array.from(participant.videoTrackPublications.values()).some(
-        (entry) => entry.track && entry.source === Track.Source.ScreenShare,
-      ),
-    );
+  const hasActiveScreenShare = () => hasParticipantScreenshare(allParticipants());
 
-  const getPresentationCircleIdentity = () => {
-    const leaderIdentity = getResolvedSessionLeaderIdentity();
-    if (
-      leaderIdentity &&
-      allParticipants().some(
-        (participant) =>
-          participant.identity === leaderIdentity &&
-          hasCameraTrack(participant),
-      )
-    ) {
-      return leaderIdentity;
-    }
-
-    return focusedParticipantIdentity || chooseFocusParticipantIdentity();
-  };
+  const getPresentationCircleIdentity = () =>
+    resolvePresentationCircleIdentity({
+      chooseFallbackIdentity: chooseFocusParticipantIdentity,
+      focusedParticipantIdentity,
+      leaderIdentity: getResolvedSessionLeaderIdentity(),
+      participants: allParticipants(),
+    });
 
   const syncScreenshareLayout = () => {
     const hasScreenshare = hasActiveScreenShare();
@@ -8337,38 +8295,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const canChangeLayoutLocally = () => !hasActiveScreenShare();
 
-  const resolveParticipantTargetSlot = (participant: Participant): HTMLElement | null => {
-    const layout = getCurrentLayout();
-    const isLocal = isLocalParticipant(room, participant);
-
-    if (layout === 'grid') {
-      return gridSlot;
-    }
-
-    // Hide self from the sidebar only when teacher is the session leader and the
-    // circle camera is active — the circle already serves as their self-preview.
-    const selfHiddenByCircle =
-      isLocal &&
-      localRole === 'teacher' &&
-      canLeadSession() &&
-      showPresentationCircle;
-
-    if (layout === 'teacher') {
-      if (participant.identity === focusedParticipantIdentity) {
-        return teacherSlot;
-      }
-      return selfHiddenByCircle ? null : studentsSlot;
-    }
-
-    if (layout === 'presentation') {
-      if (participant.identity === getPresentationCircleIdentity()) {
-        return teacherSlot;
-      }
-      return selfHiddenByCircle ? null : studentsSlot;
-    }
-
-    return selfHiddenByCircle ? null : studentsSlot;
-  };
+  const resolveParticipantTargetSlot = (participant: Participant): HTMLElement | null =>
+    resolveRoomParticipantTargetSlot({
+      canLeadSession: canLeadSession(),
+      focusedParticipantIdentity,
+      gridSlot,
+      isLocalParticipant: isLocalParticipant(room, participant),
+      layout: getCurrentLayout(),
+      localRole,
+      participant,
+      presentationCircleIdentity: getPresentationCircleIdentity(),
+      showPresentationCircle,
+      studentsSlot,
+      teacherSlot,
+    });
 
   const clearIdentityPreviewSlot = () => {
     if (identityPreviewSlot instanceof HTMLElement) {

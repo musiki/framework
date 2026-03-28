@@ -9393,6 +9393,7 @@ a[node] -->|edge| b[hub]
             toggle.appendChild(divider);
             toggle.appendChild(meta);
             toggle.addEventListener('click', async () => {
+              setThreadMenuOpen(false);
               const nextThreadId = forumState.selectedThreadId === thread.id ? '' : thread.id;
               forumState.selectedThreadId = nextThreadId;
               clearReplyTarget();
@@ -9416,17 +9417,52 @@ a[node] -->|edge| b[hub]
 
             const canEditThread = Boolean(thread.canEdit);
             const canDeleteThread = Boolean(thread.canDelete);
+            /** @type {HTMLButtonElement | null} */
             let threadEditButton = null;
+            /** @type {HTMLButtonElement | null} */
             let threadDeleteButton = null;
+            /** @type {HTMLButtonElement | null} */
+            let threadMoreButton = null;
 
+            /** @param {boolean} isDisabled */
             const setThreadActionState = (isDisabled) => {
+              if (threadMoreButton) threadMoreButton.disabled = isDisabled;
               if (threadEditButton) threadEditButton.disabled = isDisabled;
               if (threadDeleteButton) threadDeleteButton.disabled = isDisabled;
             };
 
             const threadActions = document.createElement('div');
-            threadActions.className = 'forum-thread-actions';
-            threadActions.hidden = !canEditThread && !canDeleteThread;
+            threadActions.className = 'forum-thread-actions forum-thread-actions-menu';
+            threadActions.hidden = true;
+            const closeSiblingThreadMenus = () => {
+              threadListEl.querySelectorAll('.forum-thread-item.is-thread-menu-open').forEach((node) => {
+                if (node === item) return;
+                node.classList.remove('is-thread-menu-open');
+                const menu = node.querySelector('.forum-thread-actions-menu');
+                if (menu instanceof HTMLElement) menu.hidden = true;
+              });
+            };
+            const setThreadMenuOpen = (isOpen) => {
+              const nextState = Boolean(isOpen) && (canEditThread || canDeleteThread);
+              if (nextState) closeSiblingThreadMenus();
+              threadActions.hidden = !nextState;
+              item.classList.toggle('is-thread-menu-open', nextState);
+            };
+
+            if (canEditThread || canDeleteThread) {
+              threadMoreButton = document.createElement('button');
+              threadMoreButton.type = 'button';
+              threadMoreButton.className = 'forum-thread-more-btn forum-action-btn forum-action-more';
+              threadMoreButton.textContent = '···';
+              threadMoreButton.dataset.tooltip = 'Mas acciones';
+              threadMoreButton.title = 'Mas acciones';
+              threadMoreButton.setAttribute('aria-label', 'Mas acciones del hilo');
+              threadMoreButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setThreadMenuOpen(threadActions.hidden);
+              });
+            }
 
             if (canEditThread) {
               threadEditButton = document.createElement('button');
@@ -9439,6 +9475,7 @@ a[node] -->|edge| b[hub]
               threadEditButton.addEventListener('click', async (event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                setThreadMenuOpen(false);
 
                 const nextTitle = window.prompt('Editar título del hilo', thread.title || '');
                 if (nextTitle === null) return;
@@ -9487,6 +9524,7 @@ a[node] -->|edge| b[hub]
               threadDeleteButton.addEventListener('click', async (event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                setThreadMenuOpen(false);
 
                 if (!confirm('¿Seguro que quieres borrar este hilo completo?')) return;
 
@@ -9517,9 +9555,7 @@ a[node] -->|edge| b[hub]
             }
 
             trailing.appendChild(counts);
-            if (!threadActions.hidden) {
-              trailing.appendChild(threadActions);
-            }
+            if (threadMoreButton) trailing.appendChild(threadMoreButton);
             trailing.appendChild(caret);
 
             if (isActive) {
@@ -9527,6 +9563,7 @@ a[node] -->|edge| b[hub]
             }
 
             item.appendChild(toggle);
+            item.appendChild(threadActions);
             item.appendChild(inlinePanel);
             threadListEl.appendChild(item);
           });
@@ -9631,9 +9668,92 @@ a[node] -->|edge| b[hub]
               if (canReply || canEditPost || canDeletePost || canVotePost) {
                 const actions = document.createElement('div');
                 actions.className = 'forum-post-actions';
+                actions.hidden = true;
 
+                /** @type {HTMLButtonElement | null} */
                 let replyButton = null;
+                /** @type {HTMLButtonElement[]} */
                 let reactionButtons = [];
+                /** @type {HTMLButtonElement[]} */
+                let reactionSummaryButtons = [];
+                /** @type {HTMLButtonElement | null} */
+                let reactionMoreButton = null;
+                /** @type {HTMLDivElement | null} */
+                let reactionGroup = null;
+                /** @type {HTMLDivElement | null} */
+                let quickActions = null;
+                /** @type {HTMLDivElement | null} */
+                let quickTray = null;
+                const quickButtonByReactionValue = new Map();
+                const summaryButtonByReactionValue = new Map();
+                /** @type {Record<string, HTMLSpanElement>} */
+                const reactionCountEls = {};
+                /** @type {Record<string, HTMLDivElement>} */
+                const reactionSummaryItems = {};
+                const closeSiblingQuickMenus = () => {
+                  document.querySelectorAll('.forum-post.is-quick-open').forEach((node) => {
+                    if (node !== card) node.classList.remove('is-quick-open');
+                  });
+                };
+                const setQuickMenuOpen = (isOpen) => {
+                  if (!quickActions) return;
+                  if (isOpen) closeSiblingQuickMenus();
+                  card.classList.toggle('is-quick-open', Boolean(isOpen));
+                };
+                const canOpenQuickMenu = canVotePost || canEditPost || canDeletePost;
+
+                if (canOpenQuickMenu) {
+                  quickActions = document.createElement('div');
+                  quickActions.className = 'forum-post-quick-actions';
+
+                  quickTray = document.createElement('div');
+                  quickTray.className = 'forum-post-quick-tray';
+                  quickActions.appendChild(quickTray);
+                  main.appendChild(quickActions);
+
+                  let longPressTimer = 0;
+                  let longPressTriggered = false;
+                  const clearLongPress = () => {
+                    if (longPressTimer) {
+                      window.clearTimeout(longPressTimer);
+                      longPressTimer = 0;
+                    }
+                  };
+                  const isTouchReveal = () =>
+                    typeof window !== 'undefined'
+                    && typeof window.matchMedia === 'function'
+                    && window.matchMedia('(hover: none), (pointer: coarse)').matches;
+
+                  card.addEventListener('pointerdown', (event) => {
+                    if (!isTouchReveal()) return;
+                    if (event.pointerType === 'mouse') return;
+                    if (event.target instanceof Element && event.target.closest('button, a, input, textarea, select, summary')) return;
+                    longPressTriggered = false;
+                    clearLongPress();
+                    longPressTimer = window.setTimeout(() => {
+                      longPressTriggered = true;
+                      setQuickMenuOpen(true);
+                    }, 420);
+                  });
+
+                  ['pointerup', 'pointercancel', 'pointerleave'].forEach((eventName) => {
+                    card.addEventListener(eventName, clearLongPress);
+                  });
+
+                  card.addEventListener('click', (event) => {
+                    if (!longPressTriggered) return;
+                    longPressTriggered = false;
+                    event.preventDefault();
+                    event.stopPropagation();
+                  });
+
+                  quickTray.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Escape') return;
+                    setQuickMenuOpen(false);
+                    if (reactionMoreButton) reactionMoreButton.focus();
+                  });
+                }
+
                 if (canReply) {
                   replyButton = document.createElement('button');
                   replyButton.type = 'button';
@@ -9645,11 +9765,10 @@ a[node] -->|edge| b[hub]
                   replyButton.addEventListener('click', () => {
                     setReplyTarget(post.id, post.authorName || 'usuario');
                   });
-                  actions.appendChild(replyButton);
                 }
 
                 if (canVotePost) {
-                  const reactionGroup = document.createElement('div');
+                  reactionGroup = document.createElement('div');
                   reactionGroup.className = 'forum-post-reactions';
 
                   const reactionDefs = [
@@ -9672,31 +9791,52 @@ a[node] -->|edge| b[hub]
                     currentMyReaction = 0;
                   }
 
-                  const reactionCountEls = {};
-                  const buttonByReactionValue = new Map();
-
                   const applyReactionState = () => {
+                    let hasVisibleSummary = false;
                     reactionDefs.forEach((def) => {
-                      const button = buttonByReactionValue.get(def.value);
-                      if (!button) return;
-
                       const isActive = currentMyReaction === def.value;
-                      button.classList.toggle('is-active', isActive);
-                      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-
+                      const quickButton = quickButtonByReactionValue.get(def.value);
+                      if (quickButton) {
+                        quickButton.classList.toggle('is-active', isActive);
+                        quickButton.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                      }
+                      const summaryButton = summaryButtonByReactionValue.get(def.value);
+                      if (summaryButton) {
+                        summaryButton.classList.toggle('is-active', isActive);
+                        summaryButton.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                      }
+                      const count = Math.max(0, Number(reactionCounts[def.key]) || 0);
+                      const summaryItem = reactionSummaryItems[def.key];
+                      if (summaryItem) {
+                        summaryItem.hidden = count <= 0;
+                        if (count > 0) hasVisibleSummary = true;
+                      }
                       const countEl = reactionCountEls[def.key];
                       if (countEl) {
-                        countEl.textContent = String(Math.max(0, Number(reactionCounts[def.key]) || 0));
+                        countEl.textContent = String(count);
                       }
                     });
+                    if (reactionGroup) reactionGroup.hidden = !hasVisibleSummary;
+                    if (reactionMoreButton) reactionMoreButton.hidden = !hasVisibleSummary;
+                    if (replyButton) {
+                      actions.hidden = false;
+                    } else {
+                      actions.hidden = !hasVisibleSummary;
+                    }
+                    card.classList.toggle('forum-post-has-reaction-summary', hasVisibleSummary);
                   };
 
                   const submitReaction = async (nextReaction) => {
                     if (!canVotePost) return;
+                    setQuickMenuOpen(false);
 
                     reactionButtons.forEach((button) => {
                       button.disabled = true;
                     });
+                    reactionSummaryButtons.forEach((button) => {
+                      button.disabled = true;
+                    });
+                    if (reactionMoreButton) reactionMoreButton.disabled = true;
 
                     try {
                       const response = await fetch(`/api/forum/posts/${encodeURIComponent(post.id)}/vote`, {
@@ -9732,51 +9872,94 @@ a[node] -->|edge| b[hub]
                       reactionButtons.forEach((button) => {
                         button.disabled = false;
                       });
+                      reactionSummaryButtons.forEach((button) => {
+                        button.disabled = false;
+                      });
+                      if (reactionMoreButton) reactionMoreButton.disabled = false;
                     }
                   };
 
                   reactionDefs.forEach((def) => {
+                    const quickReactionButton = document.createElement('button');
+                    quickReactionButton.type = 'button';
+                    quickReactionButton.className = `forum-post-reaction-btn forum-post-quick-reaction-btn forum-action-btn ${def.className}`;
+                    quickReactionButton.textContent = def.icon;
+                    quickReactionButton.dataset.tooltip = def.label;
+                    quickReactionButton.title = def.label;
+                    quickReactionButton.setAttribute('aria-label', def.label);
+                    quickReactionButton.setAttribute('aria-pressed', 'false');
+                    quickReactionButton.addEventListener('click', () => {
+                      submitReaction(currentMyReaction === def.value ? 0 : def.value);
+                    });
+                    quickButtonByReactionValue.set(def.value, quickReactionButton);
+                    reactionButtons.push(quickReactionButton);
+                    if (quickTray) quickTray.appendChild(quickReactionButton);
+
                     const reactionItem = document.createElement('div');
                     reactionItem.className = 'forum-post-reaction-item';
+                    reactionSummaryItems[def.key] = reactionItem;
 
-                    const reactionButton = document.createElement('button');
-                    reactionButton.type = 'button';
-                    reactionButton.className = `forum-post-reaction-btn forum-action-btn ${def.className}`;
-                    reactionButton.textContent = def.icon;
-                    reactionButton.dataset.tooltip = def.label;
-                    reactionButton.title = def.label;
-                    reactionButton.setAttribute('aria-label', def.label);
-                    reactionButton.setAttribute('aria-pressed', 'false');
-                    reactionButton.addEventListener('click', () => {
+                    const summaryButton = document.createElement('button');
+                    summaryButton.type = 'button';
+                    summaryButton.className = `forum-post-reaction-btn forum-post-reaction-summary-btn forum-action-btn ${def.className}`;
+                    summaryButton.textContent = def.icon;
+                    summaryButton.dataset.tooltip = def.label;
+                    summaryButton.title = def.label;
+                    summaryButton.setAttribute('aria-label', def.label);
+                    summaryButton.setAttribute('aria-pressed', 'false');
+                    summaryButton.addEventListener('click', () => {
                       submitReaction(currentMyReaction === def.value ? 0 : def.value);
                     });
 
                     const countEl = document.createElement('span');
                     countEl.className = 'forum-post-reaction-count';
-                    countEl.dataset.countKey = def.key; // for realtime updates
+                    countEl.dataset.countKey = def.key;
                     reactionCountEls[def.key] = countEl;
 
-                    buttonByReactionValue.set(def.value, reactionButton);
-                    reactionButtons.push(reactionButton);
+                    summaryButtonByReactionValue.set(def.value, summaryButton);
+                    reactionSummaryButtons.push(summaryButton);
 
-                    reactionItem.appendChild(reactionButton);
+                    reactionItem.appendChild(summaryButton);
                     reactionItem.appendChild(countEl);
                     reactionGroup.appendChild(reactionItem);
                   });
 
+                  reactionMoreButton = document.createElement('button');
+                  reactionMoreButton.type = 'button';
+                  reactionMoreButton.className = 'forum-post-more-btn forum-action-btn forum-action-more';
+                  reactionMoreButton.textContent = '···';
+                  reactionMoreButton.dataset.tooltip = 'Mas acciones';
+                  reactionMoreButton.title = 'Mas acciones';
+                  reactionMoreButton.setAttribute('aria-label', 'Mas acciones');
+                  reactionMoreButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const nextOpenState = !card.classList.contains('is-quick-open');
+                    setQuickMenuOpen(nextOpenState);
+                  });
+
                   applyReactionState();
                   actions.appendChild(reactionGroup);
+                  actions.appendChild(reactionMoreButton);
                 }
 
+                /** @type {HTMLButtonElement | null} */
                 let editButton = null;
+                /** @type {HTMLButtonElement | null} */
                 let deleteButton = null;
+                /** @type {HTMLDivElement | null} */
                 let editContainer = null;
+                /** @type {HTMLTextAreaElement | null} */
                 let editTextarea = null;
+                /** @type {HTMLButtonElement | null} */
                 let saveEditButton = null;
+                /** @type {HTMLButtonElement | null} */
                 let cancelEditButton = null;
 
+                /** @param {boolean} isEditing */
                 function setEditMode(isEditing) {
                   if (!editContainer || !editTextarea || !editButton) return;
+                  setQuickMenuOpen(false);
                   editContainer.hidden = !isEditing;
                   body.hidden = isEditing;
                   editButton.hidden = isEditing;
@@ -9784,6 +9967,10 @@ a[node] -->|edge| b[hub]
                   reactionButtons.forEach((button) => {
                     button.disabled = isEditing;
                   });
+                  reactionSummaryButtons.forEach((button) => {
+                    button.disabled = isEditing;
+                  });
+                  if (reactionMoreButton) reactionMoreButton.disabled = isEditing;
                   if (deleteButton) deleteButton.disabled = isEditing;
 
                   if (isEditing) {
@@ -9804,7 +9991,7 @@ a[node] -->|edge| b[hub]
                   editButton.addEventListener('click', () => {
                     setEditMode(true);
                   });
-                  actions.appendChild(editButton);
+                  if (quickTray) quickTray.appendChild(editButton);
 
                   editContainer = document.createElement('div');
                   editContainer.className = 'forum-edit-form';
@@ -9850,7 +10037,7 @@ a[node] -->|edge| b[hub]
                         }),
                       });
 
-                      const payload = await response.json().catch(() => ({}));
+                      const payload = await response.json().catch(() => /** @type {{ error?: string }} */ ({}));
                       if (!response.ok) {
                         throw new Error(payload?.error || 'No se pudo editar el mensaje.');
                       }
@@ -9861,7 +10048,8 @@ a[node] -->|edge| b[hub]
                       await loadPosts(renderedThreadId);
                     } catch (error) {
                       console.error('Forum post edit error:', error);
-                      setForumStatus(error?.message || 'No se pudo editar el mensaje.', 'error');
+                      const message = error instanceof Error ? error.message : 'No se pudo editar el mensaje.';
+                      setForumStatus(message, 'error');
                     } finally {
                       if (saveEditButton) saveEditButton.disabled = false;
                       if (cancelEditButton) cancelEditButton.disabled = false;
@@ -9891,6 +10079,7 @@ a[node] -->|edge| b[hub]
                   deleteButton.title = 'Borrar';
                   deleteButton.setAttribute('aria-label', 'Borrar');
                   deleteButton.addEventListener('click', async () => {
+                    setQuickMenuOpen(false);
                     if (!confirm('¿Seguro que quieres borrar este mensaje?')) return;
 
                     if (deleteButton) deleteButton.disabled = true;
@@ -9902,7 +10091,7 @@ a[node] -->|edge| b[hub]
                         method: 'DELETE',
                       });
 
-                      const payload = await response.json().catch(() => ({}));
+                      const payload = await response.json().catch(() => /** @type {{ error?: string }} */ ({}));
                       if (!response.ok) {
                         throw new Error(payload?.error || 'No se pudo borrar el mensaje.');
                       }
@@ -9913,16 +10102,21 @@ a[node] -->|edge| b[hub]
                       await loadThreads({ preserveSelection: true });
                     } catch (error) {
                       console.error('Forum post delete error:', error);
-                      setForumStatus(error?.message || 'No se pudo borrar el mensaje.', 'error');
+                      const message = error instanceof Error ? error.message : 'No se pudo borrar el mensaje.';
+                      setForumStatus(message, 'error');
                     } finally {
                       if (deleteButton) deleteButton.disabled = false;
                       if (editButton) editButton.disabled = false;
                       if (replyButton) replyButton.disabled = false;
                     }
                   });
-                  actions.appendChild(deleteButton);
+                  if (quickTray) quickTray.appendChild(deleteButton);
                 }
 
+                if (replyButton) {
+                  actions.appendChild(replyButton);
+                  actions.hidden = false;
+                }
                 main.appendChild(actions);
 
                 if (editContainer) {
@@ -10004,7 +10198,9 @@ a[node] -->|edge| b[hub]
         // Subscribe to a thread channel via Supabase Broadcast.
         // One lightweight WebSocket per page, swapped when the active thread changes.
 
+        /** @type {any} */
         let _forumRtChannel = null;
+        /** @type {any} */
         let _forumRtClient  = null;
 
         function unsubscribeForumRealtime() {
@@ -10014,9 +10210,11 @@ a[node] -->|edge| b[hub]
           _forumRtChannel = null;
         }
 
+        /** @param {string} threadId */
         function subscribeForumRealtime(threadId) {
           unsubscribeForumRealtime();
           if (!threadId) return;
+          if (!(forumRoot instanceof HTMLElement)) return;
 
           const supabaseUrl     = forumRoot.dataset.supabaseUrl     || '';
           const supabaseAnonKey = forumRoot.dataset.supabaseAnonKey || '';
@@ -10049,22 +10247,13 @@ a[node] -->|edge| b[hub]
             void loadPosts(threadId);
           });
 
-          // Reaction update → patch counts in DOM directly (no re-render needed)
+          // Reaction update → re-fetch so summary chips appear/disappear consistently.
           _forumRtChannel.on('broadcast', { event: 'forum_reaction_updated' }, ({ payload }) => {
             if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
             const postId = String(payload?.postId || '').trim();
-            const counts = payload?.reactionCounts;
-            if (!postId || !counts) return;
-
-            const postEl = postListEl.querySelector(`[data-post-id="${CSS.escape(postId)}"]`);
-            if (!postEl) return;
-
-            for (const key of ['useful', 'clarifies', 'reference']) {
-              const countEl = postEl.querySelector(`[data-count-key="${key}"]`);
-              if (countEl) {
-                countEl.textContent = String(Math.max(0, Number(counts[key]) || 0));
-              }
-            }
+            if (!postId) return;
+            invalidateForumPostsCache(threadId);
+            void loadPosts(threadId);
           });
 
           _forumRtChannel.subscribe();
@@ -10511,6 +10700,42 @@ a[node] -->|edge| b[hub]
           document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && mediaModalEl instanceof HTMLElement && !mediaModalEl.hidden) {
               closeForumMediaModal();
+            }
+          });
+        }
+
+        const closeForumQuickMenus = () => {
+          if (!(forumRoot instanceof HTMLElement)) return;
+          forumRoot.querySelectorAll('.forum-post.is-quick-open').forEach((node) => {
+            node.classList.remove('is-quick-open');
+          });
+          forumRoot.querySelectorAll('.forum-thread-item.is-thread-menu-open').forEach((node) => {
+            node.classList.remove('is-thread-menu-open');
+            const menu = node.querySelector('.forum-thread-actions-menu');
+            if (menu instanceof HTMLElement) menu.hidden = true;
+          });
+        };
+
+        if (document.body.dataset.lessonForumQuickMenuBound !== 'true') {
+          document.body.dataset.lessonForumQuickMenuBound = 'true';
+          document.addEventListener('click', (event) => {
+            if (!(event.target instanceof Node)) {
+              closeForumQuickMenus();
+              return;
+            }
+            if (!(forumRoot instanceof HTMLElement) || !forumRoot.contains(event.target)) {
+              closeForumQuickMenus();
+              return;
+            }
+            const interactive = event.target instanceof Element
+              ? event.target.closest('.forum-post-quick-actions, .forum-post-more-btn, .forum-thread-more-btn, .forum-thread-actions-menu')
+              : null;
+            if (interactive) return;
+            closeForumQuickMenus();
+          });
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+              closeForumQuickMenus();
             }
           });
         }

@@ -20,6 +20,12 @@ export {
   syncScreenVideo,
 } from './media';
 export {
+  chooseFocusParticipantIdentity,
+  getPresentationCircleIdentity,
+  hasActiveScreenShare,
+  resolveParticipantTargetSlot,
+} from './focus';
+export {
   ensureParticipantCard,
   listRoomParticipants,
   removeParticipantCards,
