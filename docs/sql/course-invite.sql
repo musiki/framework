@@ -13,5 +13,13 @@ CREATE TABLE IF NOT EXISTS "CourseInvite" (
 
 -- Only the service role (server-side API) can read/write this table.
 ALTER TABLE "CourseInvite" ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "service_role only" ON "CourseInvite"
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+REVOKE ALL ON TABLE public."CourseInvite" FROM anon, authenticated;
+GRANT ALL ON TABLE public."CourseInvite" TO service_role;
+
+DROP POLICY IF EXISTS "service_role only" ON "CourseInvite";
+CREATE POLICY "service_role_only" ON "CourseInvite"
+  AS PERMISSIVE FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Reload PostgREST schema cache so the table becomes visible to the API
+SELECT pg_notify('pgrst', 'reload schema');

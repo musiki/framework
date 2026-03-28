@@ -103,6 +103,49 @@ const DASHBOARD_PROJECTION_SCRIPT_IDS = [
 const normalizeText = (value: any) => String(value || '').trim();
 const normalizeTextLower = (value: any) => normalizeText(value).toLowerCase();
 
+let _toastTimer: ReturnType<typeof setTimeout> | null = null;
+const showToast = (msg: string, type: 'loading' | 'success' | 'error' = 'loading', duration = 0) => {
+  const el = document.querySelector<HTMLElement>('[data-dashboard-toast]');
+  if (!el) return;
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  el.textContent = msg;
+  el.dataset.toastType = type;
+  el.hidden = false;
+  if (duration > 0) {
+    _toastTimer = setTimeout(() => { el.hidden = true; }, duration);
+  }
+};
+const hideToast = () => {
+  const el = document.querySelector<HTMLElement>('[data-dashboard-toast]');
+  if (!el) return;
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  el.hidden = true;
+};
+
+const pickTurno = (): Promise<'M' | 'T' | 'N' | null> =>
+  new Promise((resolve) => {
+    const dialog = document.querySelector<HTMLDialogElement>('[data-turno-dialog]');
+    if (!dialog) { resolve(null); return; }
+
+    const close = (value: 'M' | 'T' | 'N' | null) => {
+      dialog.close();
+      dialog.removeEventListener('cancel', onCancel);
+      resolve(value);
+    };
+
+    const onCancel = () => close(null);
+    dialog.addEventListener('cancel', onCancel, { once: true });
+
+    dialog.querySelectorAll<HTMLButtonElement>('[data-turno-pick]').forEach((btn) => {
+      btn.onclick = () => close(btn.dataset.turnoPick as 'M' | 'T' | 'N');
+    });
+
+    const cancelBtn = dialog.querySelector<HTMLButtonElement>('[data-turno-cancel]');
+    if (cancelBtn) cancelBtn.onclick = () => close(null);
+
+    dialog.showModal();
+  });
+
 // Abbreviated label for narrow gradebook eval column headers.
 // "demo-ollama-patch-01" → "DOP1"
 // "c1grupo1" → "CG1"
@@ -338,7 +381,7 @@ const unlockDashboardSaveStatus = () => {
 const toTitleCase = (text: string): string =>
   String(text || '').replace(/\S+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 
-const EDITABLE_USER_FIELDS = ['firstName', 'lastName', 'email'];
+const EDITABLE_USER_FIELDS = ['firstName', 'lastName', 'email', 'name'];
 
 const saveUserFieldFromCell = async (cell: any, overrideValue?: string): Promise<void> => {
   const field = normalizeText(cell.getField?.() || '');
@@ -357,8 +400,10 @@ const saveUserFieldFromCell = async (cell: any, overrideValue?: string): Promise
   } else if (field === 'lastName') {
     const firstName = clean(String(rowData.firstName || ''));
     body.name = [firstName, value].filter(Boolean).join(' ');
+  } else if (field === 'name') {
+    body.name = clean(value);
   } else if (field === 'email') {
-    body.email = value;
+    body.email = clean(value).toLowerCase();
   }
 
   if (!Object.keys(body).length) return;
@@ -841,9 +886,10 @@ const persistSingleAttendanceCellValue = async (
   let attendanceUnits = 0;
   let scheduledDayCount = 0;
   Object.values(rowData?.__attendanceCellMeta || {}).forEach((entry: any) => {
+    // Only count past/today days toward totals and absences
+    if (!entry?.countsTowardAbsence) return;
     scheduledDayCount += 1;
     attendanceUnits += Math.max(0, Number(entry?.effectiveValue || 0));
-    if (!entry?.countsTowardAbsence) return;
     absenceUnits += Math.max(0, 1 - Number(entry?.effectiveValue || 0));
   });
   const attendanceRate = scheduledDayCount > 0
@@ -2978,6 +3024,9 @@ const configureColumns = (
       nextColumn.headerSort = false;
     } else if (kind === 'editable-text') {
       nextColumn.editor = 'input';
+      nextColumn.editable = true;
+      nextColumn.editorParams = { selectContents: true };
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable');
     }
 
     const isAnnotationCell = isAnnotationContextKind(context.kind) && normalizeText(nextColumn.field);
@@ -3347,17 +3396,25 @@ const buildCsvFilename = (key: string, meta: DashboardMeta) => {
   }
 };
 
-const parseClipboardStudentList = (text: string): Array<{ name: string; email: string }> => {
+const parseStudentListText = (text: string): Array<{ name: string; email: string }> => {
+  const seen = new Set<string>();
   return text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .flatMap((line) => {
-      const parts = line.split(/\t/);
+      // Try tab split first; fall back to 2+ spaces (some browsers/systems paste with spaces)
+      let parts = line.split(/\t/);
+      if (parts.length < 5) parts = line.split(/\s{2,}/);
       if (parts.length < 5) return [];
+      // Only include "Aceptada" rows (col 2)
+      if (normalizeText(parts[2]).toLowerCase() !== 'aceptada') return [];
       const rawName = normalizeText(parts[1] || '');
       const email = normalizeText(parts[4] || '').toLowerCase();
       if (!rawName || !email || !email.includes('@')) return [];
+      // Deduplicate by email
+      if (seen.has(email)) return [];
+      seen.add(email);
       const [rawApellido, ...rawNombreParts] = rawName.split(',').map((s) => s.trim()).filter(Boolean);
       const apellido = toTitleCase(rawApellido || '');
       const nombre = toTitleCase(rawNombreParts.join(' ').replace(/\s+/g, ' ').trim());
@@ -3367,6 +3424,9 @@ const parseClipboardStudentList = (text: string): Array<{ name: string; email: s
       return [{ name, email }];
     });
 };
+
+// Keep old name as alias for backward compat
+const parseClipboardStudentList = parseStudentListText;
 
 const bindImportClipboardButton = (root: HTMLElement, meta: DashboardMeta) => {
   root.querySelectorAll('[data-dashboard-import-clipboard]').forEach((button) => {
@@ -3383,33 +3443,86 @@ const bindImportClipboardButton = (root: HTMLElement, meta: DashboardMeta) => {
         }
         const students = parseClipboardStudentList(text);
         if (students.length === 0) {
-          alert('No se encontraron estudiantes válidos. Asegurate de copiar la lista en el formato correcto (con columnas separadas por tabulación).');
+          showToast('No se encontraron estudiantes válidos en el portapapeles.', 'error', 4000);
           return;
         }
-        const confirmed = confirm(`Se importarán ${students.length} estudiante${students.length !== 1 ? 's' : ''}. ¿Continuar?`);
+        const turno = await pickTurno();
+        if (!turno) return;
+
+        const confirmed = confirm(`Se importarán ${students.length} estudiante${students.length !== 1 ? 's' : ''} (turno ${turno === 'M' ? 'Mañana' : turno === 'T' ? 'Tarde' : 'Noche'}). ¿Continuar?`);
         if (!confirmed) return;
 
-        const originalContent = button.innerHTML;
         button.disabled = true;
-        button.textContent = 'Importando...';
+        showToast(`Importando ${students.length} estudiante${students.length !== 1 ? 's' : ''}…`, 'loading');
 
         const response = await fetch('/api/admin/import-students', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId: meta.courseId, students }),
+          body: JSON.stringify({ courseId: meta.courseId, turno, students }),
         });
 
         const result = await response.json();
         if (!response.ok) {
-          alert(`Error al importar: ${result.error || 'Error desconocido'}`);
+          showToast(`Error: ${result.error || 'Error desconocido'}`, 'error', 5000);
           button.disabled = false;
-          button.innerHTML = originalContent;
         } else {
-          alert(`Pre-registro completado: ${result.invited} pre-registrado${result.invited !== 1 ? 's' : ''}, ${result.alreadyInvited} ya pre-registrado${result.alreadyInvited !== 1 ? 's' : ''}, ${result.alreadyEnrolled} ya inscripto${result.alreadyEnrolled !== 1 ? 's' : ''}.`);
-          window.location.reload();
+          const msg = `✓ ${result.enrolled} inscripto${result.enrolled !== 1 ? 's' : ''}${result.alreadyEnrolled ? `, ${result.alreadyEnrolled} ya inscripto${result.alreadyEnrolled !== 1 ? 's' : ''}` : ''}${result.errors ? `, ${result.errors} error${result.errors !== 1 ? 'es' : ''}` : ''}`;
+          showToast(msg, 'success', 4000);
+          setTimeout(() => window.location.reload(), 1200);
         }
       } catch {
-        alert('No se pudo acceder al portapapeles. Asegurate de dar permiso al sitio.');
+        showToast('No se pudo acceder al portapapeles.', 'error', 4000);
+        button.disabled = false;
+      }
+    });
+  });
+};
+
+const bindImportCsvButton = (root: HTMLElement, meta: DashboardMeta) => {
+  root.querySelectorAll<HTMLButtonElement>('[data-dashboard-import-csv]').forEach((button) => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+
+    const fileInput = root.querySelector<HTMLInputElement>('[data-dashboard-import-csv-input]');
+    if (!fileInput) return;
+
+    button.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      fileInput.value = '';
+      const text = await file.text();
+      if (!text.trim()) { showToast('El archivo está vacío.', 'error', 3000); return; }
+      const students = parseStudentListText(text);
+      if (students.length === 0) {
+        showToast('No se encontraron estudiantes válidos en el archivo.', 'error', 4000);
+        return;
+      }
+      const turno = await pickTurno();
+      if (!turno) return;
+
+      const confirmed = confirm(`Se importarán ${students.length} estudiante${students.length !== 1 ? 's' : ''} (turno ${turno === 'M' ? 'Mañana' : turno === 'T' ? 'Tarde' : 'Noche'}) desde el archivo. ¿Continuar?`);
+      if (!confirmed) return;
+      button.disabled = true;
+      showToast(`Importando ${students.length} estudiante${students.length !== 1 ? 's' : ''}…`, 'loading');
+      try {
+        const response = await fetch('/api/admin/import-students', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId: meta.courseId, turno, students }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          showToast(`Error: ${result.error || 'Error desconocido'}`, 'error', 5000);
+          button.disabled = false;
+        } else {
+          const msg = `✓ ${result.enrolled} inscripto${result.enrolled !== 1 ? 's' : ''}${result.alreadyEnrolled ? `, ${result.alreadyEnrolled} ya inscripto${result.alreadyEnrolled !== 1 ? 's' : ''}` : ''}${result.errors ? `, ${result.errors} error${result.errors !== 1 ? 'es' : ''}` : ''}`;
+          showToast(msg, 'success', 4000);
+          setTimeout(() => window.location.reload(), 1200);
+        }
+      } catch {
+        showToast('Error al leer el archivo.', 'error', 4000);
         button.disabled = false;
       }
     });
@@ -3428,6 +3541,80 @@ const bindCsvButtons = (root: HTMLElement, registry: Map<string, Tabulator>, met
       if (!table) return;
       table.download('csv', buildCsvFilename(key, meta));
     });
+  });
+};
+
+const bindAddStudentModal = (root: HTMLElement, meta: DashboardMeta) => {
+  const triggerBtn = root.querySelector<HTMLButtonElement>('[data-dashboard-add-student]');
+  // Dialog lives outside root (sibling in DOM), search document-wide
+  const dialog = document.querySelector<HTMLDialogElement>('[data-add-student-dialog]');
+  const form = document.querySelector<HTMLFormElement>('[data-add-student-form]');
+  const errorEl = document.querySelector<HTMLElement>('[data-add-student-error]');
+  if (!triggerBtn || !dialog || !form) return;
+
+  const showError = (msg: string) => {
+    if (!errorEl) return;
+    errorEl.textContent = msg;
+    errorEl.hidden = false;
+  };
+  const clearError = () => { if (errorEl) { errorEl.hidden = true; errorEl.textContent = ''; } };
+
+  const openModal = () => {
+    form.reset();
+    clearError();
+    dialog.showModal();
+    (form.querySelector<HTMLInputElement>('[name="lastName"]'))?.focus();
+  };
+
+  const closeModal = () => { dialog.close(); };
+
+  triggerBtn.addEventListener('click', openModal);
+  dialog.querySelector('[data-add-student-close]')?.addEventListener('click', closeModal);
+  dialog.querySelector('[data-add-student-cancel]')?.addEventListener('click', closeModal);
+
+  // Close on backdrop click
+  dialog.addEventListener('click', (e) => { if (e.target === dialog) closeModal(); });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError();
+    const data = new FormData(form);
+    const lastName = normalizeText(data.get('lastName'));
+    const firstName = normalizeText(data.get('firstName'));
+    const email = normalizeText(data.get('email')).toLowerCase();
+    const turno = normalizeText(data.get('turno'));
+    const grupo = normalizeText(data.get('grupo'));
+
+    if (!lastName && !firstName) { showError('Ingresá al menos apellido o nombre.'); return; }
+    if (!email || !email.includes('@')) { showError('Email inválido.'); return; }
+
+    const submitBtn = form.querySelector<HTMLButtonElement>('[data-add-student-submit]');
+    const originalText = submitBtn?.textContent ?? 'Agregar';
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Agregando...'; }
+
+    try {
+      const response = await fetch('/api/admin/add-student-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: meta.courseId, year: meta.year, firstName, lastName, email, turno, grupo }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        showError(result.error || 'Error desconocido.');
+      } else {
+        const statusMap: Record<string, string> = {
+          enrolled: 'Estudiante inscripto correctamente.',
+          already_enrolled: 'El estudiante ya estaba inscripto.',
+        };
+        closeModal();
+        showToast(statusMap[result.status] ?? 'Operación completada.', 'success', 3500);
+        setTimeout(() => window.location.reload(), 1200);
+      }
+    } catch {
+      showError('Error de red. Intentá de nuevo.');
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = originalText; }
+    }
   });
 };
 
@@ -4853,6 +5040,8 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   bindAttendanceConfig();
   bindCsvButtons(root, registry, meta);
   bindImportClipboardButton(root, meta);
+  bindImportCsvButton(root, meta);
+  bindAddStudentModal(root, meta);
   bindUnfoldAllButtons(root, registry);
   bindFoldAllButtons(root, registry);
 

@@ -3829,6 +3829,180 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         opacity: 0.52;
         cursor: not-allowed;
       }
+
+      /* ── Toast notification ──────────────────────────────────────── */
+      .dashboard-toast {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        z-index: 9999;
+        max-width: 340px;
+        padding: 0.65rem 1rem;
+        border-radius: 8px;
+        font-size: 0.83rem;
+        font-weight: 500;
+        line-height: 1.4;
+        color: #fff;
+        background: #1e293b;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity 0.18s ease, transform 0.18s ease;
+        pointer-events: none;
+      }
+      .dashboard-toast:not([hidden]) {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      .dashboard-toast[data-toast-type="success"] { background: #15803d; }
+      .dashboard-toast[data-toast-type="error"]   { background: #b91c1c; }
+      .dashboard-toast[data-toast-type="loading"] { background: #1e40af; }
+
+      /* ── Turno picker dialog ─────────────────────────────────────── */
+      .dashboard-turno-dialog {
+        padding: 1.5rem 1.4rem 1.2rem;
+        border: 1px solid var(--c-border);
+        background: var(--c-bg);
+        border-radius: 12px;
+        min-width: 260px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      }
+      .dashboard-turno-dialog::backdrop {
+        background: rgba(0,0,0,0.55);
+        backdrop-filter: blur(2px);
+      }
+      .dashboard-turno-dialog__title {
+        margin: 0 0 1rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        text-align: center;
+      }
+      .dashboard-turno-dialog__options {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.8rem;
+      }
+      .dashboard-turno-btn {
+        flex: 1;
+        padding: 0.6rem 0.5rem;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--c-fg);
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+      }
+      .dashboard-turno-btn:hover {
+        background: var(--c-link);
+        border-color: var(--c-link);
+        color: #fff;
+      }
+      .dashboard-turno-cancel {
+        display: block;
+        width: 100%;
+        padding: 0.35rem;
+        background: none;
+        border: none;
+        color: var(--c-fg-dim);
+        font-size: 0.78rem;
+        cursor: pointer;
+        text-align: center;
+      }
+      .dashboard-turno-cancel:hover { color: var(--c-fg); }
+
+      /* ── Add student modal ────────────────────────────────────────── */
+      .dashboard-add-student-dialog {
+        padding: 0;
+        border: 1px solid var(--c-border);
+        background: var(--c-bg);
+        color: var(--c-fg);
+        font: inherit;
+        min-width: 340px;
+        max-width: 460px;
+        width: 100%;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+      }
+      .dashboard-add-student-dialog::backdrop {
+        background: rgba(0,0,0,0.55);
+        backdrop-filter: blur(2px);
+      }
+      .dashboard-add-student-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.65rem 0.85rem 0.65rem 1rem;
+        border-bottom: 1px solid var(--c-border);
+      }
+      .dashboard-add-student-title {
+        font-size: 0.78rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim, var(--c-fg));
+      }
+      .dashboard-add-student-close {
+        background: transparent;
+        border: 0;
+        color: var(--c-fg-dim, var(--c-fg));
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        padding: 0.15rem;
+        opacity: 0.6;
+      }
+      .dashboard-add-student-close:hover { opacity: 1; }
+      .dashboard-add-student-form { display: flex; flex-direction: column; }
+      .dashboard-add-student-fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.65rem;
+        padding: 1rem;
+      }
+      .dashboard-add-student-label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        font-size: 0.72rem;
+        color: var(--c-fg-dim, var(--c-fg));
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .dashboard-add-student-label--full { grid-column: 1 / -1; }
+      .dashboard-add-student-input {
+        font: inherit;
+        font-size: 0.82rem;
+        background: var(--c-bg-mute, var(--c-bg));
+        border: 1px solid var(--c-border);
+        color: var(--c-fg);
+        padding: 0.3rem 0.45rem;
+        width: 100%;
+        box-sizing: border-box;
+        outline: none;
+        text-transform: none;
+        letter-spacing: normal;
+      }
+      .dashboard-add-student-input:focus { border-color: var(--c-link); }
+      .dashboard-add-student-error {
+        margin: 0 1rem;
+        padding: 0.4rem 0.55rem;
+        background: color-mix(in srgb, #dc2626 12%, var(--c-bg));
+        border: 1px solid color-mix(in srgb, #dc2626 40%, var(--c-border));
+        color: #dc2626;
+        font-size: 0.78rem;
+      }
+      .dashboard-add-student-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        border-top: 1px solid var(--c-border);
+      }
+
       .dashboard-grid-icon-btn {
         width: 1.72rem;
         height: 1.72rem;
@@ -4971,6 +5145,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
             </aside>
           )}
         <section class="dashboard-main" data-dashboard-root>
+          <div data-dashboard-toast class="dashboard-toast" role="status" aria-live="polite" hidden></div>
       {isTeacher && (
         <>
         <nav class="dashboard-topbar" aria-label="Navegacion del dashboard docente">
@@ -5083,7 +5258,24 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
                 <span>I</span>
               </button>
-              <button type="button" class="dashboard-grid-btn" data-dashboard-download="teacher-main" title="Exportar la tabla principal como CSV.">CSV</button>
+              <button type="button" class="dashboard-grid-btn dashboard-grid-btn--icon" data-dashboard-download="teacher-main" title="Exportar la tabla principal como CSV.">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                CSV
+              </button>
+              <button type="button" class="dashboard-grid-btn dashboard-grid-btn--icon" data-dashboard-import-csv title="Importar estudiantes desde archivo CSV.">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                CSV
+              </button>
+              <input type="file" accept=".csv,.tsv,.txt" data-dashboard-import-csv-input style="display:none">
+              <button
+                type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square dashboard-grid-btn--icon"
+                data-dashboard-add-student
+                title="Agregar estudiante manualmente"
+                aria-label="Agregar estudiante"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
               <button
                 type="button"
                 class="dashboard-grid-btn dashboard-grid-btn--square"
@@ -5429,6 +5621,58 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       )}
         </section>
       </div>
+
+      <dialog class="dashboard-turno-dialog" data-turno-dialog>
+        <p class="dashboard-turno-dialog__title">¿Qué turno estás cargando?</p>
+        <div class="dashboard-turno-dialog__options">
+          <button type="button" class="dashboard-turno-btn" data-turno-pick="M">🌅 Mañana</button>
+          <button type="button" class="dashboard-turno-btn" data-turno-pick="T">☀️ Tarde</button>
+          <button type="button" class="dashboard-turno-btn" data-turno-pick="N">🌙 Noche</button>
+        </div>
+        <button type="button" class="dashboard-turno-cancel" data-turno-cancel>Cancelar</button>
+      </dialog>
+
+      <dialog class="dashboard-add-student-dialog" data-add-student-dialog>
+        <form class="dashboard-add-student-form" data-add-student-form autocomplete="off" novalidate>
+          <div class="dashboard-add-student-header">
+            <span class="dashboard-add-student-title">Agregar estudiante</span>
+            <button type="button" class="dashboard-add-student-close" data-add-student-close aria-label="Cerrar">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="dashboard-add-student-fields">
+            <label class="dashboard-add-student-label">
+              <span>Apellido</span>
+              <input class="dashboard-add-student-input" type="text" name="lastName" placeholder="García" required>
+            </label>
+            <label class="dashboard-add-student-label">
+              <span>Nombre</span>
+              <input class="dashboard-add-student-input" type="text" name="firstName" placeholder="Juan" required>
+            </label>
+            <label class="dashboard-add-student-label dashboard-add-student-label--full">
+              <span>Email</span>
+              <input class="dashboard-add-student-input" type="email" name="email" placeholder="juan@ejemplo.com" required>
+            </label>
+            <label class="dashboard-add-student-label">
+              <span>Turno</span>
+              <select class="dashboard-add-student-input" name="turno">
+                <option value="M">M — Mañana</option>
+                <option value="T">T — Tarde</option>
+                <option value="N">N — Noche</option>
+              </select>
+            </label>
+            <label class="dashboard-add-student-label">
+              <span>Grupo</span>
+              <input class="dashboard-add-student-input" type="text" name="grupo" placeholder="01 – 99 ó X" maxlength="3">
+            </label>
+          </div>
+          <p class="dashboard-add-student-error" data-add-student-error hidden></p>
+          <div class="dashboard-add-student-actions">
+            <button type="button" class="dashboard-grid-btn" data-add-student-cancel>Cancelar</button>
+            <button type="submit" class="dashboard-grid-btn dashboard-grid-btn--primary" data-add-student-submit>Agregar</button>
+          </div>
+        </form>
+      </dialog>
 
       <div id="dashboard-shortcuts-hud" class="dashboard-shortcuts-hud" hidden>
         <h4>Atajos de Teclado</h4>

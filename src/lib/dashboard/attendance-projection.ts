@@ -101,11 +101,28 @@ export function buildAttendanceProjection({
 
   const summaryRows = (attendanceGridRows || []).map((row: any) => {
     const scheduledColumns = Array.isArray(row?.columns) ? row.columns : [];
-    const scheduledDayCount = scheduledColumns.length;
-    const attendedUnits = scheduledColumns.reduce(
-      (sum: number, column: any) => sum + Math.max(0, Number(column?.effectiveValue || 0)),
+
+    // Only count past/today columns toward totals and absences.
+    // Use the pre-computed absenceValue from each column (already guarded by todayDateKey
+    // at build time in dashboard.astro) to avoid any todayDateKey re-evaluation issues.
+    const isPast = (column: any) =>
+      String(column?.dateKey || '') <= String(todayDateKey || '');
+
+    const absenceUnits = scheduledColumns.reduce(
+      (sum: number, column: any) =>
+        // absenceValue is 0 for future dates (set in dashboard.astro), use it directly
+        sum + (typeof column?.absenceValue === 'number'
+          ? Math.max(0, column.absenceValue)
+          : isPast(column) ? Math.max(0, 1 - Number(column?.effectiveValue || 0)) : 0),
       0,
     );
+    const scheduledDayCount = scheduledColumns.filter(isPast).length;
+    const attendedUnits = scheduledColumns
+      .filter(isPast)
+      .reduce(
+        (sum: number, column: any) => sum + Math.max(0, Number(column?.effectiveValue || 0)),
+        0,
+      );
     const attendanceRate = scheduledDayCount > 0
       ? Math.round((attendedUnits / scheduledDayCount) * 1000) / 10
       : 0;
@@ -120,14 +137,15 @@ export function buildAttendanceProjection({
       attendanceRate,
       attendanceCount: attendedUnits,
       attendanceTotalCount: scheduledDayCount,
-      absenceUnits: Number(row?.absenceUnits || 0),
-      absenceDisplay: formatDashboardAbsence(row?.absenceUnits),
+      absenceUnits,
+      absenceDisplay: formatDashboardAbsence(absenceUnits),
       email: String(row?.email || ''),
       __attendanceCellMeta: {},
     };
 
     (row?.columns || []).forEach((column: any) => {
       const field = dateFieldKey(String(column?.dateKey || ''));
+      const colIsPast = isPast(column);
       record[field] = String(column?.displayValue || '');
       record.__attendanceCellMeta[field] = {
         dateKey: String(column?.dateKey || ''),
@@ -136,8 +154,8 @@ export function buildAttendanceProjection({
         manualValue: Number(column?.manualValue || 0),
         effectiveValue: Number(column?.effectiveValue || 0),
         hasManualOverride: Boolean(column?.hasManualOverride),
-        countsTowardAbsence: String(column?.dateKey || '') <= String(todayDateKey || ''),
-        isFuture: String(column?.dateKey || '') > String(todayDateKey || ''),
+        countsTowardAbsence: colIsPast,
+        isFuture: !colIsPast,
       };
     });
 

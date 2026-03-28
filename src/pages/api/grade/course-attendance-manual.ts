@@ -147,13 +147,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const assignmentId = `${META_ASSIGNMENT_PREFIX}:${encodeURIComponent(courseId)}:${year}`;
     await ensureMetaAssignment(supabase, assignmentId, courseId, year);
 
-    const { data: existingSubmission, error: existingError } = await supabase
+    const { data: existingRows, error: existingError } = await supabase
       .from('Submission')
       .select('id, attempts, payload')
       .eq('userId', studentId)
       .eq('assignmentId', assignmentId)
-      .maybeSingle();
+      .order('submittedAt', { ascending: false });
     if (existingError) throw existingError;
+    const existingSubmission = existingRows?.[0] ?? null;
 
     const currentPayload =
       existingSubmission?.payload && typeof existingSubmission.payload === 'object' && !Array.isArray(existingSubmission.payload)

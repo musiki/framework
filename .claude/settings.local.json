@@ -15,7 +15,8 @@
       "Bash(find /Users/zztt/projects/26-musiki/framework -type f \\\\\\(-name *.prisma -o -name *schema* \\\\\\))",
       "Bash(find /Users/zztt/projects/26-musiki/framework/src/components -type f \\\\\\(-name *.astro -o -name *.ts -o -name *.tsx \\\\\\))",
       "Bash(grep -n \"<script\" /Users/zztt/projects/26-musiki/framework/src/pages/cursos/[...slug].astro)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(supabase db:*)"
     ]
   }
 }

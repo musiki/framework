@@ -1,9 +1,13 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeRole = (value: unknown) => normalizeText(value).toLowerCase();
+const normalizeTurno = (v: unknown) => {
+  const u = normalizeText(v).toUpperCase();
+  return (['M', 'T', 'N'] as const).includes(u as 'M' | 'T' | 'N') ? (u as 'M' | 'T' | 'N') : 'M';
+};
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
@@ -14,13 +18,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   try {
-    const { courseId, students } = await request.json();
+    const { courseId, students, turno: rawTurno } = await request.json();
 
     if (!courseId || !Array.isArray(students)) {
       return new Response(JSON.stringify({ error: 'Missing courseId or students' }), { status: 400 });
     }
 
-    const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+    const turno = normalizeTurno(rawTurno);
+    const year = String(new Date().getFullYear());
+    const supabase = createSupabaseServerClient();
 
     // Verify requester is a teacher
     const requesterEmail = normalizeText(currentUser.email).toLowerCase();
@@ -53,24 +59,37 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Only teachers can import students' }), { status: 403 });
     }
 
-    let invited = 0;
-    let alreadyInvited = 0;
+    // Ensure the meta assignment exists (shared across all students in this course/year)
+    const META_PREFIX = '__meta__:course-student-profile';
+    const assignmentId = `${META_PREFIX}:${encodeURIComponent(canonicalCourse)}:${year}`;
+    const { data: existingAssignment } = await supabase.from('Assignment').select('id').eq('id', assignmentId).maybeSingle();
+    if (!existingAssignment) {
+      const base = { id: assignmentId, courseId: canonicalCourse, slug: `${canonicalCourse}/__meta__/student-profile/${year}` };
+      const r = await supabase.from('Assignment').insert([{ ...base, weight: 1 }]);
+      if (r.error) await supabase.from('Assignment').insert([base]);
+    }
+
+    let enrolled = 0;
     let alreadyEnrolled = 0;
+    let errors = 0;
 
     for (const student of students as Array<{ name: string; email: string }>) {
       const email = normalizeText(student.email).toLowerCase();
       const name = normalizeText(student.name);
       if (!email || !email.includes('@')) continue;
 
-      // Ensure User record exists so they can log in and find their invite
+      // Ensure User record exists
       const { data: existingUsers } = await supabase
         .from('User')
         .select('id')
         .ilike('email', email);
 
+      let userId: string;
+
       if (!existingUsers || existingUsers.length === 0) {
-        await supabase.from('User').insert([{
-          id: crypto.randomUUID(),
+        const newId = crypto.randomUUID();
+        const { error: userInsertError } = await supabase.from('User').insert([{
+          id: newId,
           email,
           name: name || email,
           emailVerified: false,
@@ -78,46 +97,85 @@ export const POST: APIRoute = async ({ request, locals }) => {
           createdAt: new Date(),
           updatedAt: new Date(),
         }]);
-      }
-
-      // If already fully enrolled, skip
-      const userId = existingUsers?.[0]?.id;
-      if (userId) {
-        const { data: existingEnrollment } = await supabase
-          .from('Enrollment')
-          .select('id')
-          .eq('userId', userId)
-          .eq('courseId', canonicalCourse)
-          .maybeSingle();
-
-        if (existingEnrollment) {
-          alreadyEnrolled++;
+        if (userInsertError) {
+          console.error('User insert error for', email, userInsertError.message);
+          errors++;
           continue;
         }
+        userId = newId;
+      } else {
+        userId = existingUsers[0].id;
       }
 
-      // Check if invite already exists
-      const { data: existingInvite } = await supabase
-        .from('CourseInvite')
+      // Check if already enrolled
+      const { data: existingEnrollment } = await supabase
+        .from('Enrollment')
         .select('id')
+        .eq('userId', userId)
         .eq('courseId', canonicalCourse)
-        .ilike('email', email)
         .maybeSingle();
 
-      if (existingInvite) {
-        alreadyInvited++;
-        continue;
+      if (existingEnrollment) {
+        alreadyEnrolled++;
+      } else {
+        // Directly enroll the student
+        const { error: enrollError } = await supabase
+          .from('Enrollment')
+          .insert([{ userId, courseId: canonicalCourse, roleInCourse: 'student' }]);
+
+        if (enrollError) {
+          console.error('Enrollment insert error for', email, enrollError.message);
+          errors++;
+          continue;
+        }
+        enrolled++;
       }
 
-      // Insert new invite
-      const { error: insertError } = await supabase
-        .from('CourseInvite')
-        .insert([{ courseId: canonicalCourse, email, createdByUserId: requesterUser.id }]);
+      // Save turno to student profile submission
+      const { data: existingSub } = await supabase
+        .from('Submission')
+        .select('id, attempts, payload')
+        .eq('userId', userId)
+        .eq('assignmentId', assignmentId)
+        .maybeSingle();
 
-      if (!insertError) invited++;
+      const existingPayload = (existingSub?.payload && typeof existingSub.payload === 'object')
+        ? existingSub.payload as Record<string, any>
+        : {};
+
+      const metaPayload = {
+        __metaKind: 'course_student_profile',
+        courseId: canonicalCourse,
+        studentId: userId,
+        year,
+        turno,
+        grupo: existingPayload?.grupo ?? '',
+        concepto: existingPayload?.concepto ?? '',
+        notes: existingPayload?.notes ?? '',
+        notaFinal: existingPayload?.notaFinal ?? '',
+        updatedAt: new Date().toISOString(),
+        updatedBy: requesterUser.id,
+        updatedByEmail: requesterEmail,
+      };
+
+      if (existingSub?.id) {
+        await supabase.from('Submission').update({
+          payload: metaPayload,
+          attempts: (Number(existingSub.attempts) || 0) + 1,
+          submittedAt: new Date().toISOString(),
+        }).eq('id', existingSub.id);
+      } else {
+        await supabase.from('Submission').insert([{
+          userId,
+          assignmentId,
+          payload: metaPayload,
+          attempts: 1,
+          submittedAt: new Date().toISOString(),
+        }]);
+      }
     }
 
-    return new Response(JSON.stringify({ success: true, invited, alreadyInvited, alreadyEnrolled }), { status: 200 });
+    return new Response(JSON.stringify({ success: true, enrolled, alreadyEnrolled, errors }), { status: 200 });
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }

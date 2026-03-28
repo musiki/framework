@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseServerClient } from '../../../../lib/forum-server';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -35,7 +35,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     return json({ error: 'Nothing to update' }, 400);
   }
 
-  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+  const supabase = createSupabaseServerClient();
 
   try {
     const { data: requester, error: requesterError } = await supabase
@@ -140,7 +140,7 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
     return json({ error: 'User id required' }, 400);
   }
 
-  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+  const supabase = createSupabaseServerClient();
   const requestUrl = new URL(request.url);
   const activeCourseId = String(requestUrl.searchParams.get('courseId') || '').trim();
 

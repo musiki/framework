@@ -301,37 +301,54 @@ hr {
 	}
 }
 
-/* Dark mode styles */
+/* Dark mode styles — Catppuccin Mocha palette */
 .dark {
-	--accent: #4f83ff;
-	--accent-dark: #1a3a9a;
-	--black: 245, 245, 245;
-	--gray: 159, 173, 189;
-	--gray-light: 71, 85, 105;
-	--gray-dark: 217, 217, 217;
-	--gray-gradient: rgba(var(--gray-light), 50%), rgb(30 30 30);
+	/* Catppuccin Mocha */
+	--accent: #89b4fa;          /* Blue */
+	--accent-dark: #45475a;     /* Surface1 */
+	--black: 205, 214, 244;     /* Text (rgb) */
+	--gray: 166, 173, 200;      /* Subtext0 (rgb) */
+	--gray-light: 69, 71, 90;   /* Surface1 (rgb) */
+	--gray-dark: 205, 214, 244; /* Text (rgb) */
+	--gray-gradient: rgba(var(--gray-light), 50%), #1e1e2e;
+
+	/* Semantic tokens from reference palette */
+	--surface-background: #1e1e2e;  /* Base */
+	--surface-ground: #181825;      /* Mantle */
+	--surface-gray: #313244;        /* Surface0 */
+	--surface-light-gray: #45475a;  /* Surface1 */
+	--text-color: #cdd6f4;
+	--primary-color: #cba6f7;       /* Mauve */
+	--primary-light-color: #f5c2e7; /* Pink */
+	--error: #f38ba8;               /* Red */
+	--error-dark: #eba0ac;          /* Maroon */
+	--warning: #f9e2af;             /* Yellow */
+	--warning-dark: #fab387;        /* Peach */
+	--success: #a6e3a1;             /* Green */
+	--info-light: #89dceb;          /* Sky */
 }
 
 .dark body {
-	background: #000 !important;
-	color: white;
+	background: #1e1e2e !important;
+	color: #cdd6f4;
 }
 
 .dark header {
-	background: #000 !important;
-	border-bottom: 1px solid transparent;
+	background: #181825 !important;
+	border-bottom: 1px solid #313244;
 }
 
 .dark nav {
-	background: #000;
+	background: #181825;
 }
 
 .dark .card {
-	border-color: transparent;
+	background: #181825;
+	border-color: #313244;
 }
 
 .dark main {
-	color: white;
+	color: #cdd6f4;
 }
 
 .dark h1,
@@ -348,20 +365,24 @@ hr {
 }
 
 .dark code {
-	background-color: transparent;
-	color: rgb(var(--gray-dark));
+	background-color: #313244;
+	color: #a6e3a1;
+	border-radius: 3px;
+	padding: 0 3px;
 }
 
 .dark pre {
-	background-color: transparent;
+	background-color: #181825;
+	border: 1px solid #313244;
 }
 
 .dark blockquote {
-	border-left-color: var(--accent);
+	border-left-color: #cba6f7;
+	color: #a6adc8;
 }
 
 .dark hr {
-	border-top-color: transparent;
+	border-top-color: #313244;
 }
 
 .sr-only {
@@ -595,16 +616,17 @@ ul {
 
 ul > li {
   position: relative;
-  padding-left: 0.82em;
+  padding-left: 1.3em;
   margin: 0.45em 0;
 }
 
 ul > li::before {
-  content: "→";
+  content: "▸";
   position: absolute;
   left: 0;
-  top: 0.18em;
-  font-size: 0.96em;
+  top: 0.08em;
+  font-size: 1em;
+  font-weight: 700;
   color: #d4d700;
   text-align: center;
 }

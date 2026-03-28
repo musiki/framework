@@ -6,11 +6,14 @@
   --c-border: #dcdcdc;
 }
 :root.dark{
-  --c-bg: #000000;
-  --c-fg: #e8e8ea;
-  --c-subtle: #b3b3b7;
-  --c-link: #8ab4ff;
-  --c-border: #2b2b2f;
+  /* Catppuccin Mocha */
+  --c-bg: #1e1e2e;        /* Base */
+  --c-bg-surface: #181825; /* Mantle — paneles, headers */
+  --c-bg-alt: #313244;    /* Surface0 — inputs, hover */
+  --c-fg: #cdd6f4;        /* Text */
+  --c-subtle: #a6adc8;    /* Subtext1 */
+  --c-link: #89b4fa;      /* Blue */
+  --c-border: #45475a;    /* Surface1 */
 }
 
 html, body{
