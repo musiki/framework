@@ -1,0 +1,45 @@
+<details class="conference-sidebar-section conference-sidebar-panel conference-sidebar-section--notes" data-notes-section>
+  <summary class="conference-sidebar-heading">NOTAS</summary>
+
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--notes">
+    <div class="conference-notes-list" data-notes-list aria-live="polite"></div>
+
+    <form class="conference-notes-form" data-notes-form autocomplete="off">
+      <input
+        class="conference-notes-title"
+        data-notes-title
+        type="text"
+        placeholder="Título de la nota"
+        maxlength="160"
+      />
+      <textarea
+        class="conference-notes-body"
+        data-notes-body
+        placeholder="Escribe tu nota… (markdown, ```mermaid, ```lilypond)"
+        rows="5"
+      ></textarea>
+      <div class="conference-notes-actions">
+        <button type="button" class="conference-notes-new-btn" data-notes-new title="Nueva nota">+</button>
+        <button type="submit" class="conference-notes-save" data-notes-save title="Guardar">G</button>
+        <button type="button" class="conference-notes-preview-btn" data-notes-preview-btn title="Vista previa">V</button>
+        <button
+          type="button"
+          class="conference-notes-download"
+          data-notes-download
+          aria-label="Descargar nota"
+          title="Descargar nota (.txt)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+            <path
+              d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span class="conference-sr-only">Descargar nota</span>
+        </button>
+      </div>
+    </form>
+
+    <div class="conference-notes-preview-pane" data-notes-preview hidden></div>
+  </div>
+</details>

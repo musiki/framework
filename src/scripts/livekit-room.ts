@@ -7,104 +7,54 @@ import {
   RemoteTrackPublication,
   Track,
   type LocalParticipant,
-  type RemoteParticipant,
   type TrackPublication,
 } from 'livekit-client';
 
 import { subscribeToLive } from '../lib/live/client.mjs';
 import { formatCountdown, getRemainingMs } from '../lib/live/countdown.mjs';
-import { normalizeLayoutMode, setLayout, type LayoutMode } from './layout-controller';
+import { normalizeLayoutMode, setLayout } from './layout-controller';
 import { createPresentationController } from './presentation';
+import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
+import { buildRoomQueryUrl } from './room/layout';
+import {
+  cloneTemplate,
+  createMediaElement,
+  ensureParticipantCard as ensureRoomParticipantCard,
+  getTrackSid,
+  hasCameraTrack,
+  isLocalParticipant,
+  listRoomParticipants,
+  removeMount,
+  readParticipantHandRaisedFromMetadata,
+  readParticipantMetadata,
+  readParticipantName,
+  readParticipantRole as resolveParticipantRole,
+  removeParticipantCards,
+  renderParticipantRoster,
+  syncParticipantAudio,
+  syncParticipantVideo,
+  syncScreenAudio,
+  syncScreenVideo,
+  type MountCollection,
+  type ParticipantCardRefs,
+  type ParticipantMount,
+  type RoomParticipant,
+  type ScreenCardRefs,
+} from './room/participants';
+import {
+  MESSAGE_TOPIC,
+  REACTION_EMOJIS,
+  REACTION_SHORTCUTS_BY_CODE,
+  normalizeRole,
+  normalizeSlideState,
+  parseConferenceMessage,
+  type ConferenceMessage,
+  type ParticipantRole,
+  type ReactionKind,
+  type SlideState,
+} from './room/session';
 
-type Participant = LocalParticipant | RemoteParticipant;
-type ParticipantRole = 'teacher' | 'student';
-type ReactionKind = 'clap' | 'heart' | 'joy' | 'tada' | 'thumbsup' | 'wow';
-type SlideState = {
-  indexf: number;
-  indexh: number;
-  indexv: number;
-  zoom: number;
-};
-
-type ConferenceMessage =
-  | {
-      type: 'layout';
-      layout: LayoutMode;
-    }
-  | {
-      type: 'graph';
-      open: boolean;
-    }
-  | {
-      type: 'session-control';
-      allowInstruments: boolean;
-    }
-  | {
-      type: 'session-setup';
-      previewZoom: number;
-      showCircle: boolean;
-    }
-  | {
-      type: 'session-leader';
-      identity: string;
-    }
-  | {
-      id: string;
-      identity: string;
-      name: string;
-      role: ParticipantRole;
-      sentAt: string;
-      text: string;
-      type: 'chat';
-    }
-  | {
-      type: 'presentation';
-      href: string | null;
-    }
-  | {
-      type: 'mute-all';
-    }
-  | {
-      id: string;
-      identity: string;
-      name: string;
-      reaction: ReactionKind;
-      role: ParticipantRole;
-      sentAt: string;
-      type: 'reaction';
-    }
-  | ({
-      type: 'slide-state';
-    } & SlideState)
-  | {
-      type: 'presentation-zoom';
-      zoom: number;
-    }
-  | {
-      type: 'circle-move';
-      x: number;
-      y: number;
-      identity: string;
-    }
-  | {
-      type: 'break-rooms';
-      rooms: Array<{ name: string; label: string }>;
-      /** identity → break room name (empty = student chooses) */
-      assignments: Record<string, string>;
-      /** 'random' | 'grupos' | 'custom' */
-      mode: string;
-    }
-  | {
-      type: 'break-rooms-end';
-      /** seconds until auto-return */
-      countdown: number;
-      mainRoom: string;
-    }
-  | {
-      type: 'break-rooms-kill';
-      /** main room to return to immediately */
-      mainRoom: string;
-    };
+type Participant = RoomParticipant;
 
 type LiveSnapshot = {
   active?: boolean;
@@ -116,32 +66,6 @@ type LiveSnapshot = {
   prompt?: string;
   type?: string;
     };
-
-type ParticipantCardRefs = {
-  card: HTMLElement;
-  hand: HTMLElement;
-  media: HTMLElement;
-  name: HTMLElement;
-  placeholder: HTMLElement;
-};
-
-type ScreenCardRefs = {
-  card: HTMLElement;
-  media: HTMLElement;
-  name: HTMLElement;
-};
-
-type MediaMount = {
-  attached?: boolean;
-  cleanup?: () => void;
-  element: HTMLMediaElement;
-  track: Track;
-  trackSid: string;
-};
-
-type ParticipantMount = MediaMount & {
-  wrapper: HTMLElement;
-};
 
 type LocalPreviewStreamMount = {
   cleanup?: () => Promise<void> | void;
@@ -160,13 +84,6 @@ type WebkitDocument = Document & {
 
 type WebkitFullscreenElement = HTMLElement & {
   webkitRequestFullscreen?: () => Promise<void> | void;
-};
-
-type MountCollection = {
-  participantAudioMounts: Map<string, MediaMount>;
-  participantVideoMounts: Map<string, ParticipantMount>;
-  screenAudioMounts: Map<string, MediaMount>;
-  screenVideoMounts: Map<string, ParticipantMount>;
 };
 
 type PersistedRoomSetup = {
@@ -349,23 +266,6 @@ type RecordingPresetConfig = {
   width: number;
 };
 
-const MESSAGE_TOPIC = 'conference-ui';
-const REACTION_SHORTCUTS_BY_CODE: Record<string, ReactionKind> = {
-  Digit4: 'clap',
-  Digit5: 'thumbsup',
-  Digit6: 'heart',
-  Digit7: 'joy',
-  Digit8: 'wow',
-  Digit9: 'tada',
-};
-const REACTION_EMOJIS: Record<ReactionKind, string> = {
-  clap: '👏',
-  heart: '❤️',
-  joy: '😂',
-  tada: '🎉',
-  thumbsup: '👍',
-  wow: '😮',
-};
 const GRAVITY_BALL_LUNAR_MS2 = 1.62;
 const GRAVITY_BALL_EARTH_MS2 = 9.8;
 const GRAVITY_BALL_HEAVY_MS2 = 14.7;
@@ -391,6 +291,8 @@ const RECORDING_PRESET_CONFIGS: Record<RecordingPresetKey, RecordingPresetConfig
   },
 };
 const ROOM_SETUP_STORAGE_KEY = 'musiki:room:setup:v1';
+const ROOM_NOTES_DRAFT_STORAGE_KEY = 'musiki:room:notes:draft:v1';
+const ROOM_NOTES_CACHE_STORAGE_KEY = 'musiki:room:notes:cache:v1';
 const BACKGROUND_BLUR_PROCESSOR_NAME = 'musiki-background-blur';
 const BACKGROUND_BLUR_MODEL_ASSET =
   'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite';
@@ -399,7 +301,6 @@ const HAND_LANDMARKER_MODEL_ASSET =
 const BACKGROUND_BLUR_WASM_BASE =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm';
 const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
 let visionTasksModulePromise: Promise<VisionTasksModule> | null = null;
 let visionTasksFilesetPromise: Promise<unknown> | null = null;
 let threeModulePromise: Promise<ThreeModule> | null = null;
@@ -493,13 +394,7 @@ const loadThreeModule = () => {
   return threeModulePromise;
 };
 
-const normalizeText = (value: unknown) => String(value ?? '').trim();
 const formatRoleLabel = (role: ParticipantRole) => (role === 'teacher' ? 'Teacher' : 'Student');
-const normalizePreviewZoom = (value: unknown, fallback = 1) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(4, Math.max(0.8, Math.round(parsed * 100) / 100));
-};
 
 const normalizeUnitValue = (value: unknown, fallback = 0) => {
   const parsed = Number(value);
@@ -1270,51 +1165,16 @@ const writePersistedRoomSetup = (nextSetup: PersistedRoomSetup) => {
   }
 };
 
-const readParticipantMetadata = (participant: Participant) => {
-  try {
-    const parsed = JSON.parse(participant.metadata || '{}');
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
-};
-
-const isTeacherRole = (value: unknown): value is ParticipantRole =>
-  normalizeText(value).toLowerCase() === 'teacher';
-
-const normalizeRole = (value: unknown): ParticipantRole =>
-  isTeacherRole(normalizeText(value).toLowerCase()) ? 'teacher' : 'student';
-
 const readParticipantRole = (
   room: Room,
   participant: Participant,
   localRole: ParticipantRole,
 ): ParticipantRole => {
-  if (isLocalParticipant(room, participant)) {
-    return localRole;
-  }
-
-  const parsed = readParticipantMetadata(participant);
-  const role = normalizeText(parsed?.role);
-  return role
-    ? normalizeRole(role)
-    : participant.identity.toLowerCase().startsWith('teacher')
-      ? 'teacher'
-      : 'student';
-};
-
-const readParticipantName = (participant: Participant) =>
-  normalizeText(participant.name) || normalizeText(participant.identity) || 'Participant';
-
-const readParticipantHandRaisedFromMetadata = (participant: Participant) =>
-  Boolean(readParticipantMetadata(participant).handRaised);
-
-const readParticipantPreviewZoom = (participant: Participant) =>
-  normalizePreviewZoom(readParticipantMetadata(participant).previewZoom, 1);
-
-const readParticipantShowCircle = (participant: Participant) => {
-  const value = readParticipantMetadata(participant).showCircle;
-  return typeof value === 'boolean' ? value : true;
+  return resolveParticipantRole({
+    localIdentity: room.localParticipant?.identity || '',
+    localRole,
+    participant,
+  });
 };
 
 const connectionStateLabel = (state: ConnectionState) => {
@@ -1445,23 +1305,6 @@ const readPresentationPageSlug = (href: string | null | undefined) => {
   }
 };
 
-const normalizeSlideState = (value: Partial<SlideState> | null | undefined): SlideState | null => {
-  if (!value || typeof value !== 'object') return null;
-  const indexh = Number(value.indexh);
-  const indexv = Number(value.indexv);
-  const indexf = Number(value.indexf);
-  const zoom = Number(value.zoom);
-  if (!Number.isFinite(indexh) || !Number.isFinite(indexv) || !Number.isFinite(indexf)) {
-    return null;
-  }
-  return {
-    indexf: Math.max(0, Math.round(indexf)),
-    indexh: Math.max(0, Math.round(indexh)),
-    indexv: Math.max(0, Math.round(indexv)),
-    zoom: Math.min(1.4, Math.max(0.45, Number.isFinite(zoom) ? zoom : 1)),
-  };
-};
-
 const fallbackDeviceLabel = (kind: 'audioinput' | 'videoinput', index: number) =>
   kind === 'audioinput' ? `Microfono ${index + 1}` : `Camara ${index + 1}`;
 
@@ -1514,17 +1357,6 @@ const populateDeviceSelect = ({
   if (preferredValue) {
     select.value = preferredValue;
   }
-};
-
-const createMediaElement = (track: Track, muted = false) => {
-  const element = document.createElement(track.kind === Track.Kind.Video ? 'video' : 'audio');
-  element.autoplay = true;
-  element.playsInline = true;
-  element.muted = muted;
-  if (track.kind === Track.Kind.Audio) {
-    element.hidden = true;
-  }
-  return element;
 };
 
 const isLocalCameraTrackLike = (value: unknown): value is LocalCameraTrackLike =>
@@ -3625,309 +3457,6 @@ class GravityBallRenderer {
   }
 }
 
-const removeMount = (mount: MediaMount | ParticipantMount | undefined) => {
-  if (!mount) return;
-  mount.cleanup?.();
-  if (mount.attached !== false) {
-    mount.track.detach(mount.element);
-  }
-  mount.element.remove();
-  if ('wrapper' in mount) {
-    mount.wrapper.remove();
-  }
-};
-
-const cloneTemplate = (template: HTMLTemplateElement) => {
-  const firstChild = template.content.firstElementChild;
-  if (!(firstChild instanceof HTMLElement)) {
-    throw new Error('Conference template is empty.');
-  }
-  return firstChild.cloneNode(true) as HTMLElement;
-};
-
-const getTrackSid = (publication: TrackPublication) => normalizeText(publication.trackSid);
-
-const isLocalParticipant = (room: Room, participant: Participant) =>
-  participant.identity === room.localParticipant.identity;
-
-const hasCameraTrack = (participant: Participant) =>
-  Array.from(participant.videoTrackPublications.values()).some(
-    (entry) => entry.track && entry.source !== Track.Source.ScreenShare,
-  );
-
-const syncParticipantVideo = (
-  room: Room,
-  participant: Participant,
-  card: ParticipantCardRefs,
-  mounts: MountCollection,
-  options: {
-    blurLocalVideo?: boolean;
-  } = {},
-) => {
-  const publication = Array.from(participant.videoTrackPublications.values()).find(
-    (entry) => entry.track && entry.source !== Track.Source.ScreenShare,
-  );
-  const identity = participant.identity;
-  const existingMount = mounts.participantVideoMounts.get(identity);
-  const localParticipant = isLocalParticipant(room, participant);
-
-  if (!publication?.track) {
-    removeMount(existingMount);
-    mounts.participantVideoMounts.delete(identity);
-    card.media.innerHTML = '';
-    card.placeholder.hidden = false;
-    return;
-  }
-
-  const trackSid = getTrackSid(publication);
-  const shouldRenderBackdrop = Boolean(
-    options.blurLocalVideo &&
-      localParticipant &&
-      !isBackgroundBlurProcessorActive(isLocalCameraTrackLike(publication.track) ? publication.track : null),
-  );
-  const hasRenderedBackdrop = Boolean(existingMount?.wrapper.querySelector('.conference-media-backdrop'));
-  if (
-    existingMount &&
-    existingMount.trackSid === trackSid &&
-    existingMount.track === publication.track &&
-    shouldRenderBackdrop === hasRenderedBackdrop
-  ) {
-    card.placeholder.hidden = true;
-    return;
-  }
-
-  removeMount(existingMount);
-  card.media.innerHTML = '';
-
-  const wrapper = document.createElement('div');
-  wrapper.className = localParticipant
-    ? 'conference-media-frame conference-media-frame--local-camera'
-    : 'conference-media-frame';
-
-  if (shouldRenderBackdrop) {
-    const backdropTrack = (
-      publication.track as { mediaStreamTrack?: MediaStreamTrack | null } | undefined
-    )?.mediaStreamTrack;
-    appendBlurBackdrop({
-      track: backdropTrack,
-      wrapper,
-    });
-  }
-
-  const element = createMediaElement(publication.track, localParticipant);
-  wrapper.appendChild(element);
-  card.media.appendChild(wrapper);
-  publication.track.attach(element);
-
-  mounts.participantVideoMounts.set(identity, {
-    element,
-    track: publication.track,
-    trackSid,
-    wrapper,
-  });
-
-  card.placeholder.hidden = true;
-};
-
-const syncParticipantAudio = (
-  room: Room,
-  participant: Participant,
-  card: ParticipantCardRefs,
-  mounts: MountCollection,
-  options: {
-    onAudioMount?: (key: string, track: MediaStreamTrack | null | undefined) => (() => void) | void;
-  } = {},
-) => {
-  const identity = participant.identity;
-  const identityPrefix = `${identity}:`;
-  const existingKeys = Array.from(mounts.participantAudioMounts.keys()).filter((key) =>
-    key.startsWith(identityPrefix),
-  );
-
-  if (isLocalParticipant(room, participant)) {
-    existingKeys.forEach((key) => {
-      removeMount(mounts.participantAudioMounts.get(key));
-      mounts.participantAudioMounts.delete(key);
-    });
-    return;
-  }
-
-  const publications = Array.from(participant.audioTrackPublications.values()).filter(
-    (entry) => entry.track && entry.source !== Track.Source.ScreenShareAudio,
-  );
-
-  if (publications.length === 0) {
-    existingKeys.forEach((key) => {
-      removeMount(mounts.participantAudioMounts.get(key));
-      mounts.participantAudioMounts.delete(key);
-    });
-    return;
-  }
-
-  const activeKeys = new Set<string>();
-
-  publications.forEach((publication) => {
-    if (!publication.track) return;
-    const trackSid = getTrackSid(publication);
-    const mountKey = `${identity}:${trackSid || publication.source || 'audio'}`;
-    activeKeys.add(mountKey);
-    const existingMount = mounts.participantAudioMounts.get(mountKey);
-    if (existingMount && existingMount.trackSid === trackSid && existingMount.track === publication.track) {
-      return;
-    }
-
-    removeMount(existingMount);
-
-    const element = createMediaElement(publication.track, true);
-    card.card.appendChild(element);
-    publication.track.attach(element);
-    void element.play().catch(() => undefined);
-
-    const mediaStreamTrack = (
-      publication.track as { mediaStreamTrack?: MediaStreamTrack | null } | undefined
-    )?.mediaStreamTrack;
-    const mixerKey = `participant:${mountKey}`;
-    const cleanupAudioMount = options.onAudioMount?.(mixerKey, mediaStreamTrack);
-
-    mounts.participantAudioMounts.set(mountKey, {
-      attached: true,
-      cleanup: typeof cleanupAudioMount === 'function' ? cleanupAudioMount : undefined,
-      element,
-      track: publication.track,
-      trackSid,
-    });
-  });
-
-  existingKeys.forEach((key) => {
-    if (activeKeys.has(key)) return;
-    removeMount(mounts.participantAudioMounts.get(key));
-    mounts.participantAudioMounts.delete(key);
-  });
-};
-
-const syncScreenVideo = (
-  participant: Participant,
-  screenSlot: HTMLElement,
-  screenTemplate: HTMLTemplateElement,
-  screenCards: Map<string, ScreenCardRefs>,
-  mounts: MountCollection,
-) => {
-  const identity = participant.identity;
-  const publication = Array.from(participant.videoTrackPublications.values()).find(
-    (entry) => entry.track && entry.source === Track.Source.ScreenShare,
-  );
-  const existingMount = mounts.screenVideoMounts.get(identity);
-
-  if (!publication?.track) {
-    removeMount(existingMount);
-    mounts.screenVideoMounts.delete(identity);
-    const screenCard = screenCards.get(identity);
-    if (screenCard) {
-      removeMount(mounts.screenAudioMounts.get(identity));
-      mounts.screenAudioMounts.delete(identity);
-      screenCard.card.remove();
-      screenCards.delete(identity);
-    }
-    return;
-  }
-
-  let screenCard = screenCards.get(identity);
-  if (!screenCard) {
-    const card = cloneTemplate(screenTemplate);
-    const media = card.querySelector('[data-screen-media]');
-    const name = card.querySelector('[data-screen-name]');
-
-    if (!(media instanceof HTMLElement) || !(name instanceof HTMLElement)) {
-      throw new Error('Screen card template is invalid.');
-    }
-
-    screenCard = { card, media, name };
-    screenCards.set(identity, screenCard);
-    screenSlot.appendChild(card);
-  }
-
-  screenCard.name.textContent = readParticipantName(participant);
-
-  const trackSid = getTrackSid(publication);
-  if (existingMount && existingMount.trackSid === trackSid && existingMount.track === publication.track) {
-    return;
-  }
-
-  removeMount(existingMount);
-  screenCard.media.innerHTML = '';
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'conference-media-frame conference-media-frame--screen';
-
-  const element = createMediaElement(publication.track);
-  wrapper.appendChild(element);
-  screenCard.media.appendChild(wrapper);
-  publication.track.attach(element);
-
-  mounts.screenVideoMounts.set(identity, {
-    element,
-    track: publication.track,
-    trackSid,
-    wrapper,
-  });
-};
-
-const syncScreenAudio = (
-  room: Room,
-  participant: Participant,
-  screenCards: Map<string, ScreenCardRefs>,
-  mounts: MountCollection,
-  options: {
-    onAudioMount?: (key: string, track: MediaStreamTrack | null | undefined) => (() => void) | void;
-  } = {},
-) => {
-  const identity = participant.identity;
-  const existingMount = mounts.screenAudioMounts.get(identity);
-  const screenCard = screenCards.get(identity);
-
-  if (!screenCard || isLocalParticipant(room, participant)) {
-    removeMount(existingMount);
-    mounts.screenAudioMounts.delete(identity);
-    return;
-  }
-
-  const publication = Array.from(participant.audioTrackPublications.values()).find(
-    (entry) => entry.track && entry.source === Track.Source.ScreenShareAudio,
-  );
-
-  if (!publication?.track) {
-    removeMount(existingMount);
-    mounts.screenAudioMounts.delete(identity);
-    return;
-  }
-
-  const trackSid = getTrackSid(publication);
-  if (existingMount && existingMount.trackSid === trackSid && existingMount.track === publication.track) {
-    return;
-  }
-
-  removeMount(existingMount);
-
-  const element = createMediaElement(publication.track, true);
-  screenCard.card.appendChild(element);
-  publication.track.attach(element);
-  void element.play().catch(() => undefined);
-
-  const mediaStreamTrack = (
-    publication.track as { mediaStreamTrack?: MediaStreamTrack | null } | undefined
-  )?.mediaStreamTrack;
-  const mixerKey = `screen:${identity}`;
-  const cleanupAudioMount = options.onAudioMount?.(mixerKey, mediaStreamTrack);
-
-  mounts.screenAudioMounts.set(identity, {
-    attached: true,
-    cleanup: typeof cleanupAudioMount === 'function' ? cleanupAudioMount : undefined,
-    element,
-    track: publication.track,
-    trackSid,
-  });
-};
-
 export const mountLiveKitRoom = (root: HTMLElement) => {
   if (root.dataset.mounted === 'true') {
     return () => {};
@@ -4042,6 +3571,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const sessionAllowInstrumentsInput = root.querySelector('[data-session-allow-instruments-input]');
   const breakRoomsShell = root.querySelector('[data-break-rooms-shell]');
   const breakRoomsPopup = root.querySelector('[data-break-rooms-popup]');
+  const breakRoomsPopupSetup = root.querySelector('[data-break-rooms-popup-setup]');
+  const breakRoomsPopupDivider = root.querySelector('[data-break-rooms-popup-divider]');
   const breakRoomsList = root.querySelector('[data-break-rooms-list]');
   const breakRoomsStatusNote = root.querySelector('[data-break-rooms-status]');
   const breakRoomsSizeInput = root.querySelector('[data-break-rooms-size]');
@@ -4049,7 +3580,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const breakRoomsBBtn = root.querySelector('[data-break-rooms-btn]');
   const breakRoomsEndBtn = root.querySelector('[data-break-rooms-end-btn]');
   const breakRoomsKillBtn = root.querySelector('[data-break-rooms-kill-btn]');
-  const breakRoomsSetupPanel = root.querySelector('[data-break-rooms-setup]');
   const brCountdownEl = root.querySelector('[data-br-countdown]');
   const brCountdownText = root.querySelector('[data-br-countdown-text]');
   const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
@@ -5503,6 +5033,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     breakRoomsList.innerHTML = '';
 
     const currentRoom = normalizeText(roomInput instanceof HTMLInputElement ? roomInput.value : '');
+    const hasActiveRooms = breakRoomsActive.length > 0 || isInBreakRoom();
+
+    if (breakRoomsPopupSetup instanceof HTMLElement) {
+      breakRoomsPopupSetup.hidden = localRole !== 'teacher';
+    }
+    if (breakRoomsPopupDivider instanceof HTMLElement) {
+      breakRoomsPopupDivider.hidden = !(localRole === 'teacher' && hasActiveRooms);
+    }
 
     // "Return to main room" at top
     if (isInBreakRoom()) {
@@ -5536,7 +5074,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       breakRoomsList.appendChild(li);
     });
 
-    if (breakRoomsActive.length === 0 && !isInBreakRoom()) {
+    if (breakRoomsActive.length === 0 && !isInBreakRoom() && localRole !== 'teacher') {
       const li = document.createElement('li');
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -5591,6 +5129,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     if (breakRoomsKillBtn instanceof HTMLElement) {
       breakRoomsKillBtn.hidden = !teacherActive;
+    }
+
+    if (breakRoomsPopupSetup instanceof HTMLElement) {
+      breakRoomsPopupSetup.hidden = localRole !== 'teacher';
+    }
+    if (breakRoomsPopupDivider instanceof HTMLElement) {
+      breakRoomsPopupDivider.hidden = !(localRole === 'teacher' && hasActive);
     }
   };
 
@@ -7249,6 +6794,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (sessionControlsField instanceof HTMLElement) {
       sessionControlsField.hidden = localRole !== 'teacher';
     }
+    syncBreakRoomsShell();
   };
 
   const readParticipantHandRaised = (participant: Participant) =>
@@ -9328,197 +8874,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
-  const readMessage = (payload: Uint8Array): ConferenceMessage | null => {
-    try {
-      const parsed = JSON.parse(textDecoder.decode(payload));
-      if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
-        return null;
-      }
-
-      if (parsed.type === 'layout') {
-        return {
-          type: 'layout',
-          layout: normalizeLayoutMode((parsed as { layout?: string }).layout),
-        };
-      }
-
-      if (parsed.type === 'presentation') {
-        return {
-          type: 'presentation',
-          href: typeof (parsed as { href?: string | null }).href === 'string'
-            ? (parsed as { href: string }).href
-            : null,
-        };
-      }
-
-      if (parsed.type === 'graph') {
-        return {
-          type: 'graph',
-          open: (parsed as { open?: boolean }).open !== false,
-        };
-      }
-
-      if (parsed.type === 'session-setup') {
-        return {
-          type: 'session-setup',
-          previewZoom: normalizePreviewZoom((parsed as { previewZoom?: number }).previewZoom, 1),
-          showCircle: Boolean((parsed as { showCircle?: boolean }).showCircle),
-        };
-      }
-
-      if (parsed.type === 'session-control') {
-        return {
-          type: 'session-control',
-          allowInstruments: (parsed as { allowInstruments?: boolean }).allowInstruments !== false,
-        };
-      }
-
-      if (parsed.type === 'session-leader') {
-        return {
-          type: 'session-leader',
-          identity: normalizeText((parsed as { identity?: string }).identity),
-        };
-      }
-
-      if (parsed.type === 'slide-state') {
-        const slideState = normalizeSlideState(parsed as Partial<SlideState>);
-        if (!slideState) return null;
-        return {
-          type: 'slide-state',
-          ...slideState,
-        };
-      }
-
-      if (parsed.type === 'chat') {
-        const text = normalizeText((parsed as { text?: string }).text);
-        const id = normalizeText((parsed as { id?: string }).id);
-        if (!text || !id) return null;
-
-        return {
-          type: 'chat',
-          id,
-          identity: normalizeText((parsed as { identity?: string }).identity),
-          name: normalizeText((parsed as { name?: string }).name) || 'Participant',
-          role: normalizeRole((parsed as { role?: string }).role),
-          sentAt:
-            normalizeText((parsed as { sentAt?: string }).sentAt) || new Date().toISOString(),
-          text,
-        };
-      }
-
-      if (parsed.type === 'reaction') {
-        const reaction = normalizeText((parsed as { reaction?: string }).reaction) as ReactionKind;
-        const id = normalizeText((parsed as { id?: string }).id);
-        if (!id || !(reaction in REACTION_EMOJIS)) return null;
-
-        return {
-          type: 'reaction',
-          id,
-          identity: normalizeText((parsed as { identity?: string }).identity),
-          name: normalizeText((parsed as { name?: string }).name) || 'Participant',
-          reaction,
-          role: normalizeRole((parsed as { role?: string }).role),
-          sentAt:
-            normalizeText((parsed as { sentAt?: string }).sentAt) || new Date().toISOString(),
-        };
-      }
-
-      if (parsed.type === 'mute-all') {
-        return {
-          type: 'mute-all',
-        };
-      }
-
-      if (parsed.type === 'break-rooms') {
-        return {
-          type: 'break-rooms',
-          rooms: Array.isArray((parsed as { rooms?: unknown }).rooms)
-            ? (parsed as { rooms: { name: string; label: string }[] }).rooms
-            : [],
-          assignments: (parsed as { assignments?: Record<string, string> }).assignments ?? {},
-          mode: normalizeText((parsed as { mode?: string }).mode),
-        };
-      }
-
-      if (parsed.type === 'break-rooms-end') {
-        return {
-          type: 'break-rooms-end',
-          countdown: Number((parsed as { countdown?: number }).countdown) || 60,
-          mainRoom: normalizeText((parsed as { mainRoom?: string }).mainRoom),
-        };
-      }
-
-      if (parsed.type === 'break-rooms-kill') {
-        return {
-          type: 'break-rooms-kill',
-          mainRoom: normalizeText((parsed as { mainRoom?: string }).mainRoom),
-        };
-      }
-
-      if (parsed.type === 'circle-move') {
-        return {
-          type: 'circle-move',
-          x: Number((parsed as { x?: number }).x) || 0,
-          y: Number((parsed as { y?: number }).y) || 0,
-          identity: normalizeText((parsed as { identity?: string }).identity),
-        };
-      }
-
-      if (parsed.type === 'presentation-zoom') {
-        return {
-          type: 'presentation-zoom',
-          zoom: Number((parsed as { zoom?: number }).zoom) || 1,
-        };
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
-  };
+  const readMessage = (payload: Uint8Array): ConferenceMessage | null => parseConferenceMessage(payload);
 
   const writeQueryState = () => {
-    const params = new URLSearchParams(window.location.search);
-    if (isExternalInviteMode) {
-      if (inviteCode) {
-        params.set('invite', inviteCode);
-      }
-      params.delete('course');
-      params.delete('room');
-      params.delete('identity');
-      params.delete('name');
-      params.delete('slides');
-      params.delete('presentation');
-      const nextQuery = params.toString();
-      const nextUrl = nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname;
-      window.history.replaceState({}, '', nextUrl);
-      return;
-    }
-
     const effectiveCourseId = getEffectiveCourseId();
-    if (effectiveCourseId) {
-      params.set('course', effectiveCourseId);
-    } else {
-      params.delete('course');
-    }
-    params.set('room', roomInput.value.trim());
-    params.set('identity', identityInput.value.trim());
-    if (nameInput.value.trim()) {
-      params.set('name', nameInput.value.trim());
-    } else {
-      params.delete('name');
-    }
-
     const selectedPresentationHref = normalizeText(presentationSelect.value) || presentation.getHref();
-    const presentationHref = normalizeText(selectedPresentationHref);
-    if (presentationHref) {
-      params.set('slides', presentationHref);
-    } else {
-      params.delete('slides');
-    }
-
-    const nextQuery = params.toString();
-    const nextUrl = nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname;
+    const nextUrl = buildRoomQueryUrl({
+      courseId: effectiveCourseId,
+      currentSearch: window.location.search,
+      identity: identityInput.value.trim(),
+      inviteCode,
+      isExternalInviteMode,
+      name: nameInput.value.trim(),
+      pathname: window.location.pathname,
+      presentationHref: normalizeText(selectedPresentationHref),
+      room: roomInput.value.trim(),
+    });
     window.history.replaceState({}, '', nextUrl);
   };
 
@@ -10063,7 +9434,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       instrumentsToggleButton.dataset.active = instrumentsOpen ? 'true' : 'false';
       instrumentsToggleButton.setAttribute('aria-pressed', instrumentsOpen ? 'true' : 'false');
     }
-    roomInput.disabled = connected || connecting;
+    roomInput.disabled = connecting || isExternalInviteMode;
+    roomInput.readOnly = isExternalInviteMode || localRole !== 'teacher';
     identityInput.disabled = connected || connecting;
     nameInput.disabled = connected || connecting;
 
@@ -10114,98 +9486,42 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const ensureParticipantCard = (participant: Participant) => {
-    const identity = participant.identity;
-    const role = readParticipantRole(room, participant, localRole);
-    const targetSlot = resolveParticipantTargetSlot(participant);
-
-    if (!(targetSlot instanceof HTMLElement)) {
-      removeParticipant(identity);
-      return null;
-    }
-
-    let card = participantCards.get(identity);
-    if (!card) {
-      const node = cloneTemplate(participantTemplate);
-      const media = node.querySelector('[data-card-media]');
-      const name = node.querySelector('[data-card-name]');
-      const placeholder = node.querySelector('[data-card-placeholder]');
-      const hand = node.querySelector('[data-card-hand]');
-
-      if (
-        !(media instanceof HTMLElement) ||
-        !(name instanceof HTMLElement) ||
-        !(placeholder instanceof HTMLElement) ||
-        !(hand instanceof HTMLElement)
-      ) {
-        throw new Error('Participant card template is invalid.');
-      }
-
-      card = {
-        card: node,
-        hand,
-        media,
-        name,
-        placeholder,
-      };
-
-      participantCards.set(identity, card);
-      targetSlot.appendChild(node);
-    } else if (card.card.parentElement !== targetSlot) {
-      targetSlot.appendChild(card.card);
-    }
-
-    const participantPreviewZoom = isLocalParticipant(room, participant)
-      ? previewZoom
-      : readParticipantPreviewZoom(participant);
-    const participantShowCircle = isLocalParticipant(room, participant)
-      ? showPresentationCircle
-      : readParticipantShowCircle(participant);
-
-    card.card.dataset.role = role;
-    card.card.dataset.showCircle = participantShowCircle ? 'true' : 'false';
-    card.card.style.setProperty(
-      '--conference-participant-preview-zoom',
-      participantPreviewZoom.toFixed(2),
-    );
-    card.name.textContent = readParticipantName(participant);
-    card.hand.hidden = !readParticipantHandRaised(participant);
-    card.card.dataset.handRaised = readParticipantHandRaised(participant) ? 'true' : 'false';
-
-    return card;
+    return ensureRoomParticipantCard({
+      mounts,
+      participant,
+      participantCards,
+      participantTemplate,
+      previewZoom,
+      readHandRaised: (entry) => readParticipantHandRaised(entry),
+      readRole: (entry) => readParticipantRole(room, entry, localRole),
+      resolveTargetSlot: (entry) => resolveParticipantTargetSlot(entry),
+      room,
+      screenCards,
+      showPresentationCircle,
+    });
   };
 
   const removeParticipant = (identity: string) => {
-    removeMount(mounts.participantVideoMounts.get(identity));
-    removeMount(mounts.screenVideoMounts.get(identity));
-    removeMount(mounts.screenAudioMounts.get(identity));
-
-    mounts.participantVideoMounts.delete(identity);
-    mounts.screenVideoMounts.delete(identity);
-    mounts.screenAudioMounts.delete(identity);
-    Array.from(mounts.participantAudioMounts.keys())
-      .filter((key) => key.startsWith(`${identity}:`))
-      .forEach((key) => {
-        removeMount(mounts.participantAudioMounts.get(key));
-        mounts.participantAudioMounts.delete(key);
-      });
-
-    participantCards.get(identity)?.card.remove();
-    participantCards.delete(identity);
-
-    screenCards.get(identity)?.card.remove();
-    screenCards.delete(identity);
+    removeParticipantCards({
+      identity,
+      mounts,
+      participantCards,
+      screenCards,
+    });
   };
 
-  const allParticipants = () => {
-    if (room.state === ConnectionState.Disconnected) return [];
-    return [room.localParticipant, ...Array.from(room.remoteParticipants.values())];
-  };
+  const allParticipants = () => listRoomParticipants(room);
 
   const syncParticipant = (participant: Participant) => {
     const card = ensureParticipantCard(participant);
     if (!card) return;
     syncParticipantVideo(room, participant, card, mounts, {
       blurLocalVideo: previewBlur,
+      isTrackBackgroundBlurred: (track) =>
+        isBackgroundBlurProcessorActive(isLocalCameraTrackLike(track) ? track : null),
+      renderBackdrop: ({ track, wrapper }) => {
+        appendBlurBackdrop({ track, wrapper });
+      },
     });
     syncParticipantAudio(room, participant, card, mounts, {
       onAudioMount: (key, track) => {
@@ -10227,40 +9543,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const renderParticipantList = () => {
-    const participants = allParticipants();
-    participantList.innerHTML = '';
-
-    if (participants.length === 0) {
-      const empty = document.createElement('li');
-      empty.className = 'conference-roster-empty';
-      empty.textContent = 'Todavia no hay participantes en la sala.';
-      participantList.appendChild(empty);
-      return;
-    }
-
-    participants
-      .sort((left, right) => {
-        const leftRole = readParticipantRole(room, left, localRole);
-        const rightRole = readParticipantRole(room, right, localRole);
-        if (leftRole !== rightRole) return leftRole === 'teacher' ? -1 : 1;
-        return readParticipantName(left).localeCompare(readParticipantName(right), 'es');
-      })
-      .forEach((participant) => {
-        const item = document.createElement('li');
-        item.className = 'conference-roster-item';
-
-        const primary = document.createElement('span');
-        primary.textContent = readParticipantName(participant);
-
-        const secondary = document.createElement('span');
-        const role = readParticipantRole(room, participant, localRole);
-        secondary.textContent = `${role === 'teacher' ? 'Teacher' : 'Student'}${
-          isLocalParticipant(room, participant) ? ' · You' : ''
-        }`;
-
-        item.append(primary, secondary);
-        participantList.appendChild(item);
-      });
+    renderParticipantRoster({
+      participantList,
+      participants: allParticipants(),
+      readRole: (participant) => readParticipantRole(room, participant, localRole),
+      room,
+    });
   };
 
   const syncAllParticipants = () => {
@@ -11988,18 +11276,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   // ── Break rooms event wiring ──────────────────────────────────────
-  // B button toggle popup (or open setup panel for teachers when no rooms active)
+  // B button toggles the unified break rooms popup.
   root.querySelector('[data-action="break-rooms-toggle"]')?.addEventListener('click', () => {
-    const hasActive = breakRoomsActive.length > 0 || isInBreakRoom();
-    if (!hasActive && localRole === 'teacher') {
-      // Open sidebar and scroll to break rooms setup panel
-      if (sidebarCollapsed) toggleSidebarCollapsed();
-      if (breakRoomsSetupPanel instanceof HTMLDetailsElement) {
-        breakRoomsSetupPanel.open = true;
-        breakRoomsSetupPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-      return;
-    }
     if (!(breakRoomsPopup instanceof HTMLElement)) return;
     const willOpen = breakRoomsPopup.hidden;
     if (willOpen) renderBreakRoomsPopup();
@@ -12164,11 +11442,142 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const notesListEl       = root.querySelector('[data-notes-list]');
   const notesPreviewEl    = root.querySelector<HTMLElement>('[data-notes-preview]');
   const notesPreviewBtn   = root.querySelector<HTMLButtonElement>('[data-notes-preview-btn]');
+  const notesSaveBtn      = root.querySelector<HTMLButtonElement>('[data-notes-save]');
   const notesDownloadBtn  = root.querySelector<HTMLButtonElement>('[data-notes-download]');
   const notesNewBtn       = root.querySelector<HTMLButtonElement>('[data-notes-new]');
   let notesCurrentId: string | null = null;
-  const noteCourseId    = root.dataset.courseId || null;
-  const noteRoomName    = (root.querySelector('[data-room-input]') as HTMLInputElement | null)?.value.trim() || null;
+
+  type RoomNoteRecord = {
+    body?: string | null;
+    courseId?: string | null;
+    createdAt?: string | null;
+    id: string;
+    noteDate: string;
+    renderedHtml?: string | null;
+    roomName?: string | null;
+    title: string;
+    updatedAt?: string | null;
+  };
+
+  type RoomNoteDraft = {
+    body: string;
+    id: string | null;
+    title: string;
+    updatedAt: string;
+  };
+
+  const getCurrentNoteCourseId = () => normalizeText(root.dataset.courseId) || null;
+  const getCurrentNoteRoomName = () =>
+    roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) || null : null;
+  const buildNotesScopeKey = (courseId: string | null, roomName: string | null) =>
+    `${courseId || '_'}::${roomName || '_'}`;
+  const getCurrentNotesScopeKey = () => buildNotesScopeKey(getCurrentNoteCourseId(), getCurrentNoteRoomName());
+  const getNotesDraftStorageKey = (scopeKey = getCurrentNotesScopeKey()) =>
+    `${ROOM_NOTES_DRAFT_STORAGE_KEY}:${scopeKey}`;
+  const getNotesCacheStorageKey = (scopeKey = getCurrentNotesScopeKey()) =>
+    `${ROOM_NOTES_CACHE_STORAGE_KEY}:${scopeKey}`;
+  let notesScopeKey = getCurrentNotesScopeKey();
+
+  const readNotesDraft = (scopeKey = notesScopeKey): RoomNoteDraft | null => {
+    try {
+      const raw = window.localStorage.getItem(getNotesDraftStorageKey(scopeKey));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object'
+        ? {
+            body: typeof parsed.body === 'string' ? parsed.body : '',
+            id: normalizeText(parsed.id) || null,
+            title: typeof parsed.title === 'string' ? parsed.title : '',
+            updatedAt: normalizeText(parsed.updatedAt) || new Date().toISOString(),
+          }
+        : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const writeNotesDraft = (scopeKey = notesScopeKey) => {
+    try {
+      const title = notesTitleInput?.value ?? '';
+      const body = notesBodyInput?.value ?? '';
+      if (!title.trim() && !body.trim()) {
+        window.localStorage.removeItem(getNotesDraftStorageKey(scopeKey));
+        return;
+      }
+      const draft: RoomNoteDraft = {
+        body,
+        id: notesCurrentId,
+        title,
+        updatedAt: new Date().toISOString(),
+      };
+      window.localStorage.setItem(getNotesDraftStorageKey(scopeKey), JSON.stringify(draft));
+    } catch {
+      // ignore storage failures
+    }
+  };
+
+  const clearNotesDraft = (scopeKey = notesScopeKey) => {
+    try {
+      window.localStorage.removeItem(getNotesDraftStorageKey(scopeKey));
+    } catch {
+      // ignore storage failures
+    }
+  };
+
+  const readNotesCache = (scopeKey = notesScopeKey): RoomNoteRecord[] => {
+    try {
+      const raw = window.localStorage.getItem(getNotesCacheStorageKey(scopeKey));
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed
+            .filter((entry) => entry && typeof entry === 'object')
+            .map((entry) => ({
+              body: typeof entry.body === 'string' ? entry.body : '',
+              courseId: normalizeText(entry.courseId) || null,
+              createdAt: normalizeText(entry.createdAt) || null,
+              id: normalizeText(entry.id),
+              noteDate: normalizeText(entry.noteDate) || new Date().toISOString().slice(0, 10),
+              renderedHtml: typeof entry.renderedHtml === 'string' ? entry.renderedHtml : null,
+              roomName: normalizeText(entry.roomName) || null,
+              title: typeof entry.title === 'string' ? entry.title : '',
+              updatedAt: normalizeText(entry.updatedAt) || null,
+            }))
+            .filter((entry) => entry.id)
+        : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeNotesCache = (notes: RoomNoteRecord[], scopeKey = notesScopeKey) => {
+    try {
+      window.localStorage.setItem(getNotesCacheStorageKey(scopeKey), JSON.stringify(notes));
+    } catch {
+      // ignore storage failures
+    }
+  };
+
+  const sortNotes = (notes: RoomNoteRecord[]) =>
+    [...notes].sort((left, right) =>
+      normalizeText(right.updatedAt || right.noteDate).localeCompare(
+        normalizeText(left.updatedAt || left.noteDate),
+      ),
+    );
+
+  const upsertNotesCache = (note: RoomNoteRecord, scopeKey = notesScopeKey) => {
+    const cached = readNotesCache(scopeKey).filter((entry) => entry.id !== note.id);
+    cached.push(note);
+    writeNotesCache(sortNotes(cached), scopeKey);
+  };
+
+  const renderNotesList = (notes: RoomNoteRecord[]) => {
+    if (!notesListEl) return;
+    notesListEl.innerHTML = '';
+    for (const note of sortNotes(notes)) {
+      notesListEl.appendChild(renderNoteItem(note));
+    }
+  };
 
   const syncActiveNoteItem = () => {
     notesListEl?.querySelectorAll('[data-note-id]').forEach(el => {
@@ -12191,30 +11600,81 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (notesTitleInput) notesTitleInput.value = '';
     if (notesBodyInput)  notesBodyInput.value  = '';
     if (notesPreviewEl)  notesPreviewEl.innerHTML = '';
+    clearNotesDraft();
     setNotesMode(true);
     syncActiveNoteItem();
     notesTitleInput?.focus();
   };
 
+  const hydrateNotesDraft = () => {
+    const draft = readNotesDraft();
+    if (!draft) return;
+    notesCurrentId = draft.id;
+    if (notesTitleInput) notesTitleInput.value = draft.title;
+    if (notesBodyInput) notesBodyInput.value = draft.body;
+    if (notesPreviewEl) notesPreviewEl.innerHTML = '';
+    setNotesMode(true);
+    syncActiveNoteItem();
+  };
+
+  const syncNotesScope = () => {
+    const nextScopeKey = getCurrentNotesScopeKey();
+    if (nextScopeKey === notesScopeKey) return;
+    writeNotesDraft(notesScopeKey);
+    notesScopeKey = nextScopeKey;
+    notesCurrentId = null;
+    if (notesTitleInput) notesTitleInput.value = '';
+    if (notesBodyInput) notesBodyInput.value = '';
+    if (notesPreviewEl) notesPreviewEl.innerHTML = '';
+    setNotesMode(true);
+    syncActiveNoteItem();
+    renderNotesList(readNotesCache());
+    hydrateNotesDraft();
+    void loadNotesList();
+  };
+
   const loadNotesList = async () => {
     if (!notesListEl) return;
+    const cachedNotes = readNotesCache();
+    if (cachedNotes.length > 0) {
+      renderNotesList(cachedNotes);
+    }
     const params = new URLSearchParams();
+    const noteCourseId = getCurrentNoteCourseId();
+    const noteRoomName = getCurrentNoteRoomName();
     if (noteCourseId) params.set('courseId', noteCourseId);
     if (noteRoomName) params.set('roomName', noteRoomName);
     const res = await fetch(`/api/live/notes?${params}`).catch(() => null);
     if (!res?.ok) return;
     const data = await res.json().catch(() => null);
     if (!data?.notes) return;
-    notesListEl.innerHTML = '';
-    for (const note of data.notes) {
-      notesListEl.appendChild(renderNoteItem(note));
-    }
+    const scopedNotes = (data.notes as RoomNoteRecord[]).map((note) => ({
+      ...note,
+      courseId: noteCourseId,
+      roomName: noteRoomName,
+    }));
+    writeNotesCache(scopedNotes);
+    renderNotesList(scopedNotes);
   };
 
   const loadNote = async (id: string) => {
+    const cached = readNotesCache().find((note) => note.id === id);
+    if (cached) {
+      notesCurrentId = cached.id;
+      if (notesTitleInput) notesTitleInput.value = cached.title ?? '';
+      if (notesBodyInput)  notesBodyInput.value  = cached.body  ?? '';
+      if (notesPreviewEl) {
+        notesPreviewEl.innerHTML = cached.renderedHtml ?? '';
+        if (cached.renderedHtml) runMermaidIn(notesPreviewEl);
+      }
+      setNotesMode(true);
+      syncActiveNoteItem();
+    }
     const params = new URLSearchParams();
+    params.set('id', id);
+    const noteCourseId = getCurrentNoteCourseId();
     if (noteCourseId) params.set('courseId', noteCourseId);
-    const res = await fetch(`/api/live/notes?${params}&limit=100`).catch(() => null);
+    const res = await fetch(`/api/live/notes?${params}&limit=1`).catch(() => null);
     if (!res?.ok) return;
     const data = await res.json().catch(() => null);
     const note = (data?.notes ?? []).find((n: any) => n.id === id);
@@ -12226,8 +11686,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       notesPreviewEl.innerHTML = note.renderedHtml;
       runMermaidIn(notesPreviewEl);
     }
+    upsertNotesCache({
+      ...note,
+      courseId: getCurrentNoteCourseId(),
+      roomName: getCurrentNoteRoomName(),
+    });
     setNotesMode(true);
     syncActiveNoteItem();
+    writeNotesDraft();
   };
 
   let notesEditMode = true; // true = editing, false = previewing
@@ -12294,14 +11760,33 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  if (notesBodyInput) {
-    notesBodyInput.addEventListener('keydown', (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        notesForm?.requestSubmit();
+  const submitNotesForm = () => {
+    if (typeof notesForm?.requestSubmit === 'function') {
+      notesForm.requestSubmit(notesSaveBtn ?? undefined);
+      return;
+    }
+    if (notesSaveBtn) {
+      notesSaveBtn.click();
+      return;
+    }
+    notesForm?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  };
+
+  const persistNotesDraft = () => {
+    writeNotesDraft();
+  };
+
+  [notesTitleInput, notesBodyInput].forEach((input) => {
+    input?.addEventListener('input', persistNotesDraft);
+    input?.addEventListener('change', persistNotesDraft);
+    input?.addEventListener('keydown', (e) => {
+      const event = e as KeyboardEvent;
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        submitNotesForm();
       }
     });
-  }
+  });
 
   if (notesForm) {
     notesForm.addEventListener('submit', (e) => {
@@ -12310,6 +11795,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       const body  = notesBodyInput?.value  ?? '';
       if (!body.trim()) return;
       void (async () => {
+        const currentNotesScopeKey = getCurrentNotesScopeKey();
+        if (currentNotesScopeKey !== notesScopeKey) {
+          notesScopeKey = currentNotesScopeKey;
+        }
+        const noteCourseId = getCurrentNoteCourseId();
+        const noteRoomName = getCurrentNoteRoomName();
         const payload: Record<string, string | null> = {
           title, body,
           courseId: noteCourseId,
@@ -12325,6 +11816,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         if (!res?.ok) { setStatus('Error al guardar nota'); return; }
         const data = await res.json().catch(() => null);
         notesCurrentId = data?.note?.id ?? notesCurrentId;
+        upsertNotesCache({
+          body,
+          courseId: noteCourseId,
+          createdAt: normalizeText(data?.note?.createdAt) || null,
+          id: notesCurrentId || crypto.randomUUID(),
+          noteDate: payload.noteDate || new Date().toISOString().slice(0, 10),
+          renderedHtml: notesPreviewEl?.innerHTML || null,
+          roomName: noteRoomName,
+          title,
+          updatedAt: normalizeText(data?.note?.updatedAt) || new Date().toISOString(),
+        });
+        clearNotesDraft();
 
         // Show instant client-side preview while server renders in background
         if (notesPreviewEl) {
@@ -12358,6 +11861,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             if (updated?.renderedHtml && notesPreviewEl && notesCurrentId === savedNoteId) {
               notesPreviewEl.innerHTML = updated.renderedHtml;
               runMermaidIn(notesPreviewEl);
+              upsertNotesCache({
+                ...updated,
+                courseId: getCurrentNoteCourseId(),
+                roomName: getCurrentNoteRoomName(),
+              });
             }
           }, 3000);
         }
@@ -12365,6 +11873,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       })();
     });
   }
+
+  hydrateNotesDraft();
+  renderNotesList(readNotesCache());
 
   // Load notes once the section is first revealed (lazy)
   if (notesSection) {
@@ -12855,6 +12366,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         void loadInviteLink('student');
       }, 280);
     }
+  });
+
+  roomInput.addEventListener('change', () => {
+    syncNotesScope();
   });
 
   const handlePresentationLoad = () => {

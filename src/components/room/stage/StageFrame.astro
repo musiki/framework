@@ -1,0 +1,24 @@
+---
+import './stage-frame.css';
+import StagePanels from './StagePanels.astro';
+import StageOverlays from '../overlays/StageOverlays.astro';
+
+type Props = {
+  defaultLayout?: 'grid' | 'teacher' | 'presentation' | 'screenshare';
+};
+
+const { defaultLayout = 'presentation' } = Astro.props as Props;
+---
+
+<section class="conference-stage-frame">
+  <div class="conference-br-countdown" data-br-countdown hidden>
+    <span class="conference-br-countdown-label">Volviendo a sala principal en</span>
+    <span class="conference-br-countdown-secs" data-br-countdown-text></span>
+  </div>
+
+  <section class="conference-stage" data-stage data-layout={defaultLayout}>
+    <StagePanels />
+  </section>
+
+  <StageOverlays />
+</section>

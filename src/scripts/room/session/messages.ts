@@ -1,0 +1,283 @@
+import { normalizeLayoutMode, type LayoutMode } from '../../layout-controller';
+import { normalizePreviewZoom, normalizeText } from '../core/normalize';
+
+export type ParticipantRole = 'teacher' | 'student';
+export type ReactionKind = 'clap' | 'heart' | 'joy' | 'tada' | 'thumbsup' | 'wow';
+
+export type SlideState = {
+  indexf: number;
+  indexh: number;
+  indexv: number;
+  zoom: number;
+};
+
+export type ConferenceMessage =
+  | {
+      type: 'layout';
+      layout: LayoutMode;
+    }
+  | {
+      type: 'graph';
+      open: boolean;
+    }
+  | {
+      type: 'session-control';
+      allowInstruments: boolean;
+    }
+  | {
+      type: 'session-setup';
+      previewZoom: number;
+      showCircle: boolean;
+    }
+  | {
+      type: 'session-leader';
+      identity: string;
+    }
+  | {
+      id: string;
+      identity: string;
+      name: string;
+      role: ParticipantRole;
+      sentAt: string;
+      text: string;
+      type: 'chat';
+    }
+  | {
+      type: 'presentation';
+      href: string | null;
+    }
+  | {
+      type: 'mute-all';
+    }
+  | {
+      id: string;
+      identity: string;
+      name: string;
+      reaction: ReactionKind;
+      role: ParticipantRole;
+      sentAt: string;
+      type: 'reaction';
+    }
+  | ({
+      type: 'slide-state';
+    } & SlideState)
+  | {
+      type: 'presentation-zoom';
+      zoom: number;
+    }
+  | {
+      type: 'circle-move';
+      x: number;
+      y: number;
+      identity: string;
+    }
+  | {
+      type: 'break-rooms';
+      rooms: Array<{ name: string; label: string }>;
+      assignments: Record<string, string>;
+      mode: string;
+    }
+  | {
+      type: 'break-rooms-end';
+      countdown: number;
+      mainRoom: string;
+    }
+  | {
+      type: 'break-rooms-kill';
+      mainRoom: string;
+    };
+
+export const MESSAGE_TOPIC = 'conference-ui';
+
+export const REACTION_SHORTCUTS_BY_CODE: Record<string, ReactionKind> = {
+  Digit4: 'clap',
+  Digit5: 'thumbsup',
+  Digit6: 'heart',
+  Digit7: 'joy',
+  Digit8: 'wow',
+  Digit9: 'tada',
+};
+
+export const REACTION_EMOJIS: Record<ReactionKind, string> = {
+  clap: '👏',
+  heart: '❤️',
+  joy: '😂',
+  tada: '🎉',
+  thumbsup: '👍',
+  wow: '😮',
+};
+
+const textDecoder = new TextDecoder();
+
+const isTeacherRole = (value: unknown): value is ParticipantRole =>
+  normalizeText(value).toLowerCase() === 'teacher';
+
+export const normalizeRole = (value: unknown): ParticipantRole =>
+  isTeacherRole(normalizeText(value).toLowerCase()) ? 'teacher' : 'student';
+
+export const normalizeSlideState = (value: Partial<SlideState> | null | undefined): SlideState | null => {
+  if (!value || typeof value !== 'object') return null;
+  const indexh = Number(value.indexh);
+  const indexv = Number(value.indexv);
+  const indexf = Number(value.indexf);
+  const zoom = Number(value.zoom);
+  if (!Number.isFinite(indexh) || !Number.isFinite(indexv) || !Number.isFinite(indexf)) {
+    return null;
+  }
+
+  return {
+    indexf: Math.max(0, Math.round(indexf)),
+    indexh: Math.max(0, Math.round(indexh)),
+    indexv: Math.max(0, Math.round(indexv)),
+    zoom: Math.min(1.4, Math.max(0.45, Number.isFinite(zoom) ? zoom : 1)),
+  };
+};
+
+const isReactionKind = (value: string): value is ReactionKind => value in REACTION_EMOJIS;
+
+export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage | null => {
+  try {
+    const parsed = JSON.parse(textDecoder.decode(payload));
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
+      return null;
+    }
+
+    if (parsed.type === 'layout') {
+      return {
+        type: 'layout',
+        layout: normalizeLayoutMode((parsed as { layout?: string }).layout),
+      };
+    }
+
+    if (parsed.type === 'presentation') {
+      return {
+        type: 'presentation',
+        href: typeof (parsed as { href?: string | null }).href === 'string'
+          ? (parsed as { href: string }).href
+          : null,
+      };
+    }
+
+    if (parsed.type === 'graph') {
+      return {
+        type: 'graph',
+        open: (parsed as { open?: boolean }).open !== false,
+      };
+    }
+
+    if (parsed.type === 'session-setup') {
+      return {
+        type: 'session-setup',
+        previewZoom: normalizePreviewZoom((parsed as { previewZoom?: number }).previewZoom, 1),
+        showCircle: Boolean((parsed as { showCircle?: boolean }).showCircle),
+      };
+    }
+
+    if (parsed.type === 'session-control') {
+      return {
+        type: 'session-control',
+        allowInstruments: (parsed as { allowInstruments?: boolean }).allowInstruments !== false,
+      };
+    }
+
+    if (parsed.type === 'session-leader') {
+      return {
+        type: 'session-leader',
+        identity: normalizeText((parsed as { identity?: string }).identity),
+      };
+    }
+
+    if (parsed.type === 'slide-state') {
+      const slideState = normalizeSlideState(parsed as Partial<SlideState>);
+      if (!slideState) return null;
+      return {
+        type: 'slide-state',
+        ...slideState,
+      };
+    }
+
+    if (parsed.type === 'chat') {
+      const text = normalizeText((parsed as { text?: string }).text);
+      const id = normalizeText((parsed as { id?: string }).id);
+      if (!text || !id) return null;
+
+      return {
+        type: 'chat',
+        id,
+        identity: normalizeText((parsed as { identity?: string }).identity),
+        name: normalizeText((parsed as { name?: string }).name) || 'Participant',
+        role: normalizeRole((parsed as { role?: string }).role),
+        sentAt: normalizeText((parsed as { sentAt?: string }).sentAt) || new Date().toISOString(),
+        text,
+      };
+    }
+
+    if (parsed.type === 'reaction') {
+      const reaction = normalizeText((parsed as { reaction?: string }).reaction);
+      const id = normalizeText((parsed as { id?: string }).id);
+      if (!id || !isReactionKind(reaction)) return null;
+
+      return {
+        type: 'reaction',
+        id,
+        identity: normalizeText((parsed as { identity?: string }).identity),
+        name: normalizeText((parsed as { name?: string }).name) || 'Participant',
+        reaction,
+        role: normalizeRole((parsed as { role?: string }).role),
+        sentAt: normalizeText((parsed as { sentAt?: string }).sentAt) || new Date().toISOString(),
+      };
+    }
+
+    if (parsed.type === 'mute-all') {
+      return {
+        type: 'mute-all',
+      };
+    }
+
+    if (parsed.type === 'break-rooms') {
+      return {
+        type: 'break-rooms',
+        rooms: Array.isArray((parsed as { rooms?: unknown }).rooms)
+          ? (parsed as { rooms: { name: string; label: string }[] }).rooms
+          : [],
+        assignments: (parsed as { assignments?: Record<string, string> }).assignments ?? {},
+        mode: normalizeText((parsed as { mode?: string }).mode),
+      };
+    }
+
+    if (parsed.type === 'break-rooms-end') {
+      return {
+        type: 'break-rooms-end',
+        countdown: Number((parsed as { countdown?: number }).countdown) || 60,
+        mainRoom: normalizeText((parsed as { mainRoom?: string }).mainRoom),
+      };
+    }
+
+    if (parsed.type === 'break-rooms-kill') {
+      return {
+        type: 'break-rooms-kill',
+        mainRoom: normalizeText((parsed as { mainRoom?: string }).mainRoom),
+      };
+    }
+
+    if (parsed.type === 'circle-move') {
+      return {
+        type: 'circle-move',
+        x: Number((parsed as { x?: number }).x) || 0,
+        y: Number((parsed as { y?: number }).y) || 0,
+        identity: normalizeText((parsed as { identity?: string }).identity),
+      };
+    }
+
+    if (parsed.type === 'presentation-zoom') {
+      return {
+        type: 'presentation-zoom',
+        zoom: Number((parsed as { zoom?: number }).zoom) || 1,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+};

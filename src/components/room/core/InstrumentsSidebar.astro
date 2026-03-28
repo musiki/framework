@@ -1,0 +1,21 @@
+---
+import './instruments-sidebar.css';
+import FmSynthModule from '../generators/fm-synth/FmSynthModule.astro';
+import GravityBallModule from '../generators/gravity-ball/GravityBallModule.astro';
+import VideoModule from '../processors/video/VideoModule.astro';
+import MixerModule from '../mixing/mixer/MixerModule.astro';
+---
+
+<aside class="conference-instruments-sidebar" data-instruments-sidebar>
+  <div class="conference-instruments-layout">
+    <div class="conference-instruments-scroll">
+      <FmSynthModule />
+      <GravityBallModule />
+    </div>
+
+    <div class="conference-instruments-footer">
+      <VideoModule />
+      <MixerModule />
+    </div>
+  </div>
+</aside>

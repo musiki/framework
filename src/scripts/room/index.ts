@@ -1,0 +1,50 @@
+// Room runtime root entrypoint.
+export { mountLiveKitRoom } from './core';
+export { normalizePreviewZoom, normalizeText } from './core/normalize';
+export { buildRoomQueryUrl } from './layout';
+export {
+  cloneTemplate,
+  createMediaElement,
+  ensureParticipantCard,
+  getTrackSid,
+  hasCameraTrack,
+  isLocalParticipant,
+  listRoomParticipants,
+  readParticipantHandRaisedFromMetadata,
+  readParticipantMetadata,
+  readParticipantName,
+  readParticipantPreviewZoom,
+  readParticipantRole,
+  readParticipantShowCircle,
+  removeParticipantCards,
+  removeMount,
+  renderParticipantRoster,
+  syncParticipantAudio,
+  syncParticipantVideo,
+  syncScreenAudio,
+  syncScreenVideo,
+} from './participants';
+export {
+  MESSAGE_TOPIC,
+  REACTION_EMOJIS,
+  REACTION_SHORTCUTS_BY_CODE,
+  normalizeRole,
+  normalizeSlideState,
+  parseConferenceMessage,
+} from './session';
+
+export type {
+  ConferenceMessage,
+  ParticipantRole,
+  ReactionKind,
+  SlideState,
+} from './session';
+export type {
+  MediaMount,
+  MountCollection,
+  ParticipantCardRefs,
+  ParticipantMount,
+  RoomParticipant,
+  RoomParticipant as ParticipantLike,
+  ScreenCardRefs,
+} from './participants';

@@ -1,0 +1,107 @@
+---
+---
+
+<details class="conference-sidebar-section conference-sidebar-section--instrument conference-sidebar-section--video" open>
+  <summary class="conference-sidebar-heading">VIDEO</summary>
+
+  <div class="conference-video-module">
+    <div class="conference-video-module-head">
+      <button
+        type="button"
+        class="conference-ramp-reset conference-video-module-reset"
+        data-mixer-reset-button="video"
+        title="Reset video"
+        aria-label="Reset video"
+      >
+        R
+      </button>
+    </div>
+
+    <div class="conference-video-mixer-grid conference-video-mixer-grid--module">
+      <div class="conference-video-mixer-control">
+        <div
+          class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+          data-mixer-video-luma-knob
+          role="slider"
+          tabindex="0"
+          aria-label="Video luma"
+          aria-valuemin="-1"
+          aria-valuemax="1"
+          aria-valuenow="0"
+        >
+          <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+        </div>
+        <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-luma />
+        <span class="conference-video-mixer-label" data-mixer-reset-control="video:luma" title="Double click to reset Luma">Luma</span>
+      </div>
+
+      <div class="conference-video-mixer-control">
+        <div
+          class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+          data-mixer-video-tint-knob
+          role="slider"
+          tabindex="0"
+          aria-label="Video tint"
+          aria-valuemin="-1"
+          aria-valuemax="1"
+          aria-valuenow="0"
+        >
+          <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+        </div>
+        <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-tint />
+        <span class="conference-video-mixer-label" data-mixer-reset-control="video:tint" title="Double click to reset Tint">Tint</span>
+      </div>
+
+      <div class="conference-video-mixer-control">
+        <div
+          class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+          data-mixer-video-saturation-knob
+          role="slider"
+          tabindex="0"
+          aria-label="Video saturation"
+          aria-valuemin="-1"
+          aria-valuemax="1"
+          aria-valuenow="0"
+        >
+          <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+        </div>
+        <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-saturation />
+        <span class="conference-video-mixer-label" data-mixer-reset-control="video:saturation" title="Double click to reset Saturation">Sat</span>
+      </div>
+
+      <div class="conference-video-mixer-control">
+        <div
+          class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+          data-mixer-video-contrast-knob
+          role="slider"
+          tabindex="0"
+          aria-label="Video contrast"
+          aria-valuemin="-1"
+          aria-valuemax="1"
+          aria-valuenow="0"
+        >
+          <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+        </div>
+        <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-contrast />
+        <span class="conference-video-mixer-label" data-mixer-reset-control="video:contrast" title="Double click to reset Contrast">Cont</span>
+      </div>
+
+      <div class="conference-video-mixer-control">
+        <div
+          class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--video"
+          data-mixer-video-brightness-knob
+          role="slider"
+          tabindex="0"
+          aria-label="Video brightness"
+          aria-valuemin="-1"
+          aria-valuemax="1"
+          aria-valuenow="0"
+        >
+          <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
+        </div>
+        <input type="range" min="-1" max="1" step="0.01" value="0" class="conference-mixer-pan-input" data-mixer-video-brightness />
+        <span class="conference-video-mixer-label" data-mixer-reset-control="video:brightness" title="Double click to reset Brightness">Bright</span>
+      </div>
+    </div>
+  </div>
+</details>

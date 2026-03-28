@@ -1,0 +1,397 @@
+---
+type Props = {
+  defaultIdentity?: string;
+  defaultName?: string;
+  defaultRole?: 'teacher' | 'student';
+  defaultRoom?: string;
+};
+
+const {
+  defaultIdentity = '',
+  defaultName = '',
+  defaultRole = 'student',
+  defaultRoom = 'musiki-stage',
+} = Astro.props as Props;
+---
+
+<details class="conference-sidebar-section conference-sidebar-panel conference-sidebar-panel--operational">
+  <summary class="conference-sidebar-heading">IDENTITY</summary>
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--operational">
+    <div class="conference-field conference-field--room">
+      <label for="conference-room-input">Sala</label>
+      <input id="conference-room-input" name="room" type="text" value={defaultRoom} data-room-input />
+    </div>
+
+    <div class="conference-field">
+      <label for="conference-identity-input">Identity</label>
+      <input
+        id="conference-identity-input"
+        name="identity"
+        type="text"
+        value={defaultIdentity}
+        data-identity-input
+      />
+    </div>
+
+    <div class="conference-field">
+      <label for="conference-name-input">Nombre</label>
+      <div class="conference-name-row">
+        <input id="conference-name-input" name="name" type="text" value={defaultName} data-name-input />
+        <span class="conference-role-tag" data-role-label>{defaultRole === 'teacher' ? 'teacher' : 'student'}</span>
+      </div>
+      <input type="hidden" name="role" value={defaultRole} data-role-input />
+    </div>
+  </div>
+</details>
+
+<details
+  class="conference-sidebar-section conference-sidebar-panel conference-sidebar-panel--operational"
+  data-session-setup
+>
+  <summary class="conference-sidebar-heading">SETUP</summary>
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--operational">
+    <div class="conference-field">
+      <label for="conference-audio-input-select-sidebar">MIC IN</label>
+      <select
+        id="conference-audio-input-select-sidebar"
+        name="audio-input-sidebar"
+        data-audio-input-select
+        data-audio-input-select-sidebar
+      >
+        <option value="">Selecciona un microfono</option>
+      </select>
+    </div>
+
+    <div class="conference-field">
+      <label for="conference-video-input-select-sidebar">CAM IN</label>
+      <select
+        id="conference-video-input-select-sidebar"
+        name="video-input-sidebar"
+        data-video-input-select
+        data-video-input-select-sidebar
+      >
+        <option value="">Selecciona una camara</option>
+      </select>
+    </div>
+
+    <div class="conference-field conference-field--circle">
+      <div class="conference-field-row conference-field-row--compact">
+        <label for="conference-circle-zoom-input">Circle Zoom</label>
+        <label class="conference-led-switch" title="Circle preview">
+          <input
+            id="conference-show-circle-input"
+            name="show-circle"
+            type="checkbox"
+            checked
+            data-show-circle-input
+          />
+          <span class="conference-led-switch-indicator" aria-hidden="true">C</span>
+          <span class="conference-sr-only">Circle preview</span>
+        </label>
+      </div>
+      <div class="conference-range-row">
+        <input
+          id="conference-circle-zoom-input"
+          name="circle-preview-zoom"
+          type="range"
+          min="0.8"
+          max="4"
+          step="0.02"
+          value="2.25"
+          data-preview-zoom-input
+        />
+        <output for="conference-circle-zoom-input" data-preview-zoom-output>2.25x</output>
+      </div>
+    </div>
+
+    <div class="conference-field conference-field--checkbox">
+      <label class="conference-checkbox-row" for="conference-blur-background-input">
+        <input
+          id="conference-blur-background-input"
+          name="blur-background"
+          type="checkbox"
+          data-preview-blur-input
+        />
+        <span>Blur background</span>
+      </label>
+    </div>
+
+    <div class="conference-field conference-field--checkbox">
+      <label class="conference-checkbox-row" for="conference-invert-video-input">
+        <input
+          id="conference-invert-video-input"
+          name="invert-video"
+          type="checkbox"
+          data-preview-invert-input
+        />
+        <span>Invert video</span>
+      </label>
+    </div>
+
+    <div class="conference-field conference-field--checkbox">
+      <label class="conference-checkbox-row" for="conference-session-allow-instruments-input">
+        <input
+          id="conference-session-allow-instruments-input"
+          name="session-allow-instruments"
+          type="checkbox"
+          checked
+          data-session-allow-instruments-input
+        />
+        <span>Allow instruments</span>
+      </label>
+    </div>
+
+    <div class="conference-setup-action-row">
+      <button
+        type="button"
+        class="conference-session-action"
+        data-session-mute-all-button
+        title="Mute all"
+        aria-label="Mute all"
+      >
+        MUTE ALL
+      </button>
+    </div>
+  </div>
+</details>
+
+<details class="conference-sidebar-section conference-sidebar-panel conference-sidebar-panel--operational">
+  <summary class="conference-sidebar-heading">RECORDING PRESET</summary>
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--operational">
+    <div class="conference-field">
+      <label for="conference-recording-preset-select">Preset</label>
+      <select
+        id="conference-recording-preset-select"
+        name="recording-preset"
+        data-recording-preset-select
+      >
+        <option value="landscape-1080">1080p</option>
+        <option value="instagram-story">Instagram Story</option>
+        <option value="tiktok">TikTok</option>
+      </select>
+    </div>
+  </div>
+</details>
+
+<details class="conference-sidebar-section conference-sidebar-panel conference-sidebar-panel--operational">
+  <summary class="conference-sidebar-heading">STREAMING</summary>
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--operational">
+    <div class="conference-field">
+      <label for="conference-streaming-profile-select">Quality profile</label>
+      <select id="conference-streaming-profile-select" data-streaming-profile-select>
+        <option value="auto">Auto (Adaptive)</option>
+        <option value="high">High — 1080p · 2.5 Mbps</option>
+        <option value="medium">Medium — 480p · 800 kbps</option>
+        <option value="low">Low — 360p · 300 kbps</option>
+      </select>
+    </div>
+
+    <div class="conference-field conference-field--checkbox">
+      <label class="conference-checkbox-row" for="conference-optimize-speaker-input">
+        <input
+          id="conference-optimize-speaker-input"
+          name="optimize-speaker"
+          type="checkbox"
+          checked
+          data-optimize-speaker-input
+        />
+        <span>Prioritize speaker</span>
+      </label>
+    </div>
+
+    <div class="conference-field conference-field--checkbox">
+      <label class="conference-checkbox-row" for="conference-limit-grid-input">
+        <input
+          id="conference-limit-grid-input"
+          name="limit-grid"
+          type="checkbox"
+          checked
+          data-limit-grid-input
+        />
+        <span>Limit grid quality</span>
+      </label>
+    </div>
+  </div>
+</details>
+
+<details class="conference-sidebar-section conference-sidebar-panel conference-sidebar-panel--operational">
+  <summary class="conference-sidebar-heading">INVITAR</summary>
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--operational">
+    <div class="conference-invite-role-switch">
+      <span class="conference-invite-role-label" data-role-label-external>Externos</span>
+      <label class="conference-switch">
+        <input type="checkbox" id="conference-invite-role-toggle" data-invite-role-toggle />
+        <span class="conference-switch-slider"></span>
+      </label>
+      <span class="conference-invite-role-label" data-role-label-student>Estudiantes</span>
+    </div>
+
+    <div class="conference-room-invite-controls" data-invite-panel="external">
+      <div class="conference-field">
+        <label for="conference-external-password-input">Password externos</label>
+        <input
+          id="conference-external-password-input"
+          name="external-password"
+          type="password"
+          value=""
+          autocomplete="new-password"
+          data-external-password-input
+        />
+      </div>
+
+      <div class="conference-field">
+        <label for="conference-external-expiry-select">Vencimiento</label>
+        <select
+          id="conference-external-expiry-select"
+          name="external-expiry"
+          data-external-expiry-select
+        >
+          <option value="">Sin vencimiento</option>
+          <option value="60">1 hora</option>
+          <option value="1440">24 horas</option>
+          <option value="10080">7 dias</option>
+        </select>
+      </div>
+
+      <div class="conference-field">
+        <label for="conference-external-invite-link-output">Link users</label>
+        <input
+          id="conference-external-invite-link-output"
+          name="external-invite-link"
+          class="conference-invite-link-output"
+          type="text"
+          value=""
+          readonly
+          placeholder="Crea un link para invitados"
+          data-external-invite-link-output
+        />
+      </div>
+
+      <div class="conference-session-action-row">
+        <button
+          type="button"
+          class="conference-session-action conference-session-action--compact"
+          data-action="external-invite-create"
+          title="Guardar link"
+          aria-label="Guardar link"
+        >
+          G
+        </button>
+        <button
+          type="button"
+          class="conference-session-action conference-session-action--compact"
+          data-action="external-invite-copy"
+          title="Copiar link"
+          aria-label="Copiar link"
+        >
+          C
+        </button>
+        <button
+          type="button"
+          class="conference-session-action conference-session-action--compact"
+          data-action="external-invite-revoke"
+          title="Revocar link"
+          aria-label="Revocar link"
+        >
+          R
+        </button>
+      </div>
+
+      <p class="conference-session-note" data-external-invite-status>
+        Genera un link con password para invitados externos sin login.
+      </p>
+    </div>
+
+    <div
+      class="conference-room-invite-controls conference-room-invite-controls--hidden"
+      data-invite-panel="student"
+    >
+      <div class="conference-field">
+        <label for="conference-student-expiry-select">Vencimiento</label>
+        <select
+          id="conference-student-expiry-select"
+          name="student-expiry"
+          data-student-expiry-select
+        >
+          <option value="">Sin vencimiento</option>
+          <option value="60">1 hora</option>
+          <option value="1440">24 horas</option>
+          <option value="10080">7 dias</option>
+        </select>
+      </div>
+
+      <div class="conference-field">
+        <label for="conference-student-invite-link-output">Link estudiantes</label>
+        <input
+          id="conference-student-invite-link-output"
+          name="student-invite-link"
+          class="conference-invite-link-output"
+          type="text"
+          value=""
+          readonly
+          placeholder="Crea un acceso directo para estudiantes"
+          data-student-invite-link-output
+        />
+      </div>
+
+      <div class="conference-session-action-row conference-session-action-row--triple">
+        <button
+          type="button"
+          class="conference-session-action conference-session-action--compact"
+          data-action="student-invite-create"
+          title="Guardar link"
+          aria-label="Guardar link"
+        >
+          G
+        </button>
+        <button
+          type="button"
+          class="conference-session-action conference-session-action--compact"
+          data-action="student-invite-copy"
+          title="Copiar link"
+          aria-label="Copiar link"
+        >
+          C
+        </button>
+        <button
+          type="button"
+          class="conference-session-action conference-session-action--compact"
+          data-action="student-invite-revoke"
+          title="Revocar link"
+          aria-label="Revocar link"
+        >
+          R
+        </button>
+      </div>
+
+      <p class="conference-session-note" data-student-invite-status>
+        Link directo para estudiantes sin navegar por curso ni leccion.
+      </p>
+    </div>
+  </div>
+</details>
+
+<details
+  class="conference-sidebar-section conference-sidebar-panel conference-sidebar-panel--operational"
+  data-session-controls-field
+  hidden
+>
+  <summary class="conference-sidebar-heading">SESSION CONTROL</summary>
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--operational">
+    <div class="conference-field" data-session-leader-field>
+      <label for="conference-session-leader-select">Delegar sesion</label>
+      <select
+        id="conference-session-leader-select"
+        name="session-leader"
+        data-session-leader-select
+      >
+        <option value="">Sin teachers conectados</option>
+      </select>
+    </div>
+  </div>
+</details>
+
+<p class="conference-statusline" data-room-status>
+  Configura la sala y conecta.
+</p>
+<span class="conference-sr-only" data-room-state>Desconectado</span>

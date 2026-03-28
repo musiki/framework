@@ -1,0 +1,56 @@
+---
+import './room-sidebar.css';
+import ChatPanel from './chat/ChatPanel.astro';
+import GridPanel from './grid/GridPanel.astro';
+import NotesPanel from './notes/NotesPanel.astro';
+import SetupPanel from './setup/SetupPanel.astro';
+
+type Props = {
+  defaultIdentity?: string;
+  defaultName?: string;
+  defaultRole?: 'teacher' | 'student';
+  defaultRoom?: string;
+};
+
+const {
+  defaultIdentity = '',
+  defaultName = '',
+  defaultRole = 'student',
+  defaultRoom = 'musiki-stage',
+} = Astro.props as Props;
+---
+
+<aside class="conference-sidebar">
+  <div class="conference-sidebar-scroll">
+    <div class="conference-sidebar-operational-stack">
+      <SetupPanel
+        defaultIdentity={defaultIdentity}
+        defaultName={defaultName}
+        defaultRole={defaultRole}
+        defaultRoom={defaultRoom}
+      />
+    </div>
+
+    <div class="conference-sidebar-information-stack">
+      <ChatPanel />
+      <GridPanel />
+      <NotesPanel />
+    </div>
+  </div>
+</aside>
+
+<button
+  type="button"
+  class="conference-sidebar-toggle"
+  data-action="sidebar-toggle"
+  aria-label="Plegar sidebar"
+  title="Plegar sidebar (Cmd/Ctrl + Shift + /)"
+>
+  <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+    <path
+      d="M15.4 6.6 10 12l5.4 5.4-1.4 1.4L7.2 12l6.8-6.8 1.4 1.4Z"
+      fill="currentColor"
+    />
+  </svg>
+  <span class="conference-sr-only">Toggle sidebar</span>
+</button>

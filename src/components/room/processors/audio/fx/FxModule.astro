@@ -1,0 +1,267 @@
+---
+---
+
+<details class="conference-mixer-fx-details">
+  <summary class="conference-sidebar-heading conference-mixer-fx-summary">FX</summary>
+  <div class="conference-mixer-fx">
+    <div class="conference-mixer-fx-pair">
+      <article class="conference-mixer-fx-card conference-mixer-fx-card--reverb">
+        <div class="conference-mixer-fx-head">
+          <h4>REVERB</h4>
+          <span class="conference-mixer-fx-badge conference-mixer-fx-badge--reverb">FX</span>
+        </div>
+
+        <label class="conference-mixer-fx-control" for="conference-synth-reverb-time-input">
+          <span class="conference-mixer-fx-label-row">
+            <span>Time</span>
+            <output for="conference-synth-reverb-time-input" data-synth-reverb-time-output>3.0s</output>
+          </span>
+          <input
+            id="conference-synth-reverb-time-input"
+            type="range"
+            min="0.4"
+            max="8"
+            step="0.1"
+            value="3"
+            data-synth-reverb-time-input
+          />
+        </label>
+
+        <label class="conference-mixer-fx-control" for="conference-synth-reverb-mix-input">
+          <span class="conference-mixer-fx-label-row">
+            <span>Mix</span>
+            <output for="conference-synth-reverb-mix-input" data-synth-reverb-mix-output>50%</output>
+          </span>
+          <input
+            id="conference-synth-reverb-mix-input"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.5"
+            data-synth-reverb-mix-input
+          />
+        </label>
+      </article>
+
+      <article class="conference-mixer-fx-card conference-mixer-fx-card--delay">
+        <div class="conference-mixer-fx-head">
+          <h4>DELAY</h4>
+          <span class="conference-mixer-fx-badge conference-mixer-fx-badge--delay">FX</span>
+        </div>
+
+        <label class="conference-mixer-fx-control" for="conference-synth-delay-time-input">
+          <span class="conference-mixer-fx-label-row">
+            <span>Time</span>
+            <output for="conference-synth-delay-time-input" data-synth-delay-time-output>380ms</output>
+          </span>
+          <input
+            id="conference-synth-delay-time-input"
+            type="range"
+            min="0.05"
+            max="1.2"
+            step="0.01"
+            value="0.38"
+            data-synth-delay-time-input
+          />
+        </label>
+
+        <label class="conference-mixer-fx-control" for="conference-synth-delay-feedback-input">
+          <span class="conference-mixer-fx-label-row">
+            <span>Feedback</span>
+            <output for="conference-synth-delay-feedback-input" data-synth-delay-feedback-output>38%</output>
+          </span>
+          <input
+            id="conference-synth-delay-feedback-input"
+            type="range"
+            min="0"
+            max="0.95"
+            step="0.01"
+            value="0.38"
+            data-synth-delay-feedback-input
+          />
+        </label>
+
+        <label class="conference-mixer-fx-control" for="conference-synth-delay-mix-input">
+          <span class="conference-mixer-fx-label-row">
+            <span>Mix</span>
+            <output for="conference-synth-delay-mix-input" data-synth-delay-mix-output>32%</output>
+          </span>
+          <input
+            id="conference-synth-delay-mix-input"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.32"
+            data-synth-delay-mix-input
+          />
+        </label>
+
+        <label class="conference-mixer-fx-control" for="conference-synth-delay-tone-input">
+          <span class="conference-mixer-fx-label-row">
+            <span>Tone</span>
+            <output for="conference-synth-delay-tone-input" data-synth-delay-tone-output>4.2kHz</output>
+          </span>
+          <input
+            id="conference-synth-delay-tone-input"
+            type="range"
+            min="400"
+            max="8000"
+            step="50"
+            value="4200"
+            data-synth-delay-tone-input
+          />
+        </label>
+      </article>
+    </div>
+
+    <div class="conference-mixer-fx-pair">
+      <article class="conference-mixer-fx-card conference-mixer-fx-card--comp">
+        <div class="conference-mixer-fx-head">
+          <h4>COMP</h4>
+          <button
+            type="button"
+            class="conference-mixer-fx-led-toggle"
+            data-synth-comp-toggle
+            aria-label="Toggle compressor"
+            title="Compressor"
+          >
+            <span class="conference-mixer-led" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <div class="conference-mixer-fx-grid conference-mixer-fx-grid--stacked">
+          <label class="conference-mixer-fx-control" for="conference-synth-comp-threshold-input">
+            <span class="conference-mixer-fx-label-row">
+              <span>Thresh</span>
+              <output for="conference-synth-comp-threshold-input" data-synth-comp-threshold-output>-18 dB</output>
+            </span>
+            <input
+              id="conference-synth-comp-threshold-input"
+              type="range"
+              min="-48"
+              max="0"
+              step="1"
+              value="-18"
+              data-synth-comp-threshold-input
+            />
+          </label>
+
+          <label class="conference-mixer-fx-control" for="conference-synth-comp-ratio-input">
+            <span class="conference-mixer-fx-label-row">
+              <span>Ratio</span>
+              <output for="conference-synth-comp-ratio-input" data-synth-comp-ratio-output>3.0</output>
+            </span>
+            <input
+              id="conference-synth-comp-ratio-input"
+              type="range"
+              min="1"
+              max="20"
+              step="0.1"
+              value="3"
+              data-synth-comp-ratio-input
+            />
+          </label>
+
+          <label class="conference-mixer-fx-control" for="conference-synth-comp-attack-input">
+            <span class="conference-mixer-fx-label-row">
+              <span>Attack</span>
+              <output for="conference-synth-comp-attack-input" data-synth-comp-attack-output>0.003s</output>
+            </span>
+            <input
+              id="conference-synth-comp-attack-input"
+              type="range"
+              min="0.001"
+              max="0.2"
+              step="0.001"
+              value="0.003"
+              data-synth-comp-attack-input
+            />
+          </label>
+
+          <label class="conference-mixer-fx-control" for="conference-synth-comp-release-input">
+            <span class="conference-mixer-fx-label-row">
+              <span>Release</span>
+              <output for="conference-synth-comp-release-input" data-synth-comp-release-output>0.25s</output>
+            </span>
+            <input
+              id="conference-synth-comp-release-input"
+              type="range"
+              min="0.02"
+              max="1"
+              step="0.01"
+              value="0.25"
+              data-synth-comp-release-input
+            />
+          </label>
+
+          <label class="conference-mixer-fx-control conference-mixer-fx-control--wide" for="conference-synth-comp-knee-input">
+            <span class="conference-mixer-fx-label-row">
+              <span>Knee</span>
+              <output for="conference-synth-comp-knee-input" data-synth-comp-knee-output>12 dB</output>
+            </span>
+            <input
+              id="conference-synth-comp-knee-input"
+              type="range"
+              min="0"
+              max="40"
+              step="0.5"
+              value="12"
+              data-synth-comp-knee-input
+            />
+          </label>
+        </div>
+      </article>
+
+      <article class="conference-mixer-fx-card conference-mixer-fx-card--limiter">
+        <div class="conference-mixer-fx-head">
+          <h4>LIMITER</h4>
+          <button
+            type="button"
+            class="conference-mixer-fx-led-toggle"
+            data-synth-limiter-toggle
+            aria-label="Toggle limiter"
+            title="Limiter"
+          >
+            <span class="conference-mixer-led" aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <div class="conference-mixer-fx-grid conference-mixer-fx-grid--stacked">
+          <label class="conference-mixer-fx-control" for="conference-synth-limiter-threshold-input">
+            <span class="conference-mixer-fx-label-row">
+              <span>Thresh</span>
+              <output for="conference-synth-limiter-threshold-input" data-synth-limiter-threshold-output>-1 dB</output>
+            </span>
+            <input
+              id="conference-synth-limiter-threshold-input"
+              type="range"
+              min="-12"
+              max="0"
+              step="0.5"
+              value="-1"
+              data-synth-limiter-threshold-input
+            />
+          </label>
+
+          <label class="conference-mixer-fx-control" for="conference-synth-limiter-release-input">
+            <span class="conference-mixer-fx-label-row">
+              <span>Release</span>
+              <output for="conference-synth-limiter-release-input" data-synth-limiter-release-output>0.05s</output>
+            </span>
+            <input
+              id="conference-synth-limiter-release-input"
+              type="range"
+              min="0.01"
+              max="0.5"
+              step="0.01"
+              value="0.05"
+              data-synth-limiter-release-input
+            />
+          </label>
+        </div>
+      </article>
+    </div>
+  </div>
+</details>

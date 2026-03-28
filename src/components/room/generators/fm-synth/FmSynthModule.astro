@@ -1,0 +1,197 @@
+---
+---
+
+<details class="conference-sidebar-section conference-sidebar-section--instrument" open>
+  <summary class="conference-sidebar-heading">FM SYNTH</summary>
+
+  <div class="conference-field conference-field--checkbox conference-field--hand-controls">
+    <label class="conference-checkbox-row" for="conference-hand-track-input">
+      <input
+        id="conference-hand-track-input"
+        name="hand-track"
+        type="checkbox"
+        data-hand-track-input
+      />
+      <span>Hand track</span>
+    </label>
+    <label class="conference-ramp-row" for="conference-hand-ramp-input">
+      <span>Ramp</span>
+      <input
+        id="conference-hand-ramp-input"
+        name="hand-ramp"
+        type="number"
+        min="10"
+        max="4000"
+        step="10"
+        value="500"
+        data-hand-ramp-input
+      />
+      <span>ms</span>
+    </label>
+    <button
+      type="button"
+      class="conference-ramp-reset"
+      data-synth-mapping-reset
+      title="Reset mapping"
+      aria-label="Reset mapping"
+    >
+      R
+    </button>
+  </div>
+
+  <div class="conference-synth-meters">
+    <div class="conference-synth-meter">
+      <label for="conference-synth-carrier-input">Carrier</label>
+      <div class="conference-synth-meter-row">
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="carrier:min" aria-label="Capture carrier minimum"></button>
+        <input
+          id="conference-synth-carrier-input"
+          type="range"
+          min="20"
+          max="1600"
+          step="1"
+          value="220"
+          data-synth-carrier-input
+          disabled
+        />
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="carrier:max" aria-label="Capture carrier maximum"></button>
+        <output for="conference-synth-carrier-input" data-synth-carrier-output>220 Hz</output>
+      </div>
+    </div>
+
+    <div class="conference-synth-meter">
+      <label for="conference-synth-modulator-input">Modulator</label>
+      <div class="conference-synth-meter-row">
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="modulator:min" aria-label="Capture modulator minimum"></button>
+        <input
+          id="conference-synth-modulator-input"
+          type="range"
+          min="30"
+          max="1600"
+          step="1"
+          value="110"
+          data-synth-modulator-input
+          disabled
+        />
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="modulator:max" aria-label="Capture modulator maximum"></button>
+        <output for="conference-synth-modulator-input" data-synth-modulator-output>110 Hz</output>
+      </div>
+    </div>
+
+    <div class="conference-synth-meter">
+      <label for="conference-synth-gain-input">Thumb gain</label>
+      <div class="conference-synth-meter-row">
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="gain:min" aria-label="Capture gain minimum"></button>
+        <input
+          id="conference-synth-gain-input"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0"
+          data-synth-gain-input
+          disabled
+        />
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="gain:max" aria-label="Capture gain maximum"></button>
+        <output for="conference-synth-gain-input" data-synth-gain-output>0.00</output>
+      </div>
+    </div>
+
+    <div class="conference-synth-meter">
+      <label for="conference-synth-cutoff-input">Index cutoff</label>
+      <div class="conference-synth-meter-row">
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="cutoff:min" aria-label="Capture cutoff minimum"></button>
+        <input
+          id="conference-synth-cutoff-input"
+          type="range"
+          min="120"
+          max="8000"
+          step="1"
+          value="800"
+          data-synth-cutoff-input
+          disabled
+        />
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="cutoff:max" aria-label="Capture cutoff maximum"></button>
+        <output for="conference-synth-cutoff-input" data-synth-cutoff-output>800 Hz</output>
+      </div>
+    </div>
+
+    <div class="conference-synth-meter">
+      <label for="conference-synth-resonance-input">Ring resonance</label>
+      <div class="conference-synth-meter-row">
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="resonance:min" aria-label="Capture resonance minimum"></button>
+        <input
+          id="conference-synth-resonance-input"
+          type="range"
+          min="0.5"
+          max="20"
+          step="0.1"
+          value="1"
+          data-synth-resonance-input
+          disabled
+        />
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="resonance:max" aria-label="Capture resonance maximum"></button>
+        <output for="conference-synth-resonance-input" data-synth-resonance-output>1.0 Q</output>
+      </div>
+    </div>
+
+    <div class="conference-synth-meter">
+      <label for="conference-synth-waveform-input">Middle wave</label>
+      <div class="conference-synth-meter-row">
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="waveformMorph:min" aria-label="Capture waveform minimum"></button>
+        <input
+          id="conference-synth-waveform-input"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0"
+          data-synth-waveform-input
+          disabled
+        />
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="waveformMorph:max" aria-label="Capture waveform maximum"></button>
+        <output for="conference-synth-waveform-input" data-synth-waveform-output>SIN</output>
+      </div>
+    </div>
+
+    <div class="conference-synth-meter">
+      <label for="conference-synth-distortion-input" class="conference-synth-meter-label">
+        <span>Pinky distortion</span>
+        <span class="conference-synth-formula-shell" tabindex="0" aria-label="Distortion formula">
+          ƒ
+          <span class="conference-synth-formula-tooltip" role="note">
+            <math display="inline">
+              <mfrac>
+                <mrow>
+                  <mo>(</mo><mn>3</mn><mo>+</mo><mn>20</mn><mo>)</mo>
+                  <mo>&middot;</mo><mi>x</mi><mo>&middot;</mo><mn>57</mn>
+                  <mo>&middot;</mo>
+                  <mfrac><mn>3</mn><mn>180</mn></mfrac>
+                </mrow>
+                <mrow>
+                  <mn>3</mn><mo>+</mo><mn>20</mn><mo>&middot;</mo>
+                  <mo>|</mo><mi>x</mi><mo>|</mo>
+                </mrow>
+              </mfrac>
+            </math>
+          </span>
+        </span>
+      </label>
+      <div class="conference-synth-meter-row">
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="distortion:min" aria-label="Capture distortion minimum"></button>
+        <input
+          id="conference-synth-distortion-input"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value="0"
+          data-synth-distortion-input
+          disabled
+        />
+        <button type="button" class="conference-synth-map-button" data-synth-map-capture="distortion:max" aria-label="Capture distortion maximum"></button>
+        <output for="conference-synth-distortion-input" data-synth-distortion-output>0%</output>
+      </div>
+    </div>
+  </div>
+</details>
