@@ -2811,24 +2811,25 @@ a[node] -->|edge| b[hub]
               const authorName = post.authorName || 'Usuario';
               identity.appendChild(createForumAvatar(authorName, post.authorImage));
 
+              const metaInline = document.createElement('div');
+              metaInline.className = 'forum-post-meta-inline';
+
               const author = document.createElement('span');
               author.className = 'forum-post-name';
               author.textContent = authorName;
-              identity.appendChild(author);
+              metaInline.appendChild(author);
 
-              const main = document.createElement('div');
-              main.className = 'forum-post-main';
-
-              const header = document.createElement('div');
-              header.className = 'forum-post-header';
               const date = document.createElement('span');
               date.className = 'forum-post-date';
               const createdLabel = formatForumDate(post.createdAt);
               date.textContent = isForumPostEdited(post)
                 ? `${createdLabel} • editado ${formatForumDate(post.updatedAt)}`
                 : createdLabel;
-              header.appendChild(date);
-              main.appendChild(header);
+              metaInline.appendChild(date);
+              identity.appendChild(metaInline);
+
+              const main = document.createElement('div');
+              main.className = 'forum-post-main';
 
               const body = document.createElement('div');
               body.className = 'forum-post-body';
@@ -3091,6 +3092,10 @@ a[node] -->|edge| b[hub]
                   });
 
                   applyReactionState();
+                  if (replyButton) {
+                    actions.appendChild(replyButton);
+                    actions.hidden = false;
+                  }
                   actions.appendChild(reactionGroup);
                   actions.appendChild(reactionMoreButton);
                 }
@@ -3246,7 +3251,7 @@ a[node] -->|edge| b[hub]
                   if (quickTray) quickTray.appendChild(deleteButton);
                 }
 
-                if (replyButton) {
+                if (replyButton && !replyButton.isConnected) {
                   actions.appendChild(replyButton);
                   actions.hidden = false;
                 }
@@ -3504,10 +3509,10 @@ a[node] -->|edge| b[hub]
             }
 
             trailing.appendChild(counts);
-            if (threadMoreButton) trailing.appendChild(threadMoreButton);
             trailing.appendChild(caret);
 
             item.appendChild(toggle);
+            if (threadMoreButton) item.appendChild(threadMoreButton);
             item.appendChild(threadActions);
             threadListEl.appendChild(item);
           });

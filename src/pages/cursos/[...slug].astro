@@ -1798,7 +1798,13 @@ order:
       :global(#course-forum-subnav .forum-switcher-add) {
         font-size: 1.58rem;
         font-weight: 700;
-        line-height: 0.78;
+        line-height: 1;
+      }
+
+      :global(#course-forum-subnav .forum-switcher-add-mark) {
+        display: block;
+        line-height: 1;
+        transform: translate(1px, -1px);
       }
 
       :global(#course-forum-subnav .forum-switcher-notes-btn) {
@@ -3142,7 +3148,7 @@ order:
                   aria-expanded="false"
                   hidden={!hasSessionUser || !canManageLiveInteractions}
                 >
-                  +
+                  <span class="forum-switcher-add-mark" aria-hidden="true">+</span>
                 </button>
               </nav>
             </div>
@@ -9555,7 +9561,6 @@ a[node] -->|edge| b[hub]
             }
 
             trailing.appendChild(counts);
-            if (threadMoreButton) trailing.appendChild(threadMoreButton);
             trailing.appendChild(caret);
 
             if (isActive) {
@@ -9563,6 +9568,7 @@ a[node] -->|edge| b[hub]
             }
 
             item.appendChild(toggle);
+            if (threadMoreButton) item.appendChild(threadMoreButton);
             item.appendChild(threadActions);
             item.appendChild(inlinePanel);
             threadListEl.appendChild(item);
@@ -9634,16 +9640,13 @@ a[node] -->|edge| b[hub]
               const avatar = createForumAvatar(authorName, post.authorImage);
               identity.appendChild(avatar);
 
+              const metaInline = document.createElement('div');
+              metaInline.className = 'forum-post-meta-inline';
+
               const author = document.createElement('span');
               author.className = 'forum-post-name';
               author.textContent = authorName;
-              identity.appendChild(author);
-
-              const main = document.createElement('div');
-              main.className = 'forum-post-main';
-
-              const header = document.createElement('div');
-              header.className = 'forum-post-header';
+              metaInline.appendChild(author);
 
               const date = document.createElement('span');
               date.className = 'forum-post-date';
@@ -9653,9 +9656,11 @@ a[node] -->|edge| b[hub]
               } else {
                 date.textContent = createdLabel;
               }
+              metaInline.appendChild(date);
+              identity.appendChild(metaInline);
 
-              header.appendChild(date);
-              main.appendChild(header);
+              const main = document.createElement('div');
+              main.className = 'forum-post-main';
 
               const body = document.createElement('div');
               body.className = 'forum-post-body';
@@ -9939,6 +9944,10 @@ a[node] -->|edge| b[hub]
                   });
 
                   applyReactionState();
+                  if (replyButton) {
+                    actions.appendChild(replyButton);
+                    actions.hidden = false;
+                  }
                   actions.appendChild(reactionGroup);
                   actions.appendChild(reactionMoreButton);
                 }
@@ -10113,7 +10122,7 @@ a[node] -->|edge| b[hub]
                   if (quickTray) quickTray.appendChild(deleteButton);
                 }
 
-                if (replyButton) {
+                if (replyButton && !replyButton.isConnected) {
                   actions.appendChild(replyButton);
                   actions.hidden = false;
                 }
