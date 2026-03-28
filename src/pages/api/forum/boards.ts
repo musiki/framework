@@ -91,7 +91,7 @@ async function loadBoardActivityMap(
       .from('ForumPost')
       .select('threadId, createdAt')
       .in('threadId', threadIds)
-      .neq('status', 'deleted');
+      .or('status.is.null,status.neq.deleted');
 
     if (postsError) throw postsError;
 

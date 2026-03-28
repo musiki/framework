@@ -159,7 +159,7 @@ if (activeCourse) {
         .from('ForumPost')
         .select('threadId, createdAt')
         .in('threadId', threadIds)
-        .neq('status', 'deleted');
+        .or('status.is.null,status.neq.deleted');
 
       if (postError) throw postError;
       postsRaw = Array.isArray(postData) ? postData : [];

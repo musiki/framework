@@ -187,7 +187,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
         .from('ForumPost')
         .select('threadId, createdAt, parentPostId')
         .in('threadId', threadIds)
-        .neq('status', 'deleted');
+        .or('status.is.null,status.neq.deleted');
 
       if (postsError) throw postsError;
 

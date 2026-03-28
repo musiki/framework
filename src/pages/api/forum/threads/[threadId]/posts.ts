@@ -192,7 +192,7 @@ export const GET: APIRoute = async ({ params, locals, request }) => {
       .from('ForumPost')
       .select('id, threadId, parentPostId, authorUserId, body, status, createdAt, updatedAt')
       .eq('threadId', threadId)
-      .neq('status', 'deleted')
+      .or('status.is.null,status.neq.deleted')
       .order('createdAt', { ascending: true })
       .limit(POSTS_LIMIT);
 
