@@ -3114,8 +3114,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         flex-wrap: nowrap;
         overflow-x: auto;
         overflow-y: hidden;
+        scrollbar-width: none;
         margin: 0 0 0.7rem 0;
+        padding: 1rem 0.6rem 0;
       }
+      .dashboard-topbar::-webkit-scrollbar { display: none; }
       .dashboard-topbar-tabs {
         display: inline-flex;
         align-items: center;
@@ -5085,7 +5088,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
           border-bottom-color: var(--c-link);
         }
         .dashboard-topbar {
-          padding: 0.45rem 0.6rem 0;
+          padding: 1rem 0.6rem 0;
         }
         .dashboard-topbar-tabs,
         .dashboard-topbar-controls {
@@ -5257,6 +5260,12 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                   value={activeAttendanceConfig.endDate}
                   title="Fecha de fin de cuatrimestre"
                 />
+                <button
+                  type="button"
+                  class="dashboard-grid-btn"
+                  data-attendance-config-apply
+                  title="Aplicar rango de fechas"
+                >Aplicar</button>
               </div>
             </div>
             <div class="dashboard-topbar-context" data-dashboard-topbar-context="main" hidden={initialTeacherDashboardTab !== 'main'}>

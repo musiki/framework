@@ -3307,7 +3307,7 @@ const bindAttendanceConfig = () => {
 
   const startInput = panel.querySelector('[data-attendance-config-input="startDate"]');
   const endInput = panel.querySelector('[data-attendance-config-input="endDate"]');
-  const stateNode = document.querySelector('[data-attendance-config-state]');
+  const applyBtn = panel.querySelector('[data-attendance-config-apply]');
   if (
     !(startInput instanceof HTMLInputElement) ||
     !(endInput instanceof HTMLInputElement)
@@ -3315,30 +3315,16 @@ const bindAttendanceConfig = () => {
     return;
   }
 
-  const setState = (state: 'idle' | 'saving' | 'saved' | 'error', message: string) => {
-    if (!(stateNode instanceof HTMLElement)) return;
-    stateNode.dataset.state = state;
-    stateNode.textContent = message;
-  };
-
-  let lastSerialized = JSON.stringify({
-    startDate: startInput.value,
-    endDate: endInput.value,
-  });
-
-  const submitConfig = debounce(async () => {
+  const applyConfig = async () => {
     const courseId = normalizeText(panel.getAttribute('data-course-id'));
     const year = normalizeText(panel.getAttribute('data-year'));
     if (!courseId || !year) return;
-    const serialized = JSON.stringify({
-      startDate: startInput.value,
-      endDate: endInput.value,
-    });
-    if (serialized === lastSerialized) return;
 
+    if (applyBtn instanceof HTMLButtonElement) applyBtn.disabled = true;
     startInput.disabled = true;
     endInput.disabled = true;
-    setState('saving', 'Guardando y reconstruyendo grilla...');
+    showToast('Guardando rango…', 'loading');
+
     try {
       const response = await fetch('/api/grade/course-attendance-config', {
         method: 'POST',
@@ -3351,27 +3337,26 @@ const bindAttendanceConfig = () => {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('No se pudo guardar la configuración de asistencia');
-      }
+      if (!response.ok) throw new Error('No se pudo guardar la configuración');
 
-      lastSerialized = serialized;
-      setState('saved', 'Fechas guardadas. Recargando...');
-      window.location.reload();
+      showToast('Rango guardado — recargando grilla…', 'success');
+      setTimeout(() => window.location.reload(), 1200);
     } catch (error: any) {
       console.error('Error saving attendance config:', error);
-      setState('error', error?.message || 'No se pudo guardar la configuración de asistencia');
+      showToast(error?.message || 'Error al guardar la configuración', 'error', 4000);
+      if (applyBtn instanceof HTMLButtonElement) applyBtn.disabled = false;
       startInput.disabled = false;
       endInput.disabled = false;
     }
-  }, 450);
-
-  const handleChange = () => {
-    submitConfig();
   };
 
-  startInput.addEventListener('change', handleChange);
-  endInput.addEventListener('change', handleChange);
+  if (applyBtn instanceof HTMLButtonElement) {
+    applyBtn.addEventListener('click', applyConfig);
+  }
+  // Also allow Enter key in either date input to apply
+  const onEnter = (e: KeyboardEvent) => { if (e.key === 'Enter') applyConfig(); };
+  startInput.addEventListener('keydown', onEnter);
+  endInput.addEventListener('keydown', onEnter);
 };
 
 const resolveDashboardShell = (root: HTMLElement) =>
