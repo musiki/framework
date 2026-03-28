@@ -801,6 +801,33 @@ details[open] > summary.conference-sidebar-heading::before {
   line-height: 1.4;
 }
 
+.conference-status-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--conference-bar-height) + 0.82rem);
+  z-index: 88;
+  width: fit-content;
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: 0.42rem 0.7rem 0.46rem;
+  border: 1px solid var(--conference-line);
+  background: rgba(0, 0, 0, 0.84);
+  color: color-mix(in srgb, var(--conference-fg) 78%, var(--conference-muted) 22%);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 0.35rem);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.conference-status-toast[data-visible='true'] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .conference-chat-toolbar {
   display: flex;
   align-items: center;
@@ -1359,6 +1386,11 @@ details[open] > summary.conference-sidebar-heading::before {
     border-top: 1px solid var(--conference-line);
   }
 
+  .conference-status-toast {
+    bottom: calc(var(--conference-bar-height) + var(--conference-sidebar-size) + 0.55rem);
+    max-width: min(28rem, calc(100vw - 1.2rem));
+  }
+
   .conference-sidebar-toggle {
     top: auto;
     bottom: calc(var(--conference-sidebar-size) + var(--conference-bar-height) - 11px);
@@ -1413,6 +1445,10 @@ details[open] > summary.conference-sidebar-heading::before {
   .conference-sidebar-toggle {
     display: none;
   }
+
+  .conference-status-toast {
+    bottom: calc(var(--conference-bar-height) + 0.6rem);
+  }
 }
 
 @media (max-width: 500px) {
@@ -1438,5 +1474,11 @@ details[open] > summary.conference-sidebar-heading::before {
     max-height: none;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.45rem;
+  }
+
+  .conference-status-toast {
+    bottom: calc(var(--conference-bar-height) + var(--conference-sidebar-size) + 0.45rem);
+    max-width: calc(100vw - 1rem);
+    padding-inline: 0.62rem;
   }
 }

@@ -10207,6 +10207,51 @@ a[node] -->|edge| b[hub]
         // Subscribe to a thread channel via Supabase Broadcast.
         // One lightweight WebSocket per page, swapped when the active thread changes.
 
+        function patchForumPostReactionSummary(postId, rawCounts) {
+          if (!(postListEl instanceof HTMLElement)) return;
+          const postSelector = `[data-post-id="${CSS.escape(String(postId || '').trim())}"]`;
+          const postEl = postListEl.querySelector(postSelector);
+          if (!(postEl instanceof HTMLElement)) return;
+
+          const reactionCounts = {
+            useful: Math.max(0, Number(rawCounts?.useful) || 0),
+            clarifies: Math.max(0, Number(rawCounts?.clarifies) || 0),
+            reference: Math.max(0, Number(rawCounts?.reference) || 0),
+          };
+
+          let hasVisibleSummary = false;
+          ['useful', 'clarifies', 'reference'].forEach((key) => {
+            const count = reactionCounts[key];
+            const countEl = postEl.querySelector(`[data-count-key="${key}"]`);
+            if (countEl instanceof HTMLElement) {
+              countEl.textContent = String(count);
+              const summaryItem = countEl.closest('.forum-post-reaction-item');
+              if (summaryItem instanceof HTMLElement) {
+                summaryItem.hidden = count <= 0;
+              }
+            }
+            if (count > 0) hasVisibleSummary = true;
+          });
+
+          const reactionGroup = postEl.querySelector('.forum-post-reactions');
+          if (reactionGroup instanceof HTMLElement) {
+            reactionGroup.hidden = !hasVisibleSummary;
+          }
+
+          const reactionMoreButton = postEl.querySelector('.forum-post-more-btn');
+          if (reactionMoreButton instanceof HTMLElement) {
+            reactionMoreButton.hidden = !hasVisibleSummary;
+          }
+
+          const replyButton = postEl.querySelector('.forum-post-reply-btn');
+          const actions = postEl.querySelector('.forum-post-actions');
+          if (actions instanceof HTMLElement) {
+            actions.hidden = !hasVisibleSummary && !(replyButton instanceof HTMLElement);
+          }
+
+          postEl.classList.toggle('forum-post-has-reaction-summary', hasVisibleSummary);
+        }
+
         /** @type {any} */
         let _forumRtChannel = null;
         /** @type {any} */
@@ -10256,13 +10301,14 @@ a[node] -->|edge| b[hub]
             void loadPosts(threadId);
           });
 
-          // Reaction update → re-fetch so summary chips appear/disappear consistently.
+          // Reaction update → patch only the affected post to avoid full-thread flicker.
           _forumRtChannel.on('broadcast', { event: 'forum_reaction_updated' }, ({ payload }) => {
             if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
             const postId = String(payload?.postId || '').trim();
-            if (!postId) return;
+            const counts = payload?.reactionCounts;
+            if (!postId || !counts || typeof counts !== 'object') return;
             invalidateForumPostsCache(threadId);
-            void loadPosts(threadId);
+            patchForumPostReactionSummary(postId, counts);
           });
 
           _forumRtChannel.subscribe();

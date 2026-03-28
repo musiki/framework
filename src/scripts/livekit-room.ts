@@ -4692,11 +4692,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   let _statusClearTimer: ReturnType<typeof setTimeout> | null = null;
   const setStatus = (message: string, autoClearMs = 4000) => {
+    if (!(statusNode instanceof HTMLElement)) return;
     statusNode.textContent = message;
+    statusNode.dataset.visible = message ? 'true' : 'false';
     if (_statusClearTimer) clearTimeout(_statusClearTimer);
     if (autoClearMs > 0 && message) {
       _statusClearTimer = setTimeout(() => {
+        if (!(statusNode instanceof HTMLElement)) return;
         statusNode.textContent = '';
+        statusNode.dataset.visible = 'false';
         _statusClearTimer = null;
       }, autoClearMs);
     }
