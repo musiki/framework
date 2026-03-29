@@ -2,18 +2,30 @@
 ---
 
 <details class="conference-sidebar-section conference-sidebar-section--instrument" open>
-  <summary class="conference-sidebar-heading">FM SYNTH</summary>
+  <summary class="conference-sidebar-heading">
+    <span class="conference-sidebar-heading-label">FM SYNTH</span>
+    <span class="conference-sidebar-heading-actions">
+      <button
+        type="button"
+        class="conference-sidebar-heading-toggle"
+        data-summary-action
+        data-hand-track-toggle
+        aria-label="Hand track"
+        title="Hand track"
+      >
+        <span class="conference-mixer-led conference-mixer-led--mute conference-sidebar-heading-led" aria-hidden="true">H</span>
+      </button>
+    </span>
+  </summary>
 
   <div class="conference-field conference-field--checkbox conference-field--hand-controls">
-    <label class="conference-checkbox-row" for="conference-hand-track-input">
-      <input
-        id="conference-hand-track-input"
-        name="hand-track"
-        type="checkbox"
-        data-hand-track-input
-      />
-      <span>Hand track</span>
-    </label>
+    <input
+      id="conference-hand-track-input"
+      name="hand-track"
+      type="checkbox"
+      data-hand-track-input
+      hidden
+    />
     <label class="conference-ramp-row" for="conference-hand-ramp-input">
       <span>Ramp</span>
       <input

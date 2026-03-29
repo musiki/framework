@@ -64,6 +64,54 @@ summary.conference-sidebar-heading {
   box-sizing: border-box;
 }
 
+.conference-sidebar-heading-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.conference-sidebar-heading-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.conference-sidebar-heading-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--conference-fg);
+  padding: 0;
+  margin: 0;
+  min-width: 14px;
+  min-height: 14px;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.conference-sidebar-heading-toggle:disabled {
+  cursor: default;
+}
+
+.conference-sidebar-heading-toggle:disabled .conference-mixer-led {
+  opacity: 0.16;
+  box-shadow: none;
+}
+
+.conference-sidebar-heading-toggle:hover .conference-sidebar-heading-led,
+.conference-sidebar-heading-toggle:focus-visible .conference-sidebar-heading-led {
+  opacity: 0.95;
+}
+
+.conference-sidebar-heading-toggle:focus-visible {
+  outline: none;
+}
+
+.conference-sidebar-heading-led {
+  width: 8px;
+  height: 8px;
+}
+
 summary.conference-sidebar-heading::-webkit-details-marker {
   display: none;
 }
@@ -557,7 +605,8 @@ details[open] > summary.conference-sidebar-heading::before {
 }
 
 .conference-mixer-channel-toggle[data-active='false'] .conference-mixer-led,
-.conference-mixer-fx-led-toggle[data-active='false'] .conference-mixer-led {
+.conference-mixer-fx-led-toggle[data-active='false'] .conference-mixer-led,
+.conference-sidebar-heading-toggle[data-active='false'] .conference-mixer-led {
   opacity: 0.2;
   box-shadow: none;
 }

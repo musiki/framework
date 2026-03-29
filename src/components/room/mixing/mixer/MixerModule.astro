@@ -4,7 +4,21 @@ import FxModule from '../../processors/audio/fx/FxModule.astro';
 
 <section class="conference-sidebar-section conference-sidebar-section--instrument conference-sidebar-section--mixer">
   <details class="conference-mixer-foldable" open>
-    <summary class="conference-sidebar-heading conference-mixer-summary">MIXER</summary>
+    <summary class="conference-sidebar-heading conference-mixer-summary">
+      <span class="conference-sidebar-heading-label">MIXER</span>
+      <span class="conference-sidebar-heading-actions">
+        <button
+          type="button"
+          class="conference-sidebar-heading-toggle"
+          data-summary-action
+          data-mixer-master-mute
+          aria-label="Mute master channel"
+          title="Mute master"
+        >
+          <span class="conference-mixer-led conference-mixer-led--mute conference-sidebar-heading-led" aria-hidden="true">M</span>
+        </button>
+      </span>
+    </summary>
     <div class="conference-mixer">
       <div class="conference-mixer-channel">
         <div class="conference-mixer-channel-label" data-mixer-reset-scope="synth" title="Double click to reset CH1">
@@ -520,15 +534,6 @@ import FxModule from '../../processors/audio/fx/FxModule.astro';
             data-mixer-master-gain
           />
         </div>
-        <button
-          type="button"
-          class="conference-mixer-channel-toggle"
-          data-mixer-master-mute
-          aria-label="Mute master channel"
-          title="Mute master"
-        >
-          <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
-        </button>
         <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
           <div
             class="conference-mixer-knob-control"

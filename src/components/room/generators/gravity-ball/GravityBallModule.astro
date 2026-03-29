@@ -2,18 +2,30 @@
 ---
 
 <details class="conference-sidebar-section conference-sidebar-section--instrument" open>
-  <summary class="conference-sidebar-heading">GRAVITY BALL</summary>
+  <summary class="conference-sidebar-heading">
+    <span class="conference-sidebar-heading-label">GRAVITY BALL</span>
+    <span class="conference-sidebar-heading-actions">
+      <button
+        type="button"
+        class="conference-sidebar-heading-toggle"
+        data-summary-action
+        data-gravity-ball-toggle
+        aria-label="Gravity ball"
+        title="Gravity ball"
+      >
+        <span class="conference-mixer-led conference-mixer-led--mute conference-sidebar-heading-led" aria-hidden="true">G</span>
+      </button>
+    </span>
+  </summary>
 
   <div class="conference-field conference-field--checkbox conference-field--hand-controls">
-    <label class="conference-checkbox-row" for="conference-gravity-ball-input">
-      <input
-        id="conference-gravity-ball-input"
-        name="gravity-ball"
-        type="checkbox"
-        data-gravity-ball-input
-      />
-      <span>Gravity ball</span>
-    </label>
+    <input
+      id="conference-gravity-ball-input"
+      name="gravity-ball"
+      type="checkbox"
+      data-gravity-ball-input
+      hidden
+    />
 
     <label class="conference-checkbox-row" for="conference-gravity-ball-mirror-input">
       <input

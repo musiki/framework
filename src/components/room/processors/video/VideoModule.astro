@@ -2,7 +2,21 @@
 ---
 
 <details class="conference-sidebar-section conference-sidebar-section--instrument conference-sidebar-section--video" open>
-  <summary class="conference-sidebar-heading">VIDEO</summary>
+  <summary class="conference-sidebar-heading">
+    <span class="conference-sidebar-heading-label">VIDEO</span>
+    <span class="conference-sidebar-heading-actions">
+      <button
+        type="button"
+        class="conference-sidebar-heading-toggle"
+        data-summary-action
+        data-video-bypass-toggle
+        aria-label="Video bypass"
+        title="Video bypass"
+      >
+        <span class="conference-mixer-led conference-mixer-led--mute conference-sidebar-heading-led" aria-hidden="true">B</span>
+      </button>
+    </span>
+  </summary>
 
   <div class="conference-video-module">
     <div class="conference-video-module-head">

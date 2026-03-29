@@ -199,6 +199,7 @@ type PersistedRoomSetup = {
   mixerSynthReverbSend?: number;
   mixerIncomingDelaySend?: number;
   mixerIncomingReverbSend?: number;
+  videoBypassed?: boolean;
   videoBrightness?: number;
   videoContrast?: number;
   videoLuma?: number;
@@ -377,13 +378,7 @@ const localCameraProcessorState = {
   blurEnabled: false,
   invertEnabled: false,
   overlayEnabled: false,
-  videoMix: {
-    brightness: 0,
-    contrast: 0,
-    luma: 0,
-    saturation: 0,
-    tint: 0,
-  } as VideoMixSettings,
+  videoMix: createNeutralVideoMix(),
 };
 const localCameraGravityBallStreamState: {
   canvas: HTMLCanvasElement | null;
@@ -491,6 +486,16 @@ const normalizeVideoMixValue = (value: unknown, fallback = 0) =>
 
 const hasActiveVideoMix = (settings: VideoMixSettings) =>
   Object.values(settings).some((entry) => Math.abs(entry) > 0.01);
+
+function createNeutralVideoMix(): VideoMixSettings {
+  return {
+    brightness: 0,
+    contrast: 0,
+    luma: 0,
+    saturation: 0,
+    tint: 0,
+  };
+}
 
 const SYNTH_BASE_MASTER_GAIN = 0.35;
 
@@ -3650,8 +3655,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const chatDownloadButton = root.querySelector('[data-action="chat-download"]');
   const raiseHandButton = root.querySelector('[data-action="raise-hand"]');
   const handTrackInput = root.querySelector('[data-hand-track-input]');
+  const handTrackToggleButton = root.querySelector('[data-hand-track-toggle]');
   const handRampInput = root.querySelector('[data-hand-ramp-input]');
   const gravityBallInput = root.querySelector('[data-gravity-ball-input]');
+  const gravityBallToggleButton = root.querySelector('[data-gravity-ball-toggle]');
   const gravityBallGravityInput = root.querySelector('[data-gravity-ball-gravity-input]');
   const gravityBallMirrorInput = root.querySelector('[data-gravity-ball-mirror-input]');
   const synthMappingResetButton = root.querySelector('[data-synth-mapping-reset]');
@@ -3752,9 +3759,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const mixerVideoContrastKnob = root.querySelector('[data-mixer-video-contrast-knob]');
   const mixerVideoBrightnessInput = root.querySelector('[data-mixer-video-brightness]');
   const mixerVideoBrightnessKnob = root.querySelector('[data-mixer-video-brightness-knob]');
+  const videoBypassToggleButton = root.querySelector('[data-video-bypass-toggle]');
   const mixerResetButtonNodes = Array.from(root.querySelectorAll('[data-mixer-reset-button]'));
   const mixerResetScopeNodes = Array.from(root.querySelectorAll('[data-mixer-reset-scope]'));
   const mixerResetControlNodes = Array.from(root.querySelectorAll('[data-mixer-reset-control]'));
+  const summaryActionButtons = Array.from(root.querySelectorAll('[data-summary-action]'));
   const synthReverbTimeInput = root.querySelector('[data-synth-reverb-time-input]');
   const synthReverbTimeOutput = root.querySelector('[data-synth-reverb-time-output]');
   const synthReverbMixInput = root.querySelector('[data-synth-reverb-mix-input]');
@@ -4109,6 +4118,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let mixerMasterGain = normalizeMasterGain(persistedSetup.mixerMasterGain, 1);
   let mixerMasterMuted = Boolean(persistedSetup.mixerMasterMuted);
   let mixerMasterPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerMasterPan) || 0));
+  let videoMixBypassed = Boolean(persistedSetup.videoBypassed);
   let videoMix = {
     brightness: normalizeVideoMixValue(persistedSetup.videoBrightness, 0),
     contrast: normalizeVideoMixValue(persistedSetup.videoContrast, 0),
@@ -4116,6 +4126,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     saturation: normalizeVideoMixValue(persistedSetup.videoSaturation, 0),
     tint: normalizeVideoMixValue(persistedSetup.videoTint, 0),
   } satisfies VideoMixSettings;
+  const getEffectiveVideoMix = (): VideoMixSettings =>
+    videoMixBypassed ? createNeutralVideoMix() : { ...videoMix };
   let mixerMeterAnimationId = 0;
   let synthControlRanges = readPersistedHandControlRanges(persistedSetup.synthControlRanges);
   let synthDelayTime = clampNumber(persistedSetup.delayTime, 0.05, 1.2, 0.38, 2);
@@ -4370,6 +4382,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     input.checked = !input.checked;
     input.dispatchEvent(new Event('change', { bubbles: true }));
   };
+
+  summaryActionButtons.forEach((node) => {
+    if (!(node instanceof HTMLButtonElement)) return;
+    node.addEventListener('pointerdown', (event) => {
+      event.stopPropagation();
+    });
+    node.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+  });
 
   const cycleVideoInput = () => {
     deviceController.cycleVideoInput();
@@ -5067,6 +5090,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (handTrackInput instanceof HTMLInputElement) {
       handTrackInput.checked = handTrackEnabled;
     }
+    if (handTrackToggleButton instanceof HTMLButtonElement) {
+      handTrackToggleButton.dataset.active = handTrackEnabled ? 'true' : 'false';
+      handTrackToggleButton.setAttribute('aria-pressed', handTrackEnabled ? 'true' : 'false');
+    }
   };
 
   const shouldRunHandTracking = () => handTrackEnabled || gravityBallEnabled;
@@ -5077,6 +5104,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     applyGravityBallStageVisibilityState();
     if (gravityBallInput instanceof HTMLInputElement) {
       gravityBallInput.checked = gravityBallEnabled;
+    }
+    if (gravityBallToggleButton instanceof HTMLButtonElement) {
+      gravityBallToggleButton.dataset.active = gravityBallEnabled ? 'true' : 'false';
+      gravityBallToggleButton.setAttribute('aria-pressed', gravityBallEnabled ? 'true' : 'false');
     }
     if (gravityBallGravityInput instanceof HTMLInputElement) {
       gravityBallGravityInput.value = gravityBallGravity.toFixed(2);
@@ -5153,8 +5184,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (handTrackInput instanceof HTMLInputElement) {
       handTrackInput.disabled = !instrumentsEnabled;
     }
+    if (handTrackToggleButton instanceof HTMLButtonElement) {
+      handTrackToggleButton.disabled = !instrumentsEnabled;
+    }
     if (gravityBallInput instanceof HTMLInputElement) {
       gravityBallInput.disabled = !instrumentsEnabled;
+    }
+    if (gravityBallToggleButton instanceof HTMLButtonElement) {
+      gravityBallToggleButton.disabled = !instrumentsEnabled;
     }
     if (gravityBallGravityInput instanceof HTMLInputElement) {
       gravityBallGravityInput.disabled = !instrumentsEnabled || !gravityBallEnabled;
@@ -6462,7 +6499,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const applyVideoMixerState = () => {
-    localCameraProcessorState.videoMix = { ...videoMix };
+    localCameraProcessorState.videoMix = videoMixBypassed ? createNeutralVideoMix() : { ...videoMix };
+    root.dataset.videoBypassed = videoMixBypassed ? 'true' : 'false';
 
     if (mixerVideoLumaInput instanceof HTMLInputElement) {
       mixerVideoLumaInput.value = videoMix.luma.toFixed(2);
@@ -6485,6 +6523,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     syncValueKnob(mixerVideoSaturationKnob, mixerVideoSaturationInput, videoMix.saturation);
     syncValueKnob(mixerVideoContrastKnob, mixerVideoContrastInput, videoMix.contrast);
     syncValueKnob(mixerVideoBrightnessKnob, mixerVideoBrightnessInput, videoMix.brightness);
+    if (videoBypassToggleButton instanceof HTMLButtonElement) {
+      videoBypassToggleButton.dataset.active = videoMixBypassed ? 'false' : 'true';
+      videoBypassToggleButton.setAttribute('aria-pressed', videoMixBypassed ? 'true' : 'false');
+    }
   };
 
   const setMixerMeterLevel = (meter: Element | null, level: number) => {
@@ -7211,6 +7253,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mixerSynthMuted,
       mixerSynthPan,
       mixerSynthReverbSend,
+      videoBypassed: videoMixBypassed,
       videoBrightness: videoMix.brightness,
       videoContrast: videoMix.contrast,
       videoLuma: videoMix.luma,
@@ -8855,7 +8898,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       handTrackEnabled,
       previewBlur,
       previewInvert,
-      videoMix,
+      videoMix: getEffectiveVideoMix(),
     });
 
     if (!sourceTrack || !shouldProcessVideo) {
@@ -9124,7 +9167,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       handTrackEnabled,
       previewBlur,
       previewInvert,
-      videoMix,
+      videoMix: getEffectiveVideoMix(),
     });
     const isProcessed = Boolean(localPreviewStreamMount?.processed);
 
@@ -10812,6 +10855,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
+  if (handTrackToggleButton instanceof HTMLButtonElement) {
+    handTrackToggleButton.addEventListener('click', () => {
+      toggleCheckboxInput(handTrackInput);
+    });
+  }
+
   if (gravityBallInput instanceof HTMLInputElement) {
     gravityBallInput.addEventListener('change', () => {
       if (!canUseInstruments()) {
@@ -10838,6 +10887,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       stopHandTracking();
+    });
+  }
+
+  if (gravityBallToggleButton instanceof HTMLButtonElement) {
+    gravityBallToggleButton.addEventListener('click', () => {
+      toggleCheckboxInput(gravityBallInput);
     });
   }
 
@@ -11135,6 +11190,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
+  if (videoBypassToggleButton instanceof HTMLButtonElement) {
+    videoBypassToggleButton.addEventListener('click', () => {
+      videoMixBypassed = !videoMixBypassed;
+      void handleVideoMixerInput();
+    });
+  }
+
   const resetMixerScope = (scope: string) => {
     if (scope === 'synth') {
       mixerSynthPan = 0;
@@ -11183,13 +11245,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     if (scope === 'video') {
-      videoMix = {
-        brightness: 0,
-        contrast: 0,
-        luma: 0,
-        saturation: 0,
-        tint: 0,
-      };
+      videoMix = createNeutralVideoMix();
       void handleVideoMixerInput();
       setStatus('Video reset.');
     }

@@ -4265,6 +4265,10 @@ if (
       position: fixed;
       inset: auto 0 0 0;
       display: flex;
+      min-height: var(--conference-bar-height);
+      height: var(--conference-bar-height);
+      grid-template-columns: none;
+      grid-template-rows: none;
       align-items: stretch;
       overflow-x: auto;
       overflow-y: hidden;
@@ -4278,6 +4282,8 @@ if (
 
     .conference-bar-group {
       flex: 0 0 auto;
+      min-height: var(--conference-bar-height);
+      height: var(--conference-bar-height);
       border-right: 1px solid var(--conference-line);
       border-top: 0;
     }
@@ -4293,8 +4299,11 @@ if (
     }
 
     .conference-connect-button {
-      min-width: 50px;
-      padding: 0 0.7rem;
+      width: var(--conference-bar-height);
+      min-width: var(--conference-bar-height);
+      height: var(--conference-bar-height);
+      min-height: var(--conference-bar-height);
+      padding: 0;
     }
 
     .conference-icon-button,
@@ -4302,13 +4311,19 @@ if (
     .conference-share-button,
     .conference-record-button,
     .conference-exit-button {
-      min-width: 34px;
-      padding: 0 0.48rem;
+      width: var(--conference-bar-height);
+      min-width: var(--conference-bar-height);
+      height: var(--conference-bar-height);
+      min-height: var(--conference-bar-height);
+      padding: 0;
     }
 
     .conference-count-button {
-      min-width: 32px;
-      padding: 0 0.4rem;
+      width: var(--conference-bar-height);
+      min-width: var(--conference-bar-height);
+      height: var(--conference-bar-height);
+      min-height: var(--conference-bar-height);
+      padding: 0;
     }
 
     .conference-layout-button,
