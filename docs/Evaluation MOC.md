@@ -101,7 +101,7 @@ Campos relevantes:
 - beacon global con countdown,
 - resultados agregados en tiempo real.
 
-Ver detalle completo en: [Evaluation.realtimeInClass](./Evaluation.realtimeInClass.md)
+Ver detalle completo en: [Evaluation.realtimeInClass](Evaluation.realtimeInClass.md)
 
 ## 7. Métricas mínimas
 
@@ -141,7 +141,7 @@ Ver detalle completo en: [Evaluation.realtimeInClass](./Evaluation.realtimeInCla
 
 ## 10. Notas vinculadas
 
-- [Evaluation.realtimeInClass](./Evaluation.realtimeInClass.md)
-- [live-events-protocol](./live-events-protocol.md)
+- [Evaluation.realtimeInClass](Evaluation.realtimeInClass.md)
+- [live-events-protocol](live-events-protocol.md)
 - [Evaluation ollama-migration](Evaluation%20ollama-migration.md)
-- [phase2-mcq-checklist](./phase2-mcq-checklist.md)
+- [phase2-mcq-checklist](phase2-mcq-checklist.md)

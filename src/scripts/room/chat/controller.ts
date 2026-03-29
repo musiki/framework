@@ -392,6 +392,7 @@ export const createRoomChatController = ({
     });
 
     chatInput.addEventListener('keydown', (event) => {
+      if (!(event instanceof KeyboardEvent)) return;
       if (event.key !== 'Enter' || event.shiftKey) return;
       event.preventDefault();
       void sendMessage();

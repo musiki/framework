@@ -146,6 +146,55 @@ if (
       <button type="button" class="conference-layout-button" data-layout-choice="grid">G</button>
       <button type="button" class="conference-layout-button conference-chat-focus-btn" data-action="chat-focus" title="Chat">C<span class="conference-chat-unread-dot" data-chat-unread hidden></span></button>
 
+      <div class="conference-external-media-controls-shell" data-external-media-controls-shell hidden>
+        <button
+          type="button"
+          class="conference-layout-button conference-external-media-btn"
+          data-action="external-media-toggle"
+          data-external-media-btn
+          title="External Media Session"
+          aria-label="External Media Session"
+        >E</button>
+        <div class="conference-external-media-popup" data-external-media-popup hidden>
+          <div class="conference-break-rooms-panel conference-external-media-panel">
+            <div class="conference-break-rooms-section">
+              <label class="conference-sr-only" for="conference-external-media-input">Link multimedia</label>
+              <input
+                id="conference-external-media-input"
+                type="text"
+                class="conference-break-rooms-custom-name conference-external-media-input"
+                placeholder="YouTube URL o búsqueda"
+                data-external-media-input
+                inputmode="search"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div class="conference-session-action-row conference-external-media-actions-row">
+                <button
+                  type="button"
+                  class="conference-session-action conference-session-action--compact"
+                  data-action="external-media-open"
+                  title="Abrir media externa"
+                  aria-label="Abrir media externa"
+                >O</button>
+                <button
+                  type="button"
+                  class="conference-session-action conference-session-action--compact"
+                  data-action="external-media-stop"
+                  title="Cerrar media externa"
+                  aria-label="Cerrar media externa"
+                >C</button>
+              </div>
+              <div class="conference-external-media-results" data-external-media-results hidden></div>
+            </div>
+
+            <p class="conference-room-note conference-external-media-note" data-external-media-status>
+              Pega un link o escribe para buscar en YouTube.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div class="conference-break-rooms-shell" data-break-rooms-shell hidden>
         <button
           type="button"
@@ -917,6 +966,7 @@ if (
   .conference-shell {
     /* ── Layout metrics ───────────────────────────────────────────────── */
     --conference-bar-height: 42px;
+    --conference-bar-stack-height: var(--conference-bar-height);
     --conference-sidebar-size: clamp(300px, 22vw, 420px);
     --conference-instruments-size: clamp(320px, 24vw, 400px);
     /* ── Typography scale ─────────────────────────────────────────────── */
@@ -953,7 +1003,7 @@ if (
     background: #000;
     color: var(--conference-fg);
     overflow: hidden;
-    padding-bottom: var(--conference-bar-height);
+    padding-bottom: var(--conference-bar-stack-height);
   }
 
   /* global.css resets button/input font-size to 1rem; undo that inside the shell */
@@ -992,13 +1042,13 @@ if (
   .conference-sidebar {
     min-width: 0;
     min-height: 0;
-    height: calc(100vh - var(--conference-bar-height));
-    height: calc(100dvh - var(--conference-bar-height));
+    height: calc(100vh - var(--conference-bar-stack-height));
+    height: calc(100dvh - var(--conference-bar-stack-height));
   }
 
   .conference-instruments-sidebar {
     position: absolute;
-    inset: 0 auto var(--conference-bar-height) 0 !important;
+    inset: 0 auto var(--conference-bar-stack-height) 0 !important;
     z-index: 18;
     width: var(--conference-instruments-size);
     min-width: 0;
@@ -2634,10 +2684,155 @@ if (
     align-items: center;
     justify-content: center;
   }
+  .conference-external-media-controls-shell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
   .conference-break-rooms-shell[hidden],
+  .conference-external-media-controls-shell[hidden],
   .conference-break-rooms-end-btn[hidden],
   .conference-break-rooms-kill-btn[hidden] {
     display: none;
+  }
+
+  .conference-external-media-controls-shell[data-active='true'] .conference-external-media-btn {
+    color: rgba(143, 227, 255, 0.92);
+  }
+
+  .conference-external-media-popup {
+    position: absolute;
+    bottom: calc(100% + 1px);
+    left: 0;
+    min-width: 248px;
+    max-width: 320px;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.98);
+    z-index: 60;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .conference-external-media-popup[hidden] {
+    display: none;
+  }
+
+  .conference-external-media-input {
+    min-width: 14rem;
+  }
+
+  .conference-external-media-actions-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .conference-external-media-results {
+    display: grid;
+    gap: 0.22rem;
+    max-height: min(42vh, 320px);
+    overflow-y: auto;
+    padding-right: 0.1rem;
+  }
+
+  .conference-external-media-results[hidden] {
+    display: none;
+  }
+
+  .conference-external-media-result {
+    width: 100%;
+    border: 1px solid var(--conference-line);
+    background: rgba(0, 0, 0, 0.72);
+    color: inherit;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 0.55rem;
+    align-items: center;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .conference-external-media-result:hover {
+    border-color: rgba(143, 227, 255, 0.34);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .conference-external-media-result-thumb {
+    width: 72px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    background: rgba(255, 255, 255, 0.03);
+    border: 0;
+  }
+
+  .conference-external-media-result-meta {
+    min-width: 0;
+    display: grid;
+    gap: 0.14rem;
+    padding: 0.38rem 0.42rem 0.38rem 0;
+  }
+
+  .conference-external-media-result-title {
+    min-width: 0;
+    color: var(--conference-fg);
+    font-size: 0.7rem;
+    line-height: 1.25;
+    letter-spacing: 0.01em;
+  }
+
+  .conference-external-media-result-subtitle {
+    min-width: 0;
+    color: var(--conference-muted);
+    font-size: 0.55rem;
+    line-height: 1.25;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .conference-external-media-results-empty {
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    padding: 0.65rem 0.72rem;
+    color: var(--conference-muted);
+    font-size: 0.58rem;
+    line-height: 1.45;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .conference-session-action[data-action='external-media-open'] {
+    border-color: rgba(143, 227, 255, 0.36);
+    color: rgba(160, 232, 255, 0.76);
+  }
+
+  .conference-session-action[data-action='external-media-open']:hover {
+    border-color: rgba(143, 227, 255, 0.72);
+    color: rgba(214, 248, 255, 0.98);
+    background: rgba(42, 122, 145, 0.08);
+  }
+
+  .conference-session-action[data-action='external-media-stop'] {
+    border-color: rgba(240, 100, 100, 0.34);
+    color: rgba(255, 170, 170, 0.7);
+  }
+
+  .conference-session-action[data-action='external-media-stop']:hover {
+    border-color: rgba(240, 100, 100, 0.68);
+    color: rgba(255, 205, 205, 0.94);
+    background: rgba(140, 52, 52, 0.08);
+  }
+
+  .conference-external-media-note {
+    margin: 0;
+    color: var(--conference-muted);
+    font-size: 0.58rem;
+    letter-spacing: 0.06em;
+    line-height: 1.45;
+    text-transform: uppercase;
   }
 
   /* B active = yellow when break rooms are active */
@@ -3855,12 +4050,12 @@ if (
     }
 
     .conference-stage-frame {
-      height: calc(100vh - var(--conference-sidebar-size) - var(--conference-bar-height));
-      height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));
+      height: calc(100vh - var(--conference-sidebar-size) - var(--conference-bar-stack-height));
+      height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-stack-height));
     }
 
     .conference-instruments-sidebar {
-      inset: 0 auto calc(var(--conference-sidebar-size) + var(--conference-bar-height)) 0;
+      inset: 0 auto calc(var(--conference-sidebar-size) + var(--conference-bar-stack-height)) 0;
       width: min(82vw, var(--conference-instruments-size));
     }
 
@@ -3875,8 +4070,8 @@ if (
 
     .conference-stage-frame,
     .conference-sidebar {
-      height: calc(100vh - var(--conference-bar-height));
-      height: calc(100dvh - var(--conference-bar-height));
+      height: calc(100vh - var(--conference-bar-stack-height));
+      height: calc(100dvh - var(--conference-bar-stack-height));
     }
 
     .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
@@ -3893,40 +4088,102 @@ if (
     }
   }
 
-  @media (max-width: 760px) {
+  @media (max-width: 1000px) {
     .conference-shell {
-      grid-template-rows: minmax(0, 1fr);
-      padding-bottom: 0;
-    }
-
-    .conference-stage-frame,
-    .conference-sidebar {
-      height: auto;
+      --conference-bar-stack-height: calc(var(--conference-bar-height) * 2);
     }
 
     .conference-instruments-sidebar {
-      inset: 0 auto var(--conference-bar-height) 0;
       width: min(88vw, var(--conference-instruments-size));
     }
 
     .conference-bottombar {
-      position: static;
-      grid-template-columns: 1fr;
+      grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+      grid-template-rows: repeat(2, minmax(0, var(--conference-bar-height)));
+      min-height: calc(var(--conference-bar-height) * 2);
     }
 
     .conference-bar-group {
-      border-right: 0;
+      min-height: var(--conference-bar-height);
+      flex-wrap: nowrap;
       border-top: 1px solid var(--conference-line);
-      flex-wrap: wrap;
+    }
+
+    .conference-bar-group--session {
+      grid-column: 1;
+      grid-row: 1;
+      border-top: 0;
+    }
+
+    .conference-bar-group--instrument {
+      grid-column: 2;
+      grid-row: 1;
+      border-top: 0;
+    }
+
+    .conference-bar-group--layout {
+      grid-column: 3 / 5;
+      grid-row: 1;
+      border-top: 0;
+    }
+
+    .conference-bar-group--controls {
+      grid-column: 5;
+      grid-row: 1;
+      border-top: 0;
+      border-right: 0;
     }
 
     .conference-bar-group--presentation {
-      padding: 0.2rem 0.65rem;
+      grid-column: 4;
+      grid-row: 2;
+      padding: 0 0.5rem;
+      justify-self: end;
     }
 
     .conference-bar-group--presentation select {
-      min-width: 0;
-      width: 100%;
+      min-width: min(100%, 12rem);
+      width: min(12rem, 100%);
+    }
+
+    .conference-bar-group--exit {
+      grid-column: 5;
+      grid-row: 2;
+      border-right: 0;
+      justify-content: flex-end;
+    }
+
+    .conference-connect-button {
+      min-width: 50px;
+      padding: 0 0.72rem;
+    }
+
+    .conference-icon-button,
+    .conference-layout-button,
+    .conference-share-button,
+    .conference-record-button,
+    .conference-exit-button {
+      min-width: 36px;
+      padding: 0 0.52rem;
+    }
+
+    .conference-count-button {
+      min-width: 32px;
+      padding: 0 0.42rem;
+    }
+
+    .conference-layout-button,
+    .conference-share-button,
+    .conference-exit-button,
+    .conference-live-timer,
+    .conference-session-timer {
+      font-size: 0.68rem;
+      letter-spacing: 0.09em;
+    }
+
+    .conference-session-timer {
+      min-width: 4.95rem;
+      padding: 0 0.42rem;
     }
 
     .conference-device-panel {
@@ -3939,18 +4196,19 @@ if (
   @media (max-width: 500px) {
     .conference-shell {
       --conference-bar-height: 44px;
+      --conference-bar-stack-height: var(--conference-bar-height);
       --conference-sidebar-size: clamp(180px, 34dvh, 260px);
       grid-template-columns: 1fr;
       grid-template-rows: minmax(0, 1fr) var(--conference-sidebar-size);
-      padding-bottom: var(--conference-bar-height);
+      padding-bottom: var(--conference-bar-stack-height);
     }
 
     .conference-stage-frame {
-      height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));
+      height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-stack-height));
     }
 
     .conference-instruments-sidebar {
-      inset: 0 0 var(--conference-bar-height) 0;
+      inset: 0 0 var(--conference-bar-stack-height) 0;
       width: 100vw;
       width: 100dvw;
       border-right: 0;

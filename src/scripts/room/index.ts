@@ -2,6 +2,7 @@
 export { mountLiveKitRoom } from './core';
 export { createRoomChatController } from './chat';
 export { normalizePreviewZoom, normalizeText } from './core/normalize';
+export { createRoomDeviceSelectController, createRoomMicMeterController } from './devices';
 export { buildRoomQueryUrl } from './layout';
 export { createRoomNotesController } from './notes';
 export {
@@ -46,6 +47,7 @@ export type {
   SlideState,
 } from './session';
 export type { RoomChatController } from './chat';
+export type { DevicePanelKind, RoomDeviceSelectController, RoomMicMeterController } from './devices';
 export type { RoomNotesController } from './notes';
 export type {
   MediaMount,

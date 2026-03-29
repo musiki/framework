@@ -2,6 +2,7 @@
 
 - `core`: entrypoints y contratos base.
 - `chat`: composer, transcript, unread state y rendering del chat.
+- `devices`: selectors de dispositivos, paneles de setup y mic meter.
 - `generators`: runtime de fuentes performativas.
 - `processors`: runtime de audio y video processing.
 - `mixing`: mezcla, buses y master.

@@ -177,7 +177,7 @@ Fallback REST:
 - `GET /api/live/active?courseId=...`
 
 Documento técnico detallado:
-- [live-events-protocol](./live-events-protocol.md)
+- [live-events-protocol](live-events-protocol.md)
 
 ## 9. Modos operativos sugeridos
 

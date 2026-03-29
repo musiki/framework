@@ -15,6 +15,7 @@ import { formatCountdown, getRemainingMs } from '../lib/live/countdown.mjs';
 import { normalizeLayoutMode, setLayout } from './layout-controller';
 import { createPresentationController } from './presentation';
 import { createRoomChatController } from './room/chat';
+import { createRoomDeviceSelectController, createRoomMicMeterController } from './room/devices';
 import { createRoomNotesController } from './room/notes';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { buildRoomQueryUrl } from './room/layout';
@@ -47,6 +48,8 @@ import {
   type ScreenCardRefs,
 } from './room/participants';
 import {
+  type ExternalMediaPlaybackState,
+  type ExternalMediaProvider,
   MESSAGE_TOPIC,
   REACTION_EMOJIS,
   REACTION_SHORTCUTS_BY_CODE,
@@ -80,6 +83,62 @@ type LocalPreviewStreamMount = {
   sourceStream?: MediaStream;
   stream: MediaStream;
   wrapper: HTMLElement;
+};
+
+type ExternalMediaSessionState = {
+  currentTime: number;
+  mediaId: string;
+  playbackState: ExternalMediaPlaybackState;
+  provider: ExternalMediaProvider;
+  sourceUrl: string;
+  title: string;
+};
+
+type ExternalMediaSearchResult = {
+  channelTitle: string;
+  mediaId: string;
+  publishedAt: string;
+  thumbnailUrl: string;
+  title: string;
+};
+
+type YouTubePlayerStateChangeEvent = {
+  data: number;
+  target: YouTubePlayer;
+};
+
+type YouTubePlayer = {
+  destroy: () => void;
+  getCurrentTime: () => number;
+  getPlayerState: () => number;
+  getVideoData: () => { title?: string; video_id?: string };
+  loadVideoById: (videoId: string, startSeconds?: number) => void;
+  pauseVideo: () => void;
+  playVideo: () => void;
+  seekTo: (seconds: number, allowSeekAhead?: boolean) => void;
+};
+
+type YouTubePlayerCtor = new (
+  element: HTMLElement,
+  options: {
+    events?: {
+      onReady?: () => void;
+      onStateChange?: (event: YouTubePlayerStateChangeEvent) => void;
+    };
+    height?: string;
+    playerVars?: Record<string, number | string>;
+    videoId: string;
+    width?: string;
+  },
+) => YouTubePlayer;
+
+type YouTubeWindow = Window & {
+  YT?: {
+    Player: YouTubePlayerCtor;
+    PlayerState?: Record<string, number>;
+  };
+  __musikiYouTubeApiPromise?: Promise<YouTubePlayerCtor>;
+  onYouTubeIframeAPIReady?: () => void;
 };
 
 type WebkitDocument = Document & {
@@ -1287,9 +1346,6 @@ const readPresentationPageSlug = (href: string | null | undefined) => {
   }
 };
 
-const fallbackDeviceLabel = (kind: 'audioinput' | 'videoinput', index: number) =>
-  kind === 'audioinput' ? `Microfono ${index + 1}` : `Camara ${index + 1}`;
-
 const formatElapsedTime = (elapsedMs: number) => {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -1301,44 +1357,94 @@ const formatElapsedTime = (elapsedMs: number) => {
     .join(':');
 };
 
-const populateDeviceSelect = ({
-  activeDeviceId,
-  devices,
-  emptyLabel,
-  kind,
-  select,
-}: {
-  activeDeviceId?: string;
-  devices: MediaDeviceInfo[];
-  emptyLabel: string;
-  kind: 'audioinput' | 'videoinput';
-  select: HTMLSelectElement;
-}) => {
-  const previousValue = normalizeText(select.value);
-  select.innerHTML = '';
+const buildYouTubeEmbedUrl = (mediaId: string) => {
+  const normalizedMediaId = normalizeText(mediaId);
+  if (!normalizedMediaId) return '';
 
-  if (devices.length === 0) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = emptyLabel;
-    select.appendChild(option);
-    return;
+  const embedUrl = new URL(`https://www.youtube-nocookie.com/embed/${normalizedMediaId}`);
+  embedUrl.searchParams.set('enablejsapi', '1');
+  embedUrl.searchParams.set('playsinline', '1');
+  embedUrl.searchParams.set('rel', '0');
+  embedUrl.searchParams.set('modestbranding', '1');
+  embedUrl.searchParams.set('origin', window.location.origin);
+  return embedUrl.toString();
+};
+
+const normalizeYouTubeMediaUrl = (rawUrl: string): { mediaId: string; sourceUrl: string } | null => {
+  const normalizedUrl = normalizeText(rawUrl);
+  if (!normalizedUrl) return null;
+
+  try {
+    const url = new URL(normalizedUrl, window.location.origin);
+    const host = url.hostname.toLowerCase();
+    const isYouTube =
+      host.includes('youtube.com') ||
+      host.includes('youtu.be') ||
+      host.includes('youtube-nocookie.com');
+
+    if (!isYouTube) return null;
+
+    let mediaId = '';
+    if (host.includes('youtu.be')) {
+      mediaId = normalizeText(url.pathname.split('/').filter(Boolean)[0]);
+    } else if (url.pathname.startsWith('/embed/')) {
+      mediaId = normalizeText(url.pathname.split('/').filter(Boolean)[1]);
+    } else if (url.pathname.startsWith('/shorts/')) {
+      mediaId = normalizeText(url.pathname.split('/').filter(Boolean)[1]);
+    } else {
+      mediaId = normalizeText(url.searchParams.get('v'));
+    }
+
+    if (!mediaId) return null;
+
+    return {
+      mediaId,
+      sourceUrl: buildYouTubeEmbedUrl(mediaId),
+    };
+  } catch {
+    return null;
   }
+};
 
-  devices.forEach((device, index) => {
-    const option = document.createElement('option');
-    option.value = device.deviceId;
-    option.textContent = normalizeText(device.label) || fallbackDeviceLabel(kind, index);
-    select.appendChild(option);
+const loadYouTubePlayerApi = async (): Promise<YouTubePlayerCtor> => {
+  const youtubeWindow = window as YouTubeWindow;
+  if (youtubeWindow.YT?.Player) return youtubeWindow.YT.Player;
+  if (youtubeWindow.__musikiYouTubeApiPromise) return youtubeWindow.__musikiYouTubeApiPromise;
+
+  youtubeWindow.__musikiYouTubeApiPromise = new Promise<YouTubePlayerCtor>((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>('script[src="https://www.youtube.com/iframe_api"]');
+    const previousReady = youtubeWindow.onYouTubeIframeAPIReady;
+
+    youtubeWindow.onYouTubeIframeAPIReady = () => {
+      previousReady?.();
+      if (youtubeWindow.YT?.Player) {
+        resolve(youtubeWindow.YT.Player);
+      } else {
+        reject(new Error('YouTube iframe API did not initialize.'));
+      }
+    };
+
+    if (existingScript) {
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    script.async = true;
+    script.onerror = () => {
+      reject(new Error('Could not load the YouTube iframe API.'));
+    };
+    document.head.appendChild(script);
   });
 
-  const preferredValue = [activeDeviceId, previousValue, devices[0]?.deviceId]
-    .map((value) => normalizeText(value))
-    .find((value) => value && devices.some((device) => device.deviceId === value));
+  return youtubeWindow.__musikiYouTubeApiPromise;
+};
 
-  if (preferredValue) {
-    select.value = preferredValue;
-  }
+const readYouTubePlaybackState = (player: YouTubePlayer | null): ExternalMediaPlaybackState => {
+  const state = Number(player?.getPlayerState?.() ?? -1);
+  if (state === 1) return 'playing';
+  if (state === 0) return 'ended';
+  return 'paused';
 };
 
 const isLocalCameraTrackLike = (value: unknown): value is LocalCameraTrackLike =>
@@ -3563,6 +3669,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const breakRoomsBBtn = root.querySelector('[data-break-rooms-btn]');
   const breakRoomsEndBtn = root.querySelector('[data-break-rooms-end-btn]');
   const breakRoomsKillBtn = root.querySelector('[data-break-rooms-kill-btn]');
+  const externalMediaControlsShell = root.querySelector('[data-external-media-controls-shell]');
+  const externalMediaBtn = root.querySelector('[data-external-media-btn]');
+  const externalMediaPopup = root.querySelector('[data-external-media-popup]');
+  const externalMediaInput = root.querySelector('[data-external-media-input]');
+  const externalMediaOpenButton = root.querySelector('[data-action="external-media-open"]');
+  const externalMediaResults = root.querySelector('[data-external-media-results]');
+  const externalMediaStatus = root.querySelector('[data-external-media-status]');
+  const externalMediaStage = root.querySelector('[data-external-media-stage]');
+  const externalMediaPlayerHost = root.querySelector('[data-external-media-player-host]');
+  const externalMediaEmpty = root.querySelector('[data-external-media-empty]');
+  const externalMediaTitle = root.querySelector('[data-external-media-title]');
+  const externalMediaProviderLabel = root.querySelector('[data-external-media-provider-label]');
+  const externalMediaPlayToggleButtons = Array.from(
+    root.querySelectorAll('[data-action="external-media-play-toggle"]'),
+  );
+  const externalMediaCloseButtons = Array.from(
+    root.querySelectorAll('[data-action="external-media-close"], [data-action="external-media-stop"]'),
+  );
   const brCountdownEl = root.querySelector('[data-br-countdown]');
   const brCountdownText = root.querySelector('[data-br-countdown-text]');
   const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
@@ -3827,7 +3951,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let destroyed = false;
   let localRole = normalizeRole(roleInput.value);
   let pendingPresentationTask = 0;
-  let activeDevicePanel: 'audio' | 'video' | null = null;
   let preferredAudioInputId = normalizeText(persistedSetup.preferredAudioInputId) || normalizeText(audioInputSelect?.value);
   let preferredVideoInputId = normalizeText(persistedSetup.preferredVideoInputId) || normalizeText(videoInputSelect?.value);
   let focusedParticipantIdentity = '';
@@ -3840,6 +3963,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let rawTrackingVideo: HTMLVideoElement | null = null;
   let layoutBeforeAutoScreenshare = normalizeLayoutMode(layoutInput.value);
   let autoSwitchedToScreenshare = false;
+  let screenshareWasActive = false;
   let currentSlideState: SlideState | null = null;
   let pendingRemoteSlideState: SlideState | null = null;
   let lastPublishedSlideKey = '';
@@ -3869,13 +3993,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let disconnectedPreviewSourceVideo: HTMLVideoElement | null = null;
   let reverseMicKeyActive = false;
   let reverseMicRestoreState: boolean | null = null;
-  let micMeterAnimationId = 0;
-  let micMeterAudioContext: AudioContext | null = null;
-  let micMeterAnalyser: AnalyserNode | null = null;
-  let micMeterData: Uint8Array | null = null;
-  let micMeterSource: MediaStreamAudioSourceNode | null = null;
-  let micMeterTrackId = '';
-  let micMeterGeneration = 0;
   let localHandRaised = false;
   let previewZoom = normalizePreviewZoom(
     previewZoomInput instanceof HTMLInputElement
@@ -3917,6 +4034,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let sessionAllowsInstruments = true;
   let sidebarCollapsed = root.dataset.sidebarCollapsed === 'true';
   let graphVisible = false;
+  let externalMediaSession: ExternalMediaSessionState | null = null;
+  let externalMediaPlayer: YouTubePlayer | null = null;
+  let externalMediaPlayerReady = false;
+  let externalMediaSyncIntervalId = 0;
+  let externalMediaApplyingRemoteState = false;
+  let externalMediaLastBroadcastAt = 0;
+  let externalMediaStatusClearTimer: number | null = null;
+  let externalMediaSearchDebounceId = 0;
+  let externalMediaSearchRequestId = 0;
+  let externalMediaSearchLoading = false;
+  let externalMediaSearchQuery = '';
+  let externalMediaSearchResultsState: ExternalMediaSearchResult[] = [];
   let handTrackingAnimationId = 0;
   let handTrackingGeneration = 0;
   let handTrackingLandmarker: VisionHandLandmarker | null = null;
@@ -4015,6 +4144,77 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     gravityBallRenderer.setEnvCanvases([stageHandOverlay]);
   }
   localCameraGravityBallStreamState.enabled = gravityBallEnabled;
+
+  const deviceController = createRoomDeviceSelectController({
+    audioInputPanel: audioInputPanel instanceof HTMLElement ? audioInputPanel : null,
+    audioInputSelects,
+    getActiveAudioDeviceId: () => normalizeText(room.getActiveDevice('audioinput')),
+    getActiveVideoDeviceId: () => normalizeText(room.getActiveDevice('videoinput')),
+    getPreferredAudioInputId: () => preferredAudioInputId,
+    getPreferredVideoInputId: () => preferredVideoInputId,
+    onAudioInputChange: async (nextDeviceId) => {
+      preferredAudioInputId = nextDeviceId;
+      persistSetupState();
+
+      try {
+        await room.switchActiveDevice('audioinput', nextDeviceId);
+        await deviceController.refreshOptions(false);
+      } catch (error) {
+        setStatus(
+          room.state === ConnectionState.Connected
+            ? safeErrorMessage(error)
+            : 'Microfono preferido listo para la proxima conexion.',
+        );
+      }
+    },
+    onVideoInputChange: async (nextDeviceId) => {
+      preferredVideoInputId = nextDeviceId;
+      releaseRawTrackingSource();
+      persistSetupState();
+
+      if (room.state === ConnectionState.Disconnected) {
+        if (!disconnectedCameraPreviewEnabled) {
+          setStatus('Camara preferida lista para la proxima conexion.');
+          setControlState();
+          return;
+        }
+
+        try {
+          await enableDisconnectedCameraPreview();
+          setControlState();
+        } catch (error) {
+          disableDisconnectedCameraPreview();
+          setStatus(safeErrorMessage(error));
+          setControlState();
+        }
+        return;
+      }
+
+      try {
+        await room.switchActiveDevice('videoinput', nextDeviceId);
+        if (shouldRunHandTracking()) {
+          await ensureRawTrackingVideo().catch(() => undefined);
+        }
+        await syncLocalBackgroundBlurProcessor().catch(() => undefined);
+        await deviceController.refreshOptions(false);
+      } catch (error) {
+        setStatus(
+          room.state === ConnectionState.Connected
+            ? safeErrorMessage(error)
+            : 'Camara preferida lista para la proxima conexion.',
+        );
+      }
+    },
+    syncControlState: () => {
+      setControlState();
+    },
+    videoInputPanel: videoInputPanel instanceof HTMLElement ? videoInputPanel : null,
+    videoInputSelects,
+  });
+
+  const micMeterController = createRoomMicMeterController({
+    micMeter: micMeter instanceof HTMLElement ? micMeter : null,
+  });
 
   const getLocalCameraTrack = (): LocalCameraTrackLike | null => {
     const publication = Array.from(room.localParticipant.videoTrackPublications.values()).find(
@@ -4172,25 +4372,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const cycleVideoInput = () => {
-    const select = videoInputSelects.find((entry) => entry.options.length > 0);
-    if (!(select instanceof HTMLSelectElement)) return;
-
-    const options = Array.from(select.options)
-      .map((option) => normalizeText(option.value))
-      .filter(Boolean);
-
-    if (options.length === 0) return;
-
-    const currentValue =
-      normalizeText(select.value) ||
-      normalizeText(room.getActiveDevice('videoinput')) ||
-      normalizeText(preferredVideoInputId);
-
-    const currentIndex = Math.max(0, options.indexOf(currentValue));
-    const nextValue = options[(currentIndex + 1) % options.length];
-    syncSelectGroupValue(videoInputSelects, nextValue);
-    select.value = nextValue;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    deviceController.cycleVideoInput();
   };
 
   const copyInviteLink = async () => {
@@ -5112,6 +5294,554 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     if (breakRoomsPopupDivider instanceof HTMLElement) {
       breakRoomsPopupDivider.hidden = !(localRole === 'teacher' && hasActive);
+    }
+  };
+
+  const getExternalMediaDefaultStatus = () => {
+    if (!externalMediaSession) {
+      return 'Pega un link de YouTube para abrir una sesión externa sincronizada.';
+    }
+    return `${externalMediaSession.provider === 'youtube' ? 'YouTube' : 'Media externa'} activa.`;
+  };
+
+  const setExternalMediaStatus = (message: string, isError = false, autoClearMs = 4000) => {
+    if (!(externalMediaStatus instanceof HTMLElement)) return;
+    externalMediaStatus.textContent = message || getExternalMediaDefaultStatus();
+    externalMediaStatus.dataset.error = isError ? 'true' : 'false';
+    if (externalMediaStatusClearTimer) {
+      window.clearTimeout(externalMediaStatusClearTimer);
+      externalMediaStatusClearTimer = null;
+    }
+    if (autoClearMs > 0) {
+      externalMediaStatusClearTimer = window.setTimeout(() => {
+        if (!(externalMediaStatus instanceof HTMLElement)) return;
+        externalMediaStatus.textContent = getExternalMediaDefaultStatus();
+        externalMediaStatus.dataset.error = 'false';
+        externalMediaStatusClearTimer = null;
+      }, autoClearMs);
+    }
+  };
+
+  const renderExternalMediaSearchResults = () => {
+    if (!(externalMediaResults instanceof HTMLElement)) return;
+
+    const inputValue = normalizeText(externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
+    const isUrlInput = Boolean(normalizeYouTubeMediaUrl(inputValue));
+    const shouldShowResults =
+      !isUrlInput &&
+      Boolean(externalMediaSearchQuery || externalMediaSearchLoading || externalMediaSearchResultsState.length > 0);
+
+    externalMediaResults.hidden = !shouldShowResults;
+    externalMediaResults.replaceChildren();
+    if (!shouldShowResults) return;
+
+    if (externalMediaSearchLoading) {
+      const loadingState = document.createElement('div');
+      loadingState.className = 'conference-external-media-results-empty';
+      loadingState.textContent = 'Buscando en YouTube...';
+      externalMediaResults.appendChild(loadingState);
+      return;
+    }
+
+    if (externalMediaSearchResultsState.length === 0) {
+      const emptyState = document.createElement('div');
+      emptyState.className = 'conference-external-media-results-empty';
+      emptyState.textContent = externalMediaSearchQuery
+        ? 'Sin resultados. Prueba otro término o pega el link.'
+        : 'Escribe para buscar en YouTube.';
+      externalMediaResults.appendChild(emptyState);
+      return;
+    }
+
+    externalMediaSearchResultsState.forEach((result) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'conference-external-media-result';
+
+      const thumb = document.createElement('img');
+      thumb.className = 'conference-external-media-result-thumb';
+      thumb.alt = '';
+      thumb.loading = 'lazy';
+      thumb.decoding = 'async';
+      thumb.src = result.thumbnailUrl || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+
+      const meta = document.createElement('span');
+      meta.className = 'conference-external-media-result-meta';
+
+      const title = document.createElement('strong');
+      title.className = 'conference-external-media-result-title';
+      title.textContent = result.title;
+
+      const subtitle = document.createElement('span');
+      subtitle.className = 'conference-external-media-result-subtitle';
+      const publishedYear = normalizeText(result.publishedAt) ? new Date(result.publishedAt).getFullYear() : '';
+      subtitle.textContent = [result.channelTitle, Number.isFinite(publishedYear) ? String(publishedYear) : '']
+        .filter(Boolean)
+        .join(' / ');
+
+      meta.append(title, subtitle);
+      button.append(thumb, meta);
+      button.addEventListener('click', () => {
+        void applyExternalMediaSession(
+          {
+            currentTime: 0,
+            mediaId: result.mediaId,
+            playbackState: 'playing',
+            provider: 'youtube',
+            sourceUrl: buildYouTubeEmbedUrl(result.mediaId),
+            title: result.title,
+          },
+          'local',
+        );
+      });
+      externalMediaResults.appendChild(button);
+    });
+  };
+
+  const clearExternalMediaSearchResults = () => {
+    externalMediaSearchLoading = false;
+    externalMediaSearchQuery = '';
+    externalMediaSearchResultsState = [];
+    renderExternalMediaSearchResults();
+  };
+
+  const runExternalMediaSearch = async (query: string) => {
+    const normalizedQuery = normalizeText(query);
+    if (normalizedQuery.length < 2 || normalizeYouTubeMediaUrl(normalizedQuery)) {
+      clearExternalMediaSearchResults();
+      return;
+    }
+
+    const requestId = externalMediaSearchRequestId + 1;
+    externalMediaSearchRequestId = requestId;
+    externalMediaSearchLoading = true;
+    externalMediaSearchQuery = normalizedQuery;
+    renderExternalMediaSearchResults();
+
+    try {
+      const searchUrl = new URL('/api/live/external-media/search', window.location.origin);
+      const effectiveCourseId = getEffectiveCourseId();
+      if (effectiveCourseId) {
+        searchUrl.searchParams.set('courseId', effectiveCourseId);
+      }
+      searchUrl.searchParams.set('q', normalizedQuery);
+
+      const response = await fetch(searchUrl, {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+      const payload = await response.json().catch(() => null);
+      if (requestId !== externalMediaSearchRequestId) return;
+
+      if (!response.ok) {
+        throw new Error(
+          normalizeText(payload?.error) || 'No fue posible buscar en YouTube.',
+        );
+      }
+
+      externalMediaSearchResultsState = Array.isArray(payload?.items)
+        ? payload.items
+            .map((item: any) => ({
+              channelTitle: normalizeText(item?.channelTitle),
+              mediaId: normalizeText(item?.mediaId),
+              publishedAt: normalizeText(item?.publishedAt),
+              thumbnailUrl: normalizeText(item?.thumbnailUrl),
+              title: normalizeText(item?.title) || 'YouTube',
+            }))
+            .filter((item: ExternalMediaSearchResult) => item.mediaId)
+        : [];
+      externalMediaSearchLoading = false;
+      externalMediaSearchQuery = normalizedQuery;
+      renderExternalMediaSearchResults();
+      setExternalMediaStatus(
+        externalMediaSearchResultsState.length
+          ? `${externalMediaSearchResultsState.length} resultados en YouTube.`
+          : 'Sin resultados para esa búsqueda.',
+        false,
+        2200,
+      );
+    } catch (error) {
+      if (requestId !== externalMediaSearchRequestId) return;
+      externalMediaSearchLoading = false;
+      externalMediaSearchResultsState = [];
+      externalMediaSearchQuery = normalizedQuery;
+      renderExternalMediaSearchResults();
+      setExternalMediaStatus(safeErrorMessage(error), true, 4200);
+    }
+  };
+
+  const queueExternalMediaSearch = () => {
+    const query = normalizeText(externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
+    if (externalMediaSearchDebounceId) {
+      window.clearTimeout(externalMediaSearchDebounceId);
+      externalMediaSearchDebounceId = 0;
+    }
+
+    if (!query || normalizeYouTubeMediaUrl(query)) {
+      clearExternalMediaSearchResults();
+      if (query && normalizeYouTubeMediaUrl(query)) {
+        setExternalMediaStatus('Link detectado. Pulsa O para abrirlo.', false, 2200);
+      }
+      return;
+    }
+
+    externalMediaSearchDebounceId = window.setTimeout(() => {
+      externalMediaSearchDebounceId = 0;
+      void runExternalMediaSearch(query);
+    }, 260);
+  };
+
+  const closeExternalMediaPopup = () => {
+    if (externalMediaPopup instanceof HTMLElement) {
+      externalMediaPopup.hidden = true;
+    }
+  };
+
+  const stopExternalMediaSyncLoop = () => {
+    if (!externalMediaSyncIntervalId) return;
+    window.clearInterval(externalMediaSyncIntervalId);
+    externalMediaSyncIntervalId = 0;
+  };
+
+  const getExternalMediaAuthority = () =>
+    localRole === 'teacher' && (room.state !== ConnectionState.Connected || canLeadSession());
+
+  const captureExternalMediaSessionSnapshot = (): ExternalMediaSessionState | null => {
+    if (!externalMediaSession) return null;
+    const videoData = externalMediaPlayer?.getVideoData?.() ?? {};
+    return {
+      ...externalMediaSession,
+      currentTime: Math.max(
+        0,
+        Number(externalMediaPlayer?.getCurrentTime?.() ?? externalMediaSession.currentTime) || 0,
+      ),
+      mediaId: normalizeText(videoData.video_id) || externalMediaSession.mediaId,
+      playbackState: externalMediaPlayerReady
+        ? readYouTubePlaybackState(externalMediaPlayer)
+        : externalMediaSession.playbackState,
+      title: normalizeText(videoData.title) || externalMediaSession.title,
+    };
+  };
+
+  const syncExternalMediaShell = () => {
+    const isTeacher = localRole === 'teacher';
+    const canControl = getExternalMediaAuthority();
+    const isActive = Boolean(externalMediaSession);
+    const playbackState = externalMediaSession?.playbackState ?? 'paused';
+
+    if (externalMediaControlsShell instanceof HTMLElement) {
+      externalMediaControlsShell.hidden = !isTeacher;
+      externalMediaControlsShell.dataset.active = isActive ? 'true' : 'false';
+    }
+
+    if (externalMediaBtn instanceof HTMLButtonElement) {
+      externalMediaBtn.disabled = isTeacher && room.state === ConnectionState.Connected ? !canLeadSession() : false;
+      externalMediaBtn.title = isActive ? 'External Media activa' : 'External Media';
+      externalMediaBtn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    }
+
+    if (externalMediaOpenButton instanceof HTMLButtonElement) {
+      externalMediaOpenButton.disabled = !canControl;
+    }
+
+    if (externalMediaStage instanceof HTMLElement) {
+      externalMediaStage.hidden = !isActive;
+      externalMediaStage.dataset.playbackState = playbackState;
+    }
+
+    if (externalMediaTitle instanceof HTMLElement) {
+      externalMediaTitle.textContent = externalMediaSession?.title || 'External Media Session';
+    }
+
+    if (externalMediaProviderLabel instanceof HTMLElement) {
+      externalMediaProviderLabel.textContent = externalMediaSession?.provider === 'youtube'
+        ? 'YouTube'
+        : 'External Media';
+    }
+
+    if (externalMediaEmpty instanceof HTMLElement) {
+      externalMediaEmpty.hidden = isActive && externalMediaPlayerReady;
+      externalMediaEmpty.textContent = isActive
+        ? 'Cargando YouTube sincronizado...'
+        : 'Pega un link de YouTube para abrir una sesión externa sincronizada.';
+    }
+
+    if (externalMediaStatus instanceof HTMLElement && !externalMediaStatus.textContent?.trim()) {
+      externalMediaStatus.textContent = getExternalMediaDefaultStatus();
+      externalMediaStatus.dataset.error = 'false';
+    }
+
+    externalMediaPlayToggleButtons.forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      button.disabled = !isActive || !externalMediaPlayerReady || !canControl;
+      const isPlaying = playbackState === 'playing';
+      button.textContent = isPlaying ? '||' : 'P';
+      button.title = isPlaying ? 'Pausar media externa' : 'Reproducir media externa';
+      button.setAttribute('aria-label', isPlaying ? 'Pausar media externa' : 'Reproducir media externa');
+    });
+
+    externalMediaCloseButtons.forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      button.disabled = !isActive || !canControl;
+    });
+
+    stopExternalMediaSyncLoop();
+    if (isActive && playbackState === 'playing' && canControl && room.state === ConnectionState.Connected) {
+      externalMediaSyncIntervalId = window.setInterval(() => {
+        void broadcastExternalMediaState('sync');
+      }, 2500);
+    }
+  };
+
+  const clearExternalMediaPlayer = () => {
+    stopExternalMediaSyncLoop();
+    externalMediaApplyingRemoteState = false;
+    externalMediaPlayerReady = false;
+    try {
+      externalMediaPlayer?.destroy?.();
+    } catch {
+      // ignore teardown errors from YouTube iframe
+    }
+    externalMediaPlayer = null;
+    if (externalMediaPlayerHost instanceof HTMLElement) {
+      externalMediaPlayerHost.replaceChildren();
+    }
+  };
+
+  const withExternalMediaRemoteGuard = (callback: () => void) => {
+    externalMediaApplyingRemoteState = true;
+    try {
+      callback();
+    } finally {
+      window.setTimeout(() => {
+        externalMediaApplyingRemoteState = false;
+      }, 320);
+    }
+  };
+
+  const broadcastExternalMediaState = async (
+    action: 'open' | 'sync' | 'close',
+    force = false,
+  ) => {
+    if (!getExternalMediaAuthority() || room.state !== ConnectionState.Connected) return;
+
+    if (action === 'close') {
+      await publishMessage({
+        type: 'external-media',
+        action: 'close',
+      });
+      externalMediaLastBroadcastAt = Date.now();
+      return;
+    }
+
+    const snapshot = captureExternalMediaSessionSnapshot();
+    if (!snapshot) return;
+
+    const now = Date.now();
+    if (!force && action === 'sync' && now - externalMediaLastBroadcastAt < 450) {
+      return;
+    }
+
+    externalMediaSession = snapshot;
+    await publishMessage({
+      type: 'external-media',
+      action,
+      currentTime: snapshot.currentTime,
+      mediaId: snapshot.mediaId,
+      playbackState: snapshot.playbackState,
+      provider: snapshot.provider,
+      sourceUrl: snapshot.sourceUrl,
+      title: snapshot.title,
+    });
+    externalMediaLastBroadcastAt = now;
+  };
+
+  const syncExternalMediaPlayerState = (session: ExternalMediaSessionState) => {
+    const player = externalMediaPlayer;
+    if (!externalMediaPlayerReady || !player) return;
+
+    withExternalMediaRemoteGuard(() => {
+      const currentTime = Math.max(0, Number(player.getCurrentTime?.() ?? 0) || 0);
+      if (Math.abs(currentTime - session.currentTime) > 1.25) {
+        player.seekTo(session.currentTime, true);
+      }
+
+      if (session.playbackState === 'playing') {
+        player.playVideo();
+      } else {
+        player.pauseVideo();
+      }
+    });
+  };
+
+  const ensureExternalMediaPlayer = async (session: ExternalMediaSessionState) => {
+    if (!(externalMediaPlayerHost instanceof HTMLElement)) return;
+    const currentVideoId = normalizeText(externalMediaPlayer?.getVideoData?.()?.video_id);
+
+    if (externalMediaPlayer && externalMediaPlayerReady && currentVideoId === session.mediaId) {
+      syncExternalMediaPlayerState(session);
+      return;
+    }
+
+    clearExternalMediaPlayer();
+    const playerMount = document.createElement('div');
+    playerMount.dataset.externalMediaPlayer = 'youtube';
+    externalMediaPlayerHost.appendChild(playerMount);
+
+    const Player = await loadYouTubePlayerApi();
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (callback?: () => void) => {
+        if (settled) return;
+        settled = true;
+        callback?.();
+      };
+
+      externalMediaPlayer = new Player(playerMount, {
+        height: '100%',
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          start: Math.max(0, Math.floor(session.currentTime)),
+        },
+        videoId: session.mediaId,
+        width: '100%',
+        events: {
+          onReady: () => {
+            externalMediaPlayerReady = true;
+            const nextSnapshot = captureExternalMediaSessionSnapshot();
+            if (nextSnapshot) {
+              externalMediaSession = nextSnapshot;
+            }
+            syncExternalMediaPlayerState(session);
+            syncExternalMediaShell();
+            finish(resolve);
+          },
+          onStateChange: (event) => {
+            const currentSession = externalMediaSession;
+            if (!currentSession) return;
+            const videoData = event.target.getVideoData?.() ?? {};
+            externalMediaSession = {
+              ...currentSession,
+              currentTime: Math.max(0, Number(event.target.getCurrentTime?.() ?? currentSession.currentTime) || 0),
+              mediaId: normalizeText(videoData.video_id) || currentSession.mediaId,
+              playbackState: readYouTubePlaybackState(event.target),
+              title: normalizeText(videoData.title) || currentSession.title,
+            };
+            syncExternalMediaShell();
+            if (!externalMediaApplyingRemoteState && getExternalMediaAuthority()) {
+              void broadcastExternalMediaState('sync');
+            }
+          },
+        },
+      });
+
+      window.setTimeout(() => {
+        finish(() => {
+          reject(new Error('YouTube player tardó demasiado en responder.'));
+        });
+      }, 12000);
+    });
+  };
+
+  const applyExternalMediaSession = async (
+    nextSession: ExternalMediaSessionState | null,
+    source: 'local' | 'remote',
+  ) => {
+    if (!nextSession) {
+      externalMediaSession = null;
+      clearExternalMediaPlayer();
+      syncExternalMediaShell();
+      if (source === 'local') {
+        closeExternalMediaPopup();
+        setExternalMediaStatus('Sesión externa cerrada.');
+        if (room.state === ConnectionState.Connected) {
+          await broadcastExternalMediaState('close', true);
+        }
+      }
+      return;
+    }
+
+    externalMediaSession = {
+      ...nextSession,
+      currentTime: Math.max(0, Number(nextSession.currentTime) || 0),
+      playbackState: nextSession.playbackState,
+      title: normalizeText(nextSession.title) || 'YouTube',
+    };
+    syncExternalMediaShell();
+
+    try {
+      await ensureExternalMediaPlayer(externalMediaSession);
+      externalMediaSession = captureExternalMediaSessionSnapshot() ?? externalMediaSession;
+      syncExternalMediaShell();
+      if (source === 'local') {
+        closeExternalMediaPopup();
+        if (externalMediaInput instanceof HTMLInputElement) {
+          externalMediaInput.value = '';
+        }
+        clearExternalMediaSearchResults();
+        setExternalMediaStatus('YouTube sincronizado listo.');
+        if (room.state === ConnectionState.Connected) {
+          await broadcastExternalMediaState('open', true);
+        }
+      }
+    } catch (error) {
+      if (source === 'local') {
+        setExternalMediaStatus(safeErrorMessage(error), true, 5200);
+      } else {
+        setStatus(safeErrorMessage(error));
+      }
+      if (source === 'local') {
+        externalMediaSession = null;
+        clearExternalMediaPlayer();
+        syncExternalMediaShell();
+      }
+    }
+  };
+
+  const openExternalMediaFromInput = async () => {
+    if (!(externalMediaInput instanceof HTMLInputElement)) return;
+    if (!getExternalMediaAuthority()) {
+      syncExternalMediaShell();
+      return;
+    }
+
+    const normalizedInput = normalizeText(externalMediaInput.value);
+    const parsedMedia = normalizeYouTubeMediaUrl(normalizedInput);
+    if (!parsedMedia) {
+      await runExternalMediaSearch(normalizedInput);
+      return;
+    }
+
+    setExternalMediaStatus('Cargando YouTube...');
+    await applyExternalMediaSession(
+      {
+        currentTime: 0,
+        mediaId: parsedMedia.mediaId,
+        playbackState: 'playing',
+        provider: 'youtube',
+        sourceUrl: parsedMedia.sourceUrl,
+        title: 'YouTube',
+      },
+      'local',
+    );
+  };
+
+  const toggleExternalMediaPlayback = () => {
+    if (!externalMediaSession || !externalMediaPlayerReady || !externalMediaPlayer || !getExternalMediaAuthority()) {
+      syncExternalMediaShell();
+      return;
+    }
+
+    if (externalMediaSession.playbackState === 'playing') {
+      externalMediaPlayer.pauseVideo();
+    } else {
+      externalMediaPlayer.playVideo();
     }
   };
 
@@ -6754,13 +7484,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const syncSelectGroupValue = (selects: HTMLSelectElement[], nextValue: string) => {
-    selects.forEach((select) => {
-      if (normalizeText(select.value) === nextValue) return;
-      select.value = nextValue;
-    });
-  };
-
   const syncRoleUi = () => {
     roleInput.value = localRole;
     root.dataset.role = localRole;
@@ -6771,6 +7494,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sessionControlsField.hidden = localRole !== 'teacher';
     }
     syncBreakRoomsShell();
+    syncExternalMediaShell();
   };
 
   const readParticipantHandRaised = (participant: Participant) =>
@@ -6936,22 +7660,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     return Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'));
   };
 
-  const setDevicePanelVisibility = (panel: HTMLElement | null, visible: boolean) => {
-    if (!panel) return;
-    panel.hidden = !visible;
-    panel.dataset.open = visible ? 'true' : 'false';
-  };
-
   const closeDevicePanels = () => {
-    activeDevicePanel = null;
-    setDevicePanelVisibility(audioInputPanel instanceof HTMLElement ? audioInputPanel : null, false);
-    setDevicePanelVisibility(videoInputPanel instanceof HTMLElement ? videoInputPanel : null, false);
+    deviceController.closePanels();
   };
 
   const openDevicePanel = (kind: 'audio' | 'video') => {
-    activeDevicePanel = kind;
-    setDevicePanelVisibility(audioInputPanel instanceof HTMLElement ? audioInputPanel : null, kind === 'audio');
-    setDevicePanelVisibility(videoInputPanel instanceof HTMLElement ? videoInputPanel : null, kind === 'video');
+    deviceController.togglePanel(kind);
   };
 
   const syncLayoutChoiceButtons = () => {
@@ -7115,152 +7829,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       : '00:00:00';
   };
 
-  const setMicMeterLevel = (level: number) => {
-    if (!(micMeter instanceof HTMLElement)) return;
-    const normalizedLevel = Math.max(0, Math.min(1, level));
-    micMeter.style.setProperty('--conference-mic-level', normalizedLevel.toFixed(3));
-  };
-
-  const closeMicMeterAudioContext = () => {
-    if (!micMeterAudioContext) return;
-    if (micMeterAudioContext.state !== 'closed') {
-      void micMeterAudioContext.close().catch(() => undefined);
-    }
-    micMeterAudioContext = null;
-  };
-
-  const stopMicMeter = () => {
-    micMeterGeneration += 1;
-
-    if (micMeterAnimationId) {
-      window.cancelAnimationFrame(micMeterAnimationId);
-      micMeterAnimationId = 0;
-    }
-
-    if (micMeterSource) {
-      try {
-        micMeterSource.disconnect();
-      } catch {
-        // ignore disconnected nodes
-      }
-      micMeterSource = null;
-    }
-
-    if (micMeterAnalyser) {
-      try {
-        micMeterAnalyser.disconnect();
-      } catch {
-        // ignore disconnected nodes
-      }
-      micMeterAnalyser = null;
-    }
-
-    micMeterData = null;
-    micMeterTrackId = '';
-    setMicMeterLevel(0);
-
-    if (micMeter instanceof HTMLElement) {
-      micMeter.hidden = true;
-    }
-  };
-
-  const startMicMeter = async (track: MediaStreamTrack) => {
-    if (!(micMeter instanceof HTMLElement)) return;
-
-    const trackId = normalizeText(track.id);
-    if (
-      trackId &&
-      micMeterTrackId === trackId &&
-      micMeterAudioContext &&
-      micMeterAnalyser &&
-      micMeterData
-    ) {
-      micMeter.hidden = false;
-      return;
-    }
-
-    const nextGeneration = micMeterGeneration + 1;
-    stopMicMeter();
-    micMeterGeneration = nextGeneration;
-
-    const AudioContextCtor =
-      window.AudioContext ||
-      (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-
-    if (!AudioContextCtor) return;
-
-    if (!micMeterAudioContext || micMeterAudioContext.state === 'closed') {
-      micMeterAudioContext = new AudioContextCtor();
-    }
-
-    const audioContext = micMeterAudioContext;
-
-    if (audioContext.state !== 'running') {
-      await audioContext.resume().catch(() => undefined);
-    }
-
-    if (
-      nextGeneration !== micMeterGeneration ||
-      audioContext.state !== 'running' ||
-      track.readyState !== 'live'
-    ) {
-      return;
-    }
-
-    let analyser: AnalyserNode;
-    let source: MediaStreamAudioSourceNode;
-
-    try {
-      analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.82;
-
-      source = audioContext.createMediaStreamSource(new MediaStream([track]));
-      source.connect(analyser);
-    } catch {
-      stopMicMeter();
-      return;
-    }
-
-    if (nextGeneration !== micMeterGeneration || audioContext.state !== 'running') {
-      try {
-        source.disconnect();
-      } catch {
-        // ignore disconnected nodes
-      }
-      try {
-        analyser.disconnect();
-      } catch {
-        // ignore disconnected nodes
-      }
-      return;
-    }
-
-    micMeterSource = source;
-    micMeterAnalyser = analyser;
-    micMeterData = new Uint8Array(analyser.fftSize);
-    micMeterTrackId = trackId;
-    micMeter.hidden = false;
-
-    const tick = () => {
-      if (!micMeterAnalyser || !micMeterData) return;
-      micMeterAnalyser.getByteTimeDomainData(micMeterData);
-
-      let sum = 0;
-      for (let index = 0; index < micMeterData.length; index += 1) {
-        const normalizedSample = (micMeterData[index] - 128) / 128;
-        sum += normalizedSample * normalizedSample;
-      }
-
-      const rms = Math.sqrt(sum / micMeterData.length);
-      setMicMeterLevel(Math.min(1, rms * 4.5));
-      micMeterAnimationId = window.requestAnimationFrame(tick);
-    };
-
-    tick();
-  };
-
   const syncMicMeter = () => {
     const connected = room.state === ConnectionState.Connected;
     const microphoneEnabled = connected && room.localParticipant.isMicrophoneEnabled;
@@ -7272,12 +7840,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       ?.mediaStreamTrack;
 
     if (!microphoneEnabled || !localMicTrack || localMicTrack.readyState !== 'live') {
-      stopMicMeter();
+      micMeterController.stop();
       return;
     }
 
-    void startMicMeter(localMicTrack).catch(() => {
-      stopMicMeter();
+    void micMeterController.start(localMicTrack).catch(() => {
+      micMeterController.stop();
     });
   };
 
@@ -8229,15 +8797,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const currentLayout = normalizeLayoutMode(layoutInput.value);
 
     if (hasScreenshare) {
-      if (!autoSwitchedToScreenshare && currentLayout !== 'screenshare') {
-        if (currentLayout !== 'screenshare') {
-          layoutBeforeAutoScreenshare = currentLayout;
-        }
+      if (!screenshareWasActive && currentLayout !== 'screenshare') {
+        layoutBeforeAutoScreenshare = currentLayout;
         layoutInput.value = setLayout(stage, 'screenshare');
         autoSwitchedToScreenshare = true;
         writeQueryState();
         syncLayoutChoiceButtons();
       }
+      screenshareWasActive = true;
       return;
     }
 
@@ -8247,10 +8814,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     autoSwitchedToScreenshare = false;
+    screenshareWasActive = false;
     syncLayoutChoiceButtons();
   };
 
-  const canChangeLayoutLocally = () => !hasActiveScreenShare();
+  const canChangeLayoutLocally = () => true;
 
   const resolveParticipantTargetSlot = (participant: Participant): HTMLElement | null =>
     resolveRoomParticipantTargetSlot({
@@ -8753,7 +9321,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     unsubscribeLiveActivity = subscribeToLive({
       courseId: effectiveCourseId,
-      onEvent: (eventName, payload) => {
+      onEvent: (eventName: string, payload: LiveSnapshot | null) => {
         if (eventName === 'live.ended') {
           const endedSessionId = normalizeText((payload as LiveSnapshot | null)?.sessionId);
           if (!endedSessionId || endedSessionId === normalizeText(activeLiveSnapshot?.sessionId)) {
@@ -8806,7 +9374,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     chatList,
     chatSection,
     chatSendButton,
-    chatUnreadDot,
+    chatUnreadDot: chatUnreadDot instanceof HTMLElement ? chatUnreadDot : null,
     ensureSidebarOpen: () => {
       if (!sidebarCollapsed) return;
       sidebarCollapsed = false;
@@ -8876,6 +9444,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       open: graphVisible,
     });
 
+    if (externalMediaSession) {
+      await broadcastExternalMediaState('open', true);
+    }
+
     if (currentSlideState) {
       await publishSlideState(currentSlideState);
     }
@@ -8890,64 +9462,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const refreshDeviceOptions = async (requestPermissions = false) => {
-    const deviceTasks: Promise<void>[] = [];
-
-    if (audioInputSelects.length > 0) {
-      deviceTasks.push(
-        Room.getLocalDevices('audioinput', requestPermissions)
-          .then((devices) => {
-            audioInputSelects.forEach((select) => {
-              populateDeviceSelect({
-                activeDeviceId: room.getActiveDevice('audioinput') || preferredAudioInputId,
-                devices,
-                emptyLabel: 'No se detectaron microfonos',
-                kind: 'audioinput',
-                select,
-              });
-            });
-          })
-          .catch(() => {
-            audioInputSelects.forEach((select) => {
-              populateDeviceSelect({
-                devices: [],
-                emptyLabel: 'No se detectaron microfonos',
-                kind: 'audioinput',
-                select,
-              });
-            });
-          }),
-      );
-    }
-
-    if (videoInputSelects.length > 0) {
-      deviceTasks.push(
-        Room.getLocalDevices('videoinput', requestPermissions)
-          .then((devices) => {
-            videoInputSelects.forEach((select) => {
-              populateDeviceSelect({
-                activeDeviceId: room.getActiveDevice('videoinput') || preferredVideoInputId,
-                devices,
-                emptyLabel: 'No se detectaron camaras',
-                kind: 'videoinput',
-                select,
-              });
-            });
-          })
-          .catch(() => {
-            videoInputSelects.forEach((select) => {
-              populateDeviceSelect({
-                devices: [],
-                emptyLabel: 'No se detectaron camaras',
-                kind: 'videoinput',
-                select,
-              });
-            });
-          }),
-      );
-    }
-
-    await Promise.all(deviceTasks);
-    setControlState();
+    await deviceController.refreshOptions(requestPermissions);
   };
 
   const schedulePresentationLoad = ({
@@ -9094,7 +9609,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       recordButton.disabled = !canRecordCurrentStage();
     }
     layoutInput.disabled = localRole === 'teacher'
-      ? (connected ? !sessionLeader : false) || !canChangeLayoutLocally()
+      ? connected ? !sessionLeader : false
       : !canChangeLayoutLocally();
     presentationSelect.disabled = connected
       ? (localRole === 'teacher' ? !sessionLeader : true)
@@ -9128,15 +9643,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       studentInviteRevokeButton.disabled =
         localRole !== 'teacher' || !currentStudentInviteCode || connecting;
     }
-    const hasAudioChoices = audioInputSelects.some((select) =>
-      Array.from(select.options).some((option) => option.value),
-    );
+    const hasAudioChoices = deviceController.hasChoices('audio');
     audioInputSelects.forEach((select) => {
       select.disabled = !hasAudioChoices;
     });
-    const hasVideoChoices = videoInputSelects.some((select) =>
-      Array.from(select.options).some((option) => option.value),
-    );
+    const hasVideoChoices = deviceController.hasChoices('video');
     videoInputSelects.forEach((select) => {
       select.disabled = !hasVideoChoices;
     });
@@ -9166,7 +9677,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const shareEnabled = connected && room.localParticipant.isScreenShareEnabled;
 
     cameraButton.dataset.enabled = cameraEnabled || previewEnabled ? 'true' : 'false';
-    cameraButton.dataset.open = activeDevicePanel === 'video' ? 'true' : 'false';
+    cameraButton.dataset.open = deviceController.getActivePanel() === 'video' ? 'true' : 'false';
     cameraButton.setAttribute(
       'aria-label',
       cameraEnabled || previewEnabled ? 'Apagar camara' : 'Encender camara',
@@ -9180,7 +9691,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         : 'Abrir preview de camara. Shift + click para elegir dispositivo.';
 
     microphoneButton.dataset.enabled = microphoneEnabled ? 'true' : 'false';
-    microphoneButton.dataset.open = activeDevicePanel === 'audio' ? 'true' : 'false';
+    microphoneButton.dataset.open = deviceController.getActivePanel() === 'audio' ? 'true' : 'false';
     microphoneButton.setAttribute(
       'aria-label',
       microphoneEnabled ? 'Silenciar microfono' : 'Activar microfono',
@@ -9195,6 +9706,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       shareEnabled ? 'Detener pantalla compartida' : 'Compartir pantalla',
     );
     shareScreenButton.title = shareEnabled ? 'Detener pantalla' : 'Compartir pantalla';
+    syncExternalMediaShell();
     syncLayoutChoiceButtons();
     applySessionLeaderState();
     applySessionControlState();
@@ -9602,12 +10114,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     })
     .on(RoomEvent.ActiveDeviceChanged, (kind, deviceId) => {
       if (kind === 'audioinput') {
-        syncSelectGroupValue(audioInputSelects, deviceId);
+        deviceController.syncGroupValue('audio', deviceId);
         preferredAudioInputId = normalizeText(deviceId);
       }
 
       if (kind === 'videoinput') {
-        syncSelectGroupValue(videoInputSelects, deviceId);
+        deviceController.syncGroupValue('video', deviceId);
         preferredVideoInputId = normalizeText(deviceId);
         releaseRawTrackingSource();
         if (shouldRunHandTracking()) {
@@ -9732,6 +10244,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
+      if (message.type === 'external-media') {
+        if (message.action === 'close') {
+          void applyExternalMediaSession(null, 'remote');
+          return;
+        }
+
+        void applyExternalMediaSession(
+          {
+            currentTime: message.currentTime,
+            mediaId: message.mediaId,
+            playbackState: message.playbackState,
+            provider: message.provider,
+            sourceUrl: message.sourceUrl,
+            title: message.title,
+          },
+          'remote',
+        );
+        return;
+      }
+
       if (message.type === 'session-control') {
         sessionAllowsInstruments = message.allowInstruments !== false;
         if (!sessionAllowsInstruments) {
@@ -9755,6 +10287,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           layoutBeforeAutoScreenshare = nextLayout;
           autoSwitchedToScreenshare = false;
         }
+        screenshareWasActive = hasActiveScreenShare();
         syncAllParticipants();
         return;
       }
@@ -10025,11 +10558,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   cameraButton.addEventListener('click', async (event) => {
     if (event instanceof MouseEvent && event.shiftKey) {
       event.preventDefault();
-      if (activeDevicePanel === 'video') {
-        closeDevicePanels();
-      } else {
-        openDevicePanel('video');
-      }
+      openDevicePanel('video');
       setControlState();
       return;
     }
@@ -10065,11 +10594,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   microphoneButton.addEventListener('click', async (event) => {
     if (event instanceof MouseEvent && event.shiftKey) {
       event.preventDefault();
-      if (activeDevicePanel === 'audio') {
-        closeDevicePanels();
-      } else {
-        openDevicePanel('audio');
-      }
+      openDevicePanel('audio');
       setControlState();
       return;
     }
@@ -10177,70 +10702,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  audioInputSelects.forEach((select) => {
-    select.addEventListener('change', async () => {
-      const nextDeviceId = normalizeText(select.value);
-      if (!nextDeviceId) return;
-      preferredAudioInputId = nextDeviceId;
-      syncSelectGroupValue(audioInputSelects, nextDeviceId);
-      persistSetupState();
-
-      try {
-        await room.switchActiveDevice('audioinput', nextDeviceId);
-        await refreshDeviceOptions(false);
-      } catch (error) {
-        setStatus(
-          room.state === ConnectionState.Connected
-            ? safeErrorMessage(error)
-            : 'Microfono preferido listo para la proxima conexion.',
-        );
-      }
-    });
-  });
-
-  videoInputSelects.forEach((select) => {
-    select.addEventListener('change', async () => {
-      const nextDeviceId = normalizeText(select.value);
-      if (!nextDeviceId) return;
-      preferredVideoInputId = nextDeviceId;
-      releaseRawTrackingSource();
-      syncSelectGroupValue(videoInputSelects, nextDeviceId);
-      persistSetupState();
-
-      if (room.state === ConnectionState.Disconnected) {
-        if (!disconnectedCameraPreviewEnabled) {
-          setStatus('Camara preferida lista para la proxima conexion.');
-          setControlState();
-          return;
-        }
-
-        try {
-          await enableDisconnectedCameraPreview();
-          setControlState();
-        } catch (error) {
-          disableDisconnectedCameraPreview();
-          setStatus(safeErrorMessage(error));
-          setControlState();
-        }
-        return;
-      }
-
-      try {
-        await room.switchActiveDevice('videoinput', nextDeviceId);
-        if (shouldRunHandTracking()) {
-          await ensureRawTrackingVideo().catch(() => undefined);
-        }
-        await syncLocalBackgroundBlurProcessor().catch(() => undefined);
-        await refreshDeviceOptions(false);
-      } catch (error) {
-        setStatus(
-          room.state === ConnectionState.Connected
-            ? safeErrorMessage(error)
-            : 'Camara preferida lista para la proxima conexion.',
-        );
-      }
-    });
-  });
+  deviceController.bind();
 
   if (previewZoomInput instanceof HTMLInputElement) {
     previewZoomInput.addEventListener('input', () => {
@@ -10998,6 +11460,32 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   });
 
+  externalMediaBtn?.addEventListener('click', () => {
+    if (!(externalMediaPopup instanceof HTMLElement)) return;
+    const willOpen = externalMediaPopup.hidden;
+    externalMediaPopup.hidden = !willOpen;
+    if (!willOpen) return;
+    if (externalMediaStatus instanceof HTMLElement && !externalMediaStatus.textContent?.trim()) {
+      externalMediaStatus.textContent = getExternalMediaDefaultStatus();
+      externalMediaStatus.dataset.error = 'false';
+    }
+    if (externalMediaInput instanceof HTMLInputElement) {
+      renderExternalMediaSearchResults();
+      window.setTimeout(() => {
+        externalMediaInput.focus();
+        externalMediaInput.select();
+      }, 0);
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!(externalMediaPopup instanceof HTMLElement) || externalMediaPopup.hidden) return;
+    if (!(externalMediaControlsShell instanceof HTMLElement)) return;
+    if (!externalMediaControlsShell.contains(e.target as Node)) {
+      closeExternalMediaPopup();
+    }
+  });
+
   // 3.1 Random
   root.querySelector('[data-action="break-rooms-random"]')?.addEventListener('click', () => {
     void handleBreakRoomsRandom();
@@ -11028,6 +11516,35 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     void handleBreakRoomsKill();
   });
 
+  externalMediaOpenButton?.addEventListener('click', () => {
+    void openExternalMediaFromInput();
+  });
+
+  if (externalMediaInput instanceof HTMLInputElement) {
+    externalMediaInput.addEventListener('input', () => {
+      queueExternalMediaSearch();
+    });
+    externalMediaInput.addEventListener('keydown', (event) => {
+      if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return;
+      event.preventDefault();
+      void openExternalMediaFromInput();
+    });
+  }
+
+  externalMediaPlayToggleButtons.forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.addEventListener('click', () => {
+      toggleExternalMediaPlayback();
+    });
+  });
+
+  externalMediaCloseButtons.forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.addEventListener('click', () => {
+      void applyExternalMediaSession(null, 'local');
+    });
+  });
+
   layoutChoiceButtons.forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) return;
     button.addEventListener('click', () => {
@@ -11043,15 +11560,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   layoutInput.addEventListener('change', () => {
-    if (hasActiveScreenShare()) {
-      layoutInput.value = 'screenshare';
-    }
     const nextLayout = setLayout(stage, layoutInput.value);
     layoutInput.value = nextLayout;
     if (nextLayout !== 'screenshare') {
       layoutBeforeAutoScreenshare = nextLayout;
       autoSwitchedToScreenshare = false;
     }
+    screenshareWasActive = hasActiveScreenShare();
     writeQueryState();
     syncAllParticipants();
 
@@ -11746,6 +12261,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       window.clearInterval(vpsStatsTickId);
       vpsStatsTickId = 0;
     }
+    if (externalMediaStatusClearTimer) {
+      window.clearTimeout(externalMediaStatusClearTimer);
+      externalMediaStatusClearTimer = null;
+    }
+    clearExternalMediaPlayer();
     stopMixerMeters();
     stopHandTracking();
     handTrackingLandmarker?.close?.();
@@ -11754,8 +12274,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     localCameraGravityBallStreamState.canvas = null;
     gravityBallRenderer?.destroy();
     void fmSynth.destroy();
-    stopMicMeter();
-    closeMicMeterAudioContext();
+    micMeterController.teardown();
     applyImmersiveFullscreenState(false);
     stopRecording();
     disableDisconnectedCameraPreview();

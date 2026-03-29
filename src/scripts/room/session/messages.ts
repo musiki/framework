@@ -11,6 +11,9 @@ export type SlideState = {
   zoom: number;
 };
 
+export type ExternalMediaProvider = 'youtube';
+export type ExternalMediaPlaybackState = 'playing' | 'paused' | 'ended';
+
 export type ConferenceMessage =
   | {
       type: 'layout';
@@ -85,6 +88,20 @@ export type ConferenceMessage =
   | {
       type: 'break-rooms-kill';
       mainRoom: string;
+    }
+  | {
+      action: 'close';
+      type: 'external-media';
+    }
+  | {
+      action: 'open' | 'sync';
+      currentTime: number;
+      mediaId: string;
+      playbackState: ExternalMediaPlaybackState;
+      provider: ExternalMediaProvider;
+      sourceUrl: string;
+      title: string;
+      type: 'external-media';
     };
 
 export const MESSAGE_TOPIC = 'conference-ui';
@@ -134,6 +151,8 @@ export const normalizeSlideState = (value: Partial<SlideState> | null | undefine
 };
 
 const isReactionKind = (value: string): value is ReactionKind => value in REACTION_EMOJIS;
+const isExternalMediaPlaybackState = (value: string): value is ExternalMediaPlaybackState =>
+  value === 'playing' || value === 'paused' || value === 'ended';
 
 export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage | null => {
   try {
@@ -231,6 +250,42 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
     if (parsed.type === 'mute-all') {
       return {
         type: 'mute-all',
+      };
+    }
+
+    if (parsed.type === 'external-media') {
+      const action = normalizeText((parsed as { action?: string }).action);
+      if (action === 'close') {
+        return {
+          action: 'close',
+          type: 'external-media',
+        };
+      }
+
+      const provider = normalizeText((parsed as { provider?: string }).provider);
+      const playbackState = normalizeText((parsed as { playbackState?: string }).playbackState);
+      const mediaId = normalizeText((parsed as { mediaId?: string }).mediaId);
+      const sourceUrl = normalizeText((parsed as { sourceUrl?: string }).sourceUrl);
+
+      if (
+        (action !== 'open' && action !== 'sync') ||
+        provider !== 'youtube' ||
+        !isExternalMediaPlaybackState(playbackState) ||
+        !mediaId ||
+        !sourceUrl
+      ) {
+        return null;
+      }
+
+      return {
+        action,
+        currentTime: Math.max(0, Number((parsed as { currentTime?: number }).currentTime) || 0),
+        mediaId,
+        playbackState,
+        provider: 'youtube',
+        sourceUrl,
+        title: normalizeText((parsed as { title?: string }).title) || 'YouTube',
+        type: 'external-media',
       };
     }
 

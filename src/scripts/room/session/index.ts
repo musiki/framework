@@ -9,6 +9,8 @@ export {
 
 export type {
   ConferenceMessage,
+  ExternalMediaPlaybackState,
+  ExternalMediaProvider,
   ParticipantRole,
   ReactionKind,
   SlideState,

@@ -3,5 +3,35 @@
 
 <div class="conference-recording-guide" data-recording-guide aria-hidden="true"></div>
 <div class="conference-reactions-layer" data-reactions-layer aria-hidden="true"></div>
+<section class="conference-external-media-shell" data-external-media-stage hidden>
+  <div class="conference-external-media-chrome">
+    <div class="conference-external-media-meta">
+      <span class="conference-external-media-kicker" data-external-media-provider-label>External Media</span>
+      <strong class="conference-external-media-title" data-external-media-title>External Media Session</strong>
+    </div>
+    <div class="conference-external-media-actions">
+      <button
+        type="button"
+        class="conference-layout-button conference-external-media-action"
+        data-action="external-media-play-toggle"
+        title="Play / Pause"
+        aria-label="Play / Pause"
+      >P</button>
+      <button
+        type="button"
+        class="conference-layout-button conference-external-media-action"
+        data-action="external-media-close"
+        title="Cerrar media externa"
+        aria-label="Cerrar media externa"
+      >C</button>
+    </div>
+  </div>
+  <div class="conference-external-media-body">
+    <div class="conference-external-media-player" data-external-media-player-host></div>
+    <div class="conference-empty conference-empty--presentation conference-external-media-empty" data-external-media-empty hidden>
+      Pega un link de YouTube para abrir una sesión externa sincronizada.
+    </div>
+  </div>
+</section>
 <canvas class="conference-gravity-ball-overlay" data-gravity-ball-canvas aria-hidden="true"></canvas>
 <canvas class="conference-hand-overlay conference-hand-overlay--stage" data-stage-hand-overlay aria-hidden="true"></canvas>
