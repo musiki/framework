@@ -58,6 +58,7 @@ import {
   parseConferenceMessage,
   type ConferenceMessage,
   type ParticipantRole,
+  type PresentationMediaState,
   type ReactionKind,
   type SlideState,
 } from './room/session';
@@ -101,6 +102,8 @@ type ExternalMediaSearchResult = {
   thumbnailUrl: string;
   title: string;
 };
+
+type PresentationEmbeddedMediaState = PresentationMediaState;
 
 type YouTubePlayerStateChangeEvent = {
   data: number;
@@ -1450,6 +1453,34 @@ const readYouTubePlaybackState = (player: YouTubePlayer | null): ExternalMediaPl
   if (state === 1) return 'playing';
   if (state === 0) return 'ended';
   return 'paused';
+};
+
+const isPresentationMediaPlaybackState = (
+  value: string,
+): value is PresentationEmbeddedMediaState['playbackState'] =>
+  value === 'playing' || value === 'paused' || value === 'ended';
+
+const normalizePresentationMediaState = (
+  value: Partial<PresentationEmbeddedMediaState> | null | undefined,
+): PresentationEmbeddedMediaState | null => {
+  if (!value || typeof value !== 'object') return null;
+
+  const embedId = normalizeText(value.embedId);
+  const mediaId = normalizeText(value.mediaId);
+  const playbackState = normalizeText(value.playbackState);
+  const provider = normalizeText(value.provider);
+
+  if (!embedId || !mediaId || provider !== 'youtube' || !isPresentationMediaPlaybackState(playbackState)) {
+    return null;
+  }
+
+  return {
+    currentTime: Math.max(0, Number(value.currentTime) || 0),
+    embedId,
+    mediaId,
+    playbackState,
+    provider: 'youtube',
+  };
 };
 
 const isLocalCameraTrackLike = (value: unknown): value is LocalCameraTrackLike =>
@@ -3976,6 +4007,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let currentSlideState: SlideState | null = null;
   let pendingRemoteSlideState: SlideState | null = null;
   let lastPublishedSlideKey = '';
+  let currentPresentationMediaState: PresentationEmbeddedMediaState | null = null;
+  let pendingRemotePresentationMediaState: PresentationEmbeddedMediaState | null = null;
+  let lastPublishedPresentationMediaKey = '';
   let unsubscribeLiveActivity: (() => void) | null = null;
   let activeLiveSnapshot: LiveSnapshot | null = null;
   let liveActivityTickId = 0;
@@ -9308,6 +9342,34 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  const applyRemotePresentationMediaState = (mediaState: PresentationEmbeddedMediaState) => {
+    pendingRemotePresentationMediaState = mediaState;
+    postToPresentation({
+      type: 'musiki:reveal-embedded-media-sync',
+      state: mediaState,
+    });
+  };
+
+  const publishPresentationMediaState = async (
+    mediaState: PresentationEmbeddedMediaState,
+    force = false,
+  ) => {
+    if (!canLeadSession()) return;
+    const presentationMediaKey = [
+      mediaState.embedId,
+      mediaState.mediaId,
+      mediaState.playbackState,
+      mediaState.currentTime.toFixed(2),
+    ].join(':');
+    if (!force && presentationMediaKey === lastPublishedPresentationMediaKey) return;
+    lastPublishedPresentationMediaKey = presentationMediaKey;
+    currentPresentationMediaState = mediaState;
+    await publishMessage({
+      type: 'presentation-media',
+      ...mediaState,
+    });
+  };
+
   const handlePresentationMessage = (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
     if (event.source !== presentationFrame.contentWindow) return;
@@ -9331,10 +9393,27 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (type === 'musiki:reveal-embedded-media') {
+      const mediaState = normalizePresentationMediaState(
+        (payload as { state?: PresentationEmbeddedMediaState }).state,
+      );
+      if (!mediaState) return;
+      currentPresentationMediaState = mediaState;
+      if (localRole === 'teacher') {
+        void publishPresentationMediaState(mediaState);
+      }
+      return;
+    }
+
     if (type === 'musiki:reveal-ready') {
       if (pendingRemoteSlideState) {
         applyRemoteSlideState(pendingRemoteSlideState);
-      } else if (localRole === 'teacher') {
+      }
+      const nextPresentationMediaState = pendingRemotePresentationMediaState ?? currentPresentationMediaState;
+      if (nextPresentationMediaState) {
+        applyRemotePresentationMediaState(nextPresentationMediaState);
+      }
+      if (!pendingRemoteSlideState && localRole === 'teacher') {
         requestPresentationState();
       }
       return;
@@ -9494,6 +9573,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (currentSlideState) {
       await publishSlideState(currentSlideState);
     }
+
+    if (currentPresentationMediaState) {
+      await publishPresentationMediaState(currentPresentationMediaState, true);
+    }
   };
 
   const syncPresentationSelection = (href: string | null) => {
@@ -9537,12 +9620,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           currentSlideState = null;
           pendingRemoteSlideState = null;
           lastPublishedSlideKey = '';
+          currentPresentationMediaState = null;
+          pendingRemotePresentationMediaState = null;
+          lastPublishedPresentationMediaKey = '';
         } else {
           presentation.clear();
           syncPresentationSelection(null);
           currentSlideState = null;
           pendingRemoteSlideState = null;
           lastPublishedSlideKey = '';
+          currentPresentationMediaState = null;
+          pendingRemotePresentationMediaState = null;
+          lastPublishedPresentationMediaKey = '';
         }
 
         writeQueryState();
@@ -10355,6 +10444,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           zoom: message.zoom,
         };
         applyRemoteSlideState(currentSlideState);
+        return;
+      }
+
+      if (message.type === 'presentation-media') {
+        currentPresentationMediaState = message;
+        applyRemotePresentationMediaState(message);
         return;
       }
 
@@ -12154,7 +12249,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     syncPresentationSessionControl();
     if (pendingRemoteSlideState) {
       applyRemoteSlideState(pendingRemoteSlideState);
-      return;
+    }
+    const nextPresentationMediaState = pendingRemotePresentationMediaState ?? currentPresentationMediaState;
+    if (nextPresentationMediaState) {
+      applyRemotePresentationMediaState(nextPresentationMediaState);
     }
     if (canLeadSession()) {
       requestPresentationState();

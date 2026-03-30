@@ -13,6 +13,15 @@ export type SlideState = {
 
 export type ExternalMediaProvider = 'youtube';
 export type ExternalMediaPlaybackState = 'playing' | 'paused' | 'ended';
+export type PresentationMediaProvider = 'youtube';
+export type PresentationMediaPlaybackState = ExternalMediaPlaybackState;
+export type PresentationMediaState = {
+  currentTime: number;
+  embedId: string;
+  mediaId: string;
+  playbackState: PresentationMediaPlaybackState;
+  provider: PresentationMediaProvider;
+};
 
 export type ConferenceMessage =
   | {
@@ -64,6 +73,9 @@ export type ConferenceMessage =
   | ({
       type: 'slide-state';
     } & SlideState)
+  | ({
+      type: 'presentation-media';
+    } & PresentationMediaState)
   | {
       type: 'presentation-zoom';
       zoom: number;
@@ -153,6 +165,7 @@ export const normalizeSlideState = (value: Partial<SlideState> | null | undefine
 const isReactionKind = (value: string): value is ReactionKind => value in REACTION_EMOJIS;
 const isExternalMediaPlaybackState = (value: string): value is ExternalMediaPlaybackState =>
   value === 'playing' || value === 'paused' || value === 'ended';
+const isPresentationMediaProvider = (value: string): value is PresentationMediaProvider => value === 'youtube';
 
 export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage | null => {
   try {
@@ -250,6 +263,31 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
     if (parsed.type === 'mute-all') {
       return {
         type: 'mute-all',
+      };
+    }
+
+    if (parsed.type === 'presentation-media') {
+      const provider = normalizeText((parsed as { provider?: string }).provider);
+      const playbackState = normalizeText((parsed as { playbackState?: string }).playbackState);
+      const embedId = normalizeText((parsed as { embedId?: string }).embedId);
+      const mediaId = normalizeText((parsed as { mediaId?: string }).mediaId);
+
+      if (
+        !isPresentationMediaProvider(provider) ||
+        !isExternalMediaPlaybackState(playbackState) ||
+        !embedId ||
+        !mediaId
+      ) {
+        return null;
+      }
+
+      return {
+        type: 'presentation-media',
+        currentTime: Math.max(0, Number((parsed as { currentTime?: number }).currentTime) || 0),
+        embedId,
+        mediaId,
+        playbackState,
+        provider,
       };
     }
 

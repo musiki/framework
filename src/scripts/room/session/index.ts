@@ -12,6 +12,7 @@ export type {
   ExternalMediaPlaybackState,
   ExternalMediaProvider,
   ParticipantRole,
+  PresentationMediaState,
   ReactionKind,
   SlideState,
 } from './messages';

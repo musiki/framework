@@ -835,7 +835,7 @@ const resolvedSlideTheme =
           }
         };
 
-        let emitDeckState = () => {};
+        let emitDeckState = (_reason = 'change') => {};
 
         const canManageRoomSession = () => {
           if (!roomSessionControl.enabled) return true;
@@ -843,6 +843,361 @@ const resolvedSlideTheme =
           const localIdentity = String(roomSessionControl.localIdentity || '').trim();
           const sessionLeaderIdentity = String(roomSessionControl.sessionLeaderIdentity || '').trim();
           return Boolean(localIdentity) && localIdentity === sessionLeaderIdentity;
+        };
+
+        /** @typedef {{ currentTime: number; embedId: string; mediaId: string; playbackState: 'playing' | 'paused' | 'ended'; provider: 'youtube'; }} RevealEmbeddedMediaState */
+        /** @typedef {{ embedId: string; iframe: HTMLIFrameElement; mediaId: string; player: any; ready: boolean; readyPromise: Promise<any> | null; }} RevealEmbeddedPlayerEntry */
+        const revealWindow = /** @type {Window & {
+          YT?: { Player?: any };
+          onYouTubeIframeAPIReady?: (() => void) | undefined;
+          __musikiRevealYouTubeApiPromise?: Promise<any>;
+        }} */ (window);
+        const REVEAL_EMBEDDED_MEDIA_SYNC_INTERVAL_MS = 2500;
+        /** @type {Map<string, RevealEmbeddedPlayerEntry>} */
+        const revealEmbeddedPlayers = new Map();
+        let revealEmbeddedMediaActiveEmbedId = '';
+        let revealEmbeddedMediaApplyingRemoteState = false;
+        /** @type {RevealEmbeddedMediaState | null} */
+        let revealEmbeddedMediaPendingState = null;
+        let revealEmbeddedMediaSyncIntervalId = 0;
+        let revealEmbeddedMediaLastSentAt = 0;
+        let revealEmbeddedMediaLastSentKey = '';
+
+        const canBroadcastRevealEmbeddedMedia = () => {
+          if (window.parent === window) return false;
+          if (!roomSessionControl.enabled) return Boolean(canManageLive);
+          const localRole = String(roomSessionControl.localRole || '').trim().toLowerCase();
+          const localIdentity = String(roomSessionControl.localIdentity || '').trim();
+          const sessionLeaderIdentity = String(roomSessionControl.sessionLeaderIdentity || '').trim();
+          return localRole === 'teacher' && Boolean(localIdentity) && localIdentity === sessionLeaderIdentity;
+        };
+
+        /** @param {any} player */
+        const readRevealYouTubePlaybackState = (player) => {
+          const state = Number(player?.getPlayerState?.() ?? -1);
+          if (state === 1) return 'playing';
+          if (state === 0) return 'ended';
+          return 'paused';
+        };
+
+        const loadRevealYouTubePlayerApi = async () => {
+          if (revealWindow.YT?.Player) return revealWindow.YT.Player;
+          if (revealWindow.__musikiRevealYouTubeApiPromise) return revealWindow.__musikiRevealYouTubeApiPromise;
+
+          revealWindow.__musikiRevealYouTubeApiPromise = new Promise((resolve, reject) => {
+            const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+            const previousReady = revealWindow.onYouTubeIframeAPIReady;
+
+            revealWindow.onYouTubeIframeAPIReady = () => {
+              previousReady?.();
+              if (revealWindow.YT?.Player) {
+                resolve(revealWindow.YT.Player);
+              } else {
+                reject(new Error('YouTube iframe API did not initialize.'));
+              }
+            };
+
+            if (existingScript) return;
+
+            const script = document.createElement('script');
+            script.src = 'https://www.youtube.com/iframe_api';
+            script.async = true;
+            script.onerror = () => reject(new Error('Could not load the YouTube iframe API.'));
+            document.head.appendChild(script);
+          });
+
+          return revealWindow.__musikiRevealYouTubeApiPromise;
+        };
+
+        const stopRevealEmbeddedMediaSyncLoop = () => {
+          if (!revealEmbeddedMediaSyncIntervalId) return;
+          window.clearInterval(revealEmbeddedMediaSyncIntervalId);
+          revealEmbeddedMediaSyncIntervalId = 0;
+        };
+
+        const getCurrentSlideYouTubeFrames = () => {
+          const currentSlide = deck.getCurrentSlide?.();
+          if (!(currentSlide instanceof HTMLElement)) return [];
+          return /** @type {HTMLIFrameElement[]} */ (
+            Array.from(
+              currentSlide.querySelectorAll('iframe[data-musiki-reveal-media-provider="youtube"]'),
+            ).filter((frame) => frame instanceof HTMLIFrameElement)
+          );
+        };
+
+        /** @param {RevealEmbeddedMediaState | null | undefined} state */
+        const getRevealEmbeddedTargetIframe = (state = null) => {
+          const frames = getCurrentSlideYouTubeFrames();
+          if (frames.length === 0) return null;
+
+          const preferredEmbedId = String(state?.embedId || '').trim();
+          if (preferredEmbedId) {
+            const byEmbedId = frames.find((frame) => String(frame.dataset.musikiRevealEmbedId || '').trim() === preferredEmbedId);
+            if (byEmbedId) return byEmbedId;
+          }
+
+          const preferredMediaId = String(state?.mediaId || '').trim();
+          if (preferredMediaId) {
+            const byMediaId = frames.find((frame) => String(frame.dataset.musikiRevealMediaId || '').trim() === preferredMediaId);
+            if (byMediaId) return byMediaId;
+          }
+
+          if (revealEmbeddedMediaActiveEmbedId) {
+            const activeFrame = frames.find((frame) => (
+              String(frame.dataset.musikiRevealEmbedId || '').trim() === revealEmbeddedMediaActiveEmbedId
+            ));
+            if (activeFrame) return activeFrame;
+          }
+
+          return frames[0] || null;
+        };
+
+        /** @param {RevealEmbeddedPlayerEntry | undefined | null} entry */
+        const buildRevealEmbeddedMediaSnapshot = (entry) => {
+          if (!entry?.ready || !entry.player) return null;
+          const videoData = entry.player.getVideoData?.() ?? {};
+          const mediaId = String(videoData.video_id || entry.mediaId || '').trim();
+          if (!mediaId) return null;
+          entry.mediaId = mediaId;
+          if (entry.iframe instanceof HTMLIFrameElement) {
+            entry.iframe.dataset.musikiRevealMediaId = mediaId;
+          }
+          return {
+            currentTime: Math.max(0, Number(entry.player.getCurrentTime?.() ?? 0) || 0),
+            embedId: entry.embedId,
+            mediaId,
+            playbackState: readRevealYouTubePlaybackState(entry.player),
+            provider: 'youtube',
+          };
+        };
+
+        const syncRevealEmbeddedMediaLoop = () => {
+          stopRevealEmbeddedMediaSyncLoop();
+          if (!canBroadcastRevealEmbeddedMedia()) return;
+          const activeEntry = revealEmbeddedPlayers.get(revealEmbeddedMediaActiveEmbedId);
+          const snapshot = buildRevealEmbeddedMediaSnapshot(activeEntry);
+          if (!snapshot || snapshot.playbackState !== 'playing') return;
+          revealEmbeddedMediaSyncIntervalId = window.setInterval(() => {
+            const currentEntry = revealEmbeddedPlayers.get(revealEmbeddedMediaActiveEmbedId);
+            if (!currentEntry) {
+              stopRevealEmbeddedMediaSyncLoop();
+              return;
+            }
+            postRevealEmbeddedMediaState(currentEntry);
+          }, REVEAL_EMBEDDED_MEDIA_SYNC_INTERVAL_MS);
+        };
+
+        /** @param {RevealEmbeddedPlayerEntry | undefined | null} entry @param {boolean} [force] */
+        const postRevealEmbeddedMediaState = (entry, force = false) => {
+          if (revealEmbeddedMediaApplyingRemoteState || !canBroadcastRevealEmbeddedMedia()) return;
+          const snapshot = buildRevealEmbeddedMediaSnapshot(entry);
+          if (!snapshot) return;
+          const now = Date.now();
+          const stateKey = [
+            snapshot.embedId,
+            snapshot.mediaId,
+            snapshot.playbackState,
+            snapshot.currentTime.toFixed(2),
+          ].join(':');
+          if (!force && stateKey === revealEmbeddedMediaLastSentKey && now - revealEmbeddedMediaLastSentAt < 450) {
+            return;
+          }
+          revealEmbeddedMediaActiveEmbedId = snapshot.embedId;
+          revealEmbeddedMediaLastSentKey = stateKey;
+          revealEmbeddedMediaLastSentAt = now;
+          postParentMessage({
+            type: 'musiki:reveal-embedded-media',
+            state: snapshot,
+          });
+          syncRevealEmbeddedMediaLoop();
+        };
+
+        /** @param {() => void} callback */
+        const withRevealEmbeddedRemoteGuard = (callback) => {
+          revealEmbeddedMediaApplyingRemoteState = true;
+          try {
+            callback();
+          } finally {
+            window.setTimeout(() => {
+              revealEmbeddedMediaApplyingRemoteState = false;
+            }, 320);
+          }
+        };
+
+        /** @param {HTMLIFrameElement | null | undefined} iframe */
+        const ensureRevealEmbeddedPlayer = async (iframe) => {
+          if (!(iframe instanceof HTMLIFrameElement)) return null;
+
+          const embedId = String(iframe.dataset.musikiRevealEmbedId || '').trim();
+          const mediaId = String(iframe.dataset.musikiRevealMediaId || '').trim();
+          if (!embedId || !mediaId) return null;
+
+          let entry = revealEmbeddedPlayers.get(embedId);
+          if (entry?.ready) {
+            entry.iframe = iframe;
+            entry.mediaId = mediaId;
+            return entry;
+          }
+          if (entry?.readyPromise) return entry.readyPromise;
+
+          entry = /** @type {RevealEmbeddedPlayerEntry} */ (entry || {
+            embedId,
+            iframe,
+            mediaId,
+            player: null,
+            ready: false,
+            readyPromise: null,
+          });
+          entry.iframe = iframe;
+          entry.mediaId = mediaId;
+          revealEmbeddedPlayers.set(embedId, entry);
+
+          entry.readyPromise = (async () => {
+            const Player = await loadRevealYouTubePlayerApi();
+
+            await new Promise((resolve, reject) => {
+              let settled = false;
+              /** @param {(() => void) | undefined} callback */
+              const finish = (callback) => {
+                if (settled) return;
+                settled = true;
+                callback?.();
+              };
+
+              entry.player = new Player(iframe, {
+                events: {
+                  onReady: () => {
+                    entry.ready = true;
+                    entry.readyPromise = null;
+                    if (!revealEmbeddedMediaActiveEmbedId) {
+                      revealEmbeddedMediaActiveEmbedId = embedId;
+                    }
+                    if (
+                      revealEmbeddedMediaPendingState &&
+                      (
+                        revealEmbeddedMediaPendingState.embedId === embedId ||
+                        revealEmbeddedMediaPendingState.mediaId === entry.mediaId
+                      )
+                    ) {
+                      void applyRevealEmbeddedMediaState(revealEmbeddedMediaPendingState);
+                    } else {
+                      syncRevealEmbeddedMediaLoop();
+                    }
+                    finish(resolve);
+                  },
+                  /** @param {any} event */
+                  onStateChange: (event) => {
+                    const videoData = event.target.getVideoData?.() ?? {};
+                    const nextMediaId = String(videoData.video_id || entry.mediaId || '').trim();
+                    if (nextMediaId) {
+                      entry.mediaId = nextMediaId;
+                      iframe.dataset.musikiRevealMediaId = nextMediaId;
+                    }
+                    revealEmbeddedMediaActiveEmbedId = embedId;
+                    syncRevealEmbeddedMediaLoop();
+                    if (!revealEmbeddedMediaApplyingRemoteState) {
+                      postRevealEmbeddedMediaState(entry);
+                    }
+                  },
+                },
+              });
+
+              window.setTimeout(() => {
+                finish(() => reject(new Error('Reveal YouTube player tardó demasiado en responder.')));
+              }, 12000);
+            });
+
+            return entry;
+          })();
+
+          return entry.readyPromise;
+        };
+
+        const ensureCurrentSlideRevealEmbeddedPlayers = async (forceEmitCurrent = false) => {
+          const frames = getCurrentSlideYouTubeFrames();
+          if (frames.length === 0) {
+            stopRevealEmbeddedMediaSyncLoop();
+            return;
+          }
+
+          await Promise.all(frames.map((iframe) => ensureRevealEmbeddedPlayer(iframe).catch(() => null)));
+
+          if (revealEmbeddedMediaPendingState) {
+            await applyRevealEmbeddedMediaState(revealEmbeddedMediaPendingState);
+            return;
+          }
+
+          if (forceEmitCurrent) {
+            const targetIframe = getRevealEmbeddedTargetIframe();
+            if (targetIframe) {
+              const targetEntry = revealEmbeddedPlayers.get(String(targetIframe.dataset.musikiRevealEmbedId || '').trim());
+              if (targetEntry?.ready) {
+                postRevealEmbeddedMediaState(targetEntry, true);
+              }
+            }
+          }
+
+          syncRevealEmbeddedMediaLoop();
+        };
+
+        const pauseInactiveRevealEmbeddedPlayers = () => {
+          const activeEmbedIds = new Set(
+            getCurrentSlideYouTubeFrames().map((frame) => String(frame.dataset.musikiRevealEmbedId || '').trim()),
+          );
+
+          revealEmbeddedPlayers.forEach((entry, embedId) => {
+            if (!entry?.ready || !entry.player || activeEmbedIds.has(embedId)) return;
+            try {
+              entry.player.pauseVideo();
+            } catch {
+              // ignore pause failures on stale hidden embeds
+            }
+          });
+        };
+
+        /** @param {RevealEmbeddedMediaState | null | undefined} state */
+        const applyRevealEmbeddedMediaState = async (state) => {
+          if (!state || typeof state !== 'object') return;
+          revealEmbeddedMediaPendingState = {
+            currentTime: Math.max(0, Number(state.currentTime) || 0),
+            embedId: String(state.embedId || '').trim(),
+            mediaId: String(state.mediaId || '').trim(),
+            playbackState: String(state.playbackState || '').trim() || 'paused',
+            provider: 'youtube',
+          };
+
+          if (
+            !revealEmbeddedMediaPendingState.embedId ||
+            !revealEmbeddedMediaPendingState.mediaId ||
+            !['playing', 'paused', 'ended'].includes(revealEmbeddedMediaPendingState.playbackState)
+          ) {
+            revealEmbeddedMediaPendingState = null;
+            return;
+          }
+
+          const targetIframe = getRevealEmbeddedTargetIframe(revealEmbeddedMediaPendingState);
+          if (!(targetIframe instanceof HTMLIFrameElement)) return;
+
+          const entry = await ensureRevealEmbeddedPlayer(targetIframe);
+          if (!entry?.ready || !entry.player) return;
+
+          const nextState = revealEmbeddedMediaPendingState;
+          if (!nextState) return;
+          revealEmbeddedMediaPendingState = null;
+          revealEmbeddedMediaActiveEmbedId = entry.embedId;
+          withRevealEmbeddedRemoteGuard(() => {
+            const currentTime = Math.max(0, Number(entry.player.getCurrentTime?.() ?? 0) || 0);
+            if (Math.abs(currentTime - nextState.currentTime) > 1.25) {
+              entry.player.seekTo(nextState.currentTime, true);
+            }
+
+            if (nextState.playbackState === 'playing') {
+              entry.player.playVideo();
+            } else {
+              entry.player.pauseVideo();
+            }
+          });
+          syncRevealEmbeddedMediaLoop();
         };
 
         const applySlidesZoom = () => {
@@ -1047,6 +1402,7 @@ const resolvedSlideTheme =
         let hasContent = false;
         let slidesMermaidPromise = null;
         let mermaidConfigured = false;
+        let mermaidDevRecoveryReloaded = false;
         const slidesLilyRenderCache = new Map();
         const pollWidgetsByEvalId = new Map();
         let unsubscribeLivePolls = null;
@@ -1172,12 +1528,20 @@ const resolvedSlideTheme =
 
         const normalizeSlideEmbeds = (container = slidesRoot) => {
           const embeds = Array.from(container.querySelectorAll('iframe'));
-          embeds.forEach((iframe) => {
+          embeds.forEach((iframe, embedIndex) => {
             if (iframe.closest('.slide-grid-block')) return;
 
             iframe.removeAttribute('width');
             iframe.removeAttribute('height');
             iframe.setAttribute('loading', 'eager');
+
+            const existingEmbedId = String(iframe.dataset.musikiRevealEmbedId || '').trim();
+            iframe.dataset.musikiRevealEmbedId = existingEmbedId
+              || (
+                window.crypto?.randomUUID
+                  ? `reveal-media-${window.crypto.randomUUID()}`
+                  : `reveal-media-${Date.now()}-${embedIndex}`
+              );
 
             const src = String(iframe.getAttribute('src') || '').trim();
             if (!src) return;
@@ -1191,10 +1555,34 @@ const resolvedSlideTheme =
 
               if (!isYouTube) return;
 
+              iframe.dataset.musikiRevealMediaProvider = 'youtube';
+
+              let mediaId = '';
+              if (host.includes('youtu.be')) {
+                mediaId = String(url.pathname.split('/').filter(Boolean)[0] || '').trim();
+              } else if (url.pathname.startsWith('/embed/')) {
+                mediaId = String(url.pathname.split('/').filter(Boolean)[1] || '').trim();
+              } else if (url.pathname.startsWith('/shorts/')) {
+                mediaId = String(url.pathname.split('/').filter(Boolean)[1] || '').trim();
+              } else {
+                mediaId = String(url.searchParams.get('v') || '').trim();
+              }
+
+              if (mediaId) {
+                iframe.dataset.musikiRevealMediaId = mediaId;
+              }
+
+              if (!url.searchParams.has('enablejsapi')) url.searchParams.set('enablejsapi', '1');
               if (!url.searchParams.has('vq')) url.searchParams.set('vq', 'hd1080');
               if (!url.searchParams.has('rel')) url.searchParams.set('rel', '0');
               if (!url.searchParams.has('modestbranding')) url.searchParams.set('modestbranding', '1');
               if (!url.searchParams.has('playsinline')) url.searchParams.set('playsinline', '1');
+              if (!url.searchParams.has('origin')) url.searchParams.set('origin', window.location.origin);
+
+              const currentAllow = String(iframe.getAttribute('allow') || '').trim();
+              if (!/autoplay/i.test(currentAllow)) {
+                iframe.setAttribute('allow', currentAllow ? `${currentAllow}; autoplay` : 'autoplay; fullscreen');
+              }
 
               const nextSrc = url.toString();
               if (nextSrc !== src) {
@@ -1612,6 +2000,46 @@ const resolvedSlideTheme =
           return inferred;
         };
 
+        const resetMermaidNodes = (nodes) => {
+          nodes.forEach((node) => {
+            delete node.dataset.mermaidRendering;
+            delete node.dataset.mermaidRendered;
+            const source = getMermaidSource(node);
+            if (source) node.textContent = source;
+          });
+        };
+
+        const isMermaidOptimizeDepError = (error) => {
+          const message = String(error?.message || error || '').trim();
+          return (
+            message.includes('Failed to fetch dynamically imported module')
+            || message.includes('Outdated Optimize Dep')
+          );
+        };
+
+        const handleMermaidRenderFailure = (container, nodes, attempt, error) => {
+          resetMermaidNodes(nodes);
+
+          if (isMermaidOptimizeDepError(error) && import.meta.env.DEV && !mermaidDevRecoveryReloaded) {
+            mermaidDevRecoveryReloaded = true;
+            console.warn('Slides mermaid render hit an outdated Vite dep. Reloading slides once...');
+            window.setTimeout(() => {
+              window.location.reload();
+            }, 120);
+            return;
+          }
+
+          if (attempt < 3) {
+            const retryDelay = 180 * (attempt + 1);
+            window.setTimeout(() => {
+              renderSlidesMermaid(container, attempt + 1);
+            }, retryDelay);
+            return;
+          }
+
+          console.error('Slides mermaid render error:', error);
+        };
+
         const renderSlidesMermaid = (container = slidesRoot, attempt = 0) => {
           const nodes = Array.from(container.querySelectorAll('.mermaid'))
             .filter(
@@ -1652,37 +2080,10 @@ const resolvedSlideTheme =
                 });
 
                 Promise.all(renderTasks).catch((error) => {
-                  nodes.forEach((node) => {
-                    delete node.dataset.mermaidRendering;
-                    delete node.dataset.mermaidRendered;
-                    const source = getMermaidSource(node);
-                    if (source) node.textContent = source;
-                  });
-
-                  if (attempt < 3) {
-                    const retryDelay = 180 * (attempt + 1);
-                    window.setTimeout(() => {
-                      renderSlidesMermaid(container, attempt + 1);
-                    }, retryDelay);
-                  } else {
-                    console.error('Slides mermaid render error:', error);
-                  }
+                  handleMermaidRenderFailure(container, nodes, attempt, error);
                 });
               } catch (error) {
-                nodes.forEach((node) => {
-                  delete node.dataset.mermaidRendering;
-                  delete node.dataset.mermaidRendered;
-                  const source = getMermaidSource(node);
-                  if (source) node.textContent = source;
-                });
-                if (attempt < 3) {
-                  const retryDelay = 180 * (attempt + 1);
-                  window.setTimeout(() => {
-                    renderSlidesMermaid(container, attempt + 1);
-                  }, retryDelay);
-                } else {
-                  console.error('Slides mermaid render error:', error);
-                }
+                handleMermaidRenderFailure(container, nodes, attempt, error);
               }
             })
             .catch((error) => {
@@ -3038,11 +3439,16 @@ const resolvedSlideTheme =
               sessionLeaderIdentity: String(state?.sessionLeaderIdentity || '').trim(),
             };
             pollWidgetsByEvalId.forEach((widget) => renderSlidePollState(widget));
+            syncRevealEmbeddedMediaLoop();
+            if (canBroadcastRevealEmbeddedMedia()) {
+              void ensureCurrentSlideRevealEmbeddedPlayers(true);
+            }
             return;
           }
 
           if (type === 'musiki:reveal-request-state') {
             emitDeckState('change');
+            void ensureCurrentSlideRevealEmbeddedPlayers(true);
             return;
           }
 
@@ -3053,6 +3459,11 @@ const resolvedSlideTheme =
 
           if (type === 'musiki:reveal-toggle-jump-to-slide') {
             deck.toggleJumpToSlide?.();
+            return;
+          }
+
+          if (type === 'musiki:reveal-embedded-media-sync') {
+            void applyRevealEmbeddedMediaState(payload.state);
             return;
           }
 
@@ -3172,6 +3583,8 @@ const resolvedSlideTheme =
           }
           refreshScrollableState();
           emitDeckState('change');
+          pauseInactiveRevealEmbeddedPlayers();
+          void ensureCurrentSlideRevealEmbeddedPlayers();
         });
 
         deck.initialize()
@@ -3184,6 +3597,7 @@ const resolvedSlideTheme =
             setTimeout(() => renderSlidesMermaid(slidesRoot), 360);
             refreshScrollableState();
             setTimeout(refreshScrollableState, 220);
+            void ensureCurrentSlideRevealEmbeddedPlayers(true);
             if (speakerOpenPending) {
               openSpeakerView();
             }
@@ -3201,11 +3615,13 @@ const resolvedSlideTheme =
             window.clearInterval(livePollTickId);
             livePollTickId = null;
           }
+          stopRevealEmbeddedMediaSyncLoop();
           window.removeEventListener('message', handleRevealRoomMessage);
         });
 
         window.addEventListener('resize', () => {
           normalizeSlideEmbeds(slidesRoot);
+          void ensureCurrentSlideRevealEmbeddedPlayers();
           refreshScrollableState();
         });
 
