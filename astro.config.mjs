@@ -96,7 +96,7 @@ export default defineConfig({
   },
   integrations: [
     mdx(), 
-    auth({ injectEndpoints: true })
+    auth({ injectEndpoints: false })
   ],
   markdown: {
     shikiConfig: {
