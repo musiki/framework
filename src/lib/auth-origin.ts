@@ -30,9 +30,9 @@ export const resolveConfiguredAuthOrigin = (): string =>
     process.env.AUTH_URL ||
       process.env.NEXTAUTH_URL ||
       process.env.SITE_URL ||
-      import.meta.env.AUTH_URL ||
-      import.meta.env.NEXTAUTH_URL ||
-      import.meta.env.SITE_URL,
+      import.meta.env?.AUTH_URL ||
+      import.meta.env?.NEXTAUTH_URL ||
+      import.meta.env?.SITE_URL,
   );
 
 export const resolveAuthBaseOrigin = (baseUrl?: string): string => {
@@ -42,18 +42,16 @@ export const resolveAuthBaseOrigin = (baseUrl?: string): string => {
 
   const configuredOrigin = resolveConfiguredAuthOrigin();
   const detectedBaseOrigin = normalizeOriginCandidate(baseUrl);
+  const configuredNonLoopbackOrigin =
+    configuredOrigin && !isLoopbackOrigin(configuredOrigin) ? configuredOrigin : '';
+  const detectedNonLoopbackOrigin =
+    detectedBaseOrigin && !isLoopbackOrigin(detectedBaseOrigin) ? detectedBaseOrigin : '';
 
-  if (isDev) {
-    return detectedBaseOrigin || configuredOrigin || 'http://localhost:4321';
-  }
-
-  if (configuredOrigin && !isLoopbackOrigin(configuredOrigin)) {
-    return configuredOrigin;
-  }
-
-  if (detectedBaseOrigin && !isLoopbackOrigin(detectedBaseOrigin)) {
-    return detectedBaseOrigin;
-  }
+  if (detectedNonLoopbackOrigin) return detectedNonLoopbackOrigin;
+  if (configuredNonLoopbackOrigin) return configuredNonLoopbackOrigin;
+  if (detectedBaseOrigin) return detectedBaseOrigin;
+  if (configuredOrigin) return configuredOrigin;
+  if (isDev) return 'http://localhost:4321';
 
   return 'https://musiki.org.ar';
 };

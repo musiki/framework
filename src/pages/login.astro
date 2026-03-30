@@ -2,6 +2,7 @@
 import BaseHead from "../components/BaseHead.astro";
 import Header from "../components/Header.astro";
 import { SignIn } from "auth-astro/components";
+import { resolveRequestAuthOrigin } from "../lib/auth-origin";
 
 const session = (Astro.locals as any).session;
 
@@ -29,6 +30,8 @@ const toSafeRedirect = (value: unknown): string => {
 
 const requestedRedirect = toSafeRedirect(Astro.url.searchParams.get("redirect"));
 const callbackPath = requestedRedirect || "/dashboard";
+const authOrigin = resolveRequestAuthOrigin(Astro.request);
+const callbackUrl = `${authOrigin}${callbackPath}`;
 
 if (session?.user?.email) {
     return Astro.redirect(callbackPath);
@@ -69,7 +72,7 @@ if (session?.user?.email) {
     <main class="wrap">
         <h1>Iniciar Sesión</h1>
         <div class="provider-login">
-            <SignIn provider="google" options={{ callbackUrl: callbackPath }}>Continuar con Google</SignIn>
+            <SignIn provider="google" options={{ callbackUrl }}>Continuar con Google</SignIn>
         </div>
     </main>
 </body>

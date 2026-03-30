@@ -3,5 +3,5 @@ import { resolveRequestAuthOrigin } from "../lib/auth-origin";
 
 export const GET: APIRoute = async ({ request, redirect }) => {
   const origin = resolveRequestAuthOrigin(request);
-  return redirect(`${origin}/api/auth/signout?callbackUrl=/`);
+  return redirect(`${origin}/api/auth/signout?callbackUrl=${encodeURIComponent(`${origin}/`)}`);
 };
