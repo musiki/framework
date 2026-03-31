@@ -50,6 +50,7 @@ export const GET: APIRoute = async () => {
 
   return new Response(
     JSON.stringify({
+      serverIp: '46.225.154.68', // Added to identify current server
       cpu: {
         load: load.toFixed(2),
         percent: cpuPercent.toFixed(0),
