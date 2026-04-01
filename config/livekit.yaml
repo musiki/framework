@@ -1,0 +1,16 @@
+port: 7880
+rtc:
+  udp_port: 7882
+  node_ip: 46.225.154.68
+
+keys:
+  APIMPsug9QVH3aW: 3Brl3FkkKW7d0tBOzP5VDgxWdAEO2KNmtLEvigGgfhM
+
+turn:
+  enabled: true
+  domain: live.musiki.org.ar
+  # Eliminamos external_ips que causaba el error
+  udp_port: 3478
+
+logging:
+  level: info
