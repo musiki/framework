@@ -574,17 +574,6 @@ const withActiveCourse = (href: string) => {
 			});
 		}
 
-		if (courseMenuLabel instanceof HTMLAnchorElement && courseDropdown && !courseMenuLabel.dataset.bound) {
-			courseMenuLabel.dataset.bound = 'true';
-			courseMenuLabel.addEventListener('click', (event) => {
-				if (!isCompactCourseMenuTrigger()) return;
-				if (courseDropdown.classList.contains('show')) return;
-				event.preventDefault();
-				event.stopPropagation();
-				syncCourseMenuOpen(true);
-			});
-		}
-
 		if (courseMenuButton && courseDropdown && !courseMenuButton.dataset.bound) {
 			courseMenuButton.dataset.bound = 'true';
 			courseMenuButton.addEventListener('click', (event) => {
@@ -992,9 +981,13 @@ const withActiveCourse = (href: string) => {
 	}
 	.course-menu-trigger--arrow {
 		gap: 0;
-		padding-left: 0.18rem;
-		padding-right: 0.38rem;
+		padding-left: 0.4rem;
+		padding-right: 0.6rem;
 		flex: 0 0 auto;
+		min-width: 40px;
+		display: flex;
+		justify-content: center;
+		align-items: center;
 	}
 	.course-menu-trigger-label {
 		display: inline-block;
@@ -1449,6 +1442,11 @@ const withActiveCourse = (href: string) => {
 		.course-menu-trigger {
 			padding: 0.46em 0.34em;
 		}
+		.course-menu-trigger--arrow {
+			padding-left: 0.5rem;
+			padding-right: 0.7rem;
+			min-width: 44px;
+		}
 		.course-menu-trigger-label {
 			max-width: min(12rem, 38vw);
 		}
@@ -1495,8 +1493,21 @@ const withActiveCourse = (href: string) => {
 			padding-bottom: 0;
 			align-items: center;
 		}
+		.course-dropdown {
+			position: fixed;
+			top: var(--musiki-header-height, 4.5rem);
+			left: 0.5rem;
+			right: 0.5rem;
+			max-width: none;
+			width: auto;
+		}
 		.course-menu-trigger {
 			padding: 0.42em 0.32em;
+		}
+		.course-menu-trigger--arrow {
+			padding-left: 0.5rem;
+			padding-right: 0.7rem;
+			min-width: 44px;
 		}
 		.course-menu-trigger-label {
 			max-width: min(10.6rem, 40vw);
@@ -1525,6 +1536,11 @@ const withActiveCourse = (href: string) => {
 		.course-menu-trigger {
 			padding: 0.4em 0.3em;
 			font-size: 0.88rem;
+		}
+		.course-menu-trigger--arrow {
+			padding-left: 0.5rem;
+			padding-right: 0.7rem;
+			min-width: 44px;
 		}
 		.course-menu-trigger-label {
 			max-width: min(8.4rem, 40vw);
@@ -1572,6 +1588,11 @@ const withActiveCourse = (href: string) => {
 		.course-menu-trigger {
 			padding: 0.35em 0.28em;
 			font-size: 0.82rem;
+		}
+		.course-menu-trigger--arrow {
+			padding-left: 0.5rem;
+			padding-right: 0.7rem;
+			min-width: 40px;
 		}
 		.course-menu-trigger-label {
 			max-width: min(7.2rem, 44vw);
