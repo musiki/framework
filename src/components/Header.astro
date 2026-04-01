@@ -555,6 +555,22 @@ const withActiveCourse = (href: string) => {
 		};
 		const syncCourseMenuOpen = (isOpen: boolean) => {
 			syncUserMenuOpen(false);
+			if (isOpen && courseDropdown && courseMenuButton) {
+				const rect = courseMenuButton.getBoundingClientRect();
+				const isMobile = window.innerWidth <= 900;
+				
+				if (isMobile) {
+					courseDropdown.style.left = '0.5rem';
+					courseDropdown.style.right = '0.5rem';
+					courseDropdown.style.top = `${rect.bottom + 8}px`;
+					courseDropdown.style.width = 'auto';
+				} else {
+					courseDropdown.style.left = `${rect.left}px`;
+					courseDropdown.style.top = `${rect.bottom + 8}px`;
+					courseDropdown.style.width = 'max-content';
+					courseDropdown.style.right = 'auto';
+				}
+			}
 			courseDropdown?.classList.toggle('show', isOpen);
 			courseMenuButton?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
 			courseMenuLabel?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
@@ -990,6 +1006,9 @@ const withActiveCourse = (href: string) => {
 		justify-content: center;
 		align-items: center;
 	}
+	.course-menu-trigger--arrow svg {
+		pointer-events: none;
+	}
 	.course-menu-trigger-label {
 		display: inline-block;
 		max-width: min(18rem, 32vw);
@@ -998,8 +1017,8 @@ const withActiveCourse = (href: string) => {
 		white-space: nowrap;
 	}
 	.course-dropdown {
-		position: absolute;
-		top: calc(100% + 0.35rem);
+		position: fixed;
+		top: 0;
 		left: 0;
 		min-width: 220px;
 		max-width: 320px;
@@ -1011,8 +1030,8 @@ const withActiveCourse = (href: string) => {
 		opacity: 0;
 		visibility: hidden;
 		transform: translateY(-6px);
-		transition: all 0.18s ease;
-		z-index: 1265;
+		transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+		z-index: 2000;
 	}
 	.course-dropdown.show {
 		opacity: 1;
@@ -1495,12 +1514,8 @@ const withActiveCourse = (href: string) => {
 			align-items: center;
 		}
 		.course-dropdown {
-			position: fixed;
-			top: var(--musiki-header-height, 4.5rem);
-			left: 0.5rem;
-			right: 0.5rem;
+			/* top/left/right handled by JS */
 			max-width: none;
-			width: auto;
 		}
 		.course-menu-trigger {
 			padding: 0.42em 0.32em;
