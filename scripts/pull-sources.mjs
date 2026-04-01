@@ -69,6 +69,15 @@ const loadManifest = () => {
   return { manifest: parsed, sources: enabled };
 };
 
+const isIgnored = (name) =>
+  name === '.git' ||
+  name === '.obsidian' ||
+  name === '.trash' ||
+  name === '.github' ||
+  name === '.DS_Store' ||
+  name === '.env' ||
+  name === '.gitignore';
+
 const pullFromLocalPath = (source, targetDir) => {
   const localPath = path.resolve(source.localPath);
   if (!fs.existsSync(localPath)) {
@@ -78,7 +87,7 @@ const pullFromLocalPath = (source, targetDir) => {
   fs.rmSync(targetDir, { recursive: true, force: true });
   fs.cpSync(localPath, targetDir, {
     recursive: true,
-    filter: (sourcePath) => path.basename(sourcePath) !== '.git',
+    filter: (sourcePath) => !isIgnored(path.basename(sourcePath)),
   });
   return true;
 };

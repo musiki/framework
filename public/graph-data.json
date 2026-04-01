@@ -112,6 +112,13 @@
       "name": "composiciónmusical",
       "type": "tag",
       "group": "tags"
+    },
+    {
+      "id": "cursos/s123/forma y estructura/forma y estructura",
+      "name": "forma y estructura",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
     }
   ],
   "links": [

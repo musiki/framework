@@ -102,7 +102,38 @@ const mergeAssemblyConfig = (manifestAssembly) => {
   }
 };
 
+const ALLOWED_EXTENSIONS = new Set([
+  '.md',
+  '.mdx',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+  '.svg',
+  '.mp3',
+  '.wav',
+  '.ogg',
+  '.mp4',
+  '.pdf',
+  '.midi',
+  '.mid',
+  '.ly',
+]);
+
+const isAllowedFile = (filePath) => {
+  const ext = path.extname(filePath).toLowerCase();
+  return ALLOWED_EXTENSIONS.has(ext);
+};
+
 const isMarkdown = (filePath) => /\.mdx?$/i.test(filePath);
+
+const isHidden = (filePath, baseDir) => {
+  const relative = path.relative(baseDir, filePath);
+  return relative
+    .split(path.sep)
+    .some((segment) => segment.startsWith('.') && segment !== '.' && segment !== '..');
+};
 
 const prepDir = (dirPath) => {
   fs.rmSync(dirPath, { recursive: true, force: true });
@@ -158,6 +189,9 @@ const main = () => {
     if (!fs.existsSync(sourceRoot)) return;
     const files = walkFiles(sourceRoot);
     for (const filePath of files) {
+      if (isHidden(filePath, sourceRoot)) continue;
+      if (!isAllowedFile(filePath)) continue;
+
       const rel = path.relative(sourceRoot, filePath);
       const destination = path.join(destinationRoot, rel);
       registerCopy(filePath, destination, {
@@ -195,6 +229,8 @@ const main = () => {
 
     const courseFiles = walkFiles(sourceCoursesRoot).filter(isMarkdown);
     for (const filePath of courseFiles) {
+      if (isHidden(filePath, sourceCoursesRoot)) continue;
+
       const raw = fs.readFileSync(filePath, 'utf8');
       let data = {};
       try {
