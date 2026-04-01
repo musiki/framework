@@ -1873,15 +1873,9 @@ const resolvedSlideTheme =
         };
 
         const hydrateRenderedLilyBlocks = (container = slidesRoot) => {
-          const blocks = Array.from(container.querySelectorAll('.lilypond-block, .lily-score'));
-          blocks.forEach((block) => {
-            if (!(block instanceof HTMLElement)) return;
-            const image = block.querySelector('img');
-            if (!(image instanceof HTMLImageElement)) return;
-            image.loading = 'eager';
-            image.decoding = 'async';
-            image.referrerPolicy = 'no-referrer';
-          });
+          if (typeof (window as any).hydrateLilypondBlocks === 'function') {
+            (window as any).hydrateLilypondBlocks(container);
+          }
         };
 
         const hydrateSlideGrids = (container = slidesRoot) => {
@@ -3896,6 +3890,10 @@ const resolvedSlideTheme =
           postRoomCommand('hold-mic-end');
         });
       })();
+    </script>
+    <script>
+      import { hydrateLilypondBlocks } from '../lib/lilypond-player';
+      (window as any).hydrateLilypondBlocks = hydrateLilypondBlocks;
     </script>
   </body>
 </html>

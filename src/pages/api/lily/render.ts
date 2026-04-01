@@ -44,12 +44,18 @@ function tryRenderLilySvg(hash: string, source: string): boolean {
 
   try {
     fs.writeFileSync(tmpLyPath, source, 'utf8');
-    execSync(
-      `lilypond -dbackend=svg -dno-point-and-click -o "${outBasePath}" "${tmpLyPath}"`,
-      { stdio: 'ignore' },
-    );
+    // We wrap in try/catch because execSync throws on non-zero exit codes.
+    // LilyPond often returns non-zero for warnings or if \midi is missing but requested in some way.
+    try {
+      execSync(
+        `lilypond -dbackend=svg -o "${outBasePath}" "${tmpLyPath}"`,
+        { stdio: 'ignore' },
+      );
+    } catch (execError) {
+      console.warn('[api/lily/render] lilypond reported issues, checking if SVG was still produced...');
+    }
   } catch (error) {
-    console.error('[api/lily/render] lilypond render failed:', (error as Error)?.message || error);
+    console.error('[api/lily/render] file system error during render:', (error as Error)?.message || error);
   } finally {
     if (fs.existsSync(tmpLyPath)) {
       fs.unlinkSync(tmpLyPath);

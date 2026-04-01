@@ -42,8 +42,8 @@ export default function remarkLily() {
           const tmpLy = path.join(lilyDir, `${hash}.ly`);
           fs.writeFileSync(tmpLy, code);
 
-          // Run LilyPond: -dbackend=svg -dno-point-and-click
-          execSync(`lilypond -dbackend=svg -dno-point-and-click -o "${path.join(lilyDir, hash)}" "${tmpLy}"`, { stdio: 'ignore' });
+          // Run LilyPond: -dbackend=svg (keep point-and-click for anchors)
+          execSync(`lilypond -dbackend=svg -o "${path.join(lilyDir, hash)}" "${tmpLy}"`, { stdio: 'ignore' });
 
           // Cleanup temp file
           if (fs.existsSync(tmpLy)) fs.unlinkSync(tmpLy);
@@ -54,9 +54,22 @@ export default function remarkLily() {
         }
       }
 
-      // 3. If SVG exists, replace code block with Image
+      let midiExists = fs.existsSync(path.join(lilyDir, `${hash}.midi`));
+      if (!midiExists && fs.existsSync(path.join(lilyDir, `${hash}.mid`))) {
+         fs.renameSync(path.join(lilyDir, `${hash}.mid`), path.join(lilyDir, `${hash}.midi`));
+         midiExists = true;
+      }
+
+      // 3. If SVG exists, replace code block with inline Custom Element
       if (svgExists) {
-        parent.children[index] = { type: 'html', value: `<div class="lily-score"><img src="${srcUrl}" alt="LilyPond Score" loading="lazy" /></div>` };
+        let svgContent = fs.readFileSync(svgPath, 'utf8');
+        svgContent = svgContent.replace(/<\?xml.*?\?>/, '').replace(/<!DOCTYPE.*?>/, '').trim();
+        
+        const midiAttr = midiExists ? ` data-midi-url="/lily/${hash}.midi"` : '';
+        parent.children[index] = { 
+          type: 'html', 
+          value: `<musiki-lilypond class="lily-score"${midiAttr}>\n${svgContent}\n</musiki-lilypond>` 
+        };
       }
     });
   };

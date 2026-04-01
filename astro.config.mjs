@@ -13,7 +13,7 @@ import remarkRefsApa from './src/plugins/remark-refs-apa.mjs'
 import remarkEvalBlocks from './src/plugins/remark-eval-blocks.mjs'
 import remarkDataviewLite from './src/plugins/remark-dataview-lite.mjs'
 import remarkWikiLink from './src/plugins/remark-wiki-link.mjs'
-import remarkRemoteLilypond from './src/plugins/remark-remote-lilypond.mjs'
+import remarkLily from './src/plugins/remark-lily.mjs'
 
 import auth from 'auth-astro';
 import node from '@astrojs/node';
@@ -118,7 +118,7 @@ export default defineConfig({
       remarkEvalBlocks,       // procesa bloques eval
       remarkDataviewLite,     // procesa bloques dataview
       remarkWikiLink,         // procesa wiki links [[Link]]
-      [remarkRemoteLilypond, { enabled: true, timeoutMs: 10_000, preferRemote: true }], // usa renderer remoto/R2 por defecto
+      remarkLily,             // usa renderer local de lilypond
     ],
     rehypePlugins: [
       rehypeObsidianCallouts, // detecta y transforma callouts tipo GitHub/Obsidian

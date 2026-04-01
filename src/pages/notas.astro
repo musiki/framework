@@ -452,6 +452,9 @@ for (const note of allNotes) {
         if (data?.note?.renderedHtml && bodyEl) {
           bodyEl.innerHTML = data.note.renderedHtml;
           runMermaid(bodyEl);
+          if (typeof (window as any).hydrateLilypondBlocks === 'function') {
+            (window as any).hydrateLilypondBlocks(bodyEl);
+          }
         }
 
         // Switch back to read mode
@@ -503,7 +506,12 @@ for (const note of allNotes) {
 
       // Run mermaid on initial load
       const initialBody = document.getElementById('notas-body');
-      if (initialBody) runMermaid(initialBody);
+      if (initialBody) {
+        runMermaid(initialBody);
+        if (typeof (window as any).hydrateLilypondBlocks === 'function') {
+          (window as any).hydrateLilypondBlocks(initialBody);
+        }
+      }
 
       // Dump all notes as markdown
       const dumpBtn = document.getElementById('notas-dump-btn');
@@ -523,6 +531,10 @@ for (const note of allNotes) {
           URL.revokeObjectURL(url);
         });
       }
+    </script>
+    <script>
+      import { hydrateLilypondBlocks } from '../lib/lilypond-player';
+      (window as any).hydrateLilypondBlocks = hydrateLilypondBlocks;
     </script>
   </body>
 </html>

@@ -2272,6 +2272,10 @@ if (activeCourse) {
             if (!isDirectForumMediaUrl(anchor.href)) return;
             anchor.dataset.forumMediaLink = 'true';
           });
+
+          if (typeof window.hydrateLilypondBlocks === 'function') {
+            window.hydrateLilypondBlocks(container);
+          }
         };
 
         const replaceForumTextareaSelection = (textarea, nextText, start, end, cursorStart, cursorEnd = cursorStart) => {
@@ -2297,6 +2301,8 @@ if (activeCourse) {
               + 'system-count=#1 }\n\n'
               + '\\score {\n'
               + `\\new Staff \\relative{c'4 ${FORUM_EDITOR_CURSOR_TOKEN}}\n`
+              + '\\layout { }\n'
+              + '\\midi { }\n'
               + '}\n'
               + '```',
             cursorToken: FORUM_EDITOR_CURSOR_TOKEN,
@@ -3880,6 +3886,11 @@ a[node] -->|edge| b[hub]
 
       document.addEventListener('astro:page-load', mountForumReader);
       window.addEventListener('storage', refreshForumUnreadBadges);
+    </script>
+
+    <script>
+      import { hydrateLilypondBlocks } from '../lib/lilypond-player';
+      (window as any).hydrateLilypondBlocks = hydrateLilypondBlocks;
     </script>
   </body>
 </html>

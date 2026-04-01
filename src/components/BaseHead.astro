@@ -132,3 +132,28 @@ const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || 'G-0N
 		trackPageView();
 	})();
 </script>
+
+<script>
+	import { installLilypondPlayer } from '../lib/lilypond-player';
+
+	class MusikiLilypond extends HTMLElement {
+		async connectedCallback() {
+			if (this.dataset.initialized) return;
+			this.dataset.initialized = 'true';
+			
+			const midiUrl = this.getAttribute('data-midi-url');
+			if (midiUrl) {
+				try {
+					await installLilypondPlayer(this, midiUrl);
+				} catch (err) {
+					console.warn('Failed to install Lilypond Player', err);
+				}
+			}
+		}
+	}
+	
+	if (!customElements.get('musiki-lilypond')) {
+		customElements.define('musiki-lilypond', MusikiLilypond);
+	}
+</script>
+

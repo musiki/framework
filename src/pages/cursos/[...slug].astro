@@ -256,8 +256,11 @@ const presentationHref =
   isLessonPage && hasPresentationTheme && Astro.url.pathname.startsWith('/cursos/')
     ? Astro.url.pathname.replace('/cursos/', '/cursos/slides/')
     : '';
-const performativeRoomHref = presentationHref
-  ? `/room?room=${encodeURIComponent(`${canonicalCourseId || courseSlug}-stage`)}&course=${encodeURIComponent(canonicalCourseId || courseSlug)}&slides=${encodeURIComponent(presentationHref)}`
+const isLiveEnabled =
+  Boolean(courseData?.live) ||
+  Boolean((currentEntry.data as Record<string, unknown>)?.live);
+const performativeRoomHref = (presentationHref || isLiveEnabled)
+  ? `/room?room=${encodeURIComponent(`${canonicalCourseId || courseSlug}-stage`)}&course=${encodeURIComponent(canonicalCourseId || courseSlug)}${presentationHref ? `&slides=${encodeURIComponent(presentationHref)}` : ''}`
   : '';
 const hasSessionUser = Boolean(session?.user?.email);
 const extractSessionFirstName = (...values: unknown[]) => {
@@ -2867,7 +2870,7 @@ order:
               >←</button>
             </div>
           </div>
-          {performativeRoomHref && isLessonPage && (
+          {performativeRoomHref && (isLessonPage || isLiveEnabled) && (
             <div class="course-title-secondary">
               <a href={performativeRoomHref} class="performative-room-link">
                 Sala performativa
@@ -8667,6 +8670,10 @@ order:
             if (!isDirectForumMediaUrl(anchor.href)) return;
             anchor.dataset.forumMediaLink = 'true';
           });
+
+          if (typeof (window as any).hydrateLilypondBlocks === 'function') {
+            (window as any).hydrateLilypondBlocks(container);
+          }
         }
 
         function replaceForumTextareaSelection(textarea, nextText, start, end, cursorStart, cursorEnd = cursorStart) {
@@ -8692,6 +8699,8 @@ order:
               + 'system-count=#1 }\n\n'
               + '\\score {\n'
               + `\\new Staff \\relative{c'4 ${FORUM_EDITOR_CURSOR_TOKEN}}\n`
+              + '\\layout { }\n'
+              + '\\midi { }\n'
               + '}\n'
               + '```',
             cursorToken: FORUM_EDITOR_CURSOR_TOKEN,
@@ -11114,6 +11123,14 @@ a[node] -->|edge| b[hub]
         }
 
         try {
+          if (typeof (window as any).hydrateLilypondBlocks === 'function') {
+            (window as any).hydrateLilypondBlocks(document.body);
+          }
+        } catch (error) {
+          console.error('Course lilypond bootstrap error:', error);
+        }
+
+        try {
           await loadUserSubmissions();
         } catch (error) {
           console.error('User submission bootstrap error:', error);
@@ -11920,5 +11937,9 @@ a[node] -->|edge| b[hub]
         font-size: 0.82rem;
       }
     </style>
+    <script>
+      import { hydrateLilypondBlocks } from '../../lib/lilypond-player';
+      (window as any).hydrateLilypondBlocks = hydrateLilypondBlocks;
+    </script>
   </body>
 </html>

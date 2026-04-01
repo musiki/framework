@@ -27,7 +27,7 @@
     },
     {
       "id": "s123",
-      "enabled": false,
+      "enabled": true,
       "repo": "musiki/s123",
       "branch": "main",
       "contentRoot": ".",

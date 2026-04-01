@@ -875,6 +875,18 @@ ol ol ol ol > li::marker {
   filter: invert(1);
 }
 
+.lilypond-block .is-active-note,
+.lily-score .is-active-note {
+  fill: #e74c3c !important;
+  stroke: #e74c3c !important;
+  transition: fill 0.1s, stroke 0.1s;
+}
+
+.lilypond-block .lily-playhead,
+.lily-score .lily-playhead {
+  pointer-events: none;
+}
+
 /* Forum dynamic DOM (created client-side in cursos/[...slug].astro)
    Astro component-scoped styles do not always hit these nodes, so keep
    critical presentation rules global and explicit. */
