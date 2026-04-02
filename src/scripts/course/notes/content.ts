@@ -1,3 +1,5 @@
+import { hydrateLilypondBlocks, setupLilypondAutoHydration } from '../../../lib/lilypond-player';
+
 type MermaidRenderResult = {
   svg?: string;
   bindFunctions?: (element: Element) => void;
@@ -10,11 +12,17 @@ type MermaidApi = {
 
 type CourseNotesWindow = Window & {
   __musikiCourseNotesMermaidPromise?: Promise<MermaidApi | null>;
-  hydrateLilypondBlocks?: (root?: ParentNode | null) => void;
+  __musikiCourseNotesLilypondReady?: boolean;
+  hydrateLilypondBlocks?: (root?: HTMLElement | null) => Promise<void> | void;
   mermaid?: MermaidApi;
 };
 
 let courseMermaidRenderSequence = 0;
+
+if (typeof window !== 'undefined') {
+  const courseWindow = window as CourseNotesWindow;
+  courseWindow.hydrateLilypondBlocks = hydrateLilypondBlocks;
+}
 
 export function ensureCourseNotesMermaid(): Promise<MermaidApi | null> {
   const courseWindow = window as CourseNotesWindow;
@@ -130,10 +138,15 @@ export function renderCourseNotesMermaid(container: ParentNode, attempt = 0): vo
 
 export function hydrateCourseNotesLilypond(container: ParentNode | null | undefined): void {
   const courseWindow = window as CourseNotesWindow;
-  if (typeof courseWindow.hydrateLilypondBlocks !== 'function') return;
+  if (!courseWindow.__musikiCourseNotesLilypondReady) {
+    courseWindow.hydrateLilypondBlocks = hydrateLilypondBlocks;
+    setupLilypondAutoHydration();
+    courseWindow.__musikiCourseNotesLilypondReady = true;
+  }
 
-  const root = getRenderableRoot(container) || document.body;
-  courseWindow.hydrateLilypondBlocks(root);
+  const root = getRenderableRoot(container);
+  const hydrationRoot = root instanceof HTMLElement ? root : document.body;
+  void courseWindow.hydrateLilypondBlocks?.(hydrationRoot);
 }
 
 export function enhanceCourseNotesContent(container: ParentNode | null | undefined): void {

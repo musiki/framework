@@ -1453,27 +1453,23 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
   const playWrapper = document.createElement('div');
   
   if (postActions) {
-    // Inside forum post: place next to Responder (R)
-    btn.style.marginLeft = '0.35rem';
-    
+    // Inside forum post: keep Play immediately before Responder (R)
     const replyBtn = postActions.querySelector('.forum-action-r');
-    if (replyBtn && replyBtn.nextSibling) {
-      postActions.insertBefore(btn, replyBtn.nextSibling);
+    if (replyBtn) {
+      postActions.insertBefore(btn, replyBtn);
     } else {
       postActions.appendChild(btn);
     }
     // Actions bar might be hidden if it only has reactions
     (postActions as HTMLElement).hidden = false;
   } else {
-    // Fallback: place over the SVG
-    playWrapper.className = 'lily-miniplayer';
+    // Fallback: place over the SVG aligned to the left edge
+    playWrapper.className = 'lily-miniplayer lily-miniplayer-inline-start';
     Object.assign(playWrapper.style, {
       position: 'sticky',
       top: '4px',
-      right: '4px',
+      left: '4px',
       zIndex: '20',
-      float: 'right',
-      marginBottom: '-32px',
       pointerEvents: 'none', 
     });
     playWrapper.appendChild(btn);

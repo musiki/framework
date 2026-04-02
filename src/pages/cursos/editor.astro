@@ -58,25 +58,26 @@ let editorError = '';
 
 if (!source?.repo) {
   editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
-} else if (!githubAppConfigured) {
-  editorError = 'La GitHub App no está configurada todavía en el server.';
 } else if (mode === 'edit') {
   if (!requestedPath) {
     editorError = 'Falta el path de la nota a editar.';
   } else {
     try {
-      const remoteFile = localContentAdminEnabled
-        ? getEditableLocalRepoFile(source, requestedPath)
-        : await getRepoFile({
-            repoFullName: source.repo,
-            path: requestedPath,
-            ref: source.branch || 'main',
-          });
+      const localFile = getEditableLocalRepoFile(source, requestedPath);
+      const remoteFile = localFile
+        ? localFile
+        : (!githubAppConfigured
+            ? null
+            : await getRepoFile({
+                repoFullName: source.repo,
+                path: requestedPath,
+                ref: source.branch || 'main',
+              }));
 
       if (!remoteFile) {
-        editorError = localContentAdminEnabled
-          ? 'La nota no existe en local o no pudo resolverse.'
-          : 'La nota no existe en GitHub o no pudo resolverse.';
+        editorError = githubAppConfigured
+          ? 'La nota no existe ni en local ni en GitHub, o no pudo resolverse.'
+          : 'La nota no existe en local y la GitHub App no está configurada en el server.';
       } else {
         targetPath = remoteFile.path || requestedPath;
         initialContent = remoteFile.content || '';

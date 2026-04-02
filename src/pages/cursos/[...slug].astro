@@ -10,10 +10,12 @@ import {
   buildDefaultCreatePath,
   getEditableLocalRepoFile,
   isLocalContentAdminEnabled,
+  resolveCourseSource,
   sanitizeRepoMarkdownPath,
   sourcePathFromFrameworkFilePath,
 } from '../../lib/content-admin';
 import { createSupabaseServerClient } from '../../lib/forum-server';
+import { getRepoFile, isGitHubAppConfigured } from '../../lib/github-app';
 import { getCourseWelcomeFields } from '../../lib/dashboard/welcome-fields';
 import { resolveLiveManageAccess } from '../../lib/live/access';
 import {
@@ -435,24 +437,27 @@ let editorTargetPath = isEditing ? currentEntrySourcePath : (sanitizeRepoMarkdow
 if (isEditorActive) {
   if (isEditing) {
     try {
-      const { resolveCourseSource } = await import('../../lib/content-admin');
       const source = resolveCourseSource(canonicalCourseId);
       
       if (!source?.repo) {
         editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
       } else {
-        const remoteFile = localContentAdminEnabled
-          ? getEditableLocalRepoFile(source, currentEntrySourcePath)
-          : await (await import('../../lib/github-app')).getRepoFile({
-              repoFullName: source.repo,
-              path: currentEntrySourcePath,
-              ref: source.branch || 'main',
-            });
+        const localFile = getEditableLocalRepoFile(source, currentEntrySourcePath);
+        const githubAppConfigured = localContentAdminEnabled || isGitHubAppConfigured();
+        const remoteFile = localFile
+          ? localFile
+          : (!githubAppConfigured
+              ? null
+              : await getRepoFile({
+                  repoFullName: source.repo,
+                  path: currentEntrySourcePath,
+                  ref: source.branch || 'main',
+                }));
 
         if (!remoteFile) {
-          editorError = localContentAdminEnabled
-            ? 'La nota no existe en local o no pudo resolverse.'
-            : 'La nota no existe en GitHub o no pudo resolverse.';
+          editorError = githubAppConfigured
+            ? 'La nota no existe ni en local ni en GitHub, o no pudo resolverse.'
+            : 'La nota no existe en local y la GitHub App no está configurada en el server.';
         } else {
           editorTargetPath = remoteFile.path || currentEntrySourcePath;
           editorInitialContent = remoteFile.content || '';
@@ -11790,10 +11795,5 @@ a[node] -->|edge| b[hub]
         font-size: 0.82rem;
       }
     </style>
-    <script>
-      import { hydrateLilypondBlocks, setupLilypondAutoHydration } from '../../lib/lilypond-player';
-      (window as any).hydrateLilypondBlocks = hydrateLilypondBlocks;
-      setupLilypondAutoHydration();
-    </script>
   </body>
 </html>
