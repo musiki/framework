@@ -382,10 +382,7 @@ function scanFenceDiagnostics(
   const commentMarker = language === 'mermaid' ? '%%' : '%';
   const bracePairs = language === 'lily'
     ? new Map([
-      ['(', ')'],
-      ['[', ']'],
       ['{', '}'],
-      ['<', '>'],
     ])
     : new Map([
       ['(', ')'],
@@ -489,6 +486,8 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
 
   const host = document.createElement('div');
   const variant = resolveEditorVariant(textarea);
+  const originalClassName = textarea.className;
+  const originalHidden = textarea.hidden;
   host.className = `musiki-codemirror-host musiki-codemirror-host--${variant}`;
   host.dataset.editorVariant = variant;
 
@@ -566,7 +565,15 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
   textarea.addEventListener('keyup', syncSelectionToCodeMirror);
 
   textarea.dataset.markdownCodeMirrorEnhanced = 'true';
+  textarea.classList.remove(
+    'forum-textarea',
+    'forum-edit-textarea',
+    'forum-editor-input',
+    'editor-textarea',
+    'editor-input',
+  );
   textarea.classList.add('is-codemirror-hidden');
+  textarea.hidden = true;
   textarea.setAttribute('aria-hidden', 'true');
   textarea.tabIndex = -1;
 
@@ -576,7 +583,9 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
       textarea.removeEventListener('focus', syncSelectionToCodeMirror);
       textarea.removeEventListener('click', syncSelectionToCodeMirror);
       textarea.removeEventListener('keyup', syncSelectionToCodeMirror);
+      textarea.className = originalClassName;
       textarea.classList.remove('is-codemirror-hidden');
+      textarea.hidden = originalHidden;
       textarea.removeAttribute('aria-hidden');
       textarea.tabIndex = 0;
       delete textarea.dataset.markdownCodeMirrorEnhanced;

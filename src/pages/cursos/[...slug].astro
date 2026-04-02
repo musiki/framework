@@ -3386,116 +3386,12 @@ order:
     </main>
     {isEditorActive && (
       <script>
-        import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
+        import { mountIntegratedCourseNotesEditor } from '../../scripts/course/notes/index.ts';
 
-        const mountIntegratedEditor = () => {
-          const form = document.getElementById('integrated-content-editor-form');
-          const statusNode = document.getElementById('integrated-editor-status');
-          if (!(form instanceof HTMLFormElement) || !statusNode) return;
-          if (form.dataset.bound === 'true') return;
-          form.dataset.bound = 'true';
-
-          const textarea = form.elements.namedItem('content');
-          const actionsContainer = form.querySelector('.editor-actions');
-
-          if (textarea instanceof HTMLTextAreaElement) {
-            enhanceMarkdownTextarea(textarea, {
-              actionsContainer: actionsContainer instanceof HTMLElement ? actionsContainer : null,
-              status: (message, tone = 'info') => {
-                if (!(statusNode instanceof HTMLElement)) return;
-                statusNode.dataset.tone = tone === 'error' ? 'error' : 'idle';
-                statusNode.textContent = message;
-              },
-              buttonClassName: 'editor-markdown-tool-btn',
-              actionSpacerClassName: 'editor-markdown-tool-spacer',
-              dropzoneClassName: 'editor-markdown-dropzone',
-              dropzoneOverlayClassName: 'editor-markdown-dropzone-overlay',
-              dropzoneLabelClassName: 'editor-markdown-dropzone-label',
-              inputClassName: '',
-              dropLabel: 'Drop file',
-              useCodeMirror: true,
-            });
-          }
-
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const submitBtn = form.querySelector('button[type="submit"]');
-            if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = true;
-
-            statusNode.dataset.tone = 'idle';
-            statusNode.textContent = 'Guardando...';
-
-            try {
-              const payload = Object.fromEntries(new FormData(form).entries());
-              const res = await fetch('/api/content-admin/publish', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
-              const raw = await res.text();
-              let result = {};
-              try {
-                result = raw ? JSON.parse(raw) : {};
-              } catch {
-                result = { error: raw || 'Error al publicar' };
-              }
-              if (!res.ok) throw new Error(result.error || 'Error al publicar');
-
-              const contentNode = document.querySelector('[data-class-content]');
-              const editorNode = document.querySelector('[data-inline-editor]');
-              const contentArea = document.querySelector('.content-area');
-              const nextHref = String(form.dataset.cleanHref || window.location.pathname).trim() || window.location.pathname;
-              const mode = String(form.dataset.mode || payload.mode || '').trim().toLowerCase();
-
-              if (contentNode instanceof HTMLElement && typeof result.renderedHtml === 'string' && result.renderedHtml.trim()) {
-                contentNode.innerHTML = result.renderedHtml;
-                contentNode.hidden = false;
-              }
-
-              if (editorNode instanceof HTMLElement) {
-                editorNode.hidden = true;
-              }
-
-              if (contentArea instanceof HTMLElement) {
-                contentArea.classList.remove('is-editor-active');
-              }
-
-              statusNode.dataset.tone = 'success';
-              statusNode.textContent = mode === 'create'
-                ? 'Nota creada. Vista previa cargada.'
-                : '¡Guardado correctamente!';
-
-              const shaInput = form.elements.namedItem('sha');
-              if (shaInput instanceof HTMLInputElement && typeof result.fileSha === 'string') {
-                shaInput.value = result.fileSha;
-              }
-
-              const pathInput = form.elements.namedItem('targetPath');
-              if (pathInput instanceof HTMLInputElement && typeof result.path === 'string' && result.path) {
-                pathInput.value = result.path;
-              }
-
-              const modeInput = form.elements.namedItem('mode');
-              if (modeInput instanceof HTMLInputElement && mode === 'create') {
-                modeInput.value = 'edit';
-              }
-
-              window.history.replaceState({}, '', nextHref);
-              window.__musikiCourseContentBootKey = '';
-              document.dispatchEvent(new Event('astro:page-load'));
-            } catch (err) {
-              statusNode.dataset.tone = 'error';
-              statusNode.textContent = err instanceof Error ? err.message : 'Error al publicar';
-              if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = false;
-              return;
-            }
-
-            if (submitBtn instanceof HTMLButtonElement) submitBtn.disabled = false;
-          });
-        };
-
-        mountIntegratedEditor();
-        document.addEventListener('astro:page-load', mountIntegratedEditor);
+        mountIntegratedCourseNotesEditor();
+        document.addEventListener('astro:page-load', () => {
+          mountIntegratedCourseNotesEditor();
+        });
       </script>
     )}
     <div id="forum-media-modal" class="forum-media-modal" hidden aria-hidden="true">
@@ -3884,6 +3780,7 @@ order:
     <script>
       import { subscribeToLive } from '../../lib/live/client.mjs';
       import { formatCountdown, getRemainingMs } from '../../lib/live/countdown.mjs';
+      import { enhanceCourseNotesContent } from '../../scripts/course/notes/index.ts';
       import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
       import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
@@ -7850,7 +7747,6 @@ order:
         let latestPostRequestToken = 0;
         let latestThreadRequestToken = 0;
         let forumMermaidPromise = null;
-        let sharedMermaidRenderSequence = 0;
         const FORUM_READ_PREFIX = 'forum:read:';
         const FORUM_BOARD_CACHE_TTL_MS = 60_000;
         const FORUM_THREAD_CACHE_TTL_MS = 20_000;
@@ -9216,64 +9112,6 @@ a[node] -->|edge| b[hub]
           return forumMermaidPromise;
         }
 
-        const courseStaticMermaidRenderer = (container, attempt = 0) => {
-          const nodes = Array.from(container.querySelectorAll('.mermaid'))
-            .filter((node) => node instanceof HTMLElement)
-            .filter((node) => !node.closest('#lesson-forum'))
-            .filter(
-              (node) =>
-                node.dataset.mermaidRendered !== 'true' &&
-                node.dataset.mermaidRendering !== 'true',
-            );
-          if (nodes.length === 0) return;
-
-          ensureForumMermaid()
-            .then((mermaid) => {
-              if (!mermaid?.render) return;
-              try {
-                mermaid.initialize({
-                  startOnLoad: false,
-                  theme: 'default',
-                  securityLevel: 'loose',
-                  suppressErrorRendering: false,
-                });
-              } catch {}
-
-              const tasks = nodes.map(async (node) => {
-                const source = String(node.dataset.mermaidSource || node.textContent || '').trim();
-                if (!source) return;
-                node.dataset.mermaidSource = source;
-                node.dataset.mermaidRendering = 'true';
-                const renderId = `course-mermaid-${Date.now()}-${sharedMermaidRenderSequence += 1}`;
-                const result = await mermaid.render(renderId, source);
-                node.innerHTML = result?.svg || '';
-                if (typeof result?.bindFunctions === 'function') {
-                  result.bindFunctions(node);
-                }
-                delete node.dataset.mermaidRendering;
-                node.dataset.mermaidRendered = 'true';
-              });
-
-              Promise.all(tasks).catch((error) => {
-                nodes.forEach((node) => {
-                  delete node.dataset.mermaidRendering;
-                  delete node.dataset.mermaidRendered;
-                  const source = String(node.dataset.mermaidSource || node.textContent || '').trim();
-                  if (source) node.textContent = source;
-                });
-                if (attempt < 3) {
-                  window.setTimeout(() => courseStaticMermaidRenderer(container, attempt + 1), 180 * (attempt + 1));
-                } else {
-                  console.error('Course mermaid render error:', error);
-                }
-              });
-            })
-            .catch((error) => {
-              console.error('Course mermaid loader error:', error);
-            });
-        };
-        (globalThis as any).__musikiCourseStaticMermaidRenderer = courseStaticMermaidRenderer;
-
         function renderForumMermaid(container) {
           const nodes = Array.from(container.querySelectorAll('.mermaid'));
           if (nodes.length === 0) return;
@@ -10018,8 +9856,8 @@ a[node] -->|edge| b[hub]
 
                   if (isEditing) {
                     editTextarea.value = post.body || '';
-                    editTextarea.focus();
                     editTextarea.setSelectionRange(editTextarea.value.length, editTextarea.value.length);
+                    editTextarea.dispatchEvent(new Event('input', { bubbles: true }));
                   }
                 }
 
@@ -10044,6 +9882,7 @@ a[node] -->|edge| b[hub]
                   editTextarea.className = 'forum-textarea forum-edit-textarea';
                   editTextarea.maxLength = 4000;
                   editTextarea.placeholder = 'Edita tu mensaje...';
+                  editTextarea.value = post.body || '';
                   editTextarea.addEventListener('keydown', (event) => {
                     if (event.key !== 'Enter') return;
                     if (!(event.metaKey || event.ctrlKey)) return;
@@ -11136,23 +10975,12 @@ a[node] -->|edge| b[hub]
         }
 
         try {
-          const contentArea = document.querySelector('.content-area');
-          if (contentArea instanceof HTMLElement) {
-            const renderCourseMermaid = (globalThis as any).__musikiCourseStaticMermaidRenderer;
-            if (typeof renderCourseMermaid === 'function') {
-              renderCourseMermaid(contentArea);
-            }
+          const classContent = document.querySelector('[data-class-content]');
+          if (classContent instanceof HTMLElement) {
+            enhanceCourseNotesContent(classContent);
           }
         } catch (error) {
-          console.error('Course mermaid bootstrap error:', error);
-        }
-
-        try {
-          if (typeof (window as any).hydrateLilypondBlocks === 'function') {
-            (window as any).hydrateLilypondBlocks(document.body);
-          }
-        } catch (error) {
-          console.error('Course lilypond bootstrap error:', error);
+          console.error('Course notes content bootstrap error:', error);
         }
 
         try {

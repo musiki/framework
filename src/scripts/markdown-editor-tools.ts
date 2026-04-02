@@ -413,15 +413,17 @@ export function enhanceMarkdownTextarea(
   textarea.dataset.markdownEditorEnhanced = 'true';
 
   const inputClassName = options.inputClassName || DEFAULT_INPUT_CLASS_NAME;
-  if (inputClassName) {
-    textarea.classList.add(...inputClassName.split(/\s+/).filter(Boolean));
-  }
-
   const dropzone = ensureDropzone(textarea, options);
   const useCodeMirror = options.useCodeMirror !== false;
   const codeMirrorBinding = useCodeMirror ? enhanceMarkdownCodeMirror(textarea) : null;
-  if (codeMirrorBinding && inputClassName) {
-    codeMirrorBinding.getHost().classList.add(...inputClassName.split(/\s+/).filter(Boolean));
+  const inputClasses = inputClassName.split(/\s+/).filter(Boolean);
+
+  if (codeMirrorBinding) {
+    if (inputClasses.length > 0) {
+      codeMirrorBinding.getHost().classList.add(...inputClasses);
+    }
+  } else if (inputClasses.length > 0) {
+    textarea.classList.add(...inputClasses);
   }
   const interactionTarget =
     codeMirrorBinding?.getInteractionSurface() instanceof HTMLElement

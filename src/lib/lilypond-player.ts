@@ -61,6 +61,11 @@ export interface SvgPlaybackFollower {
   destroy(): void;
 }
 
+type LilypondPlayerHandle = {
+  midiUrl: string;
+  destroy(): void;
+};
+
 // ---------------------------------------------------------
 // MIDI PARSER
 // ---------------------------------------------------------
@@ -667,7 +672,7 @@ function normalizeSvgInlineStyle(styleText: string, baseInkColor: string): strin
 }
 
 function sanitizeLilypondSvg(svgEl: SVGSVGElement) {
-  const baseInkColor = '#222939';
+  const baseInkColor = 'var(--lily-score-ink, rgb(var(--gray-dark)))';
   svgEl.style.setProperty('color', baseInkColor, 'important');
   svgEl.setAttribute('color', baseInkColor);
   svgEl.querySelectorAll('*').forEach((node) => {
@@ -1368,12 +1373,53 @@ function getDefaultMidiUrlForRenderedScore(lilyUrl: string) {
   return replaceMidiUrlExtension(lilyUrl, 'midi');
 }
 
+const lilypondPlayerHandles = new WeakMap<HTMLElement, LilypondPlayerHandle>();
+
+function destroyInstalledLilypondPlayer(container: HTMLElement) {
+  const existing = lilypondPlayerHandles.get(container);
+  if (!existing) {
+    delete container.dataset.lilyPlayerInstalled;
+    return;
+  }
+
+  try {
+    existing.destroy();
+  } catch (error) {
+    console.warn('[lilypond-player] Failed to destroy existing player cleanly', error);
+  }
+
+  lilypondPlayerHandles.delete(container);
+  delete container.dataset.lilyPlayerInstalled;
+}
+
+function collectLilypondBlocksFromNode(node: Node): HTMLElement[] {
+  if (!(node instanceof Element)) return [];
+
+  const blocks = node.matches('.lilypond-block, .lily-score')
+    ? [node]
+    : [];
+
+  return [
+    ...blocks,
+    ...Array.from(node.querySelectorAll('.lilypond-block, .lily-score')),
+  ].filter((element): element is HTMLElement => element instanceof HTMLElement);
+}
+
 /**
  * Attaches the miniplayer over a given rendered SVG Container using its associated MIDI file.
  */
 export async function installLilypondPlayer(container: HTMLElement, midiUrl: string) {
-  if (!midiUrl || container.dataset.lilyPlayerInstalled === midiUrl) return null;
+  const existingHandle = lilypondPlayerHandles.get(container);
+  if (!midiUrl) {
+    destroyInstalledLilypondPlayer(container);
+    return null;
+  }
+  if (existingHandle && existingHandle.midiUrl === midiUrl) return existingHandle;
+
+  destroyInstalledLilypondPlayer(container);
   console.log(`[lilypond-player] installLilypondPlayer called for ${midiUrl}`);
+  const requestId = String(Number(container.dataset.lilyPlayerRequestId || '0') + 1);
+  container.dataset.lilyPlayerRequestId = requestId;
   container.dataset.lilyPlayerInstalled = midiUrl;
   
   // Create UI
@@ -1384,6 +1430,7 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
   btn.dataset.tooltip = 'Cargando audio...';
   btn.title = 'Cargando audio...';
   btn.setAttribute('aria-label', 'Cargando audio...');
+  btn.dataset.lilyMidiUrl = midiUrl;
   
   // Minimal inline styles to ensure functionality
   Object.assign(btn.style, {
@@ -1437,6 +1484,12 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
   }
 
   let playerBuffer: ArrayBuffer | null = null;
+  const destroyProvisionalUi = () => {
+    btn.remove();
+    if (playWrapper.parentNode) playWrapper.remove();
+  };
+  const isStaleRequest = () =>
+    !container.isConnected || container.dataset.lilyPlayerRequestId !== requestId;
 
   try {
     console.log(`[lilypond-player] Fetching MIDI: ${midiUrl}`);
@@ -1445,6 +1498,10 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
     if (!playerBuffer) throw new Error('MIDI unretrievable');
     console.log('[lilypond-player] MIDI fetched successfully');
   } catch (err) {
+    if (isStaleRequest()) {
+      destroyProvisionalUi();
+      return null;
+    }
     console.warn('[lilypond-player] Could not fetch MIDI for playback.', err);
     btn.title = 'No disponible (MIDI ausente o inaccesible)';
     btn.dataset.tooltip = 'No disponible';
@@ -1460,6 +1517,11 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
   btn.style.cursor = 'pointer';
 
   try {
+    if (isStaleRequest()) {
+      destroyProvisionalUi();
+      return null;
+    }
+
     const sequence = parseMidiBuffer(playerBuffer);
     const sampler = new MiniSampler();
     const follower = buildSvgPlaybackFollower(container, sequence);
@@ -1493,8 +1555,8 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
       }
     });
 
-    // Provide cleanup hook
-    return {
+    const handle: LilypondPlayerHandle = {
+      midiUrl,
       destroy: () => {
         controller.destroy();
         sampler.destroy();
@@ -1503,9 +1565,22 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
         }
         btn.remove();
         if (playWrapper.parentNode) playWrapper.remove();
+        if (lilypondPlayerHandles.get(container) === handle) {
+          lilypondPlayerHandles.delete(container);
+        }
+        if (container.dataset.lilyPlayerInstalled === midiUrl) {
+          delete container.dataset.lilyPlayerInstalled;
+        }
       },
     };
+
+    lilypondPlayerHandles.set(container, handle);
+    return handle;
   } catch (err) {
+    if (isStaleRequest()) {
+      destroyProvisionalUi();
+      return null;
+    }
     console.error('[lilypond-player] Failed to initialize player components:', err);
     btn.title = 'Error de inicio';
     btn.dataset.tooltip = 'Error de inicio';
@@ -1633,9 +1708,16 @@ export function setupLilypondAutoHydration() {
   const observer = new MutationObserver((mutations) => {
     let hasPotentialChanges = false;
     for (const mutation of mutations) {
+      if (mutation.type === 'childList' && mutation.removedNodes.length > 0) {
+        mutation.removedNodes.forEach((node) => {
+          collectLilypondBlocksFromNode(node).forEach((block) => {
+            destroyInstalledLilypondPlayer(block);
+          });
+        });
+      }
+
       if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
         hasPotentialChanges = true;
-        break;
       }
     }
 

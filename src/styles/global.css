@@ -1082,13 +1082,18 @@ ol ol ol ol > li::marker {
   object-fit: contain;
 }
 
+.lilypond-block,
+.lily-score {
+  --lily-score-ink: rgb(var(--gray-dark));
+}
+
 .lilypond-block svg,
 .lily-score svg {
   display: block;
   width: 100%;
   height: auto;
   margin: 0 auto;
-  color: rgb(var(--gray-dark));
+  color: var(--lily-score-ink);
 }
 
 .lilypond-block svg a,

@@ -125,7 +125,7 @@ function normalizeSvgStyle(styleText, baseInkColor) {
   return normalized;
 }
 
-export function sanitizeLilypondSvgMarkup(svgText, baseInkColor = '#222939') {
+export function sanitizeLilypondSvgMarkup(svgText, baseInkColor = 'var(--lily-score-ink, rgb(var(--gray-dark)))') {
   let output = String(svgText || '');
   if (!output) return output;
 

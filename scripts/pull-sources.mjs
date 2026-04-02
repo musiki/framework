@@ -14,6 +14,20 @@ const findArgValue = (flag, fallback) => {
 
 const manifestPath = path.resolve(findArgValue('--manifest', 'config/sources.manifest.json'));
 const sourcesDir = path.resolve(findArgValue('--sources-dir', '.content-sources'));
+
+// Load .env manually since this script runs outside of Astro's env loading
+const envPath = path.resolve(process.cwd(), '.env');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach(line => {
+    const [key, ...value] = line.split('=');
+    if (key && value.length > 0) {
+      const val = value.join('=').trim().replace(/^["']|["']$/g, '');
+      process.env[key.trim()] = val;
+    }
+  });
+}
+
 const cleanMissing = args.includes('--clean');
 const sourceStrategy = (() => {
   const normalized = (process.env.CONTENT_SOURCE_STRATEGY || 'prefer-local')

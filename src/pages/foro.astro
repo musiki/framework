@@ -3153,8 +3153,8 @@ a[node] -->|edge| b[hub]
 
                   if (isEditing) {
                     editTextarea.value = post.body || '';
-                    editTextarea.focus();
                     editTextarea.setSelectionRange(editTextarea.value.length, editTextarea.value.length);
+                    editTextarea.dispatchEvent(new Event('input', { bubbles: true }));
                   }
                 };
 
@@ -3179,6 +3179,7 @@ a[node] -->|edge| b[hub]
                   editTextarea.className = 'forum-textarea forum-edit-textarea';
                   editTextarea.maxLength = 4000;
                   editTextarea.placeholder = 'Edita tu mensaje...';
+                  editTextarea.value = post.body || '';
                   editTextarea.addEventListener('keydown', (event) => {
                     if (event.key !== 'Enter') return;
                     if (!(event.metaKey || event.ctrlKey)) return;
@@ -3186,7 +3187,6 @@ a[node] -->|edge| b[hub]
                     if (saveEditButton) saveEditButton.click();
                   });
                   editContainer.appendChild(editTextarea);
-                  attachForumEditor(editTextarea);
 
                   const editActions = document.createElement('div');
                   editActions.className = 'forum-form-actions';
@@ -3244,6 +3244,7 @@ a[node] -->|edge| b[hub]
                   });
                   editActions.appendChild(cancelEditButton);
                   editContainer.appendChild(editActions);
+                  attachForumEditor(editTextarea);
                 }
 
                 if (canDeletePost) {
