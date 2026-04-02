@@ -861,6 +861,181 @@ ol ol ol ol > li::marker {
   color: #8f8f8f;
 }
 
+.is-codemirror-hidden {
+  display: none !important;
+}
+
+.musiki-codemirror-host {
+  width: 100%;
+  max-width: 100%;
+  min-height: 84px;
+  display: block;
+  position: relative;
+  color: inherit;
+}
+
+.musiki-codemirror-host .cm-editor {
+  min-height: inherit;
+  height: 100%;
+  background: transparent;
+  color: inherit;
+}
+
+.musiki-codemirror-host .cm-scroller {
+  min-height: inherit;
+}
+
+.musiki-codemirror-host .cm-content {
+  min-height: inherit;
+}
+
+.musiki-codemirror-host .cm-gutters {
+  min-height: inherit;
+}
+
+.musiki-codemirror-host--editor {
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: var(--c-bg-mute);
+  color: var(--c-fg);
+  min-height: 68dvh;
+  font-size: 0.95rem;
+}
+
+.musiki-codemirror-host--editor.is-upload-target {
+  outline: 2px dashed color-mix(in srgb, var(--accent, #2f6fff) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.musiki-codemirror-host--editor.is-uploading {
+  cursor: progress;
+  opacity: 0.88;
+}
+
+.musiki-codemirror-host--forum {
+  border: 1px solid var(--forum-border-strong, var(--c-border));
+  border-radius: 8px;
+  background: var(--forum-bg-panel, var(--c-bg-mute));
+  color: var(--forum-text-primary, var(--c-fg));
+  font-size: 0.91rem;
+  min-height: 84px;
+}
+
+.musiki-codemirror-host--forum:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 34%, transparent);
+  outline-offset: 1px;
+}
+
+.musiki-codemirror-host--forum.is-upload-target {
+  outline: 2px dashed color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 42%, transparent);
+  outline-offset: 1px;
+  background: color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 6%, var(--forum-bg-panel, #fff));
+}
+
+.musiki-codemirror-host--forum.is-uploading {
+  cursor: progress;
+  opacity: 0.88;
+}
+
+.musiki-codemirror-host--forum .cm-scroller,
+.musiki-codemirror-host--editor .cm-scroller {
+  font-family: var(--font-family-mono, "Dank Mono", monospace);
+  line-height: 1.6;
+}
+
+.musiki-codemirror-host--forum .cm-content {
+  padding: 0.58rem 0.7rem;
+}
+
+.musiki-codemirror-host--editor .cm-content {
+  padding: 0.7rem 0.8rem;
+}
+
+.musiki-codemirror-host--forum .cm-gutters,
+.musiki-codemirror-host--editor .cm-gutters {
+  padding-top: 0.58rem;
+}
+
+.musiki-codemirror-host--forum .cm-foldGutter,
+.musiki-codemirror-host--editor .cm-foldGutter {
+  width: 1.2rem;
+}
+
+.musiki-codemirror-host--forum .cm-activeLine,
+.musiki-codemirror-host--editor .cm-activeLine {
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.musiki-codemirror-host--forum .cm-activeLineGutter,
+.musiki-codemirror-host--editor .cm-activeLineGutter {
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.musiki-codemirror-host .cm-tooltip {
+  z-index: 40;
+}
+
+.musiki-codemirror-host .cm-panels {
+  background: inherit;
+  color: inherit;
+}
+
+.musiki-codemirror-host .cm-search {
+  font-family: var(--font-family-primary);
+}
+
+.musiki-codemirror-host .cm-search input,
+.musiki-codemirror-host .cm-search button {
+  font: inherit;
+}
+
+.musiki-codemirror-host .cm-search input {
+  color: inherit;
+}
+
+.cm-musiki-code-comment {
+  color: #7f9f7f;
+  font-style: italic;
+}
+
+.cm-musiki-code-string {
+  color: #cc9393;
+}
+
+.cm-musiki-code-command {
+  color: #2f6fbe;
+  font-weight: 600;
+}
+
+.cm-musiki-code-scheme {
+  color: #7a3fa1;
+  font-weight: 600;
+}
+
+.cm-musiki-code-number {
+  color: #8cd0d3;
+}
+
+.cm-musiki-code-note {
+  color: #1b7a5e;
+  font-weight: 600;
+}
+
+.cm-musiki-code-symbol {
+  color: #efdcbc;
+  font-weight: 600;
+}
+
+.cm-musiki-code-brace,
+.cm-musiki-code-fence {
+  color: #8f8f8f;
+}
+
+.cm-musiki-code-unmatched {
+  text-decoration: underline wavy color-mix(in srgb, #c64545 86%, transparent);
+  text-underline-offset: 0.17em;
+}
+
 .hljs-strong {
   font-weight: bold;
 }
@@ -1250,6 +1425,7 @@ ol ol ol ol > li::marker {
 
 :is(#lesson-forum, #forum-reader-root) .forum-panel .forum-field,
 :is(#lesson-forum, #forum-reader-root) .forum-panel .forum-textarea,
+:is(#lesson-forum, #forum-reader-root) .forum-panel .musiki-codemirror-host--forum,
 :is(#lesson-forum, #forum-reader-root) .forum-panel .forum-select {
   width: 100% !important;
   max-width: 100% !important;
@@ -1429,7 +1605,8 @@ ol ol ol ol > li::marker {
   opacity: 1 !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-editor-dropzone.is-upload-target .forum-textarea {
+:is(#lesson-forum, #forum-reader-root) .forum-editor-dropzone.is-upload-target .forum-textarea,
+:is(#lesson-forum, #forum-reader-root) .forum-editor-dropzone.is-upload-target .musiki-codemirror-host--forum {
   outline: 2px dashed color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 42%, transparent) !important;
   outline-offset: 1px !important;
   background: color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 6%, var(--forum-bg-panel, #fff)) !important;

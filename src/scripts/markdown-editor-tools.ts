@@ -1,3 +1,5 @@
+import { enhanceMarkdownCodeMirror } from './markdown-codemirror.ts';
+
 type StatusTone = 'info' | 'error';
 
 type TemplateConfig = {
@@ -19,6 +21,7 @@ type EnhanceMarkdownTextareaOptions = {
   dropzoneLabelClassName?: string;
   inputClassName?: string;
   dropLabel?: string;
+  useCodeMirror?: boolean;
 };
 
 const CURSOR_TOKEN = '<cursor here>';
@@ -314,8 +317,10 @@ async function handleMediaUpload(
   const uploadLabel = describeUploadBatch(uploadFiles);
   const dropzoneClassName = options.dropzoneClassName || DEFAULT_DROPZONE_CLASS_NAME;
   const uploadEndpoint = options.uploadEndpoint || DEFAULT_UPLOAD_ENDPOINT;
+  const codeMirrorHost = textarea.parentElement?.querySelector('.musiki-codemirror-host');
   textarea.closest(`.${dropzoneClassName}`)?.classList.add('is-uploading');
   textarea.classList.add('is-uploading');
+  if (codeMirrorHost instanceof HTMLElement) codeMirrorHost.classList.add('is-uploading');
   emitStatus(options.status, `Subiendo ${uploadLabel} desde ${sourceLabel}...`, 'info');
 
   try {
@@ -341,6 +346,10 @@ async function handleMediaUpload(
     textarea.closest(`.${dropzoneClassName}`)?.classList.remove('is-upload-target');
     textarea.classList.remove('is-uploading');
     textarea.classList.remove('is-upload-target');
+    if (codeMirrorHost instanceof HTMLElement) {
+      codeMirrorHost.classList.remove('is-uploading');
+      codeMirrorHost.classList.remove('is-upload-target');
+    }
   }
 }
 
@@ -408,9 +417,25 @@ export function enhanceMarkdownTextarea(
     textarea.classList.add(...inputClassName.split(/\s+/).filter(Boolean));
   }
 
-  attachTypingHelpers(textarea);
-
   const dropzone = ensureDropzone(textarea, options);
+  const useCodeMirror = options.useCodeMirror !== false;
+  const codeMirrorBinding = useCodeMirror ? enhanceMarkdownCodeMirror(textarea) : null;
+  if (codeMirrorBinding && inputClassName) {
+    codeMirrorBinding.getHost().classList.add(...inputClassName.split(/\s+/).filter(Boolean));
+  }
+  const interactionTarget =
+    codeMirrorBinding?.getInteractionSurface() instanceof HTMLElement
+      ? codeMirrorBinding.getInteractionSurface()
+      : textarea;
+  const visualTarget =
+    codeMirrorBinding?.getHost() instanceof HTMLElement
+      ? codeMirrorBinding.getHost()
+      : interactionTarget;
+
+  if (!codeMirrorBinding) {
+    attachTypingHelpers(textarea);
+  }
+
   let dragDepth = 0;
 
   const actions = options.actionsContainer;
@@ -431,10 +456,10 @@ export function enhanceMarkdownTextarea(
     actions.prepend(lilypondButton);
   }
 
-  textarea.addEventListener('paste', async (event) => {
+  interactionTarget.addEventListener('paste', async (event) => {
     const uploadFiles = extractUploadFiles(
-      event.clipboardData?.files,
-      event.clipboardData?.items,
+      (event as ClipboardEvent).clipboardData?.files,
+      (event as ClipboardEvent).clipboardData?.items,
     );
     if (uploadFiles.length === 0) return;
 
@@ -442,24 +467,25 @@ export function enhanceMarkdownTextarea(
     await handleMediaUpload(textarea, uploadFiles, 'portapapeles', options);
   });
 
-  textarea.addEventListener('dragover', (event) => {
+  interactionTarget.addEventListener('dragover', (event) => {
     const uploadFiles = extractUploadFiles(
-      event.dataTransfer?.files,
-      event.dataTransfer?.items,
+      (event as DragEvent).dataTransfer?.files,
+      (event as DragEvent).dataTransfer?.items,
     );
     if (uploadFiles.length === 0) return;
     event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'copy';
+    if ((event as DragEvent).dataTransfer) {
+      (event as DragEvent).dataTransfer!.dropEffect = 'copy';
     }
     if (dropzone) dropzone.classList.add('is-upload-target');
     textarea.classList.add('is-upload-target');
+    visualTarget.classList.add('is-upload-target');
   });
 
-  textarea.addEventListener('dragenter', (event) => {
+  interactionTarget.addEventListener('dragenter', (event) => {
     const uploadFiles = extractUploadFiles(
-      event.dataTransfer?.files,
-      event.dataTransfer?.items,
+      (event as DragEvent).dataTransfer?.files,
+      (event as DragEvent).dataTransfer?.items,
     );
     if (uploadFiles.length === 0) return;
 
@@ -467,20 +493,22 @@ export function enhanceMarkdownTextarea(
     dragDepth += 1;
     if (dropzone) dropzone.classList.add('is-upload-target');
     textarea.classList.add('is-upload-target');
+    visualTarget.classList.add('is-upload-target');
   });
 
-  textarea.addEventListener('dragleave', () => {
+  interactionTarget.addEventListener('dragleave', () => {
     dragDepth = Math.max(0, dragDepth - 1);
     if (dragDepth === 0) {
       if (dropzone) dropzone.classList.remove('is-upload-target');
       textarea.classList.remove('is-upload-target');
+      visualTarget.classList.remove('is-upload-target');
     }
   });
 
-  textarea.addEventListener('drop', async (event) => {
+  interactionTarget.addEventListener('drop', async (event) => {
     const uploadFiles = extractUploadFiles(
-      event.dataTransfer?.files,
-      event.dataTransfer?.items,
+      (event as DragEvent).dataTransfer?.files,
+      (event as DragEvent).dataTransfer?.items,
     );
     if (uploadFiles.length === 0) return;
 
@@ -488,6 +516,7 @@ export function enhanceMarkdownTextarea(
     dragDepth = 0;
     if (dropzone) dropzone.classList.remove('is-upload-target');
     textarea.classList.remove('is-upload-target');
+    visualTarget.classList.remove('is-upload-target');
     await handleMediaUpload(textarea, uploadFiles, 'arrastre', options);
   });
 }

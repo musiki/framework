@@ -3386,12 +3386,36 @@ order:
     </main>
     {isEditorActive && (
       <script>
+        import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
+
         const mountIntegratedEditor = () => {
           const form = document.getElementById('integrated-content-editor-form');
           const statusNode = document.getElementById('integrated-editor-status');
           if (!(form instanceof HTMLFormElement) || !statusNode) return;
           if (form.dataset.bound === 'true') return;
           form.dataset.bound = 'true';
+
+          const textarea = form.elements.namedItem('content');
+          const actionsContainer = form.querySelector('.editor-actions');
+
+          if (textarea instanceof HTMLTextAreaElement) {
+            enhanceMarkdownTextarea(textarea, {
+              actionsContainer: actionsContainer instanceof HTMLElement ? actionsContainer : null,
+              status: (message, tone = 'info') => {
+                if (!(statusNode instanceof HTMLElement)) return;
+                statusNode.dataset.tone = tone === 'error' ? 'error' : 'idle';
+                statusNode.textContent = message;
+              },
+              buttonClassName: 'editor-markdown-tool-btn',
+              actionSpacerClassName: 'editor-markdown-tool-spacer',
+              dropzoneClassName: 'editor-markdown-dropzone',
+              dropzoneOverlayClassName: 'editor-markdown-dropzone-overlay',
+              dropzoneLabelClassName: 'editor-markdown-dropzone-label',
+              inputClassName: '',
+              dropLabel: 'Drop file',
+              useCodeMirror: true,
+            });
+          }
 
           form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -9119,6 +9143,7 @@ a[node] -->|edge| b[hub]
             dropzoneLabelClassName: 'forum-editor-dropzone-label',
             inputClassName: 'forum-editor-input',
             dropLabel: 'Drop file',
+            useCodeMirror: true,
           });
         }
 

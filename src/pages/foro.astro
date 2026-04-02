@@ -1611,6 +1611,11 @@ if (activeCourse) {
       </div>
     </div>
 
+    <script>
+      import { enhanceMarkdownTextarea } from '../scripts/markdown-editor-tools.ts';
+      Object.assign(window, { __musikiEnhanceMarkdownTextarea: enhanceMarkdownTextarea });
+    </script>
+
     <script is:inline>
       const FORUM_READ_PREFIX = 'forum:read:';
 
@@ -2640,14 +2645,33 @@ a[node] -->|edge| b[hub]
         };
 
         const attachForumEditor = (textarea) => {
-          if (!textarea || textarea.dataset.forumEditorEnhanced === 'true') return;
+          if (!(textarea instanceof HTMLTextAreaElement) || textarea.dataset.forumEditorEnhanced === 'true') return;
           textarea.dataset.forumEditorEnhanced = 'true';
-          const dropzone = ensureForumDropzone(textarea);
-          let dragDepth = 0;
           textarea.spellcheck = false;
           textarea.autocomplete = 'off';
           textarea.autocapitalize = 'off';
           textarea.setAttribute('autocorrect', 'off');
+          const actions = textarea.closest('form, .forum-edit-form')?.querySelector('.forum-form-actions');
+          const enhanceShared = window['__musikiEnhanceMarkdownTextarea'];
+
+          if (typeof enhanceShared === 'function') {
+            enhanceShared(textarea, {
+              actionsContainer: actions instanceof HTMLElement ? actions : null,
+              status: (message, tone = 'info') => setForumStatus(message, tone),
+              buttonClassName: 'forum-action-btn forum-action-f forum-editor-action-btn',
+              actionSpacerClassName: 'forum-editor-action-spacer',
+              dropzoneClassName: 'forum-editor-dropzone',
+              dropzoneOverlayClassName: 'forum-editor-dropzone-overlay',
+              dropzoneLabelClassName: 'forum-editor-dropzone-label',
+              inputClassName: 'forum-editor-input',
+              dropLabel: 'Drop file',
+              useCodeMirror: true,
+            });
+            return;
+          }
+
+          const dropzone = ensureForumDropzone(textarea);
+          let dragDepth = 0;
           attachForumTypingHelpers(textarea);
           textarea.classList.add('forum-editor-input');
           mountForumEditorActions(textarea);
