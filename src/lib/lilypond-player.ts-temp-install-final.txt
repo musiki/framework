@@ -1,0 +1,161 @@
+/**
+ * Attaches the miniplayer over a given rendered SVG Container using its associated MIDI file.
+ */
+export async function installLilypondPlayer(container: HTMLElement, midiUrl: string) {
+  console.log(`[lilypond-player] installLilypondPlayer called for ${midiUrl}`);
+  
+  // Create UI
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  // Use forum-action-btn class to match other buttons next to "R"
+  btn.className = 'lily-miniplayer-btn forum-action-btn'; 
+  btn.dataset.tooltip = 'Reproducir';
+  btn.title = 'Reproducir';
+  btn.setAttribute('aria-label', 'Reproducir');
+  
+  // Minimal inline styles to ensure functionality
+  Object.assign(btn.style, {
+    pointerEvents: 'auto',
+    cursor: 'wait',
+  });
+  
+  const setIconState = (isPlaying: boolean) => {
+    btn.replaceChildren(createIconSvg(isPlaying ? 'stop' : 'play'));
+    const label = isPlaying ? 'Detener' : 'Reproducir';
+    btn.title = label;
+    btn.dataset.tooltip = label;
+  };
+  setIconState(false);
+
+  // Strategy: If we are in a forum post, move the button to the actions bar
+  const postActions = container.closest('.forum-post')?.querySelector('.forum-post-actions');
+  const playWrapper = document.createElement('div');
+  
+  if (postActions) {
+    // Inside forum post: place next to Responder (R)
+    btn.style.marginLeft = '0.35rem';
+    
+    const replyBtn = postActions.querySelector('.forum-action-r');
+    if (replyBtn && replyBtn.nextSibling) {
+      postActions.insertBefore(btn, replyBtn.nextSibling);
+    } else {
+      postActions.appendChild(btn);
+    }
+    // Actions bar might be hidden if it only has reactions
+    (postActions as HTMLElement).hidden = false;
+  } else {
+    // Fallback: place over the SVG
+    playWrapper.className = 'lily-miniplayer';
+    Object.assign(playWrapper.style, {
+      position: 'sticky',
+      top: '4px',
+      right: '4px',
+      zIndex: '20',
+      float: 'right',
+      marginBottom: '-32px',
+      pointerEvents: 'none', 
+    });
+    playWrapper.appendChild(btn);
+    if (window.getComputedStyle(container).position === 'static') {
+      container.style.position = 'relative';
+    }
+    container.prepend(playWrapper);
+  }
+
+  let playerBuffer: ArrayBuffer | null = null;
+  try {
+    console.log(`[lilypond-player] Fetching MIDI: ${midiUrl}`);
+    let res = await fetch(midiUrl, { mode: 'cors' });
+    
+    // Local fallback for remote URLs that fail (CORS/Adblock)
+    if (!res.ok && midiUrl.startsWith('http')) {
+      const hash = midiUrl.split('/').pop();
+      if (hash) {
+        console.log(`[lilypond-player] Remote MIDI fetch failed, trying local fallback: /lily/${hash}`);
+        res = await fetch(`/lily/${hash}`);
+      }
+    }
+
+    if (!res.ok && midiUrl.endsWith('.midi')) {
+      const fallbackUrl = midiUrl.replace(/\.midi$/i, '.mid');
+      console.log(`[lilypond-player] Retrying with fallback: ${fallbackUrl}`);
+      const res2 = await fetch(fallbackUrl, { mode: 'cors' });
+      if (res2.ok) {
+        res = res2;
+      }
+    }
+
+    if (res.ok) {
+      playerBuffer = await res.arrayBuffer();
+    }
+
+    if (!playerBuffer) throw new Error('MIDI unretrievable');
+    console.log('[lilypond-player] MIDI fetched successfully');
+  } catch (err) {
+    console.warn('[lilypond-player] Could not fetch MIDI for playback.', err);
+    btn.title = 'No disponible (CORS/Red)';
+    btn.dataset.tooltip = 'No disponible';
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'default'; // Remove prohibition icon
+    return null;
+  }
+
+  // Enable button once MIDI is loaded
+  btn.disabled = false;
+  btn.style.cursor = 'pointer';
+
+  try {
+    const sequence = parseMidiBuffer(playerBuffer);
+    const sampler = new MiniSampler();
+    const follower = buildSvgPlaybackFollower(container, sequence);
+
+    // Pre-fetch used octaves
+    sampler.preloadUsedOctaves(sequence).catch(e => console.warn('[lilypond-player] Sampler preload failed:', e));
+
+    const controller = new WebMidiPlaybackController(sampler, sequence, {
+      onProgress: (ratio) => {
+        if (follower) {
+          try { follower.update(sequence.durationMs * ratio); } catch {}
+        }
+      },
+      onStateChange: (isPlaying) => {
+        setIconState(isPlaying);
+        if (!isPlaying && follower) {
+          try { follower.reset(); } catch {}
+        }
+      },
+    });
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (controller.isPlaying()) {
+        controller.stop();
+      } else {
+        controller.play().catch(err => {
+          console.error('[lilypond-player] Playback error:', err);
+          controller.stop();
+        });
+      }
+    });
+
+    // Provide cleanup hook
+    return {
+      destroy: () => {
+        controller.destroy();
+        sampler.destroy();
+        if (follower) {
+          try { follower.destroy(); } catch {}
+        }
+        btn.remove();
+        if (playWrapper.parentNode) playWrapper.remove();
+      },
+    };
+  } catch (err) {
+    console.error('[lilypond-player] Failed to initialize player components:', err);
+    btn.title = 'Error de inicio';
+    btn.dataset.tooltip = 'Error de inicio';
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'default';
+    return null;
+  }
+}

@@ -887,6 +887,21 @@ ol ol ol ol > li::marker {
   pointer-events: none;
 }
 
+.lily-miniplayer {
+  pointer-events: none;
+  z-index: 200;
+}
+
+.lilypond-block,
+.lily-score {
+  position: relative !important;
+  min-height: 44px;
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
 /* Forum dynamic DOM (created client-side in cursos/[...slug].astro)
    Astro component-scoped styles do not always hit these nodes, so keep
    critical presentation rules global and explicit. */
@@ -1695,14 +1710,67 @@ ol ol ol ol > li::marker {
   }
 }
 
-/* Keep non-action secondary buttons (e.g. edit form save/cancel) usable. */
-:is(#lesson-forum, #forum-reader-root) .forum-secondary-btn:not(.forum-action-btn) {
-  border-radius: 0 !important;
+/* Keep non-action secondary buttons (e.g. edit form save/cancel) visually consistent with action buttons. */
+:is(#lesson-forum, #forum-reader-root) .forum-secondary-btn {
+  width: auto !important;
+  height: 1.56rem !important;
+  min-width: 1.56rem !important;
+  min-height: 1.56rem !important;
   border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border-radius: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.6rem !important;
+  margin: 0 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.03em;
+  font-weight: 900 !important;
+  font-size: 0.58rem !important;
+  line-height: 1 !important;
+  color: var(--forum-text-secondary, var(--c-fg-dim, #6b7480)) !important;
+  cursor: pointer;
   background: transparent !important;
-  color: var(--forum-text-primary, var(--c-fg, #1f2937)) !important;
-  min-height: 2rem !important;
-  padding: 0.32rem 0.72rem !important;
+  opacity: 1 !important;
+  touch-action: manipulation;
+  position: relative;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-secondary-btn:hover {
+  background: color-mix(in srgb, var(--forum-bg-subtle, #eef2f5) 65%, transparent) !important;
+  color: var(--forum-text-primary, var(--c-fg, #1c1f23)) !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-form-actions {
+  display: flex !important;
+  justify-content: flex-start !important;
+  gap: 0.42rem !important;
+  margin-top: 0.65rem !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-secondary-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.42rem);
+  transform: translate(-50%, 0.35rem);
+  padding: 0.22rem 0.45rem;
+  border-radius: 0;
+  background: rgba(17, 24, 39, 0.94);
+  color: #fff;
+  font-size: 0.66rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  z-index: 15;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-secondary-btn:hover::after {
+  opacity: 1 !important;
+  transform: translate(-50%, 0) !important;
 }
 
 @media (max-width: 968px) {

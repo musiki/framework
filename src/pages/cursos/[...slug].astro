@@ -8612,7 +8612,7 @@ order:
             if (!(root instanceof HTMLElement)) return false;
             return Boolean(
               root.querySelector(
-                'img, audio, video, iframe, svg, .mermaid, .katex, .lily-score, .obsidian-media-embed-card',
+                'img, audio, video, iframe, svg, .mermaid, .katex, .lily-score, .lilypond-block, .obsidian-media-embed-card',
               ),
             );
           }
@@ -8632,7 +8632,7 @@ order:
 
             root.querySelectorAll('*').forEach((node) => {
               if (!(node instanceof HTMLElement)) return;
-              if (node.closest('svg, .mermaid, .katex, .lily-score')) return;
+              if (node.closest('svg, .mermaid, .katex, .lily-score, .lilypond-block')) return;
               if (node.style.display === 'none') node.style.display = '';
               if (node.style.visibility === 'hidden') node.style.visibility = 'visible';
               if (node.style.opacity === '0') node.style.opacity = '1';
@@ -11938,8 +11938,9 @@ a[node] -->|edge| b[hub]
       }
     </style>
     <script>
-      import { hydrateLilypondBlocks } from '../../lib/lilypond-player';
+      import { hydrateLilypondBlocks, setupLilypondAutoHydration } from '../../lib/lilypond-player';
       (window as any).hydrateLilypondBlocks = hydrateLilypondBlocks;
+      setupLilypondAutoHydration();
     </script>
   </body>
 </html>

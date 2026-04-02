@@ -533,8 +533,9 @@ for (const note of allNotes) {
       }
     </script>
     <script>
-      import { hydrateLilypondBlocks } from '../lib/lilypond-player';
+      import { hydrateLilypondBlocks, setupLilypondAutoHydration } from '../lib/lilypond-player';
       (window as any).hydrateLilypondBlocks = hydrateLilypondBlocks;
+      setupLilypondAutoHydration();
     </script>
   </body>
 </html>

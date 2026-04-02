@@ -40,17 +40,24 @@ function tryRenderLilySvg(hash: string, source: string): boolean {
   if (!hasLilypondBinary()) return false;
 
   const tmpLyPath = path.join(LILY_DIR, `${hash}.ly`);
-  const outBasePath = path.join(LILY_DIR, hash);
+  // Use prefix for output control
+  const outPrefix = path.join(LILY_DIR, hash);
 
   try {
     fs.writeFileSync(tmpLyPath, source, 'utf8');
-    // We wrap in try/catch because execSync throws on non-zero exit codes.
-    // LilyPond often returns non-zero for warnings or if \midi is missing but requested in some way.
     try {
+      // Use --output to control the directory and prefix
       execSync(
-        `lilypond -dbackend=svg -o "${outBasePath}" "${tmpLyPath}"`,
+        `lilypond -dbackend=svg --output="${outPrefix}" "${tmpLyPath}"`,
         { stdio: 'ignore' },
       );
+      
+      // LilyPond might produce .mid or .midi depending on version/config
+      const midPath = path.join(LILY_DIR, `${hash}.mid`);
+      const midiPath = path.join(LILY_DIR, `${hash}.midi`);
+      if (fs.existsSync(midPath) && !fs.existsSync(midiPath)) {
+        fs.renameSync(midPath, midiPath);
+      }
     } catch (execError) {
       console.warn('[api/lily/render] lilypond reported issues, checking if SVG was still produced...');
     }
@@ -64,6 +71,63 @@ function tryRenderLilySvg(hash: string, source: string): boolean {
 
   return fs.existsSync(svgPath);
 }
+
+async function downloadRemoteLilyFiles(remoteUrl: string, hash: string) {
+  const svgPath = path.join(LILY_DIR, `${hash}.svg`);
+  const midiPath = path.join(LILY_DIR, `${hash}.midi`);
+
+  try {
+    // Only download if SVG doesn't exist locally
+    if (!fs.existsSync(svgPath)) {
+      const res = await fetch(remoteUrl);
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        fs.writeFileSync(svgPath, Buffer.from(buf));
+      }
+    }
+
+    // Try to get MIDI too
+    if (!fs.existsSync(midiPath)) {
+      const remoteMidiUrl = remoteUrl.replace(/\.svg$/i, '.midi');
+      const resMidi = await fetch(remoteMidiUrl);
+      if (resMidi.ok) {
+        const bufMidi = await resMidi.arrayBuffer();
+        fs.writeFileSync(midiPath, Buffer.from(bufMidi));
+      } else {
+        // Try .mid fallback
+        const resMid = await fetch(remoteUrl.replace(/\.svg$/i, '.mid'));
+        if (resMid.ok) {
+          const bufMid = await resMid.arrayBuffer();
+          fs.writeFileSync(midiPath, Buffer.from(bufMid));
+        }
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn('[api/lily/render] proxy download failed:', err);
+    return false;
+  }
+}
+
+export const GET: APIRoute = async ({ url }) => {
+  const remoteUrl = url.searchParams.get('url');
+  if (!remoteUrl) return new Response('Missing url', { status: 400 });
+
+  // Extract hash from URL if possible
+  const hashMatch = remoteUrl.match(/\/([a-f0-9]{32,})\.(svg|midi|mid)/i);
+  const hash = hashMatch ? hashMatch[1] : hashLilySource(remoteUrl);
+  
+  ensureLilyDir();
+  const success = await downloadRemoteLilyFiles(remoteUrl, hash);
+  
+  if (success) {
+    const isMidi = remoteUrl.endsWith('.midi') || remoteUrl.endsWith('.mid');
+    const localUrl = `/lily/${hash}.${isMidi ? 'midi' : 'svg'}`;
+    return Response.redirect(new URL(localUrl, url.origin), 302);
+  }
+
+  return new Response('Could not proxy file', { status: 502 });
+};
 
 export const POST: APIRoute = async ({ request }) => {
   let payload: Record<string, unknown> = {};
@@ -102,11 +166,16 @@ export const POST: APIRoute = async ({ request }) => {
   const svgUrl = `/lily/${svgFilename}`;
 
   if (cachedUrl) {
+    // If it's a remote URL, try to proxy it locally
+    if (cachedUrl.startsWith('http')) {
+      await downloadRemoteLilyFiles(cachedUrl, hash);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         hash,
-        url: cachedUrl,
+        url: fs.existsSync(svgPath) ? svgUrl : cachedUrl,
         generated: false,
         cached: true,
         remote: true,
@@ -163,11 +232,14 @@ export const POST: APIRoute = async ({ request }) => {
   if (shouldTryRemote) {
     const remoteUrl = await renderRemoteLilypond(source, { timeoutMs: 10_000 });
     if (remoteUrl) {
+      // Proxy the remote files locally so the browser doesn't have CORS issues
+      await downloadRemoteLilyFiles(remoteUrl, hash);
+
       return new Response(
         JSON.stringify({
           success: true,
           hash,
-          url: remoteUrl,
+          url: fs.existsSync(svgPath) ? svgUrl : remoteUrl,
           generated: true,
           remote: true,
         }),

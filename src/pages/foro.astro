@@ -2214,7 +2214,7 @@ if (activeCourse) {
             if (!(root instanceof HTMLElement)) return false;
             return Boolean(
               root.querySelector(
-                'img, audio, video, iframe, svg, .mermaid, .katex, .lily-score, .obsidian-media-embed-card',
+                'img, audio, video, iframe, svg, .mermaid, .katex, .lily-score, .lilypond-block, .obsidian-media-embed-card',
               ),
             );
           };
@@ -2234,7 +2234,9 @@ if (activeCourse) {
 
             root.querySelectorAll('*').forEach((node) => {
               if (!(node instanceof HTMLElement)) return;
-              if (node.closest('svg, .mermaid, .katex, .lily-score')) return;
+              // Skip normalization for media elements and their children
+              if (node.closest('svg, .mermaid, .katex, .lily-score, .lilypond-block, .obsidian-media-embed-card')) return;
+              
               if (node.style.display === 'none') node.style.display = '';
               if (node.style.visibility === 'hidden') node.style.visibility = 'visible';
               if (node.style.opacity === '0') node.style.opacity = '1';
@@ -2272,10 +2274,6 @@ if (activeCourse) {
             if (!isDirectForumMediaUrl(anchor.href)) return;
             anchor.dataset.forumMediaLink = 'true';
           });
-
-          if (typeof window.hydrateLilypondBlocks === 'function') {
-            window.hydrateLilypondBlocks(container);
-          }
         };
 
         const replaceForumTextareaSelection = (textarea, nextText, start, end, cursorStart, cursorEnd = cursorStart) => {
@@ -3171,8 +3169,11 @@ a[node] -->|edge| b[hub]
 
                   saveEditButton = document.createElement('button');
                   saveEditButton.type = 'button';
-                  saveEditButton.className = 'forum-secondary-btn';
-                  saveEditButton.textContent = 'Guardar';
+                  saveEditButton.className = 'forum-secondary-btn forum-action-save';
+                  saveEditButton.textContent = 'GUARDAR';
+                  saveEditButton.dataset.tooltip = 'Guardar cambios';
+                  saveEditButton.title = 'Guardar';
+                  saveEditButton.setAttribute('aria-label', 'Guardar cambios');
                   saveEditButton.addEventListener('click', async () => {
                     if (!editTextarea) return;
                     const nextBody = editTextarea.value.trim();
@@ -3209,8 +3210,11 @@ a[node] -->|edge| b[hub]
 
                   cancelEditButton = document.createElement('button');
                   cancelEditButton.type = 'button';
-                  cancelEditButton.className = 'forum-secondary-btn';
-                  cancelEditButton.textContent = 'Cancelar';
+                  cancelEditButton.className = 'forum-secondary-btn forum-action-cancel';
+                  cancelEditButton.textContent = 'CANCELAR';
+                  cancelEditButton.dataset.tooltip = 'Cancelar edición';
+                  cancelEditButton.title = 'Cancelar';
+                  cancelEditButton.setAttribute('aria-label', 'Cancelar edición');
                   cancelEditButton.addEventListener('click', () => {
                     setEditMode(false);
                   });
@@ -3889,8 +3893,9 @@ a[node] -->|edge| b[hub]
     </script>
 
     <script>
-      import { hydrateLilypondBlocks } from '../lib/lilypond-player';
+      import { hydrateLilypondBlocks, setupLilypondAutoHydration } from '../lib/lilypond-player';
       (window as any).hydrateLilypondBlocks = hydrateLilypondBlocks;
+      setupLilypondAutoHydration();
     </script>
   </body>
 </html>

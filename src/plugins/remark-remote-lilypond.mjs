@@ -60,7 +60,7 @@ export default function remarkRemoteLilypond(options = {}) {
 
         entry.parent.children[entry.index] = {
           type: 'html',
-          value: `<figure class="lilypond-block" data-lily-url="${escapeHtmlAttribute(url)}"><img src="${escapeHtmlAttribute(url)}" alt="LilyPond notation render" loading="lazy" /></figure>`,
+          value: `<figure class="lilypond-block lily-score" data-lily-url="${escapeHtmlAttribute(url)}"><img src="${escapeHtmlAttribute(url)}" alt="LilyPond notation render" loading="lazy" /></figure>`,
         };
       }),
     );

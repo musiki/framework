@@ -1,0 +1,11 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://musiki.org.ar"],
+        "methods": ["GET", "HEAD"],
+        "headers": ["*"]
+      }
+    }
+  ]
+}

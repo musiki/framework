@@ -60,15 +60,17 @@ export default function remarkLily() {
          midiExists = true;
       }
 
-      // 3. If SVG exists, replace code block with inline Custom Element
+      // 3. If SVG exists, replace code block with inline HTML
       if (svgExists) {
         let svgContent = fs.readFileSync(svgPath, 'utf8');
         svgContent = svgContent.replace(/<\?xml.*?\?>/, '').replace(/<!DOCTYPE.*?>/, '').trim();
         
-        const midiAttr = midiExists ? ` data-midi-url="/lily/${hash}.midi"` : '';
+        const midiUrl = midiExists ? `/lily/${hash}.midi` : '';
+        const midiAttr = midiUrl ? ` data-midi-url="${midiUrl}"` : '';
+        
         parent.children[index] = { 
           type: 'html', 
-          value: `<musiki-lilypond class="lily-score"${midiAttr}>\n${svgContent}\n</musiki-lilypond>` 
+          value: `<figure class="lilypond-block lily-score" data-lily-url="/lily/${hash}.svg"${midiAttr}>\n${svgContent}\n</figure>` 
         };
       }
     });

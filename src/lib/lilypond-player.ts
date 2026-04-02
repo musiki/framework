@@ -321,14 +321,14 @@ function ticksToMilliseconds(
 // ---------------------------------------------------------
 
 const PIANO_SAMPLES = [
-  'https://2c69548e21f3b9cfd4d9fd4035e59007.r2.cloudflarestorage.com/media/samples-piano/C1.mp3',
-  'https://2c69548e21f3b9cfd4d9fd4035e59007.r2.cloudflarestorage.com/media/samples-piano/C2.mp3',
-  'https://2c69548e21f3b9cfd4d9fd4035e59007.r2.cloudflarestorage.com/media/samples-piano/C3.mp3',
-  'https://2c69548e21f3b9cfd4d9fd4035e59007.r2.cloudflarestorage.com/media/samples-piano/C4.mp3',
-  'https://2c69548e21f3b9cfd4d9fd4035e59007.r2.cloudflarestorage.com/media/samples-piano/C5.mp3',
-  'https://2c69548e21f3b9cfd4d9fd4035e59007.r2.cloudflarestorage.com/media/samples-piano/C6.mp3',
-  'https://2c69548e21f3b9cfd4d9fd4035e59007.r2.cloudflarestorage.com/media/samples-piano/C7.mp3',
-  'https://2c69548e21f3b9cfd4d9fd4035e59007.r2.cloudflarestorage.com/media/samples-piano/C8.mp3',
+  '/inc/samples-piano/C1.mp3',
+  '/inc/samples-piano/C2.mp3',
+  '/inc/samples-piano/C3.mp3',
+  '/inc/samples-piano/C4.mp3',
+  '/inc/samples-piano/C5.mp3',
+  '/inc/samples-piano/C6.mp3',
+  '/inc/samples-piano/C7.mp3',
+  '/inc/samples-piano/C8.mp3',
 ];
 
 export class MiniSampler {
@@ -341,7 +341,7 @@ export class MiniSampler {
 
   async init() {
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) {
         console.warn('Web Audio API not supported.');
         return;
@@ -1021,193 +1021,298 @@ function createIconSvg(iconName: 'play' | 'stop'): SVGSVGElement {
  * Attaches the miniplayer over a given rendered SVG Container using its associated MIDI file.
  */
 export async function installLilypondPlayer(container: HTMLElement, midiUrl: string) {
-  // Create UI first so it's visible while loading
-  const playWrapper = document.createElement('div');
-  playWrapper.className = 'lily-miniplayer';
-  Object.assign(playWrapper.style, {
-    position: 'sticky',
-    top: '8px',
-    left: 'calc(100% - 40px)', 
-    width: '32px',
-    height: '32px',
-    zIndex: '20',
-    float: 'right',
-    marginBottom: '-32px',
-    pointerEvents: 'none', // Allow clicking through the wrapper
-  });
-
+  console.log(`[lilypond-player] installLilypondPlayer called for ${midiUrl}`);
+  
+  // Create UI
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'lily-miniplayer-btn';
-  btn.disabled = true; 
+  // Use forum-action-btn class to match other buttons next to "R"
+  btn.className = 'lily-miniplayer-btn forum-action-btn'; 
+  btn.dataset.tooltip = 'Reproducir';
+  btn.title = 'Reproducir';
+  btn.setAttribute('aria-label', 'Reproducir');
+  
+  // Minimal inline styles to ensure functionality
   Object.assign(btn.style, {
-    background: 'rgba(255, 255, 255, 0.95)',
-    backdropFilter: 'blur(4px)',
-    border: '1px solid rgba(0,0,0,0.2)',
-    borderRadius: '6px',
+    pointerEvents: 'auto',
     cursor: 'wait',
-    padding: '0',
-    color: '#2c3e50',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    pointerEvents: 'auto', // Re-enable pointer events for the button
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-    transition: 'all 0.2s ease',
   });
   
   const setIconState = (isPlaying: boolean) => {
     btn.replaceChildren(createIconSvg(isPlaying ? 'stop' : 'play'));
-    btn.title = isPlaying ? 'Stop playback' : 'Play LilyPond score';
+    const label = isPlaying ? 'Detener' : 'Reproducir';
+    btn.title = label;
+    btn.dataset.tooltip = label;
   };
   setIconState(false);
-  playWrapper.appendChild(btn);
 
-  if (window.getComputedStyle(container).position === 'static') {
-    container.style.position = 'relative';
+  // Strategy: If we are in a forum post, move the button to the actions bar
+  const postActions = container.closest('.forum-post')?.querySelector('.forum-post-actions');
+  const playWrapper = document.createElement('div');
+  
+  if (postActions) {
+    // Inside forum post: place next to Responder (R)
+    btn.style.marginLeft = '0.35rem';
+    
+    const replyBtn = postActions.querySelector('.forum-action-r');
+    if (replyBtn && replyBtn.nextSibling) {
+      postActions.insertBefore(btn, replyBtn.nextSibling);
+    } else {
+      postActions.appendChild(btn);
+    }
+    // Actions bar might be hidden if it only has reactions
+    (postActions as HTMLElement).hidden = false;
+  } else {
+    // Fallback: place over the SVG
+    playWrapper.className = 'lily-miniplayer';
+    Object.assign(playWrapper.style, {
+      position: 'sticky',
+      top: '4px',
+      right: '4px',
+      zIndex: '20',
+      float: 'right',
+      marginBottom: '-32px',
+      pointerEvents: 'none', 
+    });
+    playWrapper.appendChild(btn);
+    if (window.getComputedStyle(container).position === 'static') {
+      container.style.position = 'relative';
+    }
+    container.prepend(playWrapper);
   }
-  container.prepend(playWrapper); 
 
   let playerBuffer: ArrayBuffer | null = null;
+  const getHashFromUrl = (url: string) => {
+    const parts = url.split('/');
+    const last = parts[parts.length - 1];
+    return last.split('?')[0].split('#')[0];
+  };
+
   try {
     console.log(`[lilypond-player] Fetching MIDI: ${midiUrl}`);
-    let res = await fetch(midiUrl);
-    if (!res.ok && midiUrl.endsWith('.midi')) {
+    let res: Response | null = null;
+    
+    try {
+      res = await fetch(midiUrl, { mode: 'cors' });
+    } catch (e) {
+      console.log('[lilypond-player] MIDI direct fetch failed, will try proxy');
+    }
+    
+    // Proxy fallback for remote URLs that fail (CORS/Adblock)
+    if ((!res || !res.ok) && midiUrl.startsWith('http')) {
+      console.log(`[lilypond-player] MIDI proxying: ${midiUrl}`);
+      const proxyUrl = `/api/lily/render?url=${encodeURIComponent(midiUrl)}`;
+      try { res = await fetch(proxyUrl); } catch { res = null; }
+    }
+
+    if ((!res || !res.ok) && midiUrl.endsWith('.midi')) {
       const fallbackUrl = midiUrl.replace(/\.midi$/i, '.mid');
       console.log(`[lilypond-player] Retrying with fallback: ${fallbackUrl}`);
-      res = await fetch(fallbackUrl);
+      try { res = await fetch(fallbackUrl, { mode: 'cors' }); } catch { res = null; }
     }
-    if (!res.ok) throw new Error(`MIDI unretrievable (status ${res.status})`);
-    playerBuffer = await res.arrayBuffer();
+
+    if (res && res.ok) {
+      playerBuffer = await res.arrayBuffer();
+    }
+
+    if (!playerBuffer) throw new Error('MIDI unretrievable');
     console.log('[lilypond-player] MIDI fetched successfully');
   } catch (err) {
     console.warn('[lilypond-player] Could not fetch MIDI for playback.', err);
-    btn.title = 'Playback unavailable (no MIDI)';
+    btn.title = 'No disponible (CORS/Red)';
+    btn.dataset.tooltip = 'No disponible';
     btn.style.opacity = '0.5';
-    btn.style.cursor = 'not-allowed';
-    // We keep the button but it's disabled. 
-    // If you prefer to hide it completely if MIDI fails, uncomment next line:
-    // playWrapper.style.display = 'none'; 
+    btn.style.cursor = 'default'; // Remove prohibition icon
     return null;
   }
 
   // Enable button once MIDI is loaded
   btn.disabled = false;
   btn.style.cursor = 'pointer';
-  btn.style.background = 'white';
 
-  const sequence = parseMidiBuffer(playerBuffer);
-  const sampler = new MiniSampler();
-  const follower = buildSvgPlaybackFollower(container, sequence);
+  try {
+    const sequence = parseMidiBuffer(playerBuffer);
+    const sampler = new MiniSampler();
+    const follower = buildSvgPlaybackFollower(container, sequence);
 
-  // Pre-fetch used octaves for the loaded sequence over network 
-  sampler.preloadUsedOctaves(sequence);
+    // Pre-fetch used octaves
+    sampler.preloadUsedOctaves(sequence).catch(e => console.warn('[lilypond-player] Sampler preload failed:', e));
 
-  const controller = new WebMidiPlaybackController(sampler, sequence, {
-    onProgress: (ratio) => {
-      follower?.update(sequence.durationMs * ratio);
-    },
-    onStateChange: (isPlaying) => {
-      setIconState(isPlaying);
-      if (!isPlaying) follower?.reset();
-    },
+    const controller = new WebMidiPlaybackController(sampler, sequence, {
+      onProgress: (ratio) => {
+        if (follower) {
+          try { follower.update(sequence.durationMs * ratio); } catch {}
+        }
+      },
+      onStateChange: (isPlaying) => {
+        setIconState(isPlaying);
+        if (!isPlaying && follower) {
+          try { follower.reset(); } catch {}
+        }
+      },
+    });
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (controller.isPlaying()) {
+        controller.stop();
+      } else {
+        controller.play().catch(err => {
+          console.error('[lilypond-player] Playback error:', err);
+          controller.stop();
+        });
+      }
+    });
+
+    // Provide cleanup hook
+    return {
+      destroy: () => {
+        controller.destroy();
+        sampler.destroy();
+        if (follower) {
+          try { follower.destroy(); } catch {}
+        }
+        btn.remove();
+        if (playWrapper.parentNode) playWrapper.remove();
+      },
+    };
+  } catch (err) {
+    console.error('[lilypond-player] Failed to initialize player components:', err);
+    btn.title = 'Error de inicio';
+    btn.dataset.tooltip = 'Error de inicio';
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'default';
+    return null;
+  }
+}
+
+console.log('[lilypond-player] Library loaded. Auto-hydration starting...');
+
+/**
+ * Global hydration function that finds all LilyPond-related elements 
+ * within a container and attaches the miniplayer.
+ */
+export async function hydrateLilypondBlocks(container: HTMLElement = document.body) {
+  if (!container) return;
+  
+  // 1. Find all candidate images and SVGs
+  const images = Array.from(container.querySelectorAll('img')).filter(img => {
+    const src = img.getAttribute('src') || '';
+    return (src.includes('/lily/') || src.includes('/scores/')) && img.dataset.lilyHydrated !== 'true';
   });
 
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (controller.isPlaying()) {
-      controller.stop();
-    } else {
-      controller.play();
+  const svgs = Array.from(container.querySelectorAll('svg')).filter(svg => {
+    if (svg.dataset.lilyHydrated === 'true') return false;
+    // Check if it's inside a LilyPond block or has the markers
+    return svg.closest('.lilypond-block, .lily-score') || svg.querySelector('[href^="textedit:"]');
+  });
+
+  if (images.length > 0 || svgs.length > 0) {
+    console.log(`[lilypond-player] Found ${images.length} images and ${svgs.length} SVGs to hydrate`);
+  }
+
+  // Handle images (need inlining)
+  for (const img of images) {
+    img.dataset.lilyHydrated = 'true';
+    const block = img.parentElement;
+    if (!block) continue;
+
+    block.classList.add('lilypond-block', 'is-hydrated');
+    const lilyUrl = (block as HTMLElement).dataset.lilyUrl || img.getAttribute('src');
+    if (!lilyUrl) continue;
+
+    const midiUrl = (block as HTMLElement).dataset.midiUrl || lilyUrl.replace(/\.svg$/i, '.midi');
+    
+    try {
+      let svgRes: Response | null = null;
+      try {
+        svgRes = await fetch(lilyUrl, { mode: 'cors', cache: 'no-cache' });
+      } catch (e) {
+        console.log('[lilypond-player] SVG direct fetch failed, will try proxy');
+      }
+
+      // Proxy fallback for remote URLs that fail
+      if ((!svgRes || !svgRes.ok) && lilyUrl.startsWith('http')) {
+        console.log(`[lilypond-player] SVG proxying: ${lilyUrl}`);
+        const proxyUrl = `/api/lily/render?url=${encodeURIComponent(lilyUrl)}`;
+        try { svgRes = await fetch(proxyUrl, { cache: 'no-cache' }); } catch { svgRes = null; }
+      }
+
+      if (svgRes && svgRes.ok) {
+        const svgText = await svgRes.text();
+        if (svgText.includes('<svg')) {
+          const parser = new DOMParser();
+          const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+          const svgEl = svgDoc.querySelector('svg');
+          if (svgEl) {
+            svgEl.style.width = '100%';
+            svgEl.style.height = 'auto';
+            svgEl.style.display = 'block';
+            svgEl.dataset.lilyHydrated = 'true';
+            img.replaceWith(svgEl);
+          }
+        }
+      }
+      await installLilypondPlayer(block as HTMLElement, midiUrl);
+    } catch (err) {
+      console.error('[lilypond-player] Hydration failed for:', lilyUrl, err);
+      await installLilypondPlayer(block as HTMLElement, midiUrl).catch(() => null);
     }
-  });
+  }
 
-  // Provide cleanup hook
-  return {
-    destroy: () => {
-      controller.destroy();
-      sampler.destroy();
-      follower?.destroy();
-      playWrapper.remove();
-    },
-  };
+  // Handle already inlined SVGs
+  for (const svg of svgs) {
+    svg.dataset.lilyHydrated = 'true';
+    const block = svg.parentElement;
+    if (!block) continue;
+
+    block.classList.add('lilypond-block', 'is-hydrated-player');
+    const lilyUrl = (block as HTMLElement).dataset.lilyUrl || '';
+    const midiUrl = (block as HTMLElement).dataset.midiUrl || (lilyUrl ? lilyUrl.replace(/\.svg$/i, '.midi') : '');
+    
+    if (midiUrl) {
+      await installLilypondPlayer(block as HTMLElement, midiUrl);
+    }
+  }
 }
 
 /**
- * Global hydration function that finds all .lilypond-block elements 
- * within a container, inlines their SVGs, and attaches the miniplayer.
+ * Setup a MutationObserver to automatically hydrate LilyPond blocks
+ * whenever they are added to the DOM.
  */
-export async function hydrateLilypondBlocks(container: HTMLElement = document.body) {
-  const selectors = [
-    '.lilypond-block:not(.is-hydrated)',
-    '.lily-score:not(.is-hydrated)',
-    'figure:has(img[src*="/lily/"]):not(.is-hydrated)',
-    'div:has(img[src*="/lily/"]):not(.is-hydrated)',
-    'p:has(img[src*="/lily/"]):not(.is-hydrated)'
-  ];
-  const blocks = Array.from(container.querySelectorAll(selectors.join(',')));
-  
-  if (blocks.length > 0) {
-    console.log(`[lilypond-player] Found ${blocks.length} blocks to hydrate`);
-  }
+export function setupLilypondAutoHydration() {
+  if (typeof document === 'undefined') return;
 
-  const tasks = blocks.map(async (block) => {
-    if (!(block instanceof HTMLElement)) return;
-    block.classList.add('is-hydrated');
-
-    const img = block.querySelector('img');
-    const lilyUrl = block.dataset.lilyUrl || img?.getAttribute('src');
-    if (!lilyUrl) {
-      console.warn('[lilypond-player] Block missing URL:', block);
-      return;
+  let timer: any = null;
+  const observer = new MutationObserver((mutations) => {
+    let hasPotentialChanges = false;
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+        hasPotentialChanges = true;
+        break;
+      }
     }
 
-    // Derived midiUrl (assume same name but .midi)
-    // If it's a full URL from remote, it might not work if remote doesn't serve .midi
-    const midiUrl = lilyUrl.replace(/\.svg$/i, '.midi');
-    
-    try {
-      console.log(`[lilypond-player] Hydrating SVG from: ${lilyUrl}`);
-      // 1. Fetch SVG content to inline it (needed for follower/DOM access)
-      // Use no-cache to avoid getting a stale version without textedit anchors if recently re-rendered
-      const svgRes = await fetch(lilyUrl, { mode: 'cors', cache: 'no-cache' });
-      if (!svgRes.ok) {
-        throw new Error(`SVG fetch failed: ${svgRes.status}`);
-      }
-      const svgText = await svgRes.text();
-      
-      if (!svgText.includes('<svg')) {
-        throw new Error('Fetched content is not an SVG');
-      }
-
-      const parser = new DOMParser();
-      const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
-      const svgEl = svgDoc.querySelector('svg');
-      if (!svgEl) {
-        throw new Error('Could not find <svg> element in fetched content');
-      }
-
-      // Style for responsiveness
-      svgEl.style.width = '100%';
-      svgEl.style.height = 'auto';
-      svgEl.style.display = 'block';
-
-      // 2. Inline the SVG by replacing the img
-      if (img) {
-        img.replaceWith(svgEl);
-      } else {
-        block.appendChild(svgEl);
-      }
-
-      // 3. Install the miniplayer 
-      await installLilypondPlayer(block, midiUrl);
-    } catch (err) {
-      console.error('[lilypond-player] Hydration failed for:', lilyUrl, err);
-      // Even if SVG fetching fails, the <img> should still be there from SSR.
+    if (hasPotentialChanges) {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        hydrateLilypondBlocks(document.body);
+      }, 150);
     }
   });
 
-  return Promise.all(tasks);
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
+  // Initial pass
+  console.log('[lilypond-player] Performing initial hydration pass');
+  hydrateLilypondBlocks(document.body);
+
+  return observer;
+}
+
+if (typeof window !== 'undefined') {
+  setupLilypondAutoHydration();
 }
