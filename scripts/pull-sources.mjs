@@ -46,10 +46,21 @@ const sourceStrategy = (() => {
 })();
 
 const run = (cmd, cmdArgs, options = {}) => {
-  execFileSync(cmd, cmdArgs, {
-    stdio: 'inherit',
-    ...options,
-  });
+  try {
+    execFileSync(cmd, cmdArgs, {
+      stdio: 'inherit',
+      ...options,
+    });
+  } catch (err) {
+    // Redact potential tokens from error messages
+    if (err.message) {
+      const token = process.env.CONTENT_SOURCE_READ_TOKEN || process.env.GITHUB_TOKEN;
+      if (token) {
+        err.message = err.message.replace(new RegExp(token, 'g'), '****');
+      }
+    }
+    throw err;
+  }
 };
 
 const toRepoUrl = (repo) => {

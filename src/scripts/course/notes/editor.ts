@@ -38,6 +38,15 @@ function parsePublishResponse(raw: string): ContentPublishResponse {
   }
 }
 
+function serializeForm(form: HTMLFormElement): Record<string, FormDataEntryValue> {
+  const payload: Record<string, FormDataEntryValue> = {};
+  const formData = new FormData(form);
+  formData.forEach((value, key) => {
+    payload[key] = value;
+  });
+  return payload;
+}
+
 export function mountIntegratedCourseNotesEditor(
   options: MountIntegratedCourseNotesEditorOptions = {},
 ): void {
@@ -79,7 +88,7 @@ export function mountIntegratedCourseNotesEditor(
     statusNode.textContent = 'Guardando...';
 
     try {
-      const payload = Object.fromEntries(new FormData(form).entries());
+      const payload = serializeForm(form);
       const response = await fetch(resolved.publishEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
