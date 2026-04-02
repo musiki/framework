@@ -11,6 +11,7 @@ import rehypeKatex from 'rehype-katex';
 import rehypeStringify from 'rehype-stringify';
 import rehypeHighlight from 'rehype-highlight';
 import { all as lowlightAll } from 'lowlight';
+import rehypeCodeSyntax from '../plugins/rehype-code-syntax.mjs';
 
 // Importamos tus plugins personalizados
 import slugMathRemark from '../plugins/slug-math-remark.js';
@@ -19,6 +20,7 @@ import remarkMermaid from '../plugins/remark-mermaid.mjs';
 import remarkEvalBlocks from '../plugins/remark-eval-blocks.mjs';
 import remarkDataviewLite from '../plugins/remark-dataview-lite.mjs';
 import remarkWikiLink from '../plugins/remark-wiki-link.mjs';
+import remarkLily from '../plugins/remark-lily.mjs';
 import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 
 const CONTENT_DIR = path.resolve(process.cwd(), 'src/content/cursos');
@@ -43,6 +45,7 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
     .use(remarkEvalBlocks)
     .use(remarkDataviewLite)
     .use(remarkWikiLink)
+    .use(remarkLily)
     .use(remarkRemoteLilypond, { enabled: true, timeoutMs: 10000, preferRemote: true })
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeObsidianCallouts)
@@ -53,6 +56,7 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
       aliases: runtimeHighlightAliases,
       ignoreMissing: true,
     })
+    .use(rehypeCodeSyntax)
     .use(rehypeStringify);
 
   const result = await processor.process(markdownBody);

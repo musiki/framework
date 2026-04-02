@@ -8,6 +8,7 @@ import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
 import rehypeHighlight from 'rehype-highlight';
 import { all as lowlightAll } from 'lowlight';
+import rehypeCodeSyntax from '../plugins/rehype-code-syntax.mjs';
 
 import slugMathRemark from '../plugins/slug-math-remark.js';
 import rehypeObsidianCallouts from '../plugins/remark-obsidian-callouts.mjs';
@@ -15,6 +16,7 @@ import rehypeObsidianImageSize from '../plugins/rehype-obsidian-image-size.mjs';
 import remarkMermaid from '../plugins/remark-mermaid.mjs';
 import remarkMediaEmbed from '../plugins/remark-media-embed.mjs';
 import remarkWikiLink from '../plugins/remark-wiki-link.mjs';
+import remarkLily from '../plugins/remark-lily.mjs';
 import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 import remarkForumMathMacros from '../plugins/remark-forum-math-macros.mjs';
 
@@ -42,6 +44,7 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
     .use(remarkMermaid)
     .use(remarkWikiLink)
     .use(remarkMediaEmbed)
+    .use(remarkLily)
     .use(remarkRemoteLilypond, {
       enabled: options.remoteLilypond !== false,
       timeoutMs: 10_000,
@@ -59,6 +62,7 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
       aliases: forumHighlightAliases,
       ignoreMissing: true,
     })
+    .use(rehypeCodeSyntax)
     .use(rehypeStringify, { allowDangerousHtml: true });
 }
 

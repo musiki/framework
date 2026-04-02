@@ -23,6 +23,7 @@ export interface SvgLocationGroup {
   svgEl: SVGSVGElement;
   elements: SVGElement[];
   centerX: number;
+  centerY: number;
   topLineEl: SVGGraphicsElement | null;
   bottomLineEl: SVGGraphicsElement | null;
 }
@@ -47,6 +48,11 @@ export interface SvgMarkerPosition {
   centerY: number;
   topLineEl: SVGGraphicsElement | null;
   bottomLineEl: SVGGraphicsElement | null;
+}
+
+interface SvgPointLike {
+  x: number;
+  y: number;
 }
 
 export interface SvgPlaybackFollower {
@@ -406,6 +412,19 @@ export class MiniSampler {
     };
   }
 
+  private mapVelocityToGain(velocity: number) {
+    const minVelocity = 20;
+    const maxVelocity = 127;
+    const minGain = 0.1;
+    const maxGain = 1;
+    const curveExponent = 1.9;
+    const clampedVelocity = Math.max(minVelocity, Math.min(velocity, maxVelocity));
+    const normalized = (clampedVelocity - minVelocity) / (maxVelocity - minVelocity);
+    const curved = Math.pow(normalized, curveExponent);
+
+    return minGain + curved * (maxGain - minGain);
+  }
+
   playNote(midiNote: number, velocity: number) {
     if (!this.ctx || !this.initialized) return;
     if (velocity === 0) {
@@ -425,7 +444,7 @@ export class MiniSampler {
     source.playbackRate.value = playbackRate;
 
     const gain = this.ctx.createGain();
-    const peakGain = (velocity / 127) * 0.8;
+    const peakGain = this.mapVelocityToGain(velocity);
     gain.gain.value = peakGain;
 
     source.connect(gain);
@@ -490,6 +509,7 @@ export class WebMidiPlaybackController {
   private progressTimer: number | null = null;
   private finishTimer: number | null = null;
   private playing = false;
+  private lastProgressRatio = 0;
 
   constructor(
     private readonly sampler: MiniSampler,
@@ -516,7 +536,8 @@ export class WebMidiPlaybackController {
 
     this.playing = true;
     this.callbacks.onStateChange(true);
-    this.callbacks.onProgress(0);
+    this.lastProgressRatio = 0;
+    this.emitProgress(0, true);
 
     const startedAt = performance.now();
 
@@ -526,6 +547,9 @@ export class WebMidiPlaybackController {
         if (status === 0x90) {
           const note = event.message[1];
           const velocity = event.message[2];
+          const ratio =
+            this.sequence.durationMs === 0 ? 0 : Math.min(event.timeMs / this.sequence.durationMs, 1);
+          this.emitProgress(ratio);
           this.sampler.playNote(note, velocity);
         } else if (status === 0x80) {
           const note = event.message[1];
@@ -540,8 +564,8 @@ export class WebMidiPlaybackController {
       const elapsedMs = performance.now() - startedAt;
       const ratio =
         this.sequence.durationMs === 0 ? 0 : Math.min(elapsedMs / this.sequence.durationMs, 1);
-      this.callbacks.onProgress(ratio);
-    }, 40);
+      this.emitProgress(ratio);
+    }, 16);
 
     this.finishTimer = window.setTimeout(() => {
       this.finish();
@@ -551,7 +575,8 @@ export class WebMidiPlaybackController {
   stop(resetProgress = true): void {
     if (!this.playing && this.timeoutIds.length === 0 && this.progressTimer === null) {
       if (resetProgress) {
-        this.callbacks.onProgress(0);
+        this.lastProgressRatio = 0;
+        this.emitProgress(0, true);
       }
       return;
     }
@@ -576,7 +601,8 @@ export class WebMidiPlaybackController {
     this.callbacks.onStateChange(false);
 
     if (resetProgress) {
-      this.callbacks.onProgress(0);
+      this.lastProgressRatio = 0;
+      this.emitProgress(0, true);
     }
   }
 
@@ -602,8 +628,16 @@ export class WebMidiPlaybackController {
 
     this.sampler.stopAll();
     this.playing = false;
-    this.callbacks.onProgress(1);
+    this.lastProgressRatio = 1;
+    this.emitProgress(1, true);
     this.callbacks.onStateChange(false);
+  }
+
+  private emitProgress(ratio: number, allowBackward = false): void {
+    const clampedRatio = Math.max(0, Math.min(ratio, 1));
+    const nextRatio = allowBackward ? clampedRatio : Math.max(this.lastProgressRatio, clampedRatio);
+    this.lastProgressRatio = nextRatio;
+    this.callbacks.onProgress(nextRatio);
   }
 }
 
@@ -613,8 +647,69 @@ export class WebMidiPlaybackController {
 
 function getSvgAnchorHref(element: SVGElement): string | null {
   return (
-    element.getAttribute('href') ?? element.getAttributeNS('http://www.w3.org/1999/xlink', 'href')
+    element.getAttribute('data-lily-anchor-href') ??
+    element.getAttribute('href') ??
+    element.getAttributeNS('http://www.w3.org/1999/xlink', 'href')
   );
+}
+
+function normalizeSvgInlineStyle(styleText: string, baseInkColor: string): string {
+  return String(styleText || '')
+    .replace(/color\s*:\s*inherit/gi, `color:${baseInkColor}`)
+    .replace(/color\s*:\s*currentColor/gi, `color:${baseInkColor}`)
+    .replace(/fill\s*:\s*currentColor/gi, `fill:${baseInkColor}`)
+    .replace(/stroke\s*:\s*currentColor/gi, `stroke:${baseInkColor}`)
+    .replace(/currentColor/gi, baseInkColor)
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .join(';');
+}
+
+function sanitizeLilypondSvg(svgEl: SVGSVGElement) {
+  const baseInkColor = '#222939';
+  svgEl.style.setProperty('color', baseInkColor, 'important');
+  svgEl.setAttribute('color', baseInkColor);
+  svgEl.querySelectorAll('*').forEach((node) => {
+    if (!(node instanceof SVGElement)) return;
+
+    if (/^currentcolor$/i.test(node.getAttribute('fill') || '')) {
+      node.setAttribute('fill', baseInkColor);
+    }
+    if (/^currentcolor$/i.test(node.getAttribute('stroke') || '')) {
+      node.setAttribute('stroke', baseInkColor);
+    }
+    if (/^currentcolor$/i.test(node.getAttribute('color') || '')) {
+      node.setAttribute('color', baseInkColor);
+    }
+
+    const styleText = node.getAttribute('style');
+    if (styleText) {
+      const normalizedStyle = normalizeSvgInlineStyle(styleText, baseInkColor);
+      if (normalizedStyle) {
+        node.setAttribute('style', normalizedStyle);
+      } else {
+        node.removeAttribute('style');
+      }
+    }
+  });
+  svgEl.querySelectorAll('style').forEach((styleNode) => {
+    styleNode.textContent = normalizeSvgInlineStyle(styleNode.textContent || '', baseInkColor);
+  });
+
+  Array.from(svgEl.getElementsByTagNameNS('http://www.w3.org/2000/svg', 'a')).forEach((anchor) => {
+    if (!(anchor instanceof SVGElement)) return;
+    const href = getSvgAnchorHref(anchor);
+    if (href?.startsWith('textedit:')) {
+      anchor.setAttribute('data-lily-anchor-href', href);
+      anchor.classList.add('lily-note-anchor');
+      anchor.removeAttribute('href');
+      anchor.removeAttributeNS('http://www.w3.org/1999/xlink', 'href');
+    }
+    anchor.style.setProperty('color', baseInkColor, 'important');
+    anchor.style.setProperty('text-decoration', 'none');
+    anchor.setAttribute('color', baseInkColor);
+  });
 }
 
 function extractSvgSystemRanges(svgEl: SVGSVGElement): SvgSystemRange[] {
@@ -655,38 +750,58 @@ function extractSvgSystemRanges(svgEl: SVGSVGElement): SvgSystemRange[] {
 
   if (lineElements.length === 0) return [];
 
+  const dedupedLines: Array<{ line: SVGGraphicsElement; centerY: number }> = [];
+  for (const lineEntry of lineElements) {
+    const previous = dedupedLines[dedupedLines.length - 1];
+    if (previous && Math.abs(previous.centerY - lineEntry.centerY) <= 0.05) {
+      continue;
+    }
+    dedupedLines.push(lineEntry);
+  }
+
   const gaps: number[] = [];
-  for (let index = 1; index < lineElements.length; index += 1) {
-    const gap = lineElements[index].centerY - lineElements[index - 1].centerY;
+  for (let index = 1; index < dedupedLines.length; index += 1) {
+    const gap = dedupedLines[index].centerY - dedupedLines[index - 1].centerY;
     if (gap > 0.01) gaps.push(gap);
   }
 
   const baseGap = gaps.length > 0 ? Math.min(...gaps) : 1;
-  const systemBreakGap = baseGap * 40;
+  const staffBreakGap = baseGap * 2.2;
   const systems: SvgSystemRange[] = [];
-  let startIndex = 0;
+  let currentStaff: Array<{ line: SVGGraphicsElement; centerY: number }> = [];
 
-  for (let index = 1; index <= lineElements.length; index += 1) {
-    const previous = lineElements[index - 1];
-    const current = lineElements[index];
-    const gap = current ? current.centerY - previous.centerY : Number.POSITIVE_INFINITY;
+  const pushStaff = (staffLines: Array<{ line: SVGGraphicsElement; centerY: number }>) => {
+    if (staffLines.length === 0) return;
 
-    if (gap <= systemBreakGap) continue;
+    for (let index = 0; index < staffLines.length; index += 5) {
+      const chunk = staffLines.slice(index, index + 5);
+      if (chunk.length < 2) continue;
 
-    const systemLines = lineElements.slice(startIndex, index);
-    const topLine = systemLines[0];
-    const bottomLine = systemLines[systemLines.length - 1];
+      const topLine = chunk[0];
+      const bottomLine = chunk[chunk.length - 1];
+      systems.push({
+        topLineEl: topLine.line,
+        bottomLineEl: bottomLine.line,
+        topY: topLine.centerY,
+        bottomY: bottomLine.centerY,
+        centerY: (topLine.centerY + bottomLine.centerY) / 2,
+      });
+    }
+  };
 
-    systems.push({
-      topLineEl: topLine.line,
-      bottomLineEl: bottomLine.line,
-      topY: topLine.centerY,
-      bottomY: bottomLine.centerY,
-      centerY: (topLine.centerY + bottomLine.centerY) / 2,
-    });
-    startIndex = index;
+  for (const lineEntry of dedupedLines) {
+    const previous = currentStaff[currentStaff.length - 1];
+    const gap = previous ? lineEntry.centerY - previous.centerY : 0;
+
+    if (currentStaff.length >= 5 || gap > staffBreakGap) {
+      pushStaff(currentStaff);
+      currentStaff = [];
+    }
+
+    currentStaff.push(lineEntry);
   }
 
+  pushStaff(currentStaff);
   return systems;
 }
 
@@ -722,20 +837,111 @@ function extractMidiTimeGroups(sequence: MidiSequence): FollowerTimeGroup[] {
   return timeGroups;
 }
 
-function extractSvgLocationGroups(renderEl: HTMLElement): SvgLocationGroup[] {
-  const svgElements = Array.from(renderEl.querySelectorAll('svg'));
-  const svgOrder = new Map<SVGSVGElement, number>();
-  const svgSystems = new Map<SVGSVGElement, SvgSystemRange[]>();
+function isLikelyTimingAnchor(
+  element: SVGElement,
+  box: SVGRect,
+  anchorPoint: SvgPointLike,
+  systemRange: SvgSystemRange | null,
+): boolean {
+  if (element.querySelector('text')) return false;
 
-  for (const [index, svgEl] of svgElements.entries()) {
-    svgOrder.set(svgEl, index);
-    svgSystems.set(svgEl, extractSvgSystemRanges(svgEl));
+  const hasShape = Boolean(element.querySelector('path, ellipse, circle, rect, polygon, use'));
+  const hasLine = Boolean(element.querySelector('line'));
+
+  if (!hasShape && hasLine) return false;
+  if (box.width <= 0.01 && box.height <= 0.01) return false;
+
+  if (systemRange) {
+    const staffSpace = Math.max((systemRange.bottomY - systemRange.topY) / 4, 0.5);
+    if (anchorPoint.y < systemRange.topY - staffSpace * 3.25) return false;
+    if (anchorPoint.y > systemRange.bottomY + staffSpace * 2.5) return false;
   }
 
+  return true;
+}
+
+function getPrimaryAnchorGraphicElement(anchor: SVGElement): SVGGraphicsElement | null {
+  const graphic = anchor.querySelector('path, ellipse, circle, rect, polygon, use, line');
+  return graphic instanceof SVGGraphicsElement ? graphic : null;
+}
+
+function getAnchorBoundingBox(anchor: SVGElement): SVGRect | null {
+  try {
+    return (anchor as unknown as SVGGraphicsElement).getBBox();
+  } catch (_error) {
+    try {
+      return getPrimaryAnchorGraphicElement(anchor)?.getBBox() ?? null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function getSvgTranslatePoint(element: Element): SvgPointLike | null {
+  const candidates = [element, ...Array.from(element.children)];
+
+  for (const candidate of candidates) {
+    if (!(candidate instanceof SVGElement)) continue;
+
+    const transformAttr = candidate.getAttribute('transform');
+    if (!transformAttr) continue;
+
+    const match = transformAttr.match(/translate\(\s*([-0-9.]+)(?:[\s,]+([-0-9.]+))?\s*\)/i);
+    if (!match) continue;
+
+    return {
+      x: Number.parseFloat(match[1]),
+      y: Number.parseFloat(match[2] ?? '0'),
+    };
+  }
+
+  return null;
+}
+
+function getSvgClientPoint(svgEl: SVGSVGElement, point: SvgPointLike): SvgPointLike | null {
+  const ctm = svgEl.getScreenCTM();
+  if (!ctm) return null;
+
+  const svgPoint = svgEl.createSVGPoint();
+  svgPoint.x = point.x;
+  svgPoint.y = point.y;
+
+  const transformed = svgPoint.matrixTransform(ctm);
+  return { x: transformed.x, y: transformed.y };
+}
+
+function getAnchorClientRect(anchor: SVGElement): DOMRect | null {
+  const rectTarget =
+    getPrimaryAnchorGraphicElement(anchor) ??
+    (anchor as unknown as SVGGraphicsElement);
+
+  try {
+    const rect = rectTarget.getBoundingClientRect();
+    if (rect.width > 0 || rect.height > 0) return rect;
+  } catch (_error) {
+    // Fall through to wrapper fallback.
+  }
+
+  try {
+    const rect = (anchor as unknown as Element).getBoundingClientRect();
+    if (rect.width > 0 || rect.height > 0) return rect;
+  } catch (_error) {
+    return null;
+  }
+
+  return null;
+}
+
+function collectSvgMarkerPositions(
+  renderEl: HTMLElement,
+  svgOrder: Map<SVGSVGElement, number>,
+  svgSystems: Map<SVGSVGElement, SvgSystemRange[]>,
+  strictFiltering: boolean
+): SvgMarkerPosition[] {
   const svgAnchors = Array.from(renderEl.getElementsByTagNameNS('http://www.w3.org/2000/svg', 'a'));
 
-  const markers = svgAnchors
-    .map((element, domIndex): SvgMarkerPosition | null => {
+  return svgAnchors
+    .map((element): SvgMarkerPosition | null => {
       const href = getSvgAnchorHref(element);
       if (!href?.startsWith('textedit:')) return null;
 
@@ -743,26 +949,29 @@ function extractSvgLocationGroups(renderEl: HTMLElement): SvgLocationGroup[] {
       if (!svgEl) return null;
 
       element.classList.add('lily-note-anchor');
+      element.setAttribute('data-lily-anchor-href', href);
       element.removeAttribute('href');
       element.removeAttributeNS('http://www.w3.org/1999/xlink', 'href');
 
-      let box: SVGRect | null = null;
-      try {
-        const svgGraphics = element as unknown as SVGGraphicsElement;
-        box = svgGraphics.getBBox();
-      } catch (_error) {
-        box = null;
-      }
+      if (element.querySelector('text')) return null;
 
-      const centerY = box ? box.y + box.height / 2 : 0;
-      const systemRange = findSystemRangeForY(svgSystems.get(svgEl) ?? [], centerY);
+      const box = getAnchorBoundingBox(element);
+      const anchorPoint =
+        getSvgTranslatePoint(element) ??
+        (box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null);
+      if (!anchorPoint) return null;
+
+      const systemRange = findSystemRangeForY(svgSystems.get(svgEl) ?? [], anchorPoint.y);
+      if (strictFiltering && box && !isLikelyTimingAnchor(element, box, anchorPoint, systemRange)) {
+        return null;
+      }
 
       return {
         element,
         svgEl,
         svgIndex: svgOrder.get(svgEl) ?? 0,
-        centerX: box ? box.x + box.width / 2 : domIndex,
-        centerY,
+        centerX: anchorPoint.x,
+        centerY: anchorPoint.y,
         topLineEl: systemRange?.topLineEl ?? null,
         bottomLineEl: systemRange?.bottomLineEl ?? null,
       };
@@ -773,6 +982,29 @@ function extractSvgLocationGroups(renderEl: HTMLElement): SvgLocationGroup[] {
       if (Math.abs(left.centerX - right.centerX) > 0.35) return left.centerX - right.centerX;
       return left.centerY - right.centerY;
     });
+}
+
+function extractSvgLocationGroups(renderEl: HTMLElement): SvgLocationGroup[] {
+  const svgElements = Array.from(renderEl.querySelectorAll('svg'));
+  const svgOrder = new Map<SVGSVGElement, number>();
+  const svgSystems = new Map<SVGSVGElement, SvgSystemRange[]>();
+
+  for (const [index, svgEl] of svgElements.entries()) {
+    svgOrder.set(svgEl, index);
+    svgSystems.set(svgEl, extractSvgSystemRanges(svgEl));
+  }
+
+  const strictMarkers = collectSvgMarkerPositions(renderEl, svgOrder, svgSystems, true);
+  const markers =
+    strictMarkers.length > 0
+      ? strictMarkers
+      : collectSvgMarkerPositions(renderEl, svgOrder, svgSystems, false);
+
+  if (strictMarkers.length === 0 && markers.length > 0) {
+    console.warn('[lilypond-player] Follower strict filtering fell back to permissive mode', {
+      markers: markers.length,
+    });
+  }
 
   const groups: SvgLocationGroup[] = [];
 
@@ -788,6 +1020,9 @@ function extractSvgLocationGroups(renderEl: HTMLElement): SvgLocationGroup[] {
       currentGroup.centerX =
         (currentGroup.centerX * (currentGroup.elements.length - 1) + marker.centerX) /
         currentGroup.elements.length;
+      currentGroup.centerY =
+        (currentGroup.centerY * (currentGroup.elements.length - 1) + marker.centerY) /
+        currentGroup.elements.length;
       continue;
     }
 
@@ -795,12 +1030,85 @@ function extractSvgLocationGroups(renderEl: HTMLElement): SvgLocationGroup[] {
       svgEl: marker.svgEl,
       elements: [marker.element],
       centerX: marker.centerX,
+      centerY: marker.centerY,
       topLineEl: marker.topLineEl,
       bottomLineEl: marker.bottomLineEl,
     });
   }
 
   return groups;
+}
+
+function buildPlayheadSegments(
+  renderEl: HTMLElement,
+  group: SvgLocationGroup
+): Array<{ left: number; top: number; height: number }> {
+  const renderRect = renderEl.getBoundingClientRect();
+  const svgSystems = extractSvgSystemRanges(group.svgEl);
+  const segments = new Map<string, {
+    lefts: number[];
+    topLineEl: SVGGraphicsElement | null;
+    bottomLineEl: SVGGraphicsElement | null;
+    fallbackCenterY: number;
+    fallbackHeight: number;
+  }>();
+
+  for (const element of group.elements) {
+    const anchorRect = getAnchorClientRect(element);
+    const box = getAnchorBoundingBox(element);
+    const anchorPoint =
+      getSvgTranslatePoint(element) ??
+      (box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null);
+
+    if (!anchorPoint) continue;
+
+    const systemRange = findSystemRangeForY(svgSystems, anchorPoint.y);
+    const key = systemRange
+      ? `${systemRange.topY.toFixed(3)}:${systemRange.bottomY.toFixed(3)}`
+      : `fallback:${anchorPoint.y.toFixed(3)}`;
+    const left = anchorRect
+      ? anchorRect.left - renderRect.left + anchorRect.width / 2
+      : (getSvgClientPoint(group.svgEl, anchorPoint)?.x ?? renderRect.left) - renderRect.left;
+    const fallbackCenterY = anchorRect
+      ? anchorRect.top + anchorRect.height / 2
+      : getSvgClientPoint(group.svgEl, anchorPoint)?.y ?? renderRect.top;
+    const fallbackHeight = Math.max(anchorRect?.height ?? 1, 1) * 4.2;
+
+    const existing = segments.get(key);
+    if (existing) {
+      existing.lefts.push(left);
+      existing.fallbackCenterY = (existing.fallbackCenterY + fallbackCenterY) / 2;
+      existing.fallbackHeight = Math.max(existing.fallbackHeight, fallbackHeight);
+      continue;
+    }
+
+    segments.set(key, {
+      lefts: [left],
+      topLineEl: systemRange?.topLineEl ?? null,
+      bottomLineEl: systemRange?.bottomLineEl ?? null,
+      fallbackCenterY,
+      fallbackHeight,
+    });
+  }
+
+  return Array.from(segments.values()).map((segment) => {
+    let systemTop = segment.topLineEl?.getBoundingClientRect().top ?? -1;
+    let systemBottom = segment.bottomLineEl?.getBoundingClientRect().bottom ?? -1;
+
+    if (systemTop === -1 || systemBottom === -1) {
+      systemTop = segment.fallbackCenterY - segment.fallbackHeight / 2;
+      systemBottom = segment.fallbackCenterY + segment.fallbackHeight / 2;
+    }
+
+    const staffHeight = Math.max(systemBottom - systemTop, 1);
+    const padding = Math.max(Math.min(staffHeight * 0.08, 3), 1);
+
+    return {
+      left: segment.lefts.reduce((sum, value) => sum + value, 0) / segment.lefts.length,
+      top: systemTop - renderRect.top - padding,
+      height: Math.max(staffHeight + padding * 2, 1),
+    };
+  });
 }
 
 function findActiveGroupIndex(
@@ -826,101 +1134,6 @@ function findActiveGroupIndex(
   return result;
 }
 
-function positionPlayhead(
-  playheadEl: HTMLDivElement,
-  renderEl: HTMLElement,
-  group: SvgLocationGroup
-): void {
-  const targetElement = group.elements[0];
-  const targetRect = targetElement.getBoundingClientRect();
-  const renderRect = renderEl.getBoundingClientRect();
-
-  let systemTop = -1;
-  let systemBottom = -1;
-
-  let current: Node | null = targetElement.parentNode;
-  let systemEl: Element | null = null;
-  const svgNode = group.svgEl as Node;
-  while (current && current !== svgNode) {
-    if (current instanceof Element) {
-      const cls = (current.getAttribute('class') || '').toLowerCase();
-      const id = (current.getAttribute('id') || '').toLowerCase();
-      if (
-        cls.includes('system') ||
-        cls.includes('staff-group') ||
-        cls.includes('score') ||
-        cls.includes('staffsymbol') ||
-        id.includes('system') ||
-        id.includes('score')
-      ) {
-        systemEl = current;
-      }
-    }
-    current = current.parentNode;
-  }
-
-  if (!systemEl) systemEl = targetElement.closest('svg > g');
-
-  if (systemEl) {
-    const staffElements = Array.from(
-      systemEl.querySelectorAll(
-        ".staff-symbol, .staff-line, .staff, [class*='staff'], [class*='Staff'], [id*='staff'], [id*='Staff'], path, line"
-      )
-    ).filter((el) => {
-      if (!(el instanceof SVGGraphicsElement)) return false;
-      const cls = (el.getAttribute('class') || '').toLowerCase();
-      const id = (el.getAttribute('id') || '').toLowerCase();
-      if (
-        cls.includes('staff-symbol') ||
-        cls.includes('staff-line') ||
-        cls.includes('staffsymbol') ||
-        id.includes('staffsymbol')
-      ) {
-        return true;
-      }
-      try {
-        const b = el.getBBox();
-        return b.width > b.height * 1.2 && b.width > 0.8 && b.height < 25;
-      } catch {
-        return false;
-      }
-    });
-
-    if (staffElements.length > 0) {
-      const boxes = staffElements.map((s) => s.getBoundingClientRect());
-      systemTop = Math.min(...boxes.map((b) => b.top));
-      systemBottom = Math.max(...boxes.map((b) => b.bottom));
-    }
-  }
-
-  if (systemTop === -1 || systemBottom === -1) {
-    const topLineRect = group.topLineEl?.getBoundingClientRect() ?? null;
-    const bottomLineRect = group.bottomLineEl?.getBoundingClientRect() ?? null;
-    if (topLineRect && bottomLineRect) {
-      systemTop = topLineRect.top;
-      systemBottom = bottomLineRect.bottom;
-    }
-  }
-
-  if (systemTop === -1 || systemBottom === -1) {
-    const noteHeight = targetRect.height;
-    const estimatedStaffHeight = noteHeight * 35;
-    systemTop = targetRect.top + targetRect.height / 2 - estimatedStaffHeight / 2;
-    systemBottom = systemTop + estimatedStaffHeight;
-  }
-
-  const noteWidth = targetRect.width;
-  const padding = Math.max(noteWidth * 4.5, 40);
-
-  const top = systemTop - renderRect.top - padding;
-  const height = systemBottom - systemTop + padding * 2;
-  const left = targetRect.left - renderRect.left + targetRect.width / 2;
-
-  playheadEl.style.left = `${left}px`;
-  playheadEl.style.top = `${top}px`;
-  playheadEl.style.height = `${Math.max(height, 1)}px`;
-}
-
 function buildSvgPlaybackFollower(
   renderEl: HTMLElement,
   sequence: MidiSequence
@@ -928,27 +1141,46 @@ function buildSvgPlaybackFollower(
   const timeGroups = extractMidiTimeGroups(sequence);
   const locationGroups = extractSvgLocationGroups(renderEl);
 
-  if (timeGroups.length === 0 || locationGroups.length === 0) return null;
+  if (timeGroups.length === 0 || locationGroups.length === 0) {
+    console.warn('[lilypond-player] Follower unavailable', {
+      timeGroups: timeGroups.length,
+      locationGroups: locationGroups.length,
+    });
+    return null;
+  }
 
   const mappedCount = Math.min(timeGroups.length, locationGroups.length);
-  if (mappedCount === 0) return null;
+  if (mappedCount === 0) {
+    console.warn('[lilypond-player] Follower mapping empty', {
+      timeGroups: timeGroups.length,
+      locationGroups: locationGroups.length,
+    });
+    return null;
+  }
 
-  const playheadEl = document.createElement('div');
-  playheadEl.className = 'lily-playhead is-hidden';
-  // Minimal playhead styling - standard CSS would usually do this but we inline the required positioning.
-  Object.assign(playheadEl.style, {
-    position: 'absolute',
-    width: '2px',
-    backgroundColor: '#e74c3c', // Red tint
-    pointerEvents: 'none',
-    zIndex: '10',
-    transition: 'top 0.1s, left 0.1s, height 0.1s',
-  });
   // Ensure the container has positioning to trap the absolute playhead
   if (window.getComputedStyle(renderEl).position === 'static') {
     renderEl.style.position = 'relative';
   }
-  renderEl.appendChild(playheadEl);
+
+  const playheadEls: HTMLDivElement[] = [];
+  const ensurePlayheadCount = (count: number) => {
+    while (playheadEls.length < count) {
+      const playheadEl = document.createElement('div');
+      playheadEl.className = 'lily-playhead is-hidden';
+      Object.assign(playheadEl.style, {
+        position: 'absolute',
+        width: '2px',
+        backgroundColor: '#e74c3c',
+        pointerEvents: 'none',
+        zIndex: '10',
+        transform: 'translateX(-50%)',
+        transition: 'top 0.1s, left 0.1s, height 0.1s',
+      });
+      renderEl.appendChild(playheadEl);
+      playheadEls.push(playheadEl);
+    }
+  };
 
   const groups = timeGroups.slice(0, mappedCount).map((timeGroup, index) => ({
     timeMs: timeGroup.timeMs,
@@ -959,7 +1191,22 @@ function buildSvgPlaybackFollower(
 
   const setActiveIndex = (nextIndex: number) => {
     if (activeIndex === nextIndex) {
-      if (nextIndex !== -1) positionPlayhead(playheadEl, renderEl, groups[nextIndex]);
+      if (nextIndex !== -1) {
+        const segments = buildPlayheadSegments(renderEl, groups[nextIndex]);
+        ensurePlayheadCount(Math.max(segments.length, 1));
+        segments.forEach((segment, index) => {
+          const playheadEl = playheadEls[index];
+          playheadEl.style.left = `${segment.left}px`;
+          playheadEl.style.top = `${segment.top}px`;
+          playheadEl.style.height = `${segment.height}px`;
+          playheadEl.classList.remove('is-hidden');
+          playheadEl.style.display = 'block';
+        });
+        for (let index = segments.length; index < playheadEls.length; index += 1) {
+          playheadEls[index].classList.add('is-hidden');
+          playheadEls[index].style.display = 'none';
+        }
+      }
       return;
     }
 
@@ -970,16 +1217,29 @@ function buildSvgPlaybackFollower(
     activeIndex = nextIndex;
 
     if (activeIndex === -1) {
-      playheadEl.classList.add('is-hidden');
-      playheadEl.style.display = 'none';
+      for (const playheadEl of playheadEls) {
+        playheadEl.classList.add('is-hidden');
+        playheadEl.style.display = 'none';
+      }
       return;
     }
 
     for (const element of groups[activeIndex].elements) element.classList.add('is-active-note');
 
-    positionPlayhead(playheadEl, renderEl, groups[activeIndex]);
-    playheadEl.classList.remove('is-hidden');
-    playheadEl.style.display = 'block';
+    const segments = buildPlayheadSegments(renderEl, groups[activeIndex]);
+    ensurePlayheadCount(Math.max(segments.length, 1));
+    segments.forEach((segment, index) => {
+      const playheadEl = playheadEls[index];
+      playheadEl.style.left = `${segment.left}px`;
+      playheadEl.style.top = `${segment.top}px`;
+      playheadEl.style.height = `${segment.height}px`;
+      playheadEl.classList.remove('is-hidden');
+      playheadEl.style.display = 'block';
+    });
+    for (let index = segments.length; index < playheadEls.length; index += 1) {
+      playheadEls[index].classList.add('is-hidden');
+      playheadEls[index].style.display = 'none';
+    }
   };
 
   return {
@@ -991,7 +1251,7 @@ function buildSvgPlaybackFollower(
     },
     destroy(): void {
       setActiveIndex(-1);
-      playheadEl.remove();
+      for (const playheadEl of playheadEls) playheadEl.remove();
     },
   };
 }
@@ -1017,34 +1277,129 @@ function createIconSvg(iconName: 'play' | 'stop'): SVGSVGElement {
   return icon;
 }
 
+const MIDI_URL_RE = /\.(midi|mid)(?=([?#].*)?$)/i;
+
+function isLocalLilyAssetUrl(url: string) {
+  const normalized = String(url || '').trim();
+  if (!normalized) return false;
+
+  try {
+    const parsed = new URL(normalized, window.location.href);
+    return parsed.origin === window.location.origin && parsed.pathname.startsWith('/lily/');
+  } catch {
+    return normalized.startsWith('/lily/');
+  }
+}
+
+function replaceMidiUrlExtension(url: string, extension: 'midi' | 'mid') {
+  return url.replace(MIDI_URL_RE, `.${extension}`);
+}
+
+function getLilyHashFromAssetUrl(url: string) {
+  const match = url.match(/\/([a-f0-9]{32,})(?=\.(svg|midi|mid)(?:[?#]|$))/i);
+  return match?.[1] || '';
+}
+
+function buildMidiFetchCandidates(midiUrl: string) {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const addCandidate = (candidate: string) => {
+    const normalized = String(candidate || '').trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
+
+  addCandidate(midiUrl);
+
+  if (midiUrl.startsWith('http')) {
+    addCandidate(`/api/lily/render?url=${encodeURIComponent(midiUrl)}`);
+  }
+
+  if (MIDI_URL_RE.test(midiUrl)) {
+    const fallbackUrl = /\.midi(?=([?#].*)?$)/i.test(midiUrl)
+      ? replaceMidiUrlExtension(midiUrl, 'mid')
+      : replaceMidiUrlExtension(midiUrl, 'midi');
+    addCandidate(fallbackUrl);
+    if (fallbackUrl.startsWith('http')) {
+      addCandidate(`/api/lily/render?url=${encodeURIComponent(fallbackUrl)}`);
+    }
+  }
+
+  const lilyHash = getLilyHashFromAssetUrl(midiUrl);
+  if (lilyHash) {
+    addCandidate(`/lily/${lilyHash}.midi`);
+    addCandidate(`/lily/${lilyHash}.mid`);
+  }
+
+  return candidates;
+}
+
+async function fetchMidiBufferWithFallbacks(midiUrl: string) {
+  const candidates = buildMidiFetchCandidates(midiUrl);
+
+  for (const candidate of candidates) {
+    try {
+      console.log(`[lilypond-player] Trying MIDI candidate: ${candidate}`);
+      const res = await fetch(
+        candidate,
+        candidate.startsWith('http')
+          ? { mode: 'cors', cache: 'no-cache' }
+          : { cache: 'no-cache' },
+      );
+      if (!res.ok) {
+        console.log(`[lilypond-player] MIDI candidate unavailable (${res.status}): ${candidate}`);
+        continue;
+      }
+      return await res.arrayBuffer();
+    } catch (error) {
+      console.log(`[lilypond-player] MIDI candidate fetch failed: ${candidate}`, error);
+    }
+  }
+
+  return null;
+}
+
+function getDefaultMidiUrlForRenderedScore(lilyUrl: string) {
+  if (!isLocalLilyAssetUrl(lilyUrl) || !/\.svg(?=([?#].*)?$)/i.test(lilyUrl)) {
+    return '';
+  }
+
+  return replaceMidiUrlExtension(lilyUrl, 'midi');
+}
+
 /**
  * Attaches the miniplayer over a given rendered SVG Container using its associated MIDI file.
  */
 export async function installLilypondPlayer(container: HTMLElement, midiUrl: string) {
+  if (!midiUrl || container.dataset.lilyPlayerInstalled === midiUrl) return null;
   console.log(`[lilypond-player] installLilypondPlayer called for ${midiUrl}`);
+  container.dataset.lilyPlayerInstalled = midiUrl;
   
   // Create UI
   const btn = document.createElement('button');
   btn.type = 'button';
   // Use forum-action-btn class to match other buttons next to "R"
   btn.className = 'lily-miniplayer-btn forum-action-btn'; 
-  btn.dataset.tooltip = 'Reproducir';
-  btn.title = 'Reproducir';
-  btn.setAttribute('aria-label', 'Reproducir');
+  btn.dataset.tooltip = 'Cargando audio...';
+  btn.title = 'Cargando audio...';
+  btn.setAttribute('aria-label', 'Cargando audio...');
   
   // Minimal inline styles to ensure functionality
   Object.assign(btn.style, {
     pointerEvents: 'auto',
     cursor: 'wait',
   });
+
+  btn.replaceChildren(createIconSvg('play'));
   
   const setIconState = (isPlaying: boolean) => {
     btn.replaceChildren(createIconSvg(isPlaying ? 'stop' : 'play'));
     const label = isPlaying ? 'Detener' : 'Reproducir';
     btn.title = label;
     btn.dataset.tooltip = label;
+    btn.setAttribute('aria-label', label);
   };
-  setIconState(false);
 
   // Strategy: If we are in a forum post, move the button to the actions bar
   const postActions = container.closest('.forum-post')?.querySelector('.forum-post-actions');
@@ -1082,51 +1437,25 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
   }
 
   let playerBuffer: ArrayBuffer | null = null;
-  const getHashFromUrl = (url: string) => {
-    const parts = url.split('/');
-    const last = parts[parts.length - 1];
-    return last.split('?')[0].split('#')[0];
-  };
 
   try {
     console.log(`[lilypond-player] Fetching MIDI: ${midiUrl}`);
-    let res: Response | null = null;
-    
-    try {
-      res = await fetch(midiUrl, { mode: 'cors' });
-    } catch (e) {
-      console.log('[lilypond-player] MIDI direct fetch failed, will try proxy');
-    }
-    
-    // Proxy fallback for remote URLs that fail (CORS/Adblock)
-    if ((!res || !res.ok) && midiUrl.startsWith('http')) {
-      console.log(`[lilypond-player] MIDI proxying: ${midiUrl}`);
-      const proxyUrl = `/api/lily/render?url=${encodeURIComponent(midiUrl)}`;
-      try { res = await fetch(proxyUrl); } catch { res = null; }
-    }
-
-    if ((!res || !res.ok) && midiUrl.endsWith('.midi')) {
-      const fallbackUrl = midiUrl.replace(/\.midi$/i, '.mid');
-      console.log(`[lilypond-player] Retrying with fallback: ${fallbackUrl}`);
-      try { res = await fetch(fallbackUrl, { mode: 'cors' }); } catch { res = null; }
-    }
-
-    if (res && res.ok) {
-      playerBuffer = await res.arrayBuffer();
-    }
+    playerBuffer = await fetchMidiBufferWithFallbacks(midiUrl);
 
     if (!playerBuffer) throw new Error('MIDI unretrievable');
     console.log('[lilypond-player] MIDI fetched successfully');
   } catch (err) {
     console.warn('[lilypond-player] Could not fetch MIDI for playback.', err);
-    btn.title = 'No disponible (CORS/Red)';
+    btn.title = 'No disponible (MIDI ausente o inaccesible)';
     btn.dataset.tooltip = 'No disponible';
+    btn.setAttribute('aria-label', 'No disponible');
     btn.style.opacity = '0.5';
     btn.style.cursor = 'default'; // Remove prohibition icon
     return null;
   }
 
   // Enable button once MIDI is loaded
+  setIconState(false);
   btn.disabled = false;
   btn.style.cursor = 'pointer';
 
@@ -1221,7 +1550,9 @@ export async function hydrateLilypondBlocks(container: HTMLElement = document.bo
     const lilyUrl = (block as HTMLElement).dataset.lilyUrl || img.getAttribute('src');
     if (!lilyUrl) continue;
 
-    const midiUrl = (block as HTMLElement).dataset.midiUrl || lilyUrl.replace(/\.svg$/i, '.midi');
+    const midiUrl =
+      (block as HTMLElement).dataset.midiUrl ||
+      getDefaultMidiUrlForRenderedScore(lilyUrl);
     
     try {
       let svgRes: Response | null = null;
@@ -1245,6 +1576,7 @@ export async function hydrateLilypondBlocks(container: HTMLElement = document.bo
           const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
           const svgEl = svgDoc.querySelector('svg');
           if (svgEl) {
+            sanitizeLilypondSvg(svgEl);
             svgEl.style.width = '100%';
             svgEl.style.height = 'auto';
             svgEl.style.display = 'block';
@@ -1253,10 +1585,14 @@ export async function hydrateLilypondBlocks(container: HTMLElement = document.bo
           }
         }
       }
-      await installLilypondPlayer(block as HTMLElement, midiUrl);
+      if (midiUrl) {
+        await installLilypondPlayer(block as HTMLElement, midiUrl);
+      }
     } catch (err) {
       console.error('[lilypond-player] Hydration failed for:', lilyUrl, err);
-      await installLilypondPlayer(block as HTMLElement, midiUrl).catch(() => null);
+      if (midiUrl) {
+        await installLilypondPlayer(block as HTMLElement, midiUrl).catch(() => null);
+      }
     }
   }
 
@@ -1268,7 +1604,10 @@ export async function hydrateLilypondBlocks(container: HTMLElement = document.bo
 
     block.classList.add('lilypond-block', 'is-hydrated-player');
     const lilyUrl = (block as HTMLElement).dataset.lilyUrl || '';
-    const midiUrl = (block as HTMLElement).dataset.midiUrl || (lilyUrl ? lilyUrl.replace(/\.svg$/i, '.midi') : '');
+    sanitizeLilypondSvg(svg);
+    const midiUrl =
+      (block as HTMLElement).dataset.midiUrl ||
+      getDefaultMidiUrlForRenderedScore(lilyUrl);
     
     if (midiUrl) {
       await installLilypondPlayer(block as HTMLElement, midiUrl);
@@ -1281,7 +1620,14 @@ export async function hydrateLilypondBlocks(container: HTMLElement = document.bo
  * whenever they are added to the DOM.
  */
 export function setupLilypondAutoHydration() {
-  if (typeof document === 'undefined') return;
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
+  const lilyWindow = window as Window & typeof globalThis & {
+    __musikiLilypondAutoHydrationObserver?: MutationObserver | null;
+  };
+  if (lilyWindow.__musikiLilypondAutoHydrationObserver) {
+    return lilyWindow.__musikiLilypondAutoHydrationObserver;
+  }
 
   let timer: any = null;
   const observer = new MutationObserver((mutations) => {
@@ -1309,6 +1655,7 @@ export function setupLilypondAutoHydration() {
   // Initial pass
   console.log('[lilypond-player] Performing initial hydration pass');
   hydrateLilypondBlocks(document.body);
+  lilyWindow.__musikiLilypondAutoHydrationObserver = observer;
 
   return observer;
 }

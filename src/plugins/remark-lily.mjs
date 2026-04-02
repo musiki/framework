@@ -1,8 +1,13 @@
 import { visit } from 'unist-util-visit';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {
+  buildLocalLilypondSourceAttempts,
+  getLilypondBinary,
+  sanitizeLilypondSvgMarkup,
+} from '../lib/lilypond-support.mjs';
 
 export default function remarkLily() {
   return (tree) => {
@@ -28,29 +33,43 @@ export default function remarkLily() {
 
       // 2. If not, try to generate it (requires local lilypond)
       if (!svgExists) {
+        const tmpLy = path.join(lilyDir, `${hash}.ly`);
+        let lastRenderError = null;
+
         try {
           // Check if lilypond is installed
-          try {
-            execSync('lilypond --version', { stdio: 'ignore' });
-          } catch (e) {
+          const lilypondBinary = getLilypondBinary();
+          if (!lilypondBinary) {
             // LilyPond not found (e.g. Vercel environment)
             // If SVG is missing and we can't generate it, we leave the code block as is.
             return;
           }
 
-          // Write temp .ly file
-          const tmpLy = path.join(lilyDir, `${hash}.ly`);
-          fs.writeFileSync(tmpLy, code);
+          for (const candidateSource of buildLocalLilypondSourceAttempts(code)) {
+            try {
+              fs.writeFileSync(tmpLy, candidateSource);
+              execFileSync(
+                lilypondBinary,
+                ['-dbackend=svg', '-o', path.join(lilyDir, hash), tmpLy],
+                { stdio: 'ignore' },
+              );
+            } catch (error) {
+              lastRenderError = error;
+            }
 
-          // Run LilyPond: -dbackend=svg (keep point-and-click for anchors)
-          execSync(`lilypond -dbackend=svg -o "${path.join(lilyDir, hash)}" "${tmpLy}"`, { stdio: 'ignore' });
-
-          // Cleanup temp file
-          if (fs.existsSync(tmpLy)) fs.unlinkSync(tmpLy);
-
-          if (fs.existsSync(svgPath)) svgExists = true;
+            if (fs.existsSync(svgPath)) {
+              svgExists = true;
+              break;
+            }
+          }
         } catch (e) {
-          console.error(`[remark-lily] Failed to generate SVG for ${hash}:`, e.message);
+          lastRenderError = e;
+        } finally {
+          if (fs.existsSync(tmpLy)) fs.unlinkSync(tmpLy);
+        }
+
+        if (!svgExists && lastRenderError) {
+          console.error(`[remark-lily] Failed to generate SVG for ${hash}:`, lastRenderError.message);
         }
       }
 
@@ -62,7 +81,7 @@ export default function remarkLily() {
 
       // 3. If SVG exists, replace code block with inline HTML
       if (svgExists) {
-        let svgContent = fs.readFileSync(svgPath, 'utf8');
+        let svgContent = sanitizeLilypondSvgMarkup(fs.readFileSync(svgPath, 'utf8'));
         svgContent = svgContent.replace(/<\?xml.*?\?>/, '').replace(/<!DOCTYPE.*?>/, '').trim();
         
         const midiUrl = midiExists ? `/lily/${hash}.midi` : '';

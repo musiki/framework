@@ -1,17 +1,23 @@
 import {
   cacheRenderedLilypondUrl,
+  getCachedRenderedLilypondUrl,
   getRenderedLilypondUrl,
   stripRenderedLilypondComment,
 } from './lilypond-rendered-comment.mjs';
+import { ensurePlayableLilypondSource } from './lilypond-support.mjs';
 
 export const REMOTE_LILYPOND_RENDER_URL =
   process.env.REMOTE_LILYPOND_RENDER_URL || 'http://85.31.234.141:4543/render';
 
 export async function renderRemoteLilypond(source, { timeoutMs = 10_000 } = {}) {
-  const cachedUrl = getRenderedLilypondUrl(source);
+  const normalizedSource = stripRenderedLilypondComment(source);
+  const preparedSource = ensurePlayableLilypondSource(normalizedSource);
+  const cachedUrl =
+    preparedSource === normalizedSource
+      ? getRenderedLilypondUrl(source)
+      : getCachedRenderedLilypondUrl(preparedSource);
   if (cachedUrl) return cachedUrl;
 
-  const normalizedSource = stripRenderedLilypondComment(source);
   if (!normalizedSource.trim()) return null;
 
   const controller = new AbortController();
@@ -23,7 +29,7 @@ export async function renderRemoteLilypond(source, { timeoutMs = 10_000 } = {}) 
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: normalizedSource,
+      body: preparedSource,
       signal: controller.signal,
     });
 
@@ -37,7 +43,7 @@ export async function renderRemoteLilypond(source, { timeoutMs = 10_000 } = {}) 
       throw new Error('Remote LilyPond render returned no url');
     }
 
-    return cacheRenderedLilypondUrl(normalizedSource, url) || url;
+    return cacheRenderedLilypondUrl(preparedSource, url) || url;
   } catch (error) {
     console.error('[lilypond-remote] Render error:', error);
     return null;

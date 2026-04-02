@@ -824,6 +824,43 @@ ol ol ol ol > li::marker {
   font-style: italic;
 }
 
+.musiki-code-block .musiki-code-comment {
+  color: #7f9f7f;
+  font-style: italic;
+}
+
+.musiki-code-block .musiki-code-string {
+  color: #cc9393;
+}
+
+.musiki-code-block .musiki-code-command {
+  color: #2f6fbe;
+  font-weight: 600;
+}
+
+.musiki-code-block .musiki-code-scheme {
+  color: #7a3fa1;
+  font-weight: 600;
+}
+
+.musiki-code-block .musiki-code-number {
+  color: #8cd0d3;
+}
+
+.musiki-code-block .musiki-code-note {
+  color: #1b7a5e;
+  font-weight: 600;
+}
+
+.musiki-code-block .musiki-code-symbol {
+  color: #efdcbc;
+  font-weight: 600;
+}
+
+.musiki-code-block .musiki-code-brace {
+  color: #8f8f8f;
+}
+
 .hljs-strong {
   font-weight: bold;
 }
@@ -868,6 +905,21 @@ ol ol ol ol > li::marker {
   height: auto;
   margin: 0 auto;
   object-fit: contain;
+}
+
+.lilypond-block svg,
+.lily-score svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+  color: rgb(var(--gray-dark));
+}
+
+.lilypond-block svg a,
+.lily-score svg a {
+  color: inherit !important;
+  text-decoration: none !important;
 }
 
 .dark .lilypond-block img,
