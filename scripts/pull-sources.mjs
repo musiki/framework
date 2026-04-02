@@ -19,8 +19,10 @@ const sourcesDir = path.resolve(findArgValue('--sources-dir', '.content-sources'
 const envPath = path.resolve(process.cwd(), '.env');
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
-  envContent.split('\n').forEach(line => {
-    const [key, ...value] = line.split('=');
+  envContent.split(/\r?\n/).forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const [key, ...value] = trimmed.split('=');
     if (key && value.length > 0) {
       const val = value.join('=').trim().replace(/^["']|["']$/g, '');
       process.env[key.trim()] = val;
@@ -143,6 +145,12 @@ const cleanRemovedSources = (knownIds) => {
 const main = () => {
   const { sources } = loadManifest();
   const token = process.env.CONTENT_SOURCE_READ_TOKEN || process.env.GITHUB_TOKEN || '';
+  
+  if (token) {
+    console.log(`[content:pull] Token found (length: ${token.length}, prefix: ${token.substring(0, 10)}...)`);
+  } else {
+    console.warn('[content:pull] No token found in .env or environment.');
+  }
 
   ensureDir(sourcesDir);
   console.log(`[content:pull] strategy=${sourceStrategy}`);
