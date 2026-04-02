@@ -61,7 +61,8 @@ const toRepoUrl = (repo) => {
 const withTokenIfNeeded = (repoUrl, token) => {
   if (!token) return repoUrl;
   if (!repoUrl.startsWith('https://github.com/')) return repoUrl;
-  return repoUrl.replace('https://', `https://x-access-token:${token}@`);
+  // Use the format https://<token>@github.com which works for both classic and fine-grained PATs
+  return repoUrl.replace('https://', `https://${token}@`);
 };
 
 const ensureDir = (dir) => {
@@ -112,24 +113,32 @@ const pullFromRepo = (source, targetDir, token) => {
   const branch = source.branch || 'main';
   const repoUrl = toRepoUrl(source.repo);
   const authRepoUrl = withTokenIfNeeded(repoUrl, token);
+  const maskedUrl = authRepoUrl.replace(token, '****');
 
-  if (!fs.existsSync(targetDir)) {
+  const doClone = () => {
+    console.log(`[content:pull] Cloning ${source.id} from ${maskedUrl}...`);
     run('git', ['clone', '--depth', '1', '--branch', branch, authRepoUrl, targetDir]);
-    return;
-  }
+  };
 
-  if (!fs.existsSync(path.join(targetDir, '.git'))) {
+  if (!fs.existsSync(targetDir) || !fs.existsSync(path.join(targetDir, '.git'))) {
     fs.rmSync(targetDir, { recursive: true, force: true });
-    run('git', ['clone', '--depth', '1', '--branch', branch, authRepoUrl, targetDir]);
+    doClone();
     return;
   }
 
-  run('git', ['-C', targetDir, 'remote', 'set-url', 'origin', authRepoUrl]);
-  run('git', ['-C', targetDir, 'reset', '--hard', 'HEAD']);
-  run('git', ['-C', targetDir, 'clean', '-fd']);
-  run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', branch]);
-  run('git', ['-C', targetDir, 'checkout', '-B', branch, 'FETCH_HEAD']);
-  run('git', ['-C', targetDir, 'clean', '-fd']);
+  try {
+    console.log(`[content:pull] Updating ${source.id} via fetch...`);
+    run('git', ['-C', targetDir, 'remote', 'set-url', 'origin', authRepoUrl]);
+    run('git', ['-C', targetDir, 'reset', '--hard', 'HEAD']);
+    run('git', ['-C', targetDir, 'clean', '-fd']);
+    run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', branch]);
+    run('git', ['-C', targetDir, 'checkout', '-B', branch, 'FETCH_HEAD']);
+    run('git', ['-C', targetDir, 'clean', '-fd']);
+  } catch (err) {
+    console.warn(`[content:pull] Update failed for ${source.id}, retrying with fresh clone...`);
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    doClone();
+  }
 };
 
 const cleanRemovedSources = (knownIds) => {
