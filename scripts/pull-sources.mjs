@@ -14,6 +14,7 @@ const findArgValue = (flag, fallback) => {
 
 const manifestPath = path.resolve(findArgValue('--manifest', 'config/sources.manifest.json'));
 const sourcesDir = path.resolve(findArgValue('--sources-dir', '.content-sources'));
+const envFileInjectedKeys = new Set();
 
 // Load .env manually since this script runs outside of Astro's env loading
 const envPath = path.resolve(process.cwd(), '.env');
@@ -24,8 +25,11 @@ if (fs.existsSync(envPath)) {
     if (!trimmed || trimmed.startsWith('#')) return;
     const [key, ...value] = trimmed.split('=');
     if (key && value.length > 0) {
+      const envKey = key.trim();
+      if (Object.prototype.hasOwnProperty.call(process.env, envKey)) return;
       const val = value.join('=').trim().replace(/^["']|["']$/g, '');
-      process.env[key.trim()] = val;
+      process.env[envKey] = val;
+      envFileInjectedKeys.add(envKey);
     }
   });
 }
@@ -81,6 +85,22 @@ const ensureDir = (dir) => {
 };
 
 const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
+
+const describeTokenSource = () => {
+  if (process.env.CONTENT_SOURCE_READ_TOKEN) {
+    return envFileInjectedKeys.has('CONTENT_SOURCE_READ_TOKEN')
+      ? '.env:CONTENT_SOURCE_READ_TOKEN'
+      : 'env:CONTENT_SOURCE_READ_TOKEN';
+  }
+
+  if (process.env.GITHUB_TOKEN) {
+    return envFileInjectedKeys.has('GITHUB_TOKEN')
+      ? '.env:GITHUB_TOKEN'
+      : 'env:GITHUB_TOKEN';
+  }
+
+  return 'missing';
+};
 
 const loadManifest = () => {
   if (!fs.existsSync(manifestPath)) {
@@ -167,9 +187,9 @@ const main = () => {
   const token = process.env.CONTENT_SOURCE_READ_TOKEN || process.env.GITHUB_TOKEN || '';
   
   if (token) {
-    console.log(`[content:pull] Token found (length: ${token.length}, prefix: ${token.substring(0, 10)}...)`);
+    console.log(`[content:pull] token source=${describeTokenSource()} length=${token.length}`);
   } else {
-    console.warn('[content:pull] No token found in .env or environment.');
+    console.warn('[content:pull] No token found in env or .env.');
   }
 
   ensureDir(sourcesDir);

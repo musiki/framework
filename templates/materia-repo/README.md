@@ -7,7 +7,7 @@ This repo is the source of truth for the `__SUBJECT_NAME__` Obsidian vault and L
 - `cursos/` course-private material used by the LMS.
 - `public/` public notes that require pull requests and editorial review.
 - `draft/` incubator material, student submissions, and supporting resources.
-- `.github/workflows/notify-platform-on-content-change.yml` dispatches updates to `__PLATFORM_OWNER__/__PLATFORM_REPO__`.
+- `.github/workflows/notify-platform-on-content-change.yml` notifies the framework content-bus webhook.
 
 ## Collaboration rules
 
@@ -20,6 +20,10 @@ This repo is the source of truth for the `__SUBJECT_NAME__` Obsidian vault and L
 ## GitHub setup
 
 Add this repository secret:
+
+- `CONTENT_BUS_SECRET`: shared bearer secret for `https://www.musiki.org.ar/api/webhook/content-update`.
+
+Optional only if you also add a `repository_dispatch` workflow:
 
 - `PLATFORM_DISPATCH_TOKEN`: token allowed to trigger `repository_dispatch` on `__PLATFORM_OWNER__/__PLATFORM_REPO__`.
 

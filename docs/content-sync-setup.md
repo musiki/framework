@@ -2,6 +2,10 @@
 
 Este setup permite que cada equipo docente trabaje en su repo de materia y que `musiki/framework` valide el ensamblado y luego reconstruya el sitio en tu VPS.
 
+Inventario de tokens/secrets y permisos:
+
+- [docs/github-tokens-and-secrets.md](/Users/zztt/projects/26-musiki/framework/docs/github-tokens-and-secrets.md)
+
 ## 0) Crear el repo de materia
 
 Si todavia no existe el repo de materia, usar primero el scaffold documentado en [docs/materia-repo-bootstrap.md](/Users/zztt/projects/26-musiki/framework/docs/materia-repo-bootstrap.md).
@@ -35,7 +39,7 @@ Ya está agregado en `.github/workflows/sync-content-sources.yml`.
 Se dispara en dos casos:
 
 - `push` a `main` en `framework`
-- `repository_dispatch` desde repos de materia como `i1`
+- `repository_dispatch` desde repos de materia, si decides usar ese flujo
 
 Configuracion requerida en `musiki/framework`:
 
@@ -55,7 +59,7 @@ Comandos usados por el workflow:
 
 Runtime del workflow:
 
-- `Node 22`
+- `Node 24`
 
 El workflow no commitea `src/content`: valida el ensamblado en GitHub-hosted runner y luego ejecuta el deploy dentro del VPS mediante un runner self-hosted.
 
@@ -65,7 +69,7 @@ Notas importantes para el VPS:
 - por default usa `CONTENT_SOURCE_STRATEGY=remote-only` en el VPS para ignorar `localPath` y no copiar un repo hermano desactualizado como `../i1`
 - el deploy automático ya no depende de abrir SSH desde internet hacia el VPS
 
-## 3) Workflow en cada repo de materia (push -> dispatch)
+## 3) Workflow en cada repo de materia (push -> content-bus)
 
 Si no usaste el scaffold de materia, copiar `docs/templates/notify-platform-on-content-change.yml` a:
 
@@ -73,13 +77,18 @@ Si no usaste el scaffold de materia, copiar `docs/templates/notify-platform-on-c
 
 Secret requerido en cada repo de materia:
 
-- `PLATFORM_DISPATCH_TOKEN`: token con permiso para ejecutar `repository_dispatch` sobre `musiki/framework`.
+- `CONTENT_BUS_SECRET`: bearer secret compartido con el VPS para pegarle a `/api/webhook/content-update`.
+
+Opcional, solo si además quieres el flujo GitHub -> GitHub por `repository_dispatch`:
+
+- `PLATFORM_DISPATCH_TOKEN`
 
 Nota de bootstrap:
 
 - si la fuente usa `localPath`, el sync local funciona de inmediato;
 - `localPath` toma el working tree local actual, incluso si todavia no hay commits en el repo de materia;
 - el workflow en GitHub necesitara que el repo remoto configurado en `"repo"` exista y sea accesible.
+- el template actual de materias notifica al `content-bus`; no dispara `repository_dispatch` por sí solo.
 
 ## Comandos locales útiles (framework)
 

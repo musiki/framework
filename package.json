@@ -24,7 +24,8 @@
     "db:restore": "bash scripts/db-restore.sh",
     "db:seed": "astro db seed",
     "db:push": "astro db push",
-    "db:studio": "astro db studio"
+    "db:studio": "astro db studio",
+    "github:tokens:audit": "node scripts/github-token-audit.mjs"
   },
   "dependencies": {
     "@astrojs/db": "^0.18.3",
