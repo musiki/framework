@@ -7,7 +7,7 @@ import {
 import { ensurePlayableLilypondSource } from './lilypond-support.mjs';
 
 export const REMOTE_LILYPOND_RENDER_URL =
-  process.env.REMOTE_LILYPOND_RENDER_URL || 'http://85.31.234.141:4543/render';
+  process.env.REMOTE_LILYPOND_RENDER_URL || 'http://46.225.154.68:4543/render';
 
 export async function renderRemoteLilypond(source, { timeoutMs = 10_000 } = {}) {
   const normalizedSource = stripRenderedLilypondComment(source);

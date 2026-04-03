@@ -1,5 +1,7 @@
 # musiki.org.ar Cutover
 
+> Estado histórico. Al `2026-04-03`, producción ya no corre en Vercel: `musiki.org.ar` y `www.musiki.org.ar` salen desde el servidor Hetzner `46.225.154.68` con `Caddy -> Astro Node -> PM2`. La zona DNS sigue delegada en Hostinger.
+
 Objetivo:
 
 - `musiki.org.ar` y `www.musiki.org.ar` apuntan al proyecto `framework` en Vercel

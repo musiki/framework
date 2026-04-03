@@ -338,7 +338,7 @@ const studentAssignmentById = new Map<string, any>(
 );
 
 // --- LOAD COURSES FROM FILES ---
-// Use import.meta.glob for robust file finding in production/Vercel
+// Use import.meta.glob for robust file finding in production/self-hosted builds
 const courseFiles = import.meta.glob('/src/content/cursos/**/_index.{md,mdx}', { eager: true });
 
 const courseEntries = Object.entries(courseFiles).map(([filepath, module]: any) => {

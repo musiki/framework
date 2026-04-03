@@ -57,7 +57,7 @@ flowchart LR
     REVEAL_IF["Reveal.js iframe\n/cursos/slides/courseId/lessonId\ntheme: zztt.css · index h·v·f·zoom"]
   end
 
-  subgraph SERVER["Astro SSR Server — Hostinger VPS"]
+  subgraph SERVER["Astro SSR Server — Hetzner VPS"]
     direction TB
 
     PAGE["room.astro\nSSR · prerender=false\nresolves role · invite · courseId"]

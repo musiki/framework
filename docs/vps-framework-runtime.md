@@ -7,6 +7,11 @@ Objetivo:
 - dejar Ollama y LilyPond como servicios locales del mismo VPS
 - tener deploy manual por Fish y deploy automático por GitHub Actions
 
+Estado vigente al `2026-04-03`:
+
+- el servidor productivo actual es Hetzner (`46.225.154.68`)
+- la zona DNS sigue delegada en Hostinger (`ns1.dns-parking.com`, `ns2.dns-parking.com`)
+
 ## 1. DNS
 
 Para `www` no va una IPv6.

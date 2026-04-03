@@ -121,12 +121,12 @@ flowchart LR
   end
 
   subgraph Delivery["Entrega pública y legado"]
-    Vercel["Vercel project<br/>framework"]:::repo
+    Platform["Hetzner VPS<br/>Caddy + Astro + PM2"]:::repo
     Site["musiki.org.ar"]:::public
     WWW["www.musiki.org.ar"]:::public
     Hostinger["Hostinger DNS"]:::secret
     Edu["edu.musiki.org.ar<br/>Moodle legado"]:::public
-    WikiProxy["/wiki en Vercel"]:::planned
+    WikiProxy["/wiki en Caddy/Astro"]:::planned
     WikiOrigin["wiki-origin.musiki.org.ar"]:::planned
   end
 
@@ -180,9 +180,9 @@ flowchart LR
   ContentBus -.->|"pull + assemble local"| Assemble
   Generated --> App
   GraphData --> App
-  WFFW --> Vercel
-  App --> Vercel
-  GHFW --> Vercel
+  WFFW --> Platform
+  App --> Platform
+  GHFW --> Platform
 
   App --> CourseRoute
   App --> CourseEditor
@@ -230,20 +230,20 @@ flowchart LR
   Dashboard --> Supa
   CourseRoute --> Supa
 
-  EnvAuth --> Vercel
+  EnvAuth --> Platform
   Site --> Google
   Google --> Site
 
-  Vercel --> Site
-  Hostinger --> Vercel
+  Platform --> Site
+  Hostinger --> Platform
   WWW --> Site
   Hostinger --> Edu
   Hostinger -.-> WikiOrigin
-  Vercel -.-> WikiProxy
+  Platform -.-> WikiProxy
   WikiProxy -.-> WikiOrigin
-  Vercel --> Supa
-  Vercel --> R2
-  Vercel --> LiveKit
+  Platform --> Supa
+  Platform --> R2
+  Platform --> LiveKit
 
   style Legend fill:none,stroke:#8d99ae,stroke-width:2px,color:#8d99ae
   style Users fill:none,stroke:#7f5539,stroke-width:2px,color:#7f5539
@@ -270,8 +270,7 @@ flowchart LR
 - El stack live quedó partido en dos planos distintos: interacciones activas efímeras en `server-store.mjs` + SSE, y persistencia real en Supabase para invites, notas de clase, asistencia y webhooks.
 - `/room` ya no es solo videollamada: suma tokens LiveKit, invitaciones externas/estudiantiles, notas persistentes, búsqueda de media externa y telemetría básica del VPS.
 - El foro ahora conversa también con Cloudflare R2 para uploads de imagen, audio y video; Supabase sigue siendo el plano principal para usuarios, enrollments, hilos y lecturas.
-- `scripts/vps/content-bus.mjs` existe como sidecar opcional para despliegues autoalojados o beacon de sync, pero el circuito principal publicado sigue siendo GitHub Actions `->` Vercel.
-- El dominio no cambia: `musiki.org.ar` vive en Vercel, `www` redirige, `edu.musiki.org.ar` sigue aparte y `/wiki` continúa preparado pero no activo.
-
+- `scripts/vps/content-bus.mjs` existe como sidecar opcional para despliegues autoalojados o beacon de sync, y el circuito principal publicado hoy cae en el runner self-hosted del VPS Hetzner.
+- El dominio no cambia: `musiki.org.ar` vive en Hetzner, `www` redirige, `edu.musiki.org.ar` sigue aparte y `/wiki` continúa preparado pero no activo.
 
 

@@ -40,7 +40,7 @@ export default function remarkLily() {
           // Check if lilypond is installed
           const lilypondBinary = getLilypondBinary();
           if (!lilypondBinary) {
-            // LilyPond not found (e.g. Vercel environment)
+            // LilyPond not found (e.g. build/runtime without the binary installed)
             // If SVG is missing and we can't generate it, we leave the code block as is.
             return;
           }

@@ -76,7 +76,7 @@ flowchart LR
   end
 
   subgraph Delivery["Entrega pública"]
-    Vercel["Vercel project<br/>framework"]:::repo
+    Platform["Hetzner VPS<br/>Caddy + Astro + PM2"]:::repo
     Site["musiki.org.ar"]:::public
     WWW["www.musiki.org.ar"]:::public
   end
@@ -94,7 +94,7 @@ flowchart LR
   subgraph Domains["DNS y legado"]
     Hostinger["Hostinger DNS"]:::secret
     Edu["edu.musiki.org.ar<br/>Moodle legado"]:::public
-    WikiProxy["/wiki en Vercel<br/>rewrite proxy preparado"]:::planned
+    WikiProxy["/wiki en Caddy/Astro<br/>rewrite proxy preparado"]:::planned
     WikiOrigin["wiki-origin.musiki.org.ar<br/>MediaWiki histórica"]:::planned
   end
 
@@ -136,25 +136,25 @@ flowchart LR
   Generated -->|"lo consume Astro"| App
   WFFW -->|"valida content:pull + assemble:dry"| Pull
   SecretHook -->|"hook HTTP configurado"| WFFW
-  WFFW -->|"POST deploy hook"| Vercel
-  App -->|"build: pull + assemble + astro build"| Vercel
-  GHFW -->|"push a main también despliega"| Vercel
+  WFFW -->|"runner self-hosted despliega"| Platform
+  App -->|"build + runtime publicados"| Platform
+  GHFW -->|"push a main también despliega"| Platform
 
-  EnvAuth -->|"inyecta env vars de auth"| Vercel
+  EnvAuth -->|"inyecta env vars de auth"| Platform
   Site -->|"redirige a login Google"| Google
   Google -->|"callback y sesión autenticada"| Site
 
-  Vercel -->|"runtime usa db y APIs"| Supa
+  Platform -->|"runtime usa db y APIs"| Supa
   App -->|"foros / enrollments / uploads"| Supa
   App -->|"polls / room / beacons"| Live
   Live -->|"actualiza UI en tiempo real"| Site
 
-  Hostinger -->|"A @ + CNAME www hacia Vercel"| Vercel
+  Hostinger -->|"A @ + CNAME www hacia Hetzner"| Platform
   WWW -->|"308 redirect"| Site
-  Vercel -->|"sirve dominio principal"| Site
+  Platform -->|"sirve dominio principal"| Site
   Hostinger -->|"preserva Moodle"| Edu
   Hostinger -->|"mantiene origen wiki"| WikiOrigin
-  Vercel -->|"rewrite /wiki preparado"| WikiProxy
+  Platform -->|"rewrite /wiki preparado"| WikiProxy
   WikiProxy -->|"reverse proxy por path"| WikiOrigin
 
   GHI1 -->|"source enabled hoy"| Manifest
@@ -188,9 +188,8 @@ flowchart LR
 - `i1` es la única fuente activa hoy en `config/sources.manifest.json`.
 - `i2`, `cym` y `s123` ya tienen lugar reservado en el workspace y en el manifest, pero siguen apagados.
 - `src/content/` no es un vault manual: es salida generada por `assemble-content.mjs`.
-- El flujo repo de materia -> GitHub Actions -> Vercel ya está operativo para `i1`.
-- La parte de `/wiki` quedó documentada y preparada, pero todavía depende de activar el origen histórico y el rewrite en Vercel.
+- El flujo repo de materia -> GitHub Actions -> runner self-hosted -> Hetzner ya está operativo para `i1`.
+- La parte de `/wiki` quedó documentada y preparada, pero todavía depende de activar el origen histórico y el reverse proxy en Caddy/Astro.
 - El dominio principal vive en `musiki.org.ar`; `www` redirige, y `edu.musiki.org.ar` queda fuera del framework.
-
 
 
