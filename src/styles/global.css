@@ -1305,10 +1305,29 @@ ol ol ol ol > li::marker {
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-title {
   font-weight: 700 !important;
-  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  min-width: 0 !important;
+  line-height: 1.2 !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-thread-title-label {
+  min-width: 0 !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-thread-pin-indicator {
+  flex: 0 0 auto !important;
+  width: 0.44rem !important;
+  height: 0.44rem !important;
+  border-radius: 999px !important;
+  border: 1px solid color-mix(in srgb, var(--forum-text-secondary, #6b7480) 68%, transparent) !important;
+  background: currentColor !important;
+  color: color-mix(in srgb, var(--forum-text-secondary, #6b7480) 88%, transparent) !important;
+  opacity: 0.9 !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-toggle:focus-visible {
@@ -1380,12 +1399,6 @@ ol ol ol ol > li::marker {
   transform: translate(-50%, 0);
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-thread-divider {
-  border: 0 !important;
-  border-top: 1px solid color-mix(in srgb, var(--forum-border-soft, #e2e8ee) 86%, transparent) !important;
-  margin: 0.34rem 0 0.3rem 0 !important;
-}
-
 :is(#lesson-forum, #forum-reader-root) .forum-thread-meta,
 :is(#lesson-forum, #forum-reader-root) .forum-thread-author,
 :is(#lesson-forum, #forum-reader-root) .forum-thread-date,
@@ -1423,6 +1436,20 @@ ol ol ol ol > li::marker {
   border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
   background: color-mix(in srgb, var(--forum-bg-panel, rgba(255,255,255,0.94)) 92%, transparent) !important;
   backdrop-filter: blur(10px) !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-thread-pin-glyph {
+  width: 0.54rem !important;
+  height: 0.54rem !important;
+  border-radius: 999px !important;
+  border: 1px solid currentColor !important;
+  background: transparent !important;
+  display: inline-block !important;
+  box-sizing: border-box !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-thread-pin-btn[data-pinned="true"] .forum-thread-pin-glyph {
+  background: currentColor !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-more-btn {

@@ -1,10 +1,11 @@
-import { EditorSelection, EditorState, RangeSetBuilder } from '@codemirror/state';
+import { EditorSelection, EditorState, Prec, RangeSetBuilder } from '@codemirror/state';
 import { basicSetup } from 'codemirror';
 import {
   Decoration,
   type DecorationSet,
   EditorView,
   ViewPlugin,
+  keymap,
   type ViewUpdate,
   placeholder as codeMirrorPlaceholder,
 } from '@codemirror/view';
@@ -310,6 +311,104 @@ function isClosingFence(lineText: string, fence: FenceState) {
   return new RegExp(`^\\s*${escapeRegExp(fence.character)}{${fence.length},}\\s*$`).test(lineText);
 }
 
+function getFenceLanguageForLine(state: EditorState, targetLineNumber: number): FenceLanguage | null {
+  let activeFence: FenceState | null = null;
+
+  for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber += 1) {
+    const line = state.doc.line(lineNumber);
+    const lineText = line.text;
+
+    if (activeFence) {
+      if (isClosingFence(lineText, activeFence)) {
+        if (lineNumber === targetLineNumber) return null;
+        activeFence = null;
+        continue;
+      }
+
+      if (lineNumber === targetLineNumber) {
+        return activeFence.language || null;
+      }
+
+      continue;
+    }
+
+    const nextFence = parseFence(lineText);
+    if (nextFence) {
+      if (lineNumber === targetLineNumber) return null;
+      activeFence = nextFence.language ? nextFence : null;
+      continue;
+    }
+
+    if (lineNumber === targetLineNumber) return null;
+  }
+
+  return null;
+}
+
+function collectSelectedLineNumbers(state: EditorState) {
+  const selectedLineNumbers = new Set<number>();
+
+  for (const range of state.selection.ranges) {
+    const startLine = state.doc.lineAt(range.from).number;
+    const effectiveTo = range.empty ? range.to : Math.max(range.from, range.to - 1);
+    const endLine = state.doc.lineAt(effectiveTo).number;
+
+    for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
+      selectedLineNumbers.add(lineNumber);
+    }
+  }
+
+  return Array.from(selectedLineNumbers).sort((left, right) => left - right);
+}
+
+function toggleLilyLineComment(view: EditorView) {
+  const lineNumbers = collectSelectedLineNumbers(view.state);
+  if (lineNumbers.length === 0) return false;
+
+  const lines = lineNumbers.map((lineNumber) => ({
+    number: lineNumber,
+    line: view.state.doc.line(lineNumber),
+    language: getFenceLanguageForLine(view.state, lineNumber),
+  }));
+
+  if (lines.some(({ language }) => language !== 'lily')) {
+    return false;
+  }
+
+  const nonBlankLines = lines.filter(({ line }) => line.text.trim().length > 0);
+  if (nonBlankLines.length === 0) return true;
+
+  const shouldUncomment = nonBlankLines.every(({ line }) => /^\s*%/.test(line.text));
+  const changes: Array<{ from: number; to?: number; insert: string }> = [];
+
+  if (shouldUncomment) {
+    for (const { line } of nonBlankLines) {
+      const match = line.text.match(/^(\s*)%( ?)/);
+      if (!match) continue;
+      const from = line.from + match[1].length;
+      const markerLength = 1 + (match[2] ? match[2].length : 0);
+      changes.push({
+        from,
+        to: from + markerLength,
+        insert: '',
+      });
+    }
+  } else {
+    for (const { line } of nonBlankLines) {
+      const indentLength = (line.text.match(/^\s*/) || [''])[0].length;
+      changes.push({
+        from: line.from + indentLength,
+        insert: '% ',
+      });
+    }
+  }
+
+  if (changes.length === 0) return true;
+
+  view.dispatch({ changes });
+  return true;
+}
+
 function buildFencedCodeDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const spans: EditorTokenSpan[] = [];
@@ -500,6 +599,14 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
     state: EditorState.create({
       doc: textarea.value || '',
       extensions: [
+        Prec.highest(
+          keymap.of([
+            {
+              key: 'Mod-/',
+              run: toggleLilyLineComment,
+            },
+          ]),
+        ),
         basicSetup,
         markdown(),
         EditorView.lineWrapping,

@@ -9221,7 +9221,19 @@ a[node] -->|edge| b[hub]
 
             const title = document.createElement('span');
             title.className = 'forum-thread-title';
-            title.textContent = thread.title;
+            const titleLabel = document.createElement('span');
+            titleLabel.className = 'forum-thread-title-label';
+            titleLabel.textContent = thread.title || 'Sin título';
+            title.appendChild(titleLabel);
+
+            if (thread.isPinned) {
+              const pinIndicator = document.createElement('span');
+              pinIndicator.className = 'forum-thread-pin-indicator';
+              pinIndicator.title = 'Hilo fijado';
+              pinIndicator.setAttribute('aria-hidden', 'true');
+              title.prepend(pinIndicator);
+              item.classList.add('is-thread-pinned');
+            }
 
             const messageCount = Number.isFinite(thread.messageCount)
               ? Math.max(0, Number(thread.messageCount))
@@ -9257,9 +9269,6 @@ a[node] -->|edge| b[hub]
             top.appendChild(title);
             top.appendChild(trailing);
 
-            const divider = document.createElement('hr');
-            divider.className = 'forum-thread-divider';
-
             const meta = document.createElement('div');
             meta.className = 'forum-thread-meta';
             const lastActivity = formatForumDate(thread.lastActivityAt || thread.updatedAt || thread.createdAt);
@@ -9273,7 +9282,6 @@ a[node] -->|edge| b[hub]
             meta.appendChild(stats);
 
             toggle.appendChild(top);
-            toggle.appendChild(divider);
             toggle.appendChild(meta);
             toggle.addEventListener('click', async () => {
               setThreadMenuOpen(false);
@@ -9300,10 +9308,13 @@ a[node] -->|edge| b[hub]
 
             const canEditThread = Boolean(thread.canEdit);
             const canDeleteThread = Boolean(thread.canDelete);
+            const canPinThread = Boolean(thread.canPin);
             /** @type {HTMLButtonElement | null} */
             let threadEditButton = null;
             /** @type {HTMLButtonElement | null} */
             let threadDeleteButton = null;
+            /** @type {HTMLButtonElement | null} */
+            let threadPinButton = null;
             /** @type {HTMLButtonElement | null} */
             let threadMoreButton = null;
 
@@ -9312,6 +9323,7 @@ a[node] -->|edge| b[hub]
               if (threadMoreButton) threadMoreButton.disabled = isDisabled;
               if (threadEditButton) threadEditButton.disabled = isDisabled;
               if (threadDeleteButton) threadDeleteButton.disabled = isDisabled;
+              if (threadPinButton) threadPinButton.disabled = isDisabled;
             };
 
             const threadActions = document.createElement('div');
@@ -9326,13 +9338,13 @@ a[node] -->|edge| b[hub]
               });
             };
             const setThreadMenuOpen = (isOpen) => {
-              const nextState = Boolean(isOpen) && (canEditThread || canDeleteThread);
+              const nextState = Boolean(isOpen) && (canEditThread || canDeleteThread || canPinThread);
               if (nextState) closeSiblingThreadMenus();
               threadActions.hidden = !nextState;
               item.classList.toggle('is-thread-menu-open', nextState);
             };
 
-            if (canEditThread || canDeleteThread) {
+            if (canEditThread || canDeleteThread || canPinThread) {
               threadMoreButton = document.createElement('button');
               threadMoreButton.type = 'button';
               threadMoreButton.className = 'forum-thread-more-btn forum-action-btn forum-action-more';
@@ -9345,6 +9357,50 @@ a[node] -->|edge| b[hub]
                 event.stopPropagation();
                 setThreadMenuOpen(threadActions.hidden);
               });
+            }
+
+            if (canPinThread) {
+              threadPinButton = document.createElement('button');
+              threadPinButton.type = 'button';
+              threadPinButton.className = 'forum-thread-pin-btn forum-action-btn forum-action-p';
+              threadPinButton.dataset.pinned = thread.isPinned ? 'true' : 'false';
+              threadPinButton.dataset.tooltip = thread.isPinned ? 'Desfijar hilo' : 'Fijar hilo';
+              threadPinButton.title = thread.isPinned ? 'Desfijar hilo' : 'Fijar hilo';
+              threadPinButton.setAttribute('aria-label', thread.isPinned ? 'Desfijar hilo' : 'Fijar hilo');
+              const pinGlyph = document.createElement('span');
+              pinGlyph.className = 'forum-thread-pin-glyph';
+              pinGlyph.setAttribute('aria-hidden', 'true');
+              threadPinButton.appendChild(pinGlyph);
+              threadPinButton.addEventListener('click', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setThreadMenuOpen(false);
+
+                setThreadActionState(true);
+                try {
+                  const response = await fetch(`/api/forum/threads/${encodeURIComponent(thread.id)}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ isPinned: !thread.isPinned }),
+                  });
+
+                  const payload = await response.json().catch(() => ({}));
+                  if (!response.ok) {
+                    throw new Error(payload?.error || 'No se pudo actualizar el fijado del hilo.');
+                  }
+
+                  invalidateForumThreadCache();
+                  invalidateForumPostsCache(thread.id);
+                  setForumStatus(thread.isPinned ? 'Hilo desfijado.' : 'Hilo fijado.', 'info');
+                  await loadThreads({ preserveSelection: true });
+                } catch (error) {
+                  console.error('Forum thread pin error:', error);
+                  setForumStatus(error?.message || 'No se pudo actualizar el fijado del hilo.', 'error');
+                } finally {
+                  setThreadActionState(false);
+                }
+              });
+              threadActions.appendChild(threadPinButton);
             }
 
             if (canEditThread) {

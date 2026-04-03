@@ -191,3 +191,6 @@ flowchart LR
 - El flujo repo de materia -> GitHub Actions -> Vercel ya está operativo para `i1`.
 - La parte de `/wiki` quedó documentada y preparada, pero todavía depende de activar el origen histórico y el rewrite en Vercel.
 - El dominio principal vive en `musiki.org.ar`; `www` redirige, y `edu.musiki.org.ar` queda fuera del framework.
+
+
+

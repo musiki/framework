@@ -14,6 +14,7 @@ type ThreadRow = {
   courseId: string;
   title: string;
   createdByUserId: string;
+  isPinned: boolean | null;
   isLocked: boolean | null;
   createdAt: string | null;
   updatedAt: string | null;
@@ -39,7 +40,7 @@ async function getThreadOrNull(
 ): Promise<ThreadRow | null> {
   const { data: threadRaw, error: threadError } = await supabase
     .from('ForumThread')
-    .select('id, courseId, title, createdByUserId, isLocked, createdAt, updatedAt')
+    .select('id, courseId, title, createdByUserId, isPinned, isLocked, createdAt, updatedAt')
     .eq('id', threadId)
     .maybeSingle();
 
@@ -66,8 +67,15 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
     return json({ error: 'Invalid JSON payload' }, 400);
   }
 
-  const title = cleanString(payload?.title, THREAD_TITLE_MAX);
-  if (title.length < 3) {
+  const hasTitleUpdate = Object.prototype.hasOwnProperty.call(payload || {}, 'title');
+  const hasPinnedUpdate = Object.prototype.hasOwnProperty.call(payload || {}, 'isPinned');
+  const title = hasTitleUpdate ? cleanString(payload?.title, THREAD_TITLE_MAX) : '';
+  const isPinned = hasPinnedUpdate ? Boolean(payload?.isPinned) : false;
+
+  if (!hasTitleUpdate && !hasPinnedUpdate) {
+    return json({ error: 'Nothing to update' }, 400);
+  }
+  if (hasTitleUpdate && title.length < 3) {
     return json({ error: 'Title must be at least 3 characters' }, 400);
   }
 
@@ -86,16 +94,27 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
     }
 
     const isAuthor = thread.createdByUserId === dbUser.id;
-    const canModerate = access.isTeacher || (isAuthor && !Boolean(thread.isLocked));
-    if (!canModerate) {
+    const canEditThread = access.isTeacher || (isAuthor && !Boolean(thread.isLocked));
+    const canPinThread = access.isTeacher;
+
+    if (hasTitleUpdate && !canEditThread) {
       return json({ error: 'Only the thread author or a teacher can edit this thread' }, 403);
     }
+    if (hasPinnedUpdate && !canPinThread) {
+      return json({ error: 'Only teachers can pin or unpin threads' }, 403);
+    }
+
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date().toISOString(),
+    };
+    if (hasTitleUpdate) updateData.title = title;
+    if (hasPinnedUpdate) updateData.isPinned = isPinned;
 
     const { data: updatedRaw, error: updateError } = await supabase
       .from('ForumThread')
-      .update({ title, updatedAt: new Date().toISOString() })
+      .update(updateData)
       .eq('id', threadId)
-      .select('id, courseId, title, createdByUserId, isLocked, createdAt, updatedAt')
+      .select('id, courseId, title, createdByUserId, isPinned, isLocked, createdAt, updatedAt')
       .single();
 
     if (updateError) throw updateError;
@@ -105,8 +124,9 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
         success: true,
         thread: {
           ...(updatedRaw as ThreadRow),
-          canEdit: canModerate,
-          canDelete: canModerate,
+          canEdit: canEditThread,
+          canDelete: canEditThread,
+          canPin: canPinThread,
         },
       },
       200,
