@@ -4,7 +4,6 @@ const GITHUB_OWNER = 'musiki';
 const GITHUB_REPO = 'framework';
 const GITHUB_WORKFLOW = 'sync-content-sources.yml';
 const CACHE_TTL_MS = 5_000; // Shorter TTL for local bus
-const WORKFLOW_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${GITHUB_WORKFLOW}`;
 
 type CachedPayload = {
   expiresAt: number;
@@ -37,6 +36,47 @@ const toTitle = (state: string, details: string, timestamp: string) => {
   return `Estado no disponible${displayDetails}`;
 };
 
+const parseTimestamp = (value: unknown) => {
+  if (!value) return 0;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
+const fetchGithubStatus = async () => {
+  const token = (import.meta.env.GITHUB_STATUS_TOKEN || import.meta.env.GITHUB_TOKEN || '').trim();
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'musiki-framework-build-status',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(
+    `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${encodeURIComponent(GITHUB_WORKFLOW)}/runs?per_page=1`,
+    { headers },
+  );
+
+  if (!response.ok) throw new Error(`GitHub API error`);
+
+  const payload = await response.json();
+  const latestRun = payload?.workflow_runs?.[0];
+
+  if (!latestRun) throw new Error('No runs');
+
+  const state = latestRun.status === 'completed'
+    ? (latestRun.conclusion === 'success' ? 'ok' : 'error')
+    : 'running';
+
+  const timestamp = formatTimestamp(latestRun.updated_at);
+  return {
+    state,
+    title: toTitle(state, `GH run ${latestRun.run_number}`, timestamp),
+    runUrl: latestRun.html_url,
+    mode: 'github-fallback',
+    updatedAt: latestRun.updated_at,
+    fetchedAt: new Date().toISOString(),
+  };
+};
+
 export const GET: APIRoute = async () => {
   const now = Date.now();
   if (cachedPayload && cachedPayload.expiresAt > now) {
@@ -49,6 +89,9 @@ export const GET: APIRoute = async () => {
   }
 
   try {
+    let busBody: Record<string, unknown> | null = null;
+    let githubBody: Record<string, unknown> | null = null;
+
     // 1. Try to fetch from LOCAL Content Bus
     const busResponse = await fetch('http://127.0.0.1:4322/status').catch(() => null);
     
@@ -56,51 +99,42 @@ export const GET: APIRoute = async () => {
       const busStatus = await busResponse.json();
       const timestamp = formatTimestamp(busStatus.updatedAt || busStatus.createdAt);
       const sourceInfo = busStatus.sourceRepo ? `repo: ${busStatus.sourceRepo.split('/')[1] || busStatus.sourceRepo}` : '';
+      const busTitle = String(busStatus.title || '').trim();
       
-      const body = {
+      busBody = {
         ...busStatus,
-        title: toTitle(busStatus.state, sourceInfo, timestamp),
+        title: busTitle
+          ? [busTitle, busStatus.state === 'running' ? '' : timestamp].filter(Boolean).join(' · ')
+          : toTitle(busStatus.state, sourceInfo, timestamp),
         fetchedAt: new Date().toISOString(),
       };
-
-      cachedPayload = { expiresAt: now + CACHE_TTL_MS, body };
-      return new Response(JSON.stringify(body), {
-        headers: { 'Content-Type': 'application/json; charset=utf-8' }
-      });
     }
 
-    // 2. Fallback to GitHub (original logic)
-    const token = (import.meta.env.GITHUB_STATUS_TOKEN || import.meta.env.GITHUB_TOKEN || '').trim();
-    const headers: Record<string, string> = {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'musiki-framework-build-status',
-    };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    // 2. Fetch GitHub status as a complement/fallback.
+    githubBody = await fetchGithubStatus().catch(() => null);
 
-    const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${encodeURIComponent(GITHUB_WORKFLOW)}/runs?per_page=1`,
-      { headers },
-    );
+    const busState = String(busBody?.state || '');
+    const githubState = String(githubBody?.state || '');
+    const busUpdatedAt = parseTimestamp(busBody?.updatedAt || busBody?.createdAt);
+    const githubUpdatedAt = parseTimestamp(githubBody?.updatedAt);
 
-    if (!response.ok) throw new Error(`GitHub API error`);
+    let body = busBody || githubBody;
 
-    const payload = await response.json();
-    const latestRun = payload?.workflow_runs?.[0];
+    if (busState === 'running') {
+      body = busBody;
+    } else if (githubState === 'running') {
+      body = githubBody;
+    } else if (
+      githubBody &&
+      busBody &&
+      busState === 'idle' &&
+      githubUpdatedAt > busUpdatedAt &&
+      now - githubUpdatedAt < 15 * 60 * 1000
+    ) {
+      body = githubBody;
+    }
 
-    if (!latestRun) throw new Error('No runs');
-
-    const state = latestRun.status === 'completed' 
-      ? (latestRun.conclusion === 'success' ? 'ok' : 'error') 
-      : 'running';
-    
-    const timestamp = formatTimestamp(latestRun.updated_at);
-    const body = {
-      state,
-      title: toTitle(state, `GH run ${latestRun.run_number}`, timestamp),
-      runUrl: latestRun.html_url,
-      mode: 'github-fallback',
-      fetchedAt: new Date().toISOString(),
-    };
+    if (!body) throw new Error('No status available');
 
     cachedPayload = { expiresAt: now + CACHE_TTL_MS, body };
     return new Response(JSON.stringify(body), {

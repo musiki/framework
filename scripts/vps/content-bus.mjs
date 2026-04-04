@@ -1,16 +1,23 @@
 import http from 'node:http';
-import { exec } from 'node:child_process';
-import util from 'node:util';
-
-const execPromise = util.promisify(exec);
+import { spawn } from 'node:child_process';
+import readline from 'node:readline';
 
 const PORT = process.env.CONTENT_BUS_PORT || 4322;
 const SECRET = process.env.CONTENT_BUS_SECRET || 'musiki-local-secret';
+const DEPLOY_COMMAND =
+  (process.env.CONTENT_BUS_DEPLOY_COMMAND || 'bash scripts/vps/deploy-framework-local.sh').trim();
+const CONTENT_SOURCE_STRATEGY = (
+  process.env.CONTENT_BUS_CONTENT_SOURCE_STRATEGY ||
+  process.env.CONTENT_SOURCE_STRATEGY ||
+  'remote-only'
+).trim() || 'remote-only';
+const CONTENT_BUS_INSTALL_COMMAND = (process.env.CONTENT_BUS_INSTALL_COMMAND || '').trim();
 
 // In-memory status for the beacon
 let status = {
   state: 'idle', // idle, running, ok, error, unknown
   title: 'Content Bus Idle',
+  phase: 'idle',
   runNumber: null,
   createdAt: null,
   updatedAt: null,
@@ -26,6 +33,31 @@ let isRunning = false;
 let rerunRequested = false;
 let pendingPayload = null;
 
+const updateStatus = (patch = {}) => {
+  status = {
+    ...status,
+    ...patch,
+    fetchedAt: new Date().toISOString(),
+  };
+};
+
+const formatRepoLabel = (repo) => {
+  const text = String(repo || '').trim();
+  if (!text) return 'content';
+  const [, name] = text.split('/');
+  return name || text;
+};
+
+const readDeployPhase = (line) => {
+  const match = /^::deploy-phase::([^:]+)::(.+)$/.exec(String(line || '').trim());
+  if (!match) return null;
+
+  return {
+    phase: match[1],
+    title: match[2],
+  };
+};
+
 async function runPipeline(payload) {
   if (isRunning) {
     rerunRequested = true;
@@ -35,37 +67,51 @@ async function runPipeline(payload) {
   }
 
   isRunning = true;
-  status.state = 'running';
-  status.title = `Syncing ${payload?.source_repo || 'content'}...`;
-  status.sourceRepo = payload?.source_repo || null;
-  status.sourceSha = payload?.source_sha || null;
-  status.sourceRef = payload?.source_ref || null;
-  status.createdAt = new Date().toISOString();
-  status.updatedAt = null;
-  status.lastError = null;
+  updateStatus({
+    state: 'running',
+    phase: 'queued',
+    title: `Syncing ${formatRepoLabel(payload?.source_repo)}...`,
+    sourceRepo: payload?.source_repo || null,
+    sourceSha: payload?.source_sha || null,
+    sourceRef: payload?.source_ref || null,
+    createdAt: new Date().toISOString(),
+    updatedAt: null,
+    lastError: null,
+  });
 
   try {
     console.log(`[Content Bus] Starting pipeline for ${payload?.source_repo || 'unknown'}...`);
-    
-    // 1. Pull latest sources (prefer clean for reliability)
-    await runCommand('npm run content:pull -- --clean');
-    
-    // 2. Assemble content (uses staging folder and atomic apply)
-    await runCommand('npm run content:assemble');
-    
-    // Note: No pm2 reload needed anymore due to runtime rendering pattern
-    
-    status.state = 'ok';
-    status.title = 'Content Synced';
+
+    await runCommand(DEPLOY_COMMAND, {
+      CONTENT_SOURCE_STRATEGY,
+      VPS_CONTENT_SOURCE_STRATEGY: CONTENT_SOURCE_STRATEGY,
+      VPS_INSTALL_COMMAND: CONTENT_BUS_INSTALL_COMMAND,
+    }, (phaseInfo) => {
+      updateStatus({
+        state: 'running',
+        phase: phaseInfo.phase,
+        title: phaseInfo.title,
+      });
+    });
+
+    updateStatus({
+      state: 'ok',
+      phase: 'done',
+      title: `Content deployed · ${formatRepoLabel(payload?.source_repo)}`,
+    });
     console.log(`[Content Bus] Pipeline finished successfully.`);
   } catch (error) {
-    status.state = 'error';
-    status.title = 'Sync Failed';
-    status.lastError = error.message;
+    updateStatus({
+      state: 'error',
+      phase: 'error',
+      title: 'Sync Failed',
+      lastError: error.message,
+    });
     console.error(`[Content Bus] Pipeline failed:`, error);
   } finally {
-    status.updatedAt = new Date().toISOString();
-    status.fetchedAt = new Date().toISOString();
+    updateStatus({
+      updatedAt: new Date().toISOString(),
+    });
     isRunning = false;
 
     if (rerunRequested) {
@@ -78,11 +124,49 @@ async function runPipeline(payload) {
   }
 }
 
-async function runCommand(command) {
+async function runCommand(command, extraEnv = {}, onPhase = null) {
   console.log(`[Content Bus] Running: ${command}`);
-  const { stdout, stderr } = await execPromise(command);
-  if (stdout) console.log(`[Content Bus] stdout:\n${stdout}`);
-  if (stderr) console.error(`[Content Bus] stderr:\n${stderr}`);
+  await new Promise((resolve, reject) => {
+    const child = spawn('bash', ['-lc', command], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        ...extraEnv,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const pipeStream = (stream, level) => {
+      const lines = readline.createInterface({ input: stream });
+      lines.on('line', (line) => {
+        const phaseInfo = readDeployPhase(line);
+        if (phaseInfo) {
+          console.log(`[Content Bus] phase=${phaseInfo.phase} title="${phaseInfo.title}"`);
+          if (typeof onPhase === 'function') onPhase(phaseInfo);
+          return;
+        }
+
+        if (!line.trim()) return;
+        if (level === 'stderr') {
+          console.error(`[Content Bus] stderr: ${line}`);
+        } else {
+          console.log(`[Content Bus] stdout: ${line}`);
+        }
+      });
+    };
+
+    pipeStream(child.stdout, 'stdout');
+    pipeStream(child.stderr, 'stderr');
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Command failed with exit code ${code}: ${command}`));
+    });
+  });
 }
 
 const server = http.createServer(async (req, res) => {

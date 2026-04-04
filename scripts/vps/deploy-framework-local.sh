@@ -3,29 +3,60 @@
 set -euo pipefail
 
 FRAMEWORK_DIR="${VPS_FRAMEWORK_DIR:-/opt/musiki/framework}"
-FRAMEWORK_BRANCH="${VPS_GIT_BRANCH:-main}"
-INSTALL_COMMAND="${VPS_INSTALL_COMMAND:-npm ci}"
-BUILD_COMMAND="${VPS_BUILD_COMMAND:-npm run build}"
-RELOAD_COMMAND="${VPS_RELOAD_COMMAND:-pm2 reload ecosystem.config.cjs --only musiki-framework --update-env && pm2 save}"
+INSTALL_COMMAND="${VPS_INSTALL_COMMAND-npm ci}"
 CONTENT_SOURCE_STRATEGY="${VPS_CONTENT_SOURCE_STRATEGY:-remote-only}"
+CONTENT_PULL_COMMAND="${VPS_CONTENT_PULL_COMMAND-npm run content:pull -- --clean}"
+CONTENT_ASSEMBLE_COMMAND="${VPS_CONTENT_ASSEMBLE_COMMAND-npm run content:assemble}"
+EVAL_SYNC_COMMAND="${VPS_EVAL_SYNC_COMMAND-npm run eval:sync:db}"
+ASTRO_BUILD_COMMAND="${VPS_ASTRO_BUILD_COMMAND-npx astro build --remote --outDir dist_tmp}"
+RELOAD_COMMAND="${VPS_RELOAD_COMMAND-pm2 reload ecosystem.config.cjs --only musiki-framework --update-env || pm2 start ecosystem.config.cjs --only musiki-framework}"
+SAVE_PM2_STATE="${VPS_SAVE_PM2_STATE-1}"
 
-printf '\n[framework] Deploying in %s (%s)\n' "$FRAMEWORK_DIR" "$FRAMEWORK_BRANCH"
+printf '\n[framework] Deploying in %s\n' "$FRAMEWORK_DIR"
 printf '[framework] Content source strategy: %s\n' "$CONTENT_SOURCE_STRATEGY"
 
 export CONTENT_SOURCE_STRATEGY
 
 cd "$FRAMEWORK_DIR"
-git checkout "$FRAMEWORK_BRANCH"
-git pull --ff-only origin "$FRAMEWORK_BRANCH"
+export PATH="$PATH:$(npm config get prefix)/bin"
 
 if [[ -n "$INSTALL_COMMAND" ]]; then
+  printf '::deploy-phase::install::Installing dependencies\n'
   eval "$INSTALL_COMMAND"
+else
+  printf '::deploy-phase::install::Skipping dependency install\n'
 fi
 
-eval "$BUILD_COMMAND"
+printf '::deploy-phase::content::Preparing content\n'
+eval "$CONTENT_PULL_COMMAND"
+eval "$CONTENT_ASSEMBLE_COMMAND"
+
+if [[ -n "$EVAL_SYNC_COMMAND" ]]; then
+  printf '::deploy-phase::database::Syncing database\n'
+  eval "$EVAL_SYNC_COMMAND"
+fi
+
+printf '::deploy-phase::build::Building Astro\n'
+rm -rf dist_tmp
+eval "$ASTRO_BUILD_COMMAND"
+
+printf '::deploy-phase::swap::Swapping dist folders\n'
+rm -rf dist_old
+if [[ -d "dist" ]]; then
+  mv dist dist_old
+fi
+mv dist_tmp dist
 
 if [[ -n "$RELOAD_COMMAND" ]]; then
+  printf '::deploy-phase::reload::Reloading services\n'
   eval "$RELOAD_COMMAND"
 fi
+
+if [[ "$SAVE_PM2_STATE" != "0" ]]; then
+  pm2 save
+fi
+
+printf '::deploy-phase::cleanup::Cleaning old release\n'
+rm -rf dist_old
 
 printf '\n[framework] Deploy complete.\n'

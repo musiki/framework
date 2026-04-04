@@ -61,12 +61,13 @@ Runtime del workflow:
 
 - `Node 24`
 
-El workflow no commitea `src/content`: valida el ensamblado en GitHub-hosted runner y luego ejecuta el deploy dentro del VPS mediante un runner self-hosted.
+El workflow no commitea `src/content`: valida el ensamblado en GitHub-hosted runner y luego, en el runner self-hosted del VPS, sincroniza el checkout del commit ya empujado hacia el directorio runtime antes de ejecutar el deploy local.
 
 Notas importantes para el VPS:
 
 - el workflow reenvia `CONTENT_SOURCE_READ_TOKEN` al proceso local del runner para que `content:pull` pueda leer repos privados durante el build
 - por default usa `CONTENT_SOURCE_STRATEGY=remote-only` en el VPS para ignorar `localPath` y no copiar un repo hermano desactualizado como `../i1`
+- el directorio vivo del framework ya no hace `git pull` durante el deploy; recibe el checkout del runner via `rsync`
 - el deploy automático ya no depende de abrir SSH desde internet hacia el VPS
 
 ## 3) Workflow en cada repo de materia (push -> content-bus)
@@ -88,7 +89,7 @@ Nota de bootstrap:
 - si la fuente usa `localPath`, el sync local funciona de inmediato;
 - `localPath` toma el working tree local actual, incluso si todavia no hay commits en el repo de materia;
 - el workflow en GitHub necesitara que el repo remoto configurado en `"repo"` exista y sea accesible.
-- el template actual de materias notifica al `content-bus`; no dispara `repository_dispatch` por sí solo.
+- el template actual de materias notifica al `content-bus`; ese worker ahora ejecuta el mismo deploy local del VPS, incluyendo `content:pull`, `content:assemble`, `astro build` y `pm2 reload`.
 
 ## Comandos locales útiles (framework)
 
