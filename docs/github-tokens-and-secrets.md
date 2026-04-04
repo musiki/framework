@@ -14,13 +14,13 @@ La mayor fuente de confusión venía de mezclar ambos como si usaran los mismos 
 Al 3 de abril de 2026, la foto útil es esta:
 
 - El `gh auth status` del shell local está roto: el `GITHUB_TOKEN` cargado para `gh` ya no es válido.
-- El `CONTENT_SOURCE_READ_TOKEN` del `.env` local responde bien contra `musiki/framework`, `musiki/i1`, `musiki/s123`, `musiki/cym` y lectura de runs del workflow del framework.
+- El `CONTENT_SOURCE_READ_TOKEN` del `.env` local responde bien contra `musiki/framework`, `musiki/i1`, `musiki/i2`, `musiki/s123`, `musiki/cym` y lectura de runs del workflow del framework.
 - El `PLATFORM_DISPATCH_TOKEN` del `.env` local responde bien contra `musiki/framework`. Eso es suficiente para `repository_dispatch`; no necesita ver `i1` o `s123`.
 - En el VPS existe otra copia de `CONTENT_SOURCE_READ_TOKEN` dentro de `/opt/musiki/framework/.env`.
 - `scripts/pull-sources.mjs` estaba cargando `.env` de forma agresiva y pisando variables inyectadas por GitHub Actions. Eso ya quedó corregido para respetar primero `process.env`.
 - El `content-bus` está online en `127.0.0.1:4322`.
 - La bridge pública `POST /api/webhook/content-update` responde y reenvía correctamente al `content-bus`.
-- Los workflows de `i1` y `s123` aparecen en `success`, así que el problema no está en que GitHub Actions de esos repos ni arranque.
+- Los workflows de materias que usan el `content-bus` aparecen en `success`, asi que el problema no esta en que GitHub Actions de esos repos no arranque.
 
 ## Tabla de secretos
 
@@ -42,7 +42,7 @@ Dónde debe existir:
 Permisos mínimos recomendados:
 
 - fine-grained PAT
-- repos permitidos: `musiki/framework`, `musiki/i1`, `musiki/s123`, `musiki/cym` y cualquier otra materia activa
+- repos permitidos: `musiki/framework`, `musiki/i1`, `musiki/i2`, `musiki/s123`, `musiki/cym` y cualquier otra materia activa
 - `Contents: Read`
 - opcional: `Actions: Read` si también lo reutilizas para auditorías con `gh`
 
@@ -69,7 +69,7 @@ Permisos mínimos recomendados:
 
 Notas:
 
-- no necesita acceso a `i1`, `s123` o `cym`
+- no necesita acceso a `i1`, `i2`, `s123` o `cym`
 - sirve para el flujo GitHub -> GitHub, no para el `content-bus`
 
 ### 3. `CONTENT_BUS_SECRET`
@@ -213,7 +213,7 @@ gh secret set CONTENT_SOURCE_READ_TOKEN -R musiki/framework -b"$TOKEN"
 
 ```bash
 SECRET=$(node -e "const fs=require('fs');const line=fs.readFileSync('.env','utf8').split(/\\r?\\n/).find(l=>l.startsWith('CONTENT_BUS_SECRET='));process.stdout.write((line||'').split('=').slice(1).join('=').replace(/^['\\\"]|['\\\"]$/g,''));")
-for repo in musiki/i1 musiki/s123; do
+for repo in musiki/i1 musiki/i2 musiki/cym musiki/s123; do
   gh secret set CONTENT_BUS_SECRET -R "$repo" -b"$SECRET"
 done
 ```
@@ -224,7 +224,7 @@ Solo si realmente usas ese flujo:
 
 ```bash
 TOKEN=$(node -e "const fs=require('fs');const line=fs.readFileSync('.env','utf8').split(/\\r?\\n/).find(l=>l.startsWith('PLATFORM_DISPATCH_TOKEN='));process.stdout.write((line||'').split('=').slice(1).join('=').replace(/^['\\\"]|['\\\"]$/g,''));")
-for repo in musiki/i1 musiki/s123; do
+for repo in musiki/i1 musiki/i2 musiki/cym musiki/s123; do
   gh secret set PLATFORM_DISPATCH_TOKEN -R "$repo" -b"$TOKEN"
 done
 ```
@@ -233,6 +233,6 @@ done
 
 1. Reautenticar `gh` o exportar un `GH_TOKEN` válido para administración.
 2. Rotar `CONTENT_SOURCE_READ_TOKEN` en `musiki/framework` si quieres unificar lo que usa local, GitHub Actions y VPS.
-3. Confirmar que `CONTENT_BUS_SECRET` coincida entre VPS e `i1`/`s123`.
+3. Confirmar que `CONTENT_BUS_SECRET` coincida entre VPS e `i1`/`i2`/`cym`/`s123`.
 4. Dejar `PLATFORM_DISPATCH_TOKEN` solo donde realmente se use.
 5. Correr `npm run github:tokens:audit` después de cada cambio.

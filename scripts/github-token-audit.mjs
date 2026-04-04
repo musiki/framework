@@ -132,6 +132,7 @@ const tokenChecks = [
     checks: [
       { label: 'framework repo', path: '/repos/musiki/framework' },
       { label: 'i1 repo', path: '/repos/musiki/i1' },
+      { label: 'i2 repo', path: '/repos/musiki/i2' },
       { label: 's123 repo', path: '/repos/musiki/s123' },
       { label: 'cym repo', path: '/repos/musiki/cym' },
       {
@@ -151,7 +152,7 @@ const tokenChecks = [
       },
     ],
     note:
-      'No necesita acceso a i1/s123 para funcionar; solo necesita llegar a musiki/framework.',
+      'No necesita acceso a repos de materias para funcionar; solo necesita llegar a musiki/framework.',
   },
   {
     name: 'GITHUB_STATUS_TOKEN',

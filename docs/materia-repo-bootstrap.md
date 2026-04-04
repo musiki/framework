@@ -2,6 +2,8 @@
 
 Use the local scaffold to create the first repo or vault for a subject team.
 
+For the full end-to-end checklist, see [docs/comoAgregarMaterias.md](/Users/zztt/projects/26-musiki/framework/docs/comoAgregarMaterias.md).
+
 ## Command
 
 ```bash
@@ -40,7 +42,7 @@ Optional flags:
 
 1. Create the GitHub repo and push the generated directory.
 2. Add the secret `CONTENT_BUS_SECRET` to the new repo if you keep the generated workflow as-is.
-3. Add `PLATFORM_DISPATCH_TOKEN` only if you also want a `repository_dispatch` flow toward `musiki/framework`.
+3. Add `PLATFORM_DISPATCH_TOKEN` only if you also want a legacy `repository_dispatch` flow toward `musiki/framework`.
 4. Check the token inventory in [docs/github-tokens-and-secrets.md](/Users/zztt/projects/26-musiki/framework/docs/github-tokens-and-secrets.md).
 5. Replace sample notes under `cursos/<course-id>/`.
 6. Confirm `CODEOWNERS` and branch protection rules.

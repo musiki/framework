@@ -23,7 +23,7 @@ Add this repository secret:
 
 - `CONTENT_BUS_SECRET`: shared bearer secret for `https://www.musiki.org.ar/api/webhook/content-update`.
 
-Optional only if you also add a `repository_dispatch` workflow:
+Optional only if you also keep a legacy `repository_dispatch` workflow in parallel:
 
 - `PLATFORM_DISPATCH_TOKEN`: token allowed to trigger `repository_dispatch` on `__PLATFORM_OWNER__/__PLATFORM_REPO__`.
 

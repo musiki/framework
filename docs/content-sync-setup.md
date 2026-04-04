@@ -5,6 +5,7 @@ Este setup permite que cada equipo docente trabaje en su repo de materia y que `
 Inventario de tokens/secrets y permisos:
 
 - [docs/github-tokens-and-secrets.md](/Users/zztt/projects/26-musiki/framework/docs/github-tokens-and-secrets.md)
+- [docs/comoAgregarMaterias.md](/Users/zztt/projects/26-musiki/framework/docs/comoAgregarMaterias.md)
 
 ## 0) Crear el repo de materia
 
@@ -133,4 +134,4 @@ Para el VPS:
 
 - el build del framework corre `content:pull` + `content:assemble` antes de `astro build`
 - el VPS necesita sus propios secrets/env para leer repos privados y hablar con Supabase/Auth
-- cada cambio en `i1`, `i2`, `cym` o `s123` puede despachar al workflow del framework para disparar un nuevo sync
+- cada cambio en `i1`, `i2`, `cym` o `s123` puede notificar al `content-bus` del VPS para disparar el rebuild del sitio

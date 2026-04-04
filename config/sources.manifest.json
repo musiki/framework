@@ -11,7 +11,7 @@
     },
     {
       "id": "i2",
-      "enabled": false,
+      "enabled": true,
       "repo": "musiki/i2",
       "branch": "main",
       "contentRoot": ".",
@@ -19,7 +19,7 @@
     },
     {
       "id": "cym",
-      "enabled": false,
+      "enabled": true,
       "repo": "musiki/cym",
       "branch": "main",
       "contentRoot": ".",
