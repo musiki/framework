@@ -95,3 +95,10 @@ jobs:
         run: |
           cd "$VPS_FRAMEWORK_DIR"
           bash scripts/vps/deploy-framework-local.sh
+
+      - name: Reload Content Bus Sidecar
+        run: |
+          cd "$VPS_FRAMEWORK_DIR"
+          export PATH="$PATH:$(npm config get prefix)/bin"
+          pm2 reload ecosystem.config.cjs --only musiki-content-bus --update-env || pm2 start ecosystem.config.cjs --only musiki-content-bus
+          pm2 save
