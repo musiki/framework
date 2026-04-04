@@ -1,4 +1,3 @@
-# MANUAL EVAL
 
 Estado auditado: 2026-03-11
 

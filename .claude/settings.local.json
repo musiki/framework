@@ -16,7 +16,15 @@
       "Bash(find /Users/zztt/projects/26-musiki/framework/src/components -type f \\\\\\(-name *.astro -o -name *.ts -o -name *.tsx \\\\\\))",
       "Bash(grep -n \"<script\" /Users/zztt/projects/26-musiki/framework/src/pages/cursos/[...slug].astro)",
       "Bash(awk:*)",
-      "Bash(supabase db:*)"
+      "Bash(supabase db:*)",
+      "Bash(ls /Users/zztt/.config/starship*)",
+      "Bash(gh auth:*)",
+      "Bash(GITHUB_TOKEN=\"\" GH_TOKEN=\"\" echo \"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\")",
+      "Bash(env -u GITHUB_TOKEN -u GH_TOKEN bash -c 'echo \"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\" | gh auth login --with-token 2>&1')",
+      "Bash(env -u GITHUB_TOKEN -u GH_TOKEN gh auth status 2>&1)",
+      "Bash(starship --version)",
+      "Bash(starship explain:*)",
+      "Bash(starship prompt:*)"
     ]
   }
 }
