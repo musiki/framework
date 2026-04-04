@@ -15,6 +15,7 @@ const findArgValue = (flag, fallback) => {
 const manifestPath = path.resolve(findArgValue('--manifest', 'config/sources.manifest.json'));
 const sourcesDir = path.resolve(findArgValue('--sources-dir', '.content-sources'));
 const envFileInjectedKeys = new Set();
+const SLEEP_BUFFER = new Int32Array(new SharedArrayBuffer(4));
 
 // Load .env manually since this script runs outside of Astro's env loading
 const envPath = path.resolve(process.cwd(), '.env');
@@ -35,6 +36,27 @@ if (fs.existsSync(envPath)) {
 }
 
 const cleanMissing = args.includes('--clean');
+const normalizeBranchName = (value) => String(value || '').trim().replace(/^refs\/heads\//, '');
+const normalizeRepoSlug = (value) => {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.startsWith('git@github.com:')) {
+    return text.slice('git@github.com:'.length).replace(/\.git$/i, '').toLowerCase();
+  }
+  return text
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/^\/+/, '')
+    .toLowerCase();
+};
+const targetRepo = normalizeRepoSlug(process.env.CONTENT_SOURCE_TARGET_REPO || '');
+const targetBranch = normalizeBranchName(
+  process.env.CONTENT_SOURCE_TARGET_BRANCH || process.env.CONTENT_SOURCE_TARGET_REF || '',
+);
+const targetSha = (() => {
+  const value = String(process.env.CONTENT_SOURCE_TARGET_SHA || '').trim();
+  return /^[0-9a-f]{7,40}$/i.test(value) ? value.toLowerCase() : '';
+})();
 const sourceStrategy = (() => {
   const normalized = (process.env.CONTENT_SOURCE_STRATEGY || 'prefer-local')
     .trim()
@@ -84,7 +106,13 @@ const ensureDir = (dir) => {
   fs.mkdirSync(dir, { recursive: true });
 };
 
+const sleep = (ms) => {
+  Atomics.wait(SLEEP_BUFFER, 0, 0, ms);
+};
+
 const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
+const readHeadSha = (targetDir) =>
+  execFileSync('git', ['-C', targetDir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
 const describeTokenSource = () => {
   if (process.env.CONTENT_SOURCE_READ_TOKEN) {
@@ -141,14 +169,63 @@ const pullFromLocalPath = (source, targetDir) => {
 };
 
 const pullFromRepo = (source, targetDir, token) => {
-  const branch = source.branch || 'main';
+  const defaultBranch = source.branch || 'main';
+  const sourceRepo = normalizeRepoSlug(source.repo);
+  const desiredBranch =
+    targetRepo && (targetRepo === sourceRepo || targetRepo === String(source.id || '').trim().toLowerCase())
+      ? targetBranch || defaultBranch
+      : defaultBranch;
+  const desiredSha =
+    targetRepo && (targetRepo === sourceRepo || targetRepo === String(source.id || '').trim().toLowerCase())
+      ? targetSha
+      : '';
   const repoUrl = toRepoUrl(source.repo);
   const authRepoUrl = withTokenIfNeeded(repoUrl, token);
   const maskedUrl = authRepoUrl.replace(token, '****');
+  const checkoutDesiredCommit = () => {
+    if (!desiredSha) {
+      console.log(`[content:pull] ${source.id} HEAD ${readHeadSha(targetDir)}`);
+      return;
+    }
+
+    const currentHead = readHeadSha(targetDir).toLowerCase();
+    if (currentHead === desiredSha) {
+      console.log(`[content:pull] ${source.id} already at requested sha ${currentHead}`);
+      return;
+    }
+
+    console.log(`[content:pull] Pinning ${source.id} to requested sha ${desiredSha}...`);
+    let lastError = null;
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      try {
+        run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', desiredSha]);
+        run('git', ['-C', targetDir, 'checkout', '-B', desiredBranch, 'FETCH_HEAD']);
+        run('git', ['-C', targetDir, 'clean', '-fd']);
+        const resolvedHead = readHeadSha(targetDir).toLowerCase();
+        if (resolvedHead !== desiredSha) {
+          throw new Error(
+            `Requested sha ${desiredSha} for ${source.id}, but resolved ${resolvedHead} instead.`,
+          );
+        }
+        console.log(`[content:pull] ${source.id} pinned to ${resolvedHead}`);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt >= 5) break;
+        console.warn(
+          `[content:pull] ${source.id} could not fetch requested sha yet (attempt ${attempt}/5). Retrying...`,
+        );
+        sleep(1500 * attempt);
+      }
+    }
+
+    throw lastError;
+  };
 
   const doClone = () => {
     console.log(`[content:pull] Cloning ${source.id} from ${maskedUrl}...`);
-    run('git', ['clone', '--depth', '1', '--branch', branch, authRepoUrl, targetDir]);
+    run('git', ['clone', '--depth', '1', '--branch', desiredBranch, authRepoUrl, targetDir]);
+    checkoutDesiredCommit();
   };
 
   if (!fs.existsSync(targetDir) || !fs.existsSync(path.join(targetDir, '.git'))) {
@@ -162,9 +239,10 @@ const pullFromRepo = (source, targetDir, token) => {
     run('git', ['-C', targetDir, 'remote', 'set-url', 'origin', authRepoUrl]);
     run('git', ['-C', targetDir, 'reset', '--hard', 'HEAD']);
     run('git', ['-C', targetDir, 'clean', '-fd']);
-    run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', branch]);
-    run('git', ['-C', targetDir, 'checkout', '-B', branch, 'FETCH_HEAD']);
+    run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', desiredBranch]);
+    run('git', ['-C', targetDir, 'checkout', '-B', desiredBranch, 'FETCH_HEAD']);
     run('git', ['-C', targetDir, 'clean', '-fd']);
+    checkoutDesiredCommit();
   } catch (err) {
     console.warn(`[content:pull] Update failed for ${source.id}, retrying with fresh clone...`);
     fs.rmSync(targetDir, { recursive: true, force: true });
@@ -190,6 +268,12 @@ const main = () => {
     console.log(`[content:pull] token source=${describeTokenSource()} length=${token.length}`);
   } else {
     console.warn('[content:pull] No token found in env or .env.');
+  }
+
+  if (targetRepo) {
+    console.log(
+      `[content:pull] target repo=${targetRepo} branch=${targetBranch || '(default)'} sha=${targetSha || '(none)'}`,
+    );
   }
 
   ensureDir(sourcesDir);

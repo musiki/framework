@@ -12,6 +12,23 @@ const CONTENT_SOURCE_STRATEGY = (
   'remote-only'
 ).trim() || 'remote-only';
 const CONTENT_BUS_INSTALL_COMMAND = (process.env.CONTENT_BUS_INSTALL_COMMAND || '').trim();
+const normalizeBranchName = (value) => String(value || '').trim().replace(/^refs\/heads\//, '');
+const normalizeRepoSlug = (value) => {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.startsWith('git@github.com:')) {
+    return text.slice('git@github.com:'.length).replace(/\.git$/i, '').toLowerCase();
+  }
+  return text
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/^\/+/, '')
+    .toLowerCase();
+};
+const normalizeCommitSha = (value) => {
+  const text = String(value || '').trim();
+  return /^[0-9a-f]{7,40}$/i.test(text) ? text : '';
+};
 
 // In-memory status for the beacon
 let status = {
@@ -86,6 +103,9 @@ async function runPipeline(payload) {
       CONTENT_SOURCE_STRATEGY,
       VPS_CONTENT_SOURCE_STRATEGY: CONTENT_SOURCE_STRATEGY,
       VPS_INSTALL_COMMAND: CONTENT_BUS_INSTALL_COMMAND,
+      CONTENT_SOURCE_TARGET_REPO: normalizeRepoSlug(payload?.source_repo),
+      CONTENT_SOURCE_TARGET_BRANCH: normalizeBranchName(payload?.source_ref),
+      CONTENT_SOURCE_TARGET_SHA: normalizeCommitSha(payload?.source_sha),
     }, (phaseInfo) => {
       updateStatus({
         state: 'running',

@@ -66,6 +66,9 @@ jobs:
       VPS_GIT_BRANCH: ${{ vars.VPS_GIT_BRANCH || 'main' }}
       VPS_INSTALL_COMMAND: ${{ vars.VPS_INSTALL_COMMAND || 'npm ci' }}
       VPS_CONTENT_SOURCE_STRATEGY: ${{ vars.VPS_CONTENT_SOURCE_STRATEGY || 'remote-only' }}
+      CONTENT_SOURCE_TARGET_REPO: ${{ github.event.client_payload.source_repo || '' }}
+      CONTENT_SOURCE_TARGET_SHA: ${{ github.event.client_payload.source_sha || '' }}
+      CONTENT_SOURCE_TARGET_BRANCH: ${{ github.event.client_payload.source_ref || '' }}
     steps:
       - name: Checkout pushed framework commit
         uses: actions/checkout@v4
