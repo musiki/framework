@@ -1903,6 +1903,7 @@ ol ol ol ol > li::marker {
 
 :is(#lesson-forum, #forum-reader-root) .forum-action-r,
 :is(#lesson-forum, #forum-reader-root) .forum-action-e,
+:is(#lesson-forum, #forum-reader-root) .forum-action-g,
 :is(#lesson-forum, #forum-reader-root) .forum-action-p,
 :is(#lesson-forum, #forum-reader-root) .forum-action-h,
 :is(#lesson-forum, #forum-reader-root) .forum-action-f {

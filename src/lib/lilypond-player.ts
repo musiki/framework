@@ -515,6 +515,7 @@ export class WebMidiPlaybackController {
   private finishTimer: number | null = null;
   private playing = false;
   private lastProgressRatio = 0;
+  private static readonly START_SCHEDULING_LEAD_MS = 28;
 
   constructor(
     private readonly sampler: MiniSampler,
@@ -538,13 +539,16 @@ export class WebMidiPlaybackController {
     }
 
     await this.sampler.init();
+    // Guarantee the opening note has its sample ready before scheduling playback.
+    await this.sampler.preloadUsedOctaves(this.sequence);
 
     this.playing = true;
     this.callbacks.onStateChange(true);
     this.lastProgressRatio = 0;
     this.emitProgress(0, true);
 
-    const startedAt = performance.now();
+    const schedulingLeadMs = WebMidiPlaybackController.START_SCHEDULING_LEAD_MS;
+    const startedAt = performance.now() + schedulingLeadMs;
 
     for (const event of this.sequence.events) {
       const timeoutId = window.setTimeout(() => {
@@ -560,13 +564,13 @@ export class WebMidiPlaybackController {
           const note = event.message[1];
           this.sampler.stopNote(note);
         }
-      }, event.timeMs);
+      }, Math.max(event.timeMs + schedulingLeadMs, 0));
 
       this.timeoutIds.push(timeoutId);
     }
 
     this.progressTimer = window.setInterval(() => {
-      const elapsedMs = performance.now() - startedAt;
+      const elapsedMs = Math.max(performance.now() - startedAt, 0);
       const ratio =
         this.sequence.durationMs === 0 ? 0 : Math.min(elapsedMs / this.sequence.durationMs, 1);
       this.emitProgress(ratio);
@@ -574,7 +578,7 @@ export class WebMidiPlaybackController {
 
     this.finishTimer = window.setTimeout(() => {
       this.finish();
-    }, this.sequence.durationMs + 30);
+    }, this.sequence.durationMs + schedulingLeadMs + 30);
   }
 
   stop(resetProgress = true): void {
@@ -1317,7 +1321,7 @@ function buildMidiFetchCandidates(midiUrl: string) {
 
   addCandidate(midiUrl);
 
-  if (midiUrl.startsWith('http')) {
+  if (midiUrl.startsWith('http') || isLocalLilyAssetUrl(midiUrl)) {
     addCandidate(`/api/lily/render?url=${encodeURIComponent(midiUrl)}`);
   }
 
@@ -1326,7 +1330,7 @@ function buildMidiFetchCandidates(midiUrl: string) {
       ? replaceMidiUrlExtension(midiUrl, 'mid')
       : replaceMidiUrlExtension(midiUrl, 'midi');
     addCandidate(fallbackUrl);
-    if (fallbackUrl.startsWith('http')) {
+    if (fallbackUrl.startsWith('http') || isLocalLilyAssetUrl(fallbackUrl)) {
       addCandidate(`/api/lily/render?url=${encodeURIComponent(fallbackUrl)}`);
     }
   }

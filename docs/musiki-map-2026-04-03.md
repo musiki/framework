@@ -274,3 +274,6 @@ flowchart LR
 - El dominio no cambia: `musiki.org.ar` vive en Hetzner, `www` redirige, `edu.musiki.org.ar` sigue aparte y `/wiki` continúa preparado pero no activo.
 
 
+
+
+

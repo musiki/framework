@@ -2872,6 +2872,11 @@ a[node] -->|edge| b[hub]
                 const actions = document.createElement('div');
                 actions.className = 'forum-post-actions';
                 actions.hidden = true;
+                const syncPostActionsVisibility = () => {
+                  actions.hidden = !Array.from(actions.children).some(
+                    (child) => child instanceof HTMLElement && !child.hidden && child.style.display !== 'none',
+                  );
+                };
 
                 let replyButton = null;
                 let reactionButtons = [];
@@ -3141,6 +3146,8 @@ a[node] -->|edge| b[hub]
                   editContainer.hidden = !isEditing;
                   body.hidden = isEditing;
                   editButton.hidden = isEditing;
+                  if (saveEditButton) saveEditButton.hidden = !isEditing;
+                  if (cancelEditButton) cancelEditButton.hidden = !isEditing;
                   if (replyButton) replyButton.disabled = isEditing;
                   reactionButtons.forEach((button) => {
                     button.disabled = isEditing;
@@ -3150,6 +3157,11 @@ a[node] -->|edge| b[hub]
                   });
                   if (reactionMoreButton) reactionMoreButton.disabled = isEditing;
                   if (deleteButton) deleteButton.disabled = isEditing;
+                  if (isEditing) {
+                    actions.hidden = false;
+                  } else {
+                    syncPostActionsVisibility();
+                  }
 
                   if (isEditing) {
                     editTextarea.value = post.body || '';
@@ -3193,11 +3205,12 @@ a[node] -->|edge| b[hub]
 
                   saveEditButton = document.createElement('button');
                   saveEditButton.type = 'button';
-                  saveEditButton.className = 'forum-secondary-btn forum-action-save';
-                  saveEditButton.textContent = 'GUARDAR';
+                  saveEditButton.className = 'forum-post-save-btn forum-action-btn forum-action-g';
+                  saveEditButton.textContent = 'G';
                   saveEditButton.dataset.tooltip = 'Guardar cambios';
-                  saveEditButton.title = 'Guardar';
+                  saveEditButton.title = 'Guardar cambios';
                   saveEditButton.setAttribute('aria-label', 'Guardar cambios');
+                  saveEditButton.hidden = true;
                   saveEditButton.addEventListener('click', async () => {
                     if (!editTextarea) return;
                     const nextBody = editTextarea.value.trim();
@@ -3230,21 +3243,31 @@ a[node] -->|edge| b[hub]
                       if (cancelEditButton) cancelEditButton.disabled = false;
                     }
                   });
-                  editActions.appendChild(saveEditButton);
+                  if (replyButton && replyButton.parentElement === actions) {
+                    actions.insertBefore(saveEditButton, replyButton);
+                  } else {
+                    actions.prepend(saveEditButton);
+                  }
 
                   cancelEditButton = document.createElement('button');
                   cancelEditButton.type = 'button';
-                  cancelEditButton.className = 'forum-secondary-btn forum-action-cancel';
-                  cancelEditButton.textContent = 'CANCELAR';
+                  cancelEditButton.className = 'forum-post-cancel-btn forum-action-btn forum-action-c';
+                  cancelEditButton.textContent = 'C';
                   cancelEditButton.dataset.tooltip = 'Cancelar edición';
-                  cancelEditButton.title = 'Cancelar';
+                  cancelEditButton.title = 'Cancelar edición';
                   cancelEditButton.setAttribute('aria-label', 'Cancelar edición');
+                  cancelEditButton.hidden = true;
                   cancelEditButton.addEventListener('click', () => {
                     setEditMode(false);
                   });
-                  editActions.appendChild(cancelEditButton);
+                  if (replyButton && replyButton.parentElement === actions) {
+                    actions.insertBefore(cancelEditButton, replyButton);
+                  } else {
+                    actions.appendChild(cancelEditButton);
+                  }
                   editContainer.appendChild(editActions);
                   attachForumEditor(editTextarea);
+                  syncPostActionsVisibility();
                 }
 
                 if (canDeletePost) {

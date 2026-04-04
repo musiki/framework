@@ -20,6 +20,32 @@ const LILYPOND_RENDER_STRATEGY =
   String(process.env.LILYPOND_RENDER_STRATEGY || 'remote-only').trim().toLowerCase();
 type LilyAssetKind = 'svg' | 'midi';
 
+function getLocalLilyAssetPaths(hash: string) {
+  return {
+    svgPath: path.join(LILY_DIR, `${hash}.svg`),
+    midiPath: path.join(LILY_DIR, `${hash}.midi`),
+    midPath: path.join(LILY_DIR, `${hash}.mid`),
+  };
+}
+
+function findFirstExistingPath(paths: string[]) {
+  return paths.find((candidate) => fs.existsSync(candidate)) || '';
+}
+
+function getAssetMimeType(kind: LilyAssetKind) {
+  return kind === 'svg' ? 'image/svg+xml; charset=utf-8' : 'audio/midi';
+}
+
+function serveLocalLilyAsset(filePath: string, kind: LilyAssetKind) {
+  return new Response(fs.readFileSync(filePath), {
+    status: 200,
+    headers: {
+      'Content-Type': getAssetMimeType(kind),
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  });
+}
+
 function ensureLilyDir() {
   if (!fs.existsSync(LILY_DIR)) {
     fs.mkdirSync(LILY_DIR, { recursive: true });
@@ -31,8 +57,14 @@ function hashLilySource(source: string): string {
 }
 
 function tryRenderLilySvg(hash: string, source: string): boolean {
-  const svgPath = path.join(LILY_DIR, `${hash}.svg`);
-  if (fs.existsSync(svgPath)) return true;
+  const { svgPath, midiPath, midPath } = getLocalLilyAssetPaths(hash);
+  let svgExists = fs.existsSync(svgPath);
+  let midiExists = fs.existsSync(midiPath);
+  if (!midiExists && fs.existsSync(midPath)) {
+    fs.renameSync(midPath, midiPath);
+    midiExists = true;
+  }
+  if (svgExists && midiExists) return true;
 
   if (!hasLilypondBinary()) return false;
   const lilypondBinary = getLilypondBinary();
@@ -59,13 +91,13 @@ function tryRenderLilySvg(hash: string, source: string): boolean {
       }
 
       // LilyPond might produce .mid or .midi depending on version/config
-      const midPath = path.join(LILY_DIR, `${hash}.mid`);
-      const midiPath = path.join(LILY_DIR, `${hash}.midi`);
       if (fs.existsSync(midPath) && !fs.existsSync(midiPath)) {
         fs.renameSync(midPath, midiPath);
       }
 
-      if (fs.existsSync(svgPath)) {
+      svgExists = fs.existsSync(svgPath);
+      midiExists = fs.existsSync(midiPath);
+      if (svgExists && midiExists) {
         break;
       }
     }
@@ -77,19 +109,18 @@ function tryRenderLilySvg(hash: string, source: string): boolean {
     }
   }
 
-  if (!fs.existsSync(svgPath) && lastRenderError) {
+  if (!svgExists && lastRenderError) {
     console.error(
       '[api/lily/render] file system error during render:',
       (lastRenderError as Error)?.message || lastRenderError,
     );
   }
 
-  return fs.existsSync(svgPath);
+  return svgExists;
 }
 
 async function downloadRemoteLilyFiles(remoteUrl: string, hash: string) {
-  const svgPath = path.join(LILY_DIR, `${hash}.svg`);
-  const midiPath = path.join(LILY_DIR, `${hash}.midi`);
+  const { svgPath, midiPath } = getLocalLilyAssetPaths(hash);
   let svgExists = fs.existsSync(svgPath);
   let midiExists = fs.existsSync(midiPath);
 
@@ -187,27 +218,29 @@ export const GET: APIRoute = async ({ url }) => {
   const hash = hashMatch ? hashMatch[1] : hashLilySource(remoteUrl);
   
   ensureLilyDir();
-  const localSvgUrl = `/lily/${hash}.svg`;
-  const localMidiUrl = `/lily/${hash}.midi`;
-  const localSvgPath = path.join(LILY_DIR, `${hash}.svg`);
-  const localMidiPath = path.join(LILY_DIR, `${hash}.midi`);
+  const { svgPath: localSvgPath, midiPath: localMidiPath, midPath: localMidPath } = getLocalLilyAssetPaths(hash);
+  const existingSvgPath = findFirstExistingPath([localSvgPath]);
+  const existingMidiPath = findFirstExistingPath([localMidiPath, localMidPath]);
 
-  if (requestedKind === 'svg' && fs.existsSync(localSvgPath)) {
-    return Response.redirect(new URL(localSvgUrl, url.origin), 302);
+  if (requestedKind === 'svg' && existingSvgPath) {
+    return serveLocalLilyAsset(existingSvgPath, 'svg');
   }
 
-  if (requestedKind === 'midi' && fs.existsSync(localMidiPath)) {
-    return Response.redirect(new URL(localMidiUrl, url.origin), 302);
+  if (requestedKind === 'midi' && existingMidiPath) {
+    return serveLocalLilyAsset(existingMidiPath, 'midi');
   }
 
   const result = await downloadRemoteLilyFiles(remoteUrl, hash);
 
-  if (requestedKind === 'svg' && result.svgExists) {
-    return Response.redirect(new URL(localSvgUrl, url.origin), 302);
+  const refreshedSvgPath = findFirstExistingPath([localSvgPath]);
+  const refreshedMidiPath = findFirstExistingPath([localMidiPath, localMidPath]);
+
+  if (requestedKind === 'svg' && result.svgExists && refreshedSvgPath) {
+    return serveLocalLilyAsset(refreshedSvgPath, 'svg');
   }
 
-  if (requestedKind === 'midi' && result.midiExists) {
-    return Response.redirect(new URL(localMidiUrl, url.origin), 302);
+  if (requestedKind === 'midi' && result.midiExists && refreshedMidiPath) {
+    return serveLocalLilyAsset(refreshedMidiPath, 'midi');
   }
 
   return new Response(
@@ -249,8 +282,13 @@ export const POST: APIRoute = async ({ request }) => {
 
   const hash = hashLilySource(source);
   const svgFilename = `${hash}.svg`;
-  const svgPath = path.join(LILY_DIR, svgFilename);
+  const { svgPath, midiPath, midPath } = getLocalLilyAssetPaths(hash);
   const svgUrl = `/lily/${svgFilename}`;
+  const midiUrl = fs.existsSync(midiPath)
+    ? `/lily/${hash}.midi`
+    : fs.existsSync(midPath)
+      ? `/lily/${hash}.mid`
+      : '';
 
   if (cachedUrl) {
     // If it's a remote URL, try to proxy it locally
@@ -263,6 +301,7 @@ export const POST: APIRoute = async ({ request }) => {
         success: true,
         hash,
         url: fs.existsSync(svgPath) ? svgUrl : cachedUrl,
+        midiUrl,
         generated: false,
         cached: true,
         remote: true,
@@ -280,6 +319,7 @@ export const POST: APIRoute = async ({ request }) => {
         success: true,
         hash,
         url: svgUrl,
+        midiUrl,
         generated: false,
       }),
       {
@@ -300,11 +340,17 @@ export const POST: APIRoute = async ({ request }) => {
   if (isLocalFirst) {
     const generatedLocally = tryRenderLilySvg(hash, source);
     if (generatedLocally) {
+      const generatedMidiUrl = fs.existsSync(midiPath)
+        ? `/lily/${hash}.midi`
+        : fs.existsSync(midPath)
+          ? `/lily/${hash}.mid`
+          : '';
       return new Response(
         JSON.stringify({
           success: true,
           hash,
           url: svgUrl,
+          midiUrl: generatedMidiUrl,
           generated: true,
           local: true,
         }),
@@ -321,12 +367,18 @@ export const POST: APIRoute = async ({ request }) => {
     if (remoteUrl) {
       // Proxy the remote files locally so the browser doesn't have CORS issues
       await downloadRemoteLilyFiles(remoteUrl, hash);
+      const proxiedMidiUrl = fs.existsSync(midiPath)
+        ? `/lily/${hash}.midi`
+        : fs.existsSync(midPath)
+          ? `/lily/${hash}.mid`
+          : '';
 
       return new Response(
         JSON.stringify({
           success: true,
           hash,
           url: fs.existsSync(svgPath) ? svgUrl : remoteUrl,
+          midiUrl: proxiedMidiUrl,
           generated: true,
           remote: true,
         }),

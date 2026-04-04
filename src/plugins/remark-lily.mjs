@@ -27,12 +27,19 @@ export default function remarkLily() {
       const svgFilename = `${hash}.svg`;
       const svgPath = path.join(lilyDir, svgFilename);
       const srcUrl = `/lily/${svgFilename}`;
+      const midiPath = path.join(lilyDir, `${hash}.midi`);
+      const midPath = path.join(lilyDir, `${hash}.mid`);
 
       // 1. Check if SVG already exists (cache/committed)
       let svgExists = fs.existsSync(svgPath);
+      let midiExists = fs.existsSync(midiPath);
+      if (!midiExists && fs.existsSync(midPath)) {
+        fs.renameSync(midPath, midiPath);
+        midiExists = true;
+      }
 
-      // 2. If not, try to generate it (requires local lilypond)
-      if (!svgExists) {
+      // 2. If SVG or MIDI is missing, try to generate the full asset set locally.
+      if (!svgExists || !midiExists) {
         const tmpLy = path.join(lilyDir, `${hash}.ly`);
         let lastRenderError = null;
 
@@ -47,7 +54,7 @@ export default function remarkLily() {
 
           for (const candidateSource of buildLocalLilypondSourceAttempts(code)) {
             try {
-              fs.writeFileSync(tmpLy, candidateSource);
+              fs.writeFileSync(tmpLy, candidateSource, 'utf8');
               execFileSync(
                 lilypondBinary,
                 ['-dbackend=svg', '-o', path.join(lilyDir, hash), tmpLy],
@@ -57,8 +64,13 @@ export default function remarkLily() {
               lastRenderError = error;
             }
 
-            if (fs.existsSync(svgPath)) {
-              svgExists = true;
+            if (fs.existsSync(midPath) && !fs.existsSync(midiPath)) {
+              fs.renameSync(midPath, midiPath);
+            }
+
+            svgExists = fs.existsSync(svgPath);
+            midiExists = fs.existsSync(midiPath);
+            if (svgExists && midiExists) {
               break;
             }
           }
@@ -71,12 +83,6 @@ export default function remarkLily() {
         if (!svgExists && lastRenderError) {
           console.error(`[remark-lily] Failed to generate SVG for ${hash}:`, lastRenderError.message);
         }
-      }
-
-      let midiExists = fs.existsSync(path.join(lilyDir, `${hash}.midi`));
-      if (!midiExists && fs.existsSync(path.join(lilyDir, `${hash}.mid`))) {
-         fs.renameSync(path.join(lilyDir, `${hash}.mid`), path.join(lilyDir, `${hash}.midi`));
-         midiExists = true;
       }
 
       // 3. If SVG exists, replace code block with inline HTML
