@@ -1,4 +1,5 @@
 import { normalizeText } from '../core/normalize';
+import { enhanceMarkdownTextarea } from '../../markdown-editor-tools';
 
 const ROOM_NOTES_DRAFT_STORAGE_KEY = 'musiki:room:notes:draft:v1';
 const ROOM_NOTES_CACHE_STORAGE_KEY = 'musiki:room:notes:cache:v1';
@@ -228,11 +229,26 @@ export const createRoomNotesController = ({
     });
   };
 
+  // After CodeMirror enhancement the textarea is wrapped inside a dropzone div.
+  // We hide/show that wrapper rather than the raw textarea (which CM keeps hidden).
+  const getEditorContainer = (): HTMLElement => {
+    const dropzone = notesBodyInput?.closest<HTMLElement>('.conference-notes-dropzone');
+    return dropzone ?? notesBodyInput ?? (null as unknown as HTMLElement);
+  };
+
+  // Set textarea value and notify CodeMirror binding via synthetic input event.
+  const setNotesBodyValue = (value: string) => {
+    if (!notesBodyInput) return;
+    notesBodyInput.value = value;
+    notesBodyInput.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
   const setNotesMode = (edit: boolean) => {
     notesEditMode = edit;
     if (!notesPreviewBtn || !notesPreviewEl || !notesTitleInput || !notesBodyInput) return;
+    const editorContainer = getEditorContainer();
     notesTitleInput.hidden = !edit;
-    notesBodyInput.hidden = !edit;
+    if (editorContainer) editorContainer.hidden = !edit;
     notesPreviewEl.hidden = edit;
     if (edit) {
       notesPreviewBtn.textContent = 'V';
@@ -274,7 +290,7 @@ export const createRoomNotesController = ({
   const resetNoteForm = () => {
     notesCurrentId = null;
     if (notesTitleInput) notesTitleInput.value = '';
-    if (notesBodyInput) notesBodyInput.value = '';
+    setNotesBodyValue('');
     if (notesPreviewEl) notesPreviewEl.innerHTML = '';
     clearNotesDraft();
     setNotesMode(true);
@@ -287,7 +303,7 @@ export const createRoomNotesController = ({
     if (!draft) return;
     notesCurrentId = draft.id;
     if (notesTitleInput) notesTitleInput.value = draft.title;
-    if (notesBodyInput) notesBodyInput.value = draft.body;
+    setNotesBodyValue(draft.body);
     if (notesPreviewEl) notesPreviewEl.innerHTML = '';
     setNotesMode(true);
     syncActiveNoteItem();
@@ -322,7 +338,7 @@ export const createRoomNotesController = ({
     if (cached) {
       notesCurrentId = cached.id;
       if (notesTitleInput) notesTitleInput.value = cached.title ?? '';
-      if (notesBodyInput) notesBodyInput.value = cached.body ?? '';
+      setNotesBodyValue(cached.body ?? '');
       if (notesPreviewEl) {
         notesPreviewEl.innerHTML = cached.renderedHtml ?? '';
         if (cached.renderedHtml) runMermaidIn(notesPreviewEl);
@@ -343,7 +359,7 @@ export const createRoomNotesController = ({
 
     notesCurrentId = note.id;
     if (notesTitleInput) notesTitleInput.value = note.title ?? '';
-    if (notesBodyInput) notesBodyInput.value = note.body ?? '';
+    setNotesBodyValue(note.body ?? '');
     if (notesPreviewEl && note.renderedHtml) {
       notesPreviewEl.innerHTML = note.renderedHtml;
       runMermaidIn(notesPreviewEl);
@@ -404,7 +420,7 @@ export const createRoomNotesController = ({
     notesScopeKey = nextScopeKey;
     notesCurrentId = null;
     if (notesTitleInput) notesTitleInput.value = '';
-    if (notesBodyInput) notesBodyInput.value = '';
+    setNotesBodyValue('');
     if (notesPreviewEl) notesPreviewEl.innerHTML = '';
     setNotesMode(true);
     syncActiveNoteItem();
@@ -487,6 +503,22 @@ export const createRoomNotesController = ({
   };
 
   const bind = () => {
+    // Wire CodeMirror + LilyPond/Mermaid template buttons + media upload
+    if (notesBodyInput) {
+      enhanceMarkdownTextarea(notesBodyInput, {
+        actionsContainer: notesBodyInput.closest('form')?.querySelector<HTMLElement>('.conference-notes-actions') ?? null,
+        status: (message) => reportStatus(message),
+        buttonClassName: 'conference-notes-action-btn',
+        actionSpacerClassName: 'conference-notes-action-spacer',
+        dropzoneClassName: 'conference-notes-dropzone',
+        dropzoneOverlayClassName: 'conference-notes-dropzone-overlay',
+        dropzoneLabelClassName: 'conference-notes-dropzone-label',
+        inputClassName: 'conference-notes-editor-input',
+        dropLabel: 'Soltar archivo',
+        useCodeMirror: true,
+      });
+    }
+
     if (notesPreviewBtn && notesPreviewEl && notesBodyInput) {
       notesPreviewBtn.addEventListener('click', () => {
         if (notesEditMode && !notesPreviewEl.innerHTML.trim()) {
@@ -505,16 +537,18 @@ export const createRoomNotesController = ({
     notesNewBtn?.addEventListener('click', resetNoteForm);
     notesDownloadBtn?.addEventListener('click', downloadCurrentNote);
 
-    [notesTitleInput, notesBodyInput].forEach((input) => {
-      input?.addEventListener('input', persistNotesDraft);
-      input?.addEventListener('change', persistNotesDraft);
-      input?.addEventListener('keydown', (event) => {
-        const keyboardEvent = event as KeyboardEvent;
-        if ((keyboardEvent.metaKey || keyboardEvent.ctrlKey) && keyboardEvent.key === 'Enter') {
-          keyboardEvent.preventDefault();
-          submitNotesForm();
-        }
-      });
+    // Draft persistence — listen on title + form (CM fires input on the textarea which bubbles)
+    notesTitleInput?.addEventListener('input', persistNotesDraft);
+    notesTitleInput?.addEventListener('change', persistNotesDraft);
+    notesBodyInput?.addEventListener('input', persistNotesDraft);
+
+    // Ctrl/Cmd+Enter to save — listen on the form so it catches CM keystrokes too
+    notesForm?.addEventListener('keydown', (event) => {
+      const keyboardEvent = event as KeyboardEvent;
+      if ((keyboardEvent.metaKey || keyboardEvent.ctrlKey) && keyboardEvent.key === 'Enter') {
+        keyboardEvent.preventDefault();
+        submitNotesForm();
+      }
     });
 
     notesForm?.addEventListener('submit', (event) => {

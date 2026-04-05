@@ -25,7 +25,12 @@
       "Bash(starship --version)",
       "Bash(starship explain:*)",
       "Bash(starship prompt:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(netstat -tlnp)",
+      "Read(//Users/zztt/.ollama/**)",
+      "Bash(launchctl list:*)",
+      "Bash(launchctl getenv:*)"
     ]
   }
 }

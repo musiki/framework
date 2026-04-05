@@ -1252,6 +1252,105 @@ details[open] > summary.conference-sidebar-heading::before {
   line-height: 1.4;
 }
 
+/* CodeMirror dropzone wrapper (replaces raw textarea in the flow) */
+.conference-notes-dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.conference-notes-dropzone[hidden] {
+  display: none;
+}
+
+.conference-notes-dropzone-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  background: rgba(100, 80, 180, 0.18);
+  border: 2px dashed rgba(160, 100, 220, 0.55);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.conference-notes-dropzone.is-upload-target .conference-notes-dropzone-overlay {
+  display: flex;
+}
+
+.conference-notes-dropzone-label {
+  font-size: 0.7rem;
+  color: rgba(200, 150, 255, 0.9);
+  letter-spacing: 0.06em;
+}
+
+/* CodeMirror host styled like the original textarea */
+.conference-notes-editor-input {
+  width: 100%;
+  min-height: 4.5rem;
+  border: 1px solid var(--conference-line);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--conference-fg);
+  font-size: var(--conference-font-ui);
+  line-height: 1.4;
+}
+
+.conference-notes-editor-input .cm-editor {
+  background: transparent;
+  color: var(--conference-fg);
+}
+
+.conference-notes-editor-input .cm-editor.cm-focused {
+  outline: none;
+  border-color: var(--conference-accent);
+}
+
+.conference-notes-editor-input.is-upload-target {
+  border-color: rgba(160, 100, 220, 0.65);
+}
+
+/* LilyPond / Mermaid / upload template buttons added by enhanceMarkdownTextarea */
+.conference-notes-action-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  border: 1px solid rgba(160, 160, 170, 0.3);
+  border-radius: 2px;
+  background: transparent;
+  color: rgba(245, 247, 251, 0.5);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--conference-font-ui);
+  transition: border-color 150ms, color 150ms;
+  flex-shrink: 0;
+}
+
+.conference-notes-action-btn svg {
+  width: 1rem;
+  height: 1rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.conference-notes-action-btn:hover {
+  border-color: rgba(160, 160, 170, 0.65);
+  color: rgba(245, 247, 251, 0.9);
+}
+
+.conference-notes-action-spacer {
+  flex: 1;
+}
+
 .conference-notes-actions {
   display: flex;
   gap: 0.35rem;
