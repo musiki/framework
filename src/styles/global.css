@@ -1320,14 +1320,21 @@ ol ol ol ol > li::marker {
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-pin-indicator {
-  flex: 0 0 auto !important;
-  width: 0.44rem !important;
-  height: 0.44rem !important;
+  position: absolute !important;
+  top: 0.42rem !important;
+  right: 0.5rem !important;
+  z-index: 6 !important;
+  width: 0.48rem !important;
+  height: 0.48rem !important;
   border-radius: 999px !important;
-  border: 1px solid color-mix(in srgb, var(--forum-text-secondary, #6b7480) 68%, transparent) !important;
-  background: currentColor !important;
-  color: color-mix(in srgb, var(--forum-text-secondary, #6b7480) 88%, transparent) !important;
-  opacity: 0.9 !important;
+  border: 1px solid color-mix(in srgb, var(--forum-accent, #2f5d8c) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--forum-accent, #2f5d8c) 72%, transparent) !important;
+  opacity: 0.85 !important;
+  pointer-events: none !important;
+}
+
+:is(#lesson-forum, #forum-reader-root) .forum-thread-item:has(.forum-thread-more-btn) .forum-thread-pin-indicator {
+  right: 1.82rem !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-toggle:focus-visible {

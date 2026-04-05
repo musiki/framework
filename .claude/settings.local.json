@@ -24,7 +24,8 @@
       "Bash(env -u GITHUB_TOKEN -u GH_TOKEN gh auth status 2>&1)",
       "Bash(starship --version)",
       "Bash(starship explain:*)",
-      "Bash(starship prompt:*)"
+      "Bash(starship prompt:*)",
+      "Bash(wc:*)"
     ]
   }
 }

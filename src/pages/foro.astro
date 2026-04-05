@@ -3350,7 +3350,11 @@ a[node] -->|edge| b[hub]
             return;
           }
 
-          forumState.threads.forEach((thread) => {
+          const displayThreads = [...forumState.threads].sort((a, b) => {
+            if (a.isPinned === b.isPinned) return 0;
+            return a.isPinned ? -1 : 1;
+          });
+          displayThreads.forEach((thread) => {
             const isActive = thread.id === forumState.selectedThreadId;
             const item = document.createElement('article');
             item.className = 'forum-thread-item';
@@ -3371,13 +3375,13 @@ a[node] -->|edge| b[hub]
             titleLabel.textContent = thread.title || 'Sin título';
             title.appendChild(titleLabel);
 
+            let pinIndicator = null;
             if (thread.isPinned) {
-              const pinIndicator = document.createElement('span');
+              item.classList.add('is-thread-pinned');
+              pinIndicator = document.createElement('span');
               pinIndicator.className = 'forum-thread-pin-indicator';
               pinIndicator.title = 'Hilo fijado';
               pinIndicator.setAttribute('aria-hidden', 'true');
-              title.prepend(pinIndicator);
-              item.classList.add('is-thread-pinned');
             }
 
             const messageCount = Number.isFinite(thread.messageCount)
@@ -3623,6 +3627,7 @@ a[node] -->|edge| b[hub]
 
             item.appendChild(toggle);
             if (threadMoreButton) item.appendChild(threadMoreButton);
+            if (pinIndicator) item.appendChild(pinIndicator);
             item.appendChild(threadActions);
             threadListEl.appendChild(item);
           });
@@ -3978,6 +3983,29 @@ a[node] -->|edge| b[hub]
             return;
           }
         }
+
+        document.addEventListener('keydown', async (event) => {
+          if (!event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return;
+          if (event.key !== ']' && event.code !== 'BracketRight') return;
+          if (!forumState.canModerate) return;
+          if (!forumState.selectedThreadId) return;
+          event.preventDefault();
+          const thread = forumState.threads.find((t) => t.id === forumState.selectedThreadId);
+          if (!thread) return;
+          try {
+            const response = await fetch(`/api/forum/threads/${encodeURIComponent(thread.id)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ isPinned: !thread.isPinned }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload?.error || 'No se pudo actualizar el fijado del hilo.');
+            setForumStatus(thread.isPinned ? 'Hilo desfijado.' : 'Hilo fijado.', 'info');
+            await loadThreads({ preserveSelection: true });
+          } catch (error) {
+            setForumStatus(error?.message || 'No se pudo actualizar el fijado del hilo.', 'error');
+          }
+        });
 
         await loadThreads({ preserveSelection: false });
       }

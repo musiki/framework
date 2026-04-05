@@ -161,8 +161,14 @@ if (isStudentEnrolled && !isRequestingWelcomePage) {
   }
 }
 
+// Statuses hidden from students but visible to teachers with indicator
+const teacherOnlyStatuses = new Set(['draft', 'private']);
+const sidebarLessons = canManageLiveInteractions
+  ? allLessons
+  : allLessons.filter((l) => !teacherOnlyStatuses.has(String(l.data.status || '').trim().toLowerCase()));
+
 // Group lessons by chapter
-const chapters = allLessons.reduce((acc, lesson) => {
+const chapters = sidebarLessons.reduce((acc, lesson) => {
   const chapter = lesson.data.chapter || 'general';
   if (!acc[chapter]) acc[chapter] = [];
   acc[chapter].push(lesson);
@@ -1149,6 +1155,47 @@ order:
         font-size: 0.75rem;
         opacity: 0.7;
         margin-left: 0;
+      }
+
+      .lesson-status-badge {
+        font-size: 0.6rem;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: 0.04em;
+        padding: 0.15em 0.4em 0.15em 0.25em;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25em;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .lesson-status-blob {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 999px;
+        flex: 0 0 auto;
+      }
+
+      .lesson-status-badge--draft {
+        color: #b45309;
+        background: rgba(245, 158, 11, 0.15);
+      }
+
+      .lesson-status-badge--draft .lesson-status-blob {
+        background: #f59e0b;
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
+      }
+
+      .lesson-status-badge--private {
+        color: #6d28d9;
+        background: rgba(139, 92, 246, 0.15);
+      }
+
+      .lesson-status-badge--private .lesson-status-blob {
+        background: #8b5cf6;
+        box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5);
       }
 
       .lesson-activity-indicators {
@@ -2899,9 +2946,10 @@ order:
                   lessonPathIndex.pathByEntryId.get(lesson.id)
                   || getCourseEntryLegacyPath(lesson, canonicalCourseId);
                 const isActive = currentEntry.id === lesson.id;
+                const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
                 return (
                   <li class="lesson-item">
-                    <a 
+                    <a
                       href={lessonHref}
                       class:list={['lesson-link', { active: isActive }]}
                       data-course-id={canonicalCourseId || courseSlug}
@@ -2911,6 +2959,16 @@ order:
                       <span class="lesson-link-trailing">
                         {assignmentLikeTypes.has(String(lesson.data.type || '').trim().toLowerCase()) && (
                           <span class="lesson-type">📝</span>
+                        )}
+                        {canManageLiveInteractions && lessonStatus === 'draft' && (
+                          <span class="lesson-status-badge lesson-status-badge--draft">
+                            <span class="lesson-status-blob" aria-hidden="true"></span>DRAFT
+                          </span>
+                        )}
+                        {canManageLiveInteractions && lessonStatus === 'private' && (
+                          <span class="lesson-status-badge lesson-status-badge--private">
+                            <span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE
+                          </span>
                         )}
                         <span class="lesson-activity-indicators">
                           <span class="lesson-room-indicator" data-lesson-room-indicator hidden aria-hidden="true">

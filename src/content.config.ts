@@ -12,7 +12,7 @@ const courseNoteTypes = [
 	'public-note',
 ] as const;
 
-const workflowStatuses = ['draft', 'review', 'approved', 'published', 'archived', 'nonshown'] as const;
+const workflowStatuses = ['draft', 'private', 'review', 'approved', 'published', 'archived', 'nonshown'] as const;
 const publicStatuses = ['draft', 'review', 'approved', 'deprecated'] as const;
 
 const content = defineCollection({

@@ -320,7 +320,7 @@ const withActiveCourse = (href: string) => {
 					</>
 				) : null
 			}
-			       <button id="graph-toggle" class="graph-toggle-btn" title="Mostrar grafo de conocimiento (g)">
+			       <button id="graph-toggle" class="graph-toggle-btn" title="Mostrar grafo de conocimiento ⌘G">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11 19.5a8.5 8.5 0 1 1 5.23-15.52l-1.06 1.06a6.5 6.5 0 1 0-3.17 12.46l-1 1zM12.5 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm13 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
           </svg>
@@ -506,11 +506,15 @@ const withActiveCourse = (href: string) => {
 			const code = String(event.code || '').toLowerCase();
 
 			if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-				if (key === 'g' && !isEditable) {
+				return;
+			}
+
+			if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+				if ((key === 'g' || code === 'keyg') && !isEditable) {
 					event.preventDefault();
 					window.dispatchEvent(new CustomEvent('graph:toggle'));
+					return;
 				}
-				return;
 			}
 
 			if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey) {

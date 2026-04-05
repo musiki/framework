@@ -1,8 +1,28 @@
 {
   "nodes": [
     {
-      "id": "cursos/i1/01-mentes/nueva-nota",
-      "name": "nota creada",
+      "id": "cursos/cym/_index",
+      "name": "Ciencia y Música",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
+      "id": "tag:artscience",
+      "name": "artscience",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "cursos/cym/cym introducción/cym-contenidos",
+      "name": "cym introducción",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
+      "id": "cursos/i1/01-mentes/Introducción",
+      "name": "Introducción a Mentes",
       "type": "document",
       "group": "cursos",
       "img": ""
@@ -101,6 +121,41 @@
       "img": ""
     },
     {
+      "id": "cursos/i2/01-fundamentos/01-introduccion",
+      "name": "01 - Introduccion",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
+      "id": "cursos/i2/01-fundamentos/02-presentacion",
+      "name": "02 - Presentation Draft",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
+      "id": "cursos/i2/01-fundamentos/03-evaluacion-diagnostica",
+      "name": "03 - Diagnostic Evaluation",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
+      "id": "cursos/i2/01-fundamentos/04-mapa-conceptual",
+      "name": "04 - Concept Map App",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
+      "id": "cursos/i2/_index",
+      "name": "Instrumento II",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
       "id": "cursos/s123/_index",
       "name": "Seminarios de Composición",
       "type": "document",
@@ -123,6 +178,11 @@
   ],
   "links": [
     {
+      "source": "cursos/cym/_index",
+      "target": "tag:artscience",
+      "type": "tag"
+    },
+    {
       "source": "cursos/i1/03-organología/eval-class reveal",
       "target": "tag:eval",
       "type": "tag"
@@ -144,6 +204,26 @@
     },
     {
       "source": "cursos/i1/_index",
+      "target": "tag:cognición-digital-musical",
+      "type": "tag"
+    },
+    {
+      "source": "cursos/i2/_index",
+      "target": "tag:instrumentos",
+      "type": "tag"
+    },
+    {
+      "source": "cursos/i2/_index",
+      "target": "tag:acústica",
+      "type": "tag"
+    },
+    {
+      "source": "cursos/i2/_index",
+      "target": "tag:organología",
+      "type": "tag"
+    },
+    {
+      "source": "cursos/i2/_index",
       "target": "tag:cognición-digital-musical",
       "type": "tag"
     },
