@@ -36,7 +36,9 @@
       "Bash(dig +short ollama-api.zztt.org)",
       "Bash(nslookup ollama-api.zztt.org)",
       "Bash(curl -s -X POST https://ollama-api.zztt.org/api/correct -H 'Authorization: Bearer e1c86d65bdfaa6c72aed8038b5fd8b07e957a4b9fbd4bf81baaf61af467021e052cef0d90247951c848cff2d415e1f54' -H 'Content-Type: application/json' -d '{\"texto\": \"La música tonal usa acordes y progresiones.\", \"rubrica\": \"Evaluar comprensión de armonía tonal\"}')",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(git -C /Users/zztt/projects/26-musiki/framework status --short)",
+      "Bash(git:*)"
     ]
   }
 }
