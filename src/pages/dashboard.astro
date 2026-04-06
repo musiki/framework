@@ -3166,10 +3166,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         min-width: 0;
       }
       .dashboard-scope-field--inline {
-        min-width: 11.5rem;
+        min-width: 9.2rem;
+        flex-direction: row;
       }
       .dashboard-scope-field--year {
-        min-width: 6.2rem;
+        min-width: 5.4rem;
       }
       .dashboard-scope-field--inline select {
         min-width: 0;
@@ -5025,6 +5026,29 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .eval-preview-tooltip code {
         font-size: 0.75rem;
       }
+      @media (max-width: 1130px) {
+        .dashboard-topbar-tabs,
+        .dashboard-topbar-controls {
+          flex: 0 0 auto;
+          width: auto;
+          min-width: max-content;
+        }
+        .dashboard-topbar-controls {
+          justify-content: flex-start;
+          margin-left: 0;
+        }
+        .dashboard-scope-field--inline {
+          flex: 0 0 auto;
+          min-width: 9.2rem;
+        }
+        .dashboard-topbar-search {
+          width: 14rem;
+          min-width: 14rem;
+        }
+        .dashboard-live-mode-toggle {
+          flex: 0 0 auto;
+        }
+      }
       @media (max-width: 900px) {
         .wrap {
           padding: 0;
@@ -5087,29 +5111,6 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         .tab.active {
           border-left-color: transparent;
           border-bottom-color: var(--c-link);
-        }
-        .dashboard-topbar {
-          padding: 1.4rem 0.6rem 0;
-        }
-        .dashboard-topbar-tabs,
-        .dashboard-topbar-controls {
-          width: auto;
-          min-width: max-content;
-        }
-        .dashboard-topbar-controls {
-          justify-content: flex-start;
-          margin-left: 0;
-        }
-        .dashboard-scope-field--inline {
-          flex: 0 0 auto;
-          min-width: 9.2rem;
-        }
-        .dashboard-topbar-search {
-          width: 14rem;
-          min-width: 14rem;
-        }
-        .dashboard-live-mode-toggle {
-          flex: 0 0 auto;
         }
         .teacher-grid-toolbar,
         .teacher-grid-toolbar--section {
@@ -5205,8 +5206,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
               />
             </div>
             <label class="dashboard-scope-field dashboard-scope-field--inline">
-              <span>Curso</span>
-              <select data-dashboard-scope="course">
+              <select data-dashboard-scope="course" title="Curso">
                 {availableCourseMeta.length === 0 ? (
                   <option value="">Sin cursos</option>
                 ) : (
@@ -5219,8 +5219,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
               </select>
             </label>
             <label class="dashboard-scope-field dashboard-scope-field--inline dashboard-scope-field--year">
-              <span>Año</span>
-              <select data-dashboard-scope="year">
+              <select data-dashboard-scope="year" title="Año">
                 {availableYears.map((year) => (
                   <option value={year} selected={year === activeYear}>{year}</option>
                 ))}

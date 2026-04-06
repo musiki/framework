@@ -408,17 +408,21 @@ const saveUserFieldFromCell = async (cell: any, overrideValue?: string): Promise
   }
 
   if (!Object.keys(body).length) return;
+  setDashboardSaveStatus('saving', `Guardando ${field}...`);
   try {
-    setDashboardSaveStatus('saving', `Guardando ${field}...`);
-    await fetch(`/api/admin/users/${studentId}`, {
+    const response = await fetch(`/api/admin/users/${studentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error((payload as any)?.error || `No se pudo guardar ${field}.`);
+    }
     setDashboardSaveStatus('saved', `${field} guardado.`);
-  } catch {
-    setDashboardSaveStatus('error', `No se pudo guardar ${field}.`);
-    // silent — cell is already updated in UI
+  } catch (error: any) {
+    setDashboardSaveStatus('error', error?.message || `No se pudo guardar ${field}.`);
+    throw error;
   }
 };
 
