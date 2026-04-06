@@ -17,11 +17,13 @@ const normalizeText = (value: unknown) => String(value ?? '').trim();
 export const listRoomPresentationOptions = async ({
   activeCourseId = '',
   session,
+  role = 'student',
   supabaseKey,
   supabaseUrl,
 }: {
   activeCourseId?: string;
   session: Session | null;
+  role?: 'teacher' | 'student';
   supabaseKey?: string;
   supabaseUrl?: string;
 }): Promise<RoomPresentationOption[]> => {
@@ -93,18 +95,32 @@ export const listRoomPresentationOptions = async ({
     );
   });
 
+  const isTeacher = role === 'teacher';
+
   return entries
     .filter((entry) => !entry.id.endsWith('/_index') && !entry.id.endsWith('_index'))
     .filter((entry) => {
-      const theme = normalizeText((entry.data as Record<string, unknown>).theme);
+      const data = entry.data as Record<string, unknown>;
+      const theme = normalizeText(data.theme);
       if (!theme) return false;
 
       const courseId = normalizeText(entry.id.split('/')[0]);
-      if (!courseId || !accessibleCourseIds.has(courseId)) return false;
+      if (!courseId) return false;
+
+      // Only show lessons from the active course when one is set
+      if (normalizedActiveCourseId && courseId !== normalizedActiveCourseId) return false;
+
+      if (!accessibleCourseIds.has(courseId)) return false;
 
       if (!session) {
-        const visibility = normalizeText((entry.data as Record<string, unknown>).visibility).toLowerCase();
+        const visibility = normalizeText(data.visibility).toLowerCase();
         if (visibility === 'enrolled-only') return false;
+      }
+
+      // Students cannot see draft or private lessons
+      if (!isTeacher) {
+        const status = normalizeText(data.status).toLowerCase();
+        if (status === 'draft' || status === 'private') return false;
       }
 
       return true;
@@ -116,7 +132,7 @@ export const listRoomPresentationOptions = async ({
 
       return {
         courseId,
-        label: `${courseTitle} / ${entry.data.title} (${theme})`,
+        label: `${entry.data.title} (${theme})`,
         lessonId: entry.id,
         theme,
         value: buildCourseSlideLessonHref(
@@ -127,11 +143,5 @@ export const listRoomPresentationOptions = async ({
         ),
       } satisfies RoomPresentationOption;
     })
-    .sort((left, right) => {
-      const leftActive = left.courseId === normalizedActiveCourseId ? -1 : 0;
-      const rightActive = right.courseId === normalizedActiveCourseId ? -1 : 0;
-      if (leftActive !== rightActive) return leftActive - rightActive;
-      if (left.courseId !== right.courseId) return left.courseId.localeCompare(right.courseId, 'es');
-      return left.label.localeCompare(right.label, 'es');
-    });
+    .sort((left, right) => left.label.localeCompare(right.label, 'es'));
 };

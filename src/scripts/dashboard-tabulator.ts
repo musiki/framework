@@ -384,11 +384,11 @@ const toTitleCase = (text: string): string =>
 
 const EDITABLE_USER_FIELDS = ['firstName', 'lastName', 'email', 'name'];
 
-const saveUserFieldFromCell = async (cell: any, overrideValue?: string): Promise<void> => {
+const saveUserFieldFromCell = async (cell: any, overrideValue?: string, meta?: DashboardMeta): Promise<void> => {
   const field = normalizeText(cell.getField?.() || '');
   if (!EDITABLE_USER_FIELDS.includes(field)) return;
   const value = overrideValue !== undefined ? overrideValue : String(cell.getValue() ?? '');
-  const rowData = (cell.getRow?.()?.getData?.() || {}) as Record<string, any>;
+  const rowData = (cell.getRow?.()?.getData?.() || cell.getData?.() || {}) as Record<string, any>;
   const studentId = normalizeText(rowData.studentId || rowData.id || '');
   if (!studentId) return;
 
@@ -408,6 +408,7 @@ const saveUserFieldFromCell = async (cell: any, overrideValue?: string): Promise
   }
 
   if (!Object.keys(body).length) return;
+  if (meta?.courseId) body.courseId = meta.courseId;
   setDashboardSaveStatus('saving', `Guardando ${field}...`);
   try {
     const response = await fetch(`/api/admin/users/${studentId}`, {
@@ -426,7 +427,7 @@ const saveUserFieldFromCell = async (cell: any, overrideValue?: string): Promise
   }
 };
 
-const saveSelectedUserFieldFromCell = async (cell: any, overrideValue?: any) => {
+const saveSelectedUserFieldFromCell = async (cell: any, overrideValue?: any, meta?: DashboardMeta) => {
   const field = getCellField(cell);
   if (!EDITABLE_USER_FIELDS.includes(field)) return;
 
@@ -445,11 +446,11 @@ const saveSelectedUserFieldFromCell = async (cell: any, overrideValue?: any) => 
         [field]: value,
       });
     }
-    await saveUserFieldFromCell(targetCell, value);
+    await saveUserFieldFromCell(targetCell, value, meta);
   }
 };
 
-const saveSingleUserFieldCellValue = async (cell: any, overrideValue?: any) => {
+const saveSingleUserFieldCellValue = async (cell: any, overrideValue?: any, meta?: DashboardMeta) => {
   const field = getCellField(cell);
   if (!EDITABLE_USER_FIELDS.includes(field)) return;
 
@@ -460,7 +461,7 @@ const saveSingleUserFieldCellValue = async (cell: any, overrideValue?: any) => {
       [field]: value,
     });
   }
-  await saveUserFieldFromCell(cell, value);
+  await saveUserFieldFromCell(cell, value, meta);
 };
 
 const getCellPreviousValue = (cell: any, overridePreviousValue?: any) =>
@@ -597,7 +598,7 @@ const persistClipboardCellValue = async (
   }
 
   if (kind === 'editable-text') {
-    await saveSingleUserFieldCellValue(cell, nextValue);
+    await saveSingleUserFieldCellValue(cell, nextValue, meta);
   }
 };
 
@@ -1953,7 +1954,7 @@ const bindNativeCellPersistence = (
       }
 
       if (kind === 'editable-text') {
-        await saveSelectedUserFieldFromCell(cell);
+        await saveSelectedUserFieldFromCell(cell, undefined, context.meta);
       }
     } catch (error: any) {
       console.error('Error saving native dashboard editor:', error);
@@ -2444,6 +2445,7 @@ const restoreStoredFoldState = (table: Tabulator) => {
 
 const buildCellContextMenu = (
   kind: GridKind,
+  meta: DashboardMeta,
   annotationState: AnnotationState,
   modalRef: { current: AnnotationModalApi | null },
 ) => {
@@ -2528,7 +2530,7 @@ const buildCellContextMenu = (
             const titled = toTitleCase(current);
             if (titled === current) continue;
             targetCell.setValue(titled);
-            await saveUserFieldFromCell(targetCell, titled);
+            await saveUserFieldFromCell(targetCell, titled, meta);
           }
         },
       },
@@ -3042,7 +3044,7 @@ const configureColumns = (
     const keepAnnotationWrapper = isAnnotationCell && !isNativeDashboardEditableKind(kind);
 
     if (isAnnotationCell) {
-      nextColumn.contextMenu = buildCellContextMenu(context.kind, annotationState, modalRef);
+      nextColumn.contextMenu = buildCellContextMenu(context.kind, context.meta, annotationState, modalRef);
     }
 
     if (keepAnnotationWrapper) {

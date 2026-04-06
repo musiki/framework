@@ -84,6 +84,7 @@ const presentationOptions = inviteMode === 'external'
   : await listRoomPresentationOptions({
       activeCourseId,
       session,
+      role: defaultRole,
       supabaseUrl: import.meta.env.SUPABASE_URL,
       supabaseKey: import.meta.env.SUPABASE_KEY,
     });

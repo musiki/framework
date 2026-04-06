@@ -4877,7 +4877,21 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         color: var(--c-fg) !important;
       }
       :root.dark .dashboard-tabulator .tabulator-menu,
-      :root.dark .dashboard-tabulator .tabulator-popup,
+      :root.dark .dashboard-tabulator .tabulator-popup {
+        background: color-mix(in srgb, var(--c-bg) 94%, #000 6%);
+        color: var(--c-fg);
+        border-color: var(--c-border);
+      }
+      :root.dark .dashboard-tabulator .tabulator-menu-item {
+        color: var(--c-fg);
+      }
+      :root.dark .dashboard-tabulator .tabulator-menu-item:hover {
+        background: color-mix(in srgb, var(--c-link) 14%, var(--c-bg) 86%);
+        color: var(--c-fg);
+      }
+      :root.dark .dashboard-tabulator .tabulator-menu-item-disabled {
+        color: color-mix(in srgb, var(--c-fg) 40%, transparent);
+      }
       :root.dark .dashboard-tabulator input,
       :root.dark .dashboard-tabulator textarea,
       :root.dark .dashboard-tabulator select {

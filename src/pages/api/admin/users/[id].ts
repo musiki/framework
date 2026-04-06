@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient } from '../../../../lib/forum-server';
+import { resolveLiveManageAccess } from '../../../../lib/live/access';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -30,6 +31,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const nextRole = normalizeRole((payload as any)?.role);
   const nextName = typeof (payload as any)?.name === 'string' ? String((payload as any).name).trim() : null;
   const nextEmail = typeof (payload as any)?.email === 'string' ? String((payload as any).email).trim().toLowerCase() : null;
+  const courseId = String((payload as any)?.courseId || '').trim();
 
   if (!nextRole && !nextName && !nextEmail) {
     return json({ error: 'Nothing to update' }, 400);
@@ -38,16 +40,27 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const supabase = createSupabaseServerClient();
 
   try {
-    const { data: requester, error: requesterError } = await supabase
-      .from('User')
-      .select('id, role')
-      .eq('email', currentUser.email)
-      .maybeSingle();
+    // Use enrollment-based access check (same as course-student-meta) when courseId is provided,
+    // otherwise fall back to global role check with case-insensitive email lookup.
+    let canEdit = false;
+    let requesterId = '';
+    if (courseId) {
+      const access = await resolveLiveManageAccess(session, courseId);
+      canEdit = access.canManage;
+      requesterId = access.userId;
+    } else {
+      const { data: candidates, error: candidatesError } = await supabase
+        .from('User')
+        .select('id, role')
+        .ilike('email', currentUser.email);
+      if (candidatesError) throw candidatesError;
+      const rows = Array.isArray(candidates) ? candidates : [];
+      const teacherRow = rows.find((row) => normalizeRole(row.role) === 'teacher');
+      canEdit = Boolean(teacherRow);
+      requesterId = String(teacherRow?.id || '');
+    }
 
-    if (requesterError) throw requesterError;
-    if (!requester) return json({ error: 'Requester user not found' }, 404);
-
-    if (normalizeRole(requester.role) !== 'teacher') {
+    if (!canEdit) {
       return json({ error: 'Only teachers can update user data' }, 403);
     }
 
@@ -89,7 +102,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
 
     // Handle role update
     if (nextRole) {
-      if (requester.id === targetUserId) {
+      if (requesterId && requesterId === targetUserId) {
         return json({ error: 'Cannot update your own role from this view' }, 400);
       }
 
