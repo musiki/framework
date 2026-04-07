@@ -40,9 +40,7 @@ const firstNonLocalUrl = (...values) => {
 const site = firstNonLocalUrl(
   process.env.SITE_URL,
   process.env.AUTH_URL,
-  process.env.NEXTAUTH_URL,
-  process.env.VERCEL_PROJECT_PRODUCTION_URL,
-  process.env.VERCEL_URL
+  process.env.NEXTAUTH_URL
 ) || (process.env.NODE_ENV === 'production' ? 'https://musiki.org.ar' : 'http://localhost:4321');
 
 const remoteDevHmrHost = (

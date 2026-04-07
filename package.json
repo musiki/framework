@@ -40,7 +40,7 @@
     "@codemirror/view": "^6.41.0",
     "@mediapipe/tasks-vision": "^0.10.32",
     "@supabase/supabase-js": "^2.91.0",
-    "@vercel/routing-utils": "^4.0.0",
+
     "auth-astro": "^4.2.0",
     "better-auth": "^1.4.3",
     "codemirror": "^6.0.2",

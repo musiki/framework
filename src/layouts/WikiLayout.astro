@@ -90,8 +90,8 @@ let lastAuthor = '';
 let lastDate = '';
 let commitSha = '';
 let historyEntries: CommitHistoryEntry[] = [];
-const repoOwner = process.env.VERCEL_GIT_REPO_OWNER || 'unknown';
-const repoSlug  = process.env.VERCEL_GIT_REPO_SLUG  || 'unknown';
+const repoOwner = process.env.GITHUB_REPO_OWNER || 'unknown';
+const repoSlug  = process.env.GITHUB_REPO_SLUG  || 'unknown';
 const contentRoot = path.join(process.cwd(), 'src/content');
 let slugPathCache: Map<string, string> | null = null;
 

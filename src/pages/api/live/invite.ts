@@ -53,8 +53,7 @@ const resolvePublicRequestUrl = (request: Request) => {
     normalizeOriginCandidate(import.meta.env.SITE_URL) ||
     normalizeOriginCandidate(import.meta.env.AUTH_URL) ||
     normalizeOriginCandidate(import.meta.env.NEXTAUTH_URL) ||
-    normalizeOriginCandidate(import.meta.env.VERCEL_PROJECT_PRODUCTION_URL) ||
-    normalizeOriginCandidate(import.meta.env.VERCEL_URL ? `https://${import.meta.env.VERCEL_URL}` : '');
+    '';
 
   if (fallbackOrigin) {
     return new URL(`${fallbackOrigin}${incoming.pathname}${incoming.search}`);

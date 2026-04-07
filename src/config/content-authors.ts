@@ -3,7 +3,6 @@ export const DEFAULT_CONTENT_AUTHORS = [
   'zzigo',
   'github-actions[bot]',
   'github actions',
-  'vercel',
   'unknown',
 ];
 
