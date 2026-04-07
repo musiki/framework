@@ -16,6 +16,7 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
         <img id="preview-img" src="" alt="" />
         <div id="preview-title"></div>
       </div>
+      <button id="graph-toggle-filter" title="Mostrar todo / solo público (T)">público</button>
       <button id="graph-center" title="Center on current page">⊙</button>
       <button id="graph-close" title="Close">✕</button>
     </div>
@@ -25,39 +26,186 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
 <script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
 
 <script define:vars={{ currentSlug }}>
+  // ── Per-folder visual identity ─────────────────────────────────────────────
+  // shape: 'circle' | 'diamond' | 'triangle' | 'square' | 'pentagon' | 'hexagon' | 'star' | 'cross'
+  // Add new folders here as musiki grows.
+  const FOLDER_IDENTITY = {
+    instruments:  { color: '#f59e0b', shape: 'diamond',  label: 'Instruments'  },
+    instrumentos: { color: '#f59e0b', shape: 'diamond',  label: 'Instrumentos' },
+    theory:       { color: '#818cf8', shape: 'triangle', label: 'Theory'       },
+    history:      { color: '#fb923c', shape: 'pentagon', label: 'History'      },
+    analysis:     { color: '#22d3ee', shape: 'hexagon',  label: 'Analysis'     },
+    rhythm:       { color: '#f472b6', shape: 'star',     label: 'Rhythm'       },
+    harmony:      { color: '#4ade80', shape: 'square',   label: 'Harmony'      },
+    ear:          { color: '#f87171', shape: 'cross',    label: 'Ear Training' },
+    counterpoint: { color: '#a78bfa', shape: 'diamond',  label: 'Counterpoint' },
+    form:         { color: '#34d399', shape: 'hexagon',  label: 'Form'         },
+    notation:     { color: '#67e8f9', shape: 'pentagon', label: 'Notation'     },
+    dictionaries: { color: '#fbbf24', shape: 'star',     label: 'Dictionaries' },
+    solfege:      { color: '#86efac', shape: 'triangle', label: 'Solfège'      },
+  };
+
+  const FALLBACK_SHAPES = ['square','diamond','pentagon','hexagon','star','cross','triangle'];
+  const FALLBACK_COLORS = ['#a78bfa','#34d399','#fb923c','#f472b6','#38bdf8','#fbbf24','#4ade80'];
+
+  function getFolderIdentity(folder) {
+    if (!folder) return null;
+    if (FOLDER_IDENTITY[folder]) return FOLDER_IDENTITY[folder];
+    // Consistent hash for unlisted folders
+    let hash = 0;
+    for (const c of folder) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+    return {
+      color: FALLBACK_COLORS[hash % FALLBACK_COLORS.length],
+      shape: FALLBACK_SHAPES[hash % FALLBACK_SHAPES.length],
+      label: folder.charAt(0).toUpperCase() + folder.slice(1),
+    };
+  }
+
+  function drawShape(ctx, shape, x, y, r) {
+    ctx.beginPath();
+    switch (shape) {
+      case 'diamond': {
+        ctx.moveTo(x, y - r * 1.4);
+        ctx.lineTo(x + r * 1.05, y);
+        ctx.lineTo(x, y + r * 1.4);
+        ctx.lineTo(x - r * 1.05, y);
+        ctx.closePath();
+        break;
+      }
+      case 'triangle': {
+        ctx.moveTo(x, y - r * 1.25);
+        ctx.lineTo(x + r * 1.1, y + r * 0.85);
+        ctx.lineTo(x - r * 1.1, y + r * 0.85);
+        ctx.closePath();
+        break;
+      }
+      case 'square': {
+        const s = r * 0.92;
+        ctx.rect(x - s, y - s, s * 2, s * 2);
+        break;
+      }
+      case 'pentagon': {
+        for (let i = 0; i < 5; i++) {
+          const a = (i * 2 * Math.PI / 5) - Math.PI / 2;
+          i === 0 ? ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a))
+                  : ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a));
+        }
+        ctx.closePath();
+        break;
+      }
+      case 'hexagon': {
+        for (let i = 0; i < 6; i++) {
+          const a = i * Math.PI / 3;
+          i === 0 ? ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a))
+                  : ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a));
+        }
+        ctx.closePath();
+        break;
+      }
+      case 'star': {
+        for (let i = 0; i < 10; i++) {
+          const a = (i * Math.PI / 5) - Math.PI / 2;
+          const rad = i % 2 === 0 ? r * 1.25 : r * 0.52;
+          i === 0 ? ctx.moveTo(x + rad * Math.cos(a), y + rad * Math.sin(a))
+                  : ctx.lineTo(x + rad * Math.cos(a), y + rad * Math.sin(a));
+        }
+        ctx.closePath();
+        break;
+      }
+      case 'cross': {
+        const t = r * 0.33, l = r * 1.0;
+        ctx.moveTo(x - t, y - l); ctx.lineTo(x + t, y - l);
+        ctx.lineTo(x + t, y - t); ctx.lineTo(x + l, y - t);
+        ctx.lineTo(x + l, y + t); ctx.lineTo(x + t, y + t);
+        ctx.lineTo(x + t, y + l); ctx.lineTo(x - t, y + l);
+        ctx.lineTo(x - t, y + t); ctx.lineTo(x - l, y + t);
+        ctx.lineTo(x - l, y - t); ctx.lineTo(x - t, y - t);
+        ctx.closePath();
+        break;
+      }
+      default: {
+        ctx.arc(x, y, r, 0, 2 * Math.PI);
+      }
+    }
+    ctx.fill();
+  }
+
   let graphData = null;
   let graphInstance = null;
   const highlightNodes = new Set();
   const highlightLinks = new Set();
   let hoverNode = null;
-  const labelOpacity = new Map(); // Track opacity for each node
-  let lastZoomState = false; // Track if labels should be shown
+  const labelOpacity = new Map();
+  let showAll = false; // default: only public notes + their tags
 
-  // Load graph data
+  // Load raw graph data (no cross-linking here — done per filtered dataset)
   async function initGraph() {
     if (!graphData) {
       const response = await fetch('/graph-data.json');
       graphData = await response.json();
-      
-      // Cross-link node objects for highlighting
-      graphData.links.forEach(link => {
-        const a = graphData.nodes.find(n => n.id === link.source);
-        const b = graphData.nodes.find(n => n.id === link.target);
-        if (a && b) {
-          !a.neighbors && (a.neighbors = []);
-          !b.neighbors && (b.neighbors = []);
-          a.neighbors.push(b);
-          b.neighbors.push(a);
-          
-          !a.links && (a.links = []);
-          !b.links && (b.links = []);
-          a.links.push(link);
-          b.links.push(link);
-        }
-      });
     }
-    
     return graphData;
+  }
+
+  // Add neighbors/links refs to nodes for hover-highlighting
+  function crossLinkNodes(data) {
+    data.nodes.forEach(n => { n.neighbors = []; n.links = []; });
+    data.links.forEach(link => {
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source;
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target;
+      const a = data.nodes.find(n => n.id === srcId);
+      const b = data.nodes.find(n => n.id === tgtId);
+      if (a && b) {
+        a.neighbors.push(b); b.neighbors.push(a);
+        a.links.push(link);  b.links.push(link);
+      }
+    });
+  }
+
+  // Return only public-folder nodes + tag nodes connected to them
+  function filterPublicData(data) {
+    const publicIds = new Set(
+      data.nodes.filter(n => n.type === 'document' && n.publicFolder !== null).map(n => n.id)
+    );
+    const tagIds = new Set();
+    for (const link of data.links) {
+      const s = typeof link.source === 'object' ? link.source.id : link.source;
+      const t = typeof link.target === 'object' ? link.target.id : link.target;
+      if (publicIds.has(s) && String(t).startsWith('tag:')) tagIds.add(t);
+      if (publicIds.has(t) && String(s).startsWith('tag:')) tagIds.add(s);
+    }
+    const allowed = new Set([...publicIds, ...tagIds]);
+    return {
+      nodes: data.nodes.filter(n => allowed.has(n.id)),
+      links: data.links.filter(l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        return allowed.has(s) && allowed.has(t);
+      }),
+    };
+  }
+
+  function updateLegend(data) {
+    const legend = document.querySelector('.graph-legend');
+    if (!legend) return;
+    const folders = [...new Set(data.nodes.map(n => n.publicFolder).filter(Boolean))].sort();
+    let html = `
+      <div><span class="legend-doc"></span> Docs</div>
+      <div><span class="legend-tag"></span> Tags</div>
+      <div><span class="legend-current"></span> Actual</div>
+    `;
+    for (const folder of folders) {
+      const id = getFolderIdentity(folder);
+      html += `<div><span class="legend-folder" style="background:${id.color}"></span> ${id.label}</div>`;
+    }
+    legend.innerHTML = html;
+  }
+
+  function updateFilterButton() {
+    const btn = document.getElementById('graph-toggle-filter');
+    if (!btn) return;
+    btn.textContent = showAll ? 'todo' : 'público';
+    btn.dataset.all = showAll ? 'true' : 'false';
   }
 
   // Show/hide modal
@@ -112,27 +260,24 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
 
   // Render the graph
   async function renderGraph() {
-    const data = await initGraph();
+    const raw = await initGraph();
+    const data = showAll ? raw : filterPublicData(raw);
+    crossLinkNodes(data);
     const container = document.getElementById('graph-canvas');
-    
+
     // Clear container
     container.innerHTML = '';
-    
+
     let colors = getThemeColors();
-    
+
     const NODE_R = 3.2;
-    
+
     graphInstance = ForceGraph()(container)
       .graphData(data)
       .backgroundColor(colors.background)
       .nodeId('id')
       .nodeLabel('name')
       .nodeRelSize(NODE_R)
-      .nodeColor(node => {
-        if (node.id === currentSlug) return colors.current;
-        if (highlightNodes.has(node)) return colors.highlight;
-        return node.type === 'tag' ? colors.tag : colors.document;
-      })
       .nodeVal(node => {
         if (node.id === currentSlug) return 12;
         return node.type === 'tag' ? 3 : 6;
@@ -141,64 +286,65 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
         if (highlightLinks.has(link)) return colors.highlight;
         return link.type === 'tag' ? colors.tagLink : colors.link;
       })
-      .linkWidth(link => highlightLinks.has(link) ? 3 : (link.type === 'tag' ? 1.5 : 1.5))
+      .linkWidth(link => highlightLinks.has(link) ? 3 : 1.5)
       .linkDirectionalParticles(link => highlightLinks.has(link) ? 4 : 0)
       .linkDirectionalParticleWidth(link => highlightLinks.has(link) ? 3 : 0)
       .linkLineDash(link => link.type === 'tag' && [4, 6])
       .d3AlphaDecay(0.02)
       .d3VelocityDecay(0.3)
       .autoPauseRedraw(false)
-      .nodeCanvasObjectMode(node => highlightNodes.has(node) ? 'before' : undefined)
+      // 'replace' mode: we draw the node ourselves (shape + glow + label)
+      .nodeCanvasObjectMode(() => 'replace')
       .nodeCanvasObject((node, ctx, globalScale) => {
-        // Draw highlight ring if node is highlighted
-        if (highlightNodes.has(node)) {
+        const isCurrent   = node.id === currentSlug;
+        const isHighlight = highlightNodes.has(node);
+        const isHover     = node === hoverNode;
+        const isTag       = node.type === 'tag';
+
+        // Base radius for drawing (independent from physics nodeVal)
+        const r = isCurrent ? 7 : isTag ? 2.8 : 4.5;
+
+        // Folder identity (null for tags and current node)
+        const identity = !isTag && !isCurrent ? getFolderIdentity(node.publicFolder) : null;
+
+        // Fill color
+        let fillColor;
+        if (isCurrent)        fillColor = colors.current;
+        else if (isHighlight) fillColor = isHover ? colors.hover : colors.highlight;
+        else if (identity)    fillColor = identity.color;
+        else if (isTag)       fillColor = colors.tag;
+        else                  fillColor = colors.document;
+
+        // Glow ring on highlight
+        if (isHighlight) {
           ctx.beginPath();
-          ctx.arc(node.x, node.y, NODE_R * (node.id === currentSlug ? 3 : 2.5), 0, 2 * Math.PI, false);
-          ctx.fillStyle = node === hoverNode ? colors.hover : colors.highlight;
+          ctx.arc(node.x, node.y, r * 2.0, 0, 2 * Math.PI);
+          ctx.fillStyle = (isHover ? colors.hover : colors.highlight) + '2e';
           ctx.fill();
         }
-      })
-      .nodeLabel((node, globalScale) => {
-        // Show labels only when zoomed in (scale > 0.8 = 80% zoom)
-        if (globalScale > 0.8) {
-          return node.name;
-        }
-        return '';
-      })
-      .nodeCanvasObjectMode(() => 'after')
-      .nodeCanvasObject((node, ctx, globalScale) => {
-        // Determine if labels should be shown at this zoom level
+
+        // Node shape
+        ctx.fillStyle = fillColor;
+        drawShape(ctx, identity ? identity.shape : 'circle', node.x, node.y, r);
+
+        // Fade-in label when zoomed (> 0.8 globalScale)
         const shouldShowLabels = globalScale > 0.8;
-        
-        // Initialize opacity if not exists
-        if (!labelOpacity.has(node.id)) {
-          labelOpacity.set(node.id, shouldShowLabels ? 1 : 0);
-        }
-        
-        // Get current opacity
+        if (!labelOpacity.has(node.id)) labelOpacity.set(node.id, shouldShowLabels ? 1 : 0);
         let opacity = labelOpacity.get(node.id);
-        
-        // Animate opacity towards target (0 or 1) over 1 second
-        const fadeSpeed = 0.016; // Approximately 1 second at 60fps
-        if (shouldShowLabels && opacity < 1) {
-          opacity = Math.min(1, opacity + fadeSpeed);
-          labelOpacity.set(node.id, opacity);
-        } else if (!shouldShowLabels && opacity > 0) {
-          opacity = Math.max(0, opacity - fadeSpeed);
-          labelOpacity.set(node.id, opacity);
-        }
-        
-        // Draw label with opacity
+        const fadeSpeed = 0.016;
+        if (shouldShowLabels && opacity < 1) opacity = Math.min(1, opacity + fadeSpeed);
+        else if (!shouldShowLabels && opacity > 0) opacity = Math.max(0, opacity - fadeSpeed);
+        labelOpacity.set(node.id, opacity);
+
         if (opacity > 0) {
-          const label = node.name;
           const fontSize = 12 / globalScale;
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.globalAlpha = opacity;
           ctx.fillStyle = colors.labelColor;
-          ctx.fillText(label, node.x, node.y + NODE_R * 2.5);
-          ctx.globalAlpha = 1; // Reset alpha
+          ctx.fillText(node.name, node.x, node.y + r * 2.2);
+          ctx.globalAlpha = 1;
         }
       })
       .onNodeHover(node => {
@@ -264,6 +410,9 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
         }
       });
     
+    updateLegend(data);
+    updateFilterButton();
+
     // Center on current node if it exists
     setTimeout(() => {
       const currentNode = data.nodes.find(n => n.id === currentSlug);
@@ -289,21 +438,12 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
       requestAnimationFrame(animateDashes);
     })();
     
-    // Listen for theme changes
+    // Listen for theme changes — node colors are drawn in canvas so only bg+links need updating
     const observer = new MutationObserver(() => {
       colors = getThemeColors();
-      // Force graph redraw to update all colors including background
       graphInstance
         .backgroundColor(colors.background)
-        .nodeColor(node => {
-          if (node.id === currentSlug) return colors.current;
-          if (highlightNodes.has(node)) return colors.highlight;
-          return node.type === 'tag' ? colors.tag : colors.document;
-        })
-        .linkColor(link => {
-          if (highlightLinks.has(link)) return colors.highlight;
-          return link.type === 'tag' ? colors.tagLink : colors.link;
-        });
+        .linkColor(link => highlightLinks.has(link) ? colors.highlight : link.type === 'tag' ? colors.tagLink : colors.link);
     });
     
     observer.observe(document.documentElement, {
@@ -312,31 +452,47 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
     });
   }
 
+  // Toggle public/all filter while graph is open
+  function applyGraphFilter() {
+    if (!graphInstance || !graphData) return;
+    const data = showAll ? graphData : filterPublicData(graphData);
+    crossLinkNodes(data);
+    highlightNodes.clear();
+    highlightLinks.clear();
+    hoverNode = null;
+    labelOpacity.clear();
+    graphInstance.graphData(data);
+    updateLegend(data);
+    updateFilterButton();
+  }
+
   // Center on current page
   async function centerOnCurrent() {
-    if (!graphData) await initGraph();
-    if (graphInstance && graphData) {
-      const currentNode = graphData.nodes.find(n => n.id === currentSlug);
-      if (currentNode) {
-        graphInstance.centerAt(currentNode.x, currentNode.y, 1000);
-        graphInstance.zoom(2, 1000);
-      }
+    if (!graphInstance) return;
+    const activeNodes = graphInstance.graphData().nodes;
+    const currentNode = activeNodes.find(n => n.id === currentSlug);
+    if (currentNode) {
+      graphInstance.centerAt(currentNode.x, currentNode.y, 1000);
+      graphInstance.zoom(2, 1000);
     }
   }
 
   const handleGraphShortcut = (e) => {
     if (e.defaultPrevented) return;
-    // Only trigger if not typing in an input field
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    
+
+    const modal = document.getElementById('graph-modal');
+    const isOpen = modal?.classList.contains('visible');
+
     if (e.key.toLowerCase() === 'g') {
       e.preventDefault();
       toggleModal();
-    } else if (e.key === 'Escape') {
-      const modal = document.getElementById('graph-modal');
-      if (modal.classList.contains('visible')) {
-        toggleModal();
-      }
+    } else if (e.key.toLowerCase() === 't' && isOpen) {
+      e.preventDefault();
+      showAll = !showAll;
+      applyGraphFilter();
+    } else if (e.key === 'Escape' && isOpen) {
+      toggleModal();
     }
   };
 
@@ -368,6 +524,10 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
     void setModalOpen(false, 'local');
   });
   document.getElementById('graph-center')?.addEventListener('click', centerOnCurrent);
+  document.getElementById('graph-toggle-filter')?.addEventListener('click', () => {
+    showAll = !showAll;
+    applyGraphFilter();
+  });
   
   document.getElementById('graph-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'graph-modal') {
@@ -496,6 +656,11 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
     background: #f87171;
   }
 
+  /* Folder identity swatches — color set dynamically by JS */
+  .legend-folder {
+    border-radius: 2px; /* square-ish to hint at custom shapes */
+  }
+
   .graph-hud-right button {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -509,6 +674,21 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
     justify-content: center;
     font-size: 1.1rem;
     transition: all 0.2s;
+  }
+
+  #graph-toggle-filter {
+    width: auto;
+    padding: 0 0.6rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    text-transform: lowercase;
+    opacity: 0.7;
+  }
+
+  #graph-toggle-filter[data-all="true"] {
+    opacity: 1;
+    border-color: rgba(255, 255, 255, 0.5);
   }
 
   .graph-hud-right button:hover {
@@ -535,6 +715,10 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
     background: rgba(0, 0, 0, 0.05);
     border-color: rgba(0, 0, 0, 0.1);
     color: rgb(30 30 30);
+  }
+
+  :global(:not(.dark)) #graph-toggle-filter[data-all="true"] {
+    border-color: rgba(0, 0, 0, 0.35);
   }
 
   :global(:not(.dark)) .graph-hud-right button:hover {

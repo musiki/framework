@@ -93,11 +93,14 @@ export function buildGraphData() {
     
     // Add document node
     if (!nodeIds.has(slug)) {
+      const parts = posix.split('/');
+      const publicFolder = parts[0] === 'public' && parts.length > 1 ? parts[1] : null;
       nodes.push({
         id: slug,
         name: title,
         type: 'document',
         group: slug.split('/')[0] || 'root',
+        publicFolder: publicFolder || null,
         img: fm.data.img || fm.data.coverUrl || fm.data.image || fm.data.photo || ''
       });
       nodeIds.add(slug);

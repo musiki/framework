@@ -84,6 +84,7 @@ const presentationHref = hasPresentationTheme ? route.presentationHref : '';
     id={entry.id}
     tags={tags}
     presentationHref={presentationHref}
+    frontmatter={entry.data as Record<string, unknown>}
   >
     <Content />
   </WikiLayout>

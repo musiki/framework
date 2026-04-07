@@ -41,7 +41,9 @@
       "Bash(git:*)",
       "Bash(gh run:*)",
       "Bash(npm run:*)",
-      "Bash(node --input-type=module --eval ':*)"
+      "Bash(node --input-type=module --eval ':*)",
+      "Bash(node src/scripts/build-graph-data.mjs)",
+      "Bash(node:*)"
     ]
   }
 }

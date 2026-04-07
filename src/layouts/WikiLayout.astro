@@ -12,10 +12,17 @@ type Props = CollectionEntry<'content'>['data'] & {
   id?: string;
   tags?: string[];
   heroImage?: ImageMetadata | SvgComponent | string;
+  frontmatter?: Record<string, unknown>;
 };
-const { title, description, heroImage, id: contentId, presentationHref = '' } = Astro.props as Props & {
-  presentationHref?: string;
-};
+const {
+  title,
+  description,
+  heroImage,
+  id: contentId,
+  presentationHref = '',
+  frontmatter: rawFrontmatter = {},
+} = Astro.props as Props & { presentationHref?: string };
+
 const pageTitle = String(title ?? '');
 const pageDescription = String(description ?? '');
 
@@ -27,53 +34,85 @@ const resolvedHeroImage =
       : undefined;
 
 const HeroComponent = typeof heroImage === 'function' ? (heroImage as SvgComponent) : undefined;
-type CommitHistoryEntry = {
-  author: string;
-  email: string;
-  date: string;
-  sha: string;
-  shortSha: string;
-  url: string | null;
+
+// ── YAML frontmatter display ──────────────────────────────────────────────
+const SKIP_FIELDS = new Set([
+  'title','description','summary','subtitle','slug','shortSlug',
+  'theme','slideTheme','revealTheme','type','status','public_status',
+  'public_path','public','publish','coverImage','coverSmallUrl',
+  'assignment','points','visibility','chapter','order','level',
+  'duration','instructor','instructors','isbn10','isbn13',
+  'tag', // use tags instead
+]);
+
+const isImageUrl = (v: unknown): v is string =>
+  typeof v === 'string' &&
+  /^https?:\/\/.+\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(v);
+
+const isUrl = (v: unknown): v is string =>
+  typeof v === 'string' && /^https?:\/\//i.test(v) && !isImageUrl(v);
+
+const formatKey = (key: string) =>
+  key.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+type FmValue = string | number | boolean | string[];
+
+const normalizeFmValue = (v: unknown): FmValue | null => {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') return v.trim() || null;
+  if (Array.isArray(v)) {
+    const filtered = v.filter((x) => x !== null && x !== undefined && x !== '').map(String);
+    return filtered.length > 0 ? filtered : null;
+  }
+  return null;
 };
 
-// Compute last update info during build
-let uploaderAuthor = 'Unknown';
-let uploaderDate = 'Unknown';
-let lastAuthor = 'Unknown';
-let lastDate = 'Unknown';
-let commitSha = 'Unknown';
-let repoOwner = process.env.VERCEL_GIT_REPO_OWNER || 'unknown';
-let repoSlug = process.env.VERCEL_GIT_REPO_SLUG || 'unknown';
+// Find image field first (render as hero)
+const imgField = rawFrontmatter?.img || rawFrontmatter?.image || rawFrontmatter?.cover;
+const metaImageUrl = isImageUrl(imgField) ? imgField : null;
+
+const metaFields: Array<[string, FmValue]> = Object.entries(rawFrontmatter || {})
+  .filter(([key]) => !SKIP_FIELDS.has(key) && key !== 'img' && key !== 'image' && key !== 'cover')
+  .map(([key, val]) => [key, normalizeFmValue(val)] as [string, FmValue | null])
+  .filter((entry): entry is [string, FmValue] => entry[1] !== null);
+
+// ── Git history ───────────────────────────────────────────────────────────
+type CommitHistoryEntry = {
+  author: string; email: string; date: string;
+  sha: string; shortSha: string; url: string | null;
+};
+
+let uploaderAuthor = '';
+let uploaderDate = '';
+let lastAuthor = '';
+let lastDate = '';
+let commitSha = '';
 let historyEntries: CommitHistoryEntry[] = [];
+const repoOwner = process.env.VERCEL_GIT_REPO_OWNER || 'unknown';
+const repoSlug  = process.env.VERCEL_GIT_REPO_SLUG  || 'unknown';
 const contentRoot = path.join(process.cwd(), 'src/content');
 let slugPathCache: Map<string, string> | null = null;
 
 const formatDate = (iso: string) => {
   const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return 'Unknown';
-  return parsed.toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' });
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
 };
 const shellEscape = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 const toSlugPart = (value: unknown) =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  String(value || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 const listMarkdownFiles = (dirPath: string): string[] => {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   const output: string[] = [];
   for (const entry of entries) {
     const absPath = path.join(dirPath, entry.name);
-    if (entry.isDirectory()) {
-      output.push(...listMarkdownFiles(absPath));
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    if (!/\.(md|mdx)$/i.test(entry.name)) continue;
+    if (entry.isDirectory()) { output.push(...listMarkdownFiles(absPath)); continue; }
+    if (!entry.isFile() || !/\.(md|mdx)$/i.test(entry.name)) continue;
     output.push(absPath);
   }
   return output;
@@ -85,11 +124,7 @@ const ensureSlugPathCache = () => {
   for (const absPath of listMarkdownFiles(contentRoot)) {
     const relPath = path.relative(contentRoot, absPath).replace(/\\/g, '/');
     const withoutExt = relPath.replace(/\.(md|mdx)$/i, '');
-    const slugKey = withoutExt
-      .split('/')
-      .map((part) => toSlugPart(part))
-      .filter(Boolean)
-      .join('/');
+    const slugKey = withoutExt.split('/').map(toSlugPart).filter(Boolean).join('/');
     if (!slugKey || cache.has(slugKey)) continue;
     cache.set(slugKey, absPath);
   }
@@ -99,71 +134,43 @@ const ensureSlugPathCache = () => {
 
 const resolveContentPath = (rawId: string) => {
   const normalized = rawId.replace(/\\/g, '/').trim();
-  const directCandidates = normalized.match(/\.(md|mdx)$/i)
-    ? [normalized]
-    : [normalized, `${normalized}.md`, `${normalized}.mdx`];
-
-  for (const relPath of directCandidates) {
+  const candidates = normalized.match(/\.(md|mdx)$/i)
+    ? [normalized] : [normalized, `${normalized}.md`, `${normalized}.mdx`];
+  for (const relPath of candidates) {
     const absPath = path.join(contentRoot, relPath);
-    if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
-      return absPath;
-    }
+    if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) return absPath;
   }
-
-  const slugKey = normalized
-    .replace(/\.(md|mdx)$/i, '')
-    .split('/')
-    .map((part) => toSlugPart(part))
-    .filter(Boolean)
-    .join('/');
-  if (slugKey) {
-    const bySlug = ensureSlugPathCache().get(slugKey);
-    if (bySlug && fs.existsSync(bySlug)) return bySlug;
-  }
-
+  const slugKey = normalized.replace(/\.(md|mdx)$/i, '').split('/').map(toSlugPart).filter(Boolean).join('/');
+  if (slugKey) { const bySlug = ensureSlugPathCache().get(slugKey); if (bySlug && fs.existsSync(bySlug)) return bySlug; }
   return null;
 };
 
 try {
   if (typeof contentId === 'string' && contentId.trim()) {
     const filePath = resolveContentPath(contentId);
-    if (!filePath) {
-      console.warn(`Could not resolve content file for id="${contentId}"`);
-    } else {
-      const escapedPath = shellEscape(filePath);
-      const historyRaw = execSync(
-        `git log --follow --format="%an|%ae|%cI|%H" -- ${escapedPath}`
-      )
-        .toString()
-        .trim();
-
-      const commits = historyRaw
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => {
-          const [name = '', email = '', date = '', sha = ''] = line.split('|');
-          return { name, email, date, sha };
-        });
-
+    if (filePath) {
+      const historyRaw = execSync(`git log --follow --format="%an|%ae|%cI|%H" -- ${shellEscape(filePath)}`).toString().trim();
+      const commits = historyRaw.split('\n').filter(Boolean).map((line) => {
+        const [name = '', email = '', date = '', sha = ''] = line.split('|');
+        return { name, email, date, sha };
+      });
       if (commits.length > 0) {
         const newest = commits[0];
-        commitSha = newest.sha || 'Unknown';
-        lastAuthor = newest.name || newest.email || 'Unknown';
-        lastDate = formatDate(newest.date);
-
+        commitSha  = newest.sha || '';
+        lastAuthor = newest.name || newest.email || '';
+        lastDate   = formatDate(newest.date);
         const oldest = commits[commits.length - 1];
-        uploaderAuthor = oldest.name || oldest.email || 'Unknown';
-        uploaderDate = formatDate(oldest.date);
-
-        historyEntries = commits.map((commit) => {
-          const safeSha = commit.sha || '';
+        uploaderAuthor = oldest.name || oldest.email || '';
+        uploaderDate   = formatDate(oldest.date);
+        historyEntries = commits.map((c) => {
+          const safeSha = c.sha || '';
           const canLink = safeSha && repoOwner !== 'unknown' && repoSlug !== 'unknown';
           return {
-            author: commit.name || commit.email || 'Unknown',
-            email: commit.email || '',
-            date: formatDate(commit.date),
-            sha: safeSha || 'Unknown',
-            shortSha: safeSha ? safeSha.slice(0, 7) : 'Unknown',
+            author: c.name || c.email || '',
+            email: c.email || '',
+            date: formatDate(c.date),
+            sha: safeSha,
+            shortSha: safeSha ? safeSha.slice(0, 7) : '',
             url: canLink ? `https://github.com/${repoOwner}/${repoSlug}/commit/${safeSha}` : null,
           };
         });
@@ -171,13 +178,12 @@ try {
     }
   }
 } catch (e) {
-  const errorMessage = e instanceof Error ? e.message : String(e);
-  console.warn(`Failed to get git info for ${contentId || 'unknown id'}: ${errorMessage}`);
+  // git info unavailable — silently skip
 }
-const commitUrl =
-  commitSha !== 'Unknown' && repoOwner !== 'unknown' && repoSlug !== 'unknown'
-    ? `https://github.com/${repoOwner}/${repoSlug}/commit/${commitSha}`
-    : null;
+
+const commitUrl = commitSha && repoOwner !== 'unknown' && repoSlug !== 'unknown'
+  ? `https://github.com/${repoOwner}/${repoSlug}/commit/${commitSha}`
+  : null;
 ---
 
 <html lang="es" class="scroll-smooth">
@@ -189,384 +195,274 @@ const commitUrl =
     <script is:inline>
       let wikiMermaidConfigured = false;
       let wikiMermaidRenderSequence = 0;
-
-      const normalizeMermaidSource = (value) =>
-        String(value || '')
-          .replace(/\r\n?/g, '\n')
-          .trim();
-
+      const normalizeMermaidSource = (v) => String(v || '').replace(/\r\n?/g, '\n').trim();
       const renderWikiMermaid = (attempt = 0) => {
         const api = window.mermaid;
         if (!api?.render) {
-          if (attempt < 8) {
-            window.setTimeout(() => renderWikiMermaid(attempt + 1), 90 * (attempt + 1));
-          }
+          if (attempt < 8) window.setTimeout(() => renderWikiMermaid(attempt + 1), 90 * (attempt + 1));
           return;
         }
-
         if (!wikiMermaidConfigured) {
-          api.initialize({
-            startOnLoad: false,
-            theme: 'default',
-            securityLevel: 'loose',
-            suppressErrorRendering: false,
-          });
+          api.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose', suppressErrorRendering: false });
           wikiMermaidConfigured = true;
         }
-
-        const nodes = Array.from(document.querySelectorAll('.mermaid'))
-          .filter((node) => node instanceof HTMLElement);
-        if (nodes.length === 0) return;
-
-        const renderTasks = nodes.map(async (node) => {
+        const nodes = Array.from(document.querySelectorAll('.mermaid')).filter((n) => n instanceof HTMLElement);
+        if (!nodes.length) return;
+        const tasks = nodes.map(async (node) => {
           const source = normalizeMermaidSource(node.dataset.mermaidSource || node.textContent || '');
           if (!source) return;
-          if (
-            node.dataset.mermaidRendered === 'true' &&
-            node.dataset.mermaidSource === source
-          ) {
-            return;
-          }
-
+          if (node.dataset.mermaidRendered === 'true' && node.dataset.mermaidSource === source) return;
           node.dataset.mermaidSource = source;
           node.textContent = source;
-
-          const renderId = `wiki-mermaid-${Date.now()}-${wikiMermaidRenderSequence += 1}`;
-          const result = await api.render(renderId, source);
+          const id = `wiki-mermaid-${Date.now()}-${wikiMermaidRenderSequence += 1}`;
+          const result = await api.render(id, source);
           node.innerHTML = result?.svg || '';
-          if (typeof result?.bindFunctions === 'function') {
-            result.bindFunctions(node);
-          }
+          if (typeof result?.bindFunctions === 'function') result.bindFunctions(node);
           node.dataset.mermaidRendered = 'true';
         });
-
-        Promise.all(renderTasks).catch((error) => {
-          console.error('Wiki mermaid render error:', error);
-          nodes.forEach((node) => {
-            delete node.dataset.mermaidRendered;
-            const source = normalizeMermaidSource(node.dataset.mermaidSource || node.textContent || '');
-            if (source) node.textContent = source;
-          });
-          if (attempt < 3) {
-            window.setTimeout(() => renderWikiMermaid(attempt + 1), 180 * (attempt + 1));
-          }
+        Promise.all(tasks).catch((err) => {
+          console.error('Wiki mermaid render error:', err);
+          nodes.forEach((n) => { delete n.dataset.mermaidRendered; const s = normalizeMermaidSource(n.dataset.mermaidSource || n.textContent || ''); if (s) n.textContent = s; });
+          if (attempt < 3) window.setTimeout(() => renderWikiMermaid(attempt + 1), 180 * (attempt + 1));
         });
       };
-
       document.addEventListener('DOMContentLoaded', () => renderWikiMermaid());
       document.addEventListener('astro:page-load', () => renderWikiMermaid());
     </script>
 
-    <!-- Lenis smooth scroll (very light ~9kb) -->
+    <!-- Lenis smooth scroll -->
     <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/dist/lenis.min.js" defer></script>
 
     <style is:global>
-      /* Fade-in animation for sections */
-      .fade-in-section {
-        opacity: 1;
-        transform: none;
-      }
+      /* ── Fade-in ── */
+      .fade-in-section { opacity: 1; transform: none; }
+      .fade-in-section.is-visible { opacity: 1; transform: none; }
 
-      .fade-in-section.is-visible {
-        opacity: 1;
-        transform: none;
-      }
+      /* ── Article header ── */
+      .article-header { padding: 2rem 0 1.2rem; margin-bottom: 1.5rem; }
+      .article-header h1 { font-size: 2rem; font-weight: 700; color: var(--c-fg); margin: 0; }
+      .article-header p.description { margin-top: 0.6rem; color: color-mix(in srgb, var(--c-fg) 55%, transparent); font-size: 1.05rem; line-height: 1.5; }
 
-      /* Minimal title – left aligned, uses existing variables */
-      .article-header {
-        padding: 2rem 0 1.5rem;
-        margin-bottom: 2rem;
-      }
-
-      .article-header h1 {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: rgb(var(--black));
-        margin: 0;
-        text-align: left;
-      }
-
-      .dark .article-header h1 {
-        color: rgb(var(--black));
-      }
-
-      .article-header p.description {
-        margin-top: 0.75rem;
-        color: rgb(var(--gray));
-        font-size: 1.15rem;
-        line-height: 1.5;
-      }
-
-      .dark .article-header p.description {
-        color: rgb(var(--gray));
-      }
-
-      /* Main layout with sidebar */
-      main {
+      /* ── Main layout: article + sidebar ── */
+      main.wiki-layout {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 1fr 220px;
         width: 100%;
-        max-width: 1180px;
+        max-width: 1120px;
         margin: 0 auto;
         padding: 0 clamp(1rem, 2vw, 1.5rem) 4rem;
-        gap: 2rem;
+        gap: 0;
+        align-items: start;
       }
 
-      /* Improve spacing in prose while keeping your font/line-height */
-      .prose {
-        font-size: clamp(1rem, 0.98rem + 0.22vw, 1.06rem);
-        line-height: 1.78;
+      @media (max-width: 900px) {
+        main.wiki-layout {
+          grid-template-columns: 1fr;
+        }
+        main.wiki-layout > article {
+          order: 2;
+        }
       }
 
-      .prose h2, .prose h3, .prose h4 {
-        color: rgb(var(--black));
-        margin-top: calc(2.6rem + 1.2em);
-        margin-bottom: 0.95rem;
-      }
+      /* ── Prose ── */
+      .prose { font-size: clamp(1rem, 0.98rem + 0.22vw, 1.06rem); line-height: 1.78; }
+      .prose h2, .prose h3, .prose h4 { color: var(--c-fg); margin-top: calc(2.4rem + 1em); margin-bottom: 0.85rem; }
+      .prose > * { max-width: 72ch; }
+      .prose > :is(pre, .code-wrapper, .mermaid, table, figure, .callout) { max-width: 100%; }
+      blockquote { border-left-color: var(--c-link); background: color-mix(in srgb, var(--c-border) 30%, transparent); }
 
-      .prose > * {
-        max-width: 74ch;
-      }
-
-      .prose > :is(pre, .code-wrapper, .mermaid, table, figure, .callout) {
-        max-width: 100%;
-      }
-
-      .dark .prose h2, .dark .prose h3, .dark .prose h4 {
-        color: rgb(var(--black));
-      }
-
-      /* Better blockquote contrast in both modes */
-      blockquote {
-        border-left-color: var(--accent);
-        background: rgba(var(--gray-light), 0.25);
-      }
-
-      .dark blockquote {
-        background: rgba(var(--gray-dark), 0.18);
-      }
-
-      /* Callouts already look good – just tiny contrast tweak */
-      .callout {
-        border-radius: 0;
-      }
-
-      .svg-hero svg {
-        width: 100% !important;
-        height: auto !important;
-        max-width: 100% !important;
-        display: block;
-      }
-
-      .hero-image-container {
-        min-height: 100px;
-        background: transparent;
-        padding-top: 2rem;
-        cursor: zoom-in;
-        overflow: hidden;
-        position: relative;
-        transition: background-color 0.3s ease;
-      }
-
-      .hero-image-container.is-zoomed {
-        cursor: zoom-out;
-        background-color: var(--c-bg);
-        z-index: 50;
-      }
-
-      .hero-image-container .svg-hero,
-      .hero-image-container img {
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        transform-origin: center;
-        display: block;
-      }
-
-      .hero-image-container.is-zoomed .svg-hero,
-      .hero-image-container.is-zoomed img {
-        transform: scale(6);
-      }
-
-      /* Fix article header background in dark theme */
-      .article-header.fade-in-section.is-visible {
-        background: transparent !important;
-      }
-
-      /* Use theme variables from theme.css/global.css */
-      html, body {
-        background-color: var(--c-bg) !important;
-        color: var(--c-fg);
-      }
-
-      /* Code copy button – match your style */
-      .copy-btn {
-        background: rgba(var(--gray-light), 0.6);
-        color: rgb(var(--gray-dark));
-        border: 1px solid rgba(var(--gray), 0.4);
-      }
-
-      .dark .copy-btn {
-        background: rgba(var(--gray-dark), 0.5);
-        color: rgb(var(--gray));
-        border-color: rgba(var(--gray), 0.35);
-      }
-
-      .copy-btn.copied {
-        background: var(--accent);
-        color: white;
-      }
-
-      /* Infobox sidebar */
+      /* ── Infobox sidebar — wireframe ── */
       #infobox-sidebar {
         position: sticky;
-        top: 4rem;
+        top: 4.5rem;
         align-self: start;
-        width: 280px;
-        max-width: 280px;
-        min-width: 0;
-        background: rgba(var(--gray-light), 0.15);
-        border-left: 1px solid rgba(var(--gray), 0.3);
-        padding: 1.5rem;
+        border-left: 1px solid var(--c-border);
+        padding: 1.2rem 0 1.2rem 1.2rem;
+        font-size: 0.78rem;
+        line-height: 1.45;
         overflow: hidden;
-        opacity: 1;
-        transition: transform 0.25s ease, opacity 0.2s ease, width 0.25s ease, max-width 0.25s ease, padding 0.25s ease;
-        transform: translateX(0);
+        transition: opacity 0.2s;
       }
 
       #infobox-sidebar.hidden {
-        width: 0;
-        max-width: 0;
-        padding: 0;
-        border-left-color: transparent;
-        opacity: 0;
-        transform: translateX(14px);
-        pointer-events: none;
+        display: none;
       }
 
-      .dark #infobox-sidebar {
-        background: rgba(var(--gray-dark), 0.25);
-        border-left-color: rgba(var(--gray), 0.3);
+      @media (max-width: 900px) {
+        #infobox-sidebar {
+          order: 1;
+          position: static;
+          border-left: none;
+          border-bottom: 1px solid var(--c-border);
+          padding: 0 0 1.2rem;
+          margin-bottom: 1.5rem;
+        }
       }
 
-      #infobox-sidebar h3 {
-        font-size: 1.1rem;
-        margin: 0 0 1rem;
-        color: rgb(var(--black));
+      /* ── Meta fields (YAML) ── */
+      .wiki-meta-image {
+        display: block;
+        width: 100%;
+        max-height: 140px;
+        object-fit: contain;
+        object-position: left top;
+        margin-bottom: 1rem;
       }
 
-      .dark #infobox-sidebar h3 {
-        color: rgb(var(--black));
-      }
-
-      #infobox-sidebar dl {
+      .wiki-meta-list {
         margin: 0;
+        display: grid;
+        gap: 0.45rem;
       }
 
-      #infobox-sidebar dt {
-        font-weight: bold;
-        color: rgb(var(--gray));
+      .wiki-meta-row {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.3rem 0.55rem;
+        align-items: baseline;
       }
 
-      .dark #infobox-sidebar dt {
-        color: rgb(var(--gray));
+      .wiki-meta-key {
+        color: color-mix(in srgb, var(--c-fg) 45%, transparent);
+        font-size: 0.68rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        white-space: nowrap;
       }
 
-      #infobox-sidebar dd {
-        margin: 0 0 0.75rem;
+      .wiki-meta-value {
+        color: var(--c-fg);
+        word-break: break-word;
       }
 
-      #infobox-sidebar a {
-        color: var(--accent);
+      .wiki-meta-value a {
+        color: var(--c-link);
+        text-decoration: none;
+      }
+      .wiki-meta-value a:hover { text-decoration: underline; }
+
+      .wiki-meta-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
       }
 
-      .history-section {
+      .wiki-meta-tag {
+        display: inline-block;
+        padding: 0.08rem 0.4rem;
+        border: 1px solid var(--c-border);
+        border-radius: 9999px;
+        font-size: 0.68rem;
+        color: color-mix(in srgb, var(--c-fg) 70%, transparent);
+        line-height: 1.5;
+      }
+
+      /* ── Details sections (Info / History) ── */
+      .wiki-details-section {
         margin-top: 1rem;
-        border-top: 1px solid rgba(var(--gray), 0.25);
-        padding-top: 0.8rem;
+        border-top: 1px solid var(--c-border);
+        padding-top: 0.7rem;
       }
 
-      .history-section summary {
+      .wiki-details-section summary {
         cursor: pointer;
-        font-weight: bold;
-        color: rgb(var(--gray));
-        margin-bottom: 0.6rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: color-mix(in srgb, var(--c-fg) 50%, transparent);
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        user-select: none;
       }
 
-      .history-list {
+      .wiki-details-section summary::before {
+        content: '›';
+        display: inline-block;
+        transition: transform 0.15s;
+        font-size: 0.85rem;
+      }
+
+      .wiki-details-section[open] summary::before {
+        transform: rotate(90deg);
+      }
+
+      .wiki-details-section summary::-webkit-details-marker { display: none; }
+
+      .wiki-info-grid {
+        margin: 0.7rem 0 0;
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .wiki-info-row {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.2rem 0.5rem;
+        align-items: baseline;
+      }
+
+      .wiki-info-key {
+        color: color-mix(in srgb, var(--c-fg) 40%, transparent);
+        font-size: 0.66rem;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+
+      .wiki-info-value {
+        color: var(--c-fg);
+        font-size: 0.74rem;
+      }
+
+      .wiki-info-value a { color: var(--c-link); text-decoration: none; }
+      .wiki-info-value a:hover { text-decoration: underline; }
+
+      /* ── History list ── */
+      .wiki-history-list {
         list-style: none;
-        margin: 0;
+        margin: 0.7rem 0 0;
         padding: 0;
-        max-height: min(42vh, 320px);
+        max-height: min(38vh, 280px);
         overflow-y: auto;
         display: grid;
-        gap: 0.75rem;
+        gap: 0.6rem;
       }
 
-      .history-item {
-        padding-bottom: 0.7rem;
-        border-bottom: 1px dashed rgba(var(--gray), 0.25);
+      .wiki-history-item {
+        padding-bottom: 0.55rem;
+        border-bottom: 1px solid color-mix(in srgb, var(--c-border) 60%, transparent);
       }
 
-      .history-item:last-child {
-        border-bottom: none;
-        padding-bottom: 0;
-      }
+      .wiki-history-item:last-child { border-bottom: none; padding-bottom: 0; }
 
-      .history-author {
-        display: block;
-        font-weight: 600;
-      }
+      .wiki-history-author { font-weight: 600; display: block; font-size: 0.72rem; }
+      .wiki-history-date { display: block; font-size: 0.66rem; color: color-mix(in srgb, var(--c-fg) 45%, transparent); }
+      .wiki-history-sha { display: block; font-size: 0.66rem; color: color-mix(in srgb, var(--c-fg) 40%, transparent); margin-top: 0.1rem; font-family: monospace; }
+      .wiki-history-sha a { color: var(--c-link); }
 
-      .history-date,
-      .history-meta {
-        display: block;
-        font-size: 0.9rem;
-        color: rgb(var(--gray));
-      }
+      /* ── Hero image ── */
+      .hero-image-container { min-height: 100px; background: transparent; padding-top: 2rem; cursor: zoom-in; overflow: hidden; position: relative; transition: background-color 0.3s; }
+      .hero-image-container.is-zoomed { cursor: zoom-out; background-color: var(--c-bg); z-index: 50; }
+      .hero-image-container .svg-hero, .hero-image-container img { transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); transform-origin: center; display: block; }
+      .hero-image-container.is-zoomed .svg-hero, .hero-image-container.is-zoomed img { transform: scale(6); }
+      .svg-hero svg { width: 100% !important; height: auto !important; max-width: 100% !important; display: block; }
 
-      .history-meta {
-        margin-top: 0.15rem;
-      }
+      /* ── Code copy button ── */
+      .copy-btn { background: color-mix(in srgb, var(--c-border) 50%, transparent); color: color-mix(in srgb, var(--c-fg) 60%, transparent); border: 1px solid var(--c-border); border-radius: 3px; padding: 0.2rem 0.55rem; font-size: 0.7rem; cursor: pointer; }
+      .copy-btn.copied { background: var(--c-link); color: #fff; border-color: transparent; }
 
-      @media (max-width: 1024px) {
-        main { grid-template-columns: 1fr; }
-        #infobox-sidebar {
-          position: fixed;
-          top: 4.2rem;
-          right: 0;
-          height: calc(100vh - 4.2rem);
-          max-height: calc(100vh - 4.2rem);
-          width: min(88vw, 320px);
-          max-width: min(88vw, 320px);
-          overflow-y: auto;
-          z-index: 1200;
-          background: rgba(var(--gray-light), 0.97);
-          box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
-          transform: translateX(100%);
-          opacity: 0;
-          pointer-events: none;
-        }
-        #infobox-sidebar.hidden {
-          width: min(88vw, 320px);
-          max-width: min(88vw, 320px);
-          padding: 1.5rem;
-          border-left-color: rgba(var(--gray), 0.3);
-          transform: translateX(100%);
-          opacity: 0;
-          pointer-events: none;
-        }
-        #infobox-sidebar:not(.hidden) {
-          transform: translateX(0);
-          opacity: 1;
-          pointer-events: auto;
-        }
-      }
+      html, body { background-color: var(--c-bg) !important; color: var(--c-fg); }
+      .article-header.fade-in-section.is-visible { background: transparent !important; }
     </style>
   </head>
 
   <body>
     <Header showPageInfoToggle={true} presentationHref={presentationHref} />
 
-    <main>
+    <main class="wiki-layout">
+      <!-- ── Article ── -->
       <article>
         {heroImage && (
           <div class="mb-8 hero-image-container">
@@ -598,225 +494,189 @@ const commitUrl =
         </div>
       </article>
 
-      <!-- Foldable right sidebar infobox -->
-      <aside id="infobox-sidebar" class="fade-in-section hidden">
-        <h3>Info</h3>
-        <dl>
-          <dt>Subido por:</dt>
-          <dd>{uploaderAuthor}</dd>
-          <dt>Fecha de carga:</dt>
-          <dd>{uploaderDate}</dd>
-          <dt>Ultima actualizacion:</dt>
-          <dd>{lastDate}</dd>
-          <dt>Ultimo autor:</dt>
-          <dd>{lastAuthor}</dd>
-          <dt>Commit:</dt>
-          <dd>
-            {commitUrl ? (
-              <a href={commitUrl} target="_blank" rel="noopener noreferrer">{commitSha.slice(0, 7)}</a>
-            ) : (
-              <span>{commitSha === 'Unknown' ? 'Unknown' : commitSha.slice(0, 7)}</span>
-            )}
-          </dd>
-          <!-- Add more auto info here, e.g., from frontmatter -->
-        {Astro.props.tags && (
-            <>
-              <dt>Tags:</dt>
-              <dd>{Astro.props.tags.join(', ')}</dd>
-            </>
-          )}
-        </dl>
+      <!-- ── Wireframe sidebar ── -->
+      <aside id="infobox-sidebar" class="fade-in-section">
 
-        <details class="history-section">
-          <summary>History ({historyEntries.length})</summary>
-          {historyEntries.length > 0 ? (
-            <ol class="history-list">
+        {/* Image at top if available */}
+        {metaImageUrl && (
+          <img src={metaImageUrl} alt="" class="wiki-meta-image" loading="lazy" />
+        )}
+
+        {/* YAML frontmatter fields */}
+        {metaFields.length > 0 && (
+          <dl class="wiki-meta-list">
+            {metaFields.map(([key, val]) => (
+              <div class="wiki-meta-row">
+                <dt class="wiki-meta-key">{formatKey(key)}</dt>
+                <dd class="wiki-meta-value">
+                  {Array.isArray(val) ? (
+                    key === 'tags' || key === 'tag' ? (
+                      <span class="wiki-meta-tags">
+                        {val.map((t) => <span class="wiki-meta-tag">{t}</span>)}
+                      </span>
+                    ) : (
+                      val.join(', ')
+                    )
+                  ) : isImageUrl(val) ? (
+                    <img src={val} alt="" style="max-width:100%;max-height:80px;object-fit:contain;" loading="lazy" />
+                  ) : isUrl(val) ? (
+                    <a href={val} target="_blank" rel="noopener noreferrer">
+                      {new URL(val).hostname}
+                    </a>
+                  ) : (
+                    String(val)
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+
+        {/* Info: folded by default */}
+        <details class="wiki-details-section">
+          <summary>Info</summary>
+          <dl class="wiki-info-grid">
+            {uploaderAuthor && (
+              <div class="wiki-info-row">
+                <dt class="wiki-info-key">Subido por</dt>
+                <dd class="wiki-info-value">{uploaderAuthor}</dd>
+              </div>
+            )}
+            {uploaderDate && (
+              <div class="wiki-info-row">
+                <dt class="wiki-info-key">Carga</dt>
+                <dd class="wiki-info-value">{uploaderDate}</dd>
+              </div>
+            )}
+            {lastAuthor && lastAuthor !== uploaderAuthor && (
+              <div class="wiki-info-row">
+                <dt class="wiki-info-key">Editado por</dt>
+                <dd class="wiki-info-value">{lastAuthor}</dd>
+              </div>
+            )}
+            {lastDate && (
+              <div class="wiki-info-row">
+                <dt class="wiki-info-key">Actualización</dt>
+                <dd class="wiki-info-value">{lastDate}</dd>
+              </div>
+            )}
+            {commitSha && (
+              <div class="wiki-info-row">
+                <dt class="wiki-info-key">Commit</dt>
+                <dd class="wiki-info-value">
+                  {commitUrl ? (
+                    <a href={commitUrl} target="_blank" rel="noopener noreferrer">{commitSha.slice(0,7)}</a>
+                  ) : (
+                    <span style="font-family:monospace">{commitSha.slice(0,7)}</span>
+                  )}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </details>
+
+        {/* History: folded by default */}
+        {historyEntries.length > 0 && (
+          <details class="wiki-details-section">
+            <summary>History <span style="opacity:0.5;font-weight:400">({historyEntries.length})</span></summary>
+            <ol class="wiki-history-list">
               {historyEntries.map((entry) => (
-                <li class="history-item">
-                  <span class="history-author">{entry.author}</span>
-                  <span class="history-date">{entry.date}</span>
-                  <span class="history-meta">
+                <li class="wiki-history-item">
+                  <span class="wiki-history-author">{entry.author}</span>
+                  <span class="wiki-history-date">{entry.date}</span>
+                  <span class="wiki-history-sha">
                     {entry.url ? (
                       <a href={entry.url} target="_blank" rel="noopener noreferrer">{entry.shortSha}</a>
-                    ) : (
-                      <span>{entry.shortSha}</span>
-                    )}
-                    {entry.email ? ` - ${entry.email}` : ''}
+                    ) : entry.shortSha}
                   </span>
                 </li>
               ))}
             </ol>
-          ) : (
-            <p class="history-date">Sin historial de commits.</p>
-          )}
-        </details>
+          </details>
+        )}
+
       </aside>
     </main>
 
-    <!-- Scripts -->
-
     <script>
-      // ────────────────────────────────────────────────
-      // Lenis smooth scrolling
-      // ────────────────────────────────────────────────
-      type LenisInstance = {
-        raf: (time: number) => void;
-      };
-
+      // ── Lenis smooth scrolling ──────────────────────────────
+      type LenisInstance = { raf: (time: number) => void };
       type LenisWindow = Window & {
-        Lenis?: new (options: {
-          duration: number;
-          easing: (t: number) => number;
-          smoothWheel: boolean;
-          smoothTouch: boolean;
-        }) => LenisInstance;
+        Lenis?: new (options: { duration: number; easing: (t: number) => number; smoothWheel: boolean; smoothTouch: boolean }) => LenisInstance;
       };
-
       const initLenis = () => {
         const LenisCtor = (window as LenisWindow).Lenis;
-        if (typeof LenisCtor !== 'function') {
-          console.warn('Lenis is not available, skipping smooth scroll.');
-          return;
-        }
-
-        const lenis = new LenisCtor({
-          duration: 1.1,
-          easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-          smoothWheel: true,
-          smoothTouch: false,
-        });
-
-        const raf = (time: number) => {
-          lenis.raf(time);
-          requestAnimationFrame(raf);
-        };
+        if (typeof LenisCtor !== 'function') return;
+        const lenis = new LenisCtor({ duration: 1.1, easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true, smoothTouch: false });
+        const raf = (time: number) => { lenis.raf(time); requestAnimationFrame(raf); };
         requestAnimationFrame(raf);
       };
-
       initLenis();
 
-      // ────────────────────────────────────────────────
-      // IntersectionObserver fade-in
-      // ────────────────────────────────────────────────
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              entry.target.classList.add('is-visible');
-              observer.unobserve(entry.target); // one-time animation
-            }
-          });
-        },
-        { threshold: 0.1, rootMargin: '0px 0px -10% 0px' }
-      );
-
-      document.querySelectorAll('.fade-in-section').forEach((el) => {
-        observer.observe(el);
-      });
-
-      // Re-observe after Astro page load / view transition
-      document.addEventListener('astro:page-load', () => {
-        document.querySelectorAll('.fade-in-section:not(.is-visible)').forEach((el) => {
-          observer.observe(el);
-        });
-      });
-
-      // ────────────────────────────────────────────────
-      // Sidebar toggle from header button + Shift + \
-      // ────────────────────────────────────────────────
+      // ── Sidebar toggle ──────────────────────────────────────
       const toggleInfoSidebar = () => {
         const sidebar = document.getElementById('infobox-sidebar');
         if (sidebar) sidebar.classList.toggle('hidden');
       };
-
       window.addEventListener('wiki:toggle-info', toggleInfoSidebar);
-      document.addEventListener(
-        'astro:before-swap',
-        () => window.removeEventListener('wiki:toggle-info', toggleInfoSidebar),
-        { once: true }
-      );
+      document.addEventListener('astro:before-swap', () => window.removeEventListener('wiki:toggle-info', toggleInfoSidebar), { once: true });
+      document.addEventListener('keydown', (e) => { if (e.shiftKey && e.key === '\\') toggleInfoSidebar(); });
 
-      document.addEventListener('keydown', (e) => {
-        if (e.shiftKey && e.key === '\\') {
-          toggleInfoSidebar();
-        }
+      // ── IntersectionObserver fade-in ───────────────────────
+      const observer = new IntersectionObserver(
+        (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('is-visible'); observer.unobserve(e.target); } }),
+        { threshold: 0.05, rootMargin: '0px 0px -6% 0px' }
+      );
+      document.querySelectorAll('.fade-in-section').forEach((el) => observer.observe(el));
+      document.addEventListener('astro:page-load', () => {
+        document.querySelectorAll('.fade-in-section:not(.is-visible)').forEach((el) => observer.observe(el));
       });
 
-      // ────────────────────────────────────────────────
-      // Hero Image Zoom & Pan
-      // ────────────────────────────────────────────────
+      // ── Hero zoom ──────────────────────────────────────────
       function initHeroZoom() {
         const container = document.querySelector('.hero-image-container');
         if (!container) return;
-
         const img = container.querySelector('.svg-hero, img') as HTMLElement;
         if (!img) return;
-
         let isZoomed = false;
-
         container.addEventListener('click', () => {
           isZoomed = !isZoomed;
           container.classList.toggle('is-zoomed', isZoomed);
-          
-          if (!isZoomed) {
-            img.style.transform = '';
-          }
+          if (!isZoomed) img.style.transform = '';
         });
-
         container.addEventListener('mousemove', (e: any) => {
           if (!isZoomed) return;
-
           const rect = container.getBoundingClientRect();
-          const x = (e.clientX - rect.left) / rect.width;
-          const y = (e.clientY - rect.top) / rect.height;
-
-          // Pan the image based on mouse position
-          // At scale 4, we want to shift the origin to follow the mouse
-          img.style.transformOrigin = `${x * 100}% ${y * 100}%`;
+          img.style.transformOrigin = `${((e.clientX - rect.left) / rect.width) * 100}% ${((e.clientY - rect.top) / rect.height) * 100}%`;
         });
-
-        // Reset zoom on escape key
         document.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape' && isZoomed) {
-            isZoomed = false;
-            container.classList.remove('is-zoomed');
-            img.style.transform = '';
-          }
+          if (e.key === 'Escape' && isZoomed) { isZoomed = false; container.classList.remove('is-zoomed'); img.style.transform = ''; }
         });
       }
-
       document.addEventListener('DOMContentLoaded', initHeroZoom);
       document.addEventListener('astro:page-load', initHeroZoom);
 
-      // ────────────────────────────────────────────────
-      // Copy buttons (your previous logic kept)
-      // ────────────────────────────────────────────────
+      // ── Copy buttons ───────────────────────────────────────
       function addCopyButtons() {
         document.querySelectorAll('pre').forEach((pre) => {
           if (!(pre instanceof HTMLElement)) return;
           const parent = pre.parentElement;
           if (!parent || parent.classList.contains('code-wrapper')) return;
-
           const wrapper = document.createElement('div');
           wrapper.className = 'code-wrapper relative';
           parent.insertBefore(wrapper, pre);
           wrapper.appendChild(pre);
-
           const btn = document.createElement('button');
-          btn.className =
-            'copy-btn absolute top-3 right-3 px-2.5 py-1 text-xs rounded transition-all';
+          btn.className = 'copy-btn absolute top-3 right-3';
           btn.textContent = 'Copiar';
           btn.onclick = () => {
             navigator.clipboard.writeText(pre.innerText.trim());
             btn.textContent = 'Copiado';
-            setTimeout(() => {
-              btn.textContent = 'Copiar';
-            }, 1800);
+            setTimeout(() => { btn.textContent = 'Copiar'; }, 1800);
           };
           wrapper.appendChild(btn);
         });
       }
-
       document.addEventListener('DOMContentLoaded', addCopyButtons);
       document.addEventListener('astro:page-load', addCopyButtons);
     </script>

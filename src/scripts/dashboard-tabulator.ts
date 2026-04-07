@@ -210,21 +210,19 @@ const getTableHolderElement = (table: Tabulator | null | undefined): HTMLElement
 const redrawTablePreservingScroll = (table: Tabulator | null | undefined) => {
   if (!table || !canRedrawTable(table)) return;
 
-  const holder = getTableHolderElement(table);
-  const scrollLeft = holder?.scrollLeft ?? 0;
-  const scrollTop = holder?.scrollTop ?? 0;
-
-  table.redraw(true);
-
-  const restoreScroll = () => {
-    const nextHolder = getTableHolderElement(table);
-    if (!nextHolder) return;
-    nextHolder.scrollLeft = scrollLeft;
-    nextHolder.scrollTop = scrollTop;
-  };
-
-  restoreScroll();
-  window.requestAnimationFrame(restoreScroll);
+  // Use per-row reformat() instead of table.redraw(true).
+  // redraw(true) is a full force-redraw that resets Tabulator's SelectRange module,
+  // causing the active cell to jump to the first row and breaking double-click editing.
+  // reformat() re-runs formatters on each row without touching the range selection state.
+  try {
+    const rows = table.getRows();
+    for (const row of rows) {
+      try { row.reformat(); } catch { /* ignore individual row races */ }
+    }
+  } catch {
+    // fallback: redraw without force to at least update layout without resetting range
+    try { table.redraw(false); } catch { /* ignore */ }
+  }
 };
 
 const buildPersistKey = (meta: DashboardMeta, grid: string) =>
@@ -1924,6 +1922,9 @@ const bindNativeCellPersistence = (
   const openEditorOnDoubleClick = (event: MouseEvent, cell: any) => {
     const kind = getCellKind(cell);
     if (!isNativeDashboardEditableKind(kind)) return;
+    // editable-text has editable:true, so Tabulator handles dblclick natively.
+    // Skip here to avoid a double-open race (native fires first, then our setTimeout closes it).
+    if (normalizeText(kind) === 'editable-text') return;
 
     window.getSelection?.()?.removeAllRanges?.();
     event.preventDefault();
@@ -3048,10 +3049,10 @@ const configureColumns = (
       nextColumn.headerSort = false;
     } else if (kind === 'editable-text') {
       nextColumn.editor = 'input';
-      // Range tables use custom cellDblClick handler (cell.edit(true)) — don't also set
-      // editable:true or Tabulator's native dblclick trigger opens the editor first and the
-      // custom handler's setTimeout(0) call closes it again.
-      if (!isRangeTable) nextColumn.editable = true;
+      // Always editable. With editTriggerEvent:'dblclick' (range tables), Tabulator
+      // natively opens the editor on double-click — no need for the custom cellDblClick
+      // handler. The custom handler skips editable-text to avoid a double-open race.
+      nextColumn.editable = true;
       nextColumn.editorParams = { selectContents: true };
       nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable');
     }
