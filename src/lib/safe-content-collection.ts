@@ -1,10 +1,8 @@
 import { getCollection } from 'astro:content';
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const thisDir = path.dirname(fileURLToPath(import.meta.url));
-const srcContentDir = path.resolve(thisDir, '../content');
+const srcContentDir = path.resolve(process.cwd(), 'src/content');
 
 const isEmptyCollectionError = (error: unknown, collectionName: string) => {
   const message = String((error as any)?.message || error || '');
