@@ -10120,11 +10120,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         closeExternalInviteGate();
       }
 
-      // Hide pre-join overlay when we actually connect.
-      if (prejoinEl instanceof HTMLElement) {
-        delete prejoinEl.dataset.previewActive;
-      }
-
       await room.connect(livekitUrl, tokenPayload.token);
       await room.startAudio().catch(() => undefined);
       await ensureIncomingAudioContext().catch(() => undefined);
