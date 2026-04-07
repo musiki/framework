@@ -43,7 +43,8 @@
       "Bash(npm run:*)",
       "Bash(node --input-type=module --eval ':*)",
       "Bash(node src/scripts/build-graph-data.mjs)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(python3 -m json.tool)"
     ]
   }
 }
