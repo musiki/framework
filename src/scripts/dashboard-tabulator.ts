@@ -3040,7 +3040,10 @@ const configureColumns = (
       nextColumn.headerSort = false;
     } else if (kind === 'editable-text') {
       nextColumn.editor = 'input';
-      nextColumn.editable = true;
+      // Range tables use custom cellDblClick handler (cell.edit(true)) — don't also set
+      // editable:true or Tabulator's native dblclick trigger opens the editor first and the
+      // custom handler's setTimeout(0) call closes it again.
+      if (!isRangeTable) nextColumn.editable = true;
       nextColumn.editorParams = { selectContents: true };
       nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--editable');
     }
