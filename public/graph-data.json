@@ -6,6 +6,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "index",
       "img": ""
     },
     {
@@ -20,6 +21,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "cym-contenidos",
       "img": ""
     },
     {
@@ -28,6 +30,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "introduccion",
       "img": ""
     },
     {
@@ -36,6 +39,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "segundo-cerebro",
       "img": ""
     },
     {
@@ -44,6 +48,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "acustica-c1",
       "img": ""
     },
     {
@@ -52,6 +57,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "graficos-cartesianos",
       "img": ""
     },
     {
@@ -60,6 +66,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "introduccion-a-la-organologia",
       "img": ""
     },
     {
@@ -68,6 +75,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "demo-ollama",
       "img": ""
     },
     {
@@ -76,6 +84,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "eval-class-reveal",
       "img": ""
     },
     {
@@ -90,6 +99,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "eval-patch-ai",
       "img": ""
     },
     {
@@ -98,6 +108,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "instalacion-y-primeros-pasos",
       "img": ""
     },
     {
@@ -106,6 +117,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "index",
       "img": ""
     },
     {
@@ -138,6 +150,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "welcome",
       "img": ""
     },
     {
@@ -146,6 +159,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "introduccion",
       "img": ""
     },
     {
@@ -154,6 +168,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "presentation-draft",
       "img": ""
     },
     {
@@ -162,6 +177,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "diagnostic-evaluation",
       "img": ""
     },
     {
@@ -170,6 +186,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "concept-map-app",
       "img": ""
     },
     {
@@ -178,6 +195,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "index",
       "img": ""
     },
     {
@@ -186,6 +204,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "index",
       "img": ""
     },
     {
@@ -200,6 +219,7 @@
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
+      "canonicalSlug": "forma-y-estructura",
       "img": ""
     },
     {
@@ -208,6 +228,7 @@
       "type": "document",
       "group": "public",
       "publicFolder": "instrumentos",
+      "canonicalSlug": "spectral-parrot",
       "img": "https://i.imgur.com/KVfV2EM.png"
     },
     {

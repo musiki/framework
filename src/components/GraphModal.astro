@@ -1,6 +1,9 @@
 ---
 // Graph Modal Component - Press 'g' to toggle
 const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
+
+// Show the public/all toggle only to logged-in users (students, teachers, admins)
+const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
 ---
 
 <div id="graph-modal" class="graph-modal">
@@ -16,7 +19,9 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
         <img id="preview-img" src="" alt="" />
         <div id="preview-title"></div>
       </div>
-      <button id="graph-toggle-filter" title="Mostrar todo / solo público (T)">público</button>
+      {isLoggedIn && (
+        <button id="graph-toggle-filter" title="Mostrar todo / solo público (T)">público</button>
+      )}
       <button id="graph-center" title="Center on current page">⊙</button>
       <button id="graph-close" title="Close">✕</button>
     </div>
@@ -25,7 +30,7 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
 
 <script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
 
-<script define:vars={{ currentSlug }}>
+<script define:vars={{ currentSlug, isLoggedIn }}>
   // ── Per-folder visual identity ─────────────────────────────────────────────
   // shape: 'circle' | 'diamond' | 'triangle' | 'square' | 'pentagon' | 'hexagon' | 'star' | 'cross'
   // Add new folders here as musiki grows.
@@ -164,8 +169,9 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
 
   // Return only public-folder nodes + tag nodes connected to them
   function filterPublicData(data) {
+    // group === 'public' means the file is directly inside public/ (first path segment)
     const publicIds = new Set(
-      data.nodes.filter(n => n.type === 'document' && n.publicFolder !== null).map(n => n.id)
+      data.nodes.filter(n => n.type === 'document' && n.group === 'public').map(n => n.id)
     );
     const tagIds = new Set();
     for (const link of data.links) {
@@ -296,7 +302,7 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
       // 'replace' mode: we draw the node ourselves (shape + glow + label)
       .nodeCanvasObjectMode(() => 'replace')
       .nodeCanvasObject((node, ctx, globalScale) => {
-        const isCurrent   = node.id === currentSlug;
+        const isCurrent   = node.id === currentSlug || node.canonicalSlug === currentSlug;
         const isHighlight = highlightNodes.has(node);
         const isHover     = node === hoverNode;
         const isTag       = node.type === 'tag';
@@ -402,7 +408,7 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
         } else {
           // Regular click to navigate
           if (node.type === 'document') {
-            window.location.href = '/' + node.id;
+            window.location.href = '/' + (node.canonicalSlug || node.id);
           } else if (node.type === 'tag') {
             const tag = node.id.replace('tag:', '');
             window.location.href = '/' + encodeURIComponent(tag);
@@ -413,9 +419,9 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
     updateLegend(data);
     updateFilterButton();
 
-    // Center on current node if it exists
+    // Center on current node if it exists (match by id or canonicalSlug)
     setTimeout(() => {
-      const currentNode = data.nodes.find(n => n.id === currentSlug);
+      const currentNode = data.nodes.find(n => n.id === currentSlug || n.canonicalSlug === currentSlug);
       if (currentNode && graphInstance) {
         graphInstance.centerAt(currentNode.x, currentNode.y, 1000);
         graphInstance.zoom(2, 1000);
@@ -470,7 +476,7 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
   async function centerOnCurrent() {
     if (!graphInstance) return;
     const activeNodes = graphInstance.graphData().nodes;
-    const currentNode = activeNodes.find(n => n.id === currentSlug);
+    const currentNode = activeNodes.find(n => n.id === currentSlug || n.canonicalSlug === currentSlug);
     if (currentNode) {
       graphInstance.centerAt(currentNode.x, currentNode.y, 1000);
       graphInstance.zoom(2, 1000);
@@ -487,7 +493,7 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
     if (e.key.toLowerCase() === 'g') {
       e.preventDefault();
       toggleModal();
-    } else if (e.key.toLowerCase() === 't' && isOpen) {
+    } else if (e.key.toLowerCase() === 't' && isOpen && isLoggedIn) {
       e.preventDefault();
       showAll = !showAll;
       applyGraphFilter();
@@ -524,10 +530,12 @@ const currentSlug = Astro.url.pathname.replace(/^\//, '').replace(/\/$/, '');
     void setModalOpen(false, 'local');
   });
   document.getElementById('graph-center')?.addEventListener('click', centerOnCurrent);
-  document.getElementById('graph-toggle-filter')?.addEventListener('click', () => {
-    showAll = !showAll;
-    applyGraphFilter();
-  });
+  if (isLoggedIn) {
+    document.getElementById('graph-toggle-filter')?.addEventListener('click', () => {
+      showAll = !showAll;
+      applyGraphFilter();
+    });
+  }
   
   document.getElementById('graph-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'graph-modal') {

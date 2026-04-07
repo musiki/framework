@@ -95,12 +95,22 @@ export function buildGraphData() {
     if (!nodeIds.has(slug)) {
       const parts = posix.split('/');
       const publicFolder = parts[0] === 'public' && parts.length > 1 ? parts[1] : null;
+
+      // Canonical slug: frontmatter slug > normalized filename
+      const normalizeSlug = (v) =>
+        String(v || '').trim().toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const base = slug.split('/').pop() || slug;
+      const canonicalSlug = normalizeSlug(fm.data.slug || fm.data.shortSlug || base);
+
       nodes.push({
         id: slug,
         name: title,
         type: 'document',
         group: slug.split('/')[0] || 'root',
         publicFolder: publicFolder || null,
+        canonicalSlug,
         img: fm.data.img || fm.data.coverUrl || fm.data.image || fm.data.photo || ''
       });
       nodeIds.add(slug);

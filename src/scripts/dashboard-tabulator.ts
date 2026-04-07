@@ -1963,7 +1963,9 @@ const bindNativeCellPersistence = (
       }
 
       if (kind === 'editable-text') {
-        await saveSelectedUserFieldFromCell(cell, undefined, context.meta);
+        // Use single-cell save: direct edits must only affect the edited cell.
+        // saveSelectedUserFieldFromCell would spread the value to the whole range selection.
+        await saveSingleUserFieldCellValue(cell, undefined, context.meta);
       }
     } catch (error: any) {
       console.error('Error saving native dashboard editor:', error);
@@ -2535,11 +2537,18 @@ const buildCellContextMenu = (
         label: `Title Case${suffix}`,
         action: async () => {
           for (const targetCell of targets) {
+            const targetField = getCellField(targetCell);
             const current = String(targetCell.getValue() ?? '');
             const titled = toTitleCase(current);
             if (titled === current) continue;
-            targetCell.setValue(titled);
-            await saveUserFieldFromCell(targetCell, titled, meta);
+            // For user profile fields (lastName, firstName) always save single-cell only —
+            // never spread to the range. Each student has a unique name.
+            if (EDITABLE_USER_FIELDS.includes(targetField)) {
+              await saveSingleUserFieldCellValue(targetCell, titled, meta);
+            } else {
+              targetCell.setValue(titled);
+              await saveUserFieldFromCell(targetCell, titled, meta);
+            }
           }
         },
       },
@@ -4525,6 +4534,11 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   });
 
   table.on('cellEdited', async (cell: any) => {
+    // editable-text user fields (lastName, firstName, etc.) are handled by
+    // bindNativeCellPersistence → saveSingleUserFieldCellValue. Do NOT restore them here.
+    const editedField = getCellField(cell);
+    if (EDITABLE_USER_FIELDS.includes(editedField)) return;
+
     if (!resolveAttendanceCellContext(cell)) {
       cell.restoreOldValue();
       return;
