@@ -2049,7 +2049,9 @@ const attendanceGridRows = (() => {
           isClassDay,
           displayValue: hasManualOverride
             ? formatAttendanceValue(manualValue, { isFuture })
-            : formatAttendanceValue(liveValue, { isFuture }),
+            : liveValue > 0
+              ? 'r'
+              : formatAttendanceValue(liveValue, { isFuture }),
           title: `Room: ${liveLabel} • Override: ${manualLabel} • Final: ${effectiveLabel} • ${ATTENDANCE_VALUE_HELP}`,
         };
       });
@@ -4731,6 +4733,10 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         background: rgba(34, 197, 94, 0.14);
         color: #166534;
       }
+      .dashboard-attendance-chip--room {
+        background: rgba(139, 92, 246, 0.14);
+        color: #5b21b6;
+      }
       .dashboard-attendance-chip--partial {
         background: rgba(245, 158, 11, 0.18);
         color: #92400e;
@@ -4968,6 +4974,10 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       :root.dark .dashboard-attendance-chip--present {
         color: #bbf7d0;
+      }
+      :root.dark .dashboard-attendance-chip--room {
+        background: rgba(139, 92, 246, 0.2);
+        color: #c4b5fd;
       }
       :root.dark .dashboard-attendance-chip--partial {
         color: #fde68a;

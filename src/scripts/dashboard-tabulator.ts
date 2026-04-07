@@ -1209,14 +1209,19 @@ const renderAttendanceMarkup = (cell: any) => {
   const isFuture = Boolean(meta.isFuture);
   const hasManual = Boolean(meta.hasManualOverride);
   const liveValue = Number(meta.liveValue || 0);
-  const symbol = hasManual
-    ? formatAttendanceSymbol(units)
-    : formatAttendanceSymbol(liveValue, { blankWhenZero: true });
+  const isRoom = !hasManual && String(val || '') === 'r';
+
+  const symbol = isRoom
+    ? 'r'
+    : hasManual
+      ? formatAttendanceSymbol(units)
+      : formatAttendanceSymbol(liveValue, { blankWhenZero: true });
 
   let cssClass = 'dashboard-attendance-chip';
   if (isFuture) cssClass += ' dashboard-attendance-chip--future';
   if (hasManual) cssClass += ' dashboard-attendance-chip--manual';
-  if (units >= 1) cssClass += ' dashboard-attendance-chip--present';
+  if (isRoom) cssClass += ' dashboard-attendance-chip--room';
+  else if (units >= 1) cssClass += ' dashboard-attendance-chip--present';
   else if (units >= 0.5) cssClass += ' dashboard-attendance-chip--partial';
   else if (!isFuture) cssClass += ' dashboard-attendance-chip--empty';
 
