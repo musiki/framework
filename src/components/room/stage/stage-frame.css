@@ -708,6 +708,27 @@
   }
 }
 
+/* ── Test mode recording timer ───────────────────────────────────────────── */
+
+.conference-test-timer {
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.7rem;
+  z-index: 20;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: #ef4444;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 0.18rem 0.45rem;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.conference-test-timer[hidden] {
+  display: none;
+}
+
 @media (max-width: 500px) {
   .conference-stage-frame {
     height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));

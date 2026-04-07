@@ -1793,9 +1793,13 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
     this.blurContext.imageSmoothingQuality = 'high';
 
     this.outputStream = this.outputCanvas.captureStream(30);
-    this.processedTrack = this.outputStream.getVideoTracks()[0];
+    const processedTrack = this.outputStream.getVideoTracks()[0];
+    if (!processedTrack) {
+      throw new Error('Canvas captureStream returned no video track.');
+    }
+    this.processedTrack = processedTrack;
     if (localCameraProcessorState.blurEnabled) {
-      await this.ensureSegmenterReady();
+      void this.ensureSegmenterReady();
     }
     this.renderFrame();
   }
@@ -3728,6 +3732,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const brCountdownEl = root.querySelector('[data-br-countdown]');
   const brCountdownText = root.querySelector('[data-br-countdown-text]');
   const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
+  const recentSpeakersEl = root.querySelector('[data-recent-speakers]');
   const streamingProfileSelect = root.querySelector('[data-streaming-profile-select]');
   const optimizeSpeakerInput = root.querySelector('[data-optimize-speaker-input]');
   const limitGridQualityInput = root.querySelector('[data-limit-grid-input]');
@@ -3901,6 +3906,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   root.dataset.mounted = 'true';
+  root.dataset.state = 'disconnected';
 
   const serverDefaultRoom = normalizeText(roomInput.value);
   const serverDefaultName = normalizeText(nameInput.value);
@@ -3971,6 +3977,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       pixelDensity: 'screen',
     },
     dynacast: true,
+    audioCaptureDefaults: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
   });
 
   const presentation = createPresentationController({
@@ -4016,6 +4027,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let vpsStatsTickId = 0;
   let immersiveFullscreenActive = false;
   let connectedAtMs = 0;
+  let recentSpeakers: string[] = [];
   let recordingAnimationId = 0;
   let recordingAudioContext: AudioContext | null = null;
   let recordingCanvas: HTMLCanvasElement | null = null;
@@ -4134,22 +4146,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   /** identity → break room name, for teacher-assigned rooms. */
   let breakRoomAssignments: Record<string, string> = {};
   let sessionLeaderIdentity = '';
-  let mixerSynthGain = normalizeMasterGain(persistedSetup.mixerSynthGain, 1);
+  let mixerSynthGain = normalizeMasterGain(persistedSetup.mixerSynthGain, 0.5);
   let mixerSynthReverbSend = clampNumber(persistedSetup.mixerSynthReverbSend, 0, 1, 0.55, 2);
   let mixerSynthDelaySend = clampNumber(persistedSetup.mixerSynthDelaySend, 0, 1, 0, 2);
   let mixerSynthMuted = Boolean(persistedSetup.mixerSynthMuted);
   let mixerSynthPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerSynthPan) || 0));
-  let mixerBallGain = normalizeMasterGain(persistedSetup.mixerBallGain, 1);
+  let mixerBallGain = normalizeMasterGain(persistedSetup.mixerBallGain, 0.5);
   let mixerBallReverbSend = clampNumber(persistedSetup.mixerBallReverbSend, 0, 1, 0, 2);
   let mixerBallDelaySend = clampNumber(persistedSetup.mixerBallDelaySend, 0, 1, 0, 2);
   let mixerBallMuted = Boolean(persistedSetup.mixerBallMuted);
   let mixerBallPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerBallPan) || 0));
-  let mixerIncomingGain = normalizeMasterGain(persistedSetup.mixerIncomingGain, 1);
+  let mixerIncomingGain = normalizeMasterGain(persistedSetup.mixerIncomingGain, 0.5);
   let mixerIncomingReverbSend = clampNumber(persistedSetup.mixerIncomingReverbSend, 0, 1, 0, 2);
   let mixerIncomingDelaySend = clampNumber(persistedSetup.mixerIncomingDelaySend, 0, 1, 0, 2);
   let mixerIncomingMuted = Boolean(persistedSetup.mixerIncomingMuted);
   let mixerIncomingPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerIncomingPan) || 0));
-  let mixerMasterGain = normalizeMasterGain(persistedSetup.mixerMasterGain, 1);
+  let mixerMasterGain = normalizeMasterGain(persistedSetup.mixerMasterGain, 0.5);
   let mixerMasterMuted = Boolean(persistedSetup.mixerMasterMuted);
   let mixerMasterPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerMasterPan) || 0));
   let videoMixBypassed = Boolean(persistedSetup.videoBypassed);
@@ -4294,7 +4306,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
-    await localCameraTrack.setProcessor?.(new BackgroundBlurVideoProcessor(), true);
+    try {
+      await localCameraTrack.setProcessor?.(new BackgroundBlurVideoProcessor(), true);
+    } catch {
+      // If the processor fails to initialize (WASM load error, canvas context failure, etc.),
+      // disable blur gracefully so the camera track keeps working.
+      previewBlur = false;
+      localCameraProcessorState.blurEnabled = false;
+      if (previewBlurInput instanceof HTMLInputElement) {
+        previewBlurInput.checked = false;
+      }
+      await localCameraTrack.stopProcessor?.().catch(() => undefined);
+    }
   };
 
   const resolvePresentationCourseId = (href: string | null | undefined) => {
@@ -9880,6 +9903,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const syncParticipant = (participant: Participant) => {
     const card = ensureParticipantCard(participant);
     if (!card) return;
+    const isSpeaking = room.activeSpeakers.some((s) => s.identity === participant.identity);
+    card.card.dataset.speaking = isSpeaking ? 'true' : 'false';
     syncParticipantVideo(room, participant, card, mounts, {
       blurLocalVideo: previewBlur,
       isTrackBackgroundBlurred: (track) =>
@@ -9934,6 +9959,36 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     renderParticipantList();
     queuePreferredRemoteVideoDimensionsSync();
     setControlState();
+  };
+
+  const syncRecentSpeakers = () => {
+    for (const speaker of room.activeSpeakers) {
+      if (!recentSpeakers.includes(speaker.identity)) {
+        recentSpeakers = [speaker.identity, ...recentSpeakers].slice(0, 3);
+      }
+    }
+    if (recentSpeakersEl instanceof HTMLElement) {
+      const names = recentSpeakers
+        .map((id) => participantCards.get(id)?.name.textContent || null)
+        .filter((n): n is string => Boolean(n));
+      const textEl = recentSpeakersEl.querySelector('[data-recent-speakers-text]');
+      if (textEl instanceof HTMLElement) {
+        textEl.textContent = names.join(' · ');
+      } else {
+        recentSpeakersEl.textContent = names.join(' · ');
+      }
+      recentSpeakersEl.hidden = names.length === 0;
+    }
+  };
+
+  const scrollToActiveSpeaker = () => {
+    const firstSpeaker = room.activeSpeakers[0];
+    if (!firstSpeaker) return;
+    const card = participantCards.get(firstSpeaker.identity);
+    if (!card) return;
+    if (card.card.closest('[data-slot="students"]')) {
+      card.card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   };
 
   const disconnectRoom = () => {
@@ -9996,6 +10051,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       nameInput.value = displayName;
     }
 
+    stopTestMode();
+    stopDisconnectedLivePreview();
     const shouldRestoreDisconnectedPreview = disconnectedCameraPreviewEnabled;
     const hadDisconnectedPreview = Boolean(localPreviewStreamMount?.stream.getVideoTracks()[0]);
     clearDisconnectedStagePreview();
@@ -10063,6 +10120,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         closeExternalInviteGate();
       }
 
+      // Hide pre-join overlay when we actually connect.
+      if (prejoinEl instanceof HTMLElement) {
+        delete prejoinEl.dataset.previewActive;
+      }
+
       await room.connect(livekitUrl, tokenPayload.token);
       await room.startAudio().catch(() => undefined);
       await ensureIncomingAudioContext().catch(() => undefined);
@@ -10119,6 +10181,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   room
     .on(RoomEvent.ConnectionStateChanged, (state) => {
       stateNode.textContent = connectionStateLabel(state);
+      root.dataset.state = state === ConnectionState.Connected ? 'connected' : 'disconnected';
       setControlState();
     })
     .on(RoomEvent.Connected, () => {
@@ -10211,6 +10274,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     })
     .on(RoomEvent.ActiveSpeakersChanged, () => {
       syncAllParticipants();
+      syncRecentSpeakers();
+      scrollToActiveSpeaker();
     })
     .on(RoomEvent.ParticipantConnected, () => {
       syncAllParticipants();
@@ -10573,6 +10638,210 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
+  // ── Disconnected live preview (camera button while disconnected) ─────────
+  let disconnectedLiveStream: MediaStream | null = null;
+
+  const stopDisconnectedLivePreview = () => {
+    disconnectedCameraPreviewEnabled = false;
+    micMeterController.stop();
+    if (disconnectedLiveStream) {
+      disconnectedLiveStream.getTracks().forEach((t) => t.stop());
+      disconnectedLiveStream = null;
+    }
+    if (teacherSlot instanceof HTMLElement && teacherSlot.querySelector('[data-disconnected-live]')) {
+      teacherSlot.innerHTML = '';
+    }
+  };
+
+  const startDisconnectedLivePreview = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Camera preview no disponible en este navegador.');
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    disconnectedLiveStream = stream;
+    disconnectedCameraPreviewEnabled = true;
+
+    // Switch to teacher (F) layout
+    forceDisconnectedPreviewLayout();
+
+    // Show in teacher slot
+    if (teacherSlot instanceof HTMLElement) {
+      teacherSlot.innerHTML = '';
+      const wrapper = document.createElement('div');
+      wrapper.className = 'conference-media-frame conference-media-frame--disconnected-live';
+      wrapper.dataset.disconnectedLive = 'true';
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = stream;
+      video.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      wrapper.appendChild(video);
+      teacherSlot.appendChild(wrapper);
+      void video.play().catch(() => undefined);
+    }
+
+    // Mic meter in bottom bar
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack) {
+      void micMeterController.start(audioTrack).catch(() => { micMeterController.stop(); });
+    }
+  };
+
+  // ── TEST button: record a mic+cam clip, play it back on toggle off ──────
+  const testToggleButton = root.querySelector('[data-action="test-toggle"]');
+  const testTimerEl = root.querySelector('[data-test-timer]');
+  let testStream: MediaStream | null = null;
+  let testRecorder: MediaRecorder | null = null;
+  let testChunks: Blob[] = [];
+  let testTimerIntervalId = 0;
+  let testPlaybackUrl = '';
+
+  const startTestTimer = () => {
+    let seconds = 0;
+    if (testTimerEl instanceof HTMLElement) {
+      testTimerEl.hidden = false;
+      testTimerEl.textContent = '0s';
+    }
+    testTimerIntervalId = window.setInterval(() => {
+      seconds += 1;
+      if (testTimerEl instanceof HTMLElement) {
+        testTimerEl.textContent = `${seconds}s`;
+      }
+    }, 1000);
+  };
+
+  const stopTestTimer = () => {
+    if (testTimerIntervalId) {
+      window.clearInterval(testTimerIntervalId);
+      testTimerIntervalId = 0;
+    }
+    if (testTimerEl instanceof HTMLElement) {
+      testTimerEl.hidden = true;
+    }
+  };
+
+  const stopTestMode = () => {
+    stopTestTimer();
+    if (testRecorder && testRecorder.state !== 'inactive') {
+      testRecorder.stop();
+    }
+    if (testStream) {
+      testStream.getTracks().forEach((t) => t.stop());
+      testStream = null;
+    }
+    if (testToggleButton instanceof HTMLButtonElement) {
+      testToggleButton.dataset.active = 'false';
+    }
+  };
+
+  if (testToggleButton instanceof HTMLButtonElement) {
+    testToggleButton.addEventListener('click', () => {
+      if (room.state !== ConnectionState.Disconnected) return;
+      const isActive = testToggleButton.dataset.active === 'true';
+
+      if (isActive) {
+        // Toggle OFF: stop recording, play back clip
+        stopTestTimer();
+        if (testRecorder && testRecorder.state !== 'inactive') {
+          testRecorder.onstop = () => {
+            const blob = new Blob(testChunks, { type: testRecorder?.mimeType || 'video/webm' });
+            testChunks = [];
+            if (testPlaybackUrl) {
+              URL.revokeObjectURL(testPlaybackUrl);
+            }
+            testPlaybackUrl = URL.createObjectURL(blob);
+
+            // Stop live stream
+            if (testStream) {
+              testStream.getTracks().forEach((t) => t.stop());
+              testStream = null;
+            }
+
+            // Show playback in teacher slot
+            if (teacherSlot instanceof HTMLElement) {
+              teacherSlot.innerHTML = '';
+              const playbackWrapper = document.createElement('div');
+              playbackWrapper.className = 'conference-media-frame conference-media-frame--test-playback';
+              playbackWrapper.dataset.testPlayback = 'true';
+              const playbackVideo = document.createElement('video');
+              playbackVideo.src = testPlaybackUrl;
+              playbackVideo.autoplay = true;
+              playbackVideo.loop = true;
+              playbackVideo.playsInline = true;
+              playbackVideo.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+              // Belt-and-suspenders: force restart on ended in case loop attr fails
+              playbackVideo.addEventListener('ended', () => {
+                playbackVideo.currentTime = 0;
+                void playbackVideo.play().catch(() => undefined);
+              });
+              playbackWrapper.appendChild(playbackVideo);
+              teacherSlot.appendChild(playbackWrapper);
+              void playbackVideo.play().catch(() => undefined);
+            }
+          };
+          testRecorder.stop();
+        } else {
+          if (testStream) {
+            testStream.getTracks().forEach((t) => t.stop());
+            testStream = null;
+          }
+          if (teacherSlot instanceof HTMLElement) teacherSlot.innerHTML = '';
+        }
+        testToggleButton.dataset.active = 'false';
+      } else {
+        // Toggle ON: stop live preview if active, switch to F layout, start cam+mic, record
+        stopDisconnectedLivePreview();
+        testToggleButton.dataset.active = 'true';
+        setControlState();
+        testChunks = [];
+
+        // Switch to teacher (F) layout
+        const nextLayout = setLayout(stage, 'teacher');
+        layoutInput.value = nextLayout;
+        syncLayoutChoiceButtons();
+        writeQueryState();
+
+        void (async () => {
+          try {
+            testStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          } catch (error) {
+            testToggleButton.dataset.active = 'false';
+            setStatus(`Test: ${safeErrorMessage(error)}`);
+            return;
+          }
+
+          // Show live video in teacher slot
+          if (teacherSlot instanceof HTMLElement) {
+            teacherSlot.innerHTML = '';
+            const liveWrapper = document.createElement('div');
+            liveWrapper.className = 'conference-media-frame conference-media-frame--test-live';
+            const liveVideo = document.createElement('video');
+            liveVideo.autoplay = true;
+            liveVideo.muted = true;
+            liveVideo.playsInline = true;
+            liveVideo.srcObject = testStream;
+            liveVideo.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+            liveWrapper.appendChild(liveVideo);
+            teacherSlot.appendChild(liveWrapper);
+            void liveVideo.play().catch(() => undefined);
+          }
+
+          // Start recording
+          const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(
+            (m) => MediaRecorder.isTypeSupported(m),
+          ) || '';
+          testRecorder = new MediaRecorder(testStream, mimeType ? { mimeType } : undefined);
+          testRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) testChunks.push(e.data);
+          };
+          testRecorder.start(1000);
+          startTestTimer();
+        })();
+      }
+    });
+  }
+
   const submitExternalInviteJoin = () => {
     if (!isExternalInviteMode || isInvalidInviteMode) {
       leaveExternalInviteFlow();
@@ -10704,15 +10973,19 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (room.state !== ConnectionState.Connected) {
       try {
         if (disconnectedCameraPreviewEnabled) {
-          disableDisconnectedCameraPreview();
+          stopDisconnectedLivePreview();
           setStatus('Preview de camara desactivado.');
         } else {
-          await enableDisconnectedCameraPreview();
-          setStatus('Preview de camara listo.');
+          // Stop TEST recording if active
+          if (testToggleButton instanceof HTMLButtonElement && testToggleButton.dataset.active === 'true') {
+            stopTestMode();
+          }
+          await startDisconnectedLivePreview();
+          setStatus('Preview listo.');
         }
         setControlState();
       } catch (error) {
-        disableDisconnectedCameraPreview();
+        stopDisconnectedLivePreview();
         setStatus(safeErrorMessage(error));
         setControlState();
       }
@@ -12431,6 +12704,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     micMeterController.teardown();
     applyImmersiveFullscreenState(false);
     stopRecording();
+    stopTestMode();
+    stopDisconnectedLivePreview();
     disableDisconnectedCameraPreview();
     clearDisconnectedStagePreview();
     disconnectRoom();

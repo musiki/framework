@@ -899,8 +899,11 @@ const persistSingleAttendanceCellValue = async (
     // Only count past/today days toward totals and absences
     if (!entry?.countsTowardAbsence) return;
     scheduledDayCount += 1;
-    attendanceUnits += Math.max(0, Number(entry?.effectiveValue || 0));
-    absenceUnits += Math.max(0, 1 - Number(entry?.effectiveValue || 0));
+    // Blank cell (no manual override, no live presence) counts as present by default
+    const hasAnyData = entry?.hasManualOverride || Number(entry?.liveValue || 0) > 0;
+    const effectivePresence = hasAnyData ? Number(entry?.effectiveValue || 0) : 1;
+    attendanceUnits += Math.max(0, effectivePresence);
+    absenceUnits += Math.max(0, 1 - effectivePresence);
   });
   const attendanceRate = scheduledDayCount > 0
     ? Math.round((attendanceUnits / scheduledDayCount) * 1000) / 10
@@ -2922,6 +2925,11 @@ const configureColumns = (
       nextColumn.editor = 'input';
       nextColumn.headerSort = false;
       baseFormatter = renderAttendanceMarkup;
+      nextColumn.titleFormatter = (col: any) => {
+        const title = String(col.getValue() || '');
+        const field = String(col.getDefinition()?.field || '');
+        return `<span class="dashboard-attendance-day-header-title">${title}</span><button class="dashboard-attendance-fill-btn" data-action="fill-present" data-field="${field}" title="Completar columna con presente" type="button" tabindex="-1"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" width="11" height="11"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></button>`;
+      };
     } else if (kind === 'annotation-color') {
       baseFormatter = annotationColorFormatter;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
@@ -4387,7 +4395,6 @@ const bindCustomInteractiveCellFocus = (table: Tabulator) => {
 };
 
 const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
-  const CLICK_TOGGLE_DELAY_MS = 180;
   const TOUCH_LONG_PRESS_DELAY_MS = 420;
 
   const resolveAttendanceCellContext = (cell: any) =>
@@ -4431,18 +4438,8 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     }
   };
 
-  const getNextToggleValue = (cell: any) => {
-    const context = resolveAttendanceCellContext(cell);
-    const effectiveValue = Number(context?.cellMeta?.effectiveValue || 0);
-    return effectiveValue >= 1
-      ? normalizeAttendanceInput('0')
-      : normalizeAttendanceInput('1');
-  };
-
   let pendingToggleTimer: number | null = null;
   let pendingToggleCellKey = '';
-  let suppressClickCellKey = '';
-  let suppressClickUntil = 0;
   let touchLongPressTimer: number | null = null;
   let touchLongPressCellKey = '';
   let touchLongPressTriggered = false;
@@ -4498,44 +4495,9 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     }
   });
 
-  table.on('cellClick', (event: MouseEvent, cell: any) => {
-    if (!resolveAttendanceCellContext(cell)) return;
-    if (isInteractiveDashboardTarget(event.target)) return;
-    if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
-
-    // Skip toggle if multiple cells are range-selected (user is selecting, not toggling)
-    const rangeState = (table as any).__musikiRangeSelectionState as RangeSelectionState | undefined;
-    if (rangeState && rangeState.selectedCells.size > 1) return;
-
-    const cellKey = getAttendanceCellKey(cell);
-    if (!cellKey) return;
-    if (suppressClickCellKey === cellKey && suppressClickUntil > Date.now()) return;
-
-    clearPendingToggle();
-    pendingToggleCellKey = cellKey;
-    pendingToggleTimer = window.setTimeout(async () => {
-      pendingToggleTimer = null;
-      pendingToggleCellKey = '';
-
-      try {
-        await persistAttendanceSelection(cell, getNextToggleValue(cell));
-      } catch (error: any) {
-        // Tabulator sometimes throws a NotFoundError when the cell's DOM node was
-        // moved/destroyed between the click and the async re-render (e.g. during
-        // a blur/scroll). The data was already saved — suppress the DOM error.
-        if (error instanceof Error && error.name === 'NotFoundError') return;
-        console.error('Error toggling attendance cell:', error);
-        alert(error?.message || 'No se pudo actualizar la asistencia');
-      }
-    }, CLICK_TOGGLE_DELAY_MS);
-  });
-
   table.on('cellDblClick', (_event: MouseEvent, cell: any) => {
     if (!resolveAttendanceCellContext(cell)) return;
-    const cellKey = getAttendanceCellKey(cell);
-    if (pendingToggleCellKey && pendingToggleCellKey === cellKey) {
-      clearPendingToggle();
-    }
+    clearPendingToggle();
   });
 
   const tableElement =
@@ -4552,8 +4514,6 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     touchLongPressCellKey = getAttendanceCellKey(cell);
     touchLongPressTimer = window.setTimeout(() => {
       touchLongPressTriggered = true;
-      suppressClickCellKey = touchLongPressCellKey;
-      suppressClickUntil = Date.now() + 900;
       clearPendingToggle();
       try {
         cell.getComponent?.().edit?.(true);
@@ -4587,6 +4547,44 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   tableElement?.addEventListener('touchcancel', touchMoveCancelHandler, { passive: true });
   tableElement?.addEventListener('touchmove', touchMoveCancelHandler, { passive: true });
 
+  // ── Fill column with present button ─────────────────────────────────────
+  const rootElement = (table as any)?.element as HTMLElement | undefined;
+
+  const fillColumnHandler = async (event: MouseEvent) => {
+    const btn = (event.target instanceof HTMLElement)
+      ? event.target.closest<HTMLElement>('[data-action="fill-present"]')
+      : null;
+    if (!btn) return;
+    event.stopPropagation();
+    event.preventDefault();
+
+    const field = normalizeText(btn.dataset.field || '');
+    if (!field) return;
+
+    const rows = table.getRows('active');
+    if (rows.length === 0) return;
+
+    const present = normalizeAttendanceInput('1');
+    const failures: string[] = [];
+    for (const row of rows) {
+      const cell = row.getCell(field);
+      if (!cell) continue;
+      const context = resolveAttendanceCellContext(cell);
+      if (!context) continue;
+      try {
+        await persistSingleAttendanceCellValue(cell, present, meta);
+      } catch (error: any) {
+        failures.push(error?.message || `Fila ${context.studentId}`);
+      }
+    }
+
+    if (failures.length > 0) {
+      alert(`Se completó la columna, pero fallaron ${failures.length} celdas.`);
+    }
+  };
+
+  rootElement?.addEventListener('click', fillColumnHandler);
+
   return () => {
     clearPendingToggle();
     clearTouchLongPress();
@@ -4594,6 +4592,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     tableElement?.removeEventListener('touchend', touchEndHandler);
     tableElement?.removeEventListener('touchcancel', touchMoveCancelHandler);
     tableElement?.removeEventListener('touchmove', touchMoveCancelHandler);
+    rootElement?.removeEventListener('click', fillColumnHandler);
   };
 };
 

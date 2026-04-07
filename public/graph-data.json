@@ -49,6 +49,13 @@
       "img": ""
     },
     {
+      "id": "cursos/i1/03-organología/Introducción a la Organología",
+      "name": "Introducción a la Organología",
+      "type": "document",
+      "group": "cursos",
+      "img": ""
+    },
+    {
       "id": "cursos/i1/03-organología/demo-ollama",
       "name": "demo ollama",
       "type": "document",
@@ -174,6 +181,25 @@
       "type": "document",
       "group": "cursos",
       "img": ""
+    },
+    {
+      "id": "public/instrumentos/spectral parrots",
+      "name": "spectral parrots",
+      "type": "document",
+      "group": "public",
+      "img": "https://i.imgur.com/KVfV2EM.png"
+    },
+    {
+      "id": "tag:AI-based",
+      "name": "AI-based",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:dss/feedback",
+      "name": "dss/feedback",
+      "type": "tag",
+      "group": "tags"
     }
   ],
   "links": [
@@ -230,6 +256,16 @@
     {
       "source": "cursos/s123/_index",
       "target": "tag:composiciónmusical",
+      "type": "tag"
+    },
+    {
+      "source": "public/instrumentos/spectral parrots",
+      "target": "tag:AI-based",
+      "type": "tag"
+    },
+    {
+      "source": "public/instrumentos/spectral parrots",
+      "target": "tag:dss/feedback",
       "type": "tag"
     }
   ]
