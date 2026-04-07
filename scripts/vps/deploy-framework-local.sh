@@ -20,6 +20,10 @@ export CONTENT_SOURCE_STRATEGY
 cd "$FRAMEWORK_DIR"
 export PATH="$PATH:$(npm config get prefix)/bin"
 
+printf '::deploy-phase::pull::Syncing framework repo to latest commit\n'
+git fetch origin
+git reset --hard origin/main
+
 if [[ -n "$INSTALL_COMMAND" ]]; then
   printf '::deploy-phase::install::Installing dependencies\n'
   # Remove the Vite cache directory before npm ci to prevent ENOTEMPTY errors
