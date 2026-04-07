@@ -2925,9 +2925,9 @@ const configureColumns = (
       nextColumn.editor = 'input';
       nextColumn.headerSort = false;
       baseFormatter = renderAttendanceMarkup;
-      nextColumn.titleFormatter = (col: any) => {
-        const title = String(col.getValue() || '');
-        const field = String(col.getDefinition()?.field || '');
+      nextColumn.titleFormatter = (cell: any) => {
+        const title = String(cell.getValue() || '');
+        const field = String(cell.getColumn?.()?.getField?.() || '');
         return `<span class="dashboard-attendance-day-header-title">${title}</span><button class="dashboard-attendance-fill-btn" data-action="fill-present" data-field="${field}" title="Completar columna con presente" type="button" tabindex="-1"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" width="11" height="11"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></button>`;
       };
     } else if (kind === 'annotation-color') {
@@ -3552,6 +3552,56 @@ const bindCsvButtons = (root: HTMLElement, registry: Map<string, Tabulator>, met
       const table = registry.get(key);
       if (!table) return;
       table.download('csv', buildCsvFilename(key, meta));
+    });
+  });
+};
+
+const bindFillEmptyPresentButton = (root: HTMLElement, registry: Map<string, Tabulator>, meta: DashboardMeta) => {
+  root.querySelectorAll<HTMLButtonElement>('[data-dashboard-fill-empty-present]').forEach((button) => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+    button.addEventListener('click', async () => {
+      const table = registry.get('teacher-main');
+      if (!table) return;
+
+      // Determine active column from musiki range selection state
+      const rangeState: RangeSelectionState | undefined = (table as any).__musikiRangeSelectionState;
+      const selectedCells: any[] = Array.from(rangeState?.selectedCells || []);
+      const attendanceFields = [...new Set(
+        selectedCells
+          .map((c: any) => c.getColumn?.()?.getField?.() as string | undefined)
+          .filter((f): f is string => typeof f === 'string' && f.startsWith('attendance.')),
+      )];
+
+      if (attendanceFields.length === 0) {
+        alert('Seleccioná una celda o rango en una columna de asistencia primero.');
+        return;
+      }
+
+      const rows = table.getRows('active');
+      const present = normalizeAttendanceInput('1');
+      const failures: string[] = [];
+
+      for (const field of attendanceFields) {
+        for (const row of rows) {
+          const cell = row.getCell(field);
+          if (!cell) continue;
+          const context = resolvePersistableAttendanceCellContext(cell, meta);
+          if (!context) continue;
+          // Only fill truly empty cells (no manual override, no live data)
+          const cellMeta = context.cellMeta;
+          if (cellMeta?.hasManualOverride || Number(cellMeta?.liveValue || 0) > 0) continue;
+          try {
+            await persistSingleAttendanceCellValue(cell, present, meta);
+          } catch (error: any) {
+            failures.push(error?.message || `Fila ${context.studentId}`);
+          }
+        }
+      }
+
+      if (failures.length > 0) {
+        alert(`Se completaron las celdas vacías, pero fallaron ${failures.length}.`);
+      }
     });
   });
 };
@@ -5047,6 +5097,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   bindAddStudentModal(root, meta);
   bindUnfoldAllButtons(root, registry);
   bindFoldAllButtons(root, registry);
+  bindFillEmptyPresentButton(root, registry, meta);
 
   root.dataset.dashboardTabulatorMounted = 'true';
 

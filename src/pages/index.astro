@@ -7,7 +7,7 @@ import Header from '../components/Header.astro';
   <head>
     <BaseHead
       title="musiki"
-      description="Estamos preparando el nuevo musiki público."
+      description="Recursos y contenidos musicales de musiki."
     />
     <style>
       .home-main {
@@ -27,34 +27,118 @@ import Header from '../components/Header.astro';
       }
 
       .panel {
-        padding: 2rem 1.5rem;
+        width: 100%;
+        max-width: 640px;
+        padding: 2rem 1.5rem 3rem;
         text-align: center;
       }
 
       h1 {
-        margin: 0;
-        font-size: clamp(2rem, 5vw, 3.4rem);
+        margin: 0 0 2rem;
+        font-size: clamp(2rem, 5vw, 3.2rem);
         line-height: 1;
         text-transform: lowercase;
       }
 
-      p {
-        margin: 1rem 0 0;
-        font-size: 1.05rem;
-        line-height: 1.6;
-        color: var(--c-fg-dim);
+      /* ── Search box ── */
+      .home-search-wrap {
+        position: relative;
+        width: 100%;
+      }
+
+      .home-search-input {
+        width: 100%;
+        padding: 0.85rem 1.4rem;
+        font-size: 1rem;
+        font-family: inherit;
+        border: 1.5px solid var(--c-border, rgba(0,0,0,0.15));
+        border-radius: 9999px;
+        background: var(--c-bg, #fff);
+        color: var(--c-fg, #111);
+        outline: none;
+        box-sizing: border-box;
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+
+      .home-search-input:focus {
+        border-color: var(--c-link, #2a87ff);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-link, #2a87ff) 15%, transparent);
+      }
+
+      .home-search-input::placeholder {
+        color: color-mix(in srgb, var(--c-fg) 45%, transparent);
+      }
+
+      /* ── Results dropdown ── */
+      .home-search-results {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        background: var(--c-bg, #fff);
+        border: 1px solid var(--c-border, rgba(0,0,0,0.12));
+        border-radius: 1.1rem;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+        overflow: hidden;
+        z-index: 100;
+        text-align: left;
+      }
+
+      .home-search-results[hidden] { display: none; }
+
+      .home-search-result-item {
+        display: block;
+        padding: 0.75rem 1.2rem;
+        text-decoration: none;
+        color: inherit;
+        border-bottom: 1px solid color-mix(in srgb, var(--c-border) 50%, transparent);
+        transition: background 0.1s;
+      }
+
+      .home-search-result-item:last-child {
+        border-bottom: none;
+      }
+
+      .home-search-result-item:hover,
+      .home-search-result-item:focus {
+        background: var(--c-bg-alt, color-mix(in srgb, var(--c-border) 40%, transparent));
+        outline: none;
+      }
+
+      .home-search-result-title {
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: var(--c-fg, #111);
+        margin: 0 0 0.18rem;
+        line-height: 1.3;
+      }
+
+      .home-search-result-meta {
+        font-size: 0.75rem;
+        color: color-mix(in srgb, var(--c-fg) 50%, transparent);
+        margin: 0;
+        line-height: 1.3;
+      }
+
+      .home-search-highlight {
+        background: color-mix(in srgb, var(--c-link, #2a87ff) 18%, transparent);
+        color: var(--c-link, #2a87ff);
+        border-radius: 2px;
+        padding: 0 1px;
       }
 
       .legal-links {
         display: flex;
         gap: 1rem;
         flex-wrap: wrap;
-        margin-top: 1.5rem;
+        margin-top: 2.5rem;
+        justify-content: center;
       }
 
       .legal-links a {
-        color: var(--c-link);
         text-decoration: none;
+        font-size: 0.82rem;
+        color: color-mix(in srgb, var(--c-fg) 50%, transparent);
       }
 
       .legal-links a:hover {
@@ -67,12 +151,135 @@ import Header from '../components/Header.astro';
     <main class="wrap home-main">
       <section class="panel">
         <h1>musiki</h1>
-        <p>Estamos preparando el nuevo musiki público.</p>
+
+        <div class="home-search-wrap">
+          <input
+            type="search"
+            class="home-search-input"
+            id="home-search-input"
+            placeholder="Buscar contenidos..."
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Buscar contenidos públicos"
+            aria-controls="home-search-results"
+            aria-autocomplete="list"
+          />
+          <div
+            class="home-search-results"
+            id="home-search-results"
+            role="listbox"
+            hidden
+          ></div>
+        </div>
+
         <div class="legal-links">
           <a href="/privacy">Política de privacidad</a>
           <a href="/terms">Términos del servicio</a>
         </div>
       </section>
     </main>
+
+    <script>
+      type SearchItem = { title: string; slug: string; content: string; type: string };
+
+      let searchData: SearchItem[] | null = null;
+      let fetchPromise: Promise<void> | null = null;
+
+      const ensureData = () => {
+        if (searchData !== null) return Promise.resolve();
+        if (!fetchPromise) {
+          fetchPromise = fetch('/public-search.json')
+            .then((r) => r.json())
+            .then((payload: unknown) => {
+              searchData = Array.isArray(payload)
+                ? (payload as SearchItem[]).filter((x) => x && typeof x.title === 'string')
+                : [];
+            })
+            .catch(() => { searchData = []; });
+        }
+        return fetchPromise;
+      };
+
+      const highlight = (text: string, query: string) => {
+        if (!query) return text;
+        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return text.replace(
+          new RegExp(`(${escaped})`, 'gi'),
+          '<mark class="home-search-highlight">$1</mark>',
+        );
+      };
+
+      const getSnippet = (content: string, query: string): string => {
+        if (!content) return '';
+        const lower = content.toLowerCase();
+        const idx = lower.indexOf(query.toLowerCase());
+        if (idx === -1) return content.slice(0, 80) + (content.length > 80 ? '…' : '');
+        const start = Math.max(0, idx - 35);
+        const end = Math.min(content.length, idx + query.length + 60);
+        const raw = (start > 0 ? '…' : '') + content.slice(start, end) + (end < content.length ? '…' : '');
+        return highlight(raw, query);
+      };
+
+      const initHomeSearch = () => {
+        const input = document.getElementById('home-search-input');
+        const results = document.getElementById('home-search-results');
+        if (!(input instanceof HTMLInputElement) || !(results instanceof HTMLElement)) return;
+
+        // Prefetch on focus
+        input.addEventListener('focus', () => void ensureData(), { once: true });
+
+        const clear = () => {
+          results.hidden = true;
+          results.innerHTML = '';
+        };
+
+        const render = (query: string) => {
+          if (!searchData || query.length < 2) { clear(); return; }
+
+          const q = query.toLowerCase();
+          const matched = searchData
+            .filter((item) =>
+              item.title.toLowerCase().includes(q) || item.content.toLowerCase().includes(q),
+            )
+            .slice(0, 8);
+
+          if (matched.length === 0) { clear(); return; }
+
+          results.innerHTML = matched.map((item) => {
+            const titleHl = highlight(item.title, query);
+            const snippet = getSnippet(item.content, query);
+            return `<a class="home-search-result-item" href="${item.slug}" role="option">
+              <p class="home-search-result-title">${titleHl}</p>
+              ${snippet ? `<p class="home-search-result-meta">${snippet}</p>` : ''}
+            </a>`;
+          }).join('');
+
+          results.hidden = false;
+        };
+
+        input.addEventListener('input', (e) => {
+          const q = (e.target as HTMLInputElement).value.trim();
+          if (q.length < 2) { clear(); return; }
+          void ensureData().then(() => render(q));
+        });
+
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const first = results.querySelector<HTMLAnchorElement>('a');
+            if (first) { window.location.href = first.getAttribute('href') || ''; }
+          }
+          if (e.key === 'Escape') clear();
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!(e.target instanceof Element)) return;
+          if (!input.contains(e.target) && !results.contains(e.target)) clear();
+        });
+      };
+
+      document.addEventListener('astro:page-load', initHomeSearch);
+      initHomeSearch();
+    </script>
   </body>
 </html>

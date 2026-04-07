@@ -7932,6 +7932,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const syncMicMeter = () => {
     const connected = room.state === ConnectionState.Connected;
     const microphoneEnabled = connected && room.localParticipant.isMicrophoneEnabled;
+
+    // When disconnected preview is active, the meter is managed by startDisconnectedLivePreview — don't stop it.
+    if (!connected && disconnectedCameraPreviewEnabled) return;
+
     const localMicPublication = Array.from(room.localParticipant.audioTrackPublications.values()).find(
       (entry) => entry.track && entry.source !== Track.Source.ScreenShareAudio,
     );
@@ -9829,6 +9833,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const cameraEnabled = connected && room.localParticipant.isCameraEnabled;
     const previewEnabled = !connected && disconnectedCameraPreviewEnabled;
     const microphoneEnabled = connected && room.localParticipant.isMicrophoneEnabled;
+    const micPreviewEnabled = !connected && disconnectedCameraPreviewEnabled;
     const shareEnabled = connected && room.localParticipant.isScreenShareEnabled;
 
     cameraButton.dataset.enabled = cameraEnabled || previewEnabled ? 'true' : 'false';
@@ -9845,7 +9850,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         ? 'Encender camara. Shift + click para elegir dispositivo.'
         : 'Abrir preview de camara. Shift + click para elegir dispositivo.';
 
-    microphoneButton.dataset.enabled = microphoneEnabled ? 'true' : 'false';
+    microphoneButton.dataset.enabled = (microphoneEnabled || micPreviewEnabled) ? 'true' : 'false';
     microphoneButton.dataset.open = deviceController.getActivePanel() === 'audio' ? 'true' : 'false';
     microphoneButton.setAttribute(
       'aria-label',
@@ -10762,13 +10767,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
               const playbackVideo = document.createElement('video');
               playbackVideo.src = testPlaybackUrl;
               playbackVideo.autoplay = true;
-              playbackVideo.loop = true;
               playbackVideo.playsInline = true;
               playbackVideo.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-              // Belt-and-suspenders: force restart on ended in case loop attr fails
               playbackVideo.addEventListener('ended', () => {
-                playbackVideo.currentTime = 0;
-                void playbackVideo.play().catch(() => undefined);
+                playbackWrapper.remove();
+                URL.revokeObjectURL(testPlaybackUrl);
+                testPlaybackUrl = '';
               });
               playbackWrapper.appendChild(playbackVideo);
               teacherSlot.appendChild(playbackWrapper);

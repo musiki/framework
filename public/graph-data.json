@@ -183,8 +183,8 @@
       "img": ""
     },
     {
-      "id": "public/instrumentos/spectral parrots",
-      "name": "spectral parrots",
+      "id": "public/instrumentos/spectral parrot",
+      "name": "spectral parrot",
       "type": "document",
       "group": "public",
       "img": "https://i.imgur.com/KVfV2EM.png"
@@ -259,12 +259,12 @@
       "type": "tag"
     },
     {
-      "source": "public/instrumentos/spectral parrots",
+      "source": "public/instrumentos/spectral parrot",
       "target": "tag:AI-based",
       "type": "tag"
     },
     {
-      "source": "public/instrumentos/spectral parrots",
+      "source": "public/instrumentos/spectral parrot",
       "target": "tag:dss/feedback",
       "type": "tag"
     }
