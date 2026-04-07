@@ -5,6 +5,15 @@ import GraphModal from './GraphModal.astro';
 import { createClient } from '@supabase/supabase-js';
 import { getCollection } from 'astro:content';
 import { getCourseFrontmatterId, getCourseLegacyCode } from '../lib/course-metadata';
+import { execSync } from 'node:child_process';
+
+const buildCommit = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    return '';
+  }
+})();
 
 // auth-astro populates Astro.locals.session
 const session = Astro.locals.session;
@@ -198,6 +207,7 @@ const withActiveCourse = (href: string) => {
 				title="musiki26"
 				aria-label="musiki26"
 				data-build-state="unknown"
+				data-commit={buildCommit}
 			>
 				<img src="/logo-musiki.png" alt="musiki26" class="brand-logo" />
 			</a>
@@ -646,6 +656,7 @@ const withActiveCourse = (href: string) => {
 		const brandLink = document.getElementById('header-brand-link');
 		if (!(brandLink instanceof HTMLAnchorElement)) return;
 
+		const buildCommit = brandLink.dataset.commit || '';
 		const defaultTitle = brandLink.title || 'musiki26';
 		let lastState = brandLink.dataset.buildState || 'unknown';
 		let intervalId = 0;
@@ -675,14 +686,15 @@ const withActiveCourse = (href: string) => {
 			const state = String(payload.state || 'unknown').trim() || 'unknown';
 			const runNumber = payload.runNumber;
 			const timestamp = formatLocalTimestamp(payload.updatedAt || payload.createdAt || payload.fetchedAt);
-			const suffix = [runNumber ? `run ${runNumber}` : '', timestamp].filter(Boolean).join(' · ');
+			const commitPart = buildCommit ? `#${buildCommit}` : '';
+			const suffix = [commitPart, runNumber ? `run ${runNumber}` : '', timestamp].filter(Boolean).join(' · ');
 			const details = suffix ? ` · ${suffix}` : '';
 
 			if (state === 'running') return `Sincronización de contenidos en curso${details}`;
 			if (state === 'ok') return `Última sincronización correcta${details}`;
 			if (state === 'error') return `Última sincronización con error${details}`;
 			if (state === 'idle') return `Sincronización sin cambios${details}`;
-			return '';
+			return commitPart ? `musiki26 · ${commitPart}` : '';
 		};
 
 		const applyPayload = (payload: Record<string, unknown>) => {

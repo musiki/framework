@@ -3072,7 +3072,7 @@ order:
           </section>
         )}
         
-      <div class="class-content" data-class-content hidden={isEditorActive}>
+      <div class="class-content" data-class-content data-entry-type={currentEntryType} hidden={isEditorActive}>
         {dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />}
       </div>
         
@@ -11129,6 +11129,36 @@ a[node] -->|edge| b[hub]
           }
         } catch (error) {
           console.error('Course notes content bootstrap error:', error);
+        }
+
+        try {
+          const classContent = document.querySelector('[data-class-content][data-entry-type="lesson"]');
+          if (classContent instanceof HTMLElement) {
+            // Remove everything before (and including) the first <hr> — that's the presentation slide
+            const firstHr = classContent.querySelector('hr');
+            if (firstHr) {
+              const toRemove: Node[] = [];
+              let node: Node | null = classContent.firstChild;
+              while (node && node !== firstHr) {
+                toRemove.push(node);
+                node = node.nextSibling;
+              }
+              toRemove.forEach((n) => n.parentNode?.removeChild(n));
+              firstHr.parentNode?.removeChild(firstHr);
+            }
+            // Strip "note:" prefix from paragraphs — keep the text, just remove the tag
+            classContent.querySelectorAll('p').forEach((p) => {
+              const first = p.firstChild;
+              if (first?.nodeType === Node.TEXT_NODE) {
+                const trimmed = first.textContent ?? '';
+                if (/^note\s*:/i.test(trimmed.trimStart())) {
+                  first.textContent = trimmed.replace(/^\s*note\s*:\s*/i, '');
+                }
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Lesson slide-strip error:', error);
         }
 
         try {
