@@ -22,6 +22,9 @@ export PATH="$PATH:$(npm config get prefix)/bin"
 
 if [[ -n "$INSTALL_COMMAND" ]]; then
   printf '::deploy-phase::install::Installing dependencies\n'
+  # Remove the Vite cache directory before npm ci to prevent ENOTEMPTY errors
+  # when a live process still has the directory open.
+  rm -rf node_modules/.vite 2>/dev/null || true
   eval "$INSTALL_COMMAND"
 else
   printf '::deploy-phase::install::Skipping dependency install\n'
