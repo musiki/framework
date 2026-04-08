@@ -10643,39 +10643,60 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     setStatus('Solicitando token y conectando con la sala...');
 
     try {
-      const tokenUrl = new URL('/api/token', window.location.origin);
-      tokenUrl.searchParams.set('room', roomName);
-      tokenUrl.searchParams.set('identity', identity);
-      tokenUrl.searchParams.set('name', displayName);
+      const tokenQuery = new URLSearchParams();
+      tokenQuery.set('room', roomName);
+      tokenQuery.set('identity', identity);
+      tokenQuery.set('name', displayName);
       if (inviteCode) {
-        tokenUrl.searchParams.set('invite', inviteCode);
+        tokenQuery.set('invite', inviteCode);
       }
       if (isExternalInviteMode) {
-        tokenUrl.searchParams.set('externalName', externalInviteGuestName);
-        tokenUrl.searchParams.set('externalEmail', externalInviteGuestEmail);
-        tokenUrl.searchParams.set('externalPassword', externalInviteGuestPassword);
+        tokenQuery.set('externalName', externalInviteGuestName);
+        tokenQuery.set('externalEmail', externalInviteGuestEmail);
+        tokenQuery.set('externalPassword', externalInviteGuestPassword);
       } else {
         const pageSlug = getCurrentPresentationPageSlug();
         const effectiveCourseId = getEffectiveCourseId();
         if (effectiveCourseId) {
-          tokenUrl.searchParams.set('course', effectiveCourseId);
+          tokenQuery.set('course', effectiveCourseId);
         }
         if (pageSlug) {
-          tokenUrl.searchParams.set('pageSlug', pageSlug);
+          tokenQuery.set('pageSlug', pageSlug);
         }
       }
 
-      const tokenResponse = await fetch(tokenUrl, {
-        headers: {
-          Accept: 'application/json',
-        },
-      });
+      let tokenPayload: any = null;
+      let tokenResponse: Response | null = null;
+      let tokenErrorMessage = '';
+      for (const endpoint of ['/api/token', '/api/create-live-kit-token']) {
+        const tokenUrl = new URL(endpoint, window.location.origin);
+        tokenUrl.search = tokenQuery.toString();
 
-      const tokenPayload = await tokenResponse.json().catch(() => null);
-      if (!tokenResponse.ok || !tokenPayload?.token) {
-        throw new Error(
-          normalizeText(tokenPayload?.error) || 'Could not create a LiveKit access token.',
-        );
+        tokenResponse = await fetch(tokenUrl, {
+          headers: {
+            Accept: 'application/json',
+          },
+        });
+
+        tokenPayload = await tokenResponse.json().catch(() => null);
+        if (tokenResponse.ok && tokenPayload?.token) {
+          tokenErrorMessage = '';
+          break;
+        }
+
+        tokenErrorMessage =
+          normalizeText(tokenPayload?.error) ||
+          (tokenResponse.status === 404
+            ? `Token endpoint not found (${endpoint}).`
+            : 'Could not create a LiveKit access token.');
+
+        if (tokenResponse.status !== 404) {
+          break;
+        }
+      }
+
+      if (!tokenResponse?.ok || !tokenPayload?.token) {
+        throw new Error(tokenErrorMessage || 'Could not create a LiveKit access token.');
       }
 
       livekitUrl = normalizeText(tokenPayload.livekitUrl) || livekitUrl;
