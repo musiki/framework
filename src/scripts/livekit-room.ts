@@ -8500,8 +8500,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const connected = room.state === ConnectionState.Connected;
     const microphoneEnabled = connected && room.localParticipant.isMicrophoneEnabled;
 
-    // When disconnected preview is active, the meter is managed by startDisconnectedLivePreview — don't stop it.
-    if (!connected && disconnectedCameraPreviewEnabled) return;
+    // Legacy disconnected preview may manage the mic meter separately.
+    if (!connected && disconnectedLiveStream) return;
 
     const localMicPublication = Array.from(room.localParticipant.audioTrackPublications.values()).find(
       (entry) => entry.track && entry.source !== Track.Source.ScreenShareAudio,
@@ -10400,7 +10400,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const cameraEnabled = connected && room.localParticipant.isCameraEnabled;
     const previewEnabled = !connected && disconnectedCameraPreviewEnabled;
     const microphoneEnabled = connected && room.localParticipant.isMicrophoneEnabled;
-    const micPreviewEnabled = !connected && disconnectedCameraPreviewEnabled;
+    const micPreviewEnabled = !connected && Boolean(disconnectedLiveStream?.getAudioTracks()[0]);
     const shareEnabled = connected && room.localParticipant.isScreenShareEnabled;
 
     cameraButton.dataset.enabled = cameraEnabled || previewEnabled ? 'true' : 'false';
@@ -10624,9 +10624,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     stopTestMode();
-    stopDisconnectedLivePreview();
     const shouldRestoreDisconnectedPreview = disconnectedCameraPreviewEnabled;
     const hadDisconnectedPreview = Boolean(localPreviewStreamMount?.stream.getVideoTracks()[0]);
+    stopDisconnectedLivePreview();
     clearDisconnectedStagePreview();
     removeLocalPreviewStream();
     clearIdentityPreviewSlot();
@@ -11207,7 +11207,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   // ── Disconnected live preview (camera button while disconnected) ─────────
   const stopDisconnectedLivePreview = () => {
-    disconnectedCameraPreviewEnabled = false;
     micMeterController.stop();
     if (disconnectedLiveStream) {
       disconnectedLiveStream.getTracks().forEach((t) => t.stop());
@@ -11216,41 +11215,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (teacherSlot instanceof HTMLElement && teacherSlot.querySelector('[data-disconnected-live]')) {
       teacherSlot.innerHTML = '';
     }
+    disableDisconnectedCameraPreview();
   };
 
   const startDisconnectedLivePreview = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('Camera preview no disponible en este navegador.');
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    disconnectedLiveStream = stream;
-    disconnectedCameraPreviewEnabled = true;
-
-    // Switch to teacher (F) layout
-    forceDisconnectedPreviewLayout();
-
-    // Show in teacher slot
-    if (teacherSlot instanceof HTMLElement) {
-      teacherSlot.innerHTML = '';
-      const wrapper = document.createElement('div');
-      wrapper.className = 'conference-media-frame conference-media-frame--disconnected-live';
-      wrapper.dataset.disconnectedLive = 'true';
-      const video = document.createElement('video');
-      video.autoplay = true;
-      video.muted = true;
-      video.playsInline = true;
-      video.srcObject = stream;
-      video.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-      wrapper.appendChild(video);
-      teacherSlot.appendChild(wrapper);
-      void video.play().catch(() => undefined);
-    }
-
-    // Mic meter in bottom bar
-    const audioTrack = stream.getAudioTracks()[0];
-    if (audioTrack) {
-      void micMeterController.start(audioTrack).catch(() => { micMeterController.stop(); });
-    }
+    disconnectedLiveStream = null;
+    micMeterController.stop();
+    await enableDisconnectedCameraPreview();
   };
 
   // ── TEST button: record a mic+cam clip, play it back on toggle off ──────
