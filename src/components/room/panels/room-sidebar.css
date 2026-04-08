@@ -363,6 +363,271 @@ details[open] > summary.conference-sidebar-heading::before {
   accent-color: var(--conference-accent);
 }
 
+.conference-field--background {
+  position: relative;
+}
+
+.conference-background-action-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+}
+
+.conference-background-action,
+.conference-background-dropzone button,
+.conference-background-search-row button,
+.conference-background-color-row button,
+.conference-background-popup-footer button,
+.conference-background-preview-meta button,
+.conference-background-popup-close {
+  border: 1px solid var(--conference-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--conference-fg);
+  font: inherit;
+  font-size: var(--conference-font-ui);
+  line-height: 1;
+  padding: 0.38rem 0.55rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.conference-background-action:hover,
+.conference-background-action[data-active='true'],
+.conference-background-dropzone button:hover,
+.conference-background-search-row button:hover,
+.conference-background-color-row button:hover,
+.conference-background-popup-footer button:hover,
+.conference-background-preview-meta button:hover,
+.conference-background-popup-close:hover {
+  border-color: rgba(140, 210, 255, 0.58);
+  background: rgba(72, 132, 214, 0.12);
+  color: rgba(240, 246, 255, 0.98);
+}
+
+.conference-background-popup-shell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.conference-background-popup {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0.2rem;
+  z-index: 12;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+  padding: 0.78rem;
+  border: 1px solid var(--conference-line);
+  background: rgba(10, 12, 18, 0.96);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(16px);
+}
+
+.conference-background-popup[hidden] {
+  display: none;
+}
+
+.conference-background-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.conference-background-popup-header strong {
+  color: var(--conference-fg-hi);
+  font-size: var(--conference-font-caption);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.conference-background-popup-close {
+  padding-inline: 0.45rem;
+}
+
+.conference-background-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.conference-background-preview img {
+  flex: 0 0 4.4rem;
+  width: 4.4rem;
+  height: 3.2rem;
+  object-fit: cover;
+  border: 1px solid var(--conference-line-soft);
+}
+
+.conference-background-preview-meta {
+  display: flex;
+  flex: 1 1 11rem;
+  flex-direction: column;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.conference-background-preview-meta strong {
+  color: var(--conference-fg);
+  font-size: var(--conference-font-ui);
+  line-height: 1.25;
+}
+
+.conference-background-preview-meta button {
+  justify-self: start;
+}
+
+.conference-background-dropzone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  min-width: 0;
+  padding: 0.62rem;
+  border: 1px dashed rgba(140, 210, 255, 0.26);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.conference-background-dropzone[data-drag-active='true'] {
+  border-color: rgba(140, 210, 255, 0.62);
+  background: rgba(72, 132, 214, 0.1);
+}
+
+.conference-background-dropzone-copy {
+  display: flex;
+  flex: 1 1 11rem;
+  flex-direction: column;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.conference-background-dropzone-copy strong,
+.conference-background-search label,
+.conference-background-color label {
+  color: var(--conference-fg-hi);
+  font-size: var(--conference-font-caption);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.conference-background-dropzone-copy span,
+.conference-background-inline-status {
+  color: var(--conference-muted);
+  font-size: var(--conference-font-ui);
+  line-height: 1.4;
+}
+
+.conference-background-inline-status[data-error='true'] {
+  color: rgba(255, 168, 168, 0.92);
+}
+
+.conference-background-search,
+.conference-background-color {
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.conference-background-search-row,
+.conference-background-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.conference-background-color-row {
+  justify-content: start;
+}
+
+.conference-background-search-row input {
+  flex: 1 1 11rem;
+  min-width: 0;
+}
+
+.conference-background-color-row input[type='color'] {
+  flex: 0 0 auto;
+  width: 2.8rem;
+  height: 2rem;
+  border: 1px solid var(--conference-line);
+  padding: 0.1rem;
+  background: transparent;
+}
+
+.conference-background-popup-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.conference-background-results {
+  display: grid;
+  gap: 0.36rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.conference-background-results[hidden] {
+  display: none;
+}
+
+.conference-background-result {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.32rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  text-align: left;
+}
+
+.conference-background-result:hover {
+  border-color: rgba(140, 210, 255, 0.4);
+  background: rgba(72, 132, 214, 0.12);
+}
+
+.conference-background-result img {
+  width: 4rem;
+  height: 3rem;
+  object-fit: cover;
+}
+
+.conference-background-result-meta {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.conference-background-result-meta strong,
+.conference-background-result-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conference-background-result-meta strong {
+  color: var(--conference-fg);
+  font-size: var(--conference-font-ui);
+}
+
+.conference-background-result-meta span {
+  color: var(--conference-muted);
+  font-size: var(--conference-font-caption);
+}
+
 .conference-name-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

@@ -103,6 +103,14 @@ type ExternalMediaSearchResult = {
   title: string;
 };
 
+type BackgroundImageSearchResult = {
+  imageUrl: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  thumbnailUrl: string;
+  title: string;
+};
+
 type PresentationEmbeddedMediaState = PresentationMediaState;
 
 type YouTubePlayerStateChangeEvent = {
@@ -167,6 +175,10 @@ type PersistedRoomSetup = {
   name?: string;
   preferredAudioInputId?: string;
   preferredVideoInputId?: string;
+  backgroundColor?: string;
+  backgroundEffectMode?: BackgroundEffectMode;
+  backgroundImageLabel?: string;
+  backgroundImageUrl?: string;
   previewBlur?: boolean;
   previewInvert?: boolean;
   previewZoom?: number;
@@ -326,6 +338,13 @@ type HandControlRange = {
 type HandControlValues = Record<HandControlKey, number>;
 type VideoMixKey = 'brightness' | 'contrast' | 'luma' | 'saturation' | 'tint';
 type VideoMixSettings = Record<VideoMixKey, number>;
+type BackgroundEffectMode = 'none' | 'blur' | 'image' | 'color';
+type BackgroundRgbaColor = {
+  a: number;
+  b: number;
+  g: number;
+  r: number;
+};
 type RecordingPresetKey = 'landscape-1080' | 'instagram-story' | 'tiktok';
 type RecordingPresetConfig = {
   height: number;
@@ -360,6 +379,7 @@ const RECORDING_PRESET_CONFIGS: Record<RecordingPresetKey, RecordingPresetConfig
 };
 const ROOM_SETUP_STORAGE_KEY = 'musiki:room:setup:v1';
 const BACKGROUND_BLUR_PROCESSOR_NAME = 'musiki-background-blur';
+const DEFAULT_BACKGROUND_COLOR = '#101820';
 const BACKGROUND_BLUR_MODEL_ASSET =
   'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite';
 const HAND_LANDMARKER_MODEL_ASSET =
@@ -378,6 +398,9 @@ const localCameraHandOverlayState: {
   landmarks: null,
 };
 const localCameraProcessorState = {
+  backgroundColor: DEFAULT_BACKGROUND_COLOR,
+  backgroundEffectMode: 'none' as BackgroundEffectMode,
+  backgroundImageUrl: '',
   blurEnabled: false,
   invertEnabled: false,
   overlayEnabled: false,
@@ -397,6 +420,43 @@ const normalizeRecordingPreset = (
 ): RecordingPresetKey => {
   const normalized = normalizeText(value) as RecordingPresetKey;
   return normalized in RECORDING_PRESET_CONFIGS ? normalized : fallback;
+};
+
+const normalizeBackgroundEffectMode = (
+  value: unknown,
+  fallback: BackgroundEffectMode = 'none',
+): BackgroundEffectMode => {
+  const normalized = normalizeText(value).toLowerCase();
+  if (normalized === 'blur' || normalized === 'image' || normalized === 'color' || normalized === 'none') {
+    return normalized;
+  }
+  return fallback;
+};
+
+const normalizeBackgroundColor = (value: unknown, fallback = DEFAULT_BACKGROUND_COLOR) => {
+  const normalized = normalizeText(value);
+  return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized.toUpperCase() : fallback.toUpperCase();
+};
+
+const hexToBackgroundRgba = (value: string): BackgroundRgbaColor => {
+  const normalized = normalizeBackgroundColor(value, DEFAULT_BACKGROUND_COLOR).slice(1);
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  return {
+    a: 255,
+    b,
+    g,
+    r,
+  };
+};
+
+const canPersistBackgroundImageUrl = (value: string) => Boolean(value) && !value.startsWith('blob:');
+
+const buildBackgroundImageProxyUrl = (value: string) => {
+  const normalized = normalizeText(value);
+  if (!normalized) return '';
+  return `/api/live/background-image/proxy?url=${encodeURIComponent(normalized)}`;
 };
 
 const getRecordingPresetConfig = (
@@ -1495,19 +1555,19 @@ const isBackgroundBlurProcessorActive = (track: LocalCameraTrackLike | null | un
   normalizeText(track?.getProcessor?.()?.name) === BACKGROUND_BLUR_PROCESSOR_NAME;
 
 const shouldProcessLocalCameraVideo = ({
+  backgroundEffectMode,
   gravityBallEnabled,
   handTrackEnabled,
-  previewBlur,
   previewInvert,
   videoMix,
 }: {
+  backgroundEffectMode: BackgroundEffectMode;
   gravityBallEnabled: boolean;
   handTrackEnabled: boolean;
-  previewBlur: boolean;
   previewInvert: boolean;
   videoMix: VideoMixSettings;
 }) =>
-  previewBlur ||
+  backgroundEffectMode !== 'none' ||
   previewInvert ||
   handTrackEnabled ||
   gravityBallEnabled ||
@@ -1518,8 +1578,15 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
   processedTrack?: MediaStreamTrack;
 
   private animationId = 0;
+  private allowGpuDelegate = true;
+  private backgroundCanvas: HTMLCanvasElement | null = null;
+  private backgroundContext: CanvasRenderingContext2D | null = null;
+  private backgroundImageElement: HTMLImageElement | null = null;
+  private backgroundImageLoaded = false;
+  private backgroundImageUrl = '';
   private blurCanvas: HTMLCanvasElement | null = null;
   private blurContext: CanvasRenderingContext2D | null = null;
+  private cpuFallbackScheduled = false;
   private destroyed = false;
   private drawingUtils: InstanceType<VisionTasksModule['DrawingUtils']> | null = null;
   private element: HTMLVideoElement | null = null;
@@ -1529,7 +1596,10 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
   private outputContext: CanvasRenderingContext2D | null = null;
   private outputStream: MediaStream | null = null;
   private personMaskIndex = 0;
+  private segmenterDelegate: 'CPU' | 'GPU' = 'CPU';
   private segmenter: InstanceType<VisionTasksModule['ImageSegmenter']> | null = null;
+  private segmenterGpuCanvas: HTMLCanvasElement | null = null;
+  private segmenterGpuContext: WebGL2RenderingContext | null = null;
   private segmenterInitPromise: Promise<void> | null = null;
 
   private closeMask(mask: VisionMask | null | undefined) {
@@ -1540,6 +1610,37 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
     }
   }
 
+  private ensureSegmenterGpuBridge() {
+    if (this.segmenterGpuCanvas && this.segmenterGpuContext) {
+      return {
+        canvas: this.segmenterGpuCanvas,
+        context: this.segmenterGpuContext,
+      };
+    }
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('webgl2', {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: false,
+      stencil: false,
+    });
+
+    if (!context) {
+      return null;
+    }
+
+    this.segmenterGpuCanvas = canvas;
+    this.segmenterGpuContext = context;
+
+    return {
+      canvas,
+      context,
+    };
+  }
+
   private async createSegmenter() {
     const vision = await loadVisionTasksModule();
     const wasmFileset = await loadVisionTasksFileset();
@@ -1548,20 +1649,43 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
     };
 
     let lastError: unknown = null;
-    for (const delegate of ['GPU', 'CPU'] as const) {
+
+    const gpuBridge = this.allowGpuDelegate ? this.ensureSegmenterGpuBridge() : null;
+    if (gpuBridge) {
       try {
-        return await vision.ImageSegmenter.createFromOptions(wasmFileset as never, {
+        const segmenter = await vision.ImageSegmenter.createFromOptions(wasmFileset as never, {
           baseOptions: {
             ...baseOptions,
-            delegate,
+            delegate: 'GPU',
           },
+          canvas: gpuBridge.canvas,
           outputCategoryMask: false,
           outputConfidenceMasks: true,
           runningMode: 'VIDEO',
         });
+        this.segmenterDelegate = 'GPU';
+        return segmenter;
       } catch (error) {
         lastError = error;
       }
+    }
+
+    try {
+      const segmenter = await vision.ImageSegmenter.createFromOptions(wasmFileset as never, {
+        baseOptions: {
+          ...baseOptions,
+          delegate: 'CPU',
+        },
+        outputCategoryMask: false,
+        outputConfidenceMasks: true,
+        runningMode: 'VIDEO',
+      });
+
+      this.segmenterDelegate = 'CPU';
+      this.cpuFallbackScheduled = false;
+      return segmenter;
+    } catch (error) {
+      lastError = error;
     }
 
     throw lastError instanceof Error ? lastError : new Error('Could not initialize background blur.');
@@ -1572,9 +1696,15 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
     this.segmenterInitPromise = (async () => {
       const vision = await loadVisionTasksModule();
       this.segmenter = await this.createSegmenter();
-      this.drawingUtils = new vision.DrawingUtils(this.outputContext as CanvasRenderingContext2D);
+      this.drawingUtils =
+        this.segmenterDelegate === 'GPU' && this.segmenterGpuContext
+          ? new vision.DrawingUtils(
+              this.outputContext as CanvasRenderingContext2D,
+              this.segmenterGpuContext,
+            )
+          : new vision.DrawingUtils(this.outputContext as CanvasRenderingContext2D);
 
-      const labels = this.segmenter.getLabels?.() || [];
+      const labels: string[] = this.segmenter.getLabels?.() || [];
       const maskIndex = labels.findIndex((label) => /person|selfie|foreground/i.test(String(label)));
       this.personMaskIndex = maskIndex >= 0 ? maskIndex : Math.max(0, labels.length - 1);
     })()
@@ -1586,13 +1716,90 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
   }
 
   private ensureCanvasSize(width: number, height: number) {
-    if (!this.outputCanvas || !this.blurCanvas) return;
+    if (!this.outputCanvas || !this.blurCanvas || !this.backgroundCanvas) return;
     if (this.outputCanvas.width === width && this.outputCanvas.height === height) return;
 
     this.outputCanvas.width = width;
     this.outputCanvas.height = height;
     this.blurCanvas.width = width;
     this.blurCanvas.height = height;
+    this.backgroundCanvas.width = width;
+    this.backgroundCanvas.height = height;
+    if (this.segmenterGpuCanvas) {
+      this.segmenterGpuCanvas.width = width;
+      this.segmenterGpuCanvas.height = height;
+    }
+  }
+
+  private syncBackgroundImage(url: string) {
+    if (url === this.backgroundImageUrl) {
+      return;
+    }
+
+    this.backgroundImageUrl = url;
+    this.backgroundImageLoaded = false;
+
+    if (!url) {
+      this.backgroundImageElement = null;
+      return;
+    }
+
+    const image = new Image();
+    image.decoding = 'async';
+    if (!url.startsWith('blob:') && !url.startsWith('data:')) {
+      image.crossOrigin = 'anonymous';
+    }
+    image.onload = () => {
+      if (this.backgroundImageElement !== image) return;
+      this.backgroundImageLoaded = true;
+    };
+    image.onerror = () => {
+      if (this.backgroundImageElement !== image) return;
+      this.backgroundImageLoaded = false;
+    };
+    this.backgroundImageElement = image;
+    image.src = url;
+  }
+
+  private drawBackgroundImageCover(width: number, height: number) {
+    if (!this.backgroundCanvas || !this.backgroundContext || !this.backgroundImageElement || !this.backgroundImageLoaded) {
+      return null;
+    }
+
+    const imageWidth = Math.max(1, this.backgroundImageElement.naturalWidth || this.backgroundImageElement.width || width);
+    const imageHeight = Math.max(1, this.backgroundImageElement.naturalHeight || this.backgroundImageElement.height || height);
+    const scale = Math.max(width / imageWidth, height / imageHeight);
+    const drawWidth = imageWidth * scale;
+    const drawHeight = imageHeight * scale;
+    const drawX = (width - drawWidth) * 0.5;
+    const drawY = (height - drawHeight) * 0.5;
+
+    this.backgroundContext.save();
+    this.backgroundContext.setTransform(1, 0, 0, 1, 0, 0);
+    this.backgroundContext.clearRect(0, 0, width, height);
+    this.backgroundContext.drawImage(this.backgroundImageElement, drawX, drawY, drawWidth, drawHeight);
+    this.backgroundContext.restore();
+
+    return this.backgroundCanvas;
+  }
+
+  private getBackgroundReplacementTexture(width: number, height: number) {
+    const mode = localCameraProcessorState.backgroundEffectMode;
+    if (mode === 'blur') {
+      return this.blurCanvas;
+    }
+
+    if (mode === 'color') {
+      return hexToBackgroundRgba(localCameraProcessorState.backgroundColor);
+    }
+
+    if (mode === 'image') {
+      const nextImageUrl = normalizeText(localCameraProcessorState.backgroundImageUrl);
+      this.syncBackgroundImage(nextImageUrl);
+      return this.drawBackgroundImageCover(width, height);
+    }
+
+    return null;
   }
 
   private mirrorOutput(width: number, height: number) {
@@ -1668,6 +1875,28 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
     return clonedMask;
   }
 
+  private resetSegmenterState() {
+    this.closeMask(this.lastMask);
+    this.lastMask = null;
+    this.drawingUtils?.close?.();
+    this.drawingUtils = null;
+    this.segmenter?.close?.();
+    this.segmenter = null;
+    this.segmenterInitPromise = null;
+    this.lastSegmentationAt = 0;
+  }
+
+  private scheduleCpuFallback(error: unknown) {
+    if (this.cpuFallbackScheduled || this.segmenterDelegate !== 'GPU') {
+      return;
+    }
+
+    this.cpuFallbackScheduled = true;
+    this.allowGpuDelegate = false;
+    console.warn('Background blur GPU path failed, retrying on CPU.', error);
+    this.resetSegmenterState();
+  }
+
   private renderFrame = () => {
     if (
       this.destroyed ||
@@ -1682,7 +1911,8 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
 
     const width = Math.max(2, Math.round(this.element.videoWidth || 0));
     const height = Math.max(2, Math.round(this.element.videoHeight || 0));
-    const shouldBlur = localCameraProcessorState.blurEnabled;
+    const backgroundMode = localCameraProcessorState.backgroundEffectMode;
+    const shouldProcessBackground = backgroundMode !== 'none';
 
     if (this.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || width < 2 || height < 2) {
       this.animationId = window.requestAnimationFrame(this.renderFrame);
@@ -1693,23 +1923,25 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
     const now = performance.now();
 
     this.outputContext.clearRect(0, 0, width, height);
-    if (!shouldBlur) {
+    if (!shouldProcessBackground) {
       this.outputContext.drawImage(this.element, 0, 0, width, height);
     } else {
       void this.ensureSegmenterReady();
-      const overscanX = Math.round(width * 0.03);
-      const overscanY = Math.round(height * 0.03);
-      this.blurContext.clearRect(0, 0, width, height);
-      this.blurContext.save();
-      this.blurContext.filter = 'blur(20px) saturate(0.92)';
-      this.blurContext.drawImage(
-        this.element,
-        -overscanX,
-        -overscanY,
-        width + overscanX * 2,
-        height + overscanY * 2,
-      );
-      this.blurContext.restore();
+      if (backgroundMode === 'blur') {
+        const overscanX = Math.round(width * 0.03);
+        const overscanY = Math.round(height * 0.03);
+        this.blurContext.clearRect(0, 0, width, height);
+        this.blurContext.save();
+        this.blurContext.filter = 'blur(20px) saturate(0.92)';
+        this.blurContext.drawImage(
+          this.element,
+          -overscanX,
+          -overscanY,
+          width + overscanX * 2,
+          height + overscanY * 2,
+        );
+        this.blurContext.restore();
+      }
 
       if (this.segmenter && now - this.lastSegmentationAt >= 80) {
         this.lastSegmentationAt = now;
@@ -1720,13 +1952,20 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
             this.closeMask(this.lastMask);
             this.lastMask = nextMask;
           }
-        } catch {
+        } catch (error) {
+          this.scheduleCpuFallback(error);
           // Keep the last valid mask if a frame fails.
         }
       }
 
-      if (this.lastMask && this.drawingUtils) {
-        this.drawingUtils.drawConfidenceMask(this.lastMask, this.blurCanvas, this.element);
+      const backgroundTexture = this.getBackgroundReplacementTexture(width, height);
+      if (this.lastMask && this.drawingUtils && backgroundTexture) {
+        try {
+          this.drawingUtils.drawConfidenceMask(this.lastMask, backgroundTexture, this.element);
+        } catch (error) {
+          this.scheduleCpuFallback(error);
+          this.outputContext.drawImage(this.element, 0, 0, width, height);
+        }
       } else {
         this.outputContext.drawImage(this.element, 0, 0, width, height);
       }
@@ -1778,15 +2017,25 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
       opts.element instanceof HTMLVideoElement
         ? opts.element
         : document.createElement('video');
+    this.element.autoplay = true;
+    this.element.muted = true;
+    this.element.playsInline = true;
+    if (!this.element.srcObject) {
+      this.element.srcObject = new MediaStream([opts.track]);
+    }
+    this.backgroundCanvas = document.createElement('canvas');
     this.outputCanvas = document.createElement('canvas');
     this.blurCanvas = document.createElement('canvas');
+    this.backgroundContext = this.backgroundCanvas.getContext('2d', { alpha: false });
     this.outputContext = this.outputCanvas.getContext('2d', { alpha: false });
     this.blurContext = this.blurCanvas.getContext('2d', { alpha: false });
 
-    if (!this.outputContext || !this.blurContext) {
+    if (!this.backgroundContext || !this.outputContext || !this.blurContext) {
       throw new Error('Could not initialize background blur compositor.');
     }
 
+    this.backgroundContext.imageSmoothingEnabled = true;
+    this.backgroundContext.imageSmoothingQuality = 'high';
     this.outputContext.imageSmoothingEnabled = true;
     this.outputContext.imageSmoothingQuality = 'high';
     this.blurContext.imageSmoothingEnabled = true;
@@ -1798,9 +2047,10 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
       throw new Error('Canvas captureStream returned no video track.');
     }
     this.processedTrack = processedTrack;
-    if (localCameraProcessorState.blurEnabled) {
+    if (localCameraProcessorState.backgroundEffectMode !== 'none') {
       void this.ensureSegmenterReady();
     }
+    void this.element.play().catch(() => undefined);
     this.renderFrame();
   }
 
@@ -1820,21 +2070,28 @@ class BackgroundBlurVideoProcessor implements VideoTrackProcessorLike {
       this.animationId = 0;
     }
 
-    this.closeMask(this.lastMask);
-    this.lastMask = null;
-    this.drawingUtils?.close?.();
-    this.drawingUtils = null;
-    this.segmenter?.close?.();
-    this.segmenter = null;
-    this.segmenterInitPromise = null;
+    this.resetSegmenterState();
     this.outputStream?.getTracks().forEach((track) => track.stop());
     this.outputStream = null;
     this.processedTrack = undefined;
+    this.backgroundCanvas = null;
+    this.backgroundContext = null;
+    this.backgroundImageElement = null;
+    this.backgroundImageLoaded = false;
+    this.backgroundImageUrl = '';
     this.outputCanvas = null;
     this.outputContext = null;
     this.blurCanvas = null;
     this.blurContext = null;
+    if (this.element) {
+      this.element.pause();
+      this.element.srcObject = null;
+    }
     this.element = null;
+    this.segmenterGpuCanvas = null;
+    this.segmenterGpuContext = null;
+    this.segmenterDelegate = 'CPU';
+    this.cpuFallbackScheduled = false;
   }
 }
 
@@ -3616,7 +3873,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const sessionSetupDetails = root.querySelector('[data-session-setup]');
   const previewZoomInput = root.querySelector('[data-preview-zoom-input]');
   const previewZoomOutput = root.querySelector('[data-preview-zoom-output]');
-  const previewBlurInput = root.querySelector('[data-preview-blur-input]');
+  const backgroundBlurToggleButton = root.querySelector('[data-action="background-blur-toggle"]');
+  const backgroundReplaceToggleButton = root.querySelector('[data-action="background-replace-toggle"]');
+  const backgroundReplacePopup = root.querySelector('[data-background-replace-popup]');
+  const backgroundReplaceCloseButton = root.querySelector('[data-action="background-replace-close"]');
+  const backgroundEffectClearButton = root.querySelector('[data-action="background-effect-clear"]');
+  const backgroundImagePreviewShell = root.querySelector('[data-background-image-preview-shell]');
+  const backgroundImagePreview = root.querySelector('[data-background-image-preview]');
+  const backgroundImageLabel = root.querySelector('[data-background-image-label]');
+  const backgroundImageClearButton = root.querySelector('[data-action="background-image-clear"]');
+  const backgroundImageFileInput = root.querySelector('[data-background-image-file-input]');
+  const backgroundImageDropzone = root.querySelector('[data-background-image-dropzone]');
+  const backgroundImagePickButton = root.querySelector('[data-action="background-image-pick"]');
+  const backgroundImageSearchInput = root.querySelector('[data-background-image-search-input]');
+  const backgroundImageSearchButton = root.querySelector('[data-action="background-image-search"]');
+  const backgroundImageStatus = root.querySelector('[data-background-image-status]');
+  const backgroundImageResults = root.querySelector('[data-background-image-results]');
+  const backgroundColorInput = root.querySelector('[data-background-color-input]');
+  const backgroundColorApplyButton = root.querySelector('[data-action="background-color-apply"]');
   const previewInvertInput = root.querySelector('[data-preview-invert-input]');
   const showCircleInput = root.querySelector('[data-show-circle-input]');
   const statusNode = root.querySelector('[data-room-status]');
@@ -4044,6 +4318,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let recordingPresentationUrl = '';
   let recordingPresentationSnapshotTask: Promise<void> | null = null;
   let recordingPresentationLastSnapshotAt = 0;
+  let disconnectedLiveStream: MediaStream | null = null;
   let disconnectedPreviewProcessor: BackgroundBlurVideoProcessor | null = null;
   let disconnectedPreviewSourceVideo: HTMLVideoElement | null = null;
   let reverseMicKeyActive = false;
@@ -4055,7 +4330,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       : persistedSetup.previewZoom,
     normalizePreviewZoom(persistedSetup.previewZoom, 2.25),
   );
-  let previewBlur = Boolean(persistedSetup.previewBlur);
+  let backgroundEffectMode = normalizeBackgroundEffectMode(
+    persistedSetup.backgroundEffectMode,
+    persistedSetup.previewBlur ? 'blur' : 'none',
+  );
+  let backgroundColor = normalizeBackgroundColor(persistedSetup.backgroundColor, DEFAULT_BACKGROUND_COLOR);
+  let backgroundImageUrl =
+    canPersistBackgroundImageUrl(normalizeText(persistedSetup.backgroundImageUrl))
+      ? normalizeText(persistedSetup.backgroundImageUrl)
+      : '';
+  let backgroundImageSelectionLabel = normalizeText(persistedSetup.backgroundImageLabel);
+  let backgroundImageObjectUrl = '';
+  let backgroundImageSearchRequestId = 0;
+  let backgroundImageSearchLoading = false;
+  let backgroundImageSearchQuery = '';
+  let backgroundImageSearchResultsState: BackgroundImageSearchResult[] = [];
+  let backgroundReplacePopupOpen = false;
+  if (backgroundEffectMode === 'image' && !backgroundImageUrl) {
+    backgroundEffectMode = 'none';
+  }
+  let previewBlur = backgroundEffectMode === 'blur';
   let previewInvert = Boolean(persistedSetup.previewInvert);
   let recordingPreset = normalizeRecordingPreset(
     recordingPresetSelect instanceof HTMLSelectElement
@@ -4288,9 +4582,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     localCameraHandOverlayState.enabled = handTrackEnabled;
     const shouldProcessVideo = shouldProcessLocalCameraVideo({
+      backgroundEffectMode,
       gravityBallEnabled,
       handTrackEnabled,
-      previewBlur,
       previewInvert,
       videoMix: localCameraProcessorState.videoMix,
     });
@@ -4310,14 +4604,46 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       await localCameraTrack.setProcessor?.(new BackgroundBlurVideoProcessor(), true);
     } catch {
       // If the processor fails to initialize (WASM load error, canvas context failure, etc.),
-      // disable blur gracefully so the camera track keeps working.
-      previewBlur = false;
-      localCameraProcessorState.blurEnabled = false;
-      if (previewBlurInput instanceof HTMLInputElement) {
-        previewBlurInput.checked = false;
-      }
+      // disable the background effect gracefully so the camera track keeps working.
+      backgroundEffectMode = 'none';
+      applyBackgroundEffectState();
+      persistSetupState();
       await localCameraTrack.stopProcessor?.().catch(() => undefined);
     }
+  };
+
+  const ensureDisconnectedBackgroundPreviewForEffect = async () => {
+    if (room.state !== ConnectionState.Disconnected || backgroundEffectMode === 'none') return;
+
+    const hasManagedPreview = Boolean(localPreviewStreamMount?.stream.getVideoTracks()[0]);
+    if (disconnectedLiveStream && !hasManagedPreview) {
+      stopDisconnectedLivePreview();
+    }
+
+    if (!disconnectedCameraPreviewEnabled || !hasManagedPreview) {
+      await enableDisconnectedCameraPreview();
+    }
+  };
+
+  const refreshBackgroundVideoProcessing = async () => {
+    if (room.state === ConnectionState.Disconnected) {
+      await ensureDisconnectedBackgroundPreviewForEffect();
+      await syncDisconnectedPreviewProcessing();
+      syncIdentityPreview();
+      syncAllParticipants();
+      setControlState();
+      return;
+    }
+
+    if (room.state === ConnectionState.Connected) {
+      await syncLocalBackgroundBlurProcessor();
+      syncIdentityPreview();
+      syncAllParticipants();
+      return;
+    }
+
+    syncIdentityPreview();
+    syncAllParticipants();
   };
 
   const resolvePresentationCourseId = (href: string | null | undefined) => {
@@ -4971,12 +5297,156 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const applyPreviewBlurState = () => {
-    root.dataset.previewBlur = previewBlur ? 'true' : 'false';
-    localCameraProcessorState.blurEnabled = previewBlur;
-    if (previewBlurInput instanceof HTMLInputElement) {
-      previewBlurInput.checked = previewBlur;
+  const setBackgroundImageStatus = (message: string, isError = false) => {
+    if (!(backgroundImageStatus instanceof HTMLElement)) return;
+    backgroundImageStatus.textContent = message;
+    backgroundImageStatus.dataset.error = isError ? 'true' : 'false';
+  };
+
+  const revokeBackgroundImageObjectUrl = () => {
+    if (!backgroundImageObjectUrl) return;
+    URL.revokeObjectURL(backgroundImageObjectUrl);
+    backgroundImageObjectUrl = '';
+  };
+
+  const syncBackgroundImagePreview = () => {
+    const hasPreview = Boolean(backgroundImageUrl);
+    if (backgroundImagePreviewShell instanceof HTMLElement) {
+      backgroundImagePreviewShell.hidden = !hasPreview;
     }
+    if (backgroundImagePreview instanceof HTMLImageElement) {
+      backgroundImagePreview.src = hasPreview ? backgroundImageUrl : '';
+    }
+    if (backgroundImageLabel instanceof HTMLElement) {
+      backgroundImageLabel.textContent = hasPreview
+        ? backgroundImageSelectionLabel || 'Selected image'
+        : 'No image selected';
+    }
+  };
+
+  const renderBackgroundImageSearchResults = () => {
+    if (!(backgroundImageResults instanceof HTMLElement)) return;
+    if (backgroundImageSearchButton instanceof HTMLButtonElement) {
+      backgroundImageSearchButton.disabled = backgroundImageSearchLoading;
+    }
+
+    const shouldShow =
+      Boolean(
+        backgroundImageSearchQuery || backgroundImageSearchLoading || backgroundImageSearchResultsState.length > 0,
+      );
+
+    backgroundImageResults.hidden = !shouldShow;
+    backgroundImageResults.replaceChildren();
+    if (!shouldShow) return;
+
+    if (backgroundImageSearchLoading) {
+      const loadingState = document.createElement('div');
+      loadingState.className = 'conference-background-inline-status';
+      loadingState.textContent = 'Searching images...';
+      backgroundImageResults.appendChild(loadingState);
+      return;
+    }
+
+    if (backgroundImageSearchResultsState.length === 0) {
+      const emptyState = document.createElement('div');
+      emptyState.className = 'conference-background-inline-status';
+      emptyState.textContent = backgroundImageSearchQuery
+        ? 'No image results for that search.'
+        : 'Search Google Images from here.';
+      backgroundImageResults.appendChild(emptyState);
+      return;
+    }
+
+    backgroundImageSearchResultsState.forEach((result) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'conference-background-result';
+
+      const preview = document.createElement('img');
+      preview.alt = '';
+      preview.loading = 'lazy';
+      preview.decoding = 'async';
+      preview.src = result.thumbnailUrl || result.imageUrl;
+
+      const meta = document.createElement('span');
+      meta.className = 'conference-background-result-meta';
+
+      const title = document.createElement('strong');
+      title.textContent = result.title || 'Image result';
+
+      const subtitle = document.createElement('span');
+      subtitle.textContent = result.sourceLabel || 'Google Images';
+
+      meta.append(title, subtitle);
+      button.append(preview, meta);
+      button.addEventListener('click', () => {
+        revokeBackgroundImageObjectUrl();
+        backgroundImageUrl = buildBackgroundImageProxyUrl(result.imageUrl);
+        backgroundImageSelectionLabel = result.title || result.sourceLabel || 'Google Images';
+        backgroundEffectMode = 'image';
+        applyBackgroundEffectState();
+        syncBackgroundImagePreview();
+        persistSetupState();
+        setBackgroundImageStatus('Background image selected.');
+        closeBackgroundReplacePopup();
+        void refreshBackgroundVideoProcessing().catch((error) => {
+          setStatus(safeErrorMessage(error));
+        });
+      });
+      backgroundImageResults.appendChild(button);
+    });
+  };
+
+  const clearBackgroundImageSearchResults = () => {
+    backgroundImageSearchLoading = false;
+    backgroundImageSearchQuery = '';
+    backgroundImageSearchResultsState = [];
+    renderBackgroundImageSearchResults();
+  };
+
+  const openBackgroundReplacePopup = () => {
+    backgroundReplacePopupOpen = true;
+    if (backgroundReplacePopup instanceof HTMLElement) {
+      backgroundReplacePopup.hidden = false;
+    }
+    renderBackgroundImageSearchResults();
+    syncBackgroundImagePreview();
+    if (backgroundImageSearchInput instanceof HTMLInputElement) {
+      window.setTimeout(() => {
+        backgroundImageSearchInput.focus();
+      }, 0);
+    }
+  };
+
+  const closeBackgroundReplacePopup = () => {
+    backgroundReplacePopupOpen = false;
+    if (backgroundReplacePopup instanceof HTMLElement) {
+      backgroundReplacePopup.hidden = true;
+    }
+  };
+
+  const applyBackgroundEffectState = () => {
+    previewBlur = backgroundEffectMode === 'blur';
+    root.dataset.previewBlur = previewBlur ? 'true' : 'false';
+    root.dataset.backgroundEffect = backgroundEffectMode;
+    localCameraProcessorState.backgroundColor = backgroundColor;
+    localCameraProcessorState.backgroundEffectMode = backgroundEffectMode;
+    localCameraProcessorState.backgroundImageUrl = backgroundImageUrl;
+    localCameraProcessorState.blurEnabled = previewBlur;
+    if (backgroundBlurToggleButton instanceof HTMLButtonElement) {
+      backgroundBlurToggleButton.dataset.active = previewBlur ? 'true' : 'false';
+      backgroundBlurToggleButton.setAttribute('aria-pressed', previewBlur ? 'true' : 'false');
+    }
+    if (backgroundReplaceToggleButton instanceof HTMLButtonElement) {
+      const replaceActive = backgroundEffectMode === 'image' || backgroundEffectMode === 'color';
+      backgroundReplaceToggleButton.dataset.active = replaceActive ? 'true' : 'false';
+      backgroundReplaceToggleButton.setAttribute('aria-pressed', replaceActive ? 'true' : 'false');
+    }
+    if (backgroundColorInput instanceof HTMLInputElement) {
+      backgroundColorInput.value = backgroundColor;
+    }
+    syncBackgroundImagePreview();
+    renderBackgroundImageSearchResults();
   };
 
   const syncLocalVideoDisplayFlip = () => {
@@ -5562,6 +6032,99 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       externalMediaSearchQuery = normalizedQuery;
       renderExternalMediaSearchResults();
       setExternalMediaStatus(safeErrorMessage(error), true, 4200);
+    }
+  };
+
+  const clearBackgroundImageSelection = async () => {
+    revokeBackgroundImageObjectUrl();
+    backgroundImageUrl = '';
+    backgroundImageSelectionLabel = '';
+    if (backgroundEffectMode === 'image') {
+      backgroundEffectMode = 'none';
+    }
+    applyBackgroundEffectState();
+    persistSetupState();
+    setBackgroundImageStatus('Background image cleared.');
+    closeBackgroundReplacePopup();
+    await refreshBackgroundVideoProcessing();
+  };
+
+  const applyBackgroundImageFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setBackgroundImageStatus('Please choose an image file.', true);
+      return;
+    }
+
+    revokeBackgroundImageObjectUrl();
+    backgroundImageObjectUrl = URL.createObjectURL(file);
+    backgroundImageUrl = backgroundImageObjectUrl;
+    backgroundImageSelectionLabel = normalizeText(file.name) || 'Uploaded image';
+    backgroundEffectMode = 'image';
+    applyBackgroundEffectState();
+    persistSetupState();
+    setBackgroundImageStatus('Background image loaded.');
+    closeBackgroundReplacePopup();
+    await refreshBackgroundVideoProcessing();
+  };
+
+  const runBackgroundImageSearch = async (query: string) => {
+    const normalizedQuery = normalizeText(query);
+    if (normalizedQuery.length < 2) {
+      clearBackgroundImageSearchResults();
+      setBackgroundImageStatus('Type at least 2 characters to search images.');
+      return;
+    }
+
+    const requestId = backgroundImageSearchRequestId + 1;
+    backgroundImageSearchRequestId = requestId;
+    backgroundImageSearchLoading = true;
+    backgroundImageSearchQuery = normalizedQuery;
+    renderBackgroundImageSearchResults();
+    setBackgroundImageStatus('Searching Google Images...');
+
+    try {
+      const searchUrl = new URL('/api/live/background-image/search', window.location.origin);
+      searchUrl.searchParams.set('q', normalizedQuery);
+
+      const response = await fetch(searchUrl, {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+      const payload = await response.json().catch(() => null);
+      if (requestId !== backgroundImageSearchRequestId) return;
+
+      if (!response.ok) {
+        throw new Error(normalizeText(payload?.error) || 'Image search failed.');
+      }
+
+      backgroundImageSearchResultsState = Array.isArray(payload?.items)
+        ? payload.items
+            .map((item: any) => ({
+              imageUrl: normalizeText(item?.imageUrl),
+              sourceLabel: normalizeText(item?.sourceLabel),
+              sourceUrl: normalizeText(item?.sourceUrl),
+              thumbnailUrl: normalizeText(item?.thumbnailUrl),
+              title: normalizeText(item?.title) || 'Image result',
+            }))
+            .filter((item: BackgroundImageSearchResult) => item.imageUrl)
+        : [];
+
+      backgroundImageSearchLoading = false;
+      backgroundImageSearchQuery = normalizedQuery;
+      renderBackgroundImageSearchResults();
+      setBackgroundImageStatus(
+        backgroundImageSearchResultsState.length
+          ? `${backgroundImageSearchResultsState.length} image results found.`
+          : 'No image results for that search.',
+      );
+    } catch (error) {
+      if (requestId !== backgroundImageSearchRequestId) return;
+      backgroundImageSearchLoading = false;
+      backgroundImageSearchResultsState = [];
+      backgroundImageSearchQuery = normalizedQuery;
+      renderBackgroundImageSearchResults();
+      setBackgroundImageStatus(safeErrorMessage(error), true);
     }
   };
 
@@ -7281,6 +7844,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       gravityBallEnabled,
       gravityBallGravity,
       gravityBallMirror,
+      backgroundColor,
+      backgroundEffectMode,
+      backgroundImageLabel: canPersistBackgroundImageUrl(backgroundImageUrl) ? backgroundImageSelectionLabel : '',
+      backgroundImageUrl: canPersistBackgroundImageUrl(backgroundImageUrl) ? backgroundImageUrl : '',
       room: normalizeText(roomInput.value),
       identity: normalizeText(identityInput.value),
       instrumentsOpen,
@@ -8955,9 +9522,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const buildDisconnectedPreviewStream = async (stream: MediaStream) => {
     const sourceTrack = stream.getVideoTracks()[0];
     const shouldProcessVideo = shouldProcessLocalCameraVideo({
+      backgroundEffectMode,
       gravityBallEnabled,
       handTrackEnabled,
-      previewBlur,
       previewInvert,
       videoMix: getEffectiveVideoMix(),
     });
@@ -9224,9 +9791,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const syncDisconnectedPreviewProcessing = async () => {
     if (room.state !== ConnectionState.Disconnected || !disconnectedCameraPreviewEnabled) return;
     const shouldProcessVideo = shouldProcessLocalCameraVideo({
+      backgroundEffectMode,
       gravityBallEnabled,
       handTrackEnabled,
-      previewBlur,
       previewInvert,
       videoMix: getEffectiveVideoMix(),
     });
@@ -10639,8 +11206,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   // ── Disconnected live preview (camera button while disconnected) ─────────
-  let disconnectedLiveStream: MediaStream | null = null;
-
   const stopDisconnectedLivePreview = () => {
     disconnectedCameraPreviewEnabled = false;
     micMeterController.stop();
@@ -11138,33 +11703,130 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  if (previewBlurInput instanceof HTMLInputElement) {
-    previewBlurInput.addEventListener('change', () => {
-      previewBlur = previewBlurInput.checked;
-      applyPreviewBlurState();
+  if (backgroundBlurToggleButton instanceof HTMLButtonElement) {
+    backgroundBlurToggleButton.addEventListener('click', () => {
+      backgroundEffectMode = backgroundEffectMode === 'blur' ? 'none' : 'blur';
+      applyBackgroundEffectState();
       persistSetupState();
+      closeBackgroundReplacePopup();
+      void refreshBackgroundVideoProcessing().catch((error) => {
+        setStatus(safeErrorMessage(error));
+      });
+    });
+  }
 
-      if (room.state === ConnectionState.Disconnected) {
-        void syncDisconnectedPreviewProcessing().catch((error) => {
-          setStatus(safeErrorMessage(error));
-        });
-        return;
+  if (backgroundReplaceToggleButton instanceof HTMLButtonElement) {
+    backgroundReplaceToggleButton.addEventListener('click', () => {
+      if (backgroundReplacePopupOpen) {
+        closeBackgroundReplacePopup();
+      } else {
+        openBackgroundReplacePopup();
       }
+    });
+  }
 
-      if (room.state === ConnectionState.Connected) {
-        void syncLocalBackgroundBlurProcessor()
-          .then(() => {
-            syncIdentityPreview();
-            syncAllParticipants();
-          })
-          .catch((error) => {
-            setStatus(safeErrorMessage(error));
-          });
-        return;
-      }
+  if (backgroundReplaceCloseButton instanceof HTMLButtonElement) {
+    backgroundReplaceCloseButton.addEventListener('click', () => {
+      closeBackgroundReplacePopup();
+    });
+  }
 
-      syncIdentityPreview();
-      syncAllParticipants();
+  if (backgroundEffectClearButton instanceof HTMLButtonElement) {
+    backgroundEffectClearButton.addEventListener('click', () => {
+      backgroundEffectMode = 'none';
+      applyBackgroundEffectState();
+      persistSetupState();
+      setBackgroundImageStatus('Background effect disabled.');
+      closeBackgroundReplacePopup();
+      void refreshBackgroundVideoProcessing().catch((error) => {
+        setStatus(safeErrorMessage(error));
+      });
+    });
+  }
+
+  if (backgroundImagePickButton instanceof HTMLButtonElement && backgroundImageFileInput instanceof HTMLInputElement) {
+    backgroundImagePickButton.addEventListener('click', () => {
+      backgroundImageFileInput.click();
+    });
+  }
+
+  if (backgroundImageFileInput instanceof HTMLInputElement) {
+    backgroundImageFileInput.addEventListener('change', () => {
+      const [file] = Array.from(backgroundImageFileInput.files || []);
+      if (!file) return;
+      void applyBackgroundImageFile(file).catch((error) => {
+        setBackgroundImageStatus(safeErrorMessage(error), true);
+      });
+      backgroundImageFileInput.value = '';
+    });
+  }
+
+  if (backgroundImageClearButton instanceof HTMLButtonElement) {
+    backgroundImageClearButton.addEventListener('click', () => {
+      void clearBackgroundImageSelection().catch((error) => {
+        setBackgroundImageStatus(safeErrorMessage(error), true);
+      });
+    });
+  }
+
+  if (backgroundImageSearchButton instanceof HTMLButtonElement) {
+    backgroundImageSearchButton.addEventListener('click', () => {
+      void runBackgroundImageSearch(
+        backgroundImageSearchInput instanceof HTMLInputElement ? backgroundImageSearchInput.value : '',
+      );
+    });
+  }
+
+  if (backgroundImageSearchInput instanceof HTMLInputElement) {
+    backgroundImageSearchInput.addEventListener('keydown', (event) => {
+      if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return;
+      event.preventDefault();
+      void runBackgroundImageSearch(backgroundImageSearchInput.value);
+    });
+  }
+
+  if (backgroundColorApplyButton instanceof HTMLButtonElement && backgroundColorInput instanceof HTMLInputElement) {
+    backgroundColorApplyButton.addEventListener('click', () => {
+      backgroundColor = normalizeBackgroundColor(backgroundColorInput.value, backgroundColor);
+      backgroundEffectMode = 'color';
+      applyBackgroundEffectState();
+      persistSetupState();
+      setBackgroundImageStatus('Solid color background applied.');
+      closeBackgroundReplacePopup();
+      void refreshBackgroundVideoProcessing().catch((error) => {
+        setStatus(safeErrorMessage(error));
+      });
+    });
+
+    backgroundColorInput.addEventListener('input', () => {
+      backgroundColor = normalizeBackgroundColor(backgroundColorInput.value, backgroundColor);
+      if (backgroundEffectMode !== 'color') return;
+      applyBackgroundEffectState();
+      persistSetupState();
+      void refreshBackgroundVideoProcessing().catch(() => undefined);
+    });
+  }
+
+  if (backgroundImageDropzone instanceof HTMLElement) {
+    ['dragenter', 'dragover'].forEach((eventName) => {
+      backgroundImageDropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        backgroundImageDropzone.dataset.dragActive = 'true';
+      });
+    });
+    ['dragleave', 'dragend'].forEach((eventName) => {
+      backgroundImageDropzone.addEventListener(eventName, () => {
+        backgroundImageDropzone.dataset.dragActive = 'false';
+      });
+    });
+    backgroundImageDropzone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      backgroundImageDropzone.dataset.dragActive = 'false';
+      const [file] = Array.from(event.dataTransfer?.files || []);
+      if (!file) return;
+      void applyBackgroundImageFile(file).catch((error) => {
+        setBackgroundImageStatus(safeErrorMessage(error), true);
+      });
     });
   }
 
@@ -11173,14 +11835,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       previewInvert = previewInvertInput.checked;
       applyPreviewInvertState();
       persistSetupState();
-      if (room.state === ConnectionState.Connected) {
-        void syncLocalBackgroundBlurProcessor().catch(() => undefined);
-        syncIdentityPreview();
-        syncAllParticipants();
-        return;
-      }
-
-      void syncDisconnectedPreviewProcessing().catch((error) => {
+      void refreshBackgroundVideoProcessing().catch((error) => {
         setStatus(safeErrorMessage(error));
       });
     });
@@ -11909,6 +12564,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   });
 
+  document.addEventListener('click', (event) => {
+    if (!(backgroundReplacePopup instanceof HTMLElement) || backgroundReplacePopup.hidden) return;
+    const target = event.target as Node | null;
+    if (!target) return;
+    const keepOpen =
+      backgroundReplacePopup.contains(target) ||
+      (backgroundReplaceToggleButton instanceof HTMLElement && backgroundReplaceToggleButton.contains(target));
+    if (!keepOpen) {
+      closeBackgroundReplacePopup();
+    }
+  });
+
   // 3.1 Random
   root.querySelector('[data-action="break-rooms-random"]')?.addEventListener('click', () => {
     void handleBreakRoomsRandom();
@@ -12544,7 +13211,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   applyInstrumentsOpenState();
   applySidebarCollapsedState();
   applyPreviewZoomState();
-  applyPreviewBlurState();
+  applyBackgroundEffectState();
   applyPreviewInvertState();
   applyRecordingPresetState();
   applyShowCircleState();

@@ -104,16 +104,102 @@ const {
       </div>
     </div>
 
-    <div class="conference-field conference-field--checkbox">
-      <label class="conference-checkbox-row" for="conference-blur-background-input">
-        <input
-          id="conference-blur-background-input"
-          name="blur-background"
-          type="checkbox"
-          data-preview-blur-input
-        />
-        <span>Blur background</span>
-      </label>
+    <div class="conference-field conference-field--background">
+      <div class="conference-field-row conference-field-row--compact">
+        <label>Background</label>
+        <div class="conference-background-action-row">
+          <button
+            class="conference-background-action"
+            type="button"
+            data-action="background-blur-toggle"
+          >
+            Blur
+          </button>
+          <button
+            class="conference-background-action"
+            type="button"
+            data-action="background-replace-toggle"
+          >
+            Replace
+          </button>
+        </div>
+      </div>
+
+      <div class="conference-background-popup-shell">
+        <div class="conference-background-popup" data-background-replace-popup hidden>
+          <div class="conference-background-popup-header">
+            <strong>Background Replace</strong>
+            <button
+              class="conference-background-popup-close"
+              type="button"
+              data-action="background-replace-close"
+              aria-label="Close background replacement"
+            >
+              x
+            </button>
+          </div>
+
+          <div class="conference-background-preview" data-background-image-preview-shell hidden>
+            <img alt="" data-background-image-preview />
+            <div class="conference-background-preview-meta">
+              <strong data-background-image-label>No image selected</strong>
+              <button type="button" data-action="background-image-clear">Clear</button>
+            </div>
+          </div>
+
+          <div class="conference-background-dropzone" data-background-image-dropzone>
+            <input
+              id="conference-background-image-file-input"
+              name="background-image-file"
+              type="file"
+              accept="image/*"
+              hidden
+              data-background-image-file-input
+            />
+            <div class="conference-background-dropzone-copy">
+              <strong>Image file</strong>
+              <span>Drop image here or choose one from disk.</span>
+            </div>
+            <button type="button" data-action="background-image-pick">Choose file</button>
+          </div>
+
+          <div class="conference-background-search">
+            <label for="conference-background-image-search-input">Google Images</label>
+            <div class="conference-background-search-row">
+              <input
+                id="conference-background-image-search-input"
+                name="background-image-search"
+                type="text"
+                placeholder="forest stage, classroom, abstract light..."
+                data-background-image-search-input
+              />
+              <button type="button" data-action="background-image-search">Search</button>
+            </div>
+            <p class="conference-background-inline-status" data-background-image-status>
+              Search an image or upload one to replace your background.
+            </p>
+            <div class="conference-background-results" data-background-image-results hidden></div>
+          </div>
+
+          <div class="conference-background-color">
+            <label for="conference-background-color-input">Solid color</label>
+            <div class="conference-background-color-row">
+              <input
+                id="conference-background-color-input"
+                name="background-color"
+                type="color"
+                value="#101820"
+                data-background-color-input
+              />
+              <button type="button" data-action="background-color-apply">Use color</button>
+            </div>
+          </div>
+
+          <div class="conference-background-popup-footer">
+            <button type="button" data-action="background-effect-clear">Turn off</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="conference-field conference-field--checkbox">
