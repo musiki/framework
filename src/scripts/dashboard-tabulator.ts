@@ -481,6 +481,7 @@ const getCellPreviousValue = (cell: any, overridePreviousValue?: any) =>
 
 const saveSingleCourseRoleCellValue = async (
   cell: any,
+  meta?: DashboardMeta,
   overrideNextValue?: any,
   overridePreviousValue?: any,
 ) => {
@@ -502,15 +503,30 @@ const saveSingleCourseRoleCellValue = async (
   }
 
   const rowData = cell?.getData?.() || {};
-  const enrollmentId = normalizeText(rowData.enrollmentId || '');
-  if (!enrollmentId) return;
+  const activeEnrollment = resolveActiveAdminEnrollmentCourse(rowData, meta);
+  const enrollmentId = normalizeText(activeEnrollment?.enrollmentId || rowData.enrollmentId || '');
+  if (!enrollmentId) {
+    throw new Error('No se encontró la inscripción activa de este curso.');
+  }
 
   const payload = await postCourseRoleUpdate(enrollmentId, nextValue);
   const resolvedRole = normalizeCourseRoleValue(payload?.enrollment?.roleInCourse || nextValue);
-  await row?.update?.({
-    [field]: resolvedRole,
-    courseRoleLabel: getCourseRoleLabel(resolvedRole),
-  });
+  const nextCourses = sortAdminEnrollmentCourses(
+    getAdminEnrollmentCourses(rowData).map((course) => {
+      if (normalizeText(course.enrollmentId) !== enrollmentId) return course;
+      return {
+        ...course,
+        roleInCourse: resolvedRole,
+      };
+    }),
+  );
+  if (row) {
+    updateAdminEnrollmentRowData(row, meta || {}, nextCourses);
+    await row?.update?.({
+      [field]: resolvedRole,
+      courseRoleLabel: getCourseRoleLabel(resolvedRole),
+    });
+  }
 };
 
 const saveSingleCourseStudentMetaCellValue = async (
@@ -597,7 +613,7 @@ const persistClipboardCellValue = async (
   }
 
   if (kind === 'course-role') {
-    await saveSingleCourseRoleCellValue(cell, nextValue, previousValue);
+    await saveSingleCourseRoleCellValue(cell, meta, nextValue, previousValue);
     return;
   }
 
@@ -1278,8 +1294,8 @@ const renderAdminActionsMarkup = (cell: any) => {
   const crole = escapeHtml(data.courseRole);
   return `
     <div class="dashboard-admin-actions">
-      <button type="button" class="dashboard-grid-icon-btn" data-dashboard-user-edit data-user-id="${uid}" data-user-name="${name}" data-user-email="${email}" data-user-global-role="${role}" title="Editar usuario">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+      <button type="button" class="dashboard-grid-icon-btn" data-dashboard-user-edit data-user-id="${uid}" data-user-name="${name}" data-user-email="${email}" data-user-global-role="${role}" title="Abrir dashboard de ${name}" aria-label="Abrir dashboard de ${name}">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="4" rx="1"></rect><rect x="14" y="10" width="7" height="11" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect></svg>
       </button>
       <button type="button" class="dashboard-grid-icon-btn dashboard-grid-icon-btn--danger" data-dashboard-user-delete data-user-id="${uid}" data-user-name="${name}" data-user-email="${email}" data-user-global-role="${role}" data-user-course-role="${crole}" title="Borrar usuario">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
@@ -1338,20 +1354,42 @@ const buildAdminEnrollmentSearchBlob = (rowData: any, courses: AdminEnrollmentCo
     .filter(Boolean)
     .join(' ');
 
-const resolveActiveAdminCourseRole = (courses: AdminEnrollmentCourse[], meta: DashboardMeta) => {
+const resolveActiveAdminEnrollmentCourse = (
+  rowData: any,
+  meta?: DashboardMeta,
+): AdminEnrollmentCourse | null => {
+  const courses = getAdminEnrollmentCourses(rowData);
+  if (!courses.length) return null;
+
   const activeCourseId = normalizeText(meta?.courseId || '');
-  if (!activeCourseId) return '';
-  return normalizeTextLower(
-    courses.find((course) => normalizeText(course.courseId) === activeCourseId)?.roleInCourse || '',
-  );
+  if (activeCourseId) {
+    const activeCourse = courses.find((course) => normalizeText(course.courseId) === activeCourseId) || null;
+    if (activeCourse) return activeCourse;
+  }
+
+  const enrollmentId = normalizeText(rowData?.enrollmentId || '');
+  if (enrollmentId) {
+    const byEnrollmentId = courses.find((course) => normalizeText(course.enrollmentId) === enrollmentId) || null;
+    if (byEnrollmentId) return byEnrollmentId;
+  }
+
+  return courses.length === 1 ? courses[0] : null;
 };
 
 const updateAdminEnrollmentRowData = (row: any, meta: DashboardMeta, nextCoursesInput: AdminEnrollmentCourse[]) => {
   if (!row?.update) return;
   const rowData = row.getData?.() || {};
   const nextCourses = sortAdminEnrollmentCourses(nextCoursesInput);
-  const nextCourseRole = resolveActiveAdminCourseRole(nextCourses, meta);
+  const activeEnrollment = resolveActiveAdminEnrollmentCourse(
+    {
+      ...rowData,
+      enrollmentCourses: nextCourses,
+    },
+    meta,
+  );
+  const nextCourseRole = normalizeTextLower(activeEnrollment?.roleInCourse || '');
   row.update?.({
+    enrollmentId: normalizeText(activeEnrollment?.enrollmentId || ''),
     enrollmentCourses: nextCourses,
     enrollmentSummary: formatAdminEnrollmentSummary(nextCourses),
     courseRole: nextCourseRole,
@@ -1393,12 +1431,16 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
         <div class="dashboard-enrollment-menu-wrap" data-dashboard-enrollment-menu-wrap>
           <button
             type="button"
-            class="dashboard-enrollment-trigger"
+            class="dashboard-grid-icon-btn dashboard-grid-icon-btn--subtle dashboard-enrollment-trigger"
             data-dashboard-enrollment-trigger
             aria-haspopup="menu"
             aria-expanded="false"
             aria-controls="${menuId}"
-          >Agregar a curso…</button>
+            title="Agregar a curso…"
+            aria-label="Agregar a curso…"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          </button>
           <div
             id="${menuId}"
             class="dashboard-enrollment-menu tabulator-menu"
@@ -1871,6 +1913,7 @@ const postCourseRoleUpdate = async (
 
 const saveCourseRoleSelectionFromCell = async (
   cell: any,
+  meta?: DashboardMeta,
   overrideNextValue?: any,
   overridePreviousValue?: any,
 ) => {
@@ -1899,14 +1942,16 @@ const saveCourseRoleSelectionFromCell = async (
   const targetCells = resolveSelectedTargetCells(cell, {
     sameField: true,
     sameKind: true,
-    filter: (candidate) => Boolean(normalizeText(candidate?.getData?.()?.enrollmentId || '')),
+    filter: (candidate) => Boolean(resolveActiveAdminEnrollmentCourse(candidate?.getData?.() || {}, meta)?.enrollmentId),
   });
 
   const targets = targetCells
     .map((targetCell) => {
       const rowData = targetCell?.getData?.() || {};
       const rowId = normalizeText(rowData.id || targetCell?.getRow?.()?.getIndex?.() || '');
-      const enrollmentId = normalizeText(rowData.enrollmentId || '');
+      const enrollmentId = normalizeText(
+        resolveActiveAdminEnrollmentCourse(rowData, meta)?.enrollmentId || rowData.enrollmentId || '',
+      );
       const existingValue = targetCell === cell
         ? previousValue
         : normalizeCourseRoleValue(targetCell?.getValue?.());
@@ -1935,7 +1980,7 @@ const saveCourseRoleSelectionFromCell = async (
 
   for (const target of targets) {
     try {
-      await saveSingleCourseRoleCellValue(target.cell, nextValue, target.previousValue);
+      await saveSingleCourseRoleCellValue(target.cell, meta, nextValue, target.previousValue);
       successCount += 1;
     } catch (error: any) {
       failureMessages.push(error?.message || 'No se pudo actualizar el rol del curso');
@@ -2096,7 +2141,7 @@ const bindNativeCellPersistence = (
 
     try {
       if (kind === 'course-role') {
-        await saveCourseRoleSelectionFromCell(cell);
+        await saveCourseRoleSelectionFromCell(cell, context.meta);
         return;
       }
 
@@ -3121,7 +3166,7 @@ const configureColumns = (
         verticalNavigation: 'table',
       };
       nextColumn.editable = (cell: any) =>
-        Boolean(normalizeText(cell?.getRow?.()?.getData?.()?.enrollmentId || cell?.getData?.()?.enrollmentId || ''));
+        Boolean(resolveActiveAdminEnrollmentCourse(cell?.getRow?.()?.getData?.() || cell?.getData?.() || {}, context.meta)?.enrollmentId);
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
       nextColumn.headerSort = false;

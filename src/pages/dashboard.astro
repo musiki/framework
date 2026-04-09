@@ -3784,30 +3784,13 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .dashboard-enrollment-menu-wrap {
         position: relative;
+        display: inline-flex;
         min-width: 0;
         max-width: 100%;
       }
       .dashboard-enrollment-trigger {
-        min-height: 1.9rem;
-        border: 1px solid var(--c-border);
-        border-radius: 6px;
-        background: var(--c-bg-mute);
-        color: var(--c-fg);
-        padding: 0.38rem 0.72rem;
-        font: inherit;
-        font-size: 0.82rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-      }
-      .dashboard-enrollment-trigger:hover,
-      .dashboard-enrollment-trigger[aria-expanded="true"] {
-        background: color-mix(in srgb, var(--c-link) 10%, var(--c-bg) 90%);
-        border-color: color-mix(in srgb, var(--c-link) 26%, var(--c-border));
-      }
-      .dashboard-enrollment-trigger:disabled {
-        opacity: 0.7;
-        cursor: wait;
+        width: 1.58rem;
+        height: 1.58rem;
       }
       .dashboard-enrollment-menu {
         position: absolute;
@@ -4144,8 +4127,19 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         width: 0.88rem;
         height: 0.88rem;
       }
+      .dashboard-grid-icon-btn--subtle {
+        background: transparent;
+        color: var(--c-fg-dim);
+        border-color: color-mix(in srgb, var(--c-border) 82%, transparent);
+      }
       .dashboard-grid-icon-btn:hover {
         border-color: var(--c-link);
+        color: var(--c-link);
+      }
+      .dashboard-grid-icon-btn--subtle:hover,
+      .dashboard-grid-icon-btn--subtle[aria-expanded="true"] {
+        background: color-mix(in srgb, var(--c-link) 8%, var(--c-bg) 92%);
+        border-color: color-mix(in srgb, var(--c-link) 26%, var(--c-border));
         color: var(--c-link);
       }
       .dashboard-grid-icon-btn:disabled,
@@ -4992,6 +4986,9 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       :root.dark .dashboard-grid-icon-btn {
         background-color: transparent;
         color: var(--c-fg);
+      }
+      :root.dark .dashboard-grid-icon-btn--subtle {
+        color: var(--c-fg-dim);
       }
       :root.dark .dashboard-tabulator .tabulator,
       :root.dark .dashboard-tabulator .tabulator-header,
