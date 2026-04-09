@@ -16,6 +16,7 @@ export type ExternalMediaPlaybackState = 'playing' | 'paused' | 'ended';
 export type PresentationMediaProvider = 'youtube';
 export type PresentationMediaPlaybackState = ExternalMediaPlaybackState;
 export type PresentationMediaState = {
+  capturedAt: number;
   currentTime: number;
   embedId: string;
   mediaId: string;
@@ -60,6 +61,9 @@ export type ConferenceMessage =
     }
   | {
       type: 'mute-all';
+    }
+  | {
+      type: 'presentation-state-request';
     }
   | {
       id: string;
@@ -266,6 +270,12 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       };
     }
 
+    if (parsed.type === 'presentation-state-request') {
+      return {
+        type: 'presentation-state-request',
+      };
+    }
+
     if (parsed.type === 'presentation-media') {
       const provider = normalizeText((parsed as { provider?: string }).provider);
       const playbackState = normalizeText((parsed as { playbackState?: string }).playbackState);
@@ -283,6 +293,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
 
       return {
         type: 'presentation-media',
+        capturedAt: Math.max(0, Number((parsed as { capturedAt?: number }).capturedAt) || Date.now()),
         currentTime: Math.max(0, Number((parsed as { currentTime?: number }).currentTime) || 0),
         embedId,
         mediaId,

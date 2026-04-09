@@ -38,57 +38,116 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const courseId = clean(body?.courseId);
   const year = normalizeYear(body?.year);
+  const requestedUserId = clean(body?.userId);
   const firstName = clean(body?.firstName);
   const lastName = clean(body?.lastName);
   const email = cleanLower(body?.email);
   const turno = normalizeTurno(body?.turno);
   const grupo = normalizeGrupo(body?.grupo);
 
-  if (!courseId || !email || !email.includes('@')) {
-    return new Response(JSON.stringify({ error: 'courseId and valid email are required' }), { status: 400 });
+  if (!courseId) {
+    return new Response(JSON.stringify({ error: 'courseId is required' }), { status: 400 });
+  }
+
+  if (!requestedUserId && (!email || !email.includes('@'))) {
+    return new Response(JSON.stringify({ error: 'userId or valid email is required' }), { status: 400 });
   }
 
   const supabase = createSupabaseServerClient();
 
-  // Verify requester is a teacher
-  const { data: requesterUsers } = await supabase.from('User').select('id, role').ilike('email', cleanLower(currentUser.email));
-  const requester = (requesterUsers || [])[0];
-  if (!requester) return new Response(JSON.stringify({ error: 'Requester not found' }), { status: 404 });
+  // Verify requester is a teacher and owns the course.
+  const { data: actingUsers } = await supabase
+    .from('User')
+    .select('id, role')
+    .ilike('email', cleanLower(currentUser.email));
+  const requester = (actingUsers || [])[0];
+  if (!requester || !Array.isArray(actingUsers) || actingUsers.length === 0) {
+    return new Response(JSON.stringify({ error: 'Requester not found' }), { status: 404 });
+  }
 
-  const { data: requesterEnrollments } = await supabase.from('Enrollment').select('roleInCourse').eq('userId', requester.id);
-  const isTeacher = requester.role === 'teacher' || (requesterEnrollments || []).some((e: any) => clean(e.roleInCourse).toLowerCase() === 'teacher');
+  const actingUserIds = actingUsers
+    .map((user: any) => clean(user?.id))
+    .filter(Boolean);
+
+  const { data: requesterEnrollments } = await supabase
+    .from('Enrollment')
+    .select('courseId, roleInCourse, userId')
+    .in('userId', actingUserIds);
+  const isTeacher =
+    (actingUsers || []).some((user: any) => cleanLower(user?.role) === 'teacher')
+    || (requesterEnrollments || []).some((e: any) => cleanLower(e?.roleInCourse) === 'teacher');
   if (!isTeacher) return new Response(JSON.stringify({ error: 'Only teachers can add students' }), { status: 403 });
 
   const canonicalCourse = await canonicalizeCourseId(courseId);
   if (!canonicalCourse) return new Response(JSON.stringify({ error: 'Course not found' }), { status: 404 });
 
-  // Find or create user
-  const { data: existingUsers } = await supabase.from('User').select('id').ilike('email', email);
-  let userId: string;
+  const manageableCourses = new Set<string>();
+  for (const enrollment of requesterEnrollments || []) {
+    if (cleanLower(enrollment?.roleInCourse) !== 'teacher') continue;
+    const managedCourseId = await canonicalizeCourseId(enrollment?.courseId);
+    if (managedCourseId) manageableCourses.add(managedCourseId);
+  }
 
-  if (existingUsers && existingUsers.length > 0) {
-    userId = existingUsers[0].id;
+  if (!manageableCourses.has(canonicalCourse)) {
+    return new Response(JSON.stringify({ error: 'You can only add students to your own courses' }), { status: 403 });
+  }
+
+  // Find or create user
+  let userId: string;
+  let resolvedEmail = email;
+
+  if (requestedUserId) {
+    const { data: existingUserById, error: existingUserByIdError } = await supabase
+      .from('User')
+      .select('id, email')
+      .eq('id', requestedUserId)
+      .maybeSingle();
+    if (existingUserByIdError) {
+      return new Response(JSON.stringify({ error: existingUserByIdError.message }), { status: 500 });
+    }
+    if (!existingUserById) {
+      return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
+    }
+    userId = existingUserById.id;
+    resolvedEmail = cleanLower(existingUserById.email);
   } else {
-    const name = [lastName, firstName].filter(Boolean).join(', ') || email;
-    const newId = crypto.randomUUID();
-    const { error: insertErr } = await supabase.from('User').insert([{
-      id: newId, email, name,
-      emailVerified: false, role: 'student',
-      createdAt: new Date(), updatedAt: new Date(),
-    }]);
-    if (insertErr) return new Response(JSON.stringify({ error: insertErr.message }), { status: 500 });
-    userId = newId;
+    const { data: existingUsers } = await supabase.from('User').select('id, email').ilike('email', email);
+    if (existingUsers && existingUsers.length > 0) {
+      userId = existingUsers[0].id;
+      resolvedEmail = cleanLower(existingUsers[0].email);
+    } else {
+      const name = [lastName, firstName].filter(Boolean).join(', ') || email;
+      const newId = crypto.randomUUID();
+      const { error: insertErr } = await supabase.from('User').insert([{
+        id: newId, email, name,
+        emailVerified: false, role: 'student',
+        createdAt: new Date(), updatedAt: new Date(),
+      }]);
+      if (insertErr) return new Response(JSON.stringify({ error: insertErr.message }), { status: 500 });
+      userId = newId;
+    }
   }
 
   // Check existing enrollment
-  const { data: existingEnrollment } = await supabase.from('Enrollment').select('id').eq('userId', userId).eq('courseId', canonicalCourse).maybeSingle();
+  const { data: existingEnrollment } = await supabase
+    .from('Enrollment')
+    .select('id, userId, courseId, roleInCourse')
+    .eq('userId', userId)
+    .eq('courseId', canonicalCourse)
+    .maybeSingle();
   let status: string;
+  let enrollmentRecord = existingEnrollment || null;
 
   if (existingEnrollment) {
     status = 'already_enrolled';
   } else {
-    const { error: enrollErr } = await supabase.from('Enrollment').insert([{ userId, courseId: canonicalCourse, roleInCourse: 'student' }]);
+    const { data: insertedEnrollment, error: enrollErr } = await supabase
+      .from('Enrollment')
+      .insert([{ userId, courseId: canonicalCourse, roleInCourse: 'student' }])
+      .select('id, userId, courseId, roleInCourse')
+      .single();
     if (enrollErr) return new Response(JSON.stringify({ error: enrollErr.message }), { status: 500 });
+    enrollmentRecord = insertedEnrollment || null;
     status = 'enrolled';
   }
 
@@ -128,5 +187,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
   }
 
-  return new Response(JSON.stringify({ success: true, userId, status }), { status: 200 });
+  return new Response(JSON.stringify({
+    success: true,
+    userId,
+    email: resolvedEmail,
+    status,
+    enrollment: enrollmentRecord,
+  }), { status: 200 });
 };

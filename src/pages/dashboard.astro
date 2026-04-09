@@ -2599,6 +2599,7 @@ const teacherCommentsProjection = isTeacher
 const teacherAdminProjection = isTeacher
   ? buildAdminProjection({
       activeCourseId,
+      availableCourses: availableCourseMeta,
       allUsers: allUsers || [],
       allEnrollments: allEnrollments || [],
       allSubmissions: allSubmissions || [],
@@ -3756,6 +3757,71 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .enrollment-chip-remove:hover {
         color: var(--c-danger, #c0392b);
         background: color-mix(in srgb, var(--c-danger, #c0392b) 12%, transparent);
+      }
+      .dashboard-enrollment-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        min-width: 0;
+        width: 100%;
+      }
+      .dashboard-enrollment-chip-list {
+        display: flex;
+        align-items: center;
+        gap: 0.1rem;
+        flex-wrap: wrap;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .dashboard-enrollment-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        min-width: 0;
+        flex: 1 1 12rem;
+      }
+      .dashboard-enrollment-select {
+        min-width: 0;
+        flex: 1 1 10rem;
+        width: 100%;
+        max-width: 100%;
+        height: 1.9rem;
+        border: 1px solid var(--c-border);
+        border-radius: 6px;
+        background: var(--c-bg);
+        color: var(--c-fg);
+        padding: 0 0.55rem;
+        font: inherit;
+      }
+      .dashboard-enrollment-select:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+      .dashboard-enrollment-add-btn {
+        height: 1.9rem;
+        border: 1px solid var(--c-border);
+        border-radius: 6px;
+        background: var(--c-bg-mute);
+        color: var(--c-fg);
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 600;
+        padding: 0 0.7rem;
+        cursor: pointer;
+        transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+      }
+      .dashboard-enrollment-add-btn:hover {
+        background: color-mix(in srgb, var(--c-accent, #2563eb) 12%, var(--c-bg-mute));
+        border-color: color-mix(in srgb, var(--c-accent, #2563eb) 36%, var(--c-border));
+      }
+      .dashboard-enrollment-add-btn:disabled {
+        opacity: 0.7;
+        cursor: wait;
+      }
+      .dashboard-enrollment-empty {
+        color: var(--c-fg-dim);
       }
       .dashboard-admin-actions {
         display: inline-flex;

@@ -1535,6 +1535,7 @@ const normalizePresentationMediaState = (
   }
 
   return {
+    capturedAt: Math.max(0, Number(value.capturedAt) || Date.now()),
     currentTime: Math.max(0, Number(value.currentTime) || 0),
     embedId,
     mediaId,
@@ -4295,6 +4296,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let currentPresentationMediaState: PresentationEmbeddedMediaState | null = null;
   let pendingRemotePresentationMediaState: PresentationEmbeddedMediaState | null = null;
   let lastPublishedPresentationMediaKey = '';
+  let presentationStateRecoveryRequestTimeoutIds: number[] = [];
   let unsubscribeLiveActivity: (() => void) | null = null;
   let activeLiveSnapshot: LiveSnapshot | null = null;
   let liveActivityTickId = 0;
@@ -9913,6 +9915,34 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     postToPresentation({ type: 'musiki:reveal-request-state' });
   };
 
+  const clearPresentationStateRecoveryRequests = () => {
+    presentationStateRecoveryRequestTimeoutIds.forEach((timeoutId) => {
+      window.clearTimeout(timeoutId);
+    });
+    presentationStateRecoveryRequestTimeoutIds = [];
+  };
+
+  const requestRemotePresentationState = async () => {
+    if (destroyed || room.state !== ConnectionState.Connected || canLeadSession()) return;
+    if (!presentation.getHref()) return;
+    await publishMessage({ type: 'presentation-state-request' });
+  };
+
+  const queuePresentationStateRecoveryRequests = () => {
+    clearPresentationStateRecoveryRequests();
+    if (destroyed || room.state !== ConnectionState.Connected || canLeadSession()) return;
+    if (!presentation.getHref()) return;
+
+    [0, 650, 1900].forEach((delayMs) => {
+      const timeoutId = window.setTimeout(() => {
+        if (destroyed || room.state !== ConnectionState.Connected || canLeadSession()) return;
+        if (!presentation.getHref()) return;
+        void requestRemotePresentationState().catch(() => undefined);
+      }, delayMs);
+      presentationStateRecoveryRequestTimeoutIds.push(timeoutId);
+    });
+  };
+
   const resetPresentationZoom = () => {
     postToPresentation({ type: 'musiki:reveal-reset-zoom' });
   };
@@ -9925,10 +9955,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
-  const publishSlideState = async (slideState: SlideState) => {
+  const publishSlideState = async (slideState: SlideState, force = false) => {
     if (!canLeadSession()) return;
     const slideKey = `${slideState.indexh}:${slideState.indexv}:${slideState.indexf}:${slideState.zoom.toFixed(3)}`;
-    if (slideKey === lastPublishedSlideKey) return;
+    if (!force && slideKey === lastPublishedSlideKey) return;
     lastPublishedSlideKey = slideKey;
     await publishMessage({
       type: 'slide-state',
@@ -9962,6 +9992,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       type: 'presentation-media',
       ...mediaState,
     });
+  };
+
+  const publishPresentationSyncSnapshot = async ({
+    includePresentation = true,
+  }: {
+    includePresentation?: boolean;
+  } = {}) => {
+    if (!canLeadSession()) return;
+
+    if (includePresentation) {
+      await publishMessage({
+        type: 'presentation',
+        href: presentation.getHref(),
+      });
+    }
+
+    if (currentSlideState) {
+      await publishSlideState(currentSlideState, true);
+    } else if (presentation.getHref()) {
+      requestPresentationState();
+    }
+
+    if (currentPresentationMediaState) {
+      await publishPresentationMediaState(currentPresentationMediaState, true);
+    }
   };
 
   const handlePresentationMessage = (event: MessageEvent) => {
@@ -9999,6 +10054,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (type === 'musiki:reveal-embedded-media-warning') {
+      const message = normalizeText((payload as { message?: string }).message);
+      if (message) {
+        setStatus(message);
+      }
+      return;
+    }
+
     if (type === 'musiki:reveal-ready') {
       if (pendingRemoteSlideState) {
         applyRemoteSlideState(pendingRemoteSlideState);
@@ -10007,8 +10070,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (nextPresentationMediaState) {
         applyRemotePresentationMediaState(nextPresentationMediaState);
       }
-      if (!pendingRemoteSlideState && localRole === 'teacher') {
+      if (canLeadSession()) {
         requestPresentationState();
+      } else {
+        queuePresentationStateRecoveryRequests();
       }
       return;
     }
@@ -10017,7 +10082,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const slideState = normalizeSlideState((payload as { state?: SlideState }).state);
     if (!slideState) return;
     currentSlideState = slideState;
-    if (localRole === 'teacher') {
+    if (canLeadSession()) {
       void publishSlideState(slideState);
     }
   };
@@ -10165,7 +10230,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     if (currentSlideState) {
-      await publishSlideState(currentSlideState);
+      await publishSlideState(currentSlideState, true);
+    } else if (presentation.getHref()) {
+      requestPresentationState();
     }
 
     if (currentPresentationMediaState) {
@@ -10200,7 +10267,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     const nextHref = normalizeText(href) || null;
-    if (nextHref) {
+    const currentHref = normalizeText(presentation.getHref()) || null;
+    const isSamePresentation = nextHref === currentHref;
+    if (nextHref && !isSamePresentation) {
       setStatus('Cargando escena Reveal...');
     }
 
@@ -10208,7 +10277,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       pendingPresentationTask = 0;
 
       try {
-        if (nextHref) {
+        if (isSamePresentation) {
+          syncPresentationSelection(currentHref);
+        } else if (nextHref) {
           const committedHref = presentation.setHref(nextHref);
           syncPresentationSelection(committedHref);
           currentSlideState = null;
@@ -10235,10 +10306,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         setStatus(successMessage);
 
         if (broadcast && room.state === ConnectionState.Connected && localRole === 'teacher') {
-          void publishMessage({
-            type: 'presentation',
-            href: nextHref,
-          });
+          if (isSamePresentation) {
+            void publishPresentationSyncSnapshot().catch(() => undefined);
+          } else {
+            void publishMessage({
+              type: 'presentation',
+              href: nextHref,
+            });
+          }
         }
       } catch (error) {
         setStatus(safeErrorMessage(error));
@@ -11021,6 +11096,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
+      if (message.type === 'presentation-state-request') {
+        if (canLeadSession()) {
+          void publishPresentationSyncSnapshot().catch(() => undefined);
+        }
+        return;
+      }
+
       if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
       if (!isSessionLeader(participant)) return;
 
@@ -11090,6 +11172,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'slide-state') {
+        clearPresentationStateRecoveryRequests();
         currentSlideState = {
           indexf: message.indexf,
           indexh: message.indexh,
@@ -11101,6 +11184,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'presentation-media') {
+        clearPresentationStateRecoveryRequests();
         currentPresentationMediaState = message;
         applyRemotePresentationMediaState(message);
         return;
@@ -13187,6 +13271,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     if (canLeadSession()) {
       requestPresentationState();
+    } else {
+      queuePresentationStateRecoveryRequests();
     }
   };
 
@@ -13320,6 +13406,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       window.clearTimeout(pendingPresentationTask);
       pendingPresentationTask = 0;
     }
+    clearPresentationStateRecoveryRequests();
     navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
     window.removeEventListener('resize', handleViewportResize);
     presentationFrame.removeEventListener('load', handlePresentationLoad);

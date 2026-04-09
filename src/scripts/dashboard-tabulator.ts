@@ -87,6 +87,17 @@ type DashboardTabulatorInstance = Tabulator & {
   __musikiFoldStorageKey?: string;
 };
 
+type AdminEnrollmentCourse = {
+  courseId: string;
+  enrollmentId: string;
+  roleInCourse: string;
+};
+
+type AdminEnrollmentCourseOption = {
+  courseId: string;
+  label?: string;
+};
+
 const VALID_TEACHER_TABS = ['main', 'log', 'admin'];
 const SEARCH_DEBOUNCE_MS = 300;
 const DASHBOARD_LIVE_MODE_STORAGE_KEY = 'musiki:dashboard:live-mode';
@@ -1277,21 +1288,130 @@ const renderAdminActionsMarkup = (cell: any) => {
   `;
 };
 
+const getAdminEnrollmentCourses = (data: any): AdminEnrollmentCourse[] =>
+  (Array.isArray(data?.enrollmentCourses) ? data.enrollmentCourses : [])
+    .map((item: any) => ({
+      courseId: normalizeText(item?.courseId || ''),
+      enrollmentId: normalizeText(item?.enrollmentId || ''),
+      roleInCourse: normalizeTextLower(item?.roleInCourse || 'student') || 'student',
+    }))
+    .filter((item: AdminEnrollmentCourse) => item.courseId);
+
+const getAdminEnrollmentCourseCatalog = (data: any): AdminEnrollmentCourseOption[] =>
+  (Array.isArray(data?.enrollmentCourseCatalog) ? data.enrollmentCourseCatalog : [])
+    .map((item: any) => ({
+      courseId: normalizeText(item?.courseId || ''),
+      label: normalizeText(item?.label || item?.courseId || ''),
+    }))
+    .filter((item: AdminEnrollmentCourseOption) => item.courseId);
+
+const sortAdminEnrollmentCourses = (courses: AdminEnrollmentCourse[]) =>
+  Array.from(
+    new Map(
+      (courses || [])
+        .map((course) => {
+          const courseId = normalizeText(course?.courseId || '');
+          if (!courseId) return null;
+          return [courseId, {
+            courseId,
+            enrollmentId: normalizeText(course?.enrollmentId || ''),
+            roleInCourse: normalizeTextLower(course?.roleInCourse || 'student') || 'student',
+          }] as const;
+        })
+        .filter(Boolean) as [string, AdminEnrollmentCourse][],
+    ).values(),
+  ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
+
+const formatAdminEnrollmentSummary = (courses: AdminEnrollmentCourse[]) =>
+  courses.length ? courses.map((course) => course.courseId).join(' · ') : '—';
+
+const buildAdminEnrollmentSearchBlob = (rowData: any, courses: AdminEnrollmentCourse[]) =>
+  [
+    rowData?.name,
+    rowData?.email,
+    rowData?.globalRole,
+    rowData?.courseRole,
+    ...courses.map((course) => course.courseId),
+    rowData?.lastActivityAt,
+  ]
+    .map((value) => normalizeTextLower(value))
+    .filter(Boolean)
+    .join(' ');
+
+const resolveActiveAdminCourseRole = (courses: AdminEnrollmentCourse[], meta: DashboardMeta) => {
+  const activeCourseId = normalizeText(meta?.courseId || '');
+  if (!activeCourseId) return '';
+  return normalizeTextLower(
+    courses.find((course) => normalizeText(course.courseId) === activeCourseId)?.roleInCourse || '',
+  );
+};
+
+const updateAdminEnrollmentRowData = (row: any, meta: DashboardMeta, nextCoursesInput: AdminEnrollmentCourse[]) => {
+  if (!row?.update) return;
+  const rowData = row.getData?.() || {};
+  const nextCourses = sortAdminEnrollmentCourses(nextCoursesInput);
+  const nextCourseRole = resolveActiveAdminCourseRole(nextCourses, meta);
+  row.update?.({
+    enrollmentCourses: nextCourses,
+    enrollmentSummary: formatAdminEnrollmentSummary(nextCourses),
+    courseRole: nextCourseRole,
+    courseRoleLabel: nextCourseRole ? (nextCourseRole === 'teacher' ? 'Teacher' : 'Student') : '—',
+    __search: buildAdminEnrollmentSearchBlob({ ...rowData, courseRole: nextCourseRole }, nextCourses),
+  });
+};
+
 const renderEnrollmentCoursesMarkup = (cell: any) => {
   const data = cell.getData() || {};
   const userName = escapeHtml(data.name || data.email || '');
-  const courses: Array<{ courseId: string; enrollmentId: string; roleInCourse: string }> =
-    Array.isArray(data.enrollmentCourses) ? data.enrollmentCourses : [];
-  if (!courses.length) return '<span style="color:var(--c-fg-dim)">—</span>';
-  return courses
-    .map(({ courseId, enrollmentId, roleInCourse }) => {
-      const cid = escapeHtml(courseId);
-      const eid = escapeHtml(enrollmentId);
-      const role = escapeHtml(roleInCourse);
-      const uname = userName;
-      return `<span class="enrollment-chip" data-course-id="${cid}">${cid}<button type="button" class="enrollment-chip-remove" data-dashboard-unenroll data-enrollment-id="${eid}" data-enrollment-role="${role}" data-user-name="${uname}" title="Desinscribir de ${cid}" aria-label="Desinscribir de ${cid}">×</button></span>`;
-    })
-    .join('');
+  const userId = escapeHtml(normalizeText(data.id || data.userId || ''));
+  const userEmail = escapeHtml(normalizeText(data.email || ''));
+  const courses = getAdminEnrollmentCourses(data);
+  const courseCatalog = getAdminEnrollmentCourseCatalog(data);
+  const enrolledCourseIds = new Set(courses.map((course) => normalizeText(course.courseId)));
+  const availableCourseOptions = courseCatalog.filter((course) => !enrolledCourseIds.has(normalizeText(course.courseId)));
+
+  const chipsMarkup = courses.length
+    ? `<div class="dashboard-enrollment-chip-list">${courses
+      .map(({ courseId, enrollmentId, roleInCourse }) => {
+        const cid = escapeHtml(courseId);
+        const eid = escapeHtml(enrollmentId);
+        const role = escapeHtml(roleInCourse);
+        const uname = userName;
+        return `<span class="enrollment-chip" data-course-id="${cid}">${cid}<button type="button" class="enrollment-chip-remove" data-dashboard-unenroll data-enrollment-id="${eid}" data-enrollment-role="${role}" data-user-name="${uname}" title="Desinscribir de ${cid}" aria-label="Desinscribir de ${cid}">×</button></span>`;
+      })
+      .join('')}</div>`
+    : '<span class="dashboard-enrollment-empty">—</span>';
+
+  const controlsMarkup = availableCourseOptions.length
+    ? `
+      <div class="dashboard-enrollment-controls">
+        <select class="dashboard-enrollment-select" data-dashboard-enrollment-course-select aria-label="Agregar inscripción">
+          <option value="">Agregar a curso…</option>
+          ${availableCourseOptions
+            .map((course) => {
+              const courseId = escapeHtml(course.courseId);
+              const label = escapeHtml(course.label || course.courseId);
+              return `<option value="${courseId}">${label}</option>`;
+            })
+            .join('')}
+        </select>
+        <button
+          type="button"
+          class="dashboard-enrollment-add-btn"
+          data-dashboard-enrollment-add
+          data-user-id="${userId}"
+          data-user-email="${userEmail}"
+          data-user-name="${userName}"
+        >Agregar</button>
+      </div>
+    `
+    : '';
+
+  if (!courses.length && !controlsMarkup) {
+    return '<span class="dashboard-enrollment-empty">—</span>';
+  }
+
+  return `<div class="dashboard-enrollment-cell">${chipsMarkup}${controlsMarkup}</div>`;
 };
 
 const buildCellSelectionKey = (cell: any) => {
@@ -1433,6 +1553,7 @@ const getCourseStudentMetaFallbackError = (kind: string) => {
 
 const CUSTOM_INTERACTIVE_CELL_KINDS = [
   'admin-actions',
+  'enrollment-courses',
 ];
 
 const isCustomInteractiveCellKind = (kind: string) =>
@@ -1446,7 +1567,7 @@ const getInteractiveElementFromTarget = (target: EventTarget | null) => {
 
 const shouldLetInteractiveMouseBubble = (target: EventTarget | null) =>
   target instanceof HTMLElement
-  && Boolean(target.closest('.dashboard-admin-actions, [data-dashboard-unenroll], .enrollment-chip-remove'));
+  && Boolean(target.closest('.dashboard-admin-actions, [data-dashboard-unenroll], .enrollment-chip-remove, [data-dashboard-enrollment-add]'));
 
 const getSelectedRangeCells = (table: Tabulator | null | undefined) => {
   const rangeState: RangeSelectionState | undefined = (table as any)?.__musikiRangeSelectionState;
@@ -4265,7 +4386,7 @@ const isInteractiveDashboardTarget = (target: EventTarget | null) =>
   || target instanceof SVGPathElement
   || (target instanceof HTMLElement && Boolean(
     target.closest(
-      '.dashboard-admin-actions, .tabulator-editing, .enrollment-chip-remove',
+      '.dashboard-admin-actions, .tabulator-editing, .enrollment-chip-remove, .dashboard-enrollment-cell, .dashboard-enrollment-controls',
     ),
   ));
 
@@ -4666,6 +4787,81 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (!target) return;
 
+    const resolveAdminRow = () =>
+      resolveCellComponentFromTarget(table, target, { allowInteractiveKinds: true })?.getRow?.() || null;
+
+    // ── Add enrollment from inline dropdown ──────────────────────────────────
+    const addEnrollmentButton = target.closest<HTMLButtonElement>('[data-dashboard-enrollment-add]');
+    if (addEnrollmentButton) {
+      const userId = normalizeText(addEnrollmentButton.dataset.userId || '');
+      const userEmail = normalizeText(addEnrollmentButton.dataset.userEmail || '');
+      const userName = normalizeText(addEnrollmentButton.dataset.userName || 'este usuario') || 'este usuario';
+      const controls = addEnrollmentButton.closest<HTMLElement>('.dashboard-enrollment-controls');
+      const select = controls?.querySelector<HTMLSelectElement>('[data-dashboard-enrollment-course-select]') || null;
+      const courseId = normalizeText(select?.value || '');
+      if (!courseId) {
+        alert(`Elegí un curso para inscribir a ${userName}.`);
+        select?.focus();
+        return;
+      }
+
+      if (!userId && (!userEmail || !userEmail.includes('@'))) {
+        alert('No se encontró un usuario válido para inscribir.');
+        return;
+      }
+
+      addEnrollmentButton.disabled = true;
+      if (select) select.disabled = true;
+
+      try {
+        const response = await fetch('/api/admin/add-student-manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId,
+            year: meta.year,
+            userId,
+            email: userEmail,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || 'No se pudo inscribir');
+
+        const enrollment = payload?.enrollment && typeof payload.enrollment === 'object'
+          ? payload.enrollment
+          : null;
+        const nextEnrollment: AdminEnrollmentCourse = {
+          courseId: normalizeText(enrollment?.courseId || courseId),
+          enrollmentId: normalizeText(enrollment?.id || ''),
+          roleInCourse: normalizeTextLower(enrollment?.roleInCourse || 'student') || 'student',
+        };
+
+        const row = resolveAdminRow();
+        if (row) {
+          const rowData = row.getData?.() || {};
+          const nextCourses = sortAdminEnrollmentCourses([
+            ...getAdminEnrollmentCourses(rowData),
+            nextEnrollment,
+          ]);
+          updateAdminEnrollmentRowData(row, meta, nextCourses);
+        } else {
+          addEnrollmentButton.disabled = false;
+          if (select) select.disabled = false;
+        }
+
+        if (payload?.status === 'already_enrolled') {
+          showToast(`${userName} ya estaba inscripto en ${courseId}.`, 'success', 2800);
+        } else {
+          showToast(`${userName} fue inscripto en ${courseId}.`, 'success', 2800);
+        }
+      } catch (err: any) {
+        alert(err?.message || 'No se pudo inscribir');
+        addEnrollmentButton.disabled = false;
+        if (select) select.disabled = false;
+      }
+      return;
+    }
+
     // ── Unenroll chip button ──────────────────────────────────────────────────
     const unenrollButton = target.closest<HTMLButtonElement>('[data-dashboard-unenroll]');
     if (unenrollButton) {
@@ -4687,18 +4883,15 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload?.error || 'No se pudo desinscribir');
-        // Remove the chip from the cell
-        const chip = unenrollButton.closest<HTMLElement>('.enrollment-chip');
-        chip?.remove();
-        // Update row data
-        const row = table.getRows('active').find((r: any) => {
+
+        const row = resolveAdminRow() || table.getRows('active').find((r: any) => {
           const d = r.getData?.() || {};
-          return Array.isArray(d.enrollmentCourses) && d.enrollmentCourses.some((e: any) => e.enrollmentId === enrollmentId);
+          return getAdminEnrollmentCourses(d).some((e: AdminEnrollmentCourse) => e.enrollmentId === enrollmentId);
         });
         if (row) {
           const d = row.getData?.() || {};
-          const nextCourses = (d.enrollmentCourses || []).filter((e: any) => e.enrollmentId !== enrollmentId);
-          row.update?.({ enrollmentCourses: nextCourses, enrollmentSummary: nextCourses.map((e: any) => e.courseId).join(' · ') || '—' });
+          const nextCourses = getAdminEnrollmentCourses(d).filter((e: AdminEnrollmentCourse) => e.enrollmentId !== enrollmentId);
+          updateAdminEnrollmentRowData(row, meta, nextCourses);
         }
       } catch (err: any) {
         unenrollButton.disabled = false;

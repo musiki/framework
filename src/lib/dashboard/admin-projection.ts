@@ -3,6 +3,7 @@ import { buildSearchBlob, type DashboardGridProjection } from './shared';
 
 interface AdminProjectionInput {
   activeCourseId: string;
+  availableCourses: Array<{ courseId: string; title?: string; code?: string }>;
   allUsers: any[];
   allEnrollments: any[];
   allSubmissions: any[];
@@ -32,6 +33,7 @@ const formatSubmissionDate = (value: string | null | undefined) => {
 
 export function buildAdminProjection({
   activeCourseId,
+  availableCourses,
   allUsers,
   allEnrollments,
   allSubmissions,
@@ -50,6 +52,20 @@ export function buildAdminProjection({
   }, new Map<string, any[]>());
 
   const activeCourseIdNormalized = String(activeCourseId || '').trim();
+  const enrollmentCourseCatalog = Array.from(
+    new Map(
+      (availableCourses || [])
+        .map((course) => {
+          const courseId = normalizeText(course?.courseId || '');
+          if (!courseId) return null;
+          const code = normalizeText(course?.code || '');
+          const title = normalizeText(course?.title || '');
+          const label = [code, title].filter(Boolean).join(' · ') || courseId;
+          return [courseId, { courseId, label }] as const;
+        })
+        .filter(Boolean) as [string, { courseId: string; label: string }][],
+    ).values(),
+  ).sort((left, right) => String(left.label || left.courseId).localeCompare(String(right.label || right.courseId), 'es'));
   const userIds = Array.from(
     new Set([
       ...(allUsers || []).map((user: any) => String(user?.id || '')).filter(Boolean),
@@ -107,6 +123,7 @@ export function buildAdminProjection({
         courseRole: roleInCourse,
         enrollmentSummary: enrollmentCourses.length ? enrollmentCourses.map((e) => e.courseId).join(' · ') : '—',
         enrollmentCourses,
+        enrollmentCourseCatalog,
         lastActivityAt: latestActivityAt,
         lastActivityLabel: formatSubmissionDate(latestActivityAt),
         __search: buildSearchBlob([
