@@ -58,14 +58,11 @@ export function buildAdminProjection({
         .map((course) => {
           const courseId = normalizeText(course?.courseId || '');
           if (!courseId) return null;
-          const code = normalizeText(course?.code || '');
-          const title = normalizeText(course?.title || '');
-          const label = [code, title].filter(Boolean).join(' · ') || courseId;
-          return [courseId, { courseId, label }] as const;
+          return [courseId, { courseId, label: courseId }] as const;
         })
         .filter(Boolean) as [string, { courseId: string; label: string }][],
     ).values(),
-  ).sort((left, right) => String(left.label || left.courseId).localeCompare(String(right.label || right.courseId), 'es'));
+  ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
   const userIds = Array.from(
     new Set([
       ...(allUsers || []).map((user: any) => String(user?.id || '')).filter(Boolean),

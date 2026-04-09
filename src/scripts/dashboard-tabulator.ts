@@ -1365,6 +1365,11 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
   const userName = escapeHtml(data.name || data.email || '');
   const userId = escapeHtml(normalizeText(data.id || data.userId || ''));
   const userEmail = escapeHtml(normalizeText(data.email || ''));
+  const menuId = escapeHtml(
+    `dashboard-enrollment-menu-${normalizeText(data.id || data.userId || data.email || 'row')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .toLowerCase() || 'row'}`,
+  );
   const courses = getAdminEnrollmentCourses(data);
   const courseCatalog = getAdminEnrollmentCourseCatalog(data);
   const enrolledCourseIds = new Set(courses.map((course) => normalizeText(course.courseId)));
@@ -1385,24 +1390,41 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
   const controlsMarkup = availableCourseOptions.length
     ? `
       <div class="dashboard-enrollment-controls">
-        <select class="dashboard-enrollment-select" data-dashboard-enrollment-course-select aria-label="Agregar inscripción">
-          <option value="">Agregar a curso…</option>
+        <div class="dashboard-enrollment-menu-wrap" data-dashboard-enrollment-menu-wrap>
+          <button
+            type="button"
+            class="dashboard-enrollment-trigger"
+            data-dashboard-enrollment-trigger
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="${menuId}"
+          >Agregar a curso…</button>
+          <div
+            id="${menuId}"
+            class="dashboard-enrollment-menu tabulator-menu"
+            data-dashboard-enrollment-menu
+            role="menu"
+            hidden
+          >
           ${availableCourseOptions
             .map((course) => {
               const courseId = escapeHtml(course.courseId);
-              const label = escapeHtml(course.label || course.courseId);
-              return `<option value="${courseId}">${label}</option>`;
+              return `
+                <button
+                  type="button"
+                  class="dashboard-enrollment-menu-item tabulator-menu-item"
+                  data-dashboard-enrollment-add
+                  data-course-id="${courseId}"
+                  data-user-id="${userId}"
+                  data-user-email="${userEmail}"
+                  data-user-name="${userName}"
+                  role="menuitem"
+                >${courseId}</button>
+              `;
             })
             .join('')}
-        </select>
-        <button
-          type="button"
-          class="dashboard-enrollment-add-btn"
-          data-dashboard-enrollment-add
-          data-user-id="${userId}"
-          data-user-email="${userEmail}"
-          data-user-name="${userName}"
-        >Agregar</button>
+          </div>
+        </div>
       </div>
     `
     : '';
@@ -3171,6 +3193,7 @@ const configureColumns = (
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
     } else if (kind === 'enrollment-courses') {
       baseFormatter = renderEnrollmentCoursesMarkup;
+      nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--enrollment-courses');
       nextColumn.headerSort = false;
     } else if (kind === 'admin-actions') {
       baseFormatter = renderAdminActionsMarkup;
@@ -4783,6 +4806,23 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
 };
 
 const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMeta) => {
+  const setEnrollmentMenuOpen = (menuWrap: HTMLElement | null, open: boolean) => {
+    if (!menuWrap) return;
+    const trigger = menuWrap.querySelector<HTMLButtonElement>('[data-dashboard-enrollment-trigger]');
+    const menu = menuWrap.querySelector<HTMLElement>('[data-dashboard-enrollment-menu]');
+    if (!trigger || !menu) return;
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    menuWrap.dataset.open = open ? 'true' : 'false';
+    menu.hidden = !open;
+  };
+
+  const closeEnrollmentMenus = (exceptMenuWrap: HTMLElement | null = null) => {
+    host.querySelectorAll<HTMLElement>('[data-dashboard-enrollment-menu-wrap]').forEach((menuWrap) => {
+      if (exceptMenuWrap && menuWrap === exceptMenuWrap) return;
+      setEnrollmentMenuOpen(menuWrap, false);
+    });
+  };
+
   const clickHandler = async (event: Event) => {
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (!target) return;
@@ -4790,18 +4830,35 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
     const resolveAdminRow = () =>
       resolveCellComponentFromTarget(table, target, { allowInteractiveKinds: true })?.getRow?.() || null;
 
-    // ── Add enrollment from inline dropdown ──────────────────────────────────
+    const enrollmentTrigger = target.closest<HTMLButtonElement>('[data-dashboard-enrollment-trigger]');
+    if (enrollmentTrigger) {
+      event.preventDefault();
+      const menuWrap = enrollmentTrigger.closest<HTMLElement>('[data-dashboard-enrollment-menu-wrap]');
+      if (!menuWrap) return;
+      const shouldOpen = enrollmentTrigger.getAttribute('aria-expanded') !== 'true';
+      closeEnrollmentMenus(shouldOpen ? menuWrap : null);
+      setEnrollmentMenuOpen(menuWrap, shouldOpen);
+      return;
+    }
+
+    if (!target.closest('[data-dashboard-enrollment-menu-wrap]')) {
+      closeEnrollmentMenus();
+    }
+
+    // ── Add enrollment from floating menu ────────────────────────────────────
     const addEnrollmentButton = target.closest<HTMLButtonElement>('[data-dashboard-enrollment-add]');
     if (addEnrollmentButton) {
+      event.preventDefault();
       const userId = normalizeText(addEnrollmentButton.dataset.userId || '');
       const userEmail = normalizeText(addEnrollmentButton.dataset.userEmail || '');
       const userName = normalizeText(addEnrollmentButton.dataset.userName || 'este usuario') || 'este usuario';
-      const controls = addEnrollmentButton.closest<HTMLElement>('.dashboard-enrollment-controls');
-      const select = controls?.querySelector<HTMLSelectElement>('[data-dashboard-enrollment-course-select]') || null;
-      const courseId = normalizeText(select?.value || '');
+      const courseId = normalizeText(addEnrollmentButton.dataset.courseId || '');
+      const menuWrap = addEnrollmentButton.closest<HTMLElement>('[data-dashboard-enrollment-menu-wrap]');
+      const trigger = menuWrap?.querySelector<HTMLButtonElement>('[data-dashboard-enrollment-trigger]') || null;
+      closeEnrollmentMenus();
       if (!courseId) {
         alert(`Elegí un curso para inscribir a ${userName}.`);
-        select?.focus();
+        trigger?.focus();
         return;
       }
 
@@ -4811,7 +4868,7 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
       }
 
       addEnrollmentButton.disabled = true;
-      if (select) select.disabled = true;
+      if (trigger) trigger.disabled = true;
 
       try {
         const response = await fetch('/api/admin/add-student-manual', {
@@ -4846,7 +4903,7 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
           updateAdminEnrollmentRowData(row, meta, nextCourses);
         } else {
           addEnrollmentButton.disabled = false;
-          if (select) select.disabled = false;
+          if (trigger) trigger.disabled = false;
         }
 
         if (payload?.status === 'already_enrolled') {
@@ -4857,7 +4914,7 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
       } catch (err: any) {
         alert(err?.message || 'No se pudo inscribir');
         addEnrollmentButton.disabled = false;
-        if (select) select.disabled = false;
+        if (trigger) trigger.disabled = false;
       }
       return;
     }
@@ -4940,10 +4997,25 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
     await deleteAdminUsers(table, meta, selectedUsers, deleteButton);
   };
 
+  const outsideClickHandler = (event: Event) => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest('[data-dashboard-enrollment-menu-wrap]')) return;
+    closeEnrollmentMenus();
+  };
+
+  const escapeHandler = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    closeEnrollmentMenus();
+  };
+
   host.addEventListener('click', clickHandler, { capture: true });
+  document.addEventListener('click', outsideClickHandler);
+  document.addEventListener('keydown', escapeHandler);
 
   return () => {
     host.removeEventListener('click', clickHandler, { capture: true });
+    document.removeEventListener('click', outsideClickHandler);
+    document.removeEventListener('keydown', escapeHandler);
   };
 };
 
