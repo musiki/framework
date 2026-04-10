@@ -85,6 +85,7 @@ type RealtimeProjectionSyncController = {
 type DashboardTabulatorInstance = Tabulator & {
   __musikiTableBuilt?: boolean;
   __musikiFoldStorageKey?: string;
+  __musikiPersistKey?: string;
 };
 
 type AdminEnrollmentCourse = {
@@ -98,7 +99,7 @@ type AdminEnrollmentCourseOption = {
   label?: string;
 };
 
-const VALID_TEACHER_TABS = ['main', 'log', 'admin'];
+const VALID_TEACHER_TABS = ['main', 'log', 'admin', 'agenda'];
 const SEARCH_DEBOUNCE_MS = 300;
 const DASHBOARD_LIVE_MODE_STORAGE_KEY = 'musiki:dashboard:live-mode';
 const DASHBOARD_PROJECTION_SCRIPT_IDS = [
@@ -110,10 +111,15 @@ const DASHBOARD_PROJECTION_SCRIPT_IDS = [
   'dashboard-teacher-comments',
   'dashboard-teacher-admin',
   'dashboard-teacher-annotations',
+  'dashboard-agenda-data',
 ];
 
 const normalizeText = (value: any) => String(value || '').trim();
 const normalizeTextLower = (value: any) => normalizeText(value).toLowerCase();
+const agendaAttendanceBulletByCellKey = new Map<string, string>();
+
+const buildAgendaAttendanceCellKey = (studentId: string, dateKey: string) =>
+  `${normalizeText(studentId)}::${normalizeText(dateKey)}`;
 
 let _toastTimer: ReturnType<typeof setTimeout> | null = null;
 const showToast = (msg: string, type: 'loading' | 'success' | 'error' = 'loading', duration = 0) => {
@@ -196,6 +202,29 @@ const debounce = <T extends (...args: any[]) => any>(fn: T, ms: number) => {
   };
 };
 
+// ── Row-level save queue ──────────────────────────────────────────────────────
+// Serialises async writes per row so rapid edits never overlap.
+// Key format: "<persistKey>::<rowId>"
+const rowSaveQueue = new Map<string, Promise<unknown>>();
+
+const getCellSaveQueueKey = (cell: any): string => {
+  const table = cell?.getTable?.() || cell?.getRow?.()?.getTable?.();
+  const tableKey = (table as DashboardTabulatorInstance)?.__musikiPersistKey ?? 'default';
+  const rowId = String(cell?.getRow?.()?.getIndex?.() ?? '');
+  return `${tableKey}::${rowId}`;
+};
+
+const enqueueRowSave = (key: string, fn: () => Promise<unknown>): Promise<unknown> => {
+  const prev = rowSaveQueue.get(key) ?? Promise.resolve();
+  const next = prev.then(fn, fn); // run fn even if prev failed
+  rowSaveQueue.set(key, next);
+  void next.finally(() => {
+    if (rowSaveQueue.get(key) === next) rowSaveQueue.delete(key);
+  });
+  return next;
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 const parseJsonScript = <T>(id: string, fallback: T): T => {
   const script = document.getElementById(id);
   if (!script) return fallback;
@@ -204,6 +233,26 @@ const parseJsonScript = <T>(id: string, fallback: T): T => {
   } catch {
     return fallback;
   }
+};
+
+const hydrateAgendaAttendanceBullets = () => {
+  agendaAttendanceBulletByCellKey.clear();
+  const agendaData = parseJsonScript<any>('dashboard-agenda-data', null);
+  const students = Array.isArray(agendaData?.students) ? agendaData.students : [];
+  students.forEach((student: any) => {
+    const studentId = normalizeText(student?.studentId || '');
+    const color = normalizeText(student?.color || '');
+    if (!studentId || !color) return;
+    const blocks = Array.isArray(student?.blocks) ? student.blocks : [];
+    blocks.forEach((block: any) => {
+      const dateKey = normalizeText(block?.dateKey || '');
+      if (!dateKey) return;
+      const mapKey = buildAgendaAttendanceCellKey(studentId, dateKey);
+      if (!agendaAttendanceBulletByCellKey.has(mapKey)) {
+        agendaAttendanceBulletByCellKey.set(mapKey, color);
+      }
+    });
+  });
 };
 
 const canRedrawTable = (table: Tabulator | null | undefined) =>
@@ -418,22 +467,35 @@ const saveUserFieldFromCell = async (cell: any, overrideValue?: string, meta?: D
 
   if (!Object.keys(body).length) return;
   if (meta?.courseId) body.courseId = meta.courseId;
-  setDashboardSaveStatus('saving', `Guardando ${field}...`);
-  try {
-    const response = await fetch(`/api/admin/users/${studentId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error((payload as any)?.error || `No se pudo guardar ${field}.`);
+
+  // The local row.update() was already applied by saveSingleUserFieldCellValue before this call.
+  // Use the save queue so rapid edits to the same row don't race to the server.
+  const previousValue = String(cell?.getOldValue?.() ?? '');
+  const row = cell?.getRow?.();
+  const queueKey = getCellSaveQueueKey(cell);
+
+  await enqueueRowSave(queueKey, async () => {
+    setDashboardSaveStatus('saving', `Guardando ${field}...`);
+    try {
+      const response = await fetch(`/api/admin/users/${studentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error((payload as any)?.error || `No se pudo guardar ${field}.`);
+      }
+      setDashboardSaveStatus('saved', `${field} guardado.`);
+    } catch (error: any) {
+      // Rollback optimistic row update
+      if (row) {
+        try { await row.update({ [field]: previousValue }); } catch { /* ignore rollback races */ }
+      }
+      setDashboardSaveStatus('error', error?.message || `No se pudo guardar ${field}.`);
+      throw error;
     }
-    setDashboardSaveStatus('saved', `${field} guardado.`);
-  } catch (error: any) {
-    setDashboardSaveStatus('error', error?.message || `No se pudo guardar ${field}.`);
-    throw error;
-  }
+  });
 };
 
 const saveSelectedUserFieldFromCell = async (cell: any, overrideValue?: any, meta?: DashboardMeta) => {
@@ -488,13 +550,20 @@ const saveSingleCourseRoleCellValue = async (
   if (getCellKind(cell) !== 'course-role') return;
 
   const field = getCellField(cell);
+  const rowData = cell?.getData?.() || {};
+  const activeEnrollment = resolveActiveAdminEnrollmentCourse(rowData, meta);
   const previousValue = normalizeCourseRoleValue(
-    getCellPreviousValue(cell, overridePreviousValue),
+    overridePreviousValue
+    ?? activeEnrollment?.roleInCourse
+    ?? getCellPreviousValue(cell, overridePreviousValue),
   );
   const nextValue = normalizeCourseRoleValue(overrideNextValue ?? cell.getValue?.());
   const row = cell?.getRow?.();
 
   if (nextValue === previousValue) {
+    if (row) {
+      updateAdminEnrollmentRowData(row, meta || {}, getAdminEnrollmentCourses(rowData));
+    }
     await row?.update?.({
       [field]: nextValue,
       courseRoleLabel: getCourseRoleLabel(nextValue),
@@ -502,14 +571,34 @@ const saveSingleCourseRoleCellValue = async (
     return;
   }
 
-  const rowData = cell?.getData?.() || {};
-  const activeEnrollment = resolveActiveAdminEnrollmentCourse(rowData, meta);
   const enrollmentId = normalizeText(activeEnrollment?.enrollmentId || rowData.enrollmentId || '');
   if (!enrollmentId) {
     throw new Error('No se encontró la inscripción activa de este curso.');
   }
 
-  const payload = await postCourseRoleUpdate(enrollmentId, nextValue);
+  // ── Optimistic update: show new role immediately ──────────────────────────
+  if (row) {
+    await row?.update?.({
+      [field]: nextValue,
+      courseRoleLabel: getCourseRoleLabel(nextValue),
+    });
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  let payload: any;
+  try {
+    payload = await postCourseRoleUpdate(enrollmentId, nextValue);
+  } catch (error) {
+    // Rollback optimistic update
+    if (row) {
+      await row?.update?.({
+        [field]: previousValue,
+        courseRoleLabel: getCourseRoleLabel(previousValue),
+      });
+    }
+    throw error;
+  }
+
   const resolvedRole = normalizeCourseRoleValue(payload?.enrollment?.roleInCourse || nextValue);
   const nextCourses = sortAdminEnrollmentCourses(
     getAdminEnrollmentCourses(rowData).map((course) => {
@@ -579,12 +668,29 @@ const saveSingleCourseStudentMetaCellValue = async (
   const studentId = normalizeText(rowData.studentId || '');
   if (!patchKey || !studentId) return;
 
-  const payload = await postCourseStudentMetaUpdate(
-    meta,
-    studentId,
-    { [patchKey]: nextValue },
-    getCourseStudentMetaFallbackError(kind),
-  );
+  // ── Optimistic update: reflect new value immediately ─────────────────────
+  await row?.update?.({ [field]: nextValue || '' });
+  if (normalizedKind === 'grupo') {
+    row?.getTable?.()?.refreshFilter?.();
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  let payload: any;
+  try {
+    payload = await postCourseStudentMetaUpdate(
+      meta,
+      studentId,
+      { [patchKey]: nextValue },
+      getCourseStudentMetaFallbackError(kind),
+    );
+  } catch (error) {
+    // Rollback optimistic update
+    await row?.update?.({ [field]: previousValue || '' });
+    if (normalizedKind === 'grupo') {
+      row?.getTable?.()?.refreshFilter?.();
+    }
+    throw error;
+  }
 
   const resolvedValue = getCourseStudentMetaResponseValue(kind, payload, nextValue);
   await row?.update?.({
@@ -826,6 +932,39 @@ const formatSubmissionDate = (dateValue: string | Date | null | undefined) => {
   });
 };
 
+const formatRelativeElapsedDate = (dateValue: string | Date | null | undefined) => {
+  if (!dateValue) return '—';
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+  if (Number.isNaN(date.getTime())) return '—';
+
+  const now = Date.now();
+  const diffMs = Math.max(0, now - date.getTime());
+  const totalMinutes = Math.floor(diffMs / 60000);
+
+  if (totalMinutes <= 0) return 'menos de 1 minuto';
+
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  const parts: string[] = [];
+  if (days > 0) {
+    parts.push(`${days} ${days === 1 ? 'día' : 'días'}`);
+  }
+  if (hours > 0) {
+    parts.push(`${hours} ${hours === 1 ? 'hora' : 'horas'}`);
+  }
+  if (minutes > 0 && parts.length < 2) {
+    parts.push(`${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`);
+  }
+
+  if (parts.length === 0) {
+    return 'menos de 1 minuto';
+  }
+
+  return parts.slice(0, 2).join(' ');
+};
+
 const formatAbsence = (units: number) => {
   if (units <= 0) return '0';
   return String(Math.round(units * 10) / 10).replace('.', ',');
@@ -878,21 +1017,41 @@ const persistSingleAttendanceCellValue = async (
   const context = resolvePersistableAttendanceCellContext(cell, meta);
   if (!context) return false;
 
+  // ── Optimistic update: show formatted value immediately, before the fetch ──
+  const preRowData = cell.getData?.() || {};
+  const preCellMeta = preRowData?.__attendanceCellMeta?.[context.field];
+  const preLiveValue = Number(preCellMeta?.liveValue || 0);
+  const optimisticDisplay = normalized.countRaw !== null
+    ? formatAttendanceSymbol(normalized.countRaw)
+    : formatAttendanceSymbol(preLiveValue, { blankWhenZero: true });
+  const previousDisplay = String(cell?.getOldValue?.() ?? cell?.getValue?.() ?? '');
+  await cell.getRow()?.update?.({ [context.field]: optimisticDisplay });
+  // ──────────────────────────────────────────────────────────────────────────
+
   setDashboardSaveStatus('saving', `Guardando asistencia ${context.dateKey}...`);
-  const response = await fetch('/api/grade/course-attendance-manual', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      courseId: meta.courseId,
-      year: meta.year,
-      studentId: context.studentId,
-      date: context.dateKey,
-      countRaw: normalized.countRaw,
-    }),
-  });
+
+  let response: Response;
+  try {
+    response = await fetch('/api/grade/course-attendance-manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseId: meta.courseId,
+        year: meta.year,
+        studentId: context.studentId,
+        date: context.dateKey,
+        countRaw: normalized.countRaw,
+      }),
+    });
+  } catch (fetchError) {
+    await cell.getRow()?.update?.({ [context.field]: previousDisplay });
+    setDashboardSaveStatus('error', 'No se pudo guardar la asistencia manual');
+    throw fetchError;
+  }
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
+    await cell.getRow()?.update?.({ [context.field]: previousDisplay });
     setDashboardSaveStatus('error', payload?.error || 'No se pudo guardar la asistencia manual');
     throw new Error(payload?.error || 'No se pudo guardar la asistencia manual');
   }
@@ -942,6 +1101,11 @@ const persistSingleAttendanceCellValue = async (
     absenceUnits,
     absenceDisplay: formatAbsence(absenceUnits),
   });
+
+  const table = cell.getTable?.();
+  if (table) {
+    syncAttendanceDayHeaderStats(table, [context.field]);
+  }
 
   setDashboardSaveStatus('saved', `Asistencia guardada: ${context.dateKey}.`);
   return true;
@@ -1226,6 +1390,121 @@ const renderAttendanceProgressMarkup = (cell: any) => {
 };
 
 const renderDateTimeCellMarkup = (cell: any) => formatSubmissionDate(cell.getValue());
+const renderRelativeDateTimeCellMarkup = (cell: any) => {
+  const value = cell.getValue();
+  const exact = formatSubmissionDate(value);
+  const relative = formatRelativeElapsedDate(value);
+  if (relative === '—') {
+    return '<span class="dashboard-val-empty">—</span>';
+  }
+  return `<span title="${escapeHtml(exact)}">${escapeHtml(relative)}</span>`;
+};
+
+const isAttendanceDayField = (field: unknown) => normalizeText(field || '').startsWith('day_');
+
+const resolveAttendancePresenceForHeaderStats = (entry: any) => {
+  if (!entry?.countsTowardAbsence) return null;
+
+  const liveValue = Number(entry?.liveValue || 0);
+  const hasManualOverride = Boolean(entry?.hasManualOverride);
+  const hasAnyData = hasManualOverride || liveValue > 0;
+  const rawPresence = hasAnyData ? Number(entry?.effectiveValue || 0) : 1;
+  const safePresence = Number.isFinite(rawPresence) ? rawPresence : 0;
+  return Math.max(0, Math.min(1, safePresence));
+};
+
+const computeAttendanceDayHeaderStats = (table: any, field: string) => {
+  let absentCount = 0;
+  let lateCount = 0;
+
+  const rows = typeof table?.getRows === 'function' ? table.getRows('active') : [];
+  rows.forEach((row: any) => {
+    const entry = row?.getData?.()?.__attendanceCellMeta?.[field];
+    const presence = resolveAttendancePresenceForHeaderStats(entry);
+    if (presence === null) return;
+    if (presence <= 0) {
+      absentCount += 1;
+      return;
+    }
+    if (presence < 1) {
+      lateCount += 1;
+    }
+  });
+
+  return { absentCount, lateCount };
+};
+
+const resolveAttendanceDayHeaderColumn = (columnLike: any) =>
+  columnLike?.getField?.()
+    ? columnLike
+    : columnLike?.getColumn?.() || null;
+
+const renderAttendanceDayHeaderMarkup = (columnLike: any) => {
+  const column = resolveAttendanceDayHeaderColumn(columnLike);
+  const field = normalizeText(column?.getField?.() || '');
+  const title = String(
+    columnLike?.getValue?.()
+      || column?.getDefinition?.()?.title
+      || '',
+  );
+  const table = column?.getTable?.() || null;
+  const stats = field && table
+    ? computeAttendanceDayHeaderStats(table, field)
+    : { absentCount: 0, lateCount: 0 };
+
+  return `
+    <div class="dashboard-attendance-day-header">
+      <span class="dashboard-attendance-day-header-title">${escapeHtml(title)}</span>
+      <button class="dashboard-attendance-fill-btn" data-action="fill-present" data-field="${escapeHtml(field)}" title="Completar columna con presente" type="button" tabindex="-1">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" width="11" height="11"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
+      </button>
+      <div class="dashboard-attendance-day-header-stats">
+        <span class="dashboard-attendance-day-header-stat dashboard-attendance-day-header-stat--absent" data-attendance-day-stat="absent" title="${stats.absentCount} ausente${stats.absentCount === 1 ? '' : 's'}">${stats.absentCount}</span>
+        <span class="dashboard-attendance-day-header-stat dashboard-attendance-day-header-stat--late" data-attendance-day-stat="late" title="${stats.lateCount} tarde${stats.lateCount === 1 ? '' : 's'}" ${stats.lateCount > 0 ? '' : 'hidden'}>${stats.lateCount}</span>
+      </div>
+    </div>
+  `;
+};
+
+const syncAttendanceDayHeaderStats = (table: Tabulator, fields?: string[]) => {
+  const targetFields = new Set(
+    (fields || [])
+      .map((field) => normalizeText(field))
+      .filter(Boolean),
+  );
+
+  const syncColumn = (column: any) => {
+    const subColumns = typeof column?.getSubColumns === 'function' ? column.getSubColumns() : [];
+    if (Array.isArray(subColumns) && subColumns.length > 0) {
+      subColumns.forEach(syncColumn);
+      return;
+    }
+
+    const field = normalizeText(column?.getField?.() || '');
+    if (!isAttendanceDayField(field)) return;
+    if (targetFields.size > 0 && !targetFields.has(field)) return;
+
+    const stats = computeAttendanceDayHeaderStats(table, field);
+    const columnElement = column?.getElement?.();
+    if (!(columnElement instanceof HTMLElement)) return;
+
+    const absentNode = columnElement.querySelector<HTMLElement>('[data-attendance-day-stat="absent"]');
+    const lateNode = columnElement.querySelector<HTMLElement>('[data-attendance-day-stat="late"]');
+
+    if (absentNode) {
+      absentNode.textContent = String(stats.absentCount);
+      absentNode.title = `${stats.absentCount} ausente${stats.absentCount === 1 ? '' : 's'}`;
+    }
+
+    if (lateNode) {
+      lateNode.textContent = String(stats.lateCount);
+      lateNode.title = `${stats.lateCount} tarde${stats.lateCount === 1 ? '' : 's'}`;
+      lateNode.hidden = stats.lateCount <= 0;
+    }
+  };
+
+  table.getColumns().forEach(syncColumn);
+};
 
 const renderAttendanceMarkup = (cell: any) => {
   const val = cell.getValue();
@@ -1253,7 +1532,15 @@ const renderAttendanceMarkup = (cell: any) => {
   else if (units >= 0.5) cssClass += ' dashboard-attendance-chip--partial';
   else if (!isFuture) cssClass += ' dashboard-attendance-chip--empty';
 
-  return `<span class="${cssClass}">${symbol}</span>`;
+  const studentId = normalizeText(cell.getData()?.studentId || cell.getData()?.id || '');
+  const bulletColor = agendaAttendanceBulletByCellKey.get(
+    buildAgendaAttendanceCellKey(studentId, String(meta?.dateKey || '')),
+  ) || '';
+  const bulletMarkup = bulletColor
+    ? `<span class="dashboard-agenda-bullet" style="--agenda-bullet:${escapeHtml(bulletColor)}"></span>`
+    : '';
+
+  return `<span class="${cssClass}">${symbol}${bulletMarkup}</span>`;
 };
 
 const annotationColorFormatter = (cell: any) => {
@@ -1265,6 +1552,9 @@ const annotationColorFormatter = (cell: any) => {
 const roleFormatter = (cell: any) => {
   const value = cell.getValue();
   const normalized = normalizeText(value).toLowerCase();
+  if (normalized === 'admin') {
+    return '<span class="role-badge role-badge--admin">Admin</span>';
+  }
   const isTeacher = normalized === 'teacher';
   return `<span class="role-badge ${isTeacher ? 'role-badge--teacher' : 'role-badge--student'}">${isTeacher ? 'Teacher' : 'Student'}</span>`;
 };
@@ -1623,15 +1913,21 @@ const CUSTOM_INTERACTIVE_CELL_KINDS = [
 const isCustomInteractiveCellKind = (kind: string) =>
   CUSTOM_INTERACTIVE_CELL_KINDS.includes(normalizeText(kind));
 
+const resolveEventElement = (target: EventTarget | null): Element | null => {
+  if (target instanceof Element) return target;
+  if (target instanceof Node) return target.parentElement;
+  return null;
+};
+
 const getInteractiveElementFromTarget = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) return null;
-  if (target.matches('input, textarea, select, button, a')) return target;
-  return target.querySelector<HTMLElement>('input, textarea, select, button, a');
+  const element = resolveEventElement(target);
+  if (!element) return null;
+  if (element.matches('input, textarea, select, button, a')) return element;
+  return element.querySelector<HTMLElement>('input, textarea, select, button, a');
 };
 
 const shouldLetInteractiveMouseBubble = (target: EventTarget | null) =>
-  target instanceof HTMLElement
-  && Boolean(target.closest('.dashboard-admin-actions, [data-dashboard-unenroll], .enrollment-chip-remove, [data-dashboard-enrollment-add]'));
+  Boolean(resolveEventElement(target)?.closest('.dashboard-admin-actions, [data-dashboard-unenroll], .enrollment-chip-remove, [data-dashboard-enrollment-add]'));
 
 const getSelectedRangeCells = (table: Tabulator | null | undefined) => {
   const rangeState: RangeSelectionState | undefined = (table as any)?.__musikiRangeSelectionState;
@@ -1761,7 +2057,7 @@ const deleteAdminUsers = async (
   if (!selectedUsers.length) return false;
 
   const isBatch = selectedUsers.length > 1;
-  const anyGlobalTeacher = selectedUsers.some((user) => user.globalRole === 'teacher');
+  const anyGlobalTeacher = selectedUsers.some((user) => ['teacher', 'admin'].includes(normalizeTextLower(user.globalRole)));
   const anyCourseTeacher = selectedUsers.some((user) => user.courseRole === 'teacher');
   const warningBits = [
     isBatch
@@ -1769,7 +2065,7 @@ const deleteAdminUsers = async (
       : selectedUsers[0]?.email
         ? `Email: ${selectedUsers[0].email}`
         : '',
-    anyGlobalTeacher ? 'Hay usuarios con rol global teacher.' : '',
+    anyGlobalTeacher ? 'Hay usuarios con rol global teacher/admin.' : '',
     anyCourseTeacher ? 'Hay usuarios con rol teacher en este curso.' : '',
     'Se borrarán también sus inscripciones y submissions.',
   ].filter(Boolean);
@@ -1920,8 +2216,12 @@ const saveCourseRoleSelectionFromCell = async (
   if (getCellKind(cell) !== 'course-role') return;
 
   const field = getCellField(cell);
+  const rowData = cell?.getData?.() || {};
+  const persistedRole = resolveActiveAdminEnrollmentCourse(rowData, meta)?.roleInCourse;
   const previousValue = normalizeCourseRoleValue(
-    getCellPreviousValue(cell, overridePreviousValue),
+    overridePreviousValue
+    ?? persistedRole
+    ?? getCellPreviousValue(cell, overridePreviousValue),
   );
   const nextValue = normalizeCourseRoleValue(overrideNextValue ?? cell.getValue?.());
 
@@ -1947,14 +2247,15 @@ const saveCourseRoleSelectionFromCell = async (
 
   const targets = targetCells
     .map((targetCell) => {
-      const rowData = targetCell?.getData?.() || {};
-      const rowId = normalizeText(rowData.id || targetCell?.getRow?.()?.getIndex?.() || '');
+      const targetRowData = targetCell?.getData?.() || {};
+      const rowId = normalizeText(targetRowData.id || targetCell?.getRow?.()?.getIndex?.() || '');
       const enrollmentId = normalizeText(
-        resolveActiveAdminEnrollmentCourse(rowData, meta)?.enrollmentId || rowData.enrollmentId || '',
+        resolveActiveAdminEnrollmentCourse(targetRowData, meta)?.enrollmentId || targetRowData.enrollmentId || '',
       );
+      const persistedTargetRole = resolveActiveAdminEnrollmentCourse(targetRowData, meta)?.roleInCourse;
       const existingValue = targetCell === cell
         ? previousValue
-        : normalizeCourseRoleValue(targetCell?.getValue?.());
+        : normalizeCourseRoleValue(persistedTargetRole ?? targetCell?.getValue?.());
       if (!rowId || !enrollmentId) return null;
       return {
         cell: targetCell,
@@ -3119,15 +3420,20 @@ const configureColumns = (
       nextColumn.hozAlign = nextColumn.hozAlign || 'center';
     } else if (kind === 'datetime') {
       baseFormatter = renderDateTimeCellMarkup;
+    } else if (kind === 'relative-datetime') {
+      nextColumn.sorter = (a: any, b: any) => {
+        const aTs = a ? new Date(a).getTime() : 0;
+        const bTs = b ? new Date(b).getTime() : 0;
+        const safeA = Number.isNaN(aTs) ? 0 : aTs;
+        const safeB = Number.isNaN(bTs) ? 0 : bTs;
+        return safeA - safeB;
+      };
+      baseFormatter = renderRelativeDateTimeCellMarkup;
     } else if (kind === 'attendance-day' && ['attendance-summary', 'teacher-main'].includes(context.kind)) {
       nextColumn.editor = 'input';
       nextColumn.headerSort = false;
       baseFormatter = renderAttendanceMarkup;
-      nextColumn.titleFormatter = (cell: any) => {
-        const title = String(cell.getValue() || '');
-        const field = String(cell.getColumn?.()?.getField?.() || '');
-        return `<span class="dashboard-attendance-day-header-title">${title}</span><button class="dashboard-attendance-fill-btn" data-action="fill-present" data-field="${field}" title="Completar columna con presente" type="button" tabindex="-1"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" width="11" height="11"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></button>`;
-      };
+      nextColumn.titleFormatter = renderAttendanceDayHeaderMarkup;
     } else if (kind === 'annotation-color') {
       baseFormatter = annotationColorFormatter;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
@@ -3378,6 +3684,7 @@ const buildTable = (
   element.dataset.rangeSelection = isRangeTable ? 'true' : 'false';
     const table = new Tabulator(element, {
     index: 'id',
+    reactiveData: true,
     data: Array.isArray(projection?.rows) ? projection.rows : [],
     columns: configureColumns(Array.isArray(projection?.columns) ? projection.columns : [], context, annotationState, modalRef),
     layout:
@@ -3417,7 +3724,8 @@ const buildTable = (
     placeholder: projection?.emptyMessage || 'Sin datos.',
     persistence: {
       sort: true,
-      columns: ['title', 'width', 'visible'],
+      filter: true,
+      columns: true,
     },
     persistenceMode: 'local',
     persistenceID: persistKey,
@@ -3436,6 +3744,7 @@ const buildTable = (
   });
 
   (table as DashboardTabulatorInstance).__musikiFoldStorageKey = buildFoldStorageKey(persistKey);
+  (table as DashboardTabulatorInstance).__musikiPersistKey = persistKey;
 
   return table;
 };
@@ -3449,6 +3758,47 @@ const foldTeacherMainGroupsByDefault = (table: Tabulator) => {
   } catch {
     // ignore startup folding races
   }
+};
+
+const applyInitialFoldState = (table: Tabulator, kind: GridKind) => {
+  try {
+    unfoldAllColumns(table, { persist: false });
+  } catch {
+    // ignore unfold races during startup
+  }
+
+  const restored = restoreStoredFoldState(table);
+  if (restored) return;
+
+  if (kind === 'teacher-main') {
+    foldTeacherMainGroupsByDefault(table);
+    return;
+  }
+
+  try {
+    foldAllColumns(table, { persist: false });
+    writeStoredFoldState(table, snapshotCurrentFoldState(table));
+  } catch {
+    // ignore startup folding races
+  }
+};
+
+const bindInitialFoldState = (table: Tabulator, kind: GridKind) => {
+  const handler = () => {
+    window.requestAnimationFrame(() => {
+      applyInitialFoldState(table, kind);
+    });
+  };
+
+  table.on('tableBuilt', handler);
+
+  return () => {
+    try {
+      table.off('tableBuilt', handler);
+    } catch {
+      // ignore teardown races
+    }
+  };
 };
 
 const bindFoldAllButtons = (root: HTMLElement, registry: Map<string, Tabulator>) => {
@@ -3529,7 +3879,6 @@ const bindAttendanceConfig = () => {
 
   const startInput = panel.querySelector('[data-attendance-config-input="startDate"]');
   const endInput = panel.querySelector('[data-attendance-config-input="endDate"]');
-  const applyBtn = panel.querySelector('[data-attendance-config-apply]');
   if (
     !(startInput instanceof HTMLInputElement) ||
     !(endInput instanceof HTMLInputElement)
@@ -3537,12 +3886,22 @@ const bindAttendanceConfig = () => {
     return;
   }
 
+  panel.dataset.savedStartDate = startInput.value;
+  panel.dataset.savedEndDate = endInput.value;
+  let saveTimer: number | null = null;
+  let saveInFlight = false;
+
   const applyConfig = async () => {
     const courseId = normalizeText(panel.getAttribute('data-course-id'));
     const year = normalizeText(panel.getAttribute('data-year'));
     if (!courseId || !year) return;
+    if (!startInput.value || !endInput.value) return;
+    const savedStartDate = normalizeText(panel.dataset.savedStartDate);
+    const savedEndDate = normalizeText(panel.dataset.savedEndDate);
+    if (savedStartDate === startInput.value && savedEndDate === endInput.value) return;
+    if (saveInFlight) return;
 
-    if (applyBtn instanceof HTMLButtonElement) applyBtn.disabled = true;
+    saveInFlight = true;
     startInput.disabled = true;
     endInput.disabled = true;
     showToast('Guardando rango…', 'loading');
@@ -3561,22 +3920,36 @@ const bindAttendanceConfig = () => {
 
       if (!response.ok) throw new Error('No se pudo guardar la configuración');
 
+      panel.dataset.savedStartDate = startInput.value;
+      panel.dataset.savedEndDate = endInput.value;
       showToast('Rango guardado — recargando grilla…', 'success');
-      setTimeout(() => window.location.reload(), 1200);
+      setTimeout(() => window.location.reload(), 900);
     } catch (error: any) {
       console.error('Error saving attendance config:', error);
       showToast(error?.message || 'Error al guardar la configuración', 'error', 4000);
-      if (applyBtn instanceof HTMLButtonElement) applyBtn.disabled = false;
       startInput.disabled = false;
       endInput.disabled = false;
+      saveInFlight = false;
     }
   };
 
-  if (applyBtn instanceof HTMLButtonElement) {
-    applyBtn.addEventListener('click', applyConfig);
-  }
-  // Also allow Enter key in either date input to apply
-  const onEnter = (e: KeyboardEvent) => { if (e.key === 'Enter') applyConfig(); };
+  const scheduleApply = () => {
+    if (saveTimer) window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      void applyConfig();
+    }, 220);
+  };
+
+  const onEnter = (e: KeyboardEvent) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (saveTimer) window.clearTimeout(saveTimer);
+    saveTimer = null;
+    void applyConfig();
+  };
+  startInput.addEventListener('change', scheduleApply);
+  endInput.addEventListener('change', scheduleApply);
   startInput.addEventListener('keydown', onEnter);
   endInput.addEventListener('keydown', onEnter);
 };
@@ -3951,9 +4324,16 @@ const bindTeacherTabs = (
     tabs.forEach((tab) => {
       tab.classList.toggle('active', normalizeText(tab.dataset.dashboardTab) === nextTab);
     });
-    shell.querySelectorAll<HTMLElement>('[data-dashboard-topbar-context]').forEach((node) => {
+    shell.querySelectorAll<HTMLElement>('[data-dashboard-topbar-context], [data-dashboard-topbar-contexts]').forEach((node) => {
       const targetTab = normalizeText(node.dataset.dashboardTopbarContext);
-      node.hidden = targetTab !== nextTab;
+      const targetTabs = normalizeText(node.dataset.dashboardTopbarContexts)
+        .split(',')
+        .map((value) => normalizeText(value))
+        .filter(Boolean);
+      const isVisible = targetTab
+        ? targetTab === nextTab
+        : targetTabs.includes(nextTab);
+      node.hidden = !isVisible;
     });
     let activePanel: HTMLElement | null = null;
     panels.forEach((panel) => {
@@ -4463,9 +4843,10 @@ const resolveCellComponentFromTarget = (
   target: EventTarget | null,
   options?: { allowInteractiveKinds?: boolean },
 ) => {
-  if (!(target instanceof HTMLElement)) return null;
+  const element = resolveEventElement(target);
+  if (!element) return null;
 
-  const cellElement = target.closest<HTMLElement>('.tabulator-cell');
+  const cellElement = element.closest<HTMLElement>('.tabulator-cell');
   if (!cellElement) return null;
 
   const rowElement = cellElement.closest<HTMLElement>('.tabulator-row');
@@ -4670,13 +5051,18 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     cell: any,
     normalized: ReturnType<typeof normalizeAttendanceInput>,
   ) => {
-    await persistSingleAttendanceCellValue(cell, normalized, meta);
+    // Serialise via per-row save queue so rapid edits to the same row don't race.
+    await enqueueRowSave(getCellSaveQueueKey(cell), () =>
+      persistSingleAttendanceCellValue(cell, normalized, meta),
+    );
 
     const extraCells = getSelectedAttendanceCells(cell);
     const failures: string[] = [];
     for (const selectedCell of extraCells) {
       try {
-        await persistSingleAttendanceCellValue(selectedCell, normalized, meta);
+        await enqueueRowSave(getCellSaveQueueKey(selectedCell), () =>
+          persistSingleAttendanceCellValue(selectedCell, normalized, meta),
+        );
       } catch (error: any) {
         failures.push(error?.message || 'No se pudo guardar una celda del rango');
       }
@@ -4801,13 +5187,24 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   tableElement?.addEventListener('touchcancel', touchMoveCancelHandler, { passive: true });
   tableElement?.addEventListener('touchmove', touchMoveCancelHandler, { passive: true });
 
+  const syncHeaderStats = () => {
+    window.requestAnimationFrame(() => {
+      try {
+        syncAttendanceDayHeaderStats(table);
+      } catch {
+        // ignore transient redraw races
+      }
+    });
+  };
+
+  table.on('tableBuilt', syncHeaderStats);
+  table.on('dataFiltered', syncHeaderStats);
+
   // ── Fill column with present button ─────────────────────────────────────
   const rootElement = (table as any)?.element as HTMLElement | undefined;
 
   const fillColumnHandler = async (event: MouseEvent) => {
-    const btn = (event.target instanceof HTMLElement)
-      ? event.target.closest<HTMLElement>('[data-action="fill-present"]')
-      : null;
+    const btn = resolveEventElement(event.target)?.closest<HTMLElement>('[data-action="fill-present"]') || null;
     if (!btn) return;
     event.stopPropagation();
     event.preventDefault();
@@ -4842,6 +5239,12 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   return () => {
     clearPendingToggle();
     clearTouchLongPress();
+    try {
+      table.off('tableBuilt', syncHeaderStats);
+      table.off('dataFiltered', syncHeaderStats);
+    } catch {
+      // ignore teardown races
+    }
     tableElement?.removeEventListener('touchstart', touchStartHandler);
     tableElement?.removeEventListener('touchend', touchEndHandler);
     tableElement?.removeEventListener('touchcancel', touchMoveCancelHandler);
@@ -4851,6 +5254,9 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
 };
 
 const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMeta) => {
+  const isAdminInteractiveControlTarget = (target: EventTarget | null) =>
+    Boolean(resolveEventElement(target)?.closest('.dashboard-admin-actions, [data-dashboard-enrollment-menu-wrap]'));
+
   const setEnrollmentMenuOpen = (menuWrap: HTMLElement | null, open: boolean) => {
     if (!menuWrap) return;
     const trigger = menuWrap.querySelector<HTMLButtonElement>('[data-dashboard-enrollment-trigger]');
@@ -4869,8 +5275,11 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
   };
 
   const clickHandler = async (event: Event) => {
-    const target = event.target instanceof HTMLElement ? event.target : null;
+    const target = resolveEventElement(event.target);
     if (!target) return;
+    if (isAdminInteractiveControlTarget(target)) {
+      event.stopPropagation();
+    }
 
     const resolveAdminRow = () =>
       resolveCellComponentFromTarget(table, target, { allowInteractiveKinds: true })?.getRow?.() || null;
@@ -5043,7 +5452,7 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
   };
 
   const outsideClickHandler = (event: Event) => {
-    const target = event.target instanceof HTMLElement ? event.target : null;
+    const target = resolveEventElement(event.target);
     if (target?.closest('[data-dashboard-enrollment-menu-wrap]')) return;
     closeEnrollmentMenus();
   };
@@ -5053,11 +5462,18 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
     closeEnrollmentMenus();
   };
 
+  const mouseDownHandler = (event: MouseEvent) => {
+    if (!isAdminInteractiveControlTarget(event.target)) return;
+    event.stopPropagation();
+  };
+
+  host.addEventListener('mousedown', mouseDownHandler, { capture: true });
   host.addEventListener('click', clickHandler, { capture: true });
   document.addEventListener('click', outsideClickHandler);
   document.addEventListener('keydown', escapeHandler);
 
   return () => {
+    host.removeEventListener('mousedown', mouseDownHandler, { capture: true });
     host.removeEventListener('click', clickHandler, { capture: true });
     document.removeEventListener('click', outsideClickHandler);
     document.removeEventListener('keydown', escapeHandler);
@@ -5248,6 +5664,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   if (!(root instanceof HTMLElement)) return () => {};
   if (root.dataset.dashboardTabulatorMounted === 'true') return () => {};
   const shell = resolveDashboardShell(root);
+  bindScopeSelectors(shell);
 
   const hasTeacherDashboard =
     Boolean(shell.querySelector('[data-dashboard-tab]'))
@@ -5265,6 +5682,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   const comments = parseJsonScript<GridProjection>('dashboard-teacher-comments', { columns: [], rows: [] });
   const admin = parseJsonScript<GridProjection>('dashboard-teacher-admin', { columns: [], rows: [] });
   const initialAnnotations = parseJsonScript<DashboardAnnotationRecord[]>('dashboard-teacher-annotations', []);
+  hydrateAgendaAttendanceBullets();
 
   const registry = new Map<string, Tabulator>();
   const tables: Tabulator[] = [];
@@ -5298,16 +5716,10 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     destroyers.push(bindNativeCellPersistence(mainNode, table, { kind: 'teacher-main', meta }));
     destroyers.push(bindAttendanceManualEditing(table, meta));
     destroyers.push(bindTableRangeSelection(table, 'teacher-main'));
+    destroyers.push(bindInitialFoldState(table, 'teacher-main'));
     registry.set('main', table);
     registry.set('teacher-main', table);
     tables.push(table);
-    table.on('tableBuilt', () => {
-      window.requestAnimationFrame(() => {
-        unfoldAllColumns(table, { persist: false });
-        restoreStoredFoldState(table);
-        foldTeacherMainGroupsByDefault(table);
-      });
-    });
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="teacher-main"]');
     const hideAbandonedButton = root.querySelector<HTMLButtonElement>('[data-dashboard-hide-abandoned]');
     if (searchInput) installGlobalSearch([table], searchInput, persistKey, { hideAbandonedButton });
@@ -5322,6 +5734,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     destroyers.push(bindNativeEditorFocus(table));
     destroyers.push(bindNativeCellPersistence(overviewNode, table, { kind: 'overview', meta }));
     destroyers.push(bindTableRangeSelection(table, 'overview'));
+    destroyers.push(bindInitialFoldState(table, 'overview'));
     registry.set('overview', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="overview"]');
@@ -5337,6 +5750,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     destroyers.push(bindNativeEditorFocus(table));
     destroyers.push(bindNativeCellPersistence(gradebookNode, table, { kind: 'gradebook', meta }));
     destroyers.push(bindTableRangeSelection(table, 'gradebook'));
+    destroyers.push(bindInitialFoldState(table, 'gradebook'));
     registry.set('gradebook', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="gradebook"]');
@@ -5357,6 +5771,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     destroyers.push(bindNativeCellPersistence(attendanceNode, summaryTable, { kind: 'attendance-summary', meta }));
     destroyers.push(bindAttendanceManualEditing(summaryTable, meta));
     destroyers.push(bindTableRangeSelection(summaryTable, 'attendance-summary'));
+    destroyers.push(bindInitialFoldState(summaryTable, 'attendance-summary'));
     registry.set('attendance-summary', summaryTable);
     tables.push(summaryTable);
 
@@ -5370,6 +5785,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
       meta,
     }, annotationState, modalRef);
     trackTableBuilt(logTable, readyTables);
+    destroyers.push(bindInitialFoldState(logTable, 'attendance-log'));
     registry.set('attendance-log', logTable);
     tables.push(logTable);
     const logSearchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="attendance-log"]');
@@ -5389,6 +5805,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
       modalRef,
     );
     trackTableBuilt(table, readyTables);
+    destroyers.push(bindInitialFoldState(table, 'comments'));
     registry.set('comments', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="comments"]');
@@ -5407,6 +5824,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     destroyers.push(bindAdminActions(adminNode, table, meta));
     destroyers.push(bindAdminDeleteSelectedButton(root, table, meta));
     destroyers.push(bindTableRangeSelection(table, 'admin'));
+    destroyers.push(bindInitialFoldState(table, 'admin'));
     registry.set('admin', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="admin"]');
@@ -5414,7 +5832,6 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   }
 
   bindTeacherTabs(shell, root, normalizeText(meta?.initialTeacherTab || 'main') || 'main', registry, readyTables);
-  bindScopeSelectors(shell);
   bindAttendanceConfig();
   bindCsvButtons(root, registry, meta);
   bindImportClipboardButton(root, meta);

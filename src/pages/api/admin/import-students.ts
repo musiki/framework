@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
+import { isAdminGlobalRole, isElevatedGlobalRole } from '../../../lib/roles';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeRole = (value: unknown) => normalizeText(value).toLowerCase();
@@ -51,12 +52,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .select('courseId, roleInCourse')
       .eq('userId', requesterUser.id);
 
+    const isAdmin = isAdminGlobalRole(requesterUser.role);
     const isTeacher =
-      requesterUser.role === 'teacher' ||
+      isElevatedGlobalRole(requesterUser.role) ||
       (requesterEnrollments || []).some((e: any) => normalizeRole(e.roleInCourse) === 'teacher');
 
     if (!isTeacher) {
       return new Response(JSON.stringify({ error: 'Only teachers can import students' }), { status: 403 });
+    }
+
+    if (!isAdmin) {
+      const manageableCourses = new Set(
+        await Promise.all(
+          (requesterEnrollments || [])
+            .filter((e: any) => normalizeRole(e.roleInCourse) === 'teacher')
+            .map((e: any) => canonicalizeCourseId(e.courseId)),
+        ),
+      );
+      manageableCourses.delete('');
+      if (!manageableCourses.has(canonicalCourse)) {
+        return new Response(JSON.stringify({ error: 'You can only import students into your own courses' }), { status: 403 });
+      }
     }
 
     // Ensure the meta assignment exists (shared across all students in this course/year)

@@ -1,4 +1,8 @@
-export const normalizeDashboardRole = (value: unknown) => String(value || '').trim().toLowerCase();
+import { normalizeGlobalRole } from './roles';
 
 export const getRoleBadgeLabel = (value: unknown) =>
-  normalizeDashboardRole(value) === 'teacher' ? 'Teacher' : 'Student';
+  normalizeGlobalRole(value) === 'admin'
+    ? 'Admin'
+    : normalizeGlobalRole(value) === 'teacher'
+      ? 'Teacher'
+      : 'Student';

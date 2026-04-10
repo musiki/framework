@@ -4,6 +4,7 @@ import BaseHead from '../../components/BaseHead.astro';
 import Header from '../../components/Header.astro';
 import { createClient } from '@supabase/supabase-js';
 import { buildCourseHref } from '../../lib/course-routing';
+import { isElevatedGlobalRole } from '../../lib/roles';
 
 // Get all courses (files named _index.md in cursos collection)
 const allCourseFiles = await getCollection('cursos');
@@ -72,7 +73,7 @@ if (currentUser?.email) {
     .maybeSingle();
 
   if (user) {
-    isTeacher = user.role === 'teacher';
+    isTeacher = isElevatedGlobalRole(user.role);
 
     const { data: enrollments } = await supabase
       .from('Enrollment')

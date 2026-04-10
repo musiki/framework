@@ -2,6 +2,7 @@
 import BaseHead from '../../components/BaseHead.astro';
 import Header from '../../components/Header.astro';
 import { createClient } from '@supabase/supabase-js';
+import { isElevatedGlobalRole, normalizeGlobalRole } from '../../lib/roles';
 
 // Check authentication
 const session = Astro.locals.session as any;
@@ -15,18 +16,24 @@ if (!currentUser?.email) {
 const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 
 // Get user from Supabase
-const { data: users } = await supabase.from('User').select('*').eq('email', currentUser.email);
-const dbUser = users?.[0];
+const { data: users } = await supabase.from('User').select('*').ilike('email', currentUser.email);
+const dbUser = (users || []).find((user: any) => isElevatedGlobalRole(user?.role)) || users?.[0];
 
 if (!dbUser) {
   return Astro.redirect('/login?redirect=/admin/setup');
 }
 
-// Handle POST request to promote to teacher
+// Handle POST request to promote to teacher/admin
 if (Astro.request.method === 'POST') {
   try {
+    const formData = await Astro.request.formData().catch(() => null);
+    const requestedRole = normalizeGlobalRole(formData?.get('role'));
+    const nextRole =
+      requestedRole === 'admin' && isElevatedGlobalRole(dbUser.role)
+        ? 'admin'
+        : 'teacher';
     const { error } = await supabase.from('User')
-      .update({ role: 'teacher', updatedAt: new Date() })
+      .update({ role: nextRole, updatedAt: new Date() })
       .eq('id', dbUser.id);
     
     if (error) throw error;
@@ -36,7 +43,8 @@ if (Astro.request.method === 'POST') {
   }
 }
 
-const isAlreadyTeacher = dbUser.role === 'teacher';
+const normalizedSetupRole = normalizeGlobalRole(dbUser.role);
+const isAlreadyTeacher = isElevatedGlobalRole(dbUser.role);
 ---
 
 <html lang="es">
@@ -83,6 +91,10 @@ const isAlreadyTeacher = dbUser.role === 'teacher';
       .role-teacher {
         background: #e3f2fd;
         color: #1976d2;
+      }
+      .role-admin {
+        background: #fde68a;
+        color: #92400e;
       }
       .warning {
         background: #fff3cd;
@@ -147,17 +159,36 @@ const isAlreadyTeacher = dbUser.role === 'teacher';
         </p>
         <p>
           <strong>Rol Actual:</strong>
-          <span class:list={['role-badge', dbUser.role === 'teacher' ? 'role-teacher' : 'role-student']}>
-            {dbUser.role === 'teacher' ? '👨‍🏫 Teacher' : '👨‍🎓 Student'}
+          <span class:list={['role-badge', normalizedSetupRole === 'admin' ? 'role-admin' : normalizedSetupRole === 'teacher' ? 'role-teacher' : 'role-student']}>
+            {normalizedSetupRole === 'admin' ? '🛡️ Admin' : normalizedSetupRole === 'teacher' ? '👨‍🏫 Teacher' : '👨‍🎓 Student'}
           </span>
         </p>
       </div>
 
-      {isAlreadyTeacher ? (
+      {normalizedSetupRole === 'admin' ? (
         <div class="success">
-          <h2>✅ Ya eres Teacher</h2>
-          <p>Tienes acceso completo al panel de administración.</p>
+          <h2>✅ Ya eres Admin</h2>
+          <p>Tienes acceso global a todo el panel y a todos los cursos.</p>
         </div>
+      ) : isAlreadyTeacher ? (
+        <>
+          <div class="success">
+            <h2>✅ Ya eres Teacher</h2>
+            <p>Tienes acceso docente completo y desde aquí puedes escalarte a admin.</p>
+          </div>
+
+          <form method="POST">
+            <input type="hidden" name="role" value="admin" />
+            <div class="button-group">
+              <button type="submit" class="primary">
+                🛡️ Promocionar a Admin
+              </button>
+              <a href="/dashboard" class="button secondary">
+                Cancelar
+              </a>
+            </div>
+          </form>
+        </>
       ) : (
         <>
           <div class="warning">
@@ -172,6 +203,7 @@ const isAlreadyTeacher = dbUser.role === 'teacher';
           </div>
 
           <form method="POST">
+            <input type="hidden" name="role" value="teacher" />
             <div class="button-group">
               <button type="submit" class="primary">
                 🚀 Promocionar a Teacher

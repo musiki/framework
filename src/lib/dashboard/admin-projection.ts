@@ -1,4 +1,5 @@
 import { getRoleBadgeLabel } from '../dashboard-role';
+import { normalizeGlobalRole } from '../roles';
 import { buildSearchBlob, type DashboardGridProjection } from './shared';
 
 interface AdminProjectionInput {
@@ -10,26 +11,13 @@ interface AdminProjectionInput {
   allLiveClassAttendance: any[];
 }
 
-const normalizeRole = (value: unknown) => String(value || '').trim().toLowerCase();
+const normalizeRole = (value: unknown) => normalizeGlobalRole(value);
 const normalizeText = (value: unknown) => String(value || '').trim();
 
 const getRecordCourseId = (record: any) =>
   normalizeText(record?.courseId)
   || normalizeText(record?.pageSlug).split('/').filter(Boolean)[0]
   || '';
-
-const formatSubmissionDate = (value: string | null | undefined) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
 
 export function buildAdminProjection({
   activeCourseId,
@@ -76,7 +64,9 @@ export function buildAdminProjection({
       const userEnrollments = enrollmentsByUserId.get(userId) || [];
       const enrollment = activeCourseIdNormalized
         ? userEnrollments.find((item: any) => String(item?.courseId || '').trim() === activeCourseIdNormalized) || null
-        : null;
+        : userEnrollments.length === 1
+          ? userEnrollments[0]
+          : null;
       const latestSubmission = (allSubmissions || [])
         .filter((submission: any) => String(submission?.userId || '') === userId)
         .sort((left: any, right: any) => String(right?.submittedAt || '').localeCompare(String(left?.submittedAt || ''), 'es'))[0] || null;
@@ -89,8 +79,6 @@ export function buildAdminProjection({
           ? String(latestAttendance?.lastEventAt || '')
           : String(latestSubmission?.submittedAt || '');
 
-      const globalRole = normalizeRole(user?.role);
-      const roleInCourse = normalizeRole(enrollment?.roleInCourse || '');
       const enrollmentCourses = Array.from(
         new Map(
           userEnrollments
@@ -107,6 +95,14 @@ export function buildAdminProjection({
             .filter(Boolean) as [string, { courseId: string; enrollmentId: string; roleInCourse: string }][],
         ).values(),
       ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
+      const teacherByEnrollment = enrollmentCourses.some((item) => normalizeRole(item.roleInCourse) === 'teacher');
+      const normalizedGlobalRole = normalizeRole(user?.role);
+      const globalRole = normalizedGlobalRole === 'admin'
+        ? 'admin'
+        : teacherByEnrollment
+          ? 'teacher'
+          : normalizedGlobalRole;
+      const roleInCourse = normalizeRole(enrollment?.roleInCourse || '');
 
       return {
         id: userId,
@@ -122,7 +118,6 @@ export function buildAdminProjection({
         enrollmentCourses,
         enrollmentCourseCatalog,
         lastActivityAt: latestActivityAt,
-        lastActivityLabel: formatSubmissionDate(latestActivityAt),
         __search: buildSearchBlob([
           user?.name,
           user?.email,
@@ -151,9 +146,8 @@ export function buildAdminProjection({
       { title: 'Nombre', field: 'name', frozen: true, minWidth: 180, kind: 'editable-text' },
       { title: 'Email', field: 'email', minWidth: 220, kind: 'editable-text' },
       { title: 'Rol global', field: 'globalRole', width: 110, hozAlign: 'center', headerHozAlign: 'center', kind: 'role' },
-      { title: 'Rol curso', field: 'courseRole', width: 118, hozAlign: 'center', headerHozAlign: 'center', kind: 'course-role' },
       { title: 'Inscripción', field: 'enrollmentSummary', minWidth: 220, kind: 'enrollment-courses' },
-      { title: 'Última actividad', field: 'lastActivityLabel', minWidth: 150 },
+      { title: 'Última actividad', field: 'lastActivityAt', minWidth: 170, kind: 'relative-datetime' },
       { title: 'Acciones', field: '__adminActions', width: 72, hozAlign: 'center', headerHozAlign: 'center', headerSort: false, kind: 'admin-actions' },
     ],
     rows,

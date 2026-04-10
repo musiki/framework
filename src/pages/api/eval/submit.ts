@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { createClient } from '@supabase/supabase-js';
 import { buildEvalCatalog, type EvalCatalogEntry } from '../../../lib/eval-catalog';
 import { canonicalizeCourseId, canonicalizeCourseSlugPath } from '../../../lib/course-alias';
+import { isElevatedGlobalRole } from '../../../lib/roles';
 
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -347,7 +348,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     let targetUser = requesterUser;
 
     if (targetStudentEmail && targetStudentEmail !== requesterUser.email?.toLowerCase()) {
-      if (requesterUser.role !== 'teacher') {
+      if (!isElevatedGlobalRole(requesterUser.role)) {
         return json({ error: 'Only teachers can submit for another student' }, 403);
       }
 

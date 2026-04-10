@@ -1,6 +1,8 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient } from '../../../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../../../lib/live/access';
+import { isElevatedGlobalRole, normalizeGlobalRole } from '../../../../lib/roles';
+import { hasTeacherEnrollment } from '../../../../lib/user-role-sync';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -11,8 +13,7 @@ const json = (payload: unknown, status = 200) =>
   });
 
 const normalizeRole = (value: unknown) => {
-  const role = String(value || '').trim().toLowerCase();
-  return role === 'teacher' ? 'teacher' : role === 'student' ? 'student' : '';
+  return normalizeGlobalRole(value);
 };
 
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
@@ -55,13 +56,13 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
         .ilike('email', currentUser.email);
       if (candidatesError) throw candidatesError;
       const rows = Array.isArray(candidates) ? candidates : [];
-      const teacherRow = rows.find((row) => normalizeRole(row.role) === 'teacher');
+      const teacherRow = rows.find((row) => isElevatedGlobalRole(row.role));
       canEdit = Boolean(teacherRow);
       requesterId = String(teacherRow?.id || '');
     }
 
     if (!canEdit) {
-      return json({ error: 'Only teachers can update user data' }, 403);
+      return json({ error: 'Only teachers or admins can update user data' }, 403);
     }
 
     const { data: targetUser, error: targetUserError } = await supabase
@@ -102,21 +103,29 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
 
     // Handle role update
     if (nextRole) {
-      if (requesterId && requesterId === targetUserId) {
+      const currentRole = normalizeRole(targetUser.role);
+      const isSelfRoleChange = requesterId && requesterId === targetUserId;
+      if (
+        isSelfRoleChange
+        && !(isElevatedGlobalRole(currentRole) && isElevatedGlobalRole(nextRole))
+      ) {
         return json({ error: 'Cannot update your own role from this view' }, 400);
       }
 
-      const currentRole = normalizeRole(targetUser.role);
-      if (currentRole === 'teacher' && nextRole !== 'teacher') {
-        const { count: otherTeachersCount, error: teacherCountError } = await supabase
+      if (nextRole === 'student' && await hasTeacherEnrollment(supabase, targetUserId)) {
+        return json({ error: 'No se puede pasar a student mientras figure como teacher en algún curso' }, 409);
+      }
+
+      if (isElevatedGlobalRole(currentRole) && nextRole === 'student') {
+        const { data: elevatedUsers, error: elevatedUsersError } = await supabase
           .from('User')
-          .select('id', { count: 'exact', head: true })
-          .eq('role', 'teacher')
+          .select('id, role')
           .neq('id', targetUserId);
 
-        if (teacherCountError) throw teacherCountError;
-        if (!Number(otherTeachersCount || 0)) {
-          return json({ error: 'At least one teacher account must remain' }, 400);
+        if (elevatedUsersError) throw elevatedUsersError;
+        const otherElevatedCount = (elevatedUsers || []).filter((row: any) => isElevatedGlobalRole(row?.role)).length;
+        if (!otherElevatedCount) {
+          return json({ error: 'At least one teacher or admin account must remain' }, 400);
         }
       }
       updateFields.role = nextRole;
@@ -158,22 +167,23 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
   const activeCourseId = String(requestUrl.searchParams.get('courseId') || '').trim();
 
   try {
-    const { data: requester, error: requesterError } = await supabase
+    const { data: requesterRows, error: requesterError } = await supabase
       .from('User')
       .select('id, role')
-      .eq('email', currentUser.email)
-      .maybeSingle();
+      .ilike('email', currentUser.email);
+    const requester = (requesterRows || []).find((row: any) => isElevatedGlobalRole(row?.role)) || requesterRows?.[0];
 
     if (requesterError) throw requesterError;
     if (!requester) return json({ error: 'Requester user not found' }, 404);
 
     const requesterRole = normalizeRole(requester.role);
-    if (requesterRole !== 'teacher') {
-      return json({ error: 'Only teachers can delete users' }, 403);
+    const requesterIsAdmin = requesterRole === 'admin';
+    if (!isElevatedGlobalRole(requesterRole)) {
+      return json({ error: 'Only teachers or admins can delete users' }, 403);
     }
 
     if (requester.id === targetUserId) {
-      return json({ error: 'Cannot delete current teacher account' }, 400);
+      return json({ error: 'Cannot delete current elevated account' }, 400);
     }
 
     const { data: targetUser, error: targetUserError } = await supabase
@@ -187,16 +197,16 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
 
     const targetRole = normalizeRole(targetUser.role);
 
-    if (targetRole === 'teacher') {
-      const { count: otherTeachersCount, error: teacherCountError } = await supabase
+    if (isElevatedGlobalRole(targetRole)) {
+      const { data: otherElevatedUsers, error: elevatedUsersError } = await supabase
         .from('User')
-        .select('id', { count: 'exact', head: true })
-        .eq('role', 'teacher')
+        .select('id, role')
         .neq('id', targetUserId);
 
-      if (teacherCountError) throw teacherCountError;
-      if (!Number(otherTeachersCount || 0)) {
-        return json({ error: 'At least one teacher account must remain' }, 400);
+      if (elevatedUsersError) throw elevatedUsersError;
+      const otherElevatedCount = (otherElevatedUsers || []).filter((row: any) => isElevatedGlobalRole(row?.role)).length;
+      if (!otherElevatedCount) {
+        return json({ error: 'At least one teacher or admin account must remain' }, 400);
       }
     }
 
@@ -210,7 +220,7 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
 
       if (targetEnrollmentError) throw targetEnrollmentError;
 
-      if (normalizeRole(targetCourseEnrollment?.roleInCourse) === 'teacher') {
+      if (!requesterIsAdmin && normalizeRole(targetCourseEnrollment?.roleInCourse) === 'teacher') {
         const { count: otherCourseTeachersCount, error: otherCourseTeachersError } = await supabase
           .from('Enrollment')
           .select('id', { count: 'exact', head: true })

@@ -1,0 +1,379 @@
+import {
+  buildAgendaShareUrlPath,
+  countAgendaMeetingDays,
+  minutesToTimeString,
+  normalizeAgendaComment,
+  normalizeAgendaDateKey,
+  normalizeAgendaHexColor,
+  normalizeAgendaTimeString,
+  normalizeAgendaYear,
+  normalizeText,
+  timeStringToMinutes,
+} from '../lib/dashboard/agenda';
+
+type AgendaDateColumn = { dateKey: string; label?: string; isoWeekday?: number; };
+type AgendaConfig = { courseId: string; year: string; startTime: string; endTime: string; teacherSlotMinutes: number; studentSlotMinutes: number; maxStudentMinutes: number; minMeetings: number; comment: string; updatedAt: string; };
+type AgendaBlock = { id: string; dateKey: string; startMinute: number; endMinute: number; comment?: string; updatedAt?: string; };
+type AgendaStudent = { studentId: string; name: string; email: string; color: string; totalMinutes: number; blocks: AgendaBlock[]; };
+type AgendaEvent = { id: string; dateKey: string; startMinute: number; endMinute: number; text: string; color: string; updatedAt?: string; };
+type AgendaData = { courseId: string; courseTitle: string; year: string; dates: AgendaDateColumn[]; config: AgendaConfig; students: AgendaStudent[]; events: AgendaEvent[]; viewer: { userId: string; isTeacher: boolean; }; shareUrlPath?: string; };
+type AgendaSlot = { startMinute: number; endMinute: number; label: string; rowIndex: number; };
+type SelectionRect = { rowStart: number; rowEnd: number; colStart: number; colEnd: number; dateKeys: string[]; startMinute: number; endMinute: number; };
+
+const parseJsonScript = <T>(id: string, fallback: T): T => {
+  const node = document.getElementById(id);
+  if (!(node instanceof HTMLScriptElement)) return fallback;
+  try { return JSON.parse(node.textContent || 'null') ?? fallback; } catch { return fallback; }
+};
+
+const escapeHtml = (value: unknown) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+const getAgendaTeacherSlotMinutes = (config: AgendaConfig) => Math.max(5, Number(config.teacherSlotMinutes || 30));
+const getAgendaStudentSlotMinutes = (config: AgendaConfig) => Math.max(5, Number(config.studentSlotMinutes || getAgendaTeacherSlotMinutes(config) || 30));
+const blockOverlapsSlot = (block: AgendaBlock | AgendaEvent, slotStart: number, slotEnd: number) => Number(block.startMinute || 0) < slotEnd && Number(block.endMinute || 0) > slotStart;
+const formatStudentName = (name: string) => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 1) return name;
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+};
+
+const buildUnifiedSlots = (data: AgendaData, isTeacher: boolean) => {
+  const boundaries = new Set<number>();
+  const startTime = timeStringToMinutes(data.config.startTime || '09:00');
+  const endTime = timeStringToMinutes(data.config.endTime || '18:00');
+  boundaries.add(startTime); boundaries.add(endTime);
+
+  data.events.forEach(e => {
+    if (e.startMinute >= startTime && e.startMinute <= endTime) boundaries.add(e.startMinute);
+    if (e.endMinute >= startTime && e.endMinute <= endTime) boundaries.add(e.endMinute);
+  });
+
+  const slotMin = isTeacher ? getAgendaTeacherSlotMinutes(data.config) : getAgendaStudentSlotMinutes(data.config);
+  let cursor = startTime;
+  while (cursor + slotMin <= endTime) { cursor += slotMin; boundaries.add(cursor); }
+
+  const sorted = Array.from(boundaries).sort((a,b) => a - b);
+  const slots: AgendaSlot[] = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    slots.push({ startMinute: sorted[i], endMinute: sorted[i+1], label: minutesToTimeString(sorted[i]), rowIndex: i });
+  }
+  return slots;
+};
+
+const postAgendaAction = async (payload: Record<string, any>) => {
+  const response = await fetch('/api/dashboard/agenda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result?.error || 'No se pudo actualizar la agenda'); }
+  return response.json();
+};
+
+const findSelectionRect = (root: HTMLElement) => {
+  const selectedCells = Array.from(root.querySelectorAll<HTMLElement>('.agenda-cell.is-selected'));
+  if (!selectedCells.length) return null;
+  const rowIndices = selectedCells.map((cell) => Number.parseInt(cell.dataset.rowIndex || '', 10)).filter(Number.isFinite);
+  const colIndices = selectedCells.map((cell) => Number.parseInt(cell.dataset.colIndex || '', 10)).filter(Number.isFinite);
+  const dateKeys = Array.from(new Set(selectedCells.map((cell) => normalizeAgendaDateKey(cell.dataset.dateKey)).filter(Boolean)));
+  const startMinutes = selectedCells.map((cell) => Number.parseInt(cell.dataset.startMinute || '', 10)).filter(Number.isFinite);
+  const endMinutes = selectedCells.map((cell) => Number.parseInt(cell.dataset.endMinute || '', 10)).filter(Number.isFinite);
+  if (!rowIndices.length || !colIndices.length || !dateKeys.length) return null;
+  return { rowStart: Math.min(...rowIndices), rowEnd: Math.max(...rowIndices), colStart: Math.min(...colIndices), colEnd: Math.max(...colIndices), dateKeys, startMinute: Math.min(...startMinutes), endMinute: Math.max(...endMinutes) } as SelectionRect;
+};
+
+const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData: AgendaData) => void) => {
+  const mode = host.getAttribute('data-dashboard-agenda-mode');
+  const isTeacher = mode === 'teacher';
+  const viewerId = normalizeText(data?.viewer?.userId);
+  const dates = Array.isArray(data?.dates) ? data.dates : [];
+  const slots = buildUnifiedSlots(data, isTeacher);
+  const studentById = new Map((data.students || []).map((student) => [student.studentId, student]));
+  const viewerStudent = studentById.get(viewerId) || null;
+  const teacherHeaderTitle = normalizeText(data.config?.comment);
+  const shareUrl = `${window.location.origin}${data.shareUrlPath || ''}`;
+
+  if (!normalizeText(data.courseId) || dates.length === 0 || slots.length === 0) {
+    host.innerHTML = `<article class="student-empty">${isTeacher ? 'Definí primero el rango semanal en Tabla / Asistencia para habilitar la Agenda.' : 'La agenda todavía no está disponible para este curso.'}</article>`;
+    return () => { host.innerHTML = ''; };
+  }
+
+  const resolveAgendaCellFromTarget = (target: EventTarget | null) => target instanceof Element ? target.closest<HTMLElement>('.agenda-cell') : null;
+
+  const renderCellEntries = (dateKey: string, slot: AgendaSlot, colIndex: number) => {
+    const overlappingEvents = (data.events || []).filter(e => e.dateKey === dateKey && blockOverlapsSlot(e, slot.startMinute, slot.endMinute));
+    const primaryEvent = overlappingEvents[0] || null;
+    const isFirstSlotOfEvent = primaryEvent && !slots.some(s => s.rowIndex < slot.rowIndex && blockOverlapsSlot(primaryEvent, s.startMinute, s.endMinute));
+    const isSame = (dk: string, ev: AgendaEvent) => (data.events || []).some(e => e.dateKey === dk && e.id === ev.id);
+    let colStart = colIndex; if (primaryEvent) { while (colStart > 0 && isSame(dates[colStart - 1]?.dateKey, primaryEvent)) colStart--; }
+    const isFirstColOfEvent = primaryEvent ? colIndex === colStart : false;
+
+    const studentStarts = (data.students || [])
+      .flatMap(student => (student.blocks || [])
+        .filter(block => block.dateKey === dateKey && blockOverlapsSlot(block, slot.startMinute, slot.endMinute))
+        .filter(block => !slots.some(s => s.rowIndex < slot.rowIndex && blockOverlapsSlot(block, s.startMinute, s.endMinute)))
+        .map(block => ({ student, block }))
+      );
+
+    const slotDur = slot.endMinute - slot.startMinute;
+    const eventMarkup = (isFirstSlotOfEvent && isFirstColOfEvent) ? `<span class="agenda-event-label" style="height: ${((primaryEvent.endMinute - primaryEvent.startMinute) / slotDur) * 100}%">${escapeHtml(primaryEvent.text)}</span>` : '';
+    const studentMarkup = studentStarts.map(({ student, block }) => {
+      const isOwn = student.studentId === viewerId;
+      return `<span class="agenda-student-block ${isOwn ? 'is-own' : ''}" style="background-color: ${escapeHtml(student.color)}; height: ${((block.endMinute - block.startMinute) / slotDur) * 100}%" ${isTeacher || isOwn ? `data-agenda-block-id="${escapeHtml(block.id)}"` : ''}><span class="agenda-student-block__name">${escapeHtml(formatStudentName(student.name))}</span></span>`;
+    }).join('');
+
+    const classes = ['agenda-cell', primaryEvent ? 'agenda-cell--event' : '', (studentStarts.length > 0) ? 'agenda-cell--busy' : ''].filter(Boolean).join(' ');
+    const style = primaryEvent ? `--agenda-event-color: ${escapeHtml(primaryEvent.color || '#f2d0a9')};` : '';
+
+    return { classes, style, markup: `${eventMarkup}${studentMarkup}`, eventId: primaryEvent?.id || null };
+  };
+
+  host.innerHTML = `
+    <div class="agenda-shell">
+      <div class="agenda-head">
+        <div class="agenda-head__title">
+          <p class="agenda-head__eyebrow">Agenda: ${escapeHtml(data.courseTitle || data.courseId)}, ${escapeHtml(data.year)}</p>
+          ${isTeacher ? `<div class="agenda-title-edit"><div class="agenda-title-edit__display ${teacherHeaderTitle ? '' : 'is-empty'}" data-agenda-comment-display role="button">${escapeHtml(teacherHeaderTitle || 'Título')}</div><input type="text" class="agenda-title-edit__input" data-agenda-comment-input-inline value="${escapeHtml(teacherHeaderTitle)}" hidden /></div>` : teacherHeaderTitle ? `<p class="agenda-head__note">${escapeHtml(teacherHeaderTitle)}</p>` : ''}
+        </div>
+        ${isTeacher ? `
+          <div class="agenda-config-bar">
+            <label class="agenda-config-field"><span>Inicio</span><input type="time" value="${normalizeAgendaTimeString(data.config.startTime)}" data-agenda-config="startTime" /></label>
+            <label class="agenda-config-field"><span>Fin</span><input type="time" value="${normalizeAgendaTimeString(data.config.endTime)}" data-agenda-config="endTime" /></label>
+            <label class="agenda-config-field agenda-config-field--tiny"><span>Dur.T</span><input type="number" step="5" value="${data.config.teacherSlotMinutes}" data-agenda-config="teacherSlotMinutes" /></label>
+            <label class="agenda-config-field agenda-config-field--tiny"><span>Dur.S</span><input type="number" step="5" value="${data.config.studentSlotMinutes}" data-agenda-config="studentSlotMinutes" /></label>
+            <label class="agenda-config-field agenda-config-field--small"><span>Tope min</span><input type="number" step="5" value="${data.config.maxStudentMinutes}" data-agenda-config="maxStudentMinutes" /></label>
+            <label class="agenda-config-field agenda-config-field--small"><span>Cant. mín.</span><input type="number" step="1" value="${data.config.minMeetings || 0}" data-agenda-config="minMeetings" /></label>
+            <button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-agenda-share>Compartir</button>
+          </div>
+        ` : `
+          <div class="agenda-head__stats">
+            <span class="agenda-stat">Mis min: <strong>${viewerStudent?.totalMinutes || 0}</strong></span>
+            <span class="agenda-stat">Tope: <strong>${data.config.maxStudentMinutes}</strong></span>
+            ${(data.config?.minMeetings || 0) > 0 ? `<span class="agenda-stat">Encuentros: <strong>${countAgendaMeetingDays(viewerStudent?.blocks || [])}/${data.config.minMeetings}</strong></span>` : ''}
+          </div>
+        `}
+      </div>
+      <div class="agenda-grid-wrap">
+        <table class="agenda-grid">
+          <thead><tr><th class="agenda-grid__time-head">Hora</th>${dates.map(d => `<th class="agenda-grid__day-head"><span>${escapeHtml(d.label || d.dateKey)}</span></th>`).join('')}</tr></thead>
+          <tbody>
+            ${slots.map(slot => `
+              <tr>
+                <th class="agenda-grid__time">${escapeHtml(slot.label)}</th>
+                ${dates.map((date, colIndex) => {
+                  const cell = renderCellEntries(date.dateKey, slot, colIndex);
+                  return `<td><button type="button" class="${cell.classes}" style="${cell.style}" data-row-index="${slot.rowIndex}" data-col-index="${colIndex}" data-date-key="${escapeHtml(date.dateKey)}" data-start-minute="${slot.startMinute}" data-end-minute="${slot.endMinute}" ${cell.eventId ? `data-agenda-event-id="${escapeHtml(cell.eventId)}"` : ''}><span class="agenda-cell__fill"></span><span class="agenda-cell__content">${cell.markup}</span></button></td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="agenda-popover" data-agenda-popover hidden></div>
+      <div class="agenda-modal" data-agenda-modal hidden></div>
+    </div>
+  `;
+
+  const gridWrap = host.querySelector<HTMLElement>('.agenda-grid-wrap');
+  const popover = host.querySelector<HTMLElement>('[data-agenda-popover]');
+  const modal = host.querySelector<HTMLElement>('[data-agenda-modal]');
+  
+  let anchorCell: HTMLElement | null = null;
+  let hoveredCell: HTMLElement | null = null;
+  let selecting = false;
+  let activePointerId: number | null = null;
+  let longPressTimer: any = null;
+
+  const stopUiEvent = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+  const stopUiPropagation = (e: Event) => e.stopPropagation();
+
+  const clearSelection = () => {
+    host.querySelectorAll('.agenda-cell.is-selected').forEach(c => c.classList.remove('is-selected'));
+    if (popover) popover.hidden = true;
+  };
+
+  const paintSelection = () => {
+    if (!anchorCell || !hoveredCell) return;
+    const aR = Number(anchorCell.dataset.rowIndex); const hR = Number(hoveredCell.dataset.rowIndex);
+    const aC = Number(anchorCell.dataset.colIndex); const hC = Number(hoveredCell.dataset.colIndex);
+    const rS = Math.min(aR, hR); const rE = Math.max(aR, hR);
+    const cS = Math.min(aC, hC); const cE = Math.max(aC, hC);
+    host.querySelectorAll<HTMLElement>('.agenda-cell').forEach(c => {
+      const r = Number(c.dataset.rowIndex); const col = Number(c.dataset.colIndex);
+      c.classList.toggle('is-selected', r >= rS && r <= rE && col >= cS && col <= cE);
+    });
+  };
+
+  const reloadAfterAction = async (p: any) => {
+    try { await postAgendaAction(p); window.location.reload(); } catch (e: any) { window.alert(e.message || 'Error'); }
+  };
+
+  const openEventModal = (selection: SelectionRect, eventId?: string) => {
+    if (!modal) return;
+    const existing = eventId ? data.events.find(e => e.id === eventId) : null;
+    modal.hidden = false;
+    modal.innerHTML = `<div class="agenda-modal__backdrop" data-close></div><div class="agenda-modal__dialog"><h3>${existing ? 'Editar Evento' : 'Asignar Evento'}</h3><input type="text" class="agenda-modal__input" data-text value="${existing?.text || ''}" placeholder="Título" /><div class="agenda-modal__actions"><button type="button" class="dashboard-grid-btn" data-close>Cancelar</button><button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-save>Guardar</button></div></div>`;
+    modal.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => modal.hidden = true));
+    modal.querySelector('[data-save]')?.addEventListener('click', async () => {
+      const text = modal.querySelector<HTMLInputElement>('[data-text]')?.value;
+      if (!text) return;
+      await reloadAfterAction({ action: existing ? 'update-block' : 'assign-event', courseId: data.courseId, year: data.year, blockId: eventId, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute, text });
+    });
+  };
+
+  const openStudentAssignmentModal = (selection: SelectionRect) => {
+    if (!modal) return;
+    const selectedIds = new Set<string>();
+    const renderList = () => (data.students || []).map(s => `<label class="agenda-student-row"><input type="checkbox" value="${s.studentId}" ${selectedIds.has(s.studentId) ? 'checked' : ''} /><span>${escapeHtml(s.name)}</span></label>`).join('');
+    modal.hidden = false;
+    modal.innerHTML = `<div class="agenda-modal__backdrop" data-close></div><div class="agenda-modal__dialog"><h3>Asignar Estudiantes</h3><div class="agenda-student-list">${renderList()}</div><div class="agenda-modal__actions"><button type="button" class="dashboard-grid-btn" data-close>Cancelar</button><button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-save>Asignar</button></div></div>`;
+    modal.querySelectorAll('input[type="checkbox"]').forEach(i => i.addEventListener('change', (e) => {
+      const id = (e.target as HTMLInputElement).value;
+      if ((e.target as HTMLInputElement).checked) selectedIds.add(id); else selectedIds.delete(id);
+    }));
+    modal.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => modal.hidden = true));
+    modal.querySelector('[data-save]')?.addEventListener('click', async () => {
+      if (selectedIds.size === 0) return;
+      await reloadAfterAction({ action: 'assign-students', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute, studentIds: Array.from(selectedIds) });
+    });
+  };
+
+  const openSelectionActions = (selection: SelectionRect, options: { pos?: { x: number; y: number }, targetBlockId?: string, targetEventId?: string } = {}) => {
+    if (!popover) return;
+    const ownBlocks = (data.students.find(s => s.studentId === viewerId)?.blocks || [])
+      .filter(b => selection.dateKeys.includes(b.dateKey) && blockOverlapsSlot(b, selection.startMinute, selection.endMinute));
+    const firstOwnBlockId = options.targetBlockId || ownBlocks[0]?.id;
+    const ev = options.targetEventId ? data.events.find(e => e.id === options.targetEventId) : data.events.find(ev => selection.dateKeys.includes(ev.dateKey) && ev.startMinute < selection.endMinute && ev.endMinute > selection.startMinute);
+
+    let html = '<div class="agenda-popover__actions">';
+    if (isTeacher) {
+      html += `<button type="button" class="dashboard-grid-btn" data-act="students">Alumnos</button>`;
+      html += `<button type="button" class="dashboard-grid-btn" data-act="event">Evento</button>`;
+      if (ev) html += `<button type="button" class="dashboard-grid-btn" data-act="edit">Editar</button>`;
+      html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="clear">Borrar Todo</button>`;
+      
+      const targetBlock = options.targetBlockId ? (data.students.flatMap(s => s.blocks).find(b => b.id === options.targetBlockId)) : null;
+      if (options.targetBlockId || options.targetEventId) {
+        html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="delete-block" data-block-id="${escapeHtml(options.targetBlockId || options.targetEventId || '')}">${options.targetEventId ? 'Eliminar Evento' : 'Eliminar Bloque'}</button>`;
+      }
+    } else {
+      html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-act="reserve">Reservar</button>`;
+      if (firstOwnBlockId) {
+        const isOwn = (data.students.find(s => s.studentId === viewerId)?.blocks || []).some(b => b.id === firstOwnBlockId);
+        if (isOwn) {
+          html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="delete-block" data-block-id="${escapeHtml(firstOwnBlockId)}">Eliminar Reserva</button>`;
+        }
+      }
+    }
+    html += '</div>';
+    popover.innerHTML = html;
+    popover.hidden = false;
+
+    if (options.pos) {
+      popover.style.left = `${options.pos.x}px`; popover.style.top = `${options.pos.y}px`;
+    } else {
+      const rect = getSelectionViewportRect();
+      if (rect) { popover.style.left = `${rect.left}px`; popover.style.top = `${rect.bottom + 8}px`; }
+    }
+
+    popover.querySelector('[data-act="students"]')?.addEventListener('click', (e) => { stopUiEvent(e); openStudentAssignmentModal(selection); });
+    popover.querySelector('[data-act="event"]')?.addEventListener('click', (e) => { stopUiEvent(e); openEventModal(selection); });
+    popover.querySelector('[data-act="edit"]')?.addEventListener('click', (e) => { stopUiEvent(e); openEventModal(selection, ev?.id); });
+    popover.querySelector('[data-act="clear"]')?.addEventListener('click', (e) => { stopUiEvent(e); reloadAfterAction({ action: 'clear-range', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute }); });
+    popover.querySelector('[data-act="reserve"]')?.addEventListener('click', (e) => { stopUiEvent(e); reloadAfterAction({ action: 'reserve-self', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute }); });
+    popover.querySelector('[data-act="delete-block"]')?.addEventListener('click', (e) => { 
+      const bid = (e.currentTarget as HTMLElement).dataset.blockId;
+      stopUiEvent(e); reloadAfterAction({ action: 'delete-block', courseId: data.courseId, year: data.year, blockId: bid }); 
+    });
+  };
+
+  const getSelectionViewportRect = () => {
+    const selected = Array.from(host.querySelectorAll<HTMLElement>('.agenda-cell.is-selected'));
+    if (!selected.length) return null;
+    const rects = selected.map(c => c.getBoundingClientRect());
+    return { top: Math.min(...rects.map(r => r.top)), bottom: Math.max(...rects.map(r => r.bottom)), left: Math.min(...rects.map(r => r.left)), right: Math.max(...rects.map(r => r.right)) };
+  };
+
+  const handlePointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    const cell = resolveAgendaCellFromTarget(e.target); if (!cell) return;
+    e.preventDefault();
+    const bid = (e.target as HTMLElement).closest('[data-agenda-block-id]') as HTMLElement;
+    const eid = (e.target as HTMLElement).closest('[data-agenda-event-id]') as HTMLElement;
+    if (bid || eid) {
+      longPressTimer = setTimeout(() => {
+        const selection = findSelectionRect(host);
+        if (selection) openSelectionActions(selection, { pos: { x: e.clientX, y: e.clientY }, targetBlockId: bid?.dataset.agendaBlockId, targetEventId: eid?.dataset.agendaEventId });
+      }, 800);
+    }
+    selecting = true; activePointerId = e.pointerId; anchorCell = cell; hoveredCell = cell;
+    try { cell.setPointerCapture(e.pointerId); } catch(err){}
+    paintSelection(); if (popover) popover.hidden = true;
+  };
+
+  const handlePointerMove = (e: PointerEvent) => {
+    if (!selecting || (activePointerId !== null && e.pointerId !== activePointerId)) return;
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    const next = resolveAgendaCellFromTarget(document.elementFromPoint(e.clientX, e.clientY));
+    if (!next || next === hoveredCell) return;
+    hoveredCell = next; paintSelection();
+  };
+
+  const handlePointerUp = (e: PointerEvent) => {
+    if (!selecting || (activePointerId !== null && e.pointerId !== activePointerId)) return;
+    selecting = false; if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    if (activePointerId !== null && anchorCell) { try { anchorCell.releasePointerCapture(activePointerId); } catch(err){} }
+    const selection = findSelectionRect(host); if (selection) openSelectionActions(selection);
+  };
+
+  gridWrap?.addEventListener('pointerdown', handlePointerDown);
+  window.addEventListener('pointermove', handlePointerMove);
+  window.addEventListener('pointerup', handlePointerUp);
+  window.addEventListener('pointercancel', handlePointerUp);
+  gridWrap?.addEventListener('contextmenu', (e: MouseEvent) => {
+    stopUiEvent(e);
+    const cell = resolveAgendaCellFromTarget(e.target);
+    if (cell) {
+      clearSelection();
+      cell.classList.add('is-selected');
+      const selection = findSelectionRect(host);
+      const bid = (e.target as HTMLElement).closest('[data-agenda-block-id]') as HTMLElement;
+      const eid = (e.target as HTMLElement).closest('[data-agenda-event-id]') as HTMLElement;
+      if (selection) openSelectionActions(selection, { pos: { x: e.clientX, y: e.clientY }, targetBlockId: bid?.dataset.agendaBlockId, targetEventId: eid?.dataset.agendaEventId });
+    }
+  });
+
+  if (isTeacher) {
+    host.querySelectorAll<HTMLInputElement>('[data-agenda-config]').forEach(i => i.addEventListener('change', () => {
+      const p = {
+        action: 'save-config', courseId: data.courseId, year: data.year,
+        startTime: host.querySelector<HTMLInputElement>('[data-agenda-config="startTime"]')?.value || data.config.startTime,
+        endTime: host.querySelector<HTMLInputElement>('[data-agenda-config="endTime"]')?.value || data.config.endTime,
+        teacherSlotMinutes: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="teacherSlotMinutes"]')?.value || `${data.config.teacherSlotMinutes}`, 10),
+        studentSlotMinutes: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="studentSlotMinutes"]')?.value || `${data.config.studentSlotMinutes}`, 10),
+        maxStudentMinutes: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="maxStudentMinutes"]')?.value || `${data.config.maxStudentMinutes}`, 10),
+        minMeetings: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="minMeetings"]')?.value || `${data.config.minMeetings}`, 10),
+        comment: data.config.comment
+      };
+      reloadAfterAction(p);
+    }));
+  }
+
+  const handleDocClick = (e: MouseEvent) => {
+    const t = e.target as HTMLElement; if (!t.closest('.agenda-cell') && !t.closest('.agenda-popover') && !t.closest('.agenda-modal') && !t.closest('.agenda-context-menu')) clearSelection();
+  };
+  document.addEventListener('click', handleDocClick);
+
+  return () => {
+    gridWrap?.removeEventListener('pointerdown', handlePointerDown); window.removeEventListener('pointermove', handlePointerMove); window.removeEventListener('pointerup', handlePointerUp); window.removeEventListener('pointercancel', handlePointerUp); document.removeEventListener('click', handleDocClick); host.innerHTML = '';
+  };
+};
+
+export const mountDashboardAgenda = (root: HTMLElement) => {
+  const scriptNode = document.getElementById('dashboard-agenda-data');
+  const initialData = parseJsonScript<AgendaData>('dashboard-agenda-data', { courseId: '', courseTitle: '', year: '', dates: [], config: { courseId: '', year: '', startTime: '09:00', endTime: '18:00', teacherSlotMinutes: 30, studentSlotMinutes: 30, maxStudentMinutes: 60, minMeetings: 0, comment: '', updatedAt: '' }, students: [], events: [], viewer: { userId: '', isTeacher: false } });
+  const hosts = Array.from(root.querySelectorAll<HTMLElement>('[data-dashboard-agenda]'));
+  hosts.forEach(host => {
+    let currentDestroy: (() => void) | null = null;
+    const renderHost = (nextData: AgendaData) => { 
+      if (typeof currentDestroy === 'function') currentDestroy(); 
+      currentDestroy = renderAgenda(host, nextData, renderHost); 
+    };
+    renderHost(initialData);
+  });
+};

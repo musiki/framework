@@ -2,6 +2,7 @@
 import BaseHead from '../../../components/BaseHead.astro';
 import Header from '../../../components/Header.astro';
 import { createClient } from '@supabase/supabase-js';
+import { isElevatedGlobalRole } from '../../../lib/roles';
 
 // Check authentication
 const session = (Astro.locals as any).session;
@@ -14,10 +15,14 @@ if (!currentUser?.email) {
 // Initialize Supabase
 const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 
-// Get current user from DB to verify they're a teacher
-const { data: currentDbUser, error: teacherError } = await supabase.from('User').select('id, role').eq('email', currentUser.email).single();
+// Get current user from DB to verify they're teacher/admin across possible duplicate rows
+const { data: currentDbUsers, error: teacherError } = await supabase
+  .from('User')
+  .select('id, role')
+  .ilike('email', currentUser.email);
+const currentDbUser = (currentDbUsers || []).find((user: any) => isElevatedGlobalRole(user?.role)) || currentDbUsers?.[0];
 
-if (teacherError || !currentDbUser || currentDbUser.role !== 'teacher') {
+if (teacherError || !currentDbUser || !isElevatedGlobalRole(currentDbUser.role)) {
   return Astro.redirect('/dashboard');
 }
 

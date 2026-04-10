@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createClient } from '@supabase/supabase-js';
 import { forceEvalCatalogSync } from '../../../../lib/eval-sync';
+import { isElevatedGlobalRole } from '../../../../lib/roles';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -15,11 +16,12 @@ const resolveRequesterRole = async (email: string): Promise<string> => {
   const { data, error } = await supabase
     .from('User')
     .select('role')
-    .eq('email', String(email || '').trim())
-    .maybeSingle();
+    .ilike('email', String(email || '').trim());
 
   if (error) throw error;
-  return String(data?.role || '').trim().toLowerCase();
+  const rows = Array.isArray(data) ? data : [];
+  const elevatedRow = rows.find((row: any) => isElevatedGlobalRole(row?.role));
+  return String((elevatedRow || rows[0] || {}).role || '').trim().toLowerCase();
 };
 
 const runForcedSync: APIRoute = async ({ locals }) => {
@@ -32,7 +34,7 @@ const runForcedSync: APIRoute = async ({ locals }) => {
 
   try {
     const requesterRole = await resolveRequesterRole(currentUser.email);
-    if (requesterRole !== 'teacher') {
+    if (!isElevatedGlobalRole(requesterRole)) {
       return json({ error: 'Only teachers can run eval sync' }, 403);
     }
 

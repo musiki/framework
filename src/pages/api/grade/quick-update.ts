@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createClient } from '@supabase/supabase-js';
+import { isElevatedGlobalRole } from '../../../lib/roles';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
@@ -14,10 +15,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 
-  // Verify user is a teacher
-  const { data: user } = await supabase.from('User').select('role').eq('email', currentUser.email).single();
+  // Verify user is a teacher/admin across possible duplicate rows
+  const { data: users } = await supabase.from('User').select('role').ilike('email', currentUser.email);
+  const user = (users || []).find((row: any) => isElevatedGlobalRole(row?.role)) || users?.[0];
   
-  if (!user || user.role !== 'teacher') {
+  if (!user || !isElevatedGlobalRole(user.role)) {
     return new Response(JSON.stringify({ error: 'Unauthorized - Teacher only' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },

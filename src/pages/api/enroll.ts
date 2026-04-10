@@ -1,10 +1,24 @@
 import type { APIRoute } from 'astro';
+import { getEntry } from 'astro:content';
 import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId } from '../../lib/course-alias';
 import { createSupabaseServerClient, ensureDbUserFromSession } from '../../lib/forum-server';
+import { isAdminGlobalRole, isElevatedGlobalRole } from '../../lib/roles';
+import { promoteUserToTeacherIfNeeded } from '../../lib/user-role-sync';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeRole = (value: unknown) => normalizeText(value).toLowerCase();
+
+const courseExistsInContent = async (courseId: string): Promise<boolean> => {
+  const normalizedCourseId = normalizeText(courseId);
+  if (!normalizedCourseId) return false;
+  try {
+    const courseEntry = await getEntry('cursos', `${normalizedCourseId}/_index`);
+    return Boolean(courseEntry);
+  } catch {
+    return false;
+  }
+};
 
 type SessionUserRow = {
   id?: string | null;
@@ -45,7 +59,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (!user) return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
 
     // Teachers can always enroll; students need a CourseInvite
-    if (user.role !== 'teacher') {
+    if (!isElevatedGlobalRole(user.role)) {
       const email = String(currentUser?.email || '').trim().toLowerCase();
       const { data: invite } = await supabase
         .from('CourseInvite')
@@ -76,7 +90,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // Determine role for the course based on the user's global role
-    const roleInCourse = user.role === 'teacher' ? 'teacher' : 'student';
+    const roleInCourse = isElevatedGlobalRole(user.role) ? 'teacher' : 'student';
 
     // Insert Enrollment
     const { error } = await supabase.from('Enrollment').insert([{
@@ -86,6 +100,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }]);
 
     if (error) throw error;
+
+    if (roleInCourse === 'teacher') {
+      await promoteUserToTeacherIfNeeded(supabase, user.id);
+    }
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (e: any) {
@@ -112,6 +130,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
 
     const users = await resolveSessionUsers(supabase, currentUser.email);
     const actingUserIds = Array.from(new Set(users.map((user) => normalizeText(user?.id)).filter(Boolean)));
+    const actingIsAdmin = users.some((user) => isAdminGlobalRole(user?.role));
     if (actingUserIds.length === 0) {
       return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
     }
@@ -143,33 +162,36 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       if (canonicalCourseId) manageableCourses.add(canonicalCourseId);
     }
 
-    if (!targetCourseId || !manageableCourses.has(targetCourseId)) {
+    if (!targetCourseId || (!actingIsAdmin && !manageableCourses.has(targetCourseId))) {
       return new Response(JSON.stringify({ error: 'You can only manage enrollments in your own courses' }), { status: 403 });
     }
 
     if (targetRole === 'teacher') {
       const isOwnTeacherEnrollment = actingUserIds.includes(normalizeText(targetEnrollment.userId));
-      if (!isOwnTeacherEnrollment) {
+      if (!actingIsAdmin && !isOwnTeacherEnrollment) {
         return new Response(JSON.stringify({ error: 'You can only remove your own teacher enrollment' }), { status: 403 });
       }
 
-      const { data: courseEnrollments, error: courseEnrollmentsError } = await supabase
-        .from('Enrollment')
-        .select('id, courseId, roleInCourse');
+      const targetCourseExists = await courseExistsInContent(targetCourseId);
+      if (!actingIsAdmin && targetCourseExists) {
+        const { data: courseEnrollments, error: courseEnrollmentsError } = await supabase
+          .from('Enrollment')
+          .select('id, courseId, roleInCourse');
 
-      if (courseEnrollmentsError) throw courseEnrollmentsError;
+        if (courseEnrollmentsError) throw courseEnrollmentsError;
 
-      let teacherCount = 0;
-      for (const enrollment of courseEnrollments || []) {
-        if (normalizeRole(enrollment?.roleInCourse) !== 'teacher') continue;
-        const enrollmentCourseId = await canonicalizeCourseId(enrollment?.courseId);
-        if (enrollmentCourseId === targetCourseId) {
-          teacherCount += 1;
+        let teacherCount = 0;
+        for (const enrollment of courseEnrollments || []) {
+          if (normalizeRole(enrollment?.roleInCourse) !== 'teacher') continue;
+          const enrollmentCourseId = await canonicalizeCourseId(enrollment?.courseId);
+          if (enrollmentCourseId === targetCourseId) {
+            teacherCount += 1;
+          }
         }
-      }
 
-      if (teacherCount <= 1) {
-        return new Response(JSON.stringify({ error: 'Cannot remove the last teacher enrollment in this course' }), { status: 403 });
+        if (teacherCount <= 1) {
+          return new Response(JSON.stringify({ error: 'Cannot remove the last teacher enrollment in this course' }), { status: 403 });
+        }
       }
     } else if (targetRole !== 'student') {
       return new Response(JSON.stringify({ error: 'Unsupported enrollment role' }), { status: 403 });
@@ -210,6 +232,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     const supabase = createSupabaseServerClient();
     const users = await resolveSessionUsers(supabase, currentUser.email);
     const actingUserIds = Array.from(new Set(users.map((user) => normalizeText(user?.id)).filter(Boolean)));
+    const actingIsAdmin = users.some((user) => isAdminGlobalRole(user?.role));
     if (actingUserIds.length === 0) {
       return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
     }
@@ -245,7 +268,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       if (canonicalCourseId) manageableCourses.add(canonicalCourseId);
     }
 
-    if (!manageableCourses.has(targetCourseId)) {
+    if (!actingIsAdmin && !manageableCourses.has(targetCourseId)) {
       return new Response(JSON.stringify({ error: 'You can only manage roles in your own courses' }), { status: 403 });
     }
 
@@ -253,24 +276,27 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ success: true, enrollment: targetEnrollment }), { status: 200 });
     }
 
-    if (currentRole === 'teacher' && normalizedNextRole === 'student') {
-      const { data: courseEnrollments, error: courseEnrollmentsError } = await supabase
-        .from('Enrollment')
-        .select('id, courseId, roleInCourse');
+    if (!actingIsAdmin && currentRole === 'teacher' && normalizedNextRole === 'student') {
+      const targetCourseExists = await courseExistsInContent(targetCourseId);
+      if (targetCourseExists) {
+        const { data: courseEnrollments, error: courseEnrollmentsError } = await supabase
+          .from('Enrollment')
+          .select('id, courseId, roleInCourse');
 
-      if (courseEnrollmentsError) throw courseEnrollmentsError;
+        if (courseEnrollmentsError) throw courseEnrollmentsError;
 
-      let teacherCount = 0;
-      for (const enrollment of courseEnrollments || []) {
-        if (normalizeRole(enrollment?.roleInCourse) !== 'teacher') continue;
-        const enrollmentCourseId = await canonicalizeCourseId(enrollment?.courseId);
-        if (enrollmentCourseId === targetCourseId) {
-          teacherCount += 1;
+        let teacherCount = 0;
+        for (const enrollment of courseEnrollments || []) {
+          if (normalizeRole(enrollment?.roleInCourse) !== 'teacher') continue;
+          const enrollmentCourseId = await canonicalizeCourseId(enrollment?.courseId);
+          if (enrollmentCourseId === targetCourseId) {
+            teacherCount += 1;
+          }
         }
-      }
 
-      if (teacherCount <= 1) {
-        return new Response(JSON.stringify({ error: 'Cannot demote the last teacher in this course' }), { status: 403 });
+        if (teacherCount <= 1) {
+          return new Response(JSON.stringify({ error: 'Cannot demote the last teacher in this course' }), { status: 403 });
+        }
       }
     }
 
@@ -282,6 +308,10 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       .single();
 
     if (updateError) throw updateError;
+
+    if (normalizedNextRole === 'teacher') {
+      await promoteUserToTeacherIfNeeded(supabase, normalizeText(updatedEnrollment?.userId || targetEnrollment.userId));
+    }
 
     return new Response(JSON.stringify({ success: true, enrollment: updatedEnrollment }), { status: 200 });
   } catch (e: any) {

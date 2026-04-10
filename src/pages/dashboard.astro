@@ -22,6 +22,22 @@ import {
 import { getCourseFrontmatterId } from '../lib/course-metadata';
 import { normalizeActivityPageSlug } from '../lib/class-activity/model.mjs';
 import { buildAttendanceProjection } from '../lib/dashboard/attendance-projection';
+import {
+  buildAgendaConfigAssignmentId,
+  buildAgendaDefaultConfig,
+  buildAgendaEventsAssignmentId,
+  buildAgendaShareUrlPath,
+  buildAgendaStudentAssignmentId,
+  buildAgendaStudentColor,
+  COURSE_AGENDA_CONFIG_META_KIND,
+  COURSE_AGENDA_EVENTS_META_KIND,
+  COURSE_AGENDA_STUDENT_META_KIND,
+  normalizeAgendaConfigPayload,
+  normalizeAgendaEventsPayload,
+  normalizeAgendaStudentPayload,
+  normalizeAgendaYear,
+  sumAgendaBlocksMinutes,
+} from '../lib/dashboard/agenda';
 import { listDashboardAnnotations } from '../lib/dashboard/annotation-store';
 import { buildAdminProjection } from '../lib/dashboard/admin-projection';
 import { buildCommentsProjection } from '../lib/dashboard/comments-projection';
@@ -31,6 +47,7 @@ import { buildTeacherMainProjection } from '../lib/dashboard/teacher-main-projec
 import { getCourseWelcomeFields, getWelcomeSubmissionAnswerText } from '../lib/dashboard/welcome-fields';
 import { toDashboardProjectionJson } from '../lib/dashboard/shared';
 import { getRoleBadgeLabel } from '../lib/dashboard-role';
+import { isAdminGlobalRole, isElevatedGlobalRole } from '../lib/roles';
 import 'tabulator-tables/dist/css/tabulator.min.css';
 import '../styles/theme.css';
 
@@ -143,7 +160,7 @@ if (viewerUserIds.length > 0) {
 }
 
 const viewerHasTeacherRole = viewerMatchedUsers.some(
-  (row) => normalizeRole(row?.role) === 'teacher'
+  (row) => isElevatedGlobalRole(row?.role)
 );
 const viewerIsTeacher = viewerHasTeacherRole || viewerHasTeacherEnrollment;
 
@@ -192,15 +209,18 @@ if (dashboardUserIds.length > 0) {
 }
 
 const hasTeacherRole = (matchedUsers.length > 0 ? matchedUsers : [dbUser]).some(
-  (row) => normalizeRole(row?.role) === 'teacher'
+  (row) => isElevatedGlobalRole(row?.role)
+);
+const hasAdminRole = (matchedUsers.length > 0 ? matchedUsers : [dbUser]).some(
+  (row) => isAdminGlobalRole(row?.role)
 );
 const isTeacher = hasTeacherRole || hasTeacherEnrollment;
-const initialTeacherDashboardTab = isTeacher && ['main', 'log', 'admin'].includes(requestedTabParam)
+const initialTeacherDashboardTab = isTeacher && ['main', 'log', 'admin', 'agenda'].includes(requestedTabParam)
   ? requestedTabParam
   : 'main';
 
-if (isTeacher && normalizeRole(dbUser?.role) !== 'teacher') {
-  const teacherRow = matchedUsers.find((row) => normalizeRole(row?.role) === 'teacher');
+if (isTeacher && !isElevatedGlobalRole(dbUser?.role)) {
+  const teacherRow = matchedUsers.find((row) => isElevatedGlobalRole(row?.role));
   if (teacherRow) {
     dbUser = teacherRow;
   } else if (dashboardUserIds.length > 0) {
@@ -404,13 +424,43 @@ const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeTextLower = (value: unknown) => normalizeText(value).toLowerCase();
 
 const asPayloadObject = (value: unknown): Record<string, any> => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return value as Record<string, any>;
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  return {};
 };
 
 const COURSE_STUDENT_META_KIND = 'course_student_profile';
 const COURSE_ATTENDANCE_CONFIG_META_KIND = 'course_attendance_config';
 const COURSE_ATTENDANCE_MANUAL_META_KIND = 'course_attendance_manual';
+const COURSE_ATTENDANCE_CONFIG_ASSIGNMENT_PREFIX = '__meta__:course-attendance-config';
+const COURSE_AGENDA_META_ASSIGNMENT_PREFIX = '__meta__:course-agenda-';
+
+const parseAttendanceConfigAssignmentMeta = (assignmentId: unknown) => {
+  const raw = normalizeText(assignmentId);
+  if (!raw.startsWith(`${COURSE_ATTENDANCE_CONFIG_ASSIGNMENT_PREFIX}:`)) {
+    return { courseId: '', year: '' };
+  }
+  const parts = raw.split(':');
+  const encodedCourseId = normalizeText(parts.at(-2) || '');
+  const year = normalizeText(parts.at(-1) || '');
+  let courseId = '';
+  try {
+    courseId = canonicalizeCourseId(decodeURIComponent(encodedCourseId));
+  } catch {
+    courseId = canonicalizeCourseId(encodedCourseId);
+  }
+  return { courseId, year };
+};
+
+const isAgendaMetaAssignmentId = (assignmentId: unknown) =>
+  normalizeText(assignmentId).startsWith(COURSE_AGENDA_META_ASSIGNMENT_PREFIX);
 
 const normalizeCourseId = (value: unknown) => {
   const raw = normalizeText(value);
@@ -775,7 +825,8 @@ const isCourseAttendanceManualSubmission = (submission: any) =>
 const isKnownCourseMetaSubmission = (submission: any) =>
   isCourseStudentMetaSubmission(submission)
   || isCourseAttendanceConfigSubmission(submission)
-  || isCourseAttendanceManualSubmission(submission);
+  || isCourseAttendanceManualSubmission(submission)
+  || isAgendaMetaAssignmentId(submission?.assignmentId);
 
 const isSystemMetaAssignmentRef = (value: unknown) => {
   const normalized = String(value || '').trim().replace(/^\/+|\/+$/g, '');
@@ -853,19 +904,27 @@ const toEvalPreviewAttr = (value: unknown) => {
 const teacherManagedCourseIds = new Set<string>();
 const teacherManagedCourseIdsRaw = new Set<string>();
 if (isTeacher && Array.isArray(allEnrollments)) {
-  allEnrollments
-    .filter(
-      (enrollment: any) =>
-        dashboardUserIds.includes(enrollment.userId) &&
-        normalizeRole(enrollment?.roleInCourse) === 'teacher',
-    )
-    .forEach((enrollment: any) => {
-      const rawCourseId = canonicalizeCourseId(enrollment?.courseId);
-      if (!rawCourseId || !catalogCourseIds.has(rawCourseId)) return;
+  if (hasAdminRole) {
+    Array.from(catalogCourseIds).forEach((rawCourseId) => {
       const normalizedCourseId = normalizeTextLower(rawCourseId);
       if (normalizedCourseId) teacherManagedCourseIds.add(normalizedCourseId);
       if (rawCourseId) teacherManagedCourseIdsRaw.add(rawCourseId);
     });
+  } else {
+    allEnrollments
+      .filter(
+        (enrollment: any) =>
+          dashboardUserIds.includes(enrollment.userId) &&
+          normalizeRole(enrollment?.roleInCourse) === 'teacher',
+      )
+      .forEach((enrollment: any) => {
+        const rawCourseId = canonicalizeCourseId(enrollment?.courseId);
+        if (!rawCourseId || !catalogCourseIds.has(rawCourseId)) return;
+        const normalizedCourseId = normalizeTextLower(rawCourseId);
+        if (normalizedCourseId) teacherManagedCourseIds.add(normalizedCourseId);
+        if (rawCourseId) teacherManagedCourseIdsRaw.add(rawCourseId);
+      });
+  }
 }
 
 const teacherMetaSubmissions = isTeacher
@@ -889,6 +948,7 @@ const courseStudentMetaByKey = new Map<string, {
 const courseStudentMetaUpdatedAtByKey = new Map<string, string>();
 const courseAttendanceConfigByKey = new Map<string, { startDate: string; endDate: string; updatedAt: string }>();
 const courseAttendanceManualByKey = new Map<string, Record<string, number>>();
+const courseAttendanceManualUpdatedAtByKey = new Map<string, string>();
 if (isTeacher) {
   teacherMetaSubmissions.forEach((submission: any) => {
     const metaKind = getSubmissionMetaKind(submission);
@@ -944,6 +1004,18 @@ if (isTeacher) {
     if (metaKind === COURSE_ATTENDANCE_MANUAL_META_KIND) {
       const studentId = normalizeText(payload?.studentId || submission?.userId);
       if (!studentId) return;
+      const mapKey = `${normalizeTextLower(courseId)}::${year}::${studentId}`;
+      const nextUpdatedAt = normalizeText(
+        payload?.updatedAt
+          || submission?.submittedAt
+          || submission?.updatedAt
+          || submission?.createdAt
+          || '',
+      );
+      const existingUpdatedAt = courseAttendanceManualUpdatedAtByKey.get(mapKey) || '';
+      if (existingUpdatedAt && getDateTimestamp(nextUpdatedAt) < getDateTimestamp(existingUpdatedAt)) {
+        return;
+      }
       const manualDaysPayload = asPayloadObject(payload?.manualDays || payload?.dates || {});
       const normalizedManualDays = Object.fromEntries(
         Object.entries(manualDaysPayload)
@@ -956,10 +1028,8 @@ if (isTeacher) {
           })
           .filter(([dateKey, countValue]) => Boolean(dateKey) && countValue !== null),
       );
-      courseAttendanceManualByKey.set(
-        `${normalizeTextLower(courseId)}::${year}::${studentId}`,
-        normalizedManualDays,
-      );
+      courseAttendanceManualByKey.set(mapKey, normalizedManualDays);
+      courseAttendanceManualUpdatedAtByKey.set(mapKey, nextUpdatedAt);
     }
   });
 }
@@ -1083,6 +1153,22 @@ const availableCourseMeta = availableCourseIds
   })
   .sort((left, right) => String(left.title || '').localeCompare(String(right.title || ''), 'es'));
 
+const adminCourseMeta = courseEntries
+  .map((course: any) => {
+    const courseId = canonicalizeCourseId(course?.courseId);
+    if (!courseId) return null;
+    return {
+      courseId,
+      title: String(course?.title || decodeUriSafe(courseId)),
+      code: String(course?.code || '').trim(),
+    };
+  })
+  .filter(Boolean)
+  .filter((course: any, index: number, items: any[]) =>
+    items.findIndex((candidate: any) => candidate.courseId === course.courseId) === index,
+  )
+  .sort((left: any, right: any) => String(left.title || '').localeCompare(String(right.title || ''), 'es'));
+
 const selectedCourseId = canonicalizeCourseId(requestedCourseParam);
 const activeCourseId = availableCourseMeta.some((course) => course.courseId === selectedCourseId)
   ? selectedCourseId
@@ -1092,6 +1178,46 @@ const activeCourseCode = String(activeCourseMeta?.code || '').trim();
 const activeCourseWelcomeFields = activeCourseId
   ? await getCourseWelcomeFields(activeCourseId)
   : [];
+const studentAttendanceConfigYears = new Set<string>();
+
+if (!isTeacher && activeCourseId) {
+  try {
+    const dashboardMetaSupabase = createSupabaseServerClient({ requireServiceRole: true });
+    const { data: attendanceConfigRows, error: attendanceConfigError } = await dashboardMetaSupabase
+      .from('Submission')
+      .select('assignmentId, payload, submittedAt')
+      .like('assignmentId', `${COURSE_ATTENDANCE_CONFIG_ASSIGNMENT_PREFIX}:%`)
+      .order('submittedAt', { ascending: false });
+
+    if (attendanceConfigError) {
+      console.error('Error loading attendance config rows for student dashboard:', attendanceConfigError);
+    } else {
+      (Array.isArray(attendanceConfigRows) ? attendanceConfigRows : []).forEach((row: any) => {
+        const payload = asPayloadObject(row?.payload);
+        const assignmentMeta = parseAttendanceConfigAssignmentMeta(row?.assignmentId);
+        const courseId = canonicalizeCourseId(
+          payload?.courseId || payload?.course || payload?.courseSlug || assignmentMeta.courseId || '',
+        );
+        const year = normalizeText(payload?.year || assignmentMeta.year);
+        if (courseId !== activeCourseId || !/^\d{4}$/.test(year)) return;
+
+        studentAttendanceConfigYears.add(year);
+        const mapKey = `${normalizeTextLower(courseId)}::${year}`;
+        const nextConfig = {
+          startDate: normalizeText(payload?.startDate || ''),
+          endDate: normalizeText(payload?.endDate || ''),
+          updatedAt: normalizeText(payload?.updatedAt || row?.submittedAt || ''),
+        };
+        const existingConfig = courseAttendanceConfigByKey.get(mapKey);
+        if (!existingConfig || getDateTimestamp(nextConfig.updatedAt) >= getDateTimestamp(existingConfig.updatedAt)) {
+          courseAttendanceConfigByKey.set(mapKey, nextConfig);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error initializing attendance config rows for student dashboard:', error);
+  }
+}
 
 const buildCourseLessonHref = (courseIdInput, lessonPath = '') => {
   const courseId = canonicalizeCourseId(courseIdInput);
@@ -1138,6 +1264,12 @@ const availableYears = (() => {
   (activeCourseSubmissions || []).forEach((submission: any) => {
     yearSet.add(getSubmissionYear(submission));
   });
+
+  if (!isTeacher) {
+    studentAttendanceConfigYears.forEach((year) => {
+      if (/^\d{4}$/.test(String(year || ''))) yearSet.add(String(year));
+    });
+  }
 
   if (isTeacher) {
     (allLiveClassSessions || []).forEach((session: any) => {
@@ -2080,6 +2212,186 @@ const attendanceGridRows = (() => {
     });
 })();
 
+let agendaSourceEnrollments = [] as any[];
+let agendaSourceSubmissions = [] as any[];
+let agendaSourceUsersById = new Map<string, any>();
+
+if (activeCourseId && activeYear) {
+  if (isTeacher) {
+    agendaSourceEnrollments = scopedTeacherEnrollments || [];
+    agendaSourceSubmissions = (teacherMetaSubmissions || []).filter((submission: any) =>
+      isAgendaMetaAssignmentId(submission?.assignmentId),
+    );
+    agendaSourceUsersById = allUsersById;
+  } else {
+    try {
+      const agendaSupabase = createSupabaseServerClient({ requireServiceRole: true });
+      const { data: rosterEnrollments, error: rosterEnrollmentError } = await agendaSupabase
+        .from('Enrollment')
+        .select('*')
+        .eq('courseId', activeCourseId);
+      if (rosterEnrollmentError) {
+        console.error('Error loading agenda enrollments:', rosterEnrollmentError);
+      } else {
+        agendaSourceEnrollments = (rosterEnrollments || []).filter((enrollment: any) => {
+          if (activeYear && getEnrollmentYear(enrollment) !== activeYear) return false;
+          return true;
+        });
+      }
+
+      const agendaUserIds = Array.from(
+        new Set(
+          agendaSourceEnrollments
+            .map((enrollment: any) => String(enrollment?.userId || '').trim())
+            .filter(Boolean),
+        ),
+      );
+      if (agendaUserIds.length > 0) {
+        const { data: rosterUsers, error: rosterUsersError } = await agendaSupabase
+          .from('User')
+          .select('*')
+          .in('id', agendaUserIds);
+        if (rosterUsersError) {
+          console.error('Error loading agenda roster users:', rosterUsersError);
+        } else {
+          agendaSourceUsersById = new Map(
+            (rosterUsers || []).map((user: any) => [String(user?.id || ''), user]),
+          );
+        }
+      }
+
+      const { data: agendaRows, error: agendaRowsError } = await agendaSupabase
+        .from('Submission')
+        .select('*')
+        .like('assignmentId', `${COURSE_AGENDA_META_ASSIGNMENT_PREFIX}%`)
+        .order('submittedAt', { ascending: false });
+      if (agendaRowsError) {
+        console.error('Error loading agenda submissions:', agendaRowsError);
+      } else {
+        agendaSourceSubmissions = agendaRows || [];
+      }
+    } catch (error) {
+      console.error('Error initializing dashboard agenda data:', error);
+    }
+  }
+}
+
+let activeAgendaConfig = buildAgendaDefaultConfig(activeCourseId, normalizeAgendaYear(activeYear));
+let activeAgendaConfigUpdatedAt = '';
+const agendaStudentPayloadById = new Map<string, any>();
+let activeAgendaEvents = [] as any[];
+let activeAgendaEventsUpdatedAt = '';
+
+agendaSourceSubmissions.forEach((submission: any) => {
+  const metaKind = getSubmissionMetaKind(submission);
+  const payload = asPayloadObject(submission?.payload);
+  const rawPayloadCourseId = payload?.courseId || payload?.course || payload?.courseSlug || '';
+  const payloadCourseId = normalizeTextLower(canonicalizeCourseId(rawPayloadCourseId));
+  const year = normalizeText(payload?.year || getSubmissionYear(submission));
+  
+  // Robust match: check canonical ID, raw ID, or presence in assignmentId string
+  const activeCourseIdLower = normalizeTextLower(activeCourseId);
+  const isActiveCourse = 
+    payloadCourseId === activeCourseIdLower || 
+    normalizeTextLower(rawPayloadCourseId) === activeCourseIdLower ||
+    (submission?.assignmentId && String(submission.assignmentId).toLowerCase().includes(`:${activeCourseIdLower}:`)) ||
+    (submission?.assignmentId && String(submission.assignmentId).toLowerCase().includes(`:${encodeURIComponent(activeCourseIdLower).toLowerCase()}:`));
+
+  if (!isActiveCourse || year !== activeYear) return;
+
+  const updatedAt = normalizeText(payload?.updatedAt || submission?.submittedAt || submission?.updatedAt || '');
+
+  if (metaKind === COURSE_AGENDA_CONFIG_META_KIND) {
+    if (!activeAgendaConfigUpdatedAt || getDateTimestamp(updatedAt) >= getDateTimestamp(activeAgendaConfigUpdatedAt)) {
+      activeAgendaConfig = normalizeAgendaConfigPayload(payload, activeCourseId, activeYear);
+      activeAgendaConfigUpdatedAt = updatedAt;
+    }
+    return;
+  }
+
+  if (metaKind === COURSE_AGENDA_STUDENT_META_KIND) {
+    const studentId = normalizeText(payload?.studentId || submission?.userId);
+    if (!studentId) return;
+    const existing = agendaStudentPayloadById.get(studentId);
+    const existingUpdatedAt = normalizeText(existing?.updatedAt || '');
+    if (existing && existingUpdatedAt && getDateTimestamp(existingUpdatedAt) > getDateTimestamp(updatedAt)) {
+      return;
+    }
+    const normalizedPayload = normalizeAgendaStudentPayload(payload, activeCourseId, activeYear, studentId);
+    if (normalizedPayload) agendaStudentPayloadById.set(studentId, normalizedPayload);
+    return;
+  }
+
+  if (metaKind === COURSE_AGENDA_EVENTS_META_KIND) {
+    if (!activeAgendaEventsUpdatedAt || getDateTimestamp(updatedAt) >= getDateTimestamp(activeAgendaEventsUpdatedAt)) {
+      const normalizedPayload = normalizeAgendaEventsPayload(payload, activeCourseId, activeYear);
+      activeAgendaEvents = normalizedPayload.events || [];
+      activeAgendaEventsUpdatedAt = updatedAt;
+    }
+  }
+});
+
+const agendaRosterStudentEnrollments = Array.from(
+  new Map(
+    agendaSourceEnrollments
+      .filter((enrollment: any) => normalizeRole(enrollment?.roleInCourse || 'student') === 'student')
+      .map((enrollment: any) => {
+        const userId = normalizeText(enrollment?.userId || '');
+        if (!userId) return null;
+        return [userId, enrollment] as const;
+      })
+      .filter(Boolean) as [string, any][],
+  ).values(),
+).sort((left: any, right: any) => {
+  const leftUser = agendaSourceUsersById.get(String(left?.userId || '')) || allUsersById.get(String(left?.userId || '')) || null;
+  const rightUser = agendaSourceUsersById.get(String(right?.userId || '')) || allUsersById.get(String(right?.userId || '')) || null;
+  const leftName = String(leftUser?.name || leftUser?.email || left?.userId || '');
+  const rightName = String(rightUser?.name || rightUser?.email || right?.userId || '');
+  return leftName.localeCompare(rightName, 'es');
+});
+
+const dashboardAgendaStudents = Array.from(
+  new Set([
+    ...agendaRosterStudentEnrollments.map((e: any) => normalizeText(e?.userId)),
+    ...Array.from(agendaStudentPayloadById.keys())
+  ])
+).map((studentId) => {
+  const user = agendaSourceUsersById.get(studentId) || allUsersById.get(studentId) || null;
+  const payload = agendaStudentPayloadById.get(studentId) || null;
+  const blocks = Array.isArray(payload?.blocks) ? payload.blocks : [];
+  return {
+    studentId,
+    name: String(user?.name || user?.email || studentId || 'Estudiante'),
+    email: String(user?.email || ''),
+    color: String(payload?.color || buildAgendaStudentColor(studentId)),
+    totalMinutes: sumAgendaBlocksMinutes(blocks),
+    blocks,
+  };
+});
+
+const studentAgendaVisible = Boolean(
+  (attendanceScheduleGrid.columns || []).length > 0 &&
+  (activeAgendaConfigUpdatedAt
+    || activeAgendaEventsUpdatedAt
+    || dashboardAgendaStudents.some((student: any) => Array.isArray(student?.blocks) && student.blocks.length > 0))
+);
+
+const dashboardAgendaData = {
+  courseId: activeCourseId,
+  courseTitle: String(activeCourseMeta?.title || decodeUriSafe(activeCourseId) || activeCourseId || 'Curso'),
+  year: activeYear,
+  dates: attendanceScheduleGrid.columns || [],
+  config: activeAgendaConfig,
+  students: dashboardAgendaStudents,
+  events: activeAgendaEvents,
+  viewer: {
+    userId: String(dbUser?.id || ''),
+    isTeacher,
+  },
+  shareUrlPath: buildAgendaShareUrlPath(activeCourseId, activeYear),
+};
+const dashboardAgendaDataJson = toDashboardProjectionJson(dashboardAgendaData);
+
 const attendanceLogSearchRows = attendanceLogRows.map((row: any) => ({
   ...row,
   search: [
@@ -2599,7 +2911,7 @@ const teacherCommentsProjection = isTeacher
 const teacherAdminProjection = isTeacher
   ? buildAdminProjection({
       activeCourseId,
-      availableCourses: availableCourseMeta,
+      availableCourses: adminCourseMeta,
       allUsers: allUsers || [],
       allEnrollments: allEnrollments || [],
       allSubmissions: allSubmissions || [],
@@ -2645,6 +2957,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         transition: grid-template-columns 0.25s ease;
         position: relative;
       }
+      .dashboard-shell:not(.dashboard-shell--teacher) {
+        height: calc(100dvh - 7rem);
+        max-height: calc(100dvh - 7rem);
+        overflow: hidden;
+      }
       .dashboard-shell[data-left-open="false"] {
         grid-template-columns: 2.4rem minmax(0, 1fr);
       }
@@ -2665,6 +2982,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         background: var(--c-bg);
         padding: 0.6rem 0.62rem;
         transition: grid-template-columns 0.25s ease;
+      }
+      .dashboard-shell:not(.dashboard-shell--teacher) .dashboard-sidebar {
+        top: 0;
+        height: 100%;
+        max-height: 100%;
       }
       .dashboard-shell[data-left-open="true"] .dashboard-sidebar {
         overflow-y: auto;
@@ -2716,6 +3038,13 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .dashboard-main {
         min-width: 0;
+      }
+      .dashboard-shell:not(.dashboard-shell--teacher) .dashboard-main {
+        min-height: 0;
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 0.2rem;
       }
       .dashboard-shell--teacher .dashboard-main {
         width: 100%;
@@ -2993,6 +3322,12 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         --role-badge-fg: #145ea8;
         --role-badge-border: rgba(25, 118, 210, 0.22);
       }
+      .role-badge--admin,
+      .role-admin {
+        --role-badge-bg: rgba(245, 158, 11, 0.16);
+        --role-badge-fg: #9a3412;
+        --role-badge-border: rgba(217, 119, 6, 0.24);
+      }
       .role-badge--student,
       .role-student {
         --role-badge-bg: rgba(123, 31, 162, 0.1);
@@ -3004,6 +3339,12 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         --role-badge-bg: rgba(25, 118, 210, 0.24);
         --role-badge-fg: #d7ecff;
         --role-badge-border: rgba(147, 197, 253, 0.4);
+      }
+      :root.dark .role-badge--admin,
+      :root.dark .role-admin {
+        --role-badge-bg: rgba(245, 158, 11, 0.22);
+        --role-badge-fg: #ffedd5;
+        --role-badge-border: rgba(251, 191, 36, 0.38);
       }
       :root.dark .role-badge--student,
       :root.dark .role-student {
@@ -3115,7 +3456,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-topbar {
         display: flex;
         align-items: flex-end;
-        justify-content: space-between;
+        justify-content: flex-start;
         gap: 0.55rem 0.9rem;
         flex-wrap: nowrap;
         overflow-x: auto;
@@ -3124,6 +3465,8 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         margin: 0 0 0.7rem 0;
         padding: 1.4rem 0.6rem 0;
         background: transparent;
+        width: 100%;
+        max-width: 100%;
       }
       .dashboard-topbar::-webkit-scrollbar { display: none; }
       .dashboard-topbar-tabs {
@@ -3146,12 +3489,12 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-topbar-controls {
         display: flex;
         align-items: flex-end;
-        justify-content: flex-end;
+        justify-content: flex-start;
         gap: 0.5rem;
         flex-wrap: nowrap;
         margin-left: auto;
-        flex: 1 1 auto;
-        min-width: 0;
+        flex: 0 0 auto;
+        min-width: max-content;
       }
       .dashboard-topbar-context {
         display: inline-flex;
@@ -3159,10 +3502,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         gap: 0.5rem;
         flex-wrap: nowrap;
         min-width: max-content;
+        flex: 0 0 auto;
       }
       .dashboard-topbar-context--search {
-        flex: 1 1 auto;
-        min-width: 12rem;
+        flex: 0 0 auto;
+        min-width: 14rem;
       }
       .dashboard-topbar-context[hidden] {
         display: none !important;
@@ -3845,9 +4189,18 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         min-width: 0;
         flex: 0 0 auto;
       }
+      .dashboard-control-label,
+      .agenda-config-field span,
       .attendance-config-label {
-        font-size: 0.78rem;
-        color: var(--c-fg-dim);
+        font-size: 0.72rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--c-text-2);
+        font-weight: 700;
+      }
+      .attendance-config-label {
+        display: inline-flex;
+        align-items: center;
         white-space: nowrap;
       }
       .attendance-config-bar--toolbar .attendance-config-input {
@@ -4837,6 +5190,518 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-attendance-chip--manual {
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-link) 55%, transparent);
       }
+      .dashboard-agenda-host {
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+      }
+      .agenda-cell.has-event {
+        padding: 0 !important;
+        border-radius: 0;
+        border: none !important;
+        position: relative;
+        z-index: 1;
+        background-clip: padding-box;
+      }
+      .agenda-event-label {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.2rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: rgba(0, 0, 0, 0.75);
+        pointer-events: auto; /* Permite scroll y clicks */
+        overflow-y: auto;
+        text-align: center;
+        z-index: 10;
+        line-height: 1.1;
+        word-break: break-word;
+        scrollbar-width: none; /* Ocultar scrollbar en Firefox */
+      }
+      .agenda-event-label::-webkit-scrollbar {
+        display: none; /* Ocultar scrollbar en Chrome/Safari */
+      }
+      .agenda-cell.is-event-top {
+        border-top-left-radius: 0.55rem;
+        border-top-right-radius: 0.55rem;
+      }
+      .agenda-cell.is-event-bottom {
+        border-bottom-left-radius: 0.55rem;
+        border-bottom-right-radius: 0.55rem;
+      }
+      .agenda-cell.is-event-left {
+        border-left: 1px solid rgba(0,0,0,0.05) !important;
+      }
+      .agenda-cell.is-event-right {
+        border-right: 1px solid rgba(0,0,0,0.05) !important;
+      }
+      .agenda-student-block {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        height: 1.4rem;
+        padding: 0 0.45rem;
+        border-radius: 0.35rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: rgba(0, 0, 0, 0.7);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        max-width: 100%;
+        overflow: hidden;
+      }
+      .agenda-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .agenda-head {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: flex-end;
+        width: 100%;
+      }
+      .agenda-head__title {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-width: 16rem;
+      }
+      .agenda-head__eyebrow {
+        margin: 0;
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--c-link);
+        font-weight: 700;
+      }
+      .agenda-head__note {
+        margin: 0;
+        color: var(--c-text-2);
+        font-size: 0.92rem;
+      }
+      .agenda-head__hint {
+        margin: 0;
+        font-size: 0.75rem;
+        color: var(--c-fg-dim);
+      }
+      .agenda-title-edit {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        width: 12.5rem;
+        min-width: 12.5rem;
+        max-width: 12.5rem;
+      }
+      .agenda-title-edit__display {
+        display: inline-flex;
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+        height: 2rem;
+        padding: 0 0.68rem;
+        border-radius: 0.65rem;
+        border: 1px dashed color-mix(in srgb, var(--c-border) 82%, transparent);
+        background: color-mix(in srgb, var(--c-bg) 96%, white 4%);
+        font-size: 0.92rem;
+        color: var(--c-text-2);
+        line-height: 1.4;
+        cursor: text;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+      }
+      .agenda-title-edit__display:hover,
+      .agenda-title-edit__display:focus-visible {
+        border-color: color-mix(in srgb, var(--c-link) 36%, var(--c-border) 64%);
+        background: color-mix(in srgb, var(--c-bg) 92%, white 8%);
+        outline: none;
+      }
+      .agenda-title-edit__display.is-empty {
+        color: var(--c-fg-dim);
+      }
+      .agenda-title-edit__input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        min-width: 0;
+        height: 2rem;
+        border-radius: 0.65rem;
+        border: 1px solid color-mix(in srgb, var(--c-border) 88%, transparent);
+        padding: 0 0.68rem;
+        background: var(--c-bg);
+        color: var(--c-text);
+        font-size: 0.92rem;
+      }
+      .agenda-head__stats {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        align-items: center;
+      }
+      .agenda-stat {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.32rem 0.55rem;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.14);
+        font-size: 0.8rem;
+      }
+      .agenda-stat--warning {
+        background: rgba(245, 158, 11, 0.12);
+        color: #92400e;
+      }
+      .agenda-stat--ok {
+        background: rgba(34, 197, 94, 0.12);
+        color: #166534;
+      }
+      .agenda-config-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 0.55rem;
+        flex: 1 1 30rem;
+        justify-content: flex-end;
+        min-width: 0;
+      }
+      .agenda-config-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        min-width: 8rem;
+      }
+      .agenda-config-field--small {
+        min-width: 5.6rem;
+        flex: 0 0 5.6rem;
+      }
+      .agenda-config-field--tiny {
+        min-width: 4.8rem;
+        flex: 0 0 4.8rem;
+      }
+      .agenda-config-field--comment {
+        min-width: 15rem;
+        flex: 1 1 15rem;
+      }
+      .agenda-config-field span {
+        font-size: 0.75rem;
+        color: var(--c-fg-dim);
+      }
+      .agenda-config-field input {
+        height: 2rem;
+        border-radius: 0.65rem;
+        border: 1px solid color-mix(in srgb, var(--c-border) 88%, transparent);
+        padding: 0 0.68rem;
+        background: var(--c-bg);
+        color: var(--c-text);
+      }
+      .agenda-grid-wrap {
+        position: relative;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        display: block;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 1rem;
+        border: 1px solid color-mix(in srgb, var(--c-border) 86%, transparent);
+        background: color-mix(in srgb, var(--c-bg) 94%, white 6%);
+      }
+      .agenda-grid {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        min-width: 64rem;
+        table-layout: fixed;
+      }
+      .agenda-grid th,
+      .agenda-grid td {
+        border-right: 1px solid rgba(148, 163, 184, 0.14);
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        padding: 0;
+        vertical-align: top;
+      }
+      .agenda-grid thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: color-mix(in srgb, var(--c-bg) 88%, white 12%);
+        backdrop-filter: blur(12px);
+      }
+      .agenda-grid__time-head,
+      .agenda-grid__time {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: color-mix(in srgb, var(--c-bg) 94%, white 6%);
+        min-width: 4.9rem;
+        width: 4.9rem;
+        text-align: right;
+        padding: 0.4rem 0.55rem;
+        font-size: 0.74rem;
+        color: var(--c-text-2);
+        font-weight: 700;
+      }
+      .agenda-grid__time-head {
+        z-index: 3;
+      }
+      .agenda-grid__day-head {
+        min-width: 8.4rem;
+        padding: 0.55rem 0.6rem;
+        text-align: left;
+        font-size: 0.75rem;
+        font-weight: 700;
+      }
+      .agenda-cell {
+        position: relative;
+        width: 100%;
+        min-height: 2.45rem;
+        border: 0;
+        background: transparent;
+        padding: 0.25rem;
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+        text-align: left;
+        cursor: pointer;
+        touch-action: auto;
+      }
+      .agenda-cell:hover .agenda-cell__fill {
+        background: rgba(14, 165, 233, 0.08);
+      }
+      .agenda-cell.is-selected .agenda-cell__fill {
+        background: rgba(14, 165, 233, 0.18);
+        box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.36);
+      }
+      .agenda-cell--busy .agenda-cell__fill {
+        background: rgba(148, 163, 184, 0.07);
+      }
+      .agenda-cell--event .agenda-cell__fill {
+        background: color-mix(in srgb, var(--agenda-event-color, #f2d0a9) 34%, white 66%);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agenda-event-color, #f2d0a9) 52%, transparent);
+        inset: 0 !important;
+      }
+      .agenda-cell--event:not(.agenda-cell--event-top) .agenda-cell__fill {
+        top: 0.02rem;
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
+      .agenda-cell--event:not(.agenda-cell--event-bottom) .agenda-cell__fill {
+        bottom: 0.02rem;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .agenda-cell--event:not(.agenda-cell--event-left) .agenda-cell__fill {
+        left: 0.02rem;
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+      }
+      .agenda-cell--event:not(.agenda-cell--event-right) .agenda-cell__fill {
+        right: 0.02rem;
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .agenda-cell__fill {
+        position: absolute;
+        inset: 0.18rem;
+        border-radius: 0.55rem;
+        transition: background-color 160ms ease, box-shadow 160ms ease;
+      }
+      .agenda-cell__content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.18rem;
+        align-items: flex-start;
+        width: 100%;
+      }
+      .agenda-chip {
+        --agenda-chip: #cbd5e1;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        min-height: 1.15rem;
+        padding: 0.08rem 0.32rem;
+        border-radius: 999px;
+        border: 0;
+        background: color-mix(in srgb, var(--agenda-chip) 30%, white 70%);
+        color: color-mix(in srgb, var(--c-text) 88%, black 12%);
+        font-size: 0.64rem;
+        font-weight: 700;
+      }
+      .agenda-chip--student {
+        cursor: pointer;
+        max-width: 100%;
+      }
+      .agenda-chip--own {
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agenda-chip) 75%, black 25%);
+      }
+      .agenda-chip--event {
+        max-width: 100%;
+      }
+      .agenda-chip--more {
+        background: rgba(148, 163, 184, 0.14);
+      }
+      .agenda-chip__dot {
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--agenda-chip) 82%, black 18%);
+      }
+      .agenda-chip__label {
+        line-height: 1;
+        min-width: 0;
+        max-width: 8.5rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .agenda-chip__note {
+        font-size: 0.74rem;
+        line-height: 1;
+      }
+      .agenda-popover {
+        position: fixed;
+        z-index: 1000;
+        min-width: 15rem;
+        max-width: min(26rem, calc(100vw - 1rem));
+        padding: 0.7rem 0.75rem;
+        border-radius: 0.95rem;
+        border: 1px solid color-mix(in srgb, var(--c-border) 86%, transparent);
+        background: color-mix(in srgb, var(--c-bg) 94%, white 6%);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+      }
+      .agenda-popover__summary {
+        margin: 0 0 0.55rem;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: var(--c-text-2);
+      }
+      .agenda-popover__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+      .agenda-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+      }
+      .agenda-modal__backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.34);
+      }
+      .agenda-modal__dialog {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(32rem, calc(100vw - 2rem));
+        max-height: min(80vh, 42rem);
+        overflow: auto;
+        border-radius: 1rem;
+        background: var(--c-bg);
+        border: 1px solid color-mix(in srgb, var(--c-border) 88%, transparent);
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+        padding: 0.95rem;
+      }
+      .agenda-modal__dialog--wide {
+        width: min(40rem, calc(100vw - 2rem));
+      }
+      .agenda-modal__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .agenda-modal__header h3 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      .agenda-modal__close {
+        border: 0;
+        background: transparent;
+        font-size: 1.2rem;
+        cursor: pointer;
+      }
+      .agenda-modal__field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.28rem;
+        margin-bottom: 0.7rem;
+      }
+      .agenda-modal__field span {
+        font-size: 0.73rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--c-text-2);
+      }
+      .agenda-modal__input,
+      .agenda-modal__textarea {
+        width: 100%;
+        border-radius: 0.75rem;
+        border: 1px solid color-mix(in srgb, var(--c-border) 88%, transparent);
+        background: var(--c-bg);
+        color: var(--c-text);
+        padding: 0.7rem 0.8rem;
+      }
+      .agenda-modal__actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.45rem;
+        margin-top: 0.8rem;
+      }
+      .agenda-student-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        max-height: 18rem;
+        overflow: auto;
+        padding-right: 0.2rem;
+      }
+      .agenda-student-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 0.6rem;
+        align-items: center;
+        padding: 0.5rem 0.65rem;
+        border-radius: 0.8rem;
+        background: rgba(148, 163, 184, 0.08);
+      }
+      .agenda-student-row__meta {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .agenda-student-row__meta strong,
+      .agenda-student-row__meta small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .dashboard-agenda-bullet {
+        display: inline-flex;
+        width: 0.28rem;
+        height: 0.28rem;
+        margin-left: 0.16rem;
+        border-radius: 999px;
+        background: var(--agenda-bullet, currentColor);
+        vertical-align: middle;
+      }
       .dashboard-tabulator .dashboard-attendance-month-group .tabulator-col-title {
         font-size: 0.76rem;
         letter-spacing: 0.02em;
@@ -4851,19 +5716,57 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-tabulator .dashboard-attendance-day-col .tabulator-col-title {
         font-size: 0.74rem;
         font-weight: 600;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.2rem;
+        display: block;
         overflow: visible;
+        width: 100%;
+      }
+      .dashboard-attendance-day-header {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-height: 2rem;
+        padding: 0.06rem 0 0.04rem;
+        box-sizing: border-box;
       }
       .dashboard-attendance-day-header-title {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         min-width: 0;
+        line-height: 1;
+      }
+      .dashboard-attendance-day-header-stats {
+        width: 100%;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 0.22rem;
+        font-size: 9px;
+        line-height: 1;
+        opacity: 0.3;
+      }
+      .dashboard-attendance-day-header-stat {
+        display: inline-flex;
+        align-items: flex-end;
+        justify-content: center;
+        min-width: 0;
+      }
+      .dashboard-attendance-day-header-stat[hidden] {
+        display: none;
+      }
+      .dashboard-attendance-day-header-stat--absent {
+        color: color-mix(in srgb, var(--c-text-2) 78%, transparent);
+      }
+      .dashboard-attendance-day-header-stat--late {
+        color: #f59e0b;
       }
       .dashboard-attendance-fill-btn {
+        position: absolute;
+        top: -0.02rem;
+        right: -0.08rem;
         flex-shrink: 0;
         display: inline-flex;
         align-items: center;
@@ -5211,11 +6114,20 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         }
         .dashboard-shell {
           grid-template-columns: 1fr;
+          height: auto;
+          max-height: none;
+          overflow: visible;
         }
         .dashboard-sidebar {
           position: static;
           height: auto;
+          max-height: none;
           overflow: visible;
+        }
+        .dashboard-main {
+          height: auto;
+          overflow: visible;
+          padding-right: 0;
         }
         .dashboard-shell[data-left-open="false"] .dashboard-sidebar,
         .dashboard-shell[data-left-open="true"] .dashboard-sidebar {
@@ -5283,6 +6195,20 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
           min-width: 8.2rem;
           max-width: 8.2rem;
         }
+        .agenda-config-bar {
+          width: 100%;
+        }
+        .agenda-grid {
+          min-width: 42rem;
+        }
+        .agenda-grid__day-head {
+          min-width: 6.8rem;
+        }
+        .agenda-modal__dialog,
+        .agenda-modal__dialog--wide {
+          width: calc(100vw - 1rem);
+          max-width: calc(100vw - 1rem);
+        }
         .dashboard-grid-actions {
           justify-content: flex-start;
           margin-left: 0;
@@ -5304,6 +6230,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 <a href="#student-profile" class="tab active">Perfil</a>
                 <a href="#student-deliveries" class="tab">Entregas</a>
                 <a href="#student-attendance" class="tab">Asistencia</a>
+                {studentAgendaVisible && <a href="#student-agenda" class="tab">Agenda</a>}
                 <a href="#student-log" class="tab">Log</a>
               </nav>
               <div class="dashboard-scope-controls">
@@ -5340,6 +6267,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
           <div class="dashboard-topbar-tabs">
             <div class:list={['tab', initialTeacherDashboardTab === 'main' ? 'active' : '']} data-dashboard-tab="main">Tabla</div>
             <div class:list={['tab', initialTeacherDashboardTab === 'admin' ? 'active' : '']} data-dashboard-tab="admin">Admin</div>
+            <div class:list={['tab', initialTeacherDashboardTab === 'agenda' ? 'active' : '']} data-dashboard-tab="agenda">Agenda</div>
             <div class:list={['tab', initialTeacherDashboardTab === 'log' ? 'active' : '']} data-dashboard-tab="log">Log</div>
           </div>
           <div class="dashboard-topbar-controls">
@@ -5361,26 +6289,32 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 aria-label="Buscar en admin"
               />
             </div>
-            <label class="dashboard-scope-field dashboard-scope-field--inline">
-              <select data-dashboard-scope="course" title="Curso">
-                {availableCourseMeta.length === 0 ? (
-                  <option value="">Sin cursos</option>
-                ) : (
-                  availableCourseMeta.map((course) => (
-                    <option value={course.courseId} selected={course.courseId === activeCourseId}>
-                      {course.title}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            <label class="dashboard-scope-field dashboard-scope-field--inline dashboard-scope-field--year">
-              <select data-dashboard-scope="year" title="Año">
-                {availableYears.map((year) => (
-                  <option value={year} selected={year === activeYear}>{year}</option>
-                ))}
-              </select>
-            </label>
+            <div
+              class="dashboard-topbar-context dashboard-topbar-context--scope"
+              data-dashboard-topbar-contexts="main,agenda,log"
+              hidden={initialTeacherDashboardTab === 'admin'}
+            >
+              <label class="dashboard-scope-field dashboard-scope-field--inline">
+                <select data-dashboard-scope="course" title="Curso">
+                  {availableCourseMeta.length === 0 ? (
+                    <option value="">Sin cursos</option>
+                  ) : (
+                    availableCourseMeta.map((course) => (
+                      <option value={course.courseId} selected={course.courseId === activeCourseId}>
+                        {course.title}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              <label class="dashboard-scope-field dashboard-scope-field--inline dashboard-scope-field--year">
+                <select data-dashboard-scope="year" title="Año">
+                  {availableYears.map((year) => (
+                    <option value={year} selected={year === activeYear}>{year}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <button
               type="button"
               class="dashboard-grid-btn dashboard-grid-btn--square dashboard-live-mode-toggle"
@@ -5392,8 +6326,8 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
             </button>
             <div
               class="dashboard-topbar-context"
-              data-dashboard-topbar-context="admin"
-              hidden={initialTeacherDashboardTab !== 'admin'}
+              data-dashboard-topbar-context="main"
+              hidden={initialTeacherDashboardTab !== 'main'}
             >
               <div
                 class="attendance-config-bar attendance-config-bar--toolbar"
@@ -5401,7 +6335,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 data-course-id={activeCourseId}
                 data-year={activeYear}
               >
-                <span class="attendance-config-label">Rango</span>
+                <span class="dashboard-control-label attendance-config-label">RANGO DE CURSADA</span>
                 <input
                   type="date"
                   class="attendance-config-input"
@@ -5416,12 +6350,6 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                   value={activeAttendanceConfig.endDate}
                   title="Fecha de fin de cuatrimestre"
                 />
-                <button
-                  type="button"
-                  class="dashboard-grid-btn"
-                  data-attendance-config-apply
-                  title="Aplicar rango de fechas"
-                >Aplicar</button>
               </div>
             </div>
             <div class="dashboard-topbar-context" data-dashboard-topbar-context="main" hidden={initialTeacherDashboardTab !== 'main'}>
@@ -5430,16 +6358,18 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 class="dashboard-grid-btn dashboard-grid-btn--square"
                 data-dashboard-fold-all="teacher-main"
                 title="Pliega todas las columnas de la tabla principal."
+                aria-label="Plegar todas las columnas"
               >
-                F
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline><line x1="19" y1="6" x2="19" y2="18"></line><polyline points="10 18 4 12 10 6"></polyline></svg>
               </button>
               <button
                 type="button"
                 class="dashboard-grid-btn dashboard-grid-btn--square"
                 data-dashboard-unfold-all="teacher-main"
                 title="Despliega todas las columnas de la tabla principal."
+                aria-label="Desplegar todas las columnas"
               >
-                U
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline><line x1="5" y1="6" x2="5" y2="18"></line><polyline points="14 18 20 12 14 6"></polyline></svg>
               </button>
               <button
                 type="button"
@@ -5448,15 +6378,24 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 title="Importar estudiantes desde portapapeles."
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-                <span>I</span>
               </button>
-              <button type="button" class="dashboard-grid-btn dashboard-grid-btn--icon" data-dashboard-download="teacher-main" title="Exportar la tabla principal como CSV.">
+              <button
+                type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square"
+                data-dashboard-download="teacher-main"
+                title="Exportar la tabla principal como CSV."
+                aria-label="Exportar la tabla principal como CSV"
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                CSV
               </button>
-              <button type="button" class="dashboard-grid-btn dashboard-grid-btn--icon" data-dashboard-import-csv title="Importar estudiantes desde archivo CSV.">
+              <button
+                type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square"
+                data-dashboard-import-csv
+                title="Importar estudiantes desde archivo CSV."
+                aria-label="Importar estudiantes desde archivo CSV"
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                CSV
               </button>
               <input type="file" accept=".csv,.tsv,.txt" data-dashboard-import-csv-input style="display:none">
               <button
@@ -5476,7 +6415,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 aria-label="Ocultar los abandonos"
                 aria-pressed="false"
               >
-                X
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.89 1 12c.92-2.6 2.65-4.77 4.94-6.22"/><path d="M10.58 10.58A2 2 0 0 0 12 14a2 2 0 0 0 1.42-.58"/><path d="M9.88 5.09A10.94 10.94 0 0 1 12 4c5 0 9.27 3.11 11 8a11.77 11.77 0 0 1-1.67 2.68"/><line x1="1" y1="1" x2="23" y2="23"></line></svg>
               </button>
               <button
                 type="button"
@@ -5499,7 +6438,15 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
               </button>
             </div>
             <div class="dashboard-topbar-context" data-dashboard-topbar-context="admin" hidden={initialTeacherDashboardTab !== 'admin'}>
-              <button type="button" class="dashboard-grid-btn" data-dashboard-download="admin" title="Exportar la tabla de admin como CSV.">CSV</button>
+              <button
+                type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square"
+                data-dashboard-download="admin"
+                title="Exportar la tabla de admin como CSV."
+                aria-label="Exportar la tabla de admin como CSV"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </button>
               <button
                 type="button"
                 class="dashboard-grid-btn dashboard-grid-btn--square dashboard-grid-btn--danger"
@@ -5536,6 +6483,16 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
 
           <div
             class="teacher-panel"
+            data-dashboard-tab-panel="agenda"
+            hidden={initialTeacherDashboardTab !== 'agenda'}
+          >
+            <div class="teacher-grid-shell">
+              <div class="dashboard-agenda-host" data-dashboard-agenda data-dashboard-agenda-mode="teacher"></div>
+            </div>
+          </div>
+
+          <div
+            class="teacher-panel"
             data-dashboard-tab-panel="log"
             hidden={initialTeacherDashboardTab !== 'log'}
           >
@@ -5551,7 +6508,15 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                     aria-label="Buscar en log de asistencia"
                   />
                   <div class="dashboard-grid-actions">
-                    <button type="button" class="dashboard-grid-btn" data-dashboard-download="attendance-log" title="Exportar el log de asistencias como CSV.">CSV log</button>
+                    <button
+                      type="button"
+                      class="dashboard-grid-btn dashboard-grid-btn--square"
+                      data-dashboard-download="attendance-log"
+                      title="Exportar el log de asistencias como CSV."
+                      aria-label="Exportar el log de asistencias como CSV"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </button>
                   </div>
                 </div>
                 <div class="dashboard-tabulator" data-dashboard-grid="attendance-log"></div>
@@ -5567,7 +6532,15 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                     aria-label="Buscar en comentarios y anotaciones"
                   />
                   <div class="dashboard-grid-actions">
-                    <button type="button" class="dashboard-grid-btn" data-dashboard-download="comments" title="Exportar comentarios y anotaciones como CSV.">CSV</button>
+                    <button
+                      type="button"
+                      class="dashboard-grid-btn dashboard-grid-btn--square"
+                      data-dashboard-download="comments"
+                      title="Exportar comentarios y anotaciones como CSV."
+                      aria-label="Exportar comentarios y anotaciones como CSV"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </button>
                   </div>
                 </div>
                 <p class="teacher-grid-note">
@@ -5766,6 +6739,13 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
             )}
           </section>
 
+          {studentAgendaVisible && (
+            <section class="student-section" id="student-agenda">
+              <h2 class="group-title">Agenda</h2>
+              <div class="dashboard-agenda-host" data-dashboard-agenda data-dashboard-agenda-mode="student"></div>
+            </section>
+          )}
+
           <section class="student-section" id="student-log">
             <h2 class="group-title">Log</h2>
             <div class="log-panel" data-log-panel data-log-scope="student" data-show-user="false">
@@ -5904,9 +6884,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
     <script type="application/json" id="dashboard-teacher-comments" set:html={teacherCommentsProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-admin" set:html={teacherAdminProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-annotations" set:html={teacherDashboardAnnotationsJson}></script>
+    <script type="application/json" id="dashboard-agenda-data" set:html={dashboardAgendaDataJson}></script>
 
     <script>
       import { mountDashboardTabulators } from '../scripts/dashboard-tabulator.ts';
+      import { mountDashboardAgenda } from '../scripts/dashboard-agenda.ts';
 
       const escapeHtml = (value) =>
         String(value ?? '')
@@ -6406,6 +7388,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       };
 
       let teardownDashboardTabulators = null;
+      let teardownDashboardAgenda = null;
       let teardownStudentWelcomeSync = null;
 
       const bootDashboardSidebar = () => {
@@ -6652,7 +7635,12 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
             teardownDashboardTabulators();
             teardownDashboardTabulators = null;
           }
+          if (typeof teardownDashboardAgenda === 'function') {
+            teardownDashboardAgenda();
+            teardownDashboardAgenda = null;
+          }
           teardownDashboardTabulators = mountDashboardTabulators(dashboardRoot);
+          teardownDashboardAgenda = mountDashboardAgenda(dashboardRoot);
         }
         teardownStudentWelcomeSync = initializeStudentWelcomeSync();
         initializeDashboardLogPanels();

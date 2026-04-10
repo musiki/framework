@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createClient } from '@supabase/supabase-js';
+import { isElevatedGlobalRole } from '../../../lib/roles';
 
 export const DELETE: APIRoute = async ({ params, locals }) => {
   const session = (locals as any).session;
@@ -17,17 +18,17 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 
   try {
-    const { data: user, error: userError } = await supabase
+    const { data: users, error: userError } = await supabase
       .from('User')
       .select('id, role')
-      .eq('email', currentUser.email)
-      .single();
+      .ilike('email', currentUser.email);
+    const user = (users || []).find((row: any) => isElevatedGlobalRole(row?.role)) || users?.[0];
 
     if (userError || !user) {
       return json({ error: 'User not found' }, 404);
     }
 
-    const isTeacher = String(user.role || '').trim().toLowerCase() === 'teacher';
+    const isTeacher = isElevatedGlobalRole(user.role);
     let deleteQuery = supabase.from('Submission').delete().eq('id', submissionId);
 
     if (!isTeacher) {

@@ -1,6 +1,7 @@
 import type { Session } from '@auth/core/types';
 import { createSupabaseServerClient, ensureDbUserFromSession } from '../forum-server';
 import { canonicalizeCourseId } from '../course-alias';
+import { isAdminGlobalRole, isElevatedGlobalRole, normalizeGlobalRole, toParticipantRole } from '../roles';
 
 const normalizeRole = (value: unknown) => String(value || '').trim().toLowerCase();
 export type LiveManageAccess = {
@@ -29,7 +30,7 @@ export async function resolveLiveParticipantRole(
 
   const supabase = createSupabaseServerClient();
   const dbUser = await ensureDbUserFromSession(supabase, session);
-  return normalizeRole(dbUser?.role) === 'teacher' ? 'teacher' : 'student';
+  return toParticipantRole(dbUser?.role);
 }
 
 export async function resolveLiveManageAccess(
@@ -88,7 +89,7 @@ export async function resolveLiveManageAccess(
   const normalizedUsers = userCandidates
     .map((row) => ({
       id: String((row as any)?.id || '').trim(),
-      role: normalizeRole((row as any)?.role),
+      role: normalizeGlobalRole((row as any)?.role),
     }))
     .filter((row) => Boolean(row.id));
 
@@ -125,7 +126,7 @@ export async function resolveLiveManageAccess(
     (row) => row.userId && row.courseId === normalizedCourseId,
   );
 
-  const teacherUser = normalizedUsers.find((row) => row.role === 'teacher') || null;
+  const teacherUser = normalizedUsers.find((row) => isElevatedGlobalRole(row.role)) || null;
   const teacherEnrollment = matchingEnrollments.find((row) => row.roleInCourse === 'teacher');
   const selectedEnrollment = teacherEnrollment || matchingEnrollments[0] || null;
   const selectedUser = selectedEnrollment
@@ -134,7 +135,8 @@ export async function resolveLiveManageAccess(
 
   const userRole = normalizeRole(selectedUser?.role);
   const enrollmentRole = normalizeRole(selectedEnrollment?.roleInCourse);
-  const canManage = enrollmentRole === 'teacher'
+  const canManage = isAdminGlobalRole(userRole)
+    || enrollmentRole === 'teacher'
     || (matchingEnrollments.length === 0 && userRole === 'teacher');
 
   return {

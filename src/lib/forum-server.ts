@@ -2,6 +2,7 @@ import type { Session } from '@auth/core/types';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getEntry } from 'astro:content';
 import { canonicalizeCourseId, getCourseAliases } from './course-alias';
+import { isElevatedGlobalRole } from './roles';
 
 export type ForumDbUser = {
   id: string;
@@ -201,7 +202,7 @@ export async function getForumCourseAccess(
   const isTeacherInCourse =
     isEnrolled &&
     (String((enrollment as any)?.roleInCourse || '').trim().toLowerCase() === 'teacher' ||
-      normalizedGlobalRole === 'teacher');
+      isElevatedGlobalRole(normalizedGlobalRole));
 
   return {
     canRead: isEnrolled,

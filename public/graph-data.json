@@ -214,6 +214,15 @@
       "group": "tags"
     },
     {
+      "id": "cursos/s123/forma y estructura/clase inaugural Seminarios",
+      "name": "Introducción a Seminario I",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "clase-inaugural-seminarios",
+      "img": ""
+    },
+    {
       "id": "cursos/s123/forma y estructura/forma y estructura",
       "name": "forma y estructura",
       "type": "document",

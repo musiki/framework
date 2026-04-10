@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
+import { isAdminGlobalRole, isElevatedGlobalRole } from '../../../lib/roles';
 
 const clean = (v: unknown) => String(v || '').trim();
 const cleanLower = (v: unknown) => clean(v).toLowerCase();
@@ -73,8 +74,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .from('Enrollment')
     .select('courseId, roleInCourse, userId')
     .in('userId', actingUserIds);
+  const isAdmin =
+    (actingUsers || []).some((user: any) => isAdminGlobalRole(user?.role));
   const isTeacher =
-    (actingUsers || []).some((user: any) => cleanLower(user?.role) === 'teacher')
+    (actingUsers || []).some((user: any) => isElevatedGlobalRole(user?.role))
     || (requesterEnrollments || []).some((e: any) => cleanLower(e?.roleInCourse) === 'teacher');
   if (!isTeacher) return new Response(JSON.stringify({ error: 'Only teachers can add students' }), { status: 403 });
 
@@ -88,7 +91,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (managedCourseId) manageableCourses.add(managedCourseId);
   }
 
-  if (!manageableCourses.has(canonicalCourse)) {
+  if (!isAdmin && !manageableCourses.has(canonicalCourse)) {
     return new Response(JSON.stringify({ error: 'You can only add students to your own courses' }), { status: 403 });
   }
 

@@ -155,6 +155,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .order('submittedAt', { ascending: false });
     if (existingError) throw existingError;
     const existingSubmission = existingRows?.[0] ?? null;
+    const duplicateSubmissionIds = (existingRows || [])
+      .slice(1)
+      .map((row: any) => cleanString(row?.id))
+      .filter(Boolean);
 
     const currentPayload =
       existingSubmission?.payload && typeof existingSubmission.payload === 'object' && !Array.isArray(existingSubmission.payload)
@@ -206,6 +210,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
           },
         ]);
       if (insertError) throw insertError;
+    }
+
+    if (duplicateSubmissionIds.length > 0) {
+      const { error: dedupeError } = await supabase
+        .from('Submission')
+        .delete()
+        .in('id', duplicateSubmissionIds);
+      if (dedupeError) {
+        console.error('Error deduplicating manual attendance submissions:', dedupeError);
+      }
     }
 
     return json({

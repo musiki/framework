@@ -1,6 +1,8 @@
 import type { APIRoute } from 'astro';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
 import { createSupabaseServerClient, ensureDbUserFromSession } from '../../../lib/forum-server';
+import { isElevatedGlobalRole } from '../../../lib/roles';
+import { promoteUserToTeacherIfNeeded } from '../../../lib/user-role-sync';
 
 export const POST: APIRoute = async ({ params, locals }) => {
   const session = (locals as any).session;
@@ -33,7 +35,7 @@ export const POST: APIRoute = async ({ params, locals }) => {
     }
 
     // Teachers can always enroll themselves; students need a CourseInvite
-    if (user.role !== 'teacher') {
+    if (!isElevatedGlobalRole(user.role)) {
       const email = String(currentUser.email || '').trim().toLowerCase();
       const { data: invite } = await supabase
         .from('CourseInvite')
@@ -71,9 +73,13 @@ export const POST: APIRoute = async ({ params, locals }) => {
     const { error: insertError } = await supabase.from('Enrollment').insert([{
       userId: user.id,
       courseId: normalizedCourseId,
-      roleInCourse: user.role === 'teacher' ? 'teacher' : 'student',
+      roleInCourse: isElevatedGlobalRole(user.role) ? 'teacher' : 'student',
     }]);
     if (insertError) throw insertError;
+
+    if (isElevatedGlobalRole(user.role)) {
+      await promoteUserToTeacherIfNeeded(supabase, user.id);
+    }
 
     return new Response(JSON.stringify({ success: true, message: 'Enrolled successfully' }), {
       status: 200,

@@ -3,6 +3,9 @@ import BaseHead from '../../../components/BaseHead.astro';
 import Header from '../../../components/Header.astro';
 import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '../../../lib/forum-server';
+import { getRoleBadgeLabel } from '../../../lib/dashboard-role';
+import { isElevatedGlobalRole, normalizeGlobalRole } from '../../../lib/roles';
+import { promoteUserToTeacherIfNeeded } from '../../../lib/user-role-sync';
 import { getResultIcon, getSubmissionAnswerText, getSubmissionResultState } from '../../../lib/submission-table';
 import { getEvalOptionMap } from '../../../lib/eval-option-map';
 import '../../../styles/theme.css';
@@ -16,9 +19,14 @@ const currentUser = session?.user;
 
 if (!currentUser) return Astro.redirect('/login');
 
-// Check if viewer is teacher
-const { data: viewer } = await supabase.from('User').select('role').eq('email', currentUser.email).single();
-if (viewer?.role !== 'teacher') return Astro.redirect('/dashboard');
+// Check if viewer is teacher/admin across possible duplicate rows
+const { data: viewerRows, error: viewerRowsError } = await supabase
+  .from('User')
+  .select('id, role')
+  .ilike('email', currentUser.email);
+if (viewerRowsError || !(viewerRows || []).some((row: any) => isElevatedGlobalRole(row?.role))) {
+  return Astro.redirect('/dashboard');
+}
 
 // Fetch Target User
 const { data: user, error: userError } = await supabase.from('User').select('*').eq('id', id).single();
@@ -31,10 +39,25 @@ const userShortName = String(user.name || user.email || user.id).trim().split(/\
 
 // Fetch Enrollments
 const { data: enrollments } = await supabase.from('Enrollment').select('*').eq('userId', id);
-const globalUserRole = String(user.role || '').trim().toLowerCase() === 'teacher' ? 'teacher' : 'student';
+let globalUserRole = normalizeGlobalRole(user.role);
 const hasTeacherCourseEnrollment = Array.isArray(enrollments)
   && enrollments.some((enrollment: any) => String(enrollment?.roleInCourse || '').trim().toLowerCase() === 'teacher');
-const normalizedUserRole = globalUserRole === 'teacher' || hasTeacherCourseEnrollment ? 'teacher' : 'student';
+if (hasTeacherCourseEnrollment && !isElevatedGlobalRole(globalUserRole)) {
+  try {
+    const promoted = await promoteUserToTeacherIfNeeded(supabase, String(user.id || ''));
+    if (promoted) {
+      user.role = 'teacher';
+      globalUserRole = 'teacher';
+    }
+  } catch (error) {
+    console.error('Error reconciling admin user teacher role:', error);
+  }
+}
+const normalizedUserRole = globalUserRole === 'admin'
+  ? 'admin'
+  : globalUserRole === 'teacher' || hasTeacherCourseEnrollment
+    ? 'teacher'
+    : 'student';
 
 // Fetch Submissions
 const { data: submissions } = await supabase.from('Submission').select('*').eq('userId', id).order('submittedAt', { ascending: false });
@@ -321,6 +344,7 @@ const attendanceDayGroups = (() => {
       .badge { padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
       .role-student { background: #e8f5e9; color: #2e7d32; }
       .role-teacher { background: #e3f2fd; color: #1565c0; }
+      .role-admin { background: #fde68a; color: #92400e; }
       
       .section { margin-bottom: 3rem; }
       .section h2 { border-bottom: 2px solid var(--c-border); padding-bottom: 0.5rem; margin-bottom: 1.5rem; }
@@ -479,9 +503,9 @@ const attendanceDayGroups = (() => {
               class={`badge role-${normalizedUserRole}`}
               data-user-role-badge
               data-course-teacher={hasTeacherCourseEnrollment ? 'true' : 'false'}
-              title={hasTeacherCourseEnrollment && globalUserRole !== 'teacher' ? 'Teacher por rol en curso' : 'Rol efectivo'}
+              title={hasTeacherCourseEnrollment && !isElevatedGlobalRole(globalUserRole) ? 'Teacher por rol en curso' : 'Rol efectivo'}
             >
-              {normalizedUserRole}
+              {getRoleBadgeLabel(normalizedUserRole)}
             </span>
           </div>
         </div>
@@ -491,6 +515,7 @@ const attendanceDayGroups = (() => {
             <select class="profile-role-select" data-role-select value={globalUserRole}>
               <option value="student">student</option>
               <option value="teacher">teacher</option>
+              <option value="admin">admin</option>
             </select>
             <button
               type="button"
@@ -503,8 +528,8 @@ const attendanceDayGroups = (() => {
             </button>
           </div>
           <p class="profile-role-note">
-            Teachers pueden promover o degradar otros usuarios desde esta vista.
-            {hasTeacherCourseEnrollment && globalUserRole !== 'teacher' ? ' Este usuario además figura como teacher en al menos un curso.' : ''}
+            Teachers y admins pueden promover o degradar otros usuarios desde esta vista.
+            {hasTeacherCourseEnrollment && !isElevatedGlobalRole(globalUserRole) ? ' Este usuario además figura como teacher en al menos un curso.' : ''}
           </p>
           <div class="profile-role-status" data-role-status aria-live="polite"></div>
         </section>
@@ -949,9 +974,18 @@ const attendanceDayGroups = (() => {
             select.defaultValue = nextRole;
             if (badge) {
               const hasCourseTeacher = badge.dataset.courseTeacher === 'true';
-              const effectiveRole = nextRole === 'teacher' || hasCourseTeacher ? 'teacher' : 'student';
-              badge.textContent = effectiveRole;
-              badge.classList.remove('role-student', 'role-teacher');
+              const effectiveRole = nextRole === 'admin'
+                ? 'admin'
+                : nextRole === 'teacher' || hasCourseTeacher
+                  ? 'teacher'
+                  : 'student';
+              const effectiveLabel = effectiveRole === 'admin'
+                ? 'Admin'
+                : effectiveRole === 'teacher'
+                  ? 'Teacher'
+                  : 'Student';
+              badge.textContent = effectiveLabel;
+              badge.classList.remove('role-student', 'role-teacher', 'role-admin');
               badge.classList.add(`role-${effectiveRole}`);
             }
             setStatus('Rol actualizado.', 'is-success');
