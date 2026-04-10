@@ -37,24 +37,40 @@ const formatStudentName = (name: string) => {
 };
 
 const buildUnifiedSlots = (data: AgendaData, isTeacher: boolean) => {
-  const boundaries = new Set<number>();
   const startTime = timeStringToMinutes(data.config.startTime || '09:00');
   const endTime = timeStringToMinutes(data.config.endTime || '18:00');
-  boundaries.add(startTime); boundaries.add(endTime);
-
-  data.events.forEach(e => {
-    if (e.startMinute >= startTime && e.startMinute <= endTime) boundaries.add(e.startMinute);
-    if (e.endMinute >= startTime && e.endMinute <= endTime) boundaries.add(e.endMinute);
-  });
-
   const slotMin = isTeacher ? getAgendaTeacherSlotMinutes(data.config) : getAgendaStudentSlotMinutes(data.config);
+
+  // Clamp events to [startTime, endTime] and sort. Overlapping events are handled
+  // by tracking the cursor so each segment only covers non-event time.
+  const eventSegments = (data.events || [])
+    .map(e => ({ start: Math.max(startTime, e.startMinute), end: Math.min(endTime, e.endMinute) }))
+    .filter(e => e.start < e.end)
+    .sort((a, b) => a.start - b.start);
+
+  const boundaries = new Set<number>();
+  boundaries.add(startTime);
+  boundaries.add(endTime);
+
+  // Add event boundaries so each event occupies its own slot(s).
+  eventSegments.forEach(e => { boundaries.add(e.start); boundaries.add(e.end); });
+
+  // Generate regular-grid boundaries only within free segments (gaps between events).
+  // This resets the quantisation after each event, preventing drift.
   let cursor = startTime;
+  for (const ev of eventSegments) {
+    // Fill the free gap before this event.
+    while (cursor + slotMin <= ev.start) { cursor += slotMin; boundaries.add(cursor); }
+    // Jump over the event; regular grid resumes from its end.
+    cursor = ev.end;
+  }
+  // Fill any remaining free time after the last event.
   while (cursor + slotMin <= endTime) { cursor += slotMin; boundaries.add(cursor); }
 
-  const sorted = Array.from(boundaries).sort((a,b) => a - b);
+  const sorted = Array.from(boundaries).sort((a, b) => a - b);
   const slots: AgendaSlot[] = [];
   for (let i = 0; i < sorted.length - 1; i++) {
-    slots.push({ startMinute: sorted[i], endMinute: sorted[i+1], label: minutesToTimeString(sorted[i]), rowIndex: i });
+    slots.push({ startMinute: sorted[i], endMinute: sorted[i + 1], label: minutesToTimeString(sorted[i]), rowIndex: i });
   }
   return slots;
 };
