@@ -1,5 +1,6 @@
 import {
   buildAgendaShareUrlPath,
+  buildAgendaEventColor,
   countAgendaMeetingDays,
   minutesToTimeString,
   normalizeAgendaComment,
@@ -75,6 +76,88 @@ const buildUnifiedSlots = (data: AgendaData, isTeacher: boolean) => {
   return slots;
 };
 
+// ── Optimistic local state ───────────────────────────────────────────────────
+// Applies an action payload to a cloned AgendaData immediately, before the
+// server call. The rerender() callback renders the result right away; the real
+// server write happens in the background. On error we rerender with the
+// original snapshot to roll back.
+let _optimisticSeq = 0;
+const tempId = () => `__opt_${++_optimisticSeq}_${Date.now().toString(36)}`;
+
+const blockDuration = (b: { startMinute: number; endMinute: number }) =>
+  Math.max(0, b.endMinute - b.startMinute);
+
+const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData => {
+  // Deep-clone via JSON so we never mutate the original snapshot.
+  const d: AgendaData = JSON.parse(JSON.stringify(src));
+
+  switch (p.action) {
+    case 'reserve-self': {
+      const student = d.students.find(s => s.studentId === d.viewer.userId);
+      if (student) {
+        for (const dateKey of (p.dateKeys as string[] || [])) {
+          student.blocks.push({ id: tempId(), dateKey, startMinute: p.startMinute, endMinute: p.endMinute, comment: '', updatedAt: new Date().toISOString() });
+        }
+        student.totalMinutes = student.blocks.reduce((s, b) => s + blockDuration(b), 0);
+      }
+      break;
+    }
+    case 'delete-block': {
+      d.students.forEach(s => {
+        s.blocks = s.blocks.filter(b => b.id !== p.blockId);
+        s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+      });
+      d.events = d.events.filter(e => e.id !== p.blockId);
+      break;
+    }
+    case 'assign-event': {
+      for (const dateKey of (p.dateKeys as string[] || [])) {
+        d.events.push({ id: tempId(), dateKey, startMinute: p.startMinute, endMinute: p.endMinute, text: p.text || '', color: buildAgendaEventColor(p.text || ''), updatedAt: new Date().toISOString() });
+      }
+      break;
+    }
+    case 'update-block': {
+      d.events = d.events.map(e => e.id === p.blockId ? { ...e, text: p.text ?? e.text } : e);
+      break;
+    }
+    case 'clear-range': {
+      const dates = new Set<string>(p.dateKeys || []);
+      d.students.forEach(s => {
+        s.blocks = s.blocks.filter(b => !dates.has(b.dateKey) || !blockOverlapsSlot(b, p.startMinute, p.endMinute));
+        s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+      });
+      d.events = d.events.filter(e => !dates.has(e.dateKey) || !blockOverlapsSlot(e, p.startMinute, p.endMinute));
+      break;
+    }
+    case 'assign-students': {
+      const ids = new Set<string>(p.studentIds || []);
+      for (const dateKey of (p.dateKeys as string[] || [])) {
+        d.students.forEach(s => {
+          if (!ids.has(s.studentId)) return;
+          s.blocks.push({ id: tempId(), dateKey, startMinute: p.startMinute, endMinute: p.endMinute, comment: '', updatedAt: new Date().toISOString() });
+          s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+        });
+      }
+      break;
+    }
+    case 'save-config': {
+      d.config = {
+        ...d.config,
+        startTime: p.startTime ?? d.config.startTime,
+        endTime: p.endTime ?? d.config.endTime,
+        teacherSlotMinutes: p.teacherSlotMinutes ?? d.config.teacherSlotMinutes,
+        studentSlotMinutes: p.studentSlotMinutes ?? d.config.studentSlotMinutes,
+        maxStudentMinutes: p.maxStudentMinutes ?? d.config.maxStudentMinutes,
+        minMeetings: p.minMeetings ?? d.config.minMeetings,
+        comment: p.comment ?? d.config.comment,
+      };
+      break;
+    }
+  }
+  return d;
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 const postAgendaAction = async (payload: Record<string, any>) => {
   const response = await fetch('/api/dashboard/agenda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result?.error || 'No se pudo actualizar la agenda'); }
@@ -130,7 +213,12 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     const eventMarkup = (isFirstSlotOfEvent && isFirstColOfEvent) ? `<span class="agenda-event-label" style="height: ${((primaryEvent.endMinute - primaryEvent.startMinute) / slotDur) * 100}%">${escapeHtml(primaryEvent.text)}</span>` : '';
     const studentMarkup = studentStarts.map(({ student, block }) => {
       const isOwn = student.studentId === viewerId;
-      return `<span class="agenda-student-block ${isOwn ? 'is-own' : ''}" style="background-color: ${escapeHtml(student.color)}; height: ${((block.endMinute - block.startMinute) / slotDur) * 100}%" ${isTeacher || isOwn ? `data-agenda-block-id="${escapeHtml(block.id)}"` : ''}><span class="agenda-student-block__name">${escapeHtml(formatStudentName(student.name))}</span></span>`;
+      const fullName = formatStudentName(student.name);
+      const nameParts = fullName.trim().split(/\s+/);
+      const nameHtml = nameParts.length > 1
+        ? `${escapeHtml(nameParts[0])}<br>${escapeHtml(nameParts.slice(1).join(' '))}`
+        : escapeHtml(fullName);
+      return `<span class="agenda-student-block ${isOwn ? 'is-own' : ''}" style="background-color: ${escapeHtml(student.color)}; height: ${((block.endMinute - block.startMinute) / slotDur) * 100}%" ${isTeacher || isOwn ? `data-agenda-block-id="${escapeHtml(block.id)}"` : ''}><span class="agenda-student-block__name">${nameHtml}</span></span>`;
     }).join('');
 
     const classes = ['agenda-cell', primaryEvent ? 'agenda-cell--event' : '', (studentStarts.length > 0) ? 'agenda-cell--busy' : ''].filter(Boolean).join(' ');
@@ -143,7 +231,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     <div class="agenda-shell">
       <div class="agenda-head">
         <div class="agenda-head__title">
-          <p class="agenda-head__eyebrow">Agenda: ${escapeHtml(data.courseTitle || data.courseId)}, ${escapeHtml(data.year)}</p>
+          <p class="agenda-head__eyebrow">${escapeHtml(data.courseTitle || data.courseId)}, ${escapeHtml(data.year)}</p>
           ${isTeacher ? `<div class="agenda-title-edit"><div class="agenda-title-edit__display ${teacherHeaderTitle ? '' : 'is-empty'}" data-agenda-comment-display role="button">${escapeHtml(teacherHeaderTitle || 'Título')}</div><input type="text" class="agenda-title-edit__input" data-agenda-comment-input-inline value="${escapeHtml(teacherHeaderTitle)}" hidden /></div>` : teacherHeaderTitle ? `<p class="agenda-head__note">${escapeHtml(teacherHeaderTitle)}</p>` : ''}
         </div>
         ${isTeacher ? `
@@ -216,7 +304,25 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
   };
 
   const reloadAfterAction = async (p: any) => {
-    try { await postAgendaAction(p); window.location.reload(); } catch (e: any) { window.alert(e.message || 'Error'); }
+    // 1. Close popover/modal and clear selection immediately.
+    if (popover) popover.hidden = true;
+    if (modal) modal.hidden = true;
+    clearSelection();
+
+    // 2. Optimistic: apply change locally and rerender right away so the user
+    //    sees the result without waiting for the network.
+    const snapshot = data;
+    if (rerender) rerender(applyLocalAction(data, p));
+
+    // 3. Persist to server in the background — no reload needed, optimistic
+    //    state is already correct. Temp IDs are reconciled on next navigation.
+    try {
+      await postAgendaAction(p);
+    } catch (e: any) {
+      // Rollback: rerender with the original snapshot.
+      if (rerender) rerender(snapshot);
+      window.alert(e.message || 'Error');
+    }
   };
 
   const openEventModal = (selection: SelectionRect, eventId?: string) => {
@@ -228,6 +334,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     modal.querySelector('[data-save]')?.addEventListener('click', async () => {
       const text = modal.querySelector<HTMLInputElement>('[data-text]')?.value;
       if (!text) return;
+      modal.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = true; });
       await reloadAfterAction({ action: existing ? 'update-block' : 'assign-event', courseId: data.courseId, year: data.year, blockId: eventId, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute, text });
     });
   };
@@ -245,6 +352,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     modal.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => modal.hidden = true));
     modal.querySelector('[data-save]')?.addEventListener('click', async () => {
       if (selectedIds.size === 0) return;
+      modal.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = true; });
       await reloadAfterAction({ action: 'assign-students', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute, studentIds: Array.from(selectedIds) });
     });
   };

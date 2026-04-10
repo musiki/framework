@@ -5156,6 +5156,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        position: relative;
         min-width: 1.5rem;
         padding: 0.1rem 0.15rem;
         border-radius: 0;
@@ -5191,6 +5192,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-link) 55%, transparent);
       }
       .dashboard-agenda-host {
+        position: relative;
         width: 100%;
         max-width: 100%;
         overflow: hidden;
@@ -5254,6 +5256,46 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         max-width: 100%;
         overflow: hidden;
       }
+      /* Student view: blocks fill the cell with 4px margin on all sides. */
+      [data-dashboard-agenda-mode="student"] .agenda-student-block {
+        position: absolute;
+        inset: 4px;
+        height: auto !important;
+        width: auto;
+        padding: 0.3rem 0.5rem;
+        border-radius: 0.4rem;
+        max-width: none;
+        overflow: visible;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        align-items: flex-start;
+      }
+      [data-dashboard-agenda-mode="student"] .agenda-student-block__name {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+        line-height: 1.3;
+        word-break: break-word;
+      }
+      .agenda-veil {
+        position: absolute;
+        inset: 0;
+        z-index: 99;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(3px);
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--c-fg-dim, #888);
+        border-radius: 0.5rem;
+        pointer-events: all;
+        user-select: none;
+      }
+      :root.dark .agenda-veil {
+        background: rgba(20, 20, 28, 0.72);
+      }
+      .agenda-veil[hidden] { display: none; }
       .agenda-shell {
         display: flex;
         flex-direction: column;
@@ -5465,7 +5507,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .agenda-cell {
         position: relative;
         width: 100%;
-        min-height: 2.45rem;
+        min-height: 3.24rem;
         border: 0;
         background: transparent;
         padding: 0.25rem;
@@ -5525,6 +5567,14 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         gap: 0.18rem;
         align-items: flex-start;
         width: 100%;
+      }
+      /* In student view the content pane fills the cell so blocks can use inset. */
+      [data-dashboard-agenda-mode="student"] .agenda-cell__content {
+        position: absolute;
+        inset: 0;
+        flex-wrap: nowrap;
+        flex-direction: column;
+        gap: 0;
       }
       .agenda-chip {
         --agenda-chip: #cbd5e1;
@@ -5694,13 +5744,14 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         white-space: nowrap;
       }
       .dashboard-agenda-bullet {
-        display: inline-flex;
-        width: 0.28rem;
-        height: 0.28rem;
-        margin-left: 0.16rem;
-        border-radius: 999px;
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
         background: var(--agenda-bullet, currentColor);
-        vertical-align: middle;
+        pointer-events: none;
       }
       .dashboard-tabulator .dashboard-attendance-month-group .tabulator-col-title {
         font-size: 0.76rem;

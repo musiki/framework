@@ -239,6 +239,24 @@ const hydrateAgendaAttendanceBullets = () => {
   agendaAttendanceBulletByCellKey.clear();
   const agendaData = parseJsonScript<any>('dashboard-agenda-data', null);
   const students = Array.isArray(agendaData?.students) ? agendaData.students : [];
+
+  // Only paint bullets for dates that are actual columns in the agenda grid.
+  // Blocks on other dates (stale, different course, wrong year) are ignored.
+  const validDateKeys = new Set<string>(
+    (Array.isArray(agendaData?.dates) ? agendaData.dates : [])
+      .map((d: any) => normalizeText(d?.dateKey || ''))
+      .filter(Boolean),
+  );
+
+  // Parse HH:MM → minutes without importing the agenda lib.
+  const parseHHMM = (t: unknown) => {
+    const m = normalizeText(t).match(/^(\d{1,2}):(\d{2})$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
+  };
+  const agendaStart = parseHHMM(agendaData?.config?.startTime);
+  const agendaEnd = parseHHMM(agendaData?.config?.endTime);
+  const hasTimeWindow = agendaStart >= 0 && agendaEnd > agendaStart;
+
   students.forEach((student: any) => {
     const studentId = normalizeText(student?.studentId || '');
     const color = normalizeText(student?.color || '');
@@ -246,7 +264,14 @@ const hydrateAgendaAttendanceBullets = () => {
     const blocks = Array.isArray(student?.blocks) ? student.blocks : [];
     blocks.forEach((block: any) => {
       const dateKey = normalizeText(block?.dateKey || '');
-      if (!dateKey) return;
+      // Skip dates not visible in the agenda grid.
+      if (!dateKey || !validDateKeys.has(dateKey)) return;
+      // Skip blocks whose time falls entirely outside the configured window.
+      if (hasTimeWindow) {
+        const bStart = Number(block?.startMinute ?? 0);
+        const bEnd = Number(block?.endMinute ?? 0);
+        if (bEnd <= agendaStart || bStart >= agendaEnd) return;
+      }
       const mapKey = buildAgendaAttendanceCellKey(studentId, dateKey);
       if (!agendaAttendanceBulletByCellKey.has(mapKey)) {
         agendaAttendanceBulletByCellKey.set(mapKey, color);
