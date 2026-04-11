@@ -2359,6 +2359,8 @@ const dashboardAgendaStudents = Array.from(
   const user = agendaSourceUsersById.get(studentId) || allUsersById.get(studentId) || null;
   const payload = agendaStudentPayloadById.get(studentId) || null;
   const blocks = Array.isArray(payload?.blocks) ? payload.blocks : [];
+  const metaKey = `${normalizeTextLower(activeCourseId)}::${activeYear}::${studentId}`;
+  const studentMeta = courseStudentMetaByKey.get(metaKey) || null;
   return {
     studentId,
     name: String(user?.name || user?.email || studentId || 'Estudiante'),
@@ -2366,6 +2368,7 @@ const dashboardAgendaStudents = Array.from(
     color: String(payload?.color || buildAgendaStudentColor(studentId)),
     totalMinutes: sumAgendaBlocksMinutes(blocks),
     blocks,
+    grupo: studentMeta?.grupo || '',
   };
 });
 
@@ -2387,6 +2390,10 @@ const dashboardAgendaData = {
   viewer: {
     userId: String(dbUser?.id || ''),
     isTeacher,
+    grupo: (() => {
+      const metaKey = `${normalizeTextLower(activeCourseId)}::${activeYear}::${String(dbUser?.id || '')}`;
+      return courseStudentMetaByKey.get(metaKey)?.grupo || '';
+    })(),
   },
   shareUrlPath: buildAgendaShareUrlPath(activeCourseId, activeYear),
 };
@@ -5228,6 +5235,27 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .agenda-event-label::-webkit-scrollbar {
         display: none; /* Ocultar scrollbar en Chrome/Safari */
       }
+      .agenda-event-virtual-icon {
+        display: inline-block;
+        width: 0.9em;
+        height: 0.9em;
+        vertical-align: middle;
+        margin-left: 0.25em;
+        flex-shrink: 0;
+        opacity: 0.8;
+      }
+      .agenda-cell--event-muted .agenda-event-label {
+        color: #555;
+        font-style: italic;
+      }
+      .agenda-modal__check-row {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0.4rem 0 0.2rem;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
       .agenda-cell.is-event-top {
         border-top-left-radius: 0.55rem;
         border-top-right-radius: 0.55rem;
@@ -5453,6 +5481,8 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         width: 100%;
         max-width: 100%;
         overflow-x: auto;
+        overflow-y: auto;
+        max-height: 72vh;
         display: block;
         -webkit-overflow-scrolling: touch;
         border-radius: 1rem;

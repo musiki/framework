@@ -402,6 +402,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
 
       const currentEventsPayload = await loadEventsPayload(supabase, eventsAssignmentId, courseId, year);
+      const isVirtual = Boolean(body?.virtual);
       const nextEvents = selection.dateKeys.map((dateKey) => ({
         id: createAgendaBlockId(),
         dateKey,
@@ -409,6 +410,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         endMinute: selection.endMinute,
         text,
         color: buildAgendaEventColor(text),
+        virtual: isVirtual,
         updatedAt: new Date().toISOString(),
       })) as AgendaEvent[];
 
@@ -502,6 +504,97 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
 
       return json({ success: true });
+    }
+
+    if (action === 'reserve-group') {
+      const grupo = normalizeText(body?.grupo);
+      if (!grupo) return json({ error: 'grupo es requerido' }, 400);
+      const selection = normalizeSelectedRange(body);
+      if (!selection) return json({ error: 'Rango inválido' }, 400);
+
+      // Load student meta to find members of the grupo
+      const metaAssignmentId = `__meta__:course-student-profile:${encodeURIComponent(courseId)}:${year}`;
+      const { data: metaRows, error: metaError } = await supabase
+        .from('Submission')
+        .select('userId, payload')
+        .eq('assignmentId', metaAssignmentId);
+      if (metaError) throw metaError;
+
+      const groupStudentIds = (Array.isArray(metaRows) ? metaRows : [])
+        .filter((row: any) => normalizeText(row?.payload?.grupo) === grupo)
+        .map((row: any) => normalizeText(row?.userId))
+        .filter(Boolean) as string[];
+
+      if (groupStudentIds.length === 0) {
+        return json({ error: `No hay estudiantes en el Grupo ${grupo}` }, 400);
+      }
+
+      // Students can only reserve for their own group
+      if (!canManage && !groupStudentIds.includes(dbUser.id)) {
+        return json({ error: 'No pertenecés a este grupo' }, 403);
+      }
+
+      const { data: configRows, error: configError } = await supabase
+        .from('Submission')
+        .select('payload, submittedAt')
+        .eq('assignmentId', configAssignmentId)
+        .order('submittedAt', { ascending: false });
+      if (configError) throw configError;
+      const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
+
+      await ensureMetaAssignment(supabase, studentAssignmentId, courseId, `${courseId}/__meta__/agenda-student/${year}`);
+      const existingRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      const existingByStudentId = new Map<string, any>();
+      existingRows.forEach((row) => {
+        const sid = normalizeText((row as any)?.payload?.studentId || row?.userId);
+        if (sid && !existingByStudentId.has(sid)) existingByStudentId.set(sid, row);
+      });
+
+      for (const studentId of groupStudentIds) {
+        const existingPayload = normalizeAgendaStudentPayload(
+          existingByStudentId.get(studentId)?.payload || {},
+          courseId, year, studentId,
+        ) || { courseId, year, studentId, color: '', blocks: [], updatedAt: '' };
+
+        const nextBlocks = selection.dateKeys.map((dateKey) => ({
+          id: createAgendaBlockId(),
+          dateKey,
+          startMinute: selection.startMinute,
+          endMinute: selection.endMinute,
+          comment: '',
+          updatedAt: new Date().toISOString(),
+        })) as AgendaBlock[];
+
+        const mergedBlocks = replaceBlocksInRange(
+          existingPayload.blocks || [],
+          new Set(selection.dateKeys),
+          selection.startMinute,
+          selection.endMinute,
+          nextBlocks,
+        );
+
+        const totalMinutes = sumBlocksMinutes(mergedBlocks);
+        if (totalMinutes > clampAgendaMaxStudentMinutes(currentConfig.maxStudentMinutes)) {
+          return json({ error: `El Grupo ${grupo} supera el tiempo máximo por estudiante` }, 400);
+        }
+
+        await upsertSubmission({
+          supabase,
+          assignmentId: studentAssignmentId,
+          userId: studentId,
+          payload: {
+            __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+            courseId, year, studentId,
+            color: existingPayload.color || '',
+            blocks: mergedBlocks,
+            updatedAt: new Date().toISOString(),
+            updatedBy: dbUser.id,
+            updatedByEmail: normalizeText(session?.user?.email),
+          },
+        });
+      }
+
+      return json({ success: true, grupo, studentIds: groupStudentIds });
     }
 
     if (action === 'reserve-self') {
@@ -753,6 +846,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           dateKey: normalizeAgendaDateKey(body?.dateKey || event.dateKey),
           startMinute: normalizeMinute(body?.startMinute ?? event.startMinute),
           endMinute: normalizeMinute(body?.endMinute ?? event.endMinute),
+          virtual: body?.virtual !== undefined ? Boolean(body.virtual) : event.virtual,
           updatedAt: new Date().toISOString(),
         };
         const nextEvents = [...currentEvents.events];

@@ -2,6 +2,7 @@ import {
   buildAgendaShareUrlPath,
   buildAgendaEventColor,
   countAgendaMeetingDays,
+  isMutedAgendaEvent,
   minutesToTimeString,
   normalizeAgendaComment,
   normalizeAgendaDateKey,
@@ -15,9 +16,9 @@ import {
 type AgendaDateColumn = { dateKey: string; label?: string; isoWeekday?: number; };
 type AgendaConfig = { courseId: string; year: string; startTime: string; endTime: string; teacherSlotMinutes: number; studentSlotMinutes: number; maxStudentMinutes: number; minMeetings: number; comment: string; updatedAt: string; };
 type AgendaBlock = { id: string; dateKey: string; startMinute: number; endMinute: number; comment?: string; updatedAt?: string; };
-type AgendaStudent = { studentId: string; name: string; email: string; color: string; totalMinutes: number; blocks: AgendaBlock[]; };
-type AgendaEvent = { id: string; dateKey: string; startMinute: number; endMinute: number; text: string; color: string; updatedAt?: string; };
-type AgendaData = { courseId: string; courseTitle: string; year: string; dates: AgendaDateColumn[]; config: AgendaConfig; students: AgendaStudent[]; events: AgendaEvent[]; viewer: { userId: string; isTeacher: boolean; }; shareUrlPath?: string; };
+type AgendaStudent = { studentId: string; name: string; email: string; color: string; totalMinutes: number; blocks: AgendaBlock[]; grupo?: string; };
+type AgendaEvent = { id: string; dateKey: string; startMinute: number; endMinute: number; text: string; color: string; virtual?: boolean; updatedAt?: string; };
+type AgendaData = { courseId: string; courseTitle: string; year: string; dates: AgendaDateColumn[]; config: AgendaConfig; students: AgendaStudent[]; events: AgendaEvent[]; viewer: { userId: string; isTeacher: boolean; grupo?: string; }; shareUrlPath?: string; };
 type AgendaSlot = { startMinute: number; endMinute: number; label: string; rowIndex: number; };
 type SelectionRect = { rowStart: number; rowEnd: number; colStart: number; colEnd: number; dateKeys: string[]; startMinute: number; endMinute: number; };
 
@@ -112,12 +113,12 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
     }
     case 'assign-event': {
       for (const dateKey of (p.dateKeys as string[] || [])) {
-        d.events.push({ id: tempId(), dateKey, startMinute: p.startMinute, endMinute: p.endMinute, text: p.text || '', color: buildAgendaEventColor(p.text || ''), updatedAt: new Date().toISOString() });
+        d.events.push({ id: tempId(), dateKey, startMinute: p.startMinute, endMinute: p.endMinute, text: p.text || '', color: buildAgendaEventColor(p.text || ''), virtual: Boolean(p.virtual), updatedAt: new Date().toISOString() });
       }
       break;
     }
     case 'update-block': {
-      d.events = d.events.map(e => e.id === p.blockId ? { ...e, text: p.text ?? e.text } : e);
+      d.events = d.events.map(e => e.id === p.blockId ? { ...e, text: p.text ?? e.text, virtual: p.virtual !== undefined ? Boolean(p.virtual) : e.virtual } : e);
       break;
     }
     case 'clear-range': {
@@ -134,6 +135,17 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
       for (const dateKey of (p.dateKeys as string[] || [])) {
         d.students.forEach(s => {
           if (!ids.has(s.studentId)) return;
+          s.blocks.push({ id: tempId(), dateKey, startMinute: p.startMinute, endMinute: p.endMinute, comment: '', updatedAt: new Date().toISOString() });
+          s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+        });
+      }
+      break;
+    }
+    case 'reserve-group': {
+      const grupo = normalizeText(p.grupo);
+      const targetStudents = d.students.filter(s => normalizeText(s.grupo) === grupo);
+      for (const dateKey of (p.dateKeys as string[] || [])) {
+        targetStudents.forEach(s => {
           s.blocks.push({ id: tempId(), dateKey, startMinute: p.startMinute, endMinute: p.endMinute, comment: '', updatedAt: new Date().toISOString() });
           s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
         });
@@ -209,8 +221,9 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
         .map(block => ({ student, block }))
       );
 
+    const MONITOR_SVG = `<svg class="agenda-event-virtual-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-label="evento virtual" title="evento virtual"><path d="M3 4.75A1.75 1.75 0 0 1 4.75 3h14.5A1.75 1.75 0 0 1 21 4.75v10.5A1.75 1.75 0 0 1 19.25 17h-5.5l1.2 3h1.8a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5h1.8l1.2-3h-6.5A1.75 1.75 0 0 1 3 15.25V4.75Zm1.5 0v10.5c0 .14.11.25.25.25h14.5a.25.25 0 0 0 .25-.25V4.75a.25.25 0 0 0-.25-.25H4.75a.25.25 0 0 0-.25.25Zm6.36 15.25h2.28l-1-2.5h-.28l-1 2.5Z"/></svg>`;
     const slotDur = slot.endMinute - slot.startMinute;
-    const eventMarkup = (isFirstSlotOfEvent && isFirstColOfEvent) ? `<span class="agenda-event-label" style="height: ${((primaryEvent.endMinute - primaryEvent.startMinute) / slotDur) * 100}%">${escapeHtml(primaryEvent.text)}</span>` : '';
+    const eventMarkup = (isFirstSlotOfEvent && isFirstColOfEvent) ? `<span class="agenda-event-label" style="height: ${((primaryEvent.endMinute - primaryEvent.startMinute) / slotDur) * 100}%">${escapeHtml(primaryEvent.text)}${primaryEvent.virtual ? MONITOR_SVG : ''}</span>` : '';
     const studentMarkup = studentStarts.map(({ student, block }) => {
       const isOwn = student.studentId === viewerId;
       const fullName = formatStudentName(student.name);
@@ -221,8 +234,11 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
       return `<span class="agenda-student-block ${isOwn ? 'is-own' : ''}" style="background-color: ${escapeHtml(student.color)}; height: ${((block.endMinute - block.startMinute) / slotDur) * 100}%" ${isTeacher || isOwn ? `data-agenda-block-id="${escapeHtml(block.id)}"` : ''}><span class="agenda-student-block__name">${nameHtml}</span></span>`;
     }).join('');
 
-    const classes = ['agenda-cell', primaryEvent ? 'agenda-cell--event' : '', (studentStarts.length > 0) ? 'agenda-cell--busy' : ''].filter(Boolean).join(' ');
-    const style = primaryEvent ? `--agenda-event-color: ${escapeHtml(primaryEvent.color || '#f2d0a9')};` : '';
+    const effectiveEventColor = primaryEvent
+      ? isMutedAgendaEvent(primaryEvent.text) ? '#b8bcc8' : primaryEvent.color || '#f2d0a9'
+      : '';
+    const classes = ['agenda-cell', primaryEvent ? 'agenda-cell--event' : '', primaryEvent && isMutedAgendaEvent(primaryEvent.text) ? 'agenda-cell--event-muted' : '', (studentStarts.length > 0) ? 'agenda-cell--busy' : ''].filter(Boolean).join(' ');
+    const style = primaryEvent ? `--agenda-event-color: ${escapeHtml(effectiveEventColor)};` : '';
 
     return { classes, style, markup: `${eventMarkup}${studentMarkup}`, eventId: primaryEvent?.id || null };
   };
@@ -329,13 +345,14 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     if (!modal) return;
     const existing = eventId ? data.events.find(e => e.id === eventId) : null;
     modal.hidden = false;
-    modal.innerHTML = `<div class="agenda-modal__backdrop" data-close></div><div class="agenda-modal__dialog"><h3>${existing ? 'Editar Evento' : 'Asignar Evento'}</h3><input type="text" class="agenda-modal__input" data-text value="${existing?.text || ''}" placeholder="Título" /><div class="agenda-modal__actions"><button type="button" class="dashboard-grid-btn" data-close>Cancelar</button><button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-save>Guardar</button></div></div>`;
+    modal.innerHTML = `<div class="agenda-modal__backdrop" data-close></div><div class="agenda-modal__dialog"><h3>${existing ? 'Editar Evento' : 'Asignar Evento'}</h3><input type="text" class="agenda-modal__input" data-text value="${existing?.text || ''}" placeholder="Título" /><label class="agenda-modal__check-row"><input type="checkbox" data-virtual ${existing?.virtual ? 'checked' : ''} /><span>Virtual</span></label><div class="agenda-modal__actions"><button type="button" class="dashboard-grid-btn" data-close>Cancelar</button><button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-save>Guardar</button></div></div>`;
     modal.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => modal.hidden = true));
     modal.querySelector('[data-save]')?.addEventListener('click', async () => {
       const text = modal.querySelector<HTMLInputElement>('[data-text]')?.value;
       if (!text) return;
+      const virtual = modal.querySelector<HTMLInputElement>('[data-virtual]')?.checked || false;
       modal.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = true; });
-      await reloadAfterAction({ action: existing ? 'update-block' : 'assign-event', courseId: data.courseId, year: data.year, blockId: eventId, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute, text });
+      await reloadAfterAction({ action: existing ? 'update-block' : 'assign-event', courseId: data.courseId, year: data.year, blockId: eventId, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute, text, virtual });
     });
   };
 
@@ -357,6 +374,24 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     });
   };
 
+  const openGrupoAssignmentModal = (selection: SelectionRect, grupos: string[]) => {
+    if (!modal) return;
+    modal.hidden = false;
+    const grupoStudentCounts = grupos.map(g => ({
+      grupo: g,
+      count: (data.students || []).filter(s => normalizeText(s.grupo) === g).length,
+    }));
+    modal.innerHTML = `<div class="agenda-modal__backdrop" data-close></div><div class="agenda-modal__dialog"><h3>Asignar Grupo</h3><div class="agenda-student-list">${grupoStudentCounts.map(({ grupo, count }) => `<button type="button" class="dashboard-grid-btn" data-assign-grupo="${escapeHtml(grupo)}">Grupo ${escapeHtml(grupo)} <span style="opacity:.6;font-size:.8em">(${count})</span></button>`).join('')}</div><div class="agenda-modal__actions"><button type="button" class="dashboard-grid-btn" data-close>Cancelar</button></div></div>`;
+    modal.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { modal.hidden = true; }));
+    modal.querySelectorAll<HTMLButtonElement>('[data-assign-grupo]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const grupo = btn.dataset.assignGrupo || '';
+        modal.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = true; });
+        await reloadAfterAction({ action: 'reserve-group', courseId: data.courseId, year: data.year, grupo, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute });
+      });
+    });
+  };
+
   const openSelectionActions = (selection: SelectionRect, options: { pos?: { x: number; y: number }, targetBlockId?: string, targetEventId?: string } = {}) => {
     if (!popover) return;
     const ownBlocks = (data.students.find(s => s.studentId === viewerId)?.blocks || [])
@@ -364,19 +399,26 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     const firstOwnBlockId = options.targetBlockId || ownBlocks[0]?.id;
     const ev = options.targetEventId ? data.events.find(e => e.id === options.targetEventId) : data.events.find(ev => selection.dateKeys.includes(ev.dateKey) && ev.startMinute < selection.endMinute && ev.endMinute > selection.startMinute);
 
+    const viewerGrupo = normalizeText(data.viewer.grupo);
+    const allGrupos = [...new Set((data.students || []).map(s => normalizeText(s.grupo)).filter(Boolean))].sort();
+
     let html = '<div class="agenda-popover__actions">';
     if (isTeacher) {
       html += `<button type="button" class="dashboard-grid-btn" data-act="students">Alumnos</button>`;
+      if (allGrupos.length > 0) {
+        html += `<button type="button" class="dashboard-grid-btn" data-act="grupos">Grupos</button>`;
+      }
       html += `<button type="button" class="dashboard-grid-btn" data-act="event">Evento</button>`;
       if (ev) html += `<button type="button" class="dashboard-grid-btn" data-act="edit">Editar</button>`;
       html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="clear">Borrar Todo</button>`;
-      
-      const targetBlock = options.targetBlockId ? (data.students.flatMap(s => s.blocks).find(b => b.id === options.targetBlockId)) : null;
       if (options.targetBlockId || options.targetEventId) {
         html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="delete-block" data-block-id="${escapeHtml(options.targetBlockId || options.targetEventId || '')}">${options.targetEventId ? 'Eliminar Evento' : 'Eliminar Bloque'}</button>`;
       }
     } else {
       html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-act="reserve">Reservar</button>`;
+      if (viewerGrupo) {
+        html += `<button type="button" class="dashboard-grid-btn" data-act="reserve-group" data-grupo="${escapeHtml(viewerGrupo)}">Grupo ${escapeHtml(viewerGrupo)}</button>`;
+      }
       if (firstOwnBlockId) {
         const isOwn = (data.students.find(s => s.studentId === viewerId)?.blocks || []).some(b => b.id === firstOwnBlockId);
         if (isOwn) {
@@ -396,13 +438,18 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     }
 
     popover.querySelector('[data-act="students"]')?.addEventListener('click', (e) => { stopUiEvent(e); openStudentAssignmentModal(selection); });
+    popover.querySelector('[data-act="grupos"]')?.addEventListener('click', (e) => { stopUiEvent(e); openGrupoAssignmentModal(selection, allGrupos); });
     popover.querySelector('[data-act="event"]')?.addEventListener('click', (e) => { stopUiEvent(e); openEventModal(selection); });
     popover.querySelector('[data-act="edit"]')?.addEventListener('click', (e) => { stopUiEvent(e); openEventModal(selection, ev?.id); });
     popover.querySelector('[data-act="clear"]')?.addEventListener('click', (e) => { stopUiEvent(e); reloadAfterAction({ action: 'clear-range', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute }); });
     popover.querySelector('[data-act="reserve"]')?.addEventListener('click', (e) => { stopUiEvent(e); reloadAfterAction({ action: 'reserve-self', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute }); });
-    popover.querySelector('[data-act="delete-block"]')?.addEventListener('click', (e) => { 
+    popover.querySelector('[data-act="reserve-group"]')?.addEventListener('click', (e) => {
+      const grupo = (e.currentTarget as HTMLElement).dataset.grupo || '';
+      stopUiEvent(e); reloadAfterAction({ action: 'reserve-group', courseId: data.courseId, year: data.year, grupo, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute });
+    });
+    popover.querySelector('[data-act="delete-block"]')?.addEventListener('click', (e) => {
       const bid = (e.currentTarget as HTMLElement).dataset.blockId;
-      stopUiEvent(e); reloadAfterAction({ action: 'delete-block', courseId: data.courseId, year: data.year, blockId: bid }); 
+      stopUiEvent(e); reloadAfterAction({ action: 'delete-block', courseId: data.courseId, year: data.year, blockId: bid });
     });
   };
 

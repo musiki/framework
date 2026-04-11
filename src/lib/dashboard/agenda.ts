@@ -44,6 +44,7 @@ export type AgendaEvent = {
   endMinute: number;
   text: string;
   color: string;
+  virtual?: boolean;
   updatedAt: string;
 };
 
@@ -183,10 +184,16 @@ export const buildAgendaStudentColor = (seed: unknown) => {
   return AGENDA_STUDENT_PALETTE[hashString(normalized) % AGENDA_STUDENT_PALETTE.length];
 };
 
+const AGENDA_MUTED_EVENT_TEXTS = new Set(['feriado', 'paro']);
+
 export const buildAgendaEventColor = (seed: unknown) => {
   const normalized = normalizeText(seed) || 'evento';
+  if (AGENDA_MUTED_EVENT_TEXTS.has(normalized.toLowerCase())) return '#b8bcc8';
   return AGENDA_EVENT_PALETTE[hashString(normalized.toLowerCase()) % AGENDA_EVENT_PALETTE.length];
 };
+
+export const isMutedAgendaEvent = (text: unknown) =>
+  AGENDA_MUTED_EVENT_TEXTS.has(normalizeText(text).toLowerCase());
 
 export const buildAgendaDefaultConfig = (courseId: string, year: string): AgendaConfig => ({
   courseId,
@@ -309,7 +316,8 @@ export const normalizeAgendaEventsPayload = (payload: any, courseId: string, yea
       return {
         ...block,
         text,
-        color: normalizeAgendaHexColor(event?.color, buildAgendaEventColor(text)),
+        color: isMutedAgendaEvent(text) ? buildAgendaEventColor(text) : normalizeAgendaHexColor(event?.color, buildAgendaEventColor(text)),
+        virtual: Boolean(event?.virtual),
       } as AgendaEvent;
     })
     .filter((event): event is AgendaEvent => Boolean(event));
