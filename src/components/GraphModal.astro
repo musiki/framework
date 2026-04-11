@@ -490,7 +490,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     const modal = document.getElementById('graph-modal');
     const isOpen = modal?.classList.contains('visible');
 
-    if (e.key.toLowerCase() === 'g') {
+    if (e.key.toLowerCase() === 'g' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       toggleModal();
     } else if (e.key.toLowerCase() === 't' && isOpen && isLoggedIn) {
