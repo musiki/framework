@@ -476,6 +476,18 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
       };
       reloadAfterAction(p);
     }));
+
+    host.querySelector<HTMLButtonElement>('[data-agenda-share]')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        const prev = btn.textContent;
+        btn.textContent = '✓ Copiado';
+        setTimeout(() => { btn.textContent = prev; }, 1800);
+      } catch {
+        window.prompt('Copiá este link para compartir la agenda:', shareUrl);
+      }
+    });
   }
 
   const handleDocClick = (e: MouseEvent) => {
