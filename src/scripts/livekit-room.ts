@@ -15,6 +15,7 @@ import { formatCountdown, getRemainingMs } from '../lib/live/countdown.mjs';
 import { normalizeLayoutMode, setLayout } from './layout-controller';
 import { createPresentationController } from './presentation';
 import { createRoomChatController } from './room/chat';
+import { createClaseController } from './room/clase/controller';
 import { createRoomDeviceSelectController, createRoomMicMeterController } from './room/devices';
 import { createRoomNotesController } from './room/notes';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
@@ -10082,6 +10083,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const slideState = normalizeSlideState((payload as { state?: SlideState }).state);
     if (!slideState) return;
     currentSlideState = slideState;
+    window.dispatchEvent(new CustomEvent('musiki:clase-slide-changed', { detail: { indexh: slideState.indexh } }));
     if (canLeadSession()) {
       void publishSlideState(slideState);
     }
@@ -10288,6 +10290,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           currentPresentationMediaState = null;
           pendingRemotePresentationMediaState = null;
           lastPublishedPresentationMediaKey = '';
+          window.dispatchEvent(new CustomEvent('musiki:clase-presentation-changed', {
+            detail: { lessonId: resolvePresentationPageSlug(committedHref) || null },
+          }));
         } else {
           presentation.clear();
           syncPresentationSelection(null);
@@ -10297,6 +10302,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           currentPresentationMediaState = null;
           pendingRemotePresentationMediaState = null;
           lastPublishedPresentationMediaKey = '';
+          window.dispatchEvent(new CustomEvent('musiki:clase-presentation-changed', { detail: { lessonId: null } }));
         }
 
         writeQueryState();
@@ -11179,6 +11185,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           indexv: message.indexv,
           zoom: message.zoom,
         };
+        window.dispatchEvent(new CustomEvent('musiki:clase-slide-changed', { detail: { indexh: message.indexh } }));
         applyRemoteSlideState(currentSlideState);
         return;
       }
@@ -12815,6 +12822,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   notesController.bind();
   // ── END NOTAS ─────────────────────────────────────────────────────────────
+
+  // ── CLASE ─────────────────────────────────────────────────────────────────
+  const claseController = createClaseController({
+    contentEl: root.querySelector<HTMLElement>('[data-clase-content]'),
+    placeholderEl: root.querySelector<HTMLElement>('[data-clase-placeholder]'),
+    sectionEl: root.querySelector<HTMLElement>('[data-clase-section]'),
+  });
+  claseController.bind();
+  // ── END CLASE ─────────────────────────────────────────────────────────────
 
   const beginReverseMicState = async () => {
     if (room.state !== ConnectionState.Connected || reverseMicKeyActive) return;
