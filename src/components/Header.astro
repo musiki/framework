@@ -906,44 +906,143 @@ const withActiveCourse = (href: string) => {
 		name: string;
 		image: string;
 		role: string;
+		lastActiveAt: number; // ms timestamp
 	};
 
 	const PRESENCE_CHANNEL = 'musiki:presence:online';
-	const MAX_SHOWN = 6;
+	const ACTIVE_MS = 60_000;          // considered "active" if within 60s
+	const RETRACK_INTERVAL_MS = 30_000; // re-track at most every 30s on activity
 
 	const escHtml = (s: string) =>
 		s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-	const renderAvatar = (u: PresenceUser): string => {
+	const AVATAR_BASE = 'width:26px;height:26px;border-radius:50%;border:2px solid var(--c-bg);box-sizing:content-box;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;';
+
+	const avatarHtml = (u: PresenceUser): string => {
 		const initial = String(u.name || 'U').trim().charAt(0).toUpperCase();
 		const label = escHtml(u.name || 'Usuario online');
 		if (u.image) {
-			return `<img src="${escHtml(u.image)}" alt="${label}" title="${label}" class="user-avatar online-user-avatar" loading="lazy" />`;
+			return `<img src="${escHtml(u.image)}" alt="${label}" title="${label}" style="${AVATAR_BASE}object-fit:cover;" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'" /><span style="${AVATAR_BASE}display:none;background:color-mix(in srgb,#888 40%,transparent);color:#fff;font-size:0.65rem;font-weight:700;" title="${label}" aria-hidden="true">${escHtml(initial)}</span>`;
 		}
-		return `<span class="user-avatar user-avatar--fallback online-user-avatar" title="${label}" aria-hidden="true">${escHtml(initial)}</span>`;
+		return `<span style="${AVATAR_BASE}background:color-mix(in srgb, var(--c-bg-mute) 78%, transparent);color:var(--c-fg);font-size:0.65rem;font-weight:700;" title="${label}" aria-hidden="true">${escHtml(initial)}</span>`;
 	};
 
-	// Track the active channel so we can clean it up on re-runs (Astro view transitions)
+	const makeWrap = (u: PresenceUser): HTMLElement => {
+		const el = document.createElement('span');
+		el.className = 'online-user-wrap';
+		el.innerHTML = avatarHtml(u);
+		return el;
+	};
+
+	const makeMore = (label: string, title = ''): HTMLElement => {
+		const el = document.createElement('span');
+		el.className = 'online-user-more';
+		el.textContent = label;
+		if (title) el.title = title;
+		return el;
+	};
+
+	const makeSummary = (text: string): HTMLElement => {
+		const el = document.createElement('span');
+		el.className = 'online-presence-summary';
+		el.textContent = text;
+		return el;
+	};
+
+	const isTeacher = (u: PresenceUser) => u.role === 'teacher';
+	const isActive  = (u: PresenceUser) => Date.now() - (u.lastActiveAt || 0) < ACTIVE_MS;
+
+	// Select up to `slots` featured users: teachers first, then recently-active students
+	const selectFeatured = (users: PresenceUser[], slots: number): PresenceUser[] => {
+		const teachers = users.filter(isTeacher);
+		const activeStudents = users.filter(u => !isTeacher(u) && isActive(u));
+		const idleStudents   = users.filter(u => !isTeacher(u) && !isActive(u));
+		const out: PresenceUser[] = [];
+		for (const list of [teachers, activeStudents, idleStudents]) {
+			for (const u of list) {
+				if (out.length >= slots) break;
+				out.push(u);
+			}
+		}
+		return out;
+	};
+
+	const render = (
+		bar: HTMLElement,
+		state: Record<string, PresenceUser[]>,
+		selfId: string,
+	) => {
+		// Flatten, dedupe, exclude self and admins
+		const all = (Object.entries(state) as [string, PresenceUser[]][])
+			.filter(([key]) => key !== selfId)
+			.flatMap(([, presences]) => presences)
+			.filter(u => u.role !== 'admin')
+			.filter((u, i, arr) => arr.findIndex(x => x.userId === u.userId) === i);
+
+		bar.innerHTML = '';
+		const count = all.length;
+		if (count === 0) return;
+
+		const activeCount = all.filter(isActive).length;
+
+		if (count <= 8) {
+			// ── Small: individual avatars ──────────────────────────────
+			all.forEach(u => bar.appendChild(makeWrap(u)));
+
+		} else if (count <= 25) {
+			// ── Medium: up to 8 featured + "+N more" ──────────────────
+			const featured = selectFeatured(all, 8);
+			const overflow = count - featured.length;
+			featured.forEach(u => bar.appendChild(makeWrap(u)));
+			if (overflow > 0) bar.appendChild(makeMore(`+${overflow}`, `${overflow} más online`));
+
+		} else if (count <= 100) {
+			// ── Large: pinned teachers + summary ──────────────────────
+			const teachers = all.filter(isTeacher).slice(0, 3);
+			teachers.forEach(u => bar.appendChild(makeWrap(u)));
+			const summaryParts = [`${count} online`];
+			if (activeCount > 0) summaryParts.push(`${activeCount} activos`);
+			bar.appendChild(makeSummary(summaryParts.join(' · ')));
+
+		} else {
+			// ── Massive: text only ────────────────────────────────────
+			const summaryParts = [`${count} online`];
+			if (activeCount > 0) summaryParts.push(`${activeCount} activos`);
+			bar.appendChild(makeSummary(summaryParts.join(' · ')));
+		}
+	};
+
+	// Module-level state (survives Astro view transitions within the same bundle load)
 	let _activeChannel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null;
+	let _lastTracked = 0;
+	let _selfId = '';
 
 	const setupOnlinePresence = () => {
 		const bar = document.querySelector<HTMLElement>('[data-online-users-bar]');
 		if (!bar) return;
 
-		const supabaseUrl = bar.dataset.supabaseUrl || '';
+		const supabaseUrl    = bar.dataset.supabaseUrl    || '';
 		const supabaseAnonKey = bar.dataset.supabaseAnonKey || '';
-		const userId = bar.dataset.userId || '';
-		const userName = bar.dataset.userName || '';
+		const userId   = bar.dataset.userId   || '';
+		const userName  = bar.dataset.userName  || '';
 		const userImage = bar.dataset.userImage || '';
-		const userRole = bar.dataset.userRole || '';
+		const userRole  = bar.dataset.userRole  || '';
 
 		if (!supabaseUrl || !supabaseAnonKey || !userId) return;
 
-		// Tear down previous channel if navigating back to a page
+		// If same user navigates within the session, reuse the existing channel
+		if (_activeChannel && _selfId === userId) {
+			// Just re-render with current state (bar was reset by navigation)
+			render(bar, _activeChannel.presenceState<PresenceUser>(), userId);
+			return;
+		}
+
+		// Tear down previous channel (different user or first run)
 		if (_activeChannel) {
 			void _activeChannel.unsubscribe();
 			_activeChannel = null;
 		}
+		_selfId = userId;
 
 		const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 			auth: { persistSession: false, autoRefreshToken: false },
@@ -954,50 +1053,33 @@ const withActiveCourse = (href: string) => {
 		});
 		_activeChannel = channel;
 
-		const render = () => {
-			const state = channel.presenceState<PresenceUser>();
-			const others = (Object.entries(state) as [string, PresenceUser[]][])
-				.filter(([key]) => key !== userId)
-				.flatMap(([, presences]) => presences)
-				.filter((u) => u.role !== 'admin')
-				.filter((u, i, arr) => arr.findIndex((x) => x.userId === u.userId) === i);
+		const doRender = () => render(bar, channel.presenceState<PresenceUser>(), userId);
 
-			bar.innerHTML = '';
-			if (others.length === 0) return;
-
-			const shown = others.slice(0, MAX_SHOWN);
-			const overflow = others.length - MAX_SHOWN;
-
-			shown.forEach((u) => {
-				const el = document.createElement('span');
-				el.className = 'online-user-wrap';
-				el.innerHTML = renderAvatar(u);
-				bar.appendChild(el);
-			});
-
-			if (overflow > 0) {
-				const more = document.createElement('span');
-				more.className = 'online-user-more';
-				more.title = `${overflow} más online`;
-				more.textContent = `+${overflow}`;
-				bar.appendChild(more);
-			}
+		const doTrack = async (now = Date.now()) => {
+			_lastTracked = now;
+			await channel.track({ userId, name: userName, image: userImage, role: userRole, lastActiveAt: now });
 		};
 
+		// Re-track on user activity (throttled to RETRACK_INTERVAL_MS)
+		const onActivity = () => {
+			const now = Date.now();
+			if (now - _lastTracked >= RETRACK_INTERVAL_MS) void doTrack(now);
+		};
+		['mousemove', 'keydown', 'pointerdown', 'scroll'].forEach(ev =>
+			window.addEventListener(ev, onActivity, { passive: true }),
+		);
+
 		channel
-			.on('presence', { event: 'sync' }, render)
-			.on('presence', { event: 'join' }, render)
-			.on('presence', { event: 'leave' }, render)
+			.on('presence', { event: 'sync' }, doRender)
+			.on('presence', { event: 'join' }, doRender)
+			.on('presence', { event: 'leave' }, doRender)
 			.subscribe(async (status) => {
-				if (status === 'SUBSCRIBED') {
-					await channel.track({ userId, name: userName, image: userImage, role: userRole });
-				}
+				if (status === 'SUBSCRIBED') await doTrack();
 			});
 
 		window.addEventListener('beforeunload', () => { void channel.untrack(); }, { once: true });
 	};
 
-	// Run immediately if DOM is ready, and also on Astro view transition navigations
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', setupOnlinePresence, { once: true });
 	} else {
@@ -1549,6 +1631,7 @@ const withActiveCourse = (href: string) => {
 		flex-direction: row;
 		align-items: center;
 		flex: 0 0 auto;
+		margin-top: 4px;
 	}
 	.online-user-wrap {
 		display: inline-flex;
@@ -1557,30 +1640,38 @@ const withActiveCourse = (href: string) => {
 	.online-user-wrap + .online-user-wrap {
 		margin-left: -7px;
 	}
-	.online-user-avatar {
-		border: 2px solid var(--c-bg);
-		box-sizing: content-box;
-		transition: transform 0.15s ease;
-	}
-	.online-user-wrap:hover .online-user-avatar {
+	.online-user-wrap:hover > * {
 		transform: scale(1.18);
-		z-index: 2;
 		position: relative;
+		z-index: 2;
+		transition: transform 0.15s ease;
 	}
 	.online-user-more {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border-radius: 50%;
+		min-width: 26px;
+		height: 26px;
+		padding: 0 4px;
+		border-radius: 13px;
 		background: var(--c-bg-mute);
 		color: var(--c-fg);
-		font-size: 0.6rem;
+		font-size: 0.58rem;
 		font-weight: 700;
 		border: 2px solid var(--c-bg);
+		box-sizing: content-box;
 		margin-left: -7px;
 		cursor: default;
+		white-space: nowrap;
+	}
+	.online-presence-summary {
+		font-size: 0.7rem;
+		font-weight: 500;
+		color: var(--c-fg);
+		opacity: 0.7;
+		white-space: nowrap;
+		margin-left: 4px;
+		line-height: 1;
 	}
 	/* ─────────────────────────────────────────────────────────────────── */
 	.user-button-label {
