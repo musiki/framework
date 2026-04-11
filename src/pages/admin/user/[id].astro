@@ -5,9 +5,9 @@ import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { getRoleBadgeLabel } from '../../../lib/dashboard-role';
 import { isElevatedGlobalRole, normalizeGlobalRole } from '../../../lib/roles';
-import { promoteUserToTeacherIfNeeded } from '../../../lib/user-role-sync';
 import { getResultIcon, getSubmissionAnswerText, getSubmissionResultState } from '../../../lib/submission-table';
 import { getEvalOptionMap } from '../../../lib/eval-option-map';
+import { listEmailsForUser } from '../../../lib/user-email';
 import '../../../styles/theme.css';
 
 const { id } = Astro.params;
@@ -19,11 +19,12 @@ const currentUser = session?.user;
 
 if (!currentUser) return Astro.redirect('/login');
 
-// Check if viewer is teacher/admin across possible duplicate rows
-const { data: viewerRows, error: viewerRowsError } = await supabase
-  .from('User')
-  .select('id, role')
-  .ilike('email', currentUser.email);
+// Check if viewer is teacher/admin — resolve via UserEmail
+const { resolveUserIdByEmail } = await import('../../../lib/user-email');
+const viewerUserId = await resolveUserIdByEmail(supabase, String(currentUser.email || '').toLowerCase().trim()).catch(() => null);
+const { data: viewerRows, error: viewerRowsError } = viewerUserId
+  ? await supabase.from('User').select('id, role').eq('id', viewerUserId)
+  : await supabase.from('User').select('id, role').ilike('email', currentUser.email);
 if (viewerRowsError || !(viewerRows || []).some((row: any) => isElevatedGlobalRole(row?.role))) {
   return Astro.redirect('/dashboard');
 }
@@ -39,25 +40,11 @@ const userShortName = String(user.name || user.email || user.id).trim().split(/\
 
 // Fetch Enrollments
 const { data: enrollments } = await supabase.from('Enrollment').select('*').eq('userId', id);
-let globalUserRole = normalizeGlobalRole(user.role);
+const globalUserRole = normalizeGlobalRole(user.role);
 const hasTeacherCourseEnrollment = Array.isArray(enrollments)
   && enrollments.some((enrollment: any) => String(enrollment?.roleInCourse || '').trim().toLowerCase() === 'teacher');
-if (hasTeacherCourseEnrollment && !isElevatedGlobalRole(globalUserRole)) {
-  try {
-    const promoted = await promoteUserToTeacherIfNeeded(supabase, String(user.id || ''));
-    if (promoted) {
-      user.role = 'teacher';
-      globalUserRole = 'teacher';
-    }
-  } catch (error) {
-    console.error('Error reconciling admin user teacher role:', error);
-  }
-}
-const normalizedUserRole = globalUserRole === 'admin'
-  ? 'admin'
-  : globalUserRole === 'teacher' || hasTeacherCourseEnrollment
-    ? 'teacher'
-    : 'student';
+// Global role is authoritative — no auto-promotion on page load
+const normalizedUserRole = globalUserRole;
 
 // Fetch Submissions
 const { data: submissions } = await supabase.from('Submission').select('*').eq('userId', id).order('submittedAt', { ascending: false });
@@ -238,6 +225,31 @@ const uniqueAttendanceSessionIds = new Set(
 const totalConnectedMs = attendanceLogRows.reduce((sum: number, row: any) => sum + Number(row?.durationMs || 0), 0);
 const totalJoinCount = attendanceLogRows.reduce((sum: number, row: any) => sum + Math.max(0, Number(row?.joinCount || 0)), 0);
 const averageConnectedMs = uniqueAttendanceSessionIds.size > 0 ? totalConnectedMs / uniqueAttendanceSessionIds.size : 0;
+
+// Fetch linked emails and name-based duplicate candidates
+const linkedEmails = await listEmailsForUser(supabase, id).catch(() => []);
+
+// Find other users with the same name (potential duplicates)
+const nameParts = String(user.name || '').trim().split(/\s+/).filter(Boolean);
+let duplicateCandidates: any[] = [];
+if (nameParts.length >= 2) {
+  const { data: nameMatches } = await supabase
+    .from('User')
+    .select('id, name, email, role, updatedAt')
+    .ilike('name', `%${nameParts[0]}%`)
+    .neq('id', id)
+    .limit(20);
+  // Match if: all viewed user's parts appear in candidate, OR all candidate's parts appear in viewed user's name.
+  // This handles middle names: "Pablo Eguia" ↔ "Pablo Javier Eguia" — the shorter name's parts
+  // are all contained in the longer name even though not vice-versa.
+  const lowerName = user.name.toLowerCase();
+  duplicateCandidates = (nameMatches || []).filter((row: any) => {
+    const rowName = String(row?.name || '').toLowerCase();
+    const rowParts = rowName.split(/\s+/).filter(Boolean);
+    return nameParts.every((part) => rowName.includes(part.toLowerCase()))
+      || rowParts.every((part) => lowerName.includes(part));
+  });
+}
 
 const attendanceDayGroups = (() => {
   const groups = new Map<string, any>();
@@ -512,10 +524,10 @@ const attendanceDayGroups = (() => {
         <section class="profile-role-tools" aria-label="Editar rol del usuario">
           <span class="profile-role-label">Rol global</span>
           <div class="profile-role-row">
-            <select class="profile-role-select" data-role-select value={globalUserRole}>
-              <option value="student">student</option>
-              <option value="teacher">teacher</option>
-              <option value="admin">admin</option>
+            <select class="profile-role-select" data-role-select>
+              <option value="student" selected={globalUserRole === 'student'}>student</option>
+              <option value="teacher" selected={globalUserRole === 'teacher'}>teacher</option>
+              <option value="admin" selected={globalUserRole === 'admin'}>admin</option>
             </select>
             <button
               type="button"
@@ -533,6 +545,80 @@ const attendanceDayGroups = (() => {
           </p>
           <div class="profile-role-status" data-role-status aria-live="polite"></div>
         </section>
+      </div>
+
+      <!-- ── Identity / Emails ─────────────────────────────────────────── -->
+      <div class="section">
+        <h2>📧 Identidad y emails vinculados</h2>
+
+        {linkedEmails.length > 0 ? (
+          <table class="data-table" style="margin-bottom:1rem;">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Principal</th>
+                <th>Registrado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {linkedEmails.map((row) => (
+                <tr>
+                  <td>{row.email}</td>
+                  <td>{row.isPrimary ? '✓' : ''}</td>
+                  <td style="font-size:0.82rem;color:var(--c-fg-dim);">{new Date(row.createdAt).toLocaleDateString('es-ES')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style="color:var(--c-fg-dim);font-size:0.9rem;">No hay emails vinculados en la tabla UserEmail (pre-migración).</p>
+        )}
+
+        {duplicateCandidates.length > 0 && (
+          <details style="margin-top:1rem;">
+            <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;margin-bottom:0.6rem;">
+              Posibles duplicados por nombre ({duplicateCandidates.length})
+            </summary>
+            <p style="font-size:0.82rem;color:var(--c-fg-dim);margin-bottom:0.7rem;">
+              Usuarios con nombre similar. Si son la misma persona, usa "Merge" para unificarlos — el usuario actual ({user.name}) se conserva, el otro se elimina y sus emails, matrículas y entregas se transfieren.
+            </p>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Email</th>
+                  <th>Rol</th>
+                  <th>Actualizado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {duplicateCandidates.map((candidate) => (
+                  <tr>
+                    <td><a href={`/admin/user/${candidate.id}`} style="color:var(--c-link);">{candidate.name}</a></td>
+                    <td style="font-size:0.84rem;">{candidate.email}</td>
+                    <td><span class={`badge role-${candidate.role || 'student'}`}>{candidate.role || 'student'}</span></td>
+                    <td style="font-size:0.82rem;color:var(--c-fg-dim);">{candidate.updatedAt ? new Date(candidate.updatedAt).toLocaleDateString('es-ES') : '—'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        class="profile-role-save"
+                        style="font-size:0.8rem;padding:0.35rem 0.65rem;color:#c62828;border-color:#c62828;"
+                        data-merge-btn
+                        data-keep-id={id}
+                        data-merge-id={candidate.id}
+                        data-merge-name={candidate.name}
+                      >
+                        Merge →
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div data-merge-status style="margin-top:0.5rem;font-size:0.82rem;color:var(--c-fg-dim);min-height:1rem;"></div>
+          </details>
+        )}
       </div>
 
       <div class="section">
@@ -973,20 +1059,10 @@ const attendanceDayGroups = (() => {
 
             select.defaultValue = nextRole;
             if (badge) {
-              const hasCourseTeacher = badge.dataset.courseTeacher === 'true';
-              const effectiveRole = nextRole === 'admin'
-                ? 'admin'
-                : nextRole === 'teacher' || hasCourseTeacher
-                  ? 'teacher'
-                  : 'student';
-              const effectiveLabel = effectiveRole === 'admin'
-                ? 'Admin'
-                : effectiveRole === 'teacher'
-                  ? 'Teacher'
-                  : 'Student';
-              badge.textContent = effectiveLabel;
+              const label = nextRole === 'admin' ? 'Admin' : nextRole === 'teacher' ? 'Teacher' : 'Student';
+              badge.textContent = label;
               badge.classList.remove('role-student', 'role-teacher', 'role-admin');
-              badge.classList.add(`role-${effectiveRole}`);
+              badge.classList.add(`role-${nextRole}`);
             }
             setStatus('Rol actualizado.', 'is-success');
           } catch (error) {
@@ -1086,10 +1162,73 @@ const attendanceDayGroups = (() => {
         }
       }
 
+      function initializeMergeButtons() {
+        const mergeStatus = document.querySelector('[data-merge-status]');
+        document.querySelectorAll('[data-merge-btn]').forEach((btn) => {
+          let pendingConfirm = false;
+          let resetTimer = null;
+
+          btn.addEventListener('click', async () => {
+            const keepId = btn.dataset.keepId;
+            const mergeId = btn.dataset.mergeId;
+            const mergeName = btn.dataset.mergeName || 'este usuario';
+            if (!keepId || !mergeId) return;
+
+            // First click: ask for confirmation inline
+            if (!pendingConfirm) {
+              pendingConfirm = true;
+              btn.textContent = '¿Confirmar?';
+              btn.style.background = '#c62828';
+              btn.style.color = '#fff';
+              btn.style.borderColor = '#c62828';
+              if (mergeStatus) mergeStatus.textContent = `Click de nuevo para fusionar "${mergeName}" aquí.`;
+              resetTimer = setTimeout(() => {
+                pendingConfirm = false;
+                btn.textContent = 'Merge →';
+                btn.style.background = '';
+                btn.style.color = '#c62828';
+                btn.style.borderColor = '#c62828';
+                if (mergeStatus) mergeStatus.textContent = '';
+              }, 4000);
+              return;
+            }
+
+            // Second click: execute
+            clearTimeout(resetTimer);
+            pendingConfirm = false;
+            btn.disabled = true;
+            btn.textContent = 'Fusionando…';
+            if (mergeStatus) mergeStatus.textContent = 'Fusionando…';
+
+            try {
+              const res = await fetch('/api/admin/users/merge', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keepId, mergeId }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(data?.error || 'Error al fusionar');
+              if (mergeStatus) {
+                mergeStatus.textContent = `Merge completo. ${data.transferredEmails} emails, ${data.transferredEnrollments} matrículas, ${data.transferredSubmissions} entregas transferidas.`;
+              }
+              btn.closest('tr')?.remove();
+            } catch (err) {
+              if (mergeStatus) mergeStatus.textContent = `Error: ${err?.message}`;
+              btn.disabled = false;
+              btn.textContent = 'Merge →';
+              btn.style.background = '';
+              btn.style.color = '#c62828';
+              btn.style.borderColor = '#c62828';
+            }
+          });
+        });
+      }
+
       document.addEventListener('DOMContentLoaded', () => {
         initializeSubmissionQuickEditors();
         initializeRoleEditor();
         initializeCorrectionsFolding();
+        initializeMergeButtons();
         document.addEventListener('keydown', handleFoldShortcuts);
       });
     </script>

@@ -74,6 +74,21 @@ const normalizedSessionEmail = sessionEmail.toLowerCase();
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
 
 async function resolveDashboardUserByEmail(email, normalizedEmail) {
+  // First try UserEmail table for multi-email identity resolution
+  const { resolveUserIdByEmail } = await import('../lib/user-email');
+  const resolvedUserId = await resolveUserIdByEmail(supabase, normalizedEmail).catch(() => null);
+
+  if (resolvedUserId) {
+    const { data, error } = await supabase
+      .from('User')
+      .select('*')
+      .eq('id', resolvedUserId)
+      .maybeSingle();
+    if (error) throw new Error(error.message || 'Supabase error');
+    if (data) return { user: data, rows: [data] };
+  }
+
+  // Fallback: direct User.email lookup (handles pre-migration rows)
   const { data, error } = await supabase
     .from('User')
     .select('*')
@@ -81,13 +96,13 @@ async function resolveDashboardUserByEmail(email, normalizedEmail) {
     .order('updatedAt', { ascending: false })
     .order('createdAt', { ascending: false });
 
-  if (error) throw error;
+  if (error) throw new Error(error.message || 'Supabase error');
 
   const rows = Array.isArray(data) ? data : [];
   if (rows.length === 0) return { user: null, rows: [] };
   if (rows.length === 1) return { user: rows[0], rows };
 
-  // Prefer exact-case email match first, then normalized match, then most recently updated row.
+  // Multiple rows — prefer exact-case email match, then normalized, then most recent
   const exactCaseRows = rows.filter((row) => String(row?.email || '').trim() === email);
   if (exactCaseRows.length > 0) return { user: exactCaseRows[0], rows };
 
@@ -3499,9 +3514,9 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         justify-content: flex-start;
         gap: 0.5rem;
         flex-wrap: nowrap;
-        margin-left: auto;
-        flex: 0 0 auto;
-        min-width: max-content;
+        margin-left: 0;
+        flex: 1 1 auto;
+        min-width: 0;
       }
       .dashboard-topbar-context {
         display: inline-flex;
@@ -3512,8 +3527,8 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         flex: 0 0 auto;
       }
       .dashboard-topbar-context--search {
-        flex: 0 0 auto;
-        min-width: 14rem;
+        flex: 1 1 auto;
+        min-width: 0;
       }
       .dashboard-topbar-context[hidden] {
         display: none !important;
@@ -3521,6 +3536,22 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .dashboard-topbar-search {
         width: 100%;
         min-width: 0;
+        border: none !important;
+        border-bottom: 1px solid var(--c-border) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        box-shadow: none !important;
+        outline-offset: -1px;
+      }
+      .dashboard-topbar-search:focus {
+        border-bottom-color: var(--c-link) !important;
+        outline: none;
+      }
+      .dashboard-topbar-search::placeholder {
+        color: var(--c-fg-dim);
+        opacity: 0.6;
       }
       .dashboard-scope-field--inline {
         min-width: 9.2rem;
@@ -3542,6 +3573,11 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         width: var(--dashboard-control-height);
         min-width: var(--dashboard-control-height);
         padding: 0;
+        border-color: transparent !important;
+        background: transparent !important;
+      }
+      .dashboard-live-mode-toggle:hover {
+        border-color: var(--c-border) !important;
       }
       .dashboard-live-mode-indicator {
         width: 0.64rem;
@@ -4072,6 +4108,18 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .teacher-grid-toolbar--section > .dashboard-grid-search {
         flex: 1 1 16rem;
         min-width: 12rem;
+        border: none !important;
+        border-bottom: 1px solid var(--c-border) !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        padding-left: 0.3rem;
+        padding-right: 0.3rem;
+        box-shadow: none !important;
+      }
+      .teacher-grid-toolbar > .dashboard-grid-search:focus,
+      .teacher-grid-toolbar--section > .dashboard-grid-search:focus {
+        border-bottom-color: var(--c-link) !important;
+        outline: none;
       }
       .dashboard-grid-actions {
         display: inline-flex;
@@ -4190,15 +4238,23 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       }
       .attendance-config-bar--toolbar {
         display: inline-flex;
-        align-items: center;
+        align-items: flex-end;
         gap: 0.4rem;
         flex-wrap: nowrap;
         min-width: 0;
         flex: 0 0 auto;
       }
+      .attendance-range-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.12rem;
+      }
+      .attendance-range-inputs {
+        display: flex;
+        gap: 0.4rem;
+      }
       .dashboard-control-label,
-      .agenda-config-field span,
-      .attendance-config-label {
+      .agenda-config-field span {
         font-size: 0.72rem;
         letter-spacing: 0.03em;
         text-transform: uppercase;
@@ -4206,9 +4262,15 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         font-weight: 700;
       }
       .attendance-config-label {
-        display: inline-flex;
-        align-items: center;
+        display: block;
         white-space: nowrap;
+        font-size: 0.58rem;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+        font-weight: 400;
+        opacity: 0.7;
+        line-height: 1;
       }
       .attendance-config-bar--toolbar .attendance-config-input {
         width: 8.6rem;
@@ -6167,23 +6229,26 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         font-size: 0.75rem;
       }
       @media (max-width: 1130px) {
-        .dashboard-topbar-tabs,
-        .dashboard-topbar-controls {
+        .dashboard-topbar-tabs {
           flex: 0 0 auto;
-          width: auto;
           min-width: max-content;
         }
         .dashboard-topbar-controls {
+          flex: 1 1 auto;
+          min-width: 0;
           justify-content: flex-start;
-          margin-left: 0;
+        }
+        .dashboard-topbar-context--search {
+          flex: 1 1 auto;
+          min-width: 6rem;
+        }
+        .dashboard-topbar-search {
+          width: 100%;
+          min-width: 0;
         }
         .dashboard-scope-field--inline {
           flex: 0 0 auto;
           min-width: 9.2rem;
-        }
-        .dashboard-topbar-search {
-          width: 14rem;
-          min-width: 14rem;
         }
         .dashboard-live-mode-toggle {
           flex: 0 0 auto;
@@ -6416,21 +6481,25 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 data-course-id={activeCourseId}
                 data-year={activeYear}
               >
-                <span class="dashboard-control-label attendance-config-label">RANGO DE CURSADA</span>
-                <input
-                  type="date"
-                  class="attendance-config-input"
-                  data-attendance-config-input="startDate"
-                  value={activeAttendanceConfig.startDate}
-                  title="Fecha de comienzo de cursada"
-                />
-                <input
-                  type="date"
-                  class="attendance-config-input"
-                  data-attendance-config-input="endDate"
-                  value={activeAttendanceConfig.endDate}
-                  title="Fecha de fin de cuatrimestre"
-                />
+                <div class="attendance-range-group">
+                  <span class="attendance-config-label">rango de cursada</span>
+                  <div class="attendance-range-inputs">
+                    <input
+                      type="date"
+                      class="attendance-config-input"
+                      data-attendance-config-input="startDate"
+                      value={activeAttendanceConfig.startDate}
+                      title="Fecha de comienzo de cursada"
+                    />
+                    <input
+                      type="date"
+                      class="attendance-config-input"
+                      data-attendance-config-input="endDate"
+                      value={activeAttendanceConfig.endDate}
+                      title="Fecha de fin de cuatrimestre"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <div class="dashboard-topbar-context" data-dashboard-topbar-context="main" hidden={initialTeacherDashboardTab !== 'main'}>

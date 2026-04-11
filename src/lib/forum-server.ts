@@ -88,13 +88,24 @@ export async function ensureDbUserFromSession(
   const email = cleanString(session?.user?.email ?? '', 320);
   if (!email) return null;
 
-  const { data: existing, error: existingError } = await supabase
-    .from('User')
-    .select('id, email, name, role, image')
-    .eq('email', email)
-    .maybeSingle();
+  // Resolve via UserEmail table (multi-email identity), fallback to User.email
+  const normalizedEmail = email.toLowerCase().trim();
+  const { resolveUserIdByEmail, registerEmailForUser } = await import('./user-email');
+  const resolvedUserId = await resolveUserIdByEmail(supabase, normalizedEmail);
 
-  if (existingError) throw existingError;
+  const { data: existing, error: existingError } = resolvedUserId
+    ? await supabase
+        .from('User')
+        .select('id, email, name, role, image')
+        .eq('id', resolvedUserId)
+        .maybeSingle()
+    : await supabase
+        .from('User')
+        .select('id, email, name, role, image')
+        .ilike('email', normalizedEmail)
+        .maybeSingle();
+
+  if (existingError) throw new Error(existingError.message || 'Supabase lookup error');
   if (existing) {
     const sessionName = cleanString(session?.user?.name ?? '', 160);
     const sessionImage = cleanString(session?.user?.image ?? '', 1024);
@@ -145,21 +156,23 @@ export async function ensureDbUserFromSession(
     .single();
 
   if (!insertError && inserted) {
+    // Register the email in UserEmail table for multi-email identity
+    await registerEmailForUser(supabase, inserted.id, normalizedEmail, true).catch(() => undefined);
     return normalizeDbUser(inserted);
   }
 
   if (insertError && insertError.code !== '23505') {
-    throw insertError;
+    throw new Error(insertError.message || 'Supabase insert error');
   }
 
   // Concurrent first-login writes can trigger a duplicate key race.
   const { data: refetched, error: refetchError } = await supabase
     .from('User')
     .select('id, email, name, role')
-    .eq('email', email)
+    .ilike('email', normalizedEmail)
     .single();
 
-  if (refetchError) throw refetchError;
+  if (refetchError) throw new Error(refetchError.message || 'Supabase refetch error');
   return normalizeDbUser(refetched);
 }
 

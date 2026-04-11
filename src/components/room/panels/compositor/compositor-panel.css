@@ -1,0 +1,202 @@
+/* ── Compositor Panel ─────────────────────────────────────────────────────── */
+
+.compositor-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #0a0a0a;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.compositor-preview canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.compositor-preview-label {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 0.5rem;
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+
+.compositor-devices-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.3rem;
+}
+
+.compositor-refresh-btn {
+  background: none;
+  border: none;
+  color: var(--c-fg-muted, #888);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  transition: color 0.12s;
+}
+
+.compositor-refresh-btn:hover {
+  color: var(--c-fg, #ccc);
+}
+
+.compositor-source-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.compositor-source-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.compositor-source-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-fg-muted, #888);
+}
+
+.compositor-source-select {
+  width: 100%;
+  font-size: 0.75rem;
+}
+
+.compositor-mask-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.compositor-mask-btn {
+  flex: 1;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--c-border, #333);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-fg, #ccc);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.compositor-mask-btn[data-active='true'],
+.compositor-mask-btn:hover {
+  background: var(--c-accent, #3b6ef8);
+  color: #fff;
+  border-color: transparent;
+}
+
+.compositor-pip-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.compositor-pip-options[hidden] {
+  display: none;
+}
+
+.compositor-pip-size-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.compositor-pip-size-row label {
+  font-size: 0.7rem;
+  color: var(--c-fg-muted, #888);
+  flex-shrink: 0;
+}
+
+.compositor-pip-size-row input[type='range'] {
+  flex: 1;
+}
+
+.compositor-pip-size-output {
+  font-size: 0.7rem;
+  color: var(--c-fg-muted, #888);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.compositor-pip-position-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.3rem;
+}
+
+.compositor-pip-pos-btn {
+  font-size: 0.65rem;
+  padding: 0.25rem 0.1rem;
+  border: 1px solid var(--c-border, #333);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--c-fg-muted, #888);
+  cursor: pointer;
+  text-align: center;
+}
+
+.compositor-pip-pos-btn[data-active='true'],
+.compositor-pip-pos-btn:hover {
+  background: var(--c-accent, #3b6ef8);
+  color: #fff;
+  border-color: transparent;
+}
+
+.compositor-action-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.compositor-apply-btn,
+.compositor-stop-btn {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+}
+
+.compositor-apply-btn {
+  background: var(--c-accent, #3b6ef8);
+  color: #fff;
+}
+
+.compositor-apply-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.compositor-stop-btn {
+  background: var(--c-border, #333);
+  color: var(--c-fg, #ccc);
+}
+
+.compositor-stop-btn[hidden] {
+  display: none;
+}
+
+.compositor-status {
+  margin-top: 0.5rem;
+  font-size: 0.68rem;
+  color: var(--c-fg-muted, #888);
+  min-height: 1em;
+}

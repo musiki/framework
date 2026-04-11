@@ -1,0 +1,317 @@
+---
+import './compositor-panel.css';
+---
+
+<details
+  class="conference-sidebar-section conference-sidebar-panel conference-sidebar-panel--operational"
+  data-compositor-panel
+>
+  <summary class="conference-sidebar-heading">COMPOSITOR</summary>
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--operational">
+
+    <!-- Live preview — compositor canvas is inserted here at runtime -->
+    <div class="compositor-preview" data-compositor-preview>
+      <span class="compositor-preview-label">Output preview</span>
+    </div>
+
+    <!-- Source selects + refresh -->
+    <div class="compositor-devices-header">
+      <span class="compositor-source-label">Cameras</span>
+      <button type="button" class="compositor-refresh-btn" data-compositor-refresh title="Refresh device list">↺</button>
+    </div>
+    <div class="compositor-source-row">
+      <div class="compositor-source-block">
+        <span class="compositor-source-label">Source A</span>
+        <select class="compositor-source-select" data-compositor-source-a>
+          <option value="">Open panel to load…</option>
+        </select>
+      </div>
+      <div class="compositor-source-block">
+        <span class="compositor-source-label">Source B</span>
+        <select class="compositor-source-select" data-compositor-source-b>
+          <option value="">None</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Mask mode -->
+    <div class="compositor-mask-row">
+      <button
+        type="button"
+        class="compositor-mask-btn"
+        data-compositor-mask="none"
+        data-active="true"
+      >Single</button>
+      <button
+        type="button"
+        class="compositor-mask-btn"
+        data-compositor-mask="pip"
+        data-active="false"
+      >PiP</button>
+    </div>
+
+    <!-- PiP options (shown when pip is active) -->
+    <div class="compositor-pip-options" data-compositor-pip-options hidden>
+      <div class="compositor-pip-size-row">
+        <label for="compositor-pip-size">Size</label>
+        <input
+          id="compositor-pip-size"
+          type="range"
+          min="0.12"
+          max="0.5"
+          step="0.01"
+          value="0.28"
+          data-compositor-pip-size
+        />
+        <output class="compositor-pip-size-output" data-compositor-pip-size-output>28%</output>
+      </div>
+      <div class="compositor-pip-position-row">
+        <button type="button" class="compositor-pip-pos-btn" data-compositor-pip-pos="top-left"     data-active="false">↖ TL</button>
+        <button type="button" class="compositor-pip-pos-btn" data-compositor-pip-pos="top-right"    data-active="false">TR ↗</button>
+        <button type="button" class="compositor-pip-pos-btn" data-compositor-pip-pos="bottom-left"  data-active="false">↙ BL</button>
+        <button type="button" class="compositor-pip-pos-btn" data-compositor-pip-pos="bottom-right" data-active="true">BR ↘</button>
+      </div>
+    </div>
+
+    <!-- Apply / Stop -->
+    <div class="compositor-action-row">
+      <button type="button" class="compositor-apply-btn" data-compositor-apply>Apply</button>
+      <button type="button" class="compositor-stop-btn" data-compositor-stop hidden>Stop</button>
+    </div>
+
+    <p class="compositor-status" data-compositor-status>Open panel to list cameras.</p>
+  </div>
+</details>
+
+<script>
+import { createCanvasCompositor } from '../../../../scripts/room/compositor/compositor';
+import type { CompositorConfig, PipPosition } from '../../../../scripts/room/compositor/compositor';
+
+const panel = document.querySelector<HTMLElement>('[data-compositor-panel]');
+if (panel) {
+  const previewEl    = panel.querySelector<HTMLElement>('[data-compositor-preview]');
+  const selectA      = panel.querySelector<HTMLSelectElement>('[data-compositor-source-a]');
+  const selectB      = panel.querySelector<HTMLSelectElement>('[data-compositor-source-b]');
+  const refreshBtn   = panel.querySelector<HTMLButtonElement>('[data-compositor-refresh]');
+  const pipOptions   = panel.querySelector<HTMLElement>('[data-compositor-pip-options]');
+  const pipSizeInput = panel.querySelector<HTMLInputElement>('[data-compositor-pip-size]');
+  const pipSizeOut   = panel.querySelector<HTMLOutputElement>('[data-compositor-pip-size-output]');
+  const applyBtn     = panel.querySelector<HTMLButtonElement>('[data-compositor-apply]');
+  const stopBtn      = panel.querySelector<HTMLButtonElement>('[data-compositor-stop]');
+  const statusEl     = panel.querySelector<HTMLElement>('[data-compositor-status]');
+
+  const compositor = createCanvasCompositor();
+
+  // Mount compositor canvas into the preview area immediately
+  const compositorCanvas = compositor.getCanvas();
+  compositorCanvas.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+  previewEl?.appendChild(compositorCanvas);
+
+  const setStatus = (msg: string) => {
+    if (statusEl) statusEl.textContent = msg;
+  };
+
+  // ── Device enumeration ────────────────────────────────────────────────────
+  // Only runs when the panel is open so the browser can show the permission
+  // dialog and virtual devices (OBS Virtual Camera, iPad via Continuity, etc.)
+  // are visible to enumerateDevices().
+
+  let devicesLoaded = false;
+
+  const populateDevices = async (forceRefresh = false) => {
+    if (devicesLoaded && !forceRefresh) return;
+
+    setStatus('Requesting camera permission…');
+
+    // Grant permission — this makes labels visible and wakes virtual devices
+    let permissionGranted = false;
+    try {
+      const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      tempStream.getTracks().forEach((t) => t.stop());
+      permissionGranted = true;
+    } catch {
+      setStatus('Camera permission denied. Check browser settings.');
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
+    const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+
+    const fillSelect = (sel: HTMLSelectElement | null, includeNone: boolean) => {
+      if (!sel) return;
+      const prev = sel.value;
+      sel.innerHTML = '';
+
+      if (includeNone) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'None';
+        sel.appendChild(opt);
+      }
+
+      if (videoDevices.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = permissionGranted ? 'No cameras found' : 'Permission denied';
+        sel.appendChild(opt);
+      } else {
+        videoDevices.forEach((d, i) => {
+          const opt = document.createElement('option');
+          opt.value = d.deviceId;
+          opt.textContent = d.label || `Camera ${i + 1}`;
+          sel.appendChild(opt);
+        });
+      }
+
+      // Restore previous selection if still available
+      if (prev && [...sel.options].some((o) => o.value === prev)) {
+        sel.value = prev;
+      }
+    };
+
+    fillSelect(selectA, false);
+    fillSelect(selectB, true);
+    devicesLoaded = true;
+
+    const count = videoDevices.length;
+    setStatus(
+      count === 0
+        ? permissionGranted ? 'No cameras detected. Connect a camera and click ↺.' : 'Permission denied.'
+        : `${count} camera${count === 1 ? '' : 's'} found. Select sources and press Apply.`,
+    );
+  };
+
+  // Enumerate when the panel is first opened
+  panel.addEventListener('toggle', () => {
+    if ((panel as HTMLDetailsElement).open) {
+      void populateDevices();
+    }
+  });
+
+  // Re-enumerate on device plug/unplug
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    if ((panel as HTMLDetailsElement).open) {
+      void populateDevices(true);
+    } else {
+      devicesLoaded = false; // stale — re-enumerate next open
+    }
+  });
+
+  refreshBtn?.addEventListener('click', () => void populateDevices(true));
+
+  // ── Mask mode buttons ─────────────────────────────────────────────────────
+
+  let currentMask: 'none' | 'pip' = 'none';
+
+  panel.querySelectorAll<HTMLButtonElement>('[data-compositor-mask]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currentMask = (btn.dataset.compositorMask as 'none' | 'pip') ?? 'none';
+      panel.querySelectorAll('[data-compositor-mask]').forEach((b) => {
+        (b as HTMLButtonElement).dataset.active = (b === btn).toString();
+      });
+      if (pipOptions) pipOptions.hidden = currentMask !== 'pip';
+      if (compositor.getState() === 'running') compositor.updateConfig(buildConfig());
+    });
+  });
+
+  // ── PiP size slider ───────────────────────────────────────────────────────
+
+  pipSizeInput?.addEventListener('input', () => {
+    const pct = Math.round(parseFloat(pipSizeInput.value) * 100);
+    if (pipSizeOut) pipSizeOut.textContent = `${pct}%`;
+    if (compositor.getState() === 'running') compositor.updateConfig(buildConfig());
+  });
+
+  // ── PiP position buttons ──────────────────────────────────────────────────
+
+  let pipPosition: PipPosition = 'bottom-right';
+
+  panel.querySelectorAll<HTMLButtonElement>('[data-compositor-pip-pos]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      pipPosition = (btn.dataset.compositorPipPos as PipPosition) ?? 'bottom-right';
+      panel.querySelectorAll('[data-compositor-pip-pos]').forEach((b) => {
+        (b as HTMLButtonElement).dataset.active = (b === btn).toString();
+      });
+      if (compositor.getState() === 'running') compositor.updateConfig(buildConfig());
+    });
+  });
+
+  // ── Config ────────────────────────────────────────────────────────────────
+
+  const buildConfig = (): CompositorConfig => ({
+    maskMode: currentMask,
+    pipSize: parseFloat(pipSizeInput?.value ?? '0.28'),
+    pipPosition,
+  });
+
+  // ── Streams ───────────────────────────────────────────────────────────────
+
+  let activeStreamA: MediaStream | null = null;
+  let activeStreamB: MediaStream | null = null;
+
+  const acquireStream = async (deviceId: string): Promise<MediaStream> =>
+    navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+
+  // ── Apply ─────────────────────────────────────────────────────────────────
+
+  applyBtn?.addEventListener('click', async () => {
+    const devA = selectA?.value ?? '';
+    const devB = selectB?.value ?? '';
+
+    if (!devA) {
+      setStatus('Select at least Source A (main camera).');
+      return;
+    }
+
+    if (applyBtn) applyBtn.disabled = true;
+    setStatus('Opening camera streams…');
+
+    try {
+      activeStreamA?.getTracks().forEach((t) => t.stop());
+      activeStreamB?.getTracks().forEach((t) => t.stop());
+      activeStreamA = null;
+      activeStreamB = null;
+      compositor.stop();
+
+      activeStreamA = await acquireStream(devA);
+      if (devB) activeStreamB = await acquireStream(devB);
+
+      await compositor.start(activeStreamA, activeStreamB, buildConfig());
+
+      document.dispatchEvent(
+        new CustomEvent('compositor:started', {
+          detail: { stream: compositor.getOutputStream() },
+          bubbles: false,
+        }),
+      );
+
+      setStatus('Compositor running.');
+      if (stopBtn) stopBtn.hidden = false;
+      if (applyBtn) applyBtn.textContent = 'Re-apply';
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      setStatus(`Error: ${msg}`);
+    } finally {
+      if (applyBtn) applyBtn.disabled = false;
+    }
+  });
+
+  // ── Stop ──────────────────────────────────────────────────────────────────
+
+  stopBtn?.addEventListener('click', () => {
+    compositor.stop();
+    activeStreamA?.getTracks().forEach((t) => t.stop());
+    activeStreamB?.getTracks().forEach((t) => t.stop());
+    activeStreamA = null;
+    activeStreamB = null;
+
+    document.dispatchEvent(new CustomEvent('compositor:stopped', { bubbles: false }));
+
+    if (stopBtn) stopBtn.hidden = true;
+    if (applyBtn) applyBtn.textContent = 'Apply';
+    setStatus('Compositor stopped.');
+  });
+}
+</script>

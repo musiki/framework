@@ -2,6 +2,7 @@ import {
   ConnectionState,
   DataPacket_Kind,
   LocalAudioTrack,
+  LocalVideoTrack,
   Room,
   RoomEvent,
   RemoteTrackPublication,
@@ -4322,6 +4323,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let recordingPresentationSnapshotTask: Promise<void> | null = null;
   let recordingPresentationLastSnapshotAt = 0;
   let disconnectedLiveStream: MediaStream | null = null;
+  let disconnectedMicStream: MediaStream | null = null;
   let disconnectedPreviewProcessor: BackgroundBlurVideoProcessor | null = null;
   let disconnectedPreviewSourceVideo: HTMLVideoElement | null = null;
   let reverseMicKeyActive = false;
@@ -4490,6 +4492,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let synthLimiterRelease = clampNumber(persistedSetup.limiterRelease, 0.01, 0.5, 0.05, 3);
   let publishedBallTrack: LocalAudioTrack | null = null;
   let publishedSynthTrack: LocalAudioTrack | null = null;
+  let compositorVideoTrack: LocalVideoTrack | null = null;
+  let compositorOutputStream: MediaStream | null = null;
+  let compositorInStage = false;
   const fmSynth = new FMSynthVoice();
   const gravityBallRenderer =
     gravityBallCanvas instanceof HTMLCanvasElement ? new GravityBallRenderer(gravityBallCanvas) : null;
@@ -8295,6 +8300,137 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     publishedBallTrack = null;
   };
 
+  // ── Compositor track publish / unpublish ──────────────────────────────────
+
+  const unpublishCompositorTrack = async () => {
+    if (!compositorVideoTrack) return;
+    try {
+      await room.localParticipant.unpublishTrack(compositorVideoTrack, false);
+    } catch {
+      // ignore unpublish errors during disconnect
+    }
+    compositorVideoTrack.stop();
+    compositorVideoTrack = null;
+  };
+
+  const publishCompositorStream = async (stream: MediaStream) => {
+    await unpublishCompositorTrack();
+    if (room.state !== ConnectionState.Connected) return;
+    const videoTrack = stream.getVideoTracks()[0];
+    if (!videoTrack) return;
+    // Disable the regular camera so both tracks don't occupy the same slot
+    try {
+      await room.localParticipant.setCameraEnabled(false);
+    } catch {
+      // best-effort
+    }
+    const localTrack = new LocalVideoTrack(videoTrack, undefined, false);
+    localTrack.source = Track.Source.Camera;
+    compositorVideoTrack = localTrack;
+    try {
+      await room.localParticipant.publishTrack(localTrack, {
+        name: 'Compositor',
+        source: Track.Source.Camera,
+      });
+    } catch (error) {
+      compositorVideoTrack = null;
+      localTrack.stop();
+      throw error;
+    }
+  };
+
+  // ── Compositor stage routing (offline preview) ────────────────────────────
+
+  const showCompositorInStage = (stream: MediaStream) => {
+    if (!(teacherSlot instanceof HTMLElement)) return;
+    forceDisconnectedPreviewLayout();
+
+    // If the regular disconnected preview card is already mounted, just swap its
+    // video srcObject — avoids rebuilding the participant card DOM.
+    if (disconnectedStagePreviewMount) {
+      disconnectedStagePreviewMount.element.srcObject = stream;
+      compositorInStage = true;
+      return;
+    }
+
+    // Otherwise build a minimal participant card for the compositor output
+    const node = cloneTemplate(participantTemplate);
+    if (!node) return;
+    const media = node.querySelector('[data-card-media]');
+    const namEl = node.querySelector('[data-card-name]');
+    const placeholder = node.querySelector('[data-card-placeholder]');
+    if (!(media instanceof HTMLElement)) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'conference-media-frame conference-media-frame--local-camera';
+    wrapper.dataset.compositorStagePreview = 'true';
+
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    wrapper.appendChild(video);
+    media.appendChild(wrapper);
+    if (namEl instanceof HTMLElement) namEl.textContent = 'Compositor';
+    if (placeholder instanceof HTMLElement) placeholder.hidden = true;
+    node.dataset.role = localRole;
+
+    teacherSlot.innerHTML = '';
+    teacherSlot.appendChild(node);
+    void video.play().catch(() => undefined);
+    compositorInStage = true;
+  };
+
+  const clearCompositorFromStage = () => {
+    compositorInStage = false;
+
+    // If we swapped the srcObject of the regular preview, restore it
+    if (disconnectedStagePreviewMount) {
+      const regularStream = localPreviewStreamMount?.stream ?? null;
+      disconnectedStagePreviewMount.element.srcObject = regularStream;
+      return;
+    }
+
+    // Remove the compositor-only card
+    if (teacherSlot instanceof HTMLElement) {
+      teacherSlot.querySelector('[data-compositor-stage-preview]')?.closest('[data-card-placeholder]')?.parentElement?.remove();
+      // Simpler: just clear the slot and let syncAllParticipants rebuild
+      const compositorCard = teacherSlot.querySelector('[data-compositor-stage-preview]');
+      compositorCard?.parentElement?.parentElement?.remove();
+      // Fallback: clear entirely so next sync repopulates correctly
+      if (teacherSlot.querySelector('[data-compositor-stage-preview]')) {
+        teacherSlot.innerHTML = '';
+      }
+    }
+
+    syncAllParticipants();
+  };
+
+  document.addEventListener('compositor:started', (e) => {
+    const stream = (e as CustomEvent<{ stream: MediaStream | null }>).detail?.stream;
+    compositorOutputStream = stream || null;
+    if (!stream) return;
+
+    if (room.state === ConnectionState.Connected) {
+      void publishCompositorStream(stream).catch(() => undefined);
+    } else {
+      // Offline: show compositor canvas in teacher slot so user sees output
+      showCompositorInStage(stream);
+    }
+  });
+
+  document.addEventListener('compositor:stopped', () => {
+    compositorOutputStream = null;
+    clearCompositorFromStage();
+    void unpublishCompositorTrack().then(async () => {
+      if (room.state === ConnectionState.Connected) {
+        await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
+        syncAllParticipants();
+      }
+    });
+  });
+
   const toggleRaisedHand = async () => {
     localHandRaised = !localHandRaised;
     syncRaiseHandUi();
@@ -8501,11 +8637,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const syncMicMeter = () => {
     const connected = room.state === ConnectionState.Connected;
-    const microphoneEnabled = connected && room.localParticipant.isMicrophoneEnabled;
 
-    // Legacy disconnected preview may manage the mic meter separately.
-    if (!connected && disconnectedLiveStream) return;
+    if (!connected) {
+      // Offline: feed meter from test stream audio or disconnected mic stream
+      const offlineTrack =
+        testStream?.getAudioTracks()[0] ??
+        disconnectedMicStream?.getAudioTracks()[0] ??
+        null;
+      if (offlineTrack && offlineTrack.readyState === 'live') {
+        void micMeterController.start(offlineTrack).catch(() => micMeterController.stop());
+      } else {
+        micMeterController.stop();
+      }
+      return;
+    }
 
+    const microphoneEnabled = room.localParticipant.isMicrophoneEnabled;
     const localMicPublication = Array.from(room.localParticipant.audioTrackPublications.values()).find(
       (entry) => entry.track && entry.source !== Track.Source.ScreenShareAudio,
     );
@@ -9622,6 +9769,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const syncDisconnectedStagePreview = () => {
+    // Don't evict the compositor preview from the stage slot
+    if (compositorInStage) return;
+
     if (
       room.state !== ConnectionState.Disconnected ||
       !disconnectedCameraPreviewEnabled ||
@@ -10857,6 +11007,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (!connectedAtMs) {
         connectedAtMs = Date.now();
       }
+      // If compositor was running in offline preview, route it as the camera track
+      if (compositorOutputStream) {
+        clearCompositorFromStage();
+        void publishCompositorStream(compositorOutputStream).catch(() => undefined);
+      }
       void syncLocalParticipantMetadata().catch(() => undefined);
       void syncLocalBackgroundBlurProcessor().catch(() => undefined);
       void syncPublishedBallTrack().catch(() => undefined);
@@ -11324,6 +11479,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       disconnectedLiveStream.getTracks().forEach((t) => t.stop());
       disconnectedLiveStream = null;
     }
+    if (disconnectedMicStream) {
+      disconnectedMicStream.getTracks().forEach((t) => t.stop());
+      disconnectedMicStream = null;
+    }
     if (teacherSlot instanceof HTMLElement && teacherSlot.querySelector('[data-disconnected-live]')) {
       teacherSlot.innerHTML = '';
     }
@@ -11334,11 +11493,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     disconnectedLiveStream = null;
     micMeterController.stop();
     await enableDisconnectedCameraPreview();
+    // Request mic separately for offline VU meter (camera preview uses audio: false)
+    if (!disconnectedMicStream && navigator.mediaDevices?.getUserMedia) {
+      try {
+        disconnectedMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        syncMicMeter();
+      } catch {
+        // mic not available — meter stays hidden
+      }
+    }
   };
 
   // ── TEST button: record a mic+cam clip, play it back on toggle off ──────
   const testToggleButton = root.querySelector('[data-action="test-toggle"]');
   const testTimerEl = root.querySelector('[data-test-timer]');
+  const testVumeterEl = root.querySelector('[data-test-vumeter]');
+  const testVumeterController = createRoomMicMeterController({
+    micMeter: testVumeterEl instanceof HTMLElement ? testVumeterEl : null,
+  });
   let testStream: MediaStream | null = null;
   let testRecorder: MediaRecorder | null = null;
   let testChunks: Blob[] = [];
@@ -11371,6 +11543,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const stopTestMode = () => {
     stopTestTimer();
+    testVumeterController.stop();
+    micMeterController.stop();
     if (testRecorder && testRecorder.state !== 'inactive') {
       testRecorder.stop();
     }
@@ -11484,6 +11658,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           };
           testRecorder.start(1000);
           startTestTimer();
+          // Start VU meters from test stream audio
+          const testAudioTrack = testStream?.getAudioTracks()[0] ?? null;
+          if (testAudioTrack) {
+            syncMicMeter(); // main meter (below mic button)
+            void testVumeterController.start(testAudioTrack).catch(() => testVumeterController.stop()); // overlay bar
+          }
         })();
       }
     });

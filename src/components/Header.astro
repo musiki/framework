@@ -82,11 +82,12 @@ if (user?.email) {
 	try {
 		const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 		const sessionEmail = String(user.email || '').trim();
-		const { data: dbUser } = await supabase
-			.from('User')
-			.select('id, role, name, image')
-			.eq('email', sessionEmail)
-			.maybeSingle();
+		const normalizedEmail = sessionEmail.toLowerCase();
+		const { resolveUserIdByEmail } = await import('../lib/user-email');
+		const resolvedUserId = await resolveUserIdByEmail(supabase, normalizedEmail).catch(() => null);
+		const { data: dbUser } = resolvedUserId
+			? await supabase.from('User').select('id, role, name, image').eq('id', resolvedUserId).maybeSingle()
+			: await supabase.from('User').select('id, role, name, image').ilike('email', normalizedEmail).maybeSingle();
 
 		const userId = String(dbUser?.id || '').trim();
 		headerDbUserId = userId;

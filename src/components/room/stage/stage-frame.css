@@ -708,7 +708,35 @@
   }
 }
 
-/* ── Test mode recording timer ───────────────────────────────────────────── */
+/* ── Test mode overlay elements ─────────────────────────────────────────── */
+
+.conference-test-vumeter {
+  --conference-mic-level: 0;
+  position: absolute;
+  bottom: 0.7rem;
+  left: 0.7rem;
+  width: clamp(80px, 35%, 220px);
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.conference-test-vumeter::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #25cf6b;
+  transform: scaleX(var(--conference-mic-level));
+  transform-origin: left center;
+}
+
+.conference-test-vumeter[hidden] {
+  display: none;
+}
 
 .conference-test-timer {
   position: absolute;

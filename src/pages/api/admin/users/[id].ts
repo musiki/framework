@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { createSupabaseServerClient } from '../../../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../../../lib/live/access';
 import { isElevatedGlobalRole, normalizeGlobalRole } from '../../../../lib/roles';
-import { hasTeacherEnrollment } from '../../../../lib/user-role-sync';
+import { resolveUserIdByEmail } from '../../../../lib/user-email';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -50,15 +50,13 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       canEdit = access.canManage;
       requesterId = access.userId;
     } else {
-      const { data: candidates, error: candidatesError } = await supabase
-        .from('User')
-        .select('id, role')
-        .ilike('email', currentUser.email);
-      if (candidatesError) throw candidatesError;
-      const rows = Array.isArray(candidates) ? candidates : [];
-      const teacherRow = rows.find((row) => isElevatedGlobalRole(row.role));
-      canEdit = Boolean(teacherRow);
-      requesterId = String(teacherRow?.id || '');
+      const normalizedEmail = String(currentUser.email || '').toLowerCase().trim();
+      const resolvedId = await resolveUserIdByEmail(supabase, normalizedEmail).catch(() => null);
+      const { data: requesterUser } = resolvedId
+        ? await supabase.from('User').select('id, role').eq('id', resolvedId).maybeSingle()
+        : await supabase.from('User').select('id, role').ilike('email', normalizedEmail).maybeSingle();
+      canEdit = Boolean(requesterUser && isElevatedGlobalRole(requesterUser.role));
+      requesterId = String(requesterUser?.id || '');
     }
 
     if (!canEdit) {
@@ -112,10 +110,6 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
         return json({ error: 'Cannot update your own role from this view' }, 400);
       }
 
-      if (nextRole === 'student' && await hasTeacherEnrollment(supabase, targetUserId)) {
-        return json({ error: 'No se puede pasar a student mientras figure como teacher en algún curso' }, 409);
-      }
-
       if (isElevatedGlobalRole(currentRole) && nextRole === 'student') {
         const { data: elevatedUsers, error: elevatedUsersError } = await supabase
           .from('User')
@@ -167,11 +161,13 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
   const activeCourseId = String(requestUrl.searchParams.get('courseId') || '').trim();
 
   try {
-    const { data: requesterRows, error: requesterError } = await supabase
-      .from('User')
-      .select('id, role')
-      .ilike('email', currentUser.email);
-    const requester = (requesterRows || []).find((row: any) => isElevatedGlobalRole(row?.role)) || requesterRows?.[0];
+    const normalizedRequesterEmail = String(currentUser.email || '').toLowerCase().trim();
+    const resolvedRequesterId = await resolveUserIdByEmail(supabase, normalizedRequesterEmail).catch(() => null);
+    const { data: requesterSingle } = resolvedRequesterId
+      ? await supabase.from('User').select('id, role').eq('id', resolvedRequesterId).maybeSingle()
+      : await supabase.from('User').select('id, role').ilike('email', normalizedRequesterEmail).maybeSingle();
+    const requesterRows = requesterSingle ? [requesterSingle] : [];
+    const requester = requesterRows.find((row: any) => isElevatedGlobalRole(row?.role)) || requesterRows[0];
 
     if (requesterError) throw requesterError;
     if (!requester) return json({ error: 'Requester user not found' }, 404);

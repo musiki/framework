@@ -11,7 +11,7 @@ export const hasTeacherEnrollment = async (supabase: any, userId: string): Promi
     .eq('roleInCourse', 'teacher')
     .limit(1);
 
-  if (error) throw error;
+  if (error) throw new Error(error.message || 'Supabase error');
   return Array.isArray(data) && data.length > 0;
 };
 

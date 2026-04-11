@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../../../lib/roles';
+import { resolveUserIdByEmail, registerEmailForUser } from '../../../lib/user-email';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeRole = (value: unknown) => normalizeText(value).toLowerCase();
@@ -94,15 +95,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       const name = normalizeText(student.name);
       if (!email || !email.includes('@')) continue;
 
-      // Ensure User record exists
-      const { data: existingUsers } = await supabase
-        .from('User')
-        .select('id')
-        .ilike('email', email);
+      // Ensure User record exists (resolve via UserEmail first)
+      const resolvedId = await resolveUserIdByEmail(supabase, email);
 
       let userId: string;
 
-      if (!existingUsers || existingUsers.length === 0) {
+      if (!resolvedId) {
         const newId = crypto.randomUUID();
         const { error: userInsertError } = await supabase.from('User').insert([{
           id: newId,
@@ -119,8 +117,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
           continue;
         }
         userId = newId;
+        // Register email in UserEmail for multi-email identity
+        await registerEmailForUser(supabase, userId, email, true).catch(() => undefined);
       } else {
-        userId = existingUsers[0].id;
+        userId = resolvedId;
       }
 
       // Check if already enrolled
