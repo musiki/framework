@@ -346,7 +346,17 @@ const withActiveCourse = (href: string) => {
 					</>
 				) : null
 			}
-			<div class="online-users-bar" data-online-users-bar aria-label="Usuarios online"></div>
+			<div
+				class="online-users-bar"
+				data-online-users-bar
+				data-supabase-url={headerPresenceConfig?.supabaseUrl || ''}
+				data-supabase-anon-key={headerPresenceConfig?.supabaseAnonKey || ''}
+				data-user-id={headerPresenceConfig?.userId || ''}
+				data-user-name={headerPresenceConfig?.userName || ''}
+				data-user-image={headerPresenceConfig?.userImage || ''}
+				data-user-role={headerPresenceConfig?.userRole || ''}
+				aria-label="Usuarios online"
+			></div>
 			       <button id="graph-toggle" class="graph-toggle-btn" title="Mostrar grafo de conocimiento ⌘G">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11 19.5a8.5 8.5 0 1 1 5.23-15.52l-1.06 1.06a6.5 6.5 0 1 0-3.17 12.46l-1 1zM12.5 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm13 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
@@ -412,9 +422,6 @@ const withActiveCourse = (href: string) => {
 		</div>
 	</nav>
 </header>
-{headerPresenceConfig && (
-	<script type="application/json" id="header-presence-config" set:html={JSON.stringify(headerPresenceConfig)} />
-)}
 <Search />
 <GraphModal />
 <script>
@@ -899,7 +906,6 @@ const withActiveCourse = (href: string) => {
 		name: string;
 		image: string;
 		role: string;
-		presenceRef?: string;
 	};
 
 	const PRESENCE_CHANNEL = 'musiki:presence:online';
@@ -912,58 +918,56 @@ const withActiveCourse = (href: string) => {
 		const initial = String(u.name || 'U').trim().charAt(0).toUpperCase();
 		const label = escHtml(u.name || 'Usuario online');
 		if (u.image) {
-			return `<img src="${escHtml(u.image)}" alt="${label}" title="${label}" class="user-avatar online-user-avatar" />`;
+			return `<img src="${escHtml(u.image)}" alt="${label}" title="${label}" class="user-avatar online-user-avatar" loading="lazy" />`;
 		}
 		return `<span class="user-avatar user-avatar--fallback online-user-avatar" title="${label}" aria-hidden="true">${escHtml(initial)}</span>`;
 	};
 
+	// Track the active channel so we can clean it up on re-runs (Astro view transitions)
+	let _activeChannel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null;
+
 	const setupOnlinePresence = () => {
-		const configEl = document.getElementById('header-presence-config');
-		if (!(configEl instanceof HTMLScriptElement)) return;
-
-		let config: {
-			supabaseUrl: string;
-			supabaseAnonKey: string;
-			userId: string;
-			userName: string;
-			userImage: string;
-			userRole: string;
-		};
-		try {
-			config = JSON.parse(configEl.textContent || '');
-		} catch {
-			return;
-		}
-
-		if (!config.supabaseUrl || !config.supabaseAnonKey || !config.userId) return;
-
 		const bar = document.querySelector<HTMLElement>('[data-online-users-bar]');
 		if (!bar) return;
 
-		const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+		const supabaseUrl = bar.dataset.supabaseUrl || '';
+		const supabaseAnonKey = bar.dataset.supabaseAnonKey || '';
+		const userId = bar.dataset.userId || '';
+		const userName = bar.dataset.userName || '';
+		const userImage = bar.dataset.userImage || '';
+		const userRole = bar.dataset.userRole || '';
+
+		if (!supabaseUrl || !supabaseAnonKey || !userId) return;
+
+		// Tear down previous channel if navigating back to a page
+		if (_activeChannel) {
+			void _activeChannel.unsubscribe();
+			_activeChannel = null;
+		}
+
+		const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 			auth: { persistSession: false, autoRefreshToken: false },
 		});
 
 		const channel = supabase.channel(PRESENCE_CHANNEL, {
-			config: { presence: { key: config.userId } },
+			config: { presence: { key: userId } },
 		});
+		_activeChannel = channel;
 
-		const render = (state: Record<string, PresenceUser[]>) => {
-			const others = Object.entries(state)
-				.filter(([key]) => key !== config.userId)
+		const render = () => {
+			const state = channel.presenceState<PresenceUser>();
+			const others = (Object.entries(state) as [string, PresenceUser[]][])
+				.filter(([key]) => key !== userId)
 				.flatMap(([, presences]) => presences)
 				.filter((u) => u.role !== 'admin')
-				// dedupe by userId
 				.filter((u, i, arr) => arr.findIndex((x) => x.userId === u.userId) === i);
 
 			bar.innerHTML = '';
-
 			if (others.length === 0) return;
 
 			const shown = others.slice(0, MAX_SHOWN);
 			const overflow = others.length - MAX_SHOWN;
 
-			// Build right-to-left: use flex-direction row-reverse so first child appears rightmost
 			shown.forEach((u) => {
 				const el = document.createElement('span');
 				el.className = 'online-user-wrap';
@@ -981,24 +985,24 @@ const withActiveCourse = (href: string) => {
 		};
 
 		channel
-			.on('presence', { event: 'sync' }, () => render(channel.presenceState<PresenceUser>()))
-			.on('presence', { event: 'join' }, () => render(channel.presenceState<PresenceUser>()))
-			.on('presence', { event: 'leave' }, () => render(channel.presenceState<PresenceUser>()))
+			.on('presence', { event: 'sync' }, render)
+			.on('presence', { event: 'join' }, render)
+			.on('presence', { event: 'leave' }, render)
 			.subscribe(async (status) => {
 				if (status === 'SUBSCRIBED') {
-					await channel.track({
-						userId: config.userId,
-						name: config.userName,
-						image: config.userImage,
-						role: config.userRole,
-					});
+					await channel.track({ userId, name: userName, image: userImage, role: userRole });
 				}
 			});
 
-		// Untrack on page unload
 		window.addEventListener('beforeunload', () => { void channel.untrack(); }, { once: true });
 	};
 
+	// Run immediately if DOM is ready, and also on Astro view transition navigations
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', setupOnlinePresence, { once: true });
+	} else {
+		setupOnlinePresence();
+	}
 	document.addEventListener('astro:page-load', setupOnlinePresence);
 </script>
 <style>
@@ -1542,7 +1546,7 @@ const withActiveCourse = (href: string) => {
 	/* ── Online users bar ───────────────────────────────────────────────── */
 	.online-users-bar {
 		display: flex;
-		flex-direction: row-reverse;
+		flex-direction: row;
 		align-items: center;
 		flex: 0 0 auto;
 	}
@@ -1551,14 +1555,14 @@ const withActiveCourse = (href: string) => {
 		align-items: center;
 	}
 	.online-user-wrap + .online-user-wrap {
-		margin-right: -7px;
+		margin-left: -7px;
 	}
 	.online-user-avatar {
 		border: 2px solid var(--c-bg);
 		box-sizing: content-box;
 		transition: transform 0.15s ease;
 	}
-	.online-user-avatar:hover {
+	.online-user-wrap:hover .online-user-avatar {
 		transform: scale(1.18);
 		z-index: 2;
 		position: relative;
@@ -1575,7 +1579,7 @@ const withActiveCourse = (href: string) => {
 		font-size: 0.6rem;
 		font-weight: 700;
 		border: 2px solid var(--c-bg);
-		margin-right: -7px;
+		margin-left: -7px;
 		cursor: default;
 	}
 	/* ─────────────────────────────────────────────────────────────────── */
