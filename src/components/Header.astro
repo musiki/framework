@@ -73,6 +73,10 @@ type HeaderCourseOption = {
 
 let enrolledCourses: HeaderCourseOption[] = [];
 let inferredCourseIdFromQuery = normalizeCourseId(Astro.url.searchParams.get('course') || '');
+let headerDbUserId = '';
+let headerDbUserRole = 'student';
+let headerDbUserName = '';
+let headerDbUserImage = '';
 
 if (user?.email) {
 	try {
@@ -80,11 +84,15 @@ if (user?.email) {
 		const sessionEmail = String(user.email || '').trim();
 		const { data: dbUser } = await supabase
 			.from('User')
-			.select('id')
+			.select('id, role, name, image')
 			.eq('email', sessionEmail)
 			.maybeSingle();
 
 		const userId = String(dbUser?.id || '').trim();
+		headerDbUserId = userId;
+		headerDbUserRole = String(dbUser?.role || 'student').trim();
+		headerDbUserName = String(dbUser?.name || user.name || user.email || '').trim();
+		headerDbUserImage = String(dbUser?.image || user.image || '').trim();
 		if (userId) {
 			const { data: enrollments } = await supabase
 				.from('Enrollment')
@@ -183,7 +191,15 @@ const activeCourseHref = resolvedActiveCourse
 const showHeaderClassControls = Boolean(user && (resolvedActiveCourseId || hasPerformativeRoomLink));
 const normalizedTeacherCreateHref = typeof teacherCreateHref === 'string' ? teacherCreateHref.trim() : '';
 const normalizedTeacherEditHref = typeof teacherEditHref === 'string' ? teacherEditHref.trim() : '';
-const showTeacherEditorActions = Boolean(user && (normalizedTeacherCreateHref || normalizedTeacherEditHref));
+
+const headerPresenceConfig = headerDbUserId ? {
+	supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.SUPABASE_URL || '',
+	supabaseAnonKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '',
+	userId: headerDbUserId,
+	userName: headerDbUserName,
+	userImage: headerDbUserImage,
+	userRole: headerDbUserRole,
+} : null;
 
 const withActiveCourse = (href: string) => {
 	if (!resolvedActiveCourseId) return href;
@@ -330,6 +346,7 @@ const withActiveCourse = (href: string) => {
 					</>
 				) : null
 			}
+			<div class="online-users-bar" data-online-users-bar aria-label="Usuarios online"></div>
 			       <button id="graph-toggle" class="graph-toggle-btn" title="Mostrar grafo de conocimiento ⌘G">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11 19.5a8.5 8.5 0 1 1 5.23-15.52l-1.06 1.06a6.5 6.5 0 1 0-3.17 12.46l-1 1zM12.5 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm13 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
@@ -395,6 +412,9 @@ const withActiveCourse = (href: string) => {
 		</div>
 	</nav>
 </header>
+{headerPresenceConfig && (
+	<script type="application/json" id="header-presence-config" set:html={JSON.stringify(headerPresenceConfig)} />
+)}
 <Search />
 <GraphModal />
 <script>
@@ -870,6 +890,116 @@ const withActiveCourse = (href: string) => {
 	}
 
 	document.addEventListener('astro:page-load', setupHeaderActivityIndicators);
+</script>
+<script>
+	import { createClient } from '@supabase/supabase-js';
+
+	type PresenceUser = {
+		userId: string;
+		name: string;
+		image: string;
+		role: string;
+		presenceRef?: string;
+	};
+
+	const PRESENCE_CHANNEL = 'musiki:presence:online';
+	const MAX_SHOWN = 6;
+
+	const escHtml = (s: string) =>
+		s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+	const renderAvatar = (u: PresenceUser): string => {
+		const initial = String(u.name || 'U').trim().charAt(0).toUpperCase();
+		const label = escHtml(u.name || 'Usuario online');
+		if (u.image) {
+			return `<img src="${escHtml(u.image)}" alt="${label}" title="${label}" class="user-avatar online-user-avatar" />`;
+		}
+		return `<span class="user-avatar user-avatar--fallback online-user-avatar" title="${label}" aria-hidden="true">${escHtml(initial)}</span>`;
+	};
+
+	const setupOnlinePresence = () => {
+		const configEl = document.getElementById('header-presence-config');
+		if (!(configEl instanceof HTMLScriptElement)) return;
+
+		let config: {
+			supabaseUrl: string;
+			supabaseAnonKey: string;
+			userId: string;
+			userName: string;
+			userImage: string;
+			userRole: string;
+		};
+		try {
+			config = JSON.parse(configEl.textContent || '');
+		} catch {
+			return;
+		}
+
+		if (!config.supabaseUrl || !config.supabaseAnonKey || !config.userId) return;
+
+		const bar = document.querySelector<HTMLElement>('[data-online-users-bar]');
+		if (!bar) return;
+
+		const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+			auth: { persistSession: false, autoRefreshToken: false },
+		});
+
+		const channel = supabase.channel(PRESENCE_CHANNEL, {
+			config: { presence: { key: config.userId } },
+		});
+
+		const render = (state: Record<string, PresenceUser[]>) => {
+			const others = Object.entries(state)
+				.filter(([key]) => key !== config.userId)
+				.flatMap(([, presences]) => presences)
+				.filter((u) => u.role !== 'admin')
+				// dedupe by userId
+				.filter((u, i, arr) => arr.findIndex((x) => x.userId === u.userId) === i);
+
+			bar.innerHTML = '';
+
+			if (others.length === 0) return;
+
+			const shown = others.slice(0, MAX_SHOWN);
+			const overflow = others.length - MAX_SHOWN;
+
+			// Build right-to-left: use flex-direction row-reverse so first child appears rightmost
+			shown.forEach((u) => {
+				const el = document.createElement('span');
+				el.className = 'online-user-wrap';
+				el.innerHTML = renderAvatar(u);
+				bar.appendChild(el);
+			});
+
+			if (overflow > 0) {
+				const more = document.createElement('span');
+				more.className = 'online-user-more';
+				more.title = `${overflow} más online`;
+				more.textContent = `+${overflow}`;
+				bar.appendChild(more);
+			}
+		};
+
+		channel
+			.on('presence', { event: 'sync' }, () => render(channel.presenceState<PresenceUser>()))
+			.on('presence', { event: 'join' }, () => render(channel.presenceState<PresenceUser>()))
+			.on('presence', { event: 'leave' }, () => render(channel.presenceState<PresenceUser>()))
+			.subscribe(async (status) => {
+				if (status === 'SUBSCRIBED') {
+					await channel.track({
+						userId: config.userId,
+						name: config.userName,
+						image: config.userImage,
+						role: config.userRole,
+					});
+				}
+			});
+
+		// Untrack on page unload
+		window.addEventListener('beforeunload', () => { void channel.untrack(); }, { once: true });
+	};
+
+	document.addEventListener('astro:page-load', setupOnlinePresence);
 </script>
 <style>
 	header {
@@ -1409,6 +1539,46 @@ const withActiveCourse = (href: string) => {
 		font-weight: 700;
 		line-height: 1;
 	}
+	/* ── Online users bar ───────────────────────────────────────────────── */
+	.online-users-bar {
+		display: flex;
+		flex-direction: row-reverse;
+		align-items: center;
+		flex: 0 0 auto;
+	}
+	.online-user-wrap {
+		display: inline-flex;
+		align-items: center;
+	}
+	.online-user-wrap + .online-user-wrap {
+		margin-right: -7px;
+	}
+	.online-user-avatar {
+		border: 2px solid var(--c-bg);
+		box-sizing: content-box;
+		transition: transform 0.15s ease;
+	}
+	.online-user-avatar:hover {
+		transform: scale(1.18);
+		z-index: 2;
+		position: relative;
+	}
+	.online-user-more {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 50%;
+		background: var(--c-bg-mute);
+		color: var(--c-fg);
+		font-size: 0.6rem;
+		font-weight: 700;
+		border: 2px solid var(--c-bg);
+		margin-right: -7px;
+		cursor: default;
+	}
+	/* ─────────────────────────────────────────────────────────────────── */
 	.user-button-label {
 		display: inline-block;
 		max-width: 11rem;
