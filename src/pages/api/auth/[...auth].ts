@@ -26,7 +26,8 @@ const normalizeAuthRequest = (request: Request): Request => {
   if (effectiveOrigin) {
     const parsedEffectiveOrigin = new URL(effectiveOrigin);
     effectiveUrl.protocol = parsedEffectiveOrigin.protocol;
-    effectiveUrl.host = parsedEffectiveOrigin.host;
+    effectiveUrl.hostname = parsedEffectiveOrigin.hostname;
+    effectiveUrl.port = parsedEffectiveOrigin.port;
   }
 
   const headers = new Headers(request.headers);
