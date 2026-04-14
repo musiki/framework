@@ -2,8 +2,11 @@ import Google from "@auth/core/providers/google";
 import { defineConfig } from "auth-astro";
 import { resolveAuthRedirectUrl } from "./src/lib/auth-origin";
 
+const AUTH_ORIGIN = (process.env.AUTH_URL || 'https://musiki.org.ar').replace(/\/$/, '');
+
 export default defineConfig({
   trustHost: true,
+  redirectProxyUrl: `${AUTH_ORIGIN}/api/auth`,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || import.meta.env.GOOGLE_CLIENT_ID,

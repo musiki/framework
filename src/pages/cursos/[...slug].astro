@@ -4339,6 +4339,41 @@ order:
         }, {});
       }
 
+      const WORDCLOUD_IMAGE_BUCKET = 'live-wordclouds';
+
+      function slugifyWordcloudSegment(value) {
+        return String(value || '')
+          .trim()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'item';
+      }
+
+      function getWordcloudSupabaseUrl() {
+        const forumRoot = document.getElementById('lesson-forum');
+        if (!(forumRoot instanceof HTMLElement)) return '';
+        return String(forumRoot.dataset.supabaseUrl || '').trim().replace(/\/+$/g, '');
+      }
+
+      function buildWordcloudImageUrl({ courseId, pageSlug, interactionId, sessionId }) {
+        const supabaseUrl = getWordcloudSupabaseUrl();
+        const safeCourseId = slugifyWordcloudSegment(courseId);
+        const safeInteractionId = slugifyWordcloudSegment(interactionId);
+        const safeSessionId = slugifyWordcloudSegment(sessionId);
+        if (!supabaseUrl || !safeCourseId || !safeInteractionId || !safeSessionId) return '';
+
+        const lessonPath = String(pageSlug || '')
+          .split('/')
+          .slice(1)
+          .filter(Boolean)
+          .map((segment) => slugifyWordcloudSegment(segment))
+          .join('/') || 'sin-leccion';
+        const fileName = `${safeInteractionId}-${safeSessionId}.png`;
+        return `${supabaseUrl}/storage/v1/object/public/${WORDCLOUD_IMAGE_BUCKET}/${safeCourseId}/${lessonPath}/${fileName}`;
+      }
+
       function getPersistedWordcloudResults(payload) {
         if (!payload || typeof payload !== 'object') return null;
 
@@ -4406,7 +4441,133 @@ order:
         return '';
       }
 
-      function renderWordcloudCloud(targetNode, rawCounts, totalResponses = 0) {
+      function getPersistedWordcloudSessionId(payload) {
+        if (!payload || typeof payload !== 'object') return '';
+
+        const directSessionId = String(payload.wordcloudSessionId || payload.sessionId || '').trim();
+        if (directSessionId) return directSessionId;
+
+        if (payload.answer && typeof payload.answer === 'object') {
+          const nestedSessionId = String(
+            payload.answer.wordcloudSessionId
+            || payload.answer.sessionId
+            || '',
+          ).trim();
+          if (nestedSessionId) return nestedSessionId;
+        }
+
+        return '';
+      }
+
+      function getPersistedWordcloudImageUrl(payload, evalId) {
+        if (!payload || typeof payload !== 'object') return '';
+
+        const directUrlCandidates = [
+          payload.wordcloudImageUrl,
+          payload.imageUrl,
+          payload.publicUrl,
+          payload.wordcloudImage && typeof payload.wordcloudImage === 'object' ? payload.wordcloudImage.publicUrl : '',
+        ];
+
+        if (payload.answer && typeof payload.answer === 'object') {
+          directUrlCandidates.push(
+            payload.answer.wordcloudImageUrl,
+            payload.answer.imageUrl,
+            payload.answer.publicUrl,
+            payload.answer.wordcloudImage && typeof payload.answer.wordcloudImage === 'object'
+              ? payload.answer.wordcloudImage.publicUrl
+              : '',
+          );
+        }
+
+        for (const candidate of directUrlCandidates) {
+          const url = String(candidate || '').trim();
+          if (url) return url;
+        }
+
+        const sessionId = getPersistedWordcloudSessionId(payload);
+        if (!sessionId) return '';
+
+        const { courseId, pageSlug } = getPageContext();
+        return buildWordcloudImageUrl({
+          courseId,
+          pageSlug,
+          interactionId: evalId,
+          sessionId,
+        });
+      }
+
+      function buildClassicWordcloudSvg(entries, {
+        prompt = '',
+        totalResponses = 0,
+      } = {}) {
+        const width = 1000;
+        const height = 560;
+        const padding = 44;
+        const headerHeight = 88;
+        const footerHeight = 40;
+        const maxCount = Math.max(...entries.map(([, count]) => count), 1);
+        const minCount = Math.min(...entries.map(([, count]) => count), maxCount);
+
+        let cursorX = padding;
+        let cursorY = headerHeight + 12;
+        let lineHeight = 0;
+
+        const wordNodes = entries.map(([word, count], index) => {
+          const ratio = maxCount === minCount ? 1 : (count - minCount) / (maxCount - minCount);
+          const fontSize = 22 + ratio * 44;
+          const approxWidth = Math.max(fontSize * 1.65, word.length * fontSize * 0.52);
+          const approxHeight = fontSize * 1.08;
+          const rotation = index % 5 === 0 ? -8 : index % 7 === 0 ? 7 : 0;
+
+          if (cursorX + approxWidth > width - padding) {
+            cursorX = padding;
+            cursorY += lineHeight + 18;
+            lineHeight = 0;
+          }
+
+          if (cursorY + approxHeight > height - footerHeight - 8) {
+            return '';
+          }
+
+          const x = cursorX;
+          const y = cursorY + fontSize;
+          cursorX += approxWidth + 18;
+          lineHeight = Math.max(lineHeight, approxHeight);
+
+          const hue = (index * 37 + 19) % 360;
+          const fill = ratio > 0.72
+            ? `hsl(${hue} 82% 36%)`
+            : `hsl(${hue} 70% 46%)`;
+
+          return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="${fontSize.toFixed(1)}" font-weight="${ratio > 0.6 ? 700 : 500}" fill="${fill}" transform="rotate(${rotation} ${x.toFixed(1)} ${y.toFixed(1)})">${escapeHtml(word)}</text>`;
+        }).filter(Boolean);
+
+        const headline = prompt || 'Wordcloud';
+        const metaLine = [
+          totalResponses > 0 ? `${totalResponses} aportes` : '',
+          `${entries.length} términos`,
+        ].filter(Boolean).join(' · ');
+
+        return `
+          <svg class="wordcloud-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(headline)}">
+            <defs>
+              <linearGradient id="wordcloud-bg-gradient" x1="0%" x2="100%" y1="0%" y2="100%">
+                <stop offset="0%" stop-color="#fffdf7"></stop>
+                <stop offset="100%" stop-color="#f3efe2"></stop>
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="${width}" height="${height}" rx="26" fill="url(#wordcloud-bg-gradient)"></rect>
+            <rect x="12" y="12" width="${width - 24}" height="${height - 24}" rx="18" fill="none" stroke="rgba(49, 35, 18, 0.12)"></rect>
+            <text x="${padding}" y="48" font-size="13" letter-spacing="3.2" fill="rgba(73, 54, 29, 0.52)">WORDCLOUD</text>
+            <text x="${padding}" y="76" font-size="26" font-weight="700" fill="#362818">${escapeHtml(headline)}</text>
+            ${wordNodes.join('')}
+            <text x="${padding}" y="${height - 18}" font-size="14" fill="rgba(73, 54, 29, 0.56)">${escapeHtml(metaLine)}</text>
+          </svg>
+        `;
+      }
+
+      function renderWordcloudCloud(targetNode, rawCounts, totalResponses = 0, options = {}) {
         if (!(targetNode instanceof HTMLElement)) return;
 
         const entries = Object.entries(sanitizeWordCounts(rawCounts))
@@ -4421,31 +4582,40 @@ order:
           return;
         }
 
-        const maxCount = Math.max(...entries.map(([, count]) => count), 1);
-        const minCount = Math.min(...entries.map(([, count]) => count), maxCount);
         const total = Math.max(0, Number(totalResponses || 0));
+        const prompt = String(options?.prompt || '').trim();
+        const imageUrl = String(options?.imageUrl || '').trim();
 
-        const cloud = document.createElement('div');
-        cloud.className = 'wordcloud-cloud';
+        const visual = document.createElement('div');
+        visual.className = 'wordcloud-visual';
 
-        entries.forEach(([word, count], index) => {
-          const ratio = maxCount === minCount
-            ? 1
-            : (count - minCount) / (maxCount - minCount);
-          const sizeRem = 0.95 + ratio * 1.85;
-          const hue = (index * 53 + 17) % 360;
-
-          const chip = document.createElement('span');
-          chip.className = 'wordcloud-term';
-          chip.style.fontSize = `${sizeRem.toFixed(2)}rem`;
-          chip.style.color = `hsl(${hue}deg 75% 58%)`;
-          chip.style.fontWeight = ratio > 0.6 ? '700' : '500';
-          chip.title = total > 0
-            ? `${word}: ${count} (${Math.round((count / total) * 100)}%)`
-            : `${word}: ${count}`;
-          chip.textContent = word;
-          cloud.appendChild(chip);
+        const fallback = document.createElement('div');
+        fallback.className = 'wordcloud-visual-fallback';
+        fallback.innerHTML = buildClassicWordcloudSvg(entries, {
+          prompt,
+          totalResponses: total,
         });
+        visual.appendChild(fallback);
+
+        if (imageUrl) {
+          const image = document.createElement('img');
+          image.className = 'wordcloud-image';
+          image.alt = prompt ? `Wordcloud: ${prompt}` : 'Wordcloud exportado';
+          image.loading = 'lazy';
+          image.decoding = 'async';
+          image.src = imageUrl;
+          image.hidden = true;
+          image.addEventListener('load', () => {
+            image.hidden = false;
+            fallback.hidden = true;
+          });
+          image.addEventListener('error', () => {
+            image.removeAttribute('src');
+            image.hidden = true;
+            fallback.hidden = false;
+          });
+          visual.prepend(image);
+        }
 
         const summary = document.createElement('p');
         summary.className = 'wordcloud-summary';
@@ -4455,7 +4625,7 @@ order:
 
         targetNode.hidden = false;
         targetNode.innerHTML = '';
-        targetNode.append(cloud, summary);
+        targetNode.append(visual, summary);
       }
 
       async function persistWordcloudImage(widget, payload) {
@@ -4496,6 +4666,10 @@ order:
           }
 
           widget.lastSavedWordcloudUrl = String(exportPayload?.publicUrl || '').trim();
+          if (widget.lastSavedWordcloudUrl) {
+            widget.state.persistedImageUrl = widget.lastSavedWordcloudUrl;
+            renderWordcloudState(widget);
+          }
         } catch {
           widget.lastSavedWordcloudKey = '';
         }
@@ -6289,7 +6463,10 @@ order:
           ? Math.round(explicitTotal)
           : derivedTotal;
 
-        renderWordcloudCloud(widget.resultsNode, normalizedWordCounts, totalResponses);
+        renderWordcloudCloud(widget.resultsNode, normalizedWordCounts, totalResponses, {
+          prompt: widget.data?.prompt || '',
+          imageUrl: widget.lastSavedWordcloudUrl || widget.state.persistedImageUrl || '',
+        });
       }
 
       function renderWordcloudState(widget) {
@@ -6393,6 +6570,7 @@ order:
           if (isNewSession) {
             widget.state.hasSubmitted = false;
             widget.state.persistedResults = null;
+            widget.state.persistedImageUrl = '';
             try {
               window.localStorage.removeItem(`live:submitted:${widget.data.id}`);
             } catch {
@@ -6429,6 +6607,8 @@ order:
         const previousSubmission = getSubmission(data.id);
         const previousPayload = getSubmissionPayload(previousSubmission);
         const previousWord = getPersistedWordcloudAnswerText(previousPayload);
+        const previousSessionId = getPersistedWordcloudSessionId(previousPayload);
+        const previousImageUrl = getPersistedWordcloudImageUrl(previousPayload, data.id);
         const wasSubmitted = previousWord.length > 0;
         const previousResults = getPersistedWordcloudResults(previousPayload);
         registerProgress(data, position, wasSubmitted);
@@ -6605,12 +6785,13 @@ order:
           resultsNode: results,
           state: {
             active: false,
-            sessionId: '',
+            sessionId: previousSessionId,
             endsAt: null,
             totalResponses: 0,
             wordCounts: {},
             hasSubmitted: wasSubmitted,
             persistedResults: previousResults,
+            persistedImageUrl: previousImageUrl,
           },
           getSuggestionId: () => selectedSuggestionId,
           syncOptions: (nextOptions) => {
@@ -6623,6 +6804,14 @@ order:
         renderWordcloudState(widget);
         if (wasSubmitted) {
           setPollFeedback(widget, `Tu respuesta guardada: ${previousWord}`);
+        }
+        if (widget.canManage && previousResults && previousSessionId) {
+          void persistWordcloudImage(widget, {
+            active: true,
+            sessionId: previousSessionId,
+            totalResponses: previousResults.totalResponses,
+            wordCounts: previousResults.wordCounts,
+          });
         }
 
         const courseContext = getPageContext();
@@ -6686,6 +6875,14 @@ order:
                 wordCounts: snapshotWordCounts,
                 totalResponses: snapshotTotalResponses,
               };
+              widget.state.persistedImageUrl =
+                widget.lastSavedWordcloudUrl
+                || buildWordcloudImageUrl({
+                  courseId: courseContext.courseId,
+                  pageSlug: courseContext.pageSlug,
+                  interactionId: widget.data.id,
+                  sessionId: widget.state.sessionId,
+                });
             }
 
             await saveSubmission({
@@ -6702,6 +6899,15 @@ order:
                 answerText: word,
                 answerWord: word,
                 suggestionId,
+                wordcloudSessionId: widget.state.sessionId,
+                wordcloudImageUrl:
+                  widget.lastSavedWordcloudUrl
+                  || buildWordcloudImageUrl({
+                    courseId: courseContext.courseId,
+                    pageSlug: courseContext.pageSlug,
+                    interactionId: widget.data.id,
+                    sessionId: widget.state.sessionId,
+                  }),
                 type: widget.data.type || 'wordcloud',
                 mode: widget.data.mode || 'submission',
                 ...(Object.keys(snapshotWordCounts).length > 0 || snapshotTotalResponses > 0
@@ -11958,14 +12164,24 @@ a[node] -->|edge| b[hub]
       .wordcloud-results {
         margin-top: 1rem;
       }
-      .wordcloud-cloud {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.45rem 0.8rem;
-        align-items: baseline;
+      .wordcloud-visual {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid color-mix(in srgb, var(--c-border) 82%, transparent);
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 10%, #fff8e8) 0%, transparent 42%),
+          linear-gradient(180deg, #fffdf7 0%, #f7f0df 100%);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
       }
-      .wordcloud-term {
-        line-height: 1.1;
+      .wordcloud-image,
+      .wordcloud-svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .wordcloud-visual-fallback[hidden] {
+        display: none;
       }
       .wordcloud-summary {
         margin: 0.6rem 0 0;

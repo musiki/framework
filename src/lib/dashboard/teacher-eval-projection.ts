@@ -3,6 +3,7 @@ import {
   type DashboardGridProjection,
   normalizeDashboardText,
 } from './shared';
+import { getSubmissionAnswerText } from '../submission-table';
 
 interface TeacherEvalProjectionInput {
   submissions: any[];
@@ -21,6 +22,7 @@ export function buildTeacherEvalProjection({
       const assignment = allAssignmentsById.get(String(sub?.assignmentId || ''));
       const assignmentSlug = String(assignment?.slug || sub?.assignmentId || '');
       const assignmentLabel = assignmentSlug.split('/').pop() || assignmentSlug;
+      const answerText = getSubmissionAnswerText(sub, allAssignmentsById);
       
       return {
         id: sub.id,
@@ -29,6 +31,7 @@ export function buildTeacherEvalProjection({
         email: user?.email || '—',
         assignmentLabel,
         assignmentId: sub.assignmentId,
+        answerText,
         score: sub.score !== null && sub.score !== undefined ? sub.score : '—',
         feedback: sub.feedback || '—',
         __search: buildSearchBlob([
@@ -36,6 +39,7 @@ export function buildTeacherEvalProjection({
           user?.email,
           assignmentLabel,
           sub.assignmentId,
+          answerText,
           sub.feedback,
         ]),
       };
@@ -49,6 +53,7 @@ export function buildTeacherEvalProjection({
       { title: 'Email', field: 'email', minWidth: 200 },
       { title: 'Clase', field: 'assignmentLabel', minWidth: 150 },
       { title: 'ID Eval', field: 'assignmentId', minWidth: 120 },
+      { title: 'Respuesta', field: 'answerText', minWidth: 220 },
       { title: 'Puntaje', field: 'score', width: 80, hozAlign: 'center', headerHozAlign: 'center' },
       { title: 'Feedback', field: 'feedback', minWidth: 200 },
     ],
