@@ -60,7 +60,10 @@
       "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' 'https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=__TRACKED_VAR__')",
       "Bash(python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\).get\\('scope',''\\)\\)\")",
       "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' 'https://console.developers.googleapis.com/v1/projects/musiki-150712/oauthClients?alt=json')",
-      "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' https://clientauthconfig.googleapis.com/v1/projects/musiki-150712/brands)"
+      "Bash(curl -s -H 'Authorization: Bearer __TRACKED_VAR__' https://clientauthconfig.googleapis.com/v1/projects/musiki-150712/brands)",
+      "Bash(curl:*)",
+      "Bash(scp -i ~/.ssh/id_rsa /tmp/Caddyfile.musiki zz@46.225.154.68:/tmp/Caddyfile.new)",
+      "Bash(scp -i ~/.ssh/id_rsa /tmp/Caddyfile.musiki zz@46.225.154.68:~/Caddyfile.new)"
     ]
   }
 }
