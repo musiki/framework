@@ -20,8 +20,11 @@ const shouldSyncEvalCatalogForPath = (pathname: string): boolean => {
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const url = context.url;
-  const hostname = url.hostname;
   const pathname = url.pathname;
+  
+  // Get hostname from forwarded headers or request URL
+  const forwardedHost = context.request.headers.get("x-forwarded-host") || context.request.headers.get("host") || url.hostname;
+  const hostname = forwardedHost.split(":")[0];
 
   console.log(`[middleware] ${context.request.method} ${hostname}${pathname}`);
 
@@ -29,6 +32,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (hostname === "www.musiki.org.ar") {
     const newUrl = new URL(url.href);
     newUrl.hostname = "musiki.org.ar";
+    // Force https protocol if we are on www to be safe
+    newUrl.protocol = "https:";
+    console.log(`[middleware] Redirecting www. to root: ${newUrl.href}`);
     return context.redirect(newUrl.href, 301);
   }
 
