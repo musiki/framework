@@ -13,7 +13,7 @@ export default defineConfig({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || import.meta.env.GOOGLE_CLIENT_SECRET,
     }),
   ],
-  secret: process.env.AUTH_SECRET || import.meta.env.AUTH_SECRET,
+  secret: "7b271f441de821df715b1c48fcbe4236e5e2149c1ae74ea468ea5eae23aa73ef",
   callbacks: {
     async jwt({ token, user, profile }) {
       const userImage = typeof user?.image === "string" ? user.image.trim() : "";
