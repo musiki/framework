@@ -28,6 +28,7 @@ import {
   ensureParticipantCard as ensureRoomParticipantCard,
   getPresentationCircleIdentity as resolvePresentationCircleIdentity,
   getTrackSid,
+  hasCameraTrack,
   hasActiveScreenShare as hasParticipantScreenshare,
   isLocalParticipant,
   listRoomParticipants,
