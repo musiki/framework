@@ -60,6 +60,15 @@ const handleAuth = async (context: APIContext) => {
   const normalizedRequest = normalizeAuthRequest(request);
   const response = await Auth(normalizedRequest, authConfig);
 
+  if (action === "callback") {
+    const loc = response.headers.get("location") || "";
+    if (loc.includes("error=")) {
+      console.error("[auth] callback error redirect:", loc, "| request url:", normalizedRequest.url);
+    } else {
+      console.log("[auth] callback ok → redirect:", loc);
+    }
+  }
+
   if (["callback", "signin", "signout"].includes(action)) {
     const setCookies = response.headers.getSetCookie();
     if (setCookies.length > 0) {
