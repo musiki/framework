@@ -63,11 +63,15 @@ const handleAuth = async (context: APIContext) => {
   if (["callback", "signin", "signout"].includes(action)) {
     const setCookies = response.headers.getSetCookie();
     if (setCookies.length > 0) {
+      if (action === "callback") {
+        console.log(`[auth] setting ${setCookies.length} cookies for ${action}`);
+      }
       setCookies.forEach((cookie) => {
         const { name, value, ...options } = parseString(cookie);
+        // We still set them in context.cookies in case Astro needs them for the current request lifecycle,
+        // but we DO NOT delete them from the response headers anymore.
         cookies.set(name, value, options as Parameters<typeof cookies.set>[2]);
       });
-      response.headers.delete("Set-Cookie");
     }
   }
 
