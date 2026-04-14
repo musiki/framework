@@ -8,11 +8,17 @@ import { resolveRequestAuthOrigin } from "../lib/auth-origin";
 
 const session = (Astro.locals as any).session;
 
+// Robustly fetch CSRF token for the sign-in flow
 const getCsrfToken = async (req: Request) => {
-    const url = new URL(`${authConfig.prefix || "/api/auth"}/csrf`, req.url);
-    const res = await Auth(new Request(url, { headers: req.headers }), authConfig);
-    const data = await res.json();
-    return data.csrfToken;
+    try {
+        const url = new URL(`${authConfig.prefix || "/api/auth"}/csrf`, req.url);
+        const res = await Auth(new Request(url, { headers: req.headers }), authConfig);
+        const data = await res.json();
+        return data.csrfToken;
+    } catch (e) {
+        console.error("Failed to fetch CSRF token for login page:", e);
+        return "";
+    }
 };
 
 const csrfToken = await getCsrfToken(Astro.request);
@@ -83,12 +89,9 @@ if (session?.user?.email) {
     <main class="wrap">
         <h1>Iniciar Sesión</h1>
         <div class="provider-login">
-            <SignIn provider="google" options={{ callbackUrl }}>Continuar con Google</SignIn>
-            <form action="/api/auth/signin/google" method="POST">
-                <input type="hidden" name="callbackUrl" value={callbackUrl} />
-                <input type="hidden" name="csrfToken" value={csrfToken} />
-                <button type="submit">Reintentar con Google (Sin JS)</button>
-            </form>
+            <SignIn provider="google" options={{ callbackUrl }} authParams={{ csrfToken }}>
+                Continuar con Google
+            </SignIn>
         </div>
     </main>
 </body>

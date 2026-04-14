@@ -26,20 +26,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const forwardedHost = context.request.headers.get("x-forwarded-host") || context.request.headers.get("host") || url.hostname;
   const hostname = forwardedHost.split(":")[0];
 
-  console.log(`[middleware] ${context.request.method} ${hostname}${pathname}`);
-
   // Enforce root domain if hitting www.
+  // Using 308 Permanent Redirect to preserve POST method bodies (crucial for Auth)
   if (hostname === "www.musiki.org.ar") {
     const newUrl = new URL(url.href);
     newUrl.hostname = "musiki.org.ar";
-    // Force https protocol if we are on www to be safe
     newUrl.protocol = "https:";
-    console.log(`[middleware] Redirecting www. to root (308): ${newUrl.href}`);
     return context.redirect(newUrl.href, 308);
-  }
-
-  if (pathname.startsWith("/api/auth")) {
-    console.log(`[middleware] auth path detected: ${pathname}`);
   }
 
   // Skip session check for known static or prerendered paths (search.json, assets, etc)
@@ -53,14 +46,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (!isStaticLike) {
     try {
       session = await getSession(context.request);
-      if (pathname.startsWith("/api/auth")) {
-        console.log(`[middleware] getSession result for ${pathname}: ${session ? "logged in" : "no session"}`);
-      }
     } catch (e) {
       // Ignore errors during build-time prerendering
-      if (pathname.startsWith("/api/auth")) {
-        console.error(`[middleware] getSession error for ${pathname}:`, e);
-      }
     }
   }
   context.locals.session = session;

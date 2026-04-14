@@ -28,12 +28,7 @@ const handleAuth = async (context: APIContext) => {
 
   // Use the request directly. Auth.js should handle forwarded headers 
   // correctly if trustHost is true and trustProxy is set in Astro.
-  const normalizedRequest = request;
-  if (action === "callback") {
-    console.log(`[auth] secret present: ${!!authConfig.secret}, length: ${authConfig.secret?.length}`);
-    console.log(`[auth] secret start: ${authConfig.secret?.substring(0, 4)}...`);
-  }
-  const response = await Auth(normalizedRequest, authConfig);
+  const response = await Auth(request, authConfig);
 
   if (["callback", "signin", "signout"].includes(action)) {
     const setCookies = response.headers.getSetCookie();
