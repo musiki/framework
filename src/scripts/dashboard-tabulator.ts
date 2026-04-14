@@ -771,7 +771,11 @@ const persistClipboardCellValue = async (
     if (!normalized.valid) {
       throw new Error('Usa solo / o 1, -, ~ o 0.5, x o 0, o deja vacío.');
     }
-    await persistSingleAttendanceCellValue(cell, normalized, meta);
+    const snapshot = captureAttendanceCellSnapshot(cell);
+    applyAttendanceCellLocalState(cell, normalized.countRaw);
+    await enqueueRowSave(getCellSaveQueueKey(cell), () =>
+      persistSingleAttendanceCellValue(cell, normalized, meta, snapshot),
+    );
     return;
   }
 
@@ -1066,29 +1070,147 @@ const resolvePersistableAttendanceCellContext = (cell: any, meta: DashboardMeta)
   };
 };
 
+const buildAttendanceMetaTitle = (liveValue: number, manualCount: number | null, effectiveValue: number) =>
+  `Room: ${formatAttendanceSymbol(liveValue, { blankWhenZero: true }) || '—'} • Override: ${manualCount === null ? 'auto' : formatAttendanceSymbol(manualCount)} • Final: ${formatAttendanceSymbol(effectiveValue, { blankWhenZero: true }) || '—'}`;
+
+const computeAttendanceSummaryFields = (rowData: any) => {
+  let absenceUnits = 0;
+  let attendanceUnits = 0;
+  let scheduledDayCount = 0;
+
+  Object.values(rowData?.__attendanceCellMeta || {}).forEach((entry: any) => {
+    if (!entry?.countsTowardAbsence) return;
+    scheduledDayCount += 1;
+    const hasAnyData = entry?.hasManualOverride || Number(entry?.liveValue || 0) > 0;
+    const effectivePresence = hasAnyData ? Number(entry?.effectiveValue || 0) : 1;
+    attendanceUnits += Math.max(0, effectivePresence);
+    absenceUnits += Math.max(0, 1 - effectivePresence);
+  });
+
+  const attendanceRate = scheduledDayCount > 0
+    ? Math.round((attendanceUnits / scheduledDayCount) * 1000) / 10
+    : 0;
+
+  return {
+    attendanceRate,
+    attendanceCount: attendanceUnits,
+    attendanceTotalCount: scheduledDayCount,
+    absenceUnits,
+    absenceDisplay: formatAbsence(absenceUnits),
+  };
+};
+
+const captureAttendanceCellSnapshot = (cell: any) => {
+  const field = normalizeText(cell?.getField?.() || cell?.getColumn?.()?.getDefinition?.()?.field || '');
+  const rowData = cell?.getRow?.()?.getData?.() || cell?.getData?.() || {};
+  const cellMeta = rowData?.__attendanceCellMeta?.[field];
+  if (!field || !cellMeta) return null;
+
+  return {
+    field,
+    previousDisplay: String(rowData?.[field] ?? cell?.getValue?.() ?? ''),
+    previousMeta: { ...cellMeta },
+    previousSummary: {
+      attendanceRate: rowData?.attendanceRate,
+      attendanceCount: rowData?.attendanceCount,
+      attendanceTotalCount: rowData?.attendanceTotalCount,
+      absenceUnits: rowData?.absenceUnits,
+      absenceDisplay: rowData?.absenceDisplay,
+    },
+  };
+};
+
+const applyAttendanceCellLocalState = (cell: any, manualCount: number | null) => {
+  const row = cell?.getRow?.();
+  const rowData = row?.getData?.() || cell?.getData?.() || {};
+  const field = normalizeText(cell?.getField?.() || cell?.getColumn?.()?.getDefinition?.()?.field || '');
+  const cellMeta = rowData?.__attendanceCellMeta?.[field];
+  if (!row || !field || !cellMeta) return false;
+
+  const nextManualCount = typeof manualCount === 'number' && Number.isFinite(manualCount)
+    ? Math.max(0, Math.min(1, manualCount))
+    : null;
+  const liveValue = Number(cellMeta?.liveValue || 0);
+  const hasManualOverride = nextManualCount !== null;
+  const nextEffectiveValue = hasManualOverride ? nextManualCount : liveValue;
+
+  cellMeta.hasManualOverride = hasManualOverride;
+  cellMeta.manualValue = hasManualOverride ? nextManualCount : 0;
+  cellMeta.effectiveValue = nextEffectiveValue;
+  if (hasManualOverride) {
+    cellMeta.isClassDay = true;
+  } else if (liveValue > 0) {
+    cellMeta.isClassDay = true;
+  }
+  cellMeta.countsTowardAbsence = !cellMeta.isFuture && Boolean(cellMeta.isClassDay);
+  cellMeta.title = buildAttendanceMetaTitle(liveValue, nextManualCount, nextEffectiveValue);
+
+  const nextDisplay = hasManualOverride
+    ? formatAttendanceSymbol(nextEffectiveValue)
+    : formatAttendanceSymbol(liveValue, { blankWhenZero: true });
+  const nextSummary = computeAttendanceSummaryFields(rowData);
+
+  void row.update({
+    [field]: nextDisplay,
+    ...nextSummary,
+  });
+
+  const table = cell?.getTable?.();
+  if (table) {
+    void window.requestAnimationFrame(() => {
+      syncAttendanceDayHeaderStats(table, [field]);
+    });
+  }
+
+  return true;
+};
+
+const restoreAttendanceCellSnapshot = (cell: any, snapshot: {
+  field: string;
+  previousDisplay: string;
+  previousMeta: Record<string, any>;
+  previousSummary: Record<string, any>;
+} | null) => {
+  if (!snapshot) return false;
+
+  const row = cell?.getRow?.();
+  const rowData = row?.getData?.() || cell?.getData?.() || {};
+  const cellMeta = rowData?.__attendanceCellMeta?.[snapshot.field];
+  if (!row || !cellMeta) return false;
+
+  Object.keys(cellMeta).forEach((key) => {
+    delete cellMeta[key];
+  });
+  Object.assign(cellMeta, snapshot.previousMeta || {});
+
+  void row.update({
+    [snapshot.field]: snapshot.previousDisplay,
+    ...(snapshot.previousSummary || {}),
+  });
+
+  const table = cell?.getTable?.();
+  if (table) {
+    void window.requestAnimationFrame(() => {
+      syncAttendanceDayHeaderStats(table, [snapshot.field]);
+    });
+  }
+
+  return true;
+};
+
 const persistSingleAttendanceCellValue = async (
   cell: any,
   normalized: ReturnType<typeof normalizeAttendanceInput>,
   meta: DashboardMeta,
+  snapshot?: {
+    field: string;
+    previousDisplay: string;
+    previousMeta: Record<string, any>;
+    previousSummary: Record<string, any>;
+  } | null,
 ) => {
   const context = resolvePersistableAttendanceCellContext(cell, meta);
   if (!context) return false;
-
-  // ── Optimistic update: show formatted value immediately, before the fetch ──
-  const preRowData = cell.getRow()?.getData?.() || cell.getData?.() || {};
-  const preCellMeta = preRowData?.__attendanceCellMeta?.[context.field];
-  const preLiveValue = Number(preCellMeta?.liveValue || 0);
-  const optimisticDisplay = normalized.countRaw !== null
-    ? formatAttendanceSymbol(normalized.countRaw)
-    : formatAttendanceSymbol(preLiveValue, { blankWhenZero: true });
-
-  const previousDisplay = String(cell?.getOldValue?.() ?? cell?.getValue?.() ?? '');
-
-  // Only update row if UI value differs (avoids double re-render if setValue was already called)
-  if (String(cell.getValue() || '') !== optimisticDisplay) {
-    void cell.getRow()?.update?.({ [context.field]: optimisticDisplay });
-  }
-  // ──────────────────────────────────────────────────────────────────────────
 
   setDashboardSaveStatus('saving', `Guardando asistencia ${context.dateKey}...`);
 
@@ -1106,69 +1228,21 @@ const persistSingleAttendanceCellValue = async (
       }),
     });
   } catch (fetchError) {
-    void cell.getRow()?.update?.({ [context.field]: previousDisplay });
+    restoreAttendanceCellSnapshot(cell, snapshot ?? null);
     setDashboardSaveStatus('error', 'No se pudo guardar la asistencia manual');
     throw fetchError;
   }
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    void cell.getRow()?.update?.({ [context.field]: previousDisplay });
+    restoreAttendanceCellSnapshot(cell, snapshot ?? null);
     setDashboardSaveStatus('error', payload?.error || 'No se pudo guardar la asistencia manual');
     throw new Error(payload?.error || 'No se pudo guardar la asistencia manual');
   }
 
   const payload = await response.json().catch(() => ({}));
   const nextCount = typeof payload?.meta?.count === 'number' ? payload.meta.count : null;
-  const rowData = cell.getRow()?.getData?.() || cell.getData?.() || {};
-  const nextCellMeta = rowData?.__attendanceCellMeta?.[context.field];
-  const liveValue = Number(nextCellMeta?.liveValue || 0);
-
-  const nextEffectiveValue = nextCount ?? liveValue;
-  const nextDisplay = nextCount !== null
-    ? formatAttendanceSymbol(nextCount)
-    : formatAttendanceSymbol(liveValue, { blankWhenZero: true });
-
-  if (nextCellMeta) {
-    nextCellMeta.hasManualOverride = nextCount !== null;
-    nextCellMeta.manualValue = nextCount;
-    nextCellMeta.effectiveValue = nextEffectiveValue;
-    if (nextCount !== null) nextCellMeta.isClassDay = true;
-    else if (liveValue > 0) nextCellMeta.isClassDay = true;
-    nextCellMeta.countsTowardAbsence = !nextCellMeta.isFuture && Boolean(nextCellMeta.isClassDay);
-    nextCellMeta.title = `Room: ${formatAttendanceSymbol(liveValue, { blankWhenZero: true }) || '—'} • Override: ${nextCount === null ? 'auto' : formatAttendanceSymbol(nextCount)} • Final: ${formatAttendanceSymbol(nextEffectiveValue, { blankWhenZero: true }) || '—'}`;
-  }
-
-  let absenceUnits = 0;
-  let attendanceUnits = 0;
-  let scheduledDayCount = 0;
-  Object.values(rowData?.__attendanceCellMeta || {}).forEach((entry: any) => {
-    if (!entry?.countsTowardAbsence) return;
-    scheduledDayCount += 1;
-    const hasAnyData = entry?.hasManualOverride || Number(entry?.liveValue || 0) > 0;
-    const effectivePresence = hasAnyData ? Number(entry?.effectiveValue || 0) : 1;
-    attendanceUnits += Math.max(0, effectivePresence);
-    absenceUnits += Math.max(0, 1 - effectivePresence);
-  });
-  const attendanceRate = scheduledDayCount > 0
-    ? Math.round((attendanceUnits / scheduledDayCount) * 1000) / 10
-    : 0;
-
-  void cell.getRow()?.update?.({
-    [context.field]: nextDisplay,
-    attendanceRate,
-    attendanceCount: attendanceUnits,
-    attendanceTotalCount: scheduledDayCount,
-    absenceUnits,
-    absenceDisplay: formatAbsence(absenceUnits),
-  });
-
-  const table = cell.getTable?.();
-  if (table) {
-    void window.requestAnimationFrame(() => {
-      syncAttendanceDayHeaderStats(table, [context.field]);
-    });
-  }
+  applyAttendanceCellLocalState(cell, nextCount);
 
   setDashboardSaveStatus('saved', `Asistencia guardada: ${context.dateKey}.`);
   return true;
@@ -5106,18 +5180,16 @@ const bindCustomInteractiveCellFocus = (table: Tabulator) => {
 
 const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   const TOUCH_LONG_PRESS_DELAY_MS = 420;
+  const ATTENDANCE_SHORTCUT_TIMEOUT_MS = 280;
 
   const resolveAttendanceCellContext = (cell: any) =>
     resolvePersistableAttendanceCellContext(cell, meta);
 
   const getSelectedAttendanceCells = (activeCell: any) => {
-    const state = (table as any).__musikiRangeSelectionState as RangeSelectionState | undefined;
-    if (!state?.selectedCells || state.selectedCells.size <= 1) return [] as any[];
-
-    return Array.from(state.selectedCells).filter((candidate: any) => {
-      if (!candidate || candidate === activeCell) return false;
-      const context = resolveAttendanceCellContext(candidate);
-      return Boolean(context);
+    return resolveSelectedTargetCells(activeCell, {
+      sameField: true,
+      sameKind: true,
+      filter: (candidate) => Boolean(resolveAttendanceCellContext(candidate)),
     });
   };
 
@@ -5131,24 +5203,12 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     cell: any,
     normalized: ReturnType<typeof normalizeAttendanceInput>,
   ) => {
-    // Update the main cell immediately (Tabulator might have already done this via cellEdited, 
-    // but for keyboard shortcuts we do it explicitly)
-    const optimisticValue = normalized.countRaw !== null
-      ? formatAttendanceSymbol(normalized.countRaw)
-      : '';
-    
-    // Serialise via per-row save queue so rapid edits to the same row don't race.
-    void enqueueRowSave(getCellSaveQueueKey(cell), () =>
-      persistSingleAttendanceCellValue(cell, normalized, meta),
-    );
-
-    const extraCells = getSelectedAttendanceCells(cell);
-    for (const selectedCell of extraCells) {
-      // Optimistic UI update for range
-      selectedCell.setValue(optimisticValue);
-      
-      void enqueueRowSave(getCellSaveQueueKey(selectedCell), () =>
-        persistSingleAttendanceCellValue(selectedCell, normalized, meta),
+    const targetCells = getSelectedAttendanceCells(cell);
+    for (const targetCell of targetCells) {
+      const snapshot = captureAttendanceCellSnapshot(targetCell);
+      applyAttendanceCellLocalState(targetCell, normalized.countRaw);
+      void enqueueRowSave(getCellSaveQueueKey(targetCell), () =>
+        persistSingleAttendanceCellValue(targetCell, normalized, meta, snapshot),
       );
     }
   };
@@ -5158,6 +5218,8 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   let touchLongPressTimer: number | null = null;
   let touchLongPressCellKey = '';
   let touchLongPressTriggered = false;
+  let pendingShortcutInput = '';
+  let pendingShortcutTimer: number | null = null;
 
   const clearPendingToggle = () => {
     if (pendingToggleTimer !== null) {
@@ -5174,6 +5236,41 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     }
     touchLongPressCellKey = '';
     touchLongPressTriggered = false;
+  };
+
+  const clearPendingShortcut = () => {
+    if (pendingShortcutTimer !== null) {
+      window.clearTimeout(pendingShortcutTimer);
+      pendingShortcutTimer = null;
+    }
+    pendingShortcutInput = '';
+  };
+
+  const getRangeAttendanceAnchor = () => {
+    const rangeState: RangeSelectionState | undefined = (table as any).__musikiRangeSelectionState;
+    const selectedCells = Array.from(rangeState?.selectedCells || []);
+    return selectedCells.find((candidate: any) => Boolean(resolveAttendanceCellContext(candidate))) || null;
+  };
+
+  const applyAttendanceShortcutInput = (inputStr: string) => {
+    const anchorCell = getRangeAttendanceAnchor();
+    if (!anchorCell) return;
+    const normalized = normalizeAttendanceInput(inputStr);
+    if (!normalized.valid) return;
+    persistAttendanceSelection(anchorCell, normalized);
+  };
+
+  const scheduleZeroShortcutCommit = () => {
+    if (pendingShortcutTimer !== null) {
+      window.clearTimeout(pendingShortcutTimer);
+    }
+    pendingShortcutTimer = window.setTimeout(() => {
+      const pendingValue = pendingShortcutInput;
+      clearPendingShortcut();
+      if (pendingValue === '0') {
+        applyAttendanceShortcutInput('0');
+      }
+    }, ATTENDANCE_SHORTCUT_TIMEOUT_MS);
   };
 
   table.on('cellEditing', (cell: any) => {
@@ -5266,32 +5363,59 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     if (isInteractiveDashboardTarget(event.target)) return;
 
     const key = event.key;
-    const validKeys = ['/', '1', '0', 'x', 'X', '-', '~'];
-    if (!validKeys.includes(key)) return;
-
-    const valueMap: Record<string, string> = {
+    const immediateValueMap: Record<string, string> = {
       '/': '1',
       '1': '1',
-      '0': '0',
       'x': '0',
       'X': '0',
       '-': '0.5',
       '~': '0.5',
     };
-    const inputStr = valueMap[key.toLowerCase()];
+
+    const anchorCell = getRangeAttendanceAnchor();
+    if (!anchorCell) return;
+
+    if (pendingShortcutInput === '0') {
+      if (key === '.' || key === ',') {
+        event.preventDefault();
+        event.stopPropagation();
+        pendingShortcutInput = `0${key}`;
+        scheduleZeroShortcutCommit();
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      clearPendingShortcut();
+      applyAttendanceShortcutInput('0');
+    } else if (pendingShortcutInput === '0.' || pendingShortcutInput === '0,') {
+      if (key === '5') {
+        event.preventDefault();
+        event.stopPropagation();
+        clearPendingShortcut();
+        applyAttendanceShortcutInput('0.5');
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      clearPendingShortcut();
+      applyAttendanceShortcutInput('0');
+    }
+
+    if (key === '0') {
+      event.preventDefault();
+      event.stopPropagation();
+      pendingShortcutInput = '0';
+      scheduleZeroShortcutCommit();
+      return;
+    }
+
+    const inputStr = immediateValueMap[key];
     if (inputStr === undefined) return;
-
-    const rangeState: RangeSelectionState | undefined = (table as any).__musikiRangeSelectionState;
-    const selectedCells = Array.from(rangeState?.selectedCells || []);
-    const attendanceCells = selectedCells.filter((c: any) => resolveAttendanceCellContext(c));
-    if (attendanceCells.length === 0) return;
-
     event.preventDefault();
     event.stopPropagation();
-
-    const normalized = normalizeAttendanceInput(inputStr);
-    // Use the first cell as the anchor for selection logic
-    persistAttendanceSelection(attendanceCells[0], normalized);
+    applyAttendanceShortcutInput(inputStr);
   };
 
   tableElement?.addEventListener('keydown', keydownHandler);
@@ -5332,7 +5456,11 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
       const context = resolveAttendanceCellContext(cell);
       if (!context) continue;
       try {
-        await persistSingleAttendanceCellValue(cell, present, meta);
+        const snapshot = captureAttendanceCellSnapshot(cell);
+        applyAttendanceCellLocalState(cell, present.countRaw);
+        await enqueueRowSave(getCellSaveQueueKey(cell), () =>
+          persistSingleAttendanceCellValue(cell, present, meta, snapshot),
+        );
       } catch (error: any) {
         failures.push(error?.message || `Fila ${context.studentId}`);
       }
@@ -5348,6 +5476,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   return () => {
     clearPendingToggle();
     clearTouchLongPress();
+    clearPendingShortcut();
     try {
       table.off('tableBuilt', syncHeaderStats);
       table.off('dataFiltered', syncHeaderStats);
