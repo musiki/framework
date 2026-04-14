@@ -53,6 +53,8 @@ const handleAuth = async (context: APIContext) => {
   const prefix = authConfig.prefix || "/api/auth";
   const action = url.pathname.slice(prefix.length + 1).split("/")[0] as AuthAction;
 
+  console.log(`[auth] ${request.method} ${url.pathname} (action: ${action})`);
+
   if (!actions.includes(action) || !url.pathname.startsWith(`${prefix}/`)) {
     return new Response("Not found", { status: 404 });
   }
