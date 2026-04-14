@@ -34,8 +34,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     newUrl.hostname = "musiki.org.ar";
     // Force https protocol if we are on www to be safe
     newUrl.protocol = "https:";
-    console.log(`[middleware] Redirecting www. to root: ${newUrl.href}`);
-    return context.redirect(newUrl.href, 301);
+    console.log(`[middleware] Redirecting www. to root (308): ${newUrl.href}`);
+    return context.redirect(newUrl.href, 308);
   }
 
   if (pathname.startsWith("/api/auth")) {
