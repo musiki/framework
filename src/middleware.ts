@@ -21,6 +21,10 @@ const shouldSyncEvalCatalogForPath = (pathname: string): boolean => {
 export const onRequest = defineMiddleware(async (context, next) => {
   const pathname = context.url.pathname;
 
+  if (pathname.startsWith("/api/auth")) {
+    console.log(`[middleware] auth path detected: ${pathname}`);
+  }
+
   // Skip session check for known static or prerendered paths (search.json, assets, etc)
   const isStaticLike = 
     pathname === "/search.json" || 
@@ -32,8 +36,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (!isStaticLike) {
     try {
       session = await getSession(context.request);
+      if (pathname.startsWith("/api/auth")) {
+        console.log(`[middleware] getSession result for ${pathname}: ${session ? "logged in" : "no session"}`);
+      }
     } catch (e) {
       // Ignore errors during build-time prerendering
+      if (pathname.startsWith("/api/auth")) {
+        console.error(`[middleware] getSession error for ${pathname}:`, e);
+      }
     }
   }
   context.locals.session = session;
