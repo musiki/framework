@@ -21,6 +21,9 @@ const shouldSyncEvalCatalogForPath = (pathname: string): boolean => {
 export const onRequest = defineMiddleware(async (context, next) => {
   const url = context.url;
   const hostname = url.hostname;
+  const pathname = url.pathname;
+
+  console.log(`[middleware] ${context.request.method} ${hostname}${pathname}`);
 
   // Enforce root domain if hitting www.
   if (hostname === "www.musiki.org.ar") {
@@ -28,8 +31,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     newUrl.hostname = "musiki.org.ar";
     return context.redirect(newUrl.href, 301);
   }
-
-  const pathname = url.pathname;
 
   if (pathname.startsWith("/api/auth")) {
     console.log(`[middleware] auth path detected: ${pathname}`);
