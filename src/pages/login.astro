@@ -2,9 +2,11 @@
 import BaseHead from "../components/BaseHead.astro";
 import Header from "../components/Header.astro";
 import { SignIn } from "auth-astro/components";
+import { getCsrfToken } from "auth-astro/server";
 import { resolveRequestAuthOrigin } from "../lib/auth-origin";
 
 const session = (Astro.locals as any).session;
+const csrfToken = await getCsrfToken(Astro.request);
 
 const toSafeRedirect = (value: unknown): string => {
     let text = typeof value === "string" ? value.trim() : "";
@@ -73,6 +75,11 @@ if (session?.user?.email) {
         <h1>Iniciar Sesión</h1>
         <div class="provider-login">
             <SignIn provider="google" options={{ callbackUrl }}>Continuar con Google</SignIn>
+            <form action="/api/auth/signin/google" method="POST">
+                <input type="hidden" name="callbackUrl" value={callbackUrl} />
+                <input type="hidden" name="csrfToken" value={csrfToken} />
+                <button type="submit">Reintentar con Google (Sin JS)</button>
+            </form>
         </div>
     </main>
 </body>
