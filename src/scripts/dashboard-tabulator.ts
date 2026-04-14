@@ -323,9 +323,51 @@ const TEACHER_MAIN_TOP_LEVEL_FOLD_KEYS = [
 const getTableFoldStorageKey = (table: Tabulator | null | undefined) =>
   normalizeText((table as DashboardTabulatorInstance | null | undefined)?.__musikiFoldStorageKey || '');
 
+let settingsSyncTimeout: any = null;
+const syncSettingsToServer = (settings: Record<string, any>) => {
+  if (settingsSyncTimeout) clearTimeout(settingsSyncTimeout);
+  settingsSyncTimeout = setTimeout(async () => {
+    try {
+      await fetch('/api/user/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings }),
+      });
+    } catch (error) {
+      console.error('Error syncing settings to server:', error);
+    }
+  }, 2000); // 2s debounce
+};
+
+const writeStoredFoldState = (table: Tabulator | null | undefined, nextState: Record<string, boolean>) => {
+  const storageKey = getTableFoldStorageKey(table);
+  if (!storageKey) return;
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(nextState));
+    
+    // Also sync to server-side settings
+    const meta = (table as DashboardTabulatorInstance | null | undefined)?.__musikiMeta;
+    if (meta) {
+      const currentFolds = meta.settings?.folds || {};
+      const nextFolds = { ...currentFolds, [storageKey]: nextState };
+      meta.settings = { ...(meta.settings || {}), folds: nextFolds };
+      syncSettingsToServer({ folds: nextFolds });
+    }
+  } catch {
+    // ignore storage errors
+  }
+};
+
 const readStoredFoldState = (table: Tabulator | null | undefined): Record<string, boolean> => {
   const storageKey = getTableFoldStorageKey(table);
   if (!storageKey) return {};
+  
+  // Try server-side settings first if available in meta
+  const meta = (table as DashboardTabulatorInstance | null | undefined)?.__musikiMeta;
+  if (meta?.settings?.folds?.[storageKey]) {
+    return meta.settings.folds[storageKey];
+  }
+
   try {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return {};
@@ -336,16 +378,6 @@ const readStoredFoldState = (table: Tabulator | null | undefined): Record<string
     );
   } catch {
     return {};
-  }
-};
-
-const writeStoredFoldState = (table: Tabulator | null | undefined, nextState: Record<string, boolean>) => {
-  const storageKey = getTableFoldStorageKey(table);
-  if (!storageKey) return;
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(nextState));
-  } catch {
-    // ignore storage errors
   }
 };
 
@@ -1043,14 +1075,19 @@ const persistSingleAttendanceCellValue = async (
   if (!context) return false;
 
   // ── Optimistic update: show formatted value immediately, before the fetch ──
-  const preRowData = cell.getData?.() || {};
+  const preRowData = cell.getRow()?.getData?.() || cell.getData?.() || {};
   const preCellMeta = preRowData?.__attendanceCellMeta?.[context.field];
   const preLiveValue = Number(preCellMeta?.liveValue || 0);
   const optimisticDisplay = normalized.countRaw !== null
     ? formatAttendanceSymbol(normalized.countRaw)
     : formatAttendanceSymbol(preLiveValue, { blankWhenZero: true });
+
   const previousDisplay = String(cell?.getOldValue?.() ?? cell?.getValue?.() ?? '');
-  await cell.getRow()?.update?.({ [context.field]: optimisticDisplay });
+
+  // Only update row if UI value differs (avoids double re-render if setValue was already called)
+  if (String(cell.getValue() || '') !== optimisticDisplay) {
+    void cell.getRow()?.update?.({ [context.field]: optimisticDisplay });
+  }
   // ──────────────────────────────────────────────────────────────────────────
 
   setDashboardSaveStatus('saving', `Guardando asistencia ${context.dateKey}...`);
@@ -1069,32 +1106,33 @@ const persistSingleAttendanceCellValue = async (
       }),
     });
   } catch (fetchError) {
-    await cell.getRow()?.update?.({ [context.field]: previousDisplay });
+    void cell.getRow()?.update?.({ [context.field]: previousDisplay });
     setDashboardSaveStatus('error', 'No se pudo guardar la asistencia manual');
     throw fetchError;
   }
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    await cell.getRow()?.update?.({ [context.field]: previousDisplay });
+    void cell.getRow()?.update?.({ [context.field]: previousDisplay });
     setDashboardSaveStatus('error', payload?.error || 'No se pudo guardar la asistencia manual');
     throw new Error(payload?.error || 'No se pudo guardar la asistencia manual');
   }
 
   const payload = await response.json().catch(() => ({}));
   const nextCount = typeof payload?.meta?.count === 'number' ? payload.meta.count : null;
-  const rowData = cell.getData?.() || {};
+  const rowData = cell.getRow()?.getData?.() || cell.getData?.() || {};
   const nextCellMeta = rowData?.__attendanceCellMeta?.[context.field];
   const liveValue = Number(nextCellMeta?.liveValue || 0);
+
   const nextEffectiveValue = nextCount ?? liveValue;
   const nextDisplay = nextCount !== null
     ? formatAttendanceSymbol(nextCount)
     : formatAttendanceSymbol(liveValue, { blankWhenZero: true });
+
   if (nextCellMeta) {
     nextCellMeta.hasManualOverride = nextCount !== null;
     nextCellMeta.manualValue = nextCount;
     nextCellMeta.effectiveValue = nextEffectiveValue;
-    // Setting any override marks this date as a class day; removing reverts to live-based
     if (nextCount !== null) nextCellMeta.isClassDay = true;
     else if (liveValue > 0) nextCellMeta.isClassDay = true;
     nextCellMeta.countsTowardAbsence = !nextCellMeta.isFuture && Boolean(nextCellMeta.isClassDay);
@@ -1105,10 +1143,8 @@ const persistSingleAttendanceCellValue = async (
   let attendanceUnits = 0;
   let scheduledDayCount = 0;
   Object.values(rowData?.__attendanceCellMeta || {}).forEach((entry: any) => {
-    // Only count past/today days toward totals and absences
     if (!entry?.countsTowardAbsence) return;
     scheduledDayCount += 1;
-    // Blank cell (no manual override, no live presence) counts as present by default
     const hasAnyData = entry?.hasManualOverride || Number(entry?.liveValue || 0) > 0;
     const effectivePresence = hasAnyData ? Number(entry?.effectiveValue || 0) : 1;
     attendanceUnits += Math.max(0, effectivePresence);
@@ -1118,7 +1154,7 @@ const persistSingleAttendanceCellValue = async (
     ? Math.round((attendanceUnits / scheduledDayCount) * 1000) / 10
     : 0;
 
-  await cell.getRow()?.update?.({
+  void cell.getRow()?.update?.({
     [context.field]: nextDisplay,
     attendanceRate,
     attendanceCount: attendanceUnits,
@@ -1129,7 +1165,9 @@ const persistSingleAttendanceCellValue = async (
 
   const table = cell.getTable?.();
   if (table) {
-    syncAttendanceDayHeaderStats(table, [context.field]);
+    void window.requestAnimationFrame(() => {
+      syncAttendanceDayHeaderStats(table, [context.field]);
+    });
   }
 
   setDashboardSaveStatus('saved', `Asistencia guardada: ${context.dateKey}.`);
@@ -3587,9 +3625,9 @@ const configureColumns = (
     }
 
     const isAnnotationCell = isAnnotationContextKind(context.kind) && normalizeText(nextColumn.field);
-    const keepAnnotationWrapper = isAnnotationCell && !isNativeDashboardEditableKind(kind);
+    const keepAnnotationWrapper = isAnnotationCell && !isNativeDashboardEditableKind(kind) && !['row-select', 'admin-actions'].includes(kind);
 
-    if (isAnnotationCell) {
+    if (isAnnotationCell && kind !== 'row-select') {
       nextColumn.contextMenu = buildCellContextMenu(context.kind, context.meta, annotationState, modalRef);
     }
 
@@ -3701,7 +3739,7 @@ const buildTable = (
   const isRangeTable = supportsRangeSelection(context.kind);
   const fillPanelHeight = ['teacher-main', 'overview', 'gradebook', 'attendance-summary', 'admin'].includes(context.kind);
   const maxHeight =
-    context.kind === 'comments'
+    ['comments', 'teacher-eval'].includes(context.kind)
       ? '34vh'
       : context.kind === 'attendance-log'
         ? '50vh'
@@ -3727,7 +3765,7 @@ const buildTable = (
     movableColumns: !isComplexTable,
     headerSort: !isComplexTable,
     resizableColumnFit: false,
-    selectableRows: context.kind === 'admin',
+    selectable: context.kind === 'admin',
     // Native Tabulator range selection (SelectRange module, included in TabulatorFull).
     selectableRange: isRangeTable ? true : false,
     selectableRangeAutoFocus: false,
@@ -3876,8 +3914,25 @@ const getActiveTeacherTab = (shell: ParentNode) => {
   return VALID_TEACHER_TABS.includes(nextTab) ? nextTab : 'main';
 };
 
-const updateScopeQuery = (courseId: string, year: string, activeTab: string) => {
+const updateScopeQuery = async (courseId: string, year: string, activeTab: string) => {
   const url = new URL(window.location.href);
+  
+  // Sync to server before reload (no debounce here as we're leaving the page)
+  try {
+    await fetch('/api/user/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        settings: { 
+          lastActiveCourseId: courseId,
+          lastActiveYear: year
+        } 
+      }),
+    });
+  } catch (e) {
+    // Ignore errors during navigation
+  }
+
   if (courseId) {
     url.searchParams.set('course', courseId);
   } else {
@@ -4167,7 +4222,7 @@ const bindFillEmptyPresentButton = (root: HTMLElement, registry: Map<string, Tab
       const attendanceFields = [...new Set(
         selectedCells
           .map((c: any) => c.getColumn?.()?.getField?.() as string | undefined)
-          .filter((f): f is string => typeof f === 'string' && f.startsWith('attendance.')),
+          .filter((f): f is string => typeof f === 'string' && (f.startsWith('attendance.') || f.startsWith('day_'))),
       )];
 
       if (attendanceFields.length === 0) {
@@ -4402,15 +4457,15 @@ const bindScopeSelectors = (shell: ParentNode) => {
 
   if (courseSelect.dataset.boundScope !== 'true') {
     courseSelect.dataset.boundScope = 'true';
-    courseSelect.addEventListener('change', () => {
-      updateScopeQuery(courseSelect.value, yearSelect.value, getActiveTeacherTab(shell));
+    courseSelect.addEventListener('change', async () => {
+      await updateScopeQuery(courseSelect.value, yearSelect.value, getActiveTeacherTab(shell));
     });
   }
 
   if (yearSelect.dataset.boundScope !== 'true') {
     yearSelect.dataset.boundScope = 'true';
-    yearSelect.addEventListener('change', () => {
-      updateScopeQuery(courseSelect.value, yearSelect.value, getActiveTeacherTab(shell));
+    yearSelect.addEventListener('change', async () => {
+      await updateScopeQuery(courseSelect.value, yearSelect.value, getActiveTeacherTab(shell));
     });
   }
 };
@@ -5072,29 +5127,29 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     return `${context.studentId}::${context.dateKey}`;
   };
 
-  const persistAttendanceSelection = async (
+  const persistAttendanceSelection = (
     cell: any,
     normalized: ReturnType<typeof normalizeAttendanceInput>,
   ) => {
+    // Update the main cell immediately (Tabulator might have already done this via cellEdited, 
+    // but for keyboard shortcuts we do it explicitly)
+    const optimisticValue = normalized.countRaw !== null
+      ? formatAttendanceSymbol(normalized.countRaw)
+      : '';
+    
     // Serialise via per-row save queue so rapid edits to the same row don't race.
-    await enqueueRowSave(getCellSaveQueueKey(cell), () =>
+    void enqueueRowSave(getCellSaveQueueKey(cell), () =>
       persistSingleAttendanceCellValue(cell, normalized, meta),
     );
 
     const extraCells = getSelectedAttendanceCells(cell);
-    const failures: string[] = [];
     for (const selectedCell of extraCells) {
-      try {
-        await enqueueRowSave(getCellSaveQueueKey(selectedCell), () =>
-          persistSingleAttendanceCellValue(selectedCell, normalized, meta),
-        );
-      } catch (error: any) {
-        failures.push(error?.message || 'No se pudo guardar una celda del rango');
-      }
-    }
-
-    if (failures.length > 0) {
-      alert(`Se guardó la celda activa, pero fallaron ${failures.length} celdas del rango.`);
+      // Optimistic UI update for range
+      selectedCell.setValue(optimisticValue);
+      
+      void enqueueRowSave(getCellSaveQueueKey(selectedCell), () =>
+        persistSingleAttendanceCellValue(selectedCell, normalized, meta),
+      );
     }
   };
 
@@ -5151,13 +5206,8 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
       return;
     }
 
-    try {
-      await persistAttendanceSelection(cell, normalized);
-    } catch (error: any) {
-      console.error('Error saving manual attendance:', error);
-      cell.restoreOldValue();
-      alert(error?.message || 'No se pudo guardar la asistencia manual');
-    }
+    // Local-first: don't await, let the queue handle it.
+    persistAttendanceSelection(cell, normalized);
   });
 
   table.on('cellDblClick', (_event: MouseEvent, cell: any) => {
@@ -5211,6 +5261,40 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
   tableElement?.addEventListener('touchend', touchEndHandler, { passive: true });
   tableElement?.addEventListener('touchcancel', touchMoveCancelHandler, { passive: true });
   tableElement?.addEventListener('touchmove', touchMoveCancelHandler, { passive: true });
+
+  const keydownHandler = (event: KeyboardEvent) => {
+    if (isInteractiveDashboardTarget(event.target)) return;
+
+    const key = event.key;
+    const validKeys = ['/', '1', '0', 'x', 'X', '-', '~'];
+    if (!validKeys.includes(key)) return;
+
+    const valueMap: Record<string, string> = {
+      '/': '1',
+      '1': '1',
+      '0': '0',
+      'x': '0',
+      'X': '0',
+      '-': '0.5',
+      '~': '0.5',
+    };
+    const inputStr = valueMap[key.toLowerCase()];
+    if (inputStr === undefined) return;
+
+    const rangeState: RangeSelectionState | undefined = (table as any).__musikiRangeSelectionState;
+    const selectedCells = Array.from(rangeState?.selectedCells || []);
+    const attendanceCells = selectedCells.filter((c: any) => resolveAttendanceCellContext(c));
+    if (attendanceCells.length === 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const normalized = normalizeAttendanceInput(inputStr);
+    // Use the first cell as the anchor for selection logic
+    persistAttendanceSelection(attendanceCells[0], normalized);
+  };
+
+  tableElement?.addEventListener('keydown', keydownHandler);
 
   const syncHeaderStats = () => {
     window.requestAnimationFrame(() => {
@@ -5274,6 +5358,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     tableElement?.removeEventListener('touchend', touchEndHandler);
     tableElement?.removeEventListener('touchcancel', touchMoveCancelHandler);
     tableElement?.removeEventListener('touchmove', touchMoveCancelHandler);
+    tableElement?.removeEventListener('keydown', keydownHandler);
     rootElement?.removeEventListener('click', fillColumnHandler);
   };
 };
@@ -5705,6 +5790,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     log: { columns: [], rows: [] },
   });
   const comments = parseJsonScript<GridProjection>('dashboard-teacher-comments', { columns: [], rows: [] });
+  const teacherEval = parseJsonScript<GridProjection>('dashboard-teacher-eval', { columns: [], rows: [] });
   const admin = parseJsonScript<GridProjection>('dashboard-teacher-admin', { columns: [], rows: [] });
   const initialAnnotations = parseJsonScript<DashboardAnnotationRecord[]>('dashboard-teacher-annotations', []);
   hydrateAgendaAttendanceBullets();
@@ -5834,6 +5920,26 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     registry.set('comments', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="comments"]');
+    if (searchInput) installGlobalSearch([table], searchInput, persistKey);
+  }
+
+  const teacherEvalNode = root.querySelector<HTMLElement>('[data-dashboard-grid="teacher-eval"]');
+  if (teacherEvalNode) {
+    const persistKey = buildPersistKey(meta, 'teacher-eval');
+    const table = buildTable(
+      root,
+      teacherEvalNode,
+      teacherEval,
+      persistKey,
+      { kind: 'teacher-eval', meta },
+      annotationState,
+      modalRef,
+    );
+    trackTableBuilt(table, readyTables);
+    destroyers.push(bindInitialFoldState(table, 'teacher-eval'));
+    registry.set('teacher-eval', table);
+    tables.push(table);
+    const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="teacher-eval"]');
     if (searchInput) installGlobalSearch([table], searchInput, persistKey);
   }
 

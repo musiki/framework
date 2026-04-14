@@ -44,6 +44,7 @@ import { buildCommentsProjection } from '../lib/dashboard/comments-projection';
 import { buildGradebookProjection } from '../lib/dashboard/gradebook-projection';
 import { buildOverviewProjection } from '../lib/dashboard/overview-projection';
 import { buildTeacherMainProjection } from '../lib/dashboard/teacher-main-projection';
+import { buildTeacherEvalProjection } from '../lib/dashboard/teacher-eval-projection';
 import { getCourseWelcomeFields, getWelcomeSubmissionAnswerText } from '../lib/dashboard/welcome-fields';
 import { toDashboardProjectionJson } from '../lib/dashboard/shared';
 import { getRoleBadgeLabel } from '../lib/dashboard-role';
@@ -81,7 +82,7 @@ async function resolveDashboardUserByEmail(email, normalizedEmail) {
   if (resolvedUserId) {
     const { data, error } = await supabase
       .from('User')
-      .select('*')
+      .select('*, settings')
       .eq('id', resolvedUserId)
       .maybeSingle();
     if (error) throw new Error(error.message || 'Supabase error');
@@ -91,7 +92,7 @@ async function resolveDashboardUserByEmail(email, normalizedEmail) {
   // Fallback: direct User.email lookup (handles pre-migration rows)
   const { data, error } = await supabase
     .from('User')
-    .select('*')
+    .select('*, settings')
     .ilike('email', normalizedEmail)
     .order('updatedAt', { ascending: false })
     .order('createdAt', { ascending: false });
@@ -1184,15 +1185,19 @@ const adminCourseMeta = courseEntries
   )
   .sort((left: any, right: any) => String(left.title || '').localeCompare(String(right.title || ''), 'es'));
 
-const selectedCourseId = canonicalizeCourseId(requestedCourseParam);
+const userSettings = (dbUser?.settings || {}) as Record<string, any>;
+
+const selectedCourseId = canonicalizeCourseId(requestedCourseParam || userSettings.lastActiveCourseId || '');
 const activeCourseId = availableCourseMeta.some((course) => course.courseId === selectedCourseId)
   ? selectedCourseId
   : String(availableCourseMeta[0]?.courseId || '');
 const activeCourseMeta = availableCourseMeta.find((course) => course.courseId === activeCourseId) || null;
 const activeCourseCode = String(activeCourseMeta?.code || '').trim();
+
 const activeCourseWelcomeFields = activeCourseId
   ? await getCourseWelcomeFields(activeCourseId)
   : [];
+
 const studentAttendanceConfigYears = new Set<string>();
 
 if (!isTeacher && activeCourseId) {
@@ -1233,23 +1238,6 @@ if (!isTeacher && activeCourseId) {
     console.error('Error initializing attendance config rows for student dashboard:', error);
   }
 }
-
-const buildCourseLessonHref = (courseIdInput, lessonPath = '') => {
-  const courseId = canonicalizeCourseId(courseIdInput);
-  if (!courseId) return '#';
-
-  const courseEntry = courseEntries.find((entry: any) => canonicalizeCourseId(entry?.courseId) === courseId);
-  const courseSlug = normalizeText(courseEntry?.slug || courseId);
-  const lessonSegments = normalizeText(lessonPath)
-    .split('/')
-    .filter(Boolean)
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
-
-  return lessonSegments
-    ? `/cursos/${encodeURIComponent(courseSlug)}/${lessonSegments}`
-    : `/cursos/${encodeURIComponent(courseSlug)}`;
-};
 
 const activeCourseSubmissions = (() => {
   if (!activeCourseId) {
@@ -1304,13 +1292,31 @@ const availableYears = (() => {
   return years;
 })();
 
-const activeYear = availableYears.includes(requestedYearParam)
-  ? requestedYearParam
-  : String(availableYears[0] || String(new Date().getFullYear()));
+const selectedYear = requestedYearParam || userSettings.lastActiveYear || '';
+const activeYear = /^\d{4}$/.test(selectedYear)
+  ? selectedYear
+  : String(availableYears[0] || new Date().getFullYear());
 
 const matchesActiveYear = (submission: any) => {
   if (!activeYear) return true;
   return getSubmissionYear(submission) === activeYear;
+};
+
+const buildCourseLessonHref = (courseIdInput, lessonPath = '') => {
+  const courseId = canonicalizeCourseId(courseIdInput);
+  if (!courseId) return '#';
+
+  const courseEntry = courseEntries.find((entry: any) => canonicalizeCourseId(entry?.courseId) === courseId);
+  const courseSlug = normalizeText(courseEntry?.slug || courseId);
+  const lessonSegments = normalizeText(lessonPath)
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+  return lessonSegments
+    ? `/cursos/${encodeURIComponent(courseSlug)}/${lessonSegments}`
+    : `/cursos/${encodeURIComponent(courseSlug)}`;
 };
 
 const scopedTeacherSubmissions = isTeacher
@@ -1412,8 +1418,10 @@ const isTeacherCourseMember = (userIdInput: any, courseIdInput: any, enrollments
   const userId = String(userIdInput || '').trim();
   if (!userId) return false;
 
-  const userRole = normalizeRole(allUsersById.get(userId)?.role);
-  if (userRole === 'teacher') return true;
+  const user = allUsersById.get(userId);
+  const userRole = normalizeRole(user?.role);
+  // Consider both course-level teachers and global admins as 'teachers'
+  if (userRole === 'teacher' || userRole === 'admin') return true;
 
   const courseId = canonicalizeCourseId(courseIdInput);
   if (!courseId) return false;
@@ -2930,6 +2938,18 @@ const teacherCommentsProjection = isTeacher
     })
   : { columns: [], rows: [], emptyMessage: '' };
 
+const allAssignmentsById = new Map<string, any>(
+  (allAssignments || []).map((a: any) => [String(a?.id || ''), a]),
+);
+
+const teacherEvalProjection = isTeacher
+  ? buildTeacherEvalProjection({
+      submissions: scopedTeacherSubmissions,
+      allUsersById,
+      allAssignmentsById,
+    })
+  : { columns: [], rows: [], emptyMessage: '' };
+
 const teacherAdminProjection = isTeacher
   ? buildAdminProjection({
       activeCourseId,
@@ -2945,6 +2965,7 @@ const teacherTabulatorMetaJson = toDashboardProjectionJson({
   userId: String(dbUser?.id || ''),
   courseId: activeCourseId,
   year: activeYear,
+  settings: userSettings,
   initialTeacherTab: initialTeacherDashboardTab,
   supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.SUPABASE_URL,
   supabaseKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '',
@@ -2955,6 +2976,7 @@ const teacherGradebookProjectionJson = toDashboardProjectionJson(teacherGradeboo
 const teacherAttendanceProjectionJson = toDashboardProjectionJson(teacherAttendanceProjection);
 const teacherCommentsProjectionJson = toDashboardProjectionJson(teacherCommentsProjection);
 const teacherAdminProjectionJson = toDashboardProjectionJson(teacherAdminProjection);
+const teacherEvalProjectionJson = toDashboardProjectionJson(teacherEvalProjection);
 const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboardAnnotations);
 ---
 
@@ -4064,6 +4086,9 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
       .teacher-panel:not([hidden]) {
         display: flex;
       }
+      [data-dashboard-tab-panel="log"]:not([hidden]) {
+        overflow-y: auto;
+      }
       .teacher-grid-shell {
         display: grid;
         gap: 0.55rem;
@@ -4072,9 +4097,13 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         height: 100%;
       }
       .teacher-grid-shell--stacked {
-        gap: 0.95rem;
+        gap: 1.45rem;
         height: auto;
+        padding-bottom: 2rem;
+        display: flex;
+        flex-direction: column;
       }
+
       .teacher-grid-shell > .dashboard-tabulator {
         min-height: 0;
         height: 100%;
@@ -4083,6 +4112,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         display: grid;
         gap: 0.45rem;
         min-height: 0;
+        flex-shrink: 0;
       }
       .teacher-section-title {
         margin: 0;
@@ -6698,6 +6728,33 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 </p>
                 <div class="dashboard-tabulator" data-dashboard-grid="comments"></div>
               </section>
+              <section class="teacher-log-section">
+                <h3 class="teacher-section-title">Log de actividad de docentes en evals</h3>
+                <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
+                  <input
+                    type="search"
+                    class="dashboard-grid-search"
+                    data-dashboard-search="teacher-eval"
+                    placeholder="Buscar docente, email, clase, comentario..."
+                    aria-label="Buscar en log de evals de docentes"
+                  />
+                  <div class="dashboard-grid-actions">
+                    <button
+                      type="button"
+                      class="dashboard-grid-btn dashboard-grid-btn--square"
+                      data-dashboard-download="teacher-eval"
+                      title="Exportar el log de evals de docentes como CSV."
+                      aria-label="Exportar el log de evals de docentes como CSV"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <p class="teacher-grid-note">
+                  Registro de evals completados por docentes y administradores (usado para testing o ejemplos).
+                </p>
+                <div class="dashboard-tabulator" data-dashboard-grid="teacher-eval"></div>
+              </section>
             </div>
           </div>
 
@@ -7033,6 +7090,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
     <script type="application/json" id="dashboard-teacher-attendance" set:html={teacherAttendanceProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-comments" set:html={teacherCommentsProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-admin" set:html={teacherAdminProjectionJson}></script>
+    <script type="application/json" id="dashboard-teacher-eval" set:html={teacherEvalProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-annotations" set:html={teacherDashboardAnnotationsJson}></script>
     <script type="application/json" id="dashboard-agenda-data" set:html={dashboardAgendaDataJson}></script>
 

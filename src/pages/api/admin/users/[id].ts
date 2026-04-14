@@ -163,7 +163,7 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
   try {
     const normalizedRequesterEmail = String(currentUser.email || '').toLowerCase().trim();
     const resolvedRequesterId = await resolveUserIdByEmail(supabase, normalizedRequesterEmail).catch(() => null);
-    const { data: requesterSingle } = resolvedRequesterId
+    const { data: requesterSingle, error: requesterError } = resolvedRequesterId
       ? await supabase.from('User').select('id, role').eq('id', resolvedRequesterId).maybeSingle()
       : await supabase.from('User').select('id, role').ilike('email', normalizedRequesterEmail).maybeSingle();
     const requesterRows = requesterSingle ? [requesterSingle] : [];

@@ -1551,17 +1551,22 @@ order:
         background: var(--c-bg);
         width: min(100%, clamp(42rem, 54vw, 60rem));
         justify-self: center;
-        height: calc(100dvh - 7.4rem);
-        min-height: 0;
-        overflow-y: auto;
-        overscroll-behavior: contain;
+        height: auto;
+        min-height: calc(100dvh - 7.4rem);
+        overflow-y: visible;
         scrollbar-gutter: stable;
+        font-size: 1.15rem;
       }
 
       .content-area > :not(.course-nav) {
         max-width: 76ch;
         margin-left: auto;
         margin-right: auto;
+      }
+
+      .content-area .eval-block-wrapper,
+      .content-area .eval-block {
+        display: none !important;
       }
 
       .content-area > :is(h1, h2, h3, h4) {

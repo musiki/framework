@@ -507,6 +507,21 @@ export const createRoomNotesController = ({
   };
 
   const bind = () => {
+    // Archive popup toggle
+    const archiveTrigger = notesSection?.querySelector('[data-notes-archive-trigger]');
+    if (archiveTrigger && notesListEl) {
+      archiveTrigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        notesListEl.hidden = !notesListEl.hidden;
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!notesListEl.hidden && !notesListEl.contains(event.target as Node) && event.target !== archiveTrigger) {
+          notesListEl.hidden = true;
+        }
+      });
+    }
+
     // Wire CodeMirror + LilyPond/Mermaid template buttons + media upload
     if (notesBodyInput) {
       enhanceMarkdownTextarea(notesBodyInput, {

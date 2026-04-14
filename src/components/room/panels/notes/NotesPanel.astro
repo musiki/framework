@@ -2,8 +2,6 @@
   <summary class="conference-sidebar-heading">NOTAS</summary>
 
   <div class="conference-sidebar-panel-body conference-sidebar-panel-body--notes">
-    <div class="conference-notes-list" data-notes-list aria-live="polite"></div>
-
     <form class="conference-notes-form" data-notes-form autocomplete="off">
       <textarea
         class="conference-notes-body"
@@ -30,6 +28,19 @@
           </svg>
           <span class="conference-sr-only">Descargar nota</span>
         </button>
+        <div class="conference-notes-archive-wrap">
+          <button
+            type="button"
+            class="conference-notes-archive-trigger"
+            data-notes-archive-trigger
+            title="Archivo de notas"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+              <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z" fill="currentColor"/>
+            </svg>
+          </button>
+          <div class="conference-notes-archive-popup" data-notes-list aria-live="polite" hidden></div>
+        </div>
       </div>
     </form>
 
