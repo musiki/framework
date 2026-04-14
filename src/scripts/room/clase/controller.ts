@@ -63,6 +63,8 @@ export const createClaseController = ({
   let sections: string[] = [];
   let activeIndex = 0;
   let currentLessonId: string | null = null;
+  let followReveal = true;
+  let ignoreScrollEventsUntil = 0;
 
   const showPlaceholder = (msg?: string) => {
     if (!contentEl) return;
@@ -90,6 +92,7 @@ export const createClaseController = ({
     if (!contentEl) return;
     const active = contentEl.querySelector<HTMLElement>('.clase-section.is-active');
     if (active) {
+      ignoreScrollEventsUntil = Date.now() + 420;
       active.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   };
@@ -97,17 +100,26 @@ export const createClaseController = ({
   const updateActiveIndex = (index: number) => {
     if (!contentEl) return;
     const clamped = Math.max(0, Math.min(index, sections.length - 1));
+    const slideChanged = clamped !== activeIndex;
+    if (slideChanged) {
+      followReveal = true;
+    }
     if (clamped === activeIndex && contentEl.querySelector('.clase-section')) {
-      // Already rendered — just toggle classes
       contentEl.querySelectorAll<HTMLElement>('.clase-section').forEach((el) => {
         el.classList.toggle('is-active', Number(el.dataset.claseIndex) === clamped);
       });
       activeIndex = clamped;
-      scrollToActive();
+      if (followReveal) {
+        scrollToActive();
+      }
       return;
     }
     activeIndex = clamped;
-    void renderSections().then(() => scrollToActive());
+    void renderSections().then(() => {
+      if (followReveal) {
+        scrollToActive();
+      }
+    });
   };
 
   const loadLesson = async (lessonId: string) => {
@@ -123,6 +135,7 @@ export const createClaseController = ({
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const raw = await resp.text();
       sections = splitSlides(raw);
+      followReveal = true;
       if (sections.length === 0) {
         showPlaceholder('Sin contenido de diapositivas.');
         return;
@@ -139,10 +152,16 @@ export const createClaseController = ({
     currentLessonId = null;
     sections = [];
     activeIndex = 0;
+    followReveal = true;
     showPlaceholder();
   };
 
   const bind = () => {
+    contentEl?.addEventListener('scroll', () => {
+      if (Date.now() <= ignoreScrollEventsUntil) return;
+      followReveal = false;
+    }, { passive: true });
+
     window.addEventListener('musiki:clase-presentation-changed', (e: Event) => {
       const ev = e as CustomEvent<{ lessonId: string | null }>;
       const lessonId = ev.detail?.lessonId ?? null;

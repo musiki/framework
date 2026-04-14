@@ -1080,6 +1080,7 @@ const resolvedSlideTheme =
           revealEmbeddedMediaLastSentAt = now;
           postParentMessage({
             type: 'musiki:reveal-embedded-media',
+            force,
             state: snapshot,
           });
           syncRevealEmbeddedMediaLoop();

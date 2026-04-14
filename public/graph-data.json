@@ -199,6 +199,24 @@
       "img": ""
     },
     {
+      "id": "cursos/s123/01-notas generales/clase inaugural Seminarios",
+      "name": "Introducción a Seminario I",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "clase-inaugural-seminarios",
+      "img": ""
+    },
+    {
+      "id": "cursos/s123/02-forma y estructura/forma y estructura",
+      "name": "forma y estructura",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "forma-y-estructura",
+      "img": ""
+    },
+    {
       "id": "cursos/s123/_index",
       "name": "Seminarios de Composición",
       "type": "document",
@@ -212,24 +230,6 @@
       "name": "composiciónmusical",
       "type": "tag",
       "group": "tags"
-    },
-    {
-      "id": "cursos/s123/forma y estructura/clase inaugural Seminarios",
-      "name": "Introducción a Seminario I",
-      "type": "document",
-      "group": "cursos",
-      "publicFolder": null,
-      "canonicalSlug": "clase-inaugural-seminarios",
-      "img": ""
-    },
-    {
-      "id": "cursos/s123/forma y estructura/forma y estructura",
-      "name": "forma y estructura",
-      "type": "document",
-      "group": "cursos",
-      "publicFolder": null,
-      "canonicalSlug": "forma-y-estructura",
-      "img": ""
     },
     {
       "id": "public/instrumentos/spectral parrot",

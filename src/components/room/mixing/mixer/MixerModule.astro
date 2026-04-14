@@ -281,7 +281,7 @@ import FxModule from '../../processors/audio/fx/FxModule.astro';
             min="0"
             max="1"
             step="0.01"
-            value="1"
+            value="0"
             class="conference-mixer-fader"
             data-mixer-incoming-gain
           />
@@ -289,7 +289,9 @@ import FxModule from '../../processors/audio/fx/FxModule.astro';
         <button
           type="button"
           class="conference-mixer-channel-toggle"
+          data-active="false"
           data-mixer-incoming-mute
+          aria-pressed="true"
           aria-label="Mute incoming channel"
           title="Mute incoming"
         >

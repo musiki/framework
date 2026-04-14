@@ -11,6 +11,17 @@ import { renderForumMarkdown } from '../../../lib/forum-markdown';
 const TITLE_MAX = 160;
 const BODY_MAX  = 8_000;
 
+const deriveLiveNoteTitle = (body: string, fallbackTitle = '') => {
+  const firstLine = String(body || '')
+    .split(/\r?\n/)
+    .map((line) => cleanString(String(line || '').replace(/^#{1,6}\s*/, ''), TITLE_MAX))
+    .find(Boolean);
+
+  const source = firstLine || cleanString(String(fallbackTitle || '').replace(/^#{1,6}\s*/, ''), TITLE_MAX);
+  const words = String(source || '').split(/\s+/).filter(Boolean).slice(0, 3);
+  return cleanString(words.join(' '), TITLE_MAX) || 'nota';
+};
+
 // GET  /api/live/notes?courseId=...&roomName=...&limit=40
 export const GET: APIRoute = async ({ request, locals, url }) => {
   const session = (locals as any).session;
@@ -50,8 +61,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const body   = await request.json().catch(() => ({}));
   const id       = cleanString(body?.id ?? '', 36) || null;
-  const title    = cleanString(body?.title ?? '', TITLE_MAX);
   const noteBody = cleanBody(body?.body ?? '', BODY_MAX);
+  const title    = cleanString(body?.title ?? '', TITLE_MAX) || deriveLiveNoteTitle(noteBody);
   const courseId = cleanString(body?.courseId ?? '', 120) || null;
   const roomName = cleanString(body?.roomName ?? '', 120) || null;
   const noteDate = cleanString(body?.noteDate ?? '', 10) || new Date().toISOString().slice(0, 10);

@@ -193,7 +193,7 @@
   grid-template-rows: 1fr;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--presentation .conference-stage-label {
+.conference-stage[data-layout='presentation'] .conference-stage-panel--presentation .conference-stage-heading {
   display: none;
 }
 
@@ -210,7 +210,7 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-stage-label,
+.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-stage-heading,
 .conference-stage[data-layout='presentation'] .conference-stage-panel--screen {
   display: none;
 }
@@ -219,7 +219,6 @@
   grid-template-rows: 1fr;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-stage-label,
 .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus::before {
   display: none;
 }
@@ -274,10 +273,6 @@
 
 .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen {
   grid-template-rows: 1fr;
-}
-
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-stage-label {
-  display: none;
 }
 
 .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen,
@@ -351,15 +346,46 @@
   display: none;
 }
 
+.conference-stage-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 3px 0.65rem;
+}
+
 .conference-stage-label {
   --conference-sidebar-strip-padding-y: 3px;
   --conference-sidebar-strip-padding-x: 0.65rem;
-  padding: 3px 0.65rem;
+  flex: 0 0 auto;
+  padding: 0;
   color: var(--conference-muted);
   font-size: 0.56rem;
   line-height: 1;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.conference-stage-heading .conference-recent-speakers {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 0;
+  letter-spacing: 0.16em;
+  opacity: 0.5;
+}
+
+.conference-stage-heading .conference-recent-speakers[hidden] {
+  display: none;
+}
+
+.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-stage-heading,
+.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-stage-heading {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 3;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0) 100%);
+  pointer-events: none;
 }
 
 .conference-slot,

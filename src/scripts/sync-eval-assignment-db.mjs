@@ -145,6 +145,63 @@ const chunkList = (items, size = 200) => {
   return chunks;
 };
 
+const SUPABASE_CONNECTIVITY_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+]);
+
+const isSupabaseConnectivityError = (error) => {
+  const queue = [error];
+  const visited = new Set();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || visited.has(current)) continue;
+    visited.add(current);
+
+    const code = normalizeText(current?.code).toUpperCase();
+    const message = normalizeText(current?.message || current);
+
+    if (SUPABASE_CONNECTIVITY_ERROR_CODES.has(code)) return true;
+    if (/fetch failed|network|timed out|timeout|socket hang up|connection reset/i.test(message)) return true;
+
+    if (typeof current === 'object' && current !== null) {
+      queue.push(current.cause);
+    }
+  }
+
+  return false;
+};
+
+const formatErrorMessage = (error) => {
+  const messages = [];
+  const queue = [error];
+  const visited = new Set();
+
+  while (queue.length > 0 && messages.length < 3) {
+    const current = queue.shift();
+    if (!current || visited.has(current)) continue;
+    visited.add(current);
+
+    const message = normalizeText(current?.message || current);
+    const code = normalizeText(current?.code);
+
+    if (message) {
+      messages.push(code ? `${message} (${code})` : message);
+    }
+
+    if (typeof current === 'object' && current !== null) {
+      queue.push(current.cause);
+    }
+  }
+
+  return messages.join(' -> ') || 'Unknown error';
+};
+
 const main = async () => {
   if (!fs.existsSync(contentRoot)) {
     console.log('[eval-db-sync] src/content/cursos not found. Skipping.');
@@ -262,6 +319,11 @@ const main = async () => {
 };
 
 main().catch((error) => {
+  if (isSupabaseConnectivityError(error)) {
+    console.warn(`[eval-db-sync] Supabase unreachable. Skipping sync. ${formatErrorMessage(error)}`);
+    return;
+  }
+
   console.error('[eval-db-sync] failed:', error?.message || error);
   process.exitCode = 1;
 });

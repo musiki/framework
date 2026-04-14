@@ -4009,7 +4009,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const brCountdownEl = root.querySelector('[data-br-countdown]');
   const brCountdownText = root.querySelector('[data-br-countdown-text]');
   const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
-  const recentSpeakersEl = root.querySelector('[data-recent-speakers]');
+  const recentSpeakersEls = Array.from(root.querySelectorAll('[data-recent-speakers]'));
   const streamingProfileSelect = root.querySelector('[data-streaming-profile-select]');
   const optimizeSpeakerInput = root.querySelector('[data-optimize-speaker-input]');
   const limitGridQualityInput = root.querySelector('[data-limit-grid-input]');
@@ -4458,7 +4458,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let mixerIncomingGain = normalizeMasterGain(persistedSetup.mixerIncomingGain, 0.5);
   let mixerIncomingReverbSend = clampNumber(persistedSetup.mixerIncomingReverbSend, 0, 1, 0, 2);
   let mixerIncomingDelaySend = clampNumber(persistedSetup.mixerIncomingDelaySend, 0, 1, 0, 2);
-  let mixerIncomingMuted = Boolean(persistedSetup.mixerIncomingMuted);
+  let mixerIncomingMuted = persistedSetup.mixerIncomingMuted !== false;
   let mixerIncomingPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerIncomingPan) || 0));
   let mixerMasterGain = normalizeMasterGain(persistedSetup.mixerMasterGain, 0.5);
   let mixerMasterMuted = Boolean(persistedSetup.mixerMasterMuted);
@@ -7490,6 +7490,71 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     return Number.isFinite(joinedAtMs) ? joinedAtMs : Number.POSITIVE_INFINITY;
   };
 
+  const compareParticipantsForDisplay = (left: Participant, right: Participant) => {
+    const leftHasCamera = hasCameraTrack(left);
+    const rightHasCamera = hasCameraTrack(right);
+    if (leftHasCamera !== rightHasCamera) return leftHasCamera ? -1 : 1;
+
+    const leftRole = readParticipantRole(room, left, localRole);
+    const rightRole = readParticipantRole(room, right, localRole);
+    if (leftRole !== rightRole) return leftRole === 'teacher' ? -1 : 1;
+
+    const joinedAtDifference = getParticipantJoinedAtMs(left) - getParticipantJoinedAtMs(right);
+    if (joinedAtDifference !== 0) return joinedAtDifference;
+
+    const nameDifference = readParticipantName(left).localeCompare(readParticipantName(right), 'es');
+    if (nameDifference !== 0) return nameDifference;
+
+    return left.identity.localeCompare(right.identity, 'es');
+  };
+
+  const getDisplayOrderedParticipants = () => [...allParticipants()].sort(compareParticipantsForDisplay);
+
+  const reorderParticipantCardsInSlot = (slot: HTMLElement, identities: string[]) => {
+    identities
+      .map((identity) => participantCards.get(identity)?.card)
+      .filter((card): card is HTMLElement => card instanceof HTMLElement && card.parentElement === slot)
+      .forEach((card, index) => {
+        if (slot.children.item(index) !== card) {
+          slot.appendChild(card);
+        }
+      });
+  };
+
+  const createRecentSpeakerSeparator = () => {
+    const separator = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    separator.setAttribute('viewBox', '0 0 20 20');
+    separator.setAttribute('aria-hidden', 'true');
+    separator.setAttribute('fill', 'currentColor');
+    separator.classList.add('conference-recent-speakers-icon');
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute(
+      'd',
+      'M3 9v2a7 7 0 0 0 5.5 6.83V19h3v-1.17A7 7 0 0 0 17 11V9h-2v2a5 5 0 0 1-10 0V9H3zm7-7a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z',
+    );
+    separator.appendChild(path);
+    return separator;
+  };
+
+  const renderRecentSpeakers = (container: Element, names: string[]) => {
+    if (!(container instanceof HTMLElement)) return;
+    container.replaceChildren();
+
+    names.forEach((name, index) => {
+      if (index > 0) {
+        container.appendChild(createRecentSpeakerSeparator());
+      }
+
+      const label = document.createElement('span');
+      label.className = 'conference-recent-speakers-name';
+      label.textContent = name;
+      container.appendChild(label);
+    });
+
+    container.hidden = names.length === 0;
+  };
+
   const compareSessionLeaderCandidates = (left: Participant, right: Participant) => {
     const joinedAtDifference = getParticipantJoinedAtMs(left) - getParticipantJoinedAtMs(right);
     if (joinedAtDifference !== 0) return joinedAtDifference;
@@ -10198,9 +10263,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         (payload as { state?: PresentationEmbeddedMediaState }).state,
       );
       if (!mediaState) return;
+      const shouldForcePublish = (payload as { force?: boolean }).force === true;
       currentPresentationMediaState = mediaState;
       if (localRole === 'teacher') {
-        void publishPresentationMediaState(mediaState);
+        void publishPresentationMediaState(mediaState, shouldForcePublish);
       }
       return;
     }
@@ -10756,7 +10822,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
     });
 
-    allParticipants().forEach(syncParticipant);
+    const orderedParticipants = getDisplayOrderedParticipants();
+    const identitiesBySlot = new Map<HTMLElement, string[]>();
+
+    orderedParticipants.forEach((participant) => {
+      syncParticipant(participant);
+      const card = participantCards.get(participant.identity)?.card;
+      const slot = card?.parentElement;
+      if (!(slot instanceof HTMLElement)) return;
+
+      const currentOrder = identitiesBySlot.get(slot) ?? [];
+      currentOrder.push(participant.identity);
+      identitiesBySlot.set(slot, currentOrder);
+    });
+
+    identitiesBySlot.forEach((identities, slot) => {
+      reorderParticipantCardsInSlot(slot, identities);
+    });
     syncIdentityPreview();
     syncDisconnectedStagePreview();
     renderParticipantList();
@@ -10765,23 +10847,30 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const syncRecentSpeakers = () => {
+    const activeParticipantMap = new Map(
+      allParticipants().map((participant) => [participant.identity, participant]),
+    );
+
     for (const speaker of room.activeSpeakers) {
       if (!recentSpeakers.includes(speaker.identity)) {
         recentSpeakers = [speaker.identity, ...recentSpeakers].slice(0, 3);
       }
     }
-    if (recentSpeakersEl instanceof HTMLElement) {
-      const names = recentSpeakers
-        .map((id) => participantCards.get(id)?.name.textContent || null)
-        .filter((n): n is string => Boolean(n));
-      const textEl = recentSpeakersEl.querySelector('[data-recent-speakers-text]');
-      if (textEl instanceof HTMLElement) {
-        textEl.textContent = names.join(' · ');
-      } else {
-        recentSpeakersEl.textContent = names.join(' · ');
-      }
-      recentSpeakersEl.hidden = names.length === 0;
-    }
+
+    recentSpeakers = recentSpeakers.filter((identity) => activeParticipantMap.has(identity)).slice(0, 3);
+
+    const names = recentSpeakers
+      .map((identity) => {
+        const cardName = normalizeText(participantCards.get(identity)?.name.textContent);
+        if (cardName) return cardName;
+        const participant = activeParticipantMap.get(identity);
+        return participant ? readParticipantName(participant) : '';
+      })
+      .filter((name): name is string => Boolean(name));
+
+    recentSpeakersEls.forEach((element) => {
+      renderRecentSpeakers(element, names);
+    });
   };
 
   const scrollToActiveSpeaker = () => {
@@ -12512,7 +12601,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mixerIncomingGain = 0;
       mixerIncomingReverbSend = 0;
       mixerIncomingDelaySend = 0;
-      mixerIncomingMuted = false;
+      mixerIncomingMuted = true;
       applyMixerState();
       persistSetupState();
       setStatus('CH3 reset.');

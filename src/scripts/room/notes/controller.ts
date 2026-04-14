@@ -19,7 +19,6 @@ type RoomNoteRecord = {
 type RoomNoteDraft = {
   body: string;
   id: string | null;
-  title: string;
   updatedAt: string;
 };
 
@@ -53,6 +52,19 @@ type NotesWindow = Window & {
 
 const buildNotesScopeKey = (courseId: string | null, roomName: string | null) =>
   `${courseId || '_'}::${roomName || '_'}`;
+
+const stripNoteTitlePrefix = (value: string) => normalizeText(value).replace(/^#{1,6}\s*/, '');
+
+const deriveNoteTitle = (body: string, fallbackTitle = '') => {
+  const firstLine = String(body || '')
+    .split(/\r?\n/)
+    .map((line) => stripNoteTitlePrefix(line))
+    .find((line) => line.length > 0);
+
+  const source = firstLine || stripNoteTitlePrefix(fallbackTitle);
+  const words = source.split(/\s+/).filter(Boolean).slice(0, 3);
+  return words.join(' ') || 'nota';
+};
 
 const createMarkedLoader = async () => {
   const notesWindow = window as NotesWindow;
@@ -136,7 +148,6 @@ export const createRoomNotesController = ({
         ? {
             body: typeof parsed.body === 'string' ? parsed.body : '',
             id: normalizeText(parsed.id) || null,
-            title: typeof parsed.title === 'string' ? parsed.title : '',
             updatedAt: normalizeText(parsed.updatedAt) || new Date().toISOString(),
           }
         : null;
@@ -147,16 +158,14 @@ export const createRoomNotesController = ({
 
   const writeNotesDraft = (scopeKey = notesScopeKey) => {
     try {
-      const title = notesTitleInput?.value ?? '';
       const body = notesBodyInput?.value ?? '';
-      if (!title.trim() && !body.trim()) {
+      if (!body.trim()) {
         window.localStorage.removeItem(getNotesDraftStorageKey(scopeKey));
         return;
       }
       const draft: RoomNoteDraft = {
         body,
         id: notesCurrentId,
-        title,
         updatedAt: new Date().toISOString(),
       };
       window.localStorage.setItem(getNotesDraftStorageKey(scopeKey), JSON.stringify(draft));
@@ -245,9 +254,9 @@ export const createRoomNotesController = ({
 
   const setNotesMode = (edit: boolean) => {
     notesEditMode = edit;
-    if (!notesPreviewBtn || !notesPreviewEl || !notesTitleInput || !notesBodyInput) return;
+    if (!notesPreviewBtn || !notesPreviewEl || !notesBodyInput) return;
     const editorContainer = getEditorContainer();
-    notesTitleInput.hidden = !edit;
+    if (notesTitleInput) notesTitleInput.hidden = !edit;
     if (editorContainer) editorContainer.hidden = !edit;
     notesPreviewEl.hidden = edit;
     if (edit) {
@@ -259,14 +268,14 @@ export const createRoomNotesController = ({
     notesPreviewBtn.title = 'Editar';
   };
 
-  const renderNoteItem = (note: { id: string; title: string; noteDate: string }): HTMLElement => {
+  const renderNoteItem = (note: { body?: string | null; id: string; title: string; noteDate: string }): HTMLElement => {
     const element = document.createElement('div');
     element.className = 'conference-notes-item';
     element.dataset.noteId = note.id;
 
     const title = document.createElement('span');
     title.className = 'conference-notes-item-title';
-    title.textContent = note.title || '(sin título)';
+    title.textContent = deriveNoteTitle(note.body ?? '', note.title);
 
     const date = document.createElement('span');
     date.className = 'conference-notes-item-date';
@@ -289,20 +298,18 @@ export const createRoomNotesController = ({
 
   const resetNoteForm = () => {
     notesCurrentId = null;
-    if (notesTitleInput) notesTitleInput.value = '';
     setNotesBodyValue('');
     if (notesPreviewEl) notesPreviewEl.innerHTML = '';
     clearNotesDraft();
     setNotesMode(true);
     syncActiveNoteItem();
-    notesTitleInput?.focus();
+    notesBodyInput?.focus();
   };
 
   const hydrateNotesDraft = () => {
     const draft = readNotesDraft();
     if (!draft) return;
     notesCurrentId = draft.id;
-    if (notesTitleInput) notesTitleInput.value = draft.title;
     setNotesBodyValue(draft.body);
     if (notesPreviewEl) notesPreviewEl.innerHTML = '';
     setNotesMode(true);
@@ -337,7 +344,6 @@ export const createRoomNotesController = ({
     const cached = readNotesCache().find((note) => note.id === id);
     if (cached) {
       notesCurrentId = cached.id;
-      if (notesTitleInput) notesTitleInput.value = cached.title ?? '';
       setNotesBodyValue(cached.body ?? '');
       if (notesPreviewEl) {
         notesPreviewEl.innerHTML = cached.renderedHtml ?? '';
@@ -358,7 +364,6 @@ export const createRoomNotesController = ({
     if (!note) return;
 
     notesCurrentId = note.id;
-    if (notesTitleInput) notesTitleInput.value = note.title ?? '';
     setNotesBodyValue(note.body ?? '');
     if (notesPreviewEl && note.renderedHtml) {
       notesPreviewEl.innerHTML = note.renderedHtml;
@@ -399,10 +404,10 @@ export const createRoomNotesController = ({
   };
 
   const downloadCurrentNote = () => {
-    const title = notesTitleInput?.value.trim() || 'nota';
     const body = notesBodyInput?.value ?? '';
     if (!body.trim()) return;
-    const content = title ? `# ${title}\n\n${body}` : body;
+    const title = deriveNoteTitle(body, notesTitleInput?.value ?? '');
+    const content = body;
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -419,7 +424,6 @@ export const createRoomNotesController = ({
     writeNotesDraft(notesScopeKey);
     notesScopeKey = nextScopeKey;
     notesCurrentId = null;
-    if (notesTitleInput) notesTitleInput.value = '';
     setNotesBodyValue('');
     if (notesPreviewEl) notesPreviewEl.innerHTML = '';
     setNotesMode(true);
@@ -430,9 +434,9 @@ export const createRoomNotesController = ({
   };
 
   const saveCurrentNote = async () => {
-    const title = notesTitleInput?.value.trim() ?? '';
     const body = notesBodyInput?.value ?? '';
     if (!body.trim()) return;
+    const title = deriveNoteTitle(body, notesTitleInput?.value ?? '');
 
     const currentNotesScopeKey = getCurrentNotesScopeKey();
     if (currentNotesScopeKey !== notesScopeKey) {
@@ -537,9 +541,7 @@ export const createRoomNotesController = ({
     notesNewBtn?.addEventListener('click', resetNoteForm);
     notesDownloadBtn?.addEventListener('click', downloadCurrentNote);
 
-    // Draft persistence — listen on title + form (CM fires input on the textarea which bubbles)
-    notesTitleInput?.addEventListener('input', persistNotesDraft);
-    notesTitleInput?.addEventListener('change', persistNotesDraft);
+    // Draft persistence — CM fires input on the textarea which bubbles
     notesBodyInput?.addEventListener('input', persistNotesDraft);
 
     // Ctrl/Cmd+Enter to save — listen on the form so it catches CM keystrokes too
