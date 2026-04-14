@@ -2,10 +2,19 @@
 import BaseHead from "../components/BaseHead.astro";
 import Header from "../components/Header.astro";
 import { SignIn } from "auth-astro/components";
-import { getCsrfToken } from "auth-astro/server";
+import { Auth } from "@auth/core";
+import authConfig from "auth:config";
 import { resolveRequestAuthOrigin } from "../lib/auth-origin";
 
 const session = (Astro.locals as any).session;
+
+const getCsrfToken = async (req: Request) => {
+    const url = new URL(`${authConfig.prefix || "/api/auth"}/csrf`, req.url);
+    const res = await Auth(new Request(url, { headers: req.headers }), authConfig);
+    const data = await res.json();
+    return data.csrfToken;
+};
+
 const csrfToken = await getCsrfToken(Astro.request);
 
 const toSafeRedirect = (value: unknown): string => {
