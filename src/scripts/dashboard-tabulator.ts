@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 // @ts-expect-error tabulator-tables does not expose usable declarations in this build.
 import { TabulatorFull as Tabulator } from 'tabulator-tables';
 import {
@@ -31,8 +30,6 @@ type DashboardMeta = {
   courseId?: string;
   year?: string;
   initialTeacherTab?: string;
-  supabaseUrl?: string;
-  supabaseKey?: string;
 };
 
 type GridKind =
@@ -76,12 +73,6 @@ type RangeSelectionState = {
   selectedCells: Set<any>;
 };
 
-type RealtimeProjectionSyncController = {
-  isEnabled: () => boolean;
-  setEnabled: (next: boolean) => void;
-  destroy: () => void;
-};
-
 type DashboardTabulatorInstance = Tabulator & {
   __musikiTableBuilt?: boolean;
   __musikiFoldStorageKey?: string;
@@ -101,18 +92,6 @@ type AdminEnrollmentCourseOption = {
 
 const VALID_TEACHER_TABS = ['main', 'log', 'admin', 'agenda'];
 const SEARCH_DEBOUNCE_MS = 300;
-const DASHBOARD_LIVE_MODE_STORAGE_KEY = 'musiki:dashboard:live-mode';
-const DASHBOARD_PROJECTION_SCRIPT_IDS = [
-  'dashboard-teacher-tabulator-meta',
-  'dashboard-teacher-main',
-  'dashboard-teacher-overview',
-  'dashboard-teacher-gradebook',
-  'dashboard-teacher-attendance',
-  'dashboard-teacher-comments',
-  'dashboard-teacher-admin',
-  'dashboard-teacher-annotations',
-  'dashboard-agenda-data',
-];
 
 const normalizeText = (value: any) => String(value || '').trim();
 const normalizeTextLower = (value: any) => normalizeText(value).toLowerCase();
@@ -435,22 +414,6 @@ const getStoredFoldState = (table: Tabulator | null | undefined, foldKey: string
   const state = readStoredFoldState(table);
   if (!Object.prototype.hasOwnProperty.call(state, nextKey)) return undefined;
   return Boolean(state[nextKey]);
-};
-
-const getStoredLiveModePreference = () => {
-  try {
-    return window.localStorage.getItem(DASHBOARD_LIVE_MODE_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-};
-
-const setStoredLiveModePreference = (enabled: boolean) => {
-  try {
-    window.localStorage.setItem(DASHBOARD_LIVE_MODE_STORAGE_KEY, enabled ? 'true' : 'false');
-  } catch {
-    // ignore storage errors
-  }
 };
 
 let dashboardSaveStatusTimeout: number | null = null;
@@ -820,6 +783,39 @@ const isClipboardEditableCell = (cell: any) => {
   return false;
 };
 
+const parseClipboardRangeRows = (table: Tabulator, rawText: string) => {
+  const range = (table as any)?.modules?.selectRange?.activeRange;
+  if (!range) return [] as Record<string, any>[];
+
+  const bounds = range.getBounds?.();
+  const startCell = bounds?.start;
+  if (!startCell) return [] as Record<string, any>[];
+
+  const visibleColumns = table.columnManager?.getVisibleColumnsByIndex?.() || [];
+  const startColIndex = visibleColumns.indexOf(startCell.column);
+  if (startColIndex < 0) return [] as Record<string, any>[];
+
+  const text = String(rawText || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = text.split('\n');
+  if (lines.length > 1 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+
+  return lines
+    .map((line) => {
+      const values = line.split('\t');
+      const row: Record<string, any> = {};
+      values.forEach((value, index) => {
+        const column = visibleColumns[startColIndex + index];
+        const field = normalizeText(column?.field || column?.definition?.field || '');
+        if (!field) return;
+        row[field] = value;
+      });
+      return row;
+    })
+    .filter((row) => Object.keys(row).length > 0);
+};
+
 const applyRangeClipboardPaste = (
   table: Tabulator,
   parsedRows: Record<string, any>[],
@@ -895,18 +891,19 @@ const applyRangeClipboardPaste = (
     setDashboardSaveStatus('saving', `Guardando pegado en ${operations.length} celdas...`);
     void (async () => {
       lockDashboardSaveStatus();
-      let successCount = 0;
       const failureMessages: string[] = [];
 
       try {
-        for (const operation of operations) {
+        const results = await Promise.all(operations.map(async (operation) => {
           const liveRow =
             (operation.rowId ? table.getRow?.(operation.rowId) : null)
             || operation.row;
           const targetCell = liveRow?.getCell?.(operation.field);
           if (!targetCell) {
-            failureMessages.push(`No se encontró la celda ${operation.field} para guardar.`);
-            continue;
+            return {
+              ok: false,
+              message: `No se encontró la celda ${operation.field} para guardar.`,
+            };
           }
           try {
             await persistClipboardCellValue(
@@ -915,18 +912,28 @@ const applyRangeClipboardPaste = (
               operation.previousValue,
               meta,
             );
-            successCount += 1;
+            return { ok: true };
           } catch (error: any) {
-            failureMessages.push(error?.message || 'No se pudo guardar una celda pegada');
             await liveRow?.update?.({
               [operation.field]: operation.previousValue,
             });
+            return {
+              ok: false,
+              message: error?.message || 'No se pudo guardar una celda pegada',
+            };
           }
-        }
+        }));
+
+        results.forEach((result) => {
+          if (!result.ok) {
+            failureMessages.push(result.message);
+          }
+        });
       } finally {
         unlockDashboardSaveStatus();
       }
 
+      const successCount = operations.length - failureMessages.length;
       if (failureMessages.length > 0) {
         if (successCount === 0) {
           setDashboardSaveStatus('error', failureMessages[0]);
@@ -1049,6 +1056,38 @@ const normalizeAttendanceInput = (value: any) => {
   if (['-', '~', '0.5', '0,5'].includes(raw)) return { valid: true, countRaw: 0.5 };
   if (['x', '0'].includes(raw)) return { valid: true, countRaw: 0 };
   return { valid: false, countRaw: null };
+};
+
+const serializeAttendanceClipboardUnits = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return '';
+  const units = Number(value);
+  if (!Number.isFinite(units)) return '';
+  if (units >= 1) return '1';
+  if (units >= 0.5) return '0.5';
+  if (units <= 0) return '0';
+  return String(Math.round(units * 100) / 100);
+};
+
+const getAttendanceClipboardValue = (
+  rowData: any,
+  field: string,
+  fallbackValue: any,
+) => {
+  const cellMeta = rowData?.__attendanceCellMeta?.[field];
+  if (!cellMeta) {
+    return normalizeText(fallbackValue);
+  }
+
+  if (cellMeta?.hasManualOverride) {
+    return serializeAttendanceClipboardUnits(cellMeta?.manualValue);
+  }
+
+  const liveValue = Number(cellMeta?.liveValue || 0);
+  if (liveValue > 0) {
+    return serializeAttendanceClipboardUnits(cellMeta?.effectiveValue ?? liveValue);
+  }
+
+  return '';
 };
 
 const resolvePersistableAttendanceCellContext = (cell: any, meta: DashboardMeta) => {
@@ -3571,6 +3610,12 @@ const configureColumns = (
       nextColumn.headerSort = false;
       baseFormatter = renderAttendanceMarkup;
       nextColumn.titleFormatter = renderAttendanceDayHeaderMarkup;
+      nextColumn.accessorClipboard = (value: any, data: any, _type: string, _params: any, column: any) =>
+        getAttendanceClipboardValue(
+          data,
+          normalizeText(column?.getField?.() || nextColumn.field || ''),
+          value,
+        );
     } else if (kind === 'annotation-color') {
       baseFormatter = annotationColorFormatter;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
@@ -4544,51 +4589,6 @@ const bindScopeSelectors = (shell: ParentNode) => {
   }
 };
 
-const bindLiveModeToggle = (
-  shell: ParentNode,
-  realtimeSync: RealtimeProjectionSyncController,
-) => {
-  const button = shell.querySelector('[data-dashboard-live-mode-toggle]');
-  const indicator = shell.querySelector('[data-dashboard-live-mode-indicator]');
-  if (!(button instanceof HTMLButtonElement)) {
-    realtimeSync.setEnabled(getStoredLiveModePreference());
-    return () => {};
-  }
-
-  const syncButtonState = () => {
-    const enabled = realtimeSync.isEnabled();
-    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-    button.classList.toggle('dashboard-grid-btn--primary', enabled);
-    button.classList.toggle('is-active', enabled);
-    button.dataset.liveMode = enabled ? 'true' : 'false';
-    button.setAttribute('aria-label', enabled ? 'Live mode activado' : 'Live mode desactivado');
-    button.title = enabled
-      ? 'Live mode activado. Escucha cambios de la base y refresca el dashboard automaticamente.'
-      : 'Live mode desactivado. El dashboard solo se actualiza al recargar o cambiar curso, año o rango.';
-
-    if (indicator instanceof HTMLElement) {
-      indicator.dataset.state = enabled ? 'on' : 'off';
-      indicator.title = button.title;
-    }
-  };
-
-  const handleClick = () => {
-    const nextEnabled = !realtimeSync.isEnabled();
-    realtimeSync.setEnabled(nextEnabled);
-    setStoredLiveModePreference(nextEnabled);
-    syncButtonState();
-  };
-
-  realtimeSync.setEnabled(getStoredLiveModePreference());
-  syncButtonState();
-
-  button.addEventListener('click', handleClick);
-
-  return () => {
-    button.removeEventListener('click', handleClick);
-  };
-};
-
 const saveAnnotation = async (
   state: AnnotationState,
   context: CellScopeContext,
@@ -5363,6 +5363,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     if (isInteractiveDashboardTarget(event.target)) return;
 
     const key = event.key;
+    const lowerKey = String(key || '').toLowerCase();
     const immediateValueMap: Record<string, string> = {
       '/': '1',
       '1': '1',
@@ -5374,6 +5375,26 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
 
     const anchorCell = getRangeAttendanceAnchor();
     if (!anchorCell) return;
+
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && lowerKey === 'c') {
+      event.preventDefault();
+      event.stopPropagation();
+      clearPendingShortcut();
+      try {
+        (table as any)?.copyToClipboard?.('range');
+      } catch {
+        // ignore clipboard copy races
+      }
+      return;
+    }
+
+    if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && (key === 'Backspace' || key === 'Delete')) {
+      event.preventDefault();
+      event.stopPropagation();
+      clearPendingShortcut();
+      applyAttendanceShortcutInput('');
+      return;
+    }
 
     if (pendingShortcutInput === '0') {
       if (key === '.' || key === ',') {
@@ -5418,7 +5439,25 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     applyAttendanceShortcutInput(inputStr);
   };
 
+  const pasteHandler = (event: ClipboardEvent) => {
+    if (isInteractiveDashboardTarget(event.target)) return;
+    const anchorCell = getRangeAttendanceAnchor();
+    if (!anchorCell) return;
+
+    const text = event.clipboardData?.getData('text/plain') || '';
+    if (!text) return;
+
+    const parsedRows = parseClipboardRangeRows(table, text);
+    if (!parsedRows.length) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    clearPendingShortcut();
+    applyRangeClipboardPaste(table, parsedRows, meta);
+  };
+
   tableElement?.addEventListener('keydown', keydownHandler);
+  tableElement?.addEventListener('paste', pasteHandler);
 
   const syncHeaderStats = () => {
     window.requestAnimationFrame(() => {
@@ -5488,6 +5527,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     tableElement?.removeEventListener('touchcancel', touchMoveCancelHandler);
     tableElement?.removeEventListener('touchmove', touchMoveCancelHandler);
     tableElement?.removeEventListener('keydown', keydownHandler);
+    tableElement?.removeEventListener('paste', pasteHandler);
     rootElement?.removeEventListener('click', fillColumnHandler);
   };
 };
@@ -5719,186 +5759,6 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
   };
 };
 
-const recordMatchesDashboardScope = (meta: DashboardMeta, record: Record<string, any> | null | undefined) => {
-  if (!record) return true;
-  const activeCourseId = normalizeText(meta?.courseId || '');
-  const activeYear = normalizeText(meta?.year || '');
-  const recordCourseId = normalizeText(
-    record?.courseId
-      || (normalizeText(record?.pageSlug || '').split('/').find(Boolean) || ''),
-  );
-  const recordYear = normalizeText(
-    record?.year
-      || String(record?.startedAt || record?.submittedAt || record?.updatedAt || '').slice(0, 4),
-  );
-
-  if (activeCourseId && recordCourseId && recordCourseId !== activeCourseId) {
-    return false;
-  }
-  if (activeYear && recordYear && recordYear !== activeYear) {
-    return false;
-  }
-  return true;
-};
-
-const replaceProjectionScriptsFromHtml = (html: string) => {
-  const parsed = new DOMParser().parseFromString(html, 'text/html');
-  let updatedCount = 0;
-
-  DASHBOARD_PROJECTION_SCRIPT_IDS.forEach((scriptId) => {
-    const current = document.getElementById(scriptId);
-    const next = parsed.getElementById(scriptId);
-    if (!(current instanceof HTMLScriptElement) || !(next instanceof HTMLScriptElement)) return;
-    current.textContent = next.textContent || '';
-    updatedCount += 1;
-  });
-
-  return updatedCount > 0;
-};
-
-const createRealtimeProjectionSync = (meta: DashboardMeta): RealtimeProjectionSyncController => {
-  const supabaseUrl = normalizeText(meta?.supabaseUrl || '');
-  const supabaseKey = normalizeText(meta?.supabaseKey || '');
-  const isSafeClientKey =
-    supabaseKey.startsWith('sb_publishable_')
-    || (supabaseKey.includes('.') && !supabaseKey.startsWith('sb_secret_'));
-  if (!supabaseUrl || !supabaseKey || !isSafeClientKey) {
-    return {
-      isEnabled: () => false,
-      setEnabled: () => {},
-      destroy: () => {},
-    };
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-
-  let disposed = false;
-  let enabled = false;
-  let channel: any = null;
-  let refreshTimeout: number | null = null;
-  let refreshInFlight = false;
-  let refreshQueued = false;
-
-  const clearScheduledRefresh = () => {
-    if (refreshTimeout !== null) {
-      window.clearTimeout(refreshTimeout);
-      refreshTimeout = null;
-    }
-    refreshQueued = false;
-  };
-
-  const stopChannel = () => {
-    clearScheduledRefresh();
-
-    if (!channel) return;
-
-    const activeChannel = channel;
-    channel = null;
-    void supabase.removeChannel(activeChannel);
-  };
-
-  const ensureChannel = () => {
-    if (disposed || !enabled || channel) return;
-
-    channel = supabase
-      .channel(`musiki-dashboard:${normalizeText(meta.courseId)}:${normalizeText(meta.year)}:${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'Assignment' }, handleRealtimeEvent)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'Submission' }, handleRealtimeEvent)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'Enrollment' }, handleRealtimeEvent)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'LiveClassSession' }, handleRealtimeEvent)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'LiveClassAttendance' }, handleRealtimeEvent)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'GradebookAnnotation' }, handleRealtimeEvent)
-      .subscribe();
-  };
-
-  const runRefresh = async () => {
-    if (disposed || !enabled) {
-      return;
-    }
-
-    if (refreshInFlight) {
-      refreshQueued = true;
-      return;
-    }
-
-    refreshInFlight = true;
-    try {
-      const response = await fetch(window.location.href, {
-        headers: {
-          'x-musiki-dashboard-refresh': '1',
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`Dashboard refresh failed (${response.status})`);
-      }
-
-      const html = await response.text();
-      if (disposed || !enabled) {
-        return;
-      }
-
-      const didUpdate = replaceProjectionScriptsFromHtml(html);
-      if (didUpdate && typeof window.__musikiDashboardRemount === 'function') {
-        window.__musikiDashboardRemount();
-      }
-    } catch (error) {
-      console.error('Error refreshing dashboard projections:', error);
-    } finally {
-      refreshInFlight = false;
-      if (refreshQueued && !disposed && enabled) {
-        refreshQueued = false;
-        scheduleRefresh();
-      }
-    }
-  };
-
-  const scheduleRefresh = () => {
-    if (disposed || !enabled) return;
-    clearScheduledRefresh();
-    refreshTimeout = window.setTimeout(() => {
-      refreshTimeout = null;
-      void runRefresh();
-    }, 700);
-  };
-
-  const handleRealtimeEvent = (payload: any) => {
-    const nextRecord = payload?.new && typeof payload.new === 'object' ? payload.new : null;
-    const previousRecord = payload?.old && typeof payload.old === 'object' ? payload.old : null;
-    if (
-      !recordMatchesDashboardScope(meta, nextRecord)
-      && !recordMatchesDashboardScope(meta, previousRecord)
-    ) {
-      return;
-    }
-    scheduleRefresh();
-  };
-
-  return {
-    isEnabled: () => enabled,
-    setEnabled: (next: boolean) => {
-      if (disposed) return;
-
-      enabled = Boolean(next);
-      if (!enabled) {
-        stopChannel();
-        return;
-      }
-
-      ensureChannel();
-    },
-    destroy: () => {
-      disposed = true;
-      enabled = false;
-      stopChannel();
-    },
-  };
-};
-
 export const mountDashboardTabulators = (root: HTMLElement) => {
   if (!(root instanceof HTMLElement)) return () => {};
   if (root.dataset.dashboardTabulatorMounted === 'true') return () => {};
@@ -5943,8 +5803,6 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   const modalRef: { current: AnnotationModalApi | null } = { current: null };
   modalRef.current = createAnnotationModal(root, meta, annotationState);
   const destroyShortcut = bindAnnotationShortcut(annotationState, modalRef);
-  const realtimeSync = createRealtimeProjectionSync(meta);
-  destroyers.push(bindLiveModeToggle(shell, realtimeSync));
 
   const mainNode = root.querySelector<HTMLElement>('[data-dashboard-grid="teacher-main"]');
   if (mainNode) {
@@ -6105,7 +5963,6 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
 
   return () => {
     destroyShortcut();
-    realtimeSync.destroy();
     destroyers.forEach((destroy) => {
       try {
         destroy();

@@ -2967,8 +2967,6 @@ const teacherTabulatorMetaJson = toDashboardProjectionJson({
   year: activeYear,
   settings: userSettings,
   initialTeacherTab: initialTeacherDashboardTab,
-  supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.SUPABASE_URL,
-  supabaseKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '',
 });
 const teacherMainProjectionJson = toDashboardProjectionJson(teacherMainProjection);
 const teacherOverviewProjectionJson = toDashboardProjectionJson(teacherOverviewProjection);
@@ -3587,31 +3585,6 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
         width: 100%;
         border-radius: 0;
         padding: 0.36rem 0.48rem;
-      }
-      .dashboard-live-mode-toggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: var(--dashboard-control-height);
-        min-width: var(--dashboard-control-height);
-        padding: 0;
-        border-color: transparent !important;
-        background: transparent !important;
-      }
-      .dashboard-live-mode-toggle:hover {
-        border-color: var(--c-border) !important;
-      }
-      .dashboard-live-mode-indicator {
-        width: 0.64rem;
-        height: 0.64rem;
-        min-width: 0.64rem;
-        border: 1px solid color-mix(in srgb, var(--c-border) 88%, transparent);
-        background: color-mix(in srgb, var(--c-fg-dim) 36%, transparent);
-      }
-      .dashboard-live-mode-indicator[data-state="on"] {
-        background: #16a34a;
-        border-color: #16a34a;
-        box-shadow: 0 0 0 2px color-mix(in srgb, #16a34a 18%, transparent);
       }
       .dashboard-save-indicator {
         display: inline-flex;
@@ -6280,9 +6253,6 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
           flex: 0 0 auto;
           min-width: 9.2rem;
         }
-        .dashboard-live-mode-toggle {
-          flex: 0 0 auto;
-        }
       }
       @media (max-width: 900px) {
         .wrap {
@@ -6491,15 +6461,6 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 </select>
               </label>
             </div>
-            <button
-              type="button"
-              class="dashboard-grid-btn dashboard-grid-btn--square dashboard-live-mode-toggle"
-              data-dashboard-live-mode-toggle
-              aria-pressed="false"
-              title="Activa o pausa la escucha en vivo de cambios de base de datos para refrescar el dashboard automaticamente."
-            >
-              <span class="dashboard-live-mode-indicator" data-dashboard-live-mode-indicator aria-hidden="true"></span>
-            </button>
             <div
               class="dashboard-topbar-context"
               data-dashboard-topbar-context="main"
