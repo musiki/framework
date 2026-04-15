@@ -4312,7 +4312,7 @@ if (
     .conference-shell {
       --conference-bar-height: 36px; /* ~20% reduction from 44px */
       --conference-bar-stack-height: var(--conference-bar-height);
-      --conference-sidebar-size: clamp(180px, 34dvh, 260px);
+      --conference-sidebar-size: clamp(140px, 30dvh, 220px); /* Reduced and capped */
       grid-template-columns: 1fr;
       grid-template-rows: 1fr auto;
       padding-bottom: var(--conference-bar-stack-height);
@@ -4322,9 +4322,9 @@ if (
 
     .conference-stage-frame {
       height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-stack-height));
-      min-height: 200px;
-      background: #000 !important; /* Ensure black background */
-      overflow-y: auto !important; /* Allow scrolling if content overflows */
+      min-height: 180px; /* Leave space for sidebar */
+      background: #000 !important; 
+      overflow-y: auto !important;
       -webkit-overflow-scrolling: touch;
     }
 

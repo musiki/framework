@@ -1579,27 +1579,41 @@ details[open] > summary.conference-sidebar-heading::before {
   flex: 1 1 auto;
   padding: 0.2rem 0.45rem;
   display: grid;
-  /* ~80px or 10% proportion for > 500px */
-  grid-template-columns: repeat(auto-fit, minmax(clamp(72px, 10%, 88px), 1fr));
+  /* Use auto-fill to keep items at their minimum size if there's extra space */
+  grid-template-columns: repeat(auto-fill, minmax(72px, 88px));
   gap: 0.45rem;
   align-content: start;
+  justify-content: center; /* Center them if there is space */
   overflow: auto;
 }
 
 .conference-slot--sidebar .conference-tile {
-  aspect-ratio: 1; /* Make thumbnails square for better space usage in sidebar */
+  aspect-ratio: 1; 
+  width: 100%;
+  max-width: 88px; /* Hard cap to avoid giant single thumbnails */
 }
 
 .conference-slot--sidebar .conference-tile-meta {
-  display: none; /* Hide names in small thumbnails to save space */
+  display: none; 
 }
 
 @media (max-width: 500px) {
   .conference-slot--sidebar {
-    /* 15% proportion for < 500px */
-    grid-template-columns: repeat(auto-fit, minmax(clamp(64px, 15%, 80px), 1fr));
+    /* On mobile, prioritize fitting more columns and keeping height capped */
+    grid-template-columns: repeat(auto-fill, minmax(60px, 72px));
     gap: 0.35rem;
     padding: 0.2rem 0.35rem;
+    /* If height is very narrow, allow horizontal scrolling instead of vertical stack */
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .conference-slot--sidebar .conference-tile {
+    /* Scale based on available sidebar height if needed, but 64px is a safe bet */
+    flex: 0 0 64px;
+    height: 64px;
+    max-width: 64px;
   }
 }
 

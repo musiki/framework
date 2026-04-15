@@ -786,7 +786,7 @@
 @media (max-width: 500px) {
   .conference-stage-frame {
     height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));
-    min-height: 200px;
+    min-height: 180px;
     background: #000 !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
