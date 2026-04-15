@@ -1043,16 +1043,24 @@ const resolvedSlideTheme =
         };
 
         const syncRevealEmbeddedMediaLoop = () => {
-          stopRevealEmbeddedMediaSyncLoop();
-          if (!canBroadcastRevealEmbeddedMedia()) return;
+          if (!canBroadcastRevealEmbeddedMedia()) {
+            stopRevealEmbeddedMediaSyncLoop();
+            return;
+          }
           
           const activeEntry = revealEmbeddedPlayers.get(revealEmbeddedMediaActiveEmbedId);
           const snapshot = buildRevealEmbeddedMediaSnapshot(activeEntry);
-          if (!snapshot || snapshot.playbackState !== 'playing') return;
+          
+          if (!snapshot || snapshot.playbackState !== 'playing') {
+            stopRevealEmbeddedMediaSyncLoop();
+            return;
+          }
+
+          if (revealEmbeddedMediaSyncIntervalId) return; // Already running
 
           revealEmbeddedMediaSyncIntervalId = window.setInterval(() => {
             const currentEntry = revealEmbeddedPlayers.get(revealEmbeddedMediaActiveEmbedId);
-            if (!currentEntry?.ready || !currentEntry.player) {
+            if (!currentEntry?.ready || !currentEntry.player || !currentEntry.iframe.isConnected) {
               stopRevealEmbeddedMediaSyncLoop();
               return;
             }
@@ -1067,7 +1075,7 @@ const resolvedSlideTheme =
           REVEAL_EMBEDDED_MEDIA_BURST_DELAYS_MS.forEach((delayMs) => {
             const timeoutId = window.setTimeout(() => {
               const currentEntry = revealEmbeddedPlayers.get(entry.embedId);
-              if (!currentEntry?.ready || !currentEntry.player) return;
+              if (!currentEntry?.ready || !currentEntry.player || !currentEntry.iframe.isConnected) return;
               postRevealEmbeddedMediaState(currentEntry, true);
             }, delayMs);
             revealEmbeddedMediaBurstTimeoutIds.push(timeoutId);
@@ -1085,7 +1093,7 @@ const resolvedSlideTheme =
             snapshot.embedId,
             snapshot.mediaId,
             snapshot.playbackState,
-            snapshot.currentTime.toFixed(1), // Reduced precision for key matching
+            snapshot.currentTime.toFixed(1), 
           ].join(':');
 
           if (!force && stateKey === revealEmbeddedMediaLastSentKey && now - revealEmbeddedMediaLastSentAt < 450) {
@@ -1104,6 +1112,8 @@ const resolvedSlideTheme =
           
           if (snapshot.playbackState === 'playing') {
             syncRevealEmbeddedMediaLoop();
+          } else {
+            stopRevealEmbeddedMediaSyncLoop();
           }
         };
 
@@ -1117,7 +1127,7 @@ const resolvedSlideTheme =
             const timeoutId = window.setTimeout(() => {
               if (applyToken !== revealEmbeddedMediaApplyToken) return;
               const currentEntry = revealEmbeddedPlayers.get(entry.embedId);
-              if (!currentEntry?.ready || !currentEntry.player) return;
+              if (!currentEntry?.ready || !currentEntry.player || !currentEntry.iframe.isConnected) return;
 
               const expectedTime = getRevealEmbeddedExpectedTime(expectedState);
               let currentTime = 0;
@@ -1150,10 +1160,6 @@ const resolvedSlideTheme =
 
                 if (expectedState.playbackState === 'playing') {
                   currentEntry.player.playVideo();
-                  // For nested iframes, sometimes we need to unmute to start
-                  if (currentEntry.player.isMuted?.()) {
-                    // Try to unmute, but don't force if user has volume preference
-                  }
                 } else {
                   currentEntry.player.pauseVideo();
                 }
@@ -1163,7 +1169,7 @@ const resolvedSlideTheme =
                 const finalCheckTimeoutId = window.setTimeout(() => {
                   if (applyToken !== revealEmbeddedMediaApplyToken) return;
                   const verifiedEntry = revealEmbeddedPlayers.get(entry.embedId);
-                  if (!verifiedEntry?.ready || !verifiedEntry.player) return;
+                  if (!verifiedEntry?.ready || !verifiedEntry.player || !verifiedEntry.iframe.isConnected) return;
                   const verifiedPlaybackState = readRevealYouTubePlaybackState(verifiedEntry.player);
                   const stillNeedsInteraction =
                     expectedState.playbackState === 'playing' &&
@@ -1183,9 +1189,10 @@ const resolvedSlideTheme =
           try {
             callback();
           } finally {
+            // Use a clear timeout to avoid lingering state
             window.setTimeout(() => {
               revealEmbeddedMediaApplyingRemoteState = false;
-            }, 450); // Slightly longer guard
+            }, 500); 
           }
         };
 
@@ -1198,7 +1205,7 @@ const resolvedSlideTheme =
           if (!embedId || !mediaId) return null;
 
           let entry = revealEmbeddedPlayers.get(embedId);
-          if (entry?.ready && entry.player) {
+          if (entry?.ready && entry.player && entry.iframe.isConnected) {
             entry.iframe = iframe;
             entry.mediaId = mediaId;
             return entry;
@@ -1232,22 +1239,30 @@ const resolvedSlideTheme =
                 entry.player = new Player(iframe, {
                   events: {
                     onReady: () => {
+                      if (!entry.iframe.isConnected) {
+                        finish(() => reject(new Error('Iframe disconnected before ready.')));
+                        return;
+                      }
                       entry.ready = true;
                       entry.readyPromise = null;
                       setRevealEmbeddedInteractionHint(entry.iframe, false);
-                      if (!revealEmbeddedMediaActiveEmbedId) {
+                      
+                      // If this is the only or first frame, make it active
+                      if (!revealEmbeddedMediaActiveEmbedId || getCurrentSlideYouTubeFrames().some(f => f.dataset.musikiRevealEmbedId === embedId)) {
                         revealEmbeddedMediaActiveEmbedId = embedId;
                       }
+
                       if (revealEmbeddedMediaPendingState && 
                          (revealEmbeddedMediaPendingState.embedId === embedId || 
                           revealEmbeddedMediaPendingState.mediaId === entry.mediaId)) {
                         void applyRevealEmbeddedMediaState(revealEmbeddedMediaPendingState);
-                      } else {
+                      } else if (canBroadcastRevealEmbeddedMedia()) {
                         syncRevealEmbeddedMediaLoop();
                       }
                       finish(resolve);
                     },
                     onStateChange: (event) => {
+                      if (!entry.iframe.isConnected) return;
                       const videoData = event.target.getVideoData?.() ?? {};
                       const nextMediaId = String(videoData.video_id || entry.mediaId || '').trim();
                       if (nextMediaId) {
@@ -1256,12 +1271,12 @@ const resolvedSlideTheme =
                       }
                       
                       revealEmbeddedMediaActiveEmbedId = embedId;
-                      syncRevealEmbeddedMediaLoop();
                       
                       if (!revealEmbeddedMediaApplyingRemoteState) {
                         postRevealEmbeddedMediaState(entry);
                         scheduleRevealEmbeddedMediaBurst(entry);
                       }
+                      syncRevealEmbeddedMediaLoop();
                     },
                     onError: (err) => {
                       console.warn('YouTube Player Error:', err);
@@ -1291,7 +1306,14 @@ const resolvedSlideTheme =
             stopRevealEmbeddedMediaSyncLoop();
             clearRevealEmbeddedMediaBurstQueue();
             clearRevealEmbeddedMediaVerificationQueue();
+            revealEmbeddedMediaActiveEmbedId = '';
             return;
+          }
+
+          // Important: find the active embed for this slide
+          const currentEmbedIds = frames.map(f => String(f.dataset.musikiRevealEmbedId || '').trim());
+          if (!currentEmbedIds.includes(revealEmbeddedMediaActiveEmbedId)) {
+            revealEmbeddedMediaActiveEmbedId = currentEmbedIds[0] || '';
           }
 
           await Promise.all(frames.map((iframe) => ensureRevealEmbeddedPlayer(iframe).catch(() => null)));
@@ -1301,14 +1323,11 @@ const resolvedSlideTheme =
             return;
           }
 
-          if (forceEmitCurrent) {
-            const targetIframe = getRevealEmbeddedTargetIframe();
-            if (targetIframe) {
-              const targetEntry = revealEmbeddedPlayers.get(String(targetIframe.dataset.musikiRevealEmbedId || '').trim());
-              if (targetEntry?.ready) {
-                postRevealEmbeddedMediaState(targetEntry, true);
-                scheduleRevealEmbeddedMediaBurst(targetEntry);
-              }
+          if (forceEmitCurrent && canBroadcastRevealEmbeddedMedia()) {
+            const targetEntry = revealEmbeddedPlayers.get(revealEmbeddedMediaActiveEmbedId);
+            if (targetEntry?.ready && targetEntry.iframe.isConnected) {
+              postRevealEmbeddedMediaState(targetEntry, true);
+              scheduleRevealEmbeddedMediaBurst(targetEntry);
             }
           }
 
