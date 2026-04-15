@@ -900,14 +900,16 @@ const resolvedSlideTheme =
           revealWindow.__musikiRevealYouTubeApiPromise = new Promise((resolve, reject) => {
             const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
             
-            // Define global callback if not present
+            // Define global callback
             const previousReady = revealWindow.onYouTubeIframeAPIReady;
             revealWindow.onYouTubeIframeAPIReady = () => {
-              if (typeof previousReady === 'function') previousReady();
+              if (typeof previousReady === 'function') {
+                try { previousReady(); } catch (e) { console.warn('Previous onYouTubeIframeAPIReady failed:', e); }
+              }
               if (revealWindow.YT?.Player) {
                 resolve(revealWindow.YT.Player);
               } else {
-                reject(new Error('YouTube iframe API did not initialize.'));
+                reject(new Error('YouTube iframe API ready but Player missing.'));
               }
             };
 
@@ -915,12 +917,38 @@ const resolvedSlideTheme =
               const script = document.createElement('script');
               script.src = 'https://www.youtube.com/iframe_api';
               script.async = true;
-              script.onerror = () => reject(new Error('Could not load the YouTube iframe API.'));
+              script.onerror = (e) => reject(new Error('Could not load the YouTube iframe API script.'));
               document.head.appendChild(script);
+            } else if (revealWindow.YT?.Player) {
+              // If script exists and YT is ready, resolve immediately
+              resolve(revealWindow.YT.Player);
             }
           });
 
           return revealWindow.__musikiRevealYouTubeApiPromise;
+        };
+
+        /** @param {HTMLIFrameElement} iframe */
+        const prepareRevealIframeForApi = (iframe) => {
+          const src = String(iframe.getAttribute('src') || '').trim();
+          if (!src) return;
+          try {
+            const url = new URL(src, window.location.origin);
+            let changed = false;
+            if (url.searchParams.get('enablejsapi') !== '1') {
+              url.searchParams.set('enablejsapi', '1');
+              changed = true;
+            }
+            if (url.searchParams.get('origin') !== window.location.origin) {
+              url.searchParams.set('origin', window.location.origin);
+              changed = true;
+            }
+            if (changed) {
+              iframe.setAttribute('src', url.toString());
+            }
+          } catch (e) {
+            // ignore malformed URLs
+          }
         };
 
         const stopRevealEmbeddedMediaSyncLoop = () => {
@@ -1205,11 +1233,20 @@ const resolvedSlideTheme =
           if (!embedId || !mediaId) return null;
 
           let entry = revealEmbeddedPlayers.get(embedId);
+          
+          // If we have a player but it's not the same iframe (rare in Reveal but possible)
+          if (entry?.player && entry.iframe !== iframe) {
+            try { entry.player.destroy?.(); } catch {}
+            entry.ready = false;
+            entry.player = null;
+          }
+
           if (entry?.ready && entry.player && entry.iframe.isConnected) {
             entry.iframe = iframe;
             entry.mediaId = mediaId;
             return entry;
           }
+          
           if (entry?.readyPromise) return entry.readyPromise;
 
           entry = /** @type {RevealEmbeddedPlayerEntry} */ (entry || {
@@ -1224,6 +1261,9 @@ const resolvedSlideTheme =
           entry.mediaId = mediaId;
           revealEmbeddedPlayers.set(embedId, entry);
 
+          // Crucial: Ensure iframe has JS API enabled before YouTube API tries to bind to it
+          prepareRevealIframeForApi(iframe);
+
           entry.readyPromise = (async () => {
             try {
               const Player = await loadRevealYouTubePlayerApi();
@@ -1236,57 +1276,74 @@ const resolvedSlideTheme =
                   cb?.();
                 };
 
-                entry.player = new Player(iframe, {
-                  events: {
-                    onReady: () => {
-                      if (!entry.iframe.isConnected) {
-                        finish(() => reject(new Error('Iframe disconnected before ready.')));
-                        return;
-                      }
-                      entry.ready = true;
-                      entry.readyPromise = null;
-                      setRevealEmbeddedInteractionHint(entry.iframe, false);
-                      
-                      // If this is the only or first frame, make it active
-                      if (!revealEmbeddedMediaActiveEmbedId || getCurrentSlideYouTubeFrames().some(f => f.dataset.musikiRevealEmbedId === embedId)) {
-                        revealEmbeddedMediaActiveEmbedId = embedId;
-                      }
+                // In some cases, creating a new Player on an existing iframe 
+                // requires the iframe to be fully loaded first.
+                const initPlayer = () => {
+                  if (!iframe.isConnected) {
+                    finish(() => reject(new Error('Iframe disconnected before init.')));
+                    return;
+                  }
 
-                      if (revealEmbeddedMediaPendingState && 
-                         (revealEmbeddedMediaPendingState.embedId === embedId || 
-                          revealEmbeddedMediaPendingState.mediaId === entry.mediaId)) {
-                        void applyRevealEmbeddedMediaState(revealEmbeddedMediaPendingState);
-                      } else if (canBroadcastRevealEmbeddedMedia()) {
+                  entry.player = new Player(iframe, {
+                    events: {
+                      onReady: (event) => {
+                        if (!entry.iframe.isConnected) {
+                          finish(() => reject(new Error('Iframe disconnected during ready.')));
+                          return;
+                        }
+                        entry.ready = true;
+                        entry.readyPromise = null;
+                        setRevealEmbeddedInteractionHint(entry.iframe, false);
+                        
+                        // Sync current state immediately if active
+                        if (!revealEmbeddedMediaActiveEmbedId || getCurrentSlideYouTubeFrames().some(f => f.dataset.musikiRevealEmbedId === embedId)) {
+                          revealEmbeddedMediaActiveEmbedId = embedId;
+                        }
+
+                        if (revealEmbeddedMediaPendingState && 
+                           (revealEmbeddedMediaPendingState.embedId === embedId || 
+                            revealEmbeddedMediaPendingState.mediaId === entry.mediaId)) {
+                          void applyRevealEmbeddedMediaState(revealEmbeddedMediaPendingState);
+                        } else if (canBroadcastRevealEmbeddedMedia()) {
+                          syncRevealEmbeddedMediaLoop();
+                        }
+                        finish(resolve);
+                      },
+                      onStateChange: (event) => {
+                        if (!entry.iframe.isConnected) return;
+                        const videoData = event.target.getVideoData?.() ?? {};
+                        const nextMediaId = String(videoData.video_id || entry.mediaId || '').trim();
+                        if (nextMediaId) {
+                          entry.mediaId = nextMediaId;
+                          iframe.dataset.musikiRevealMediaId = nextMediaId;
+                        }
+                        
+                        revealEmbeddedMediaActiveEmbedId = embedId;
+                        
+                        if (!revealEmbeddedMediaApplyingRemoteState) {
+                          postRevealEmbeddedMediaState(entry);
+                          scheduleRevealEmbeddedMediaBurst(entry);
+                        }
                         syncRevealEmbeddedMediaLoop();
+                      },
+                      onError: (err) => {
+                        console.warn('YouTube Player Error:', err);
+                        // Don't reject yet, sometimes transient
                       }
-                      finish(resolve);
                     },
-                    onStateChange: (event) => {
-                      if (!entry.iframe.isConnected) return;
-                      const videoData = event.target.getVideoData?.() ?? {};
-                      const nextMediaId = String(videoData.video_id || entry.mediaId || '').trim();
-                      if (nextMediaId) {
-                        entry.mediaId = nextMediaId;
-                        iframe.dataset.musikiRevealMediaId = nextMediaId;
-                      }
-                      
-                      revealEmbeddedMediaActiveEmbedId = embedId;
-                      
-                      if (!revealEmbeddedMediaApplyingRemoteState) {
-                        postRevealEmbeddedMediaState(entry);
-                        scheduleRevealEmbeddedMediaBurst(entry);
-                      }
-                      syncRevealEmbeddedMediaLoop();
-                    },
-                    onError: (err) => {
-                      console.warn('YouTube Player Error:', err);
-                      finish(() => reject(err));
-                    }
-                  },
-                });
+                  });
+                };
+
+                if (iframe.contentWindow) {
+                  initPlayer();
+                } else {
+                  iframe.addEventListener('load', initPlayer, { once: true });
+                }
 
                 window.setTimeout(() => {
-                  finish(() => reject(new Error('Reveal YouTube player timeout.')));
+                  if (!entry.ready) {
+                    finish(() => reject(new Error('Reveal YouTube player timeout.')));
+                  }
                 }, 15000);
               });
 
@@ -1802,11 +1859,11 @@ const resolvedSlideTheme =
               }
 
               if (!url.searchParams.has('enablejsapi')) url.searchParams.set('enablejsapi', '1');
+              if (!url.searchParams.has('origin')) url.searchParams.set('origin', window.location.origin);
               if (!url.searchParams.has('vq')) url.searchParams.set('vq', 'hd1080');
               if (!url.searchParams.has('rel')) url.searchParams.set('rel', '0');
               if (!url.searchParams.has('modestbranding')) url.searchParams.set('modestbranding', '1');
               if (!url.searchParams.has('playsinline')) url.searchParams.set('playsinline', '1');
-              if (!url.searchParams.has('origin')) url.searchParams.set('origin', window.location.origin);
 
               const currentAllow = String(iframe.getAttribute('allow') || '').trim();
               if (!/autoplay/i.test(currentAllow)) {
@@ -1814,7 +1871,8 @@ const resolvedSlideTheme =
               }
 
               const nextSrc = url.toString();
-              if (nextSrc !== src) {
+              const currentSrc = String(iframe.getAttribute('src') || '').trim();
+              if (nextSrc !== currentSrc) {
                 iframe.setAttribute('src', nextSrc);
               }
             } catch {
