@@ -48,28 +48,30 @@
 
     <div class="conference-chat">
       <ul class="conference-chat-list" data-chat-list></ul>
-      <div class="conference-chat-compose">
-        <textarea rows="3" name="chat" placeholder="Escribe un mensaje" data-chat-input></textarea>
-        <div class="conference-chat-actions">
-          <button type="button" class="conference-chat-send" data-action="chat-send" disabled>
-            Send
-          </button>
-          <button
-            type="button"
-            class="conference-chat-download"
-            data-action="chat-download"
-            aria-label="Descargar chat"
-            title="Descargar chat"
-            disabled
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
-              <path
-                d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
-                fill="currentColor"
-              />
-            </svg>
-            <span class="conference-sr-only">Download chat</span>
-          </button>
+      <div class="conference-chat-compose-anchor">
+        <div class="conference-chat-compose">
+          <textarea rows="3" name="chat" placeholder="Escribe un mensaje" data-chat-input></textarea>
+          <div class="conference-chat-actions">
+            <button type="button" class="conference-chat-send" data-action="chat-send" disabled>
+              Send
+            </button>
+            <button
+              type="button"
+              class="conference-chat-download"
+              data-action="chat-download"
+              aria-label="Descargar chat"
+              title="Descargar chat"
+              disabled
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+                <path
+                  d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
+                  fill="currentColor"
+                />
+              </svg>
+              <span class="conference-sr-only">Download chat</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

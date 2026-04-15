@@ -57,7 +57,6 @@ export const createClaseController = ({
   let activeIndex = 0;
   let lastKnownRevealIndex = 0;
   let currentLessonId: string | null = null;
-  let ignoreScrollEventsUntil = 0;
 
   const showPlaceholder = (msg?: string) => {
     if (!contentEl) return;
@@ -85,7 +84,6 @@ export const createClaseController = ({
     if (!contentEl) return;
     const active = contentEl.querySelector<HTMLElement>('.clase-section.is-active');
     if (active) {
-      ignoreScrollEventsUntil = Date.now() + 420;
       active.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   };
@@ -130,7 +128,7 @@ export const createClaseController = ({
         return;
       }
       await renderSections();
-      scrollToActive();
+      contentEl.scrollTop = 0;
     } catch (err) {
       console.error('[clase] load error', err);
       showPlaceholder('Error al cargar la clase.');

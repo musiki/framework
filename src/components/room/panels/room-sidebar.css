@@ -2,6 +2,11 @@
   --conference-sidebar-strip-padding-y: 3px;
   --conference-sidebar-strip-padding-x: 0.65rem;
   --conference-sidebar-strip-height: calc((0.56rem + (var(--conference-sidebar-strip-padding-y) * 2)) * 1.2);
+  --conference-chat-section-max-height: 400px;
+  --conference-clase-section-max-height: 300px;
+  --conference-clase-section-initial-height: min(260px, 30vh);
+  --conference-notes-section-max-height: min(70vh, 34rem);
+  --conference-notes-section-initial-height: min(18rem, 34vh);
   border-left: 1px solid var(--conference-line);
   min-width: 0;
   overflow: hidden;
@@ -175,6 +180,7 @@ details[open] > summary.conference-sidebar-heading::before {
 
 .conference-sidebar-information-stack > .conference-sidebar-section--chat[open] {
   flex: 2 1 0;
+  max-height: calc(var(--conference-sidebar-strip-height) + var(--conference-chat-section-max-height));
 }
 
 .conference-sidebar-information-stack > .conference-sidebar-section--grid[open] {
@@ -189,7 +195,8 @@ details[open] > summary.conference-sidebar-heading::before {
 .conference-sidebar-information-stack > .conference-sidebar-section--clase,
 .conference-sidebar-information-stack > .conference-sidebar-section--notes {
   flex: 0 0 auto;
-  max-height: clamp(9rem, 23vh, 16rem);
+  min-height: 0;
+  max-height: none;
   overflow: hidden;
 }
 
@@ -228,8 +235,10 @@ details[open] > summary.conference-sidebar-heading::before {
   overflow: hidden;
 }
 
+.conference-sidebar-panel-body--clase,
 .conference-sidebar-panel-body--notes {
-  overflow-y: auto;
+  flex: 1 1 auto;
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 
@@ -844,6 +853,27 @@ details[open] > summary.conference-sidebar-heading::before {
   flex-direction: column;
 }
 
+.conference-sidebar-section--clase[open],
+.conference-sidebar-section--notes[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.conference-sidebar-section--clase[open] {
+  height: calc(var(--conference-sidebar-strip-height) + var(--conference-clase-section-initial-height));
+  min-height: calc(var(--conference-sidebar-strip-height) + 8rem);
+  max-height: calc(var(--conference-sidebar-strip-height) + var(--conference-clase-section-max-height));
+  resize: vertical;
+}
+
+.conference-sidebar-section--notes[open] {
+  height: calc(var(--conference-sidebar-strip-height) + var(--conference-notes-section-initial-height));
+  min-height: calc(var(--conference-sidebar-strip-height) + 10rem);
+  max-height: calc(var(--conference-sidebar-strip-height) + var(--conference-notes-section-max-height));
+  resize: vertical;
+}
+
 .conference-sidebar-section--chat.is-attention-flash {
   animation: conference-chat-section-flash 50ms ease-out 1;
 }
@@ -1364,8 +1394,8 @@ details[open] > summary.conference-sidebar-heading::before {
 .conference-chat {
   flex: 1 1 auto;
   min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 0.18rem;
 }
 
@@ -1539,6 +1569,19 @@ details[open] > summary.conference-sidebar-heading::before {
 :global(.conference-chat-empty) {
   color: rgba(245, 247, 251, 0.5);
   font-size: 0.67rem;
+}
+
+.conference-chat-compose-anchor {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  margin-top: auto;
+  padding-top: 0.24rem;
+  background:
+    linear-gradient(180deg, rgba(9, 11, 15, 0) 0%, rgba(9, 11, 15, 0.88) 34%, rgba(9, 11, 15, 0.98) 100%);
 }
 
 .conference-chat-compose {
@@ -2061,6 +2104,8 @@ details[open] > summary.conference-sidebar-heading::before {
 }
 
 .conference-notes-preview-pane {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 0.5rem;
   border: 1px solid var(--conference-line);
   border-radius: 3px;
@@ -2069,7 +2114,7 @@ details[open] > summary.conference-sidebar-heading::before {
   line-height: 1.5;
   color: rgba(245, 247, 251, 0.82);
   overflow-x: auto;
-  max-height: 14rem;
+  max-height: none;
   overflow-y: auto;
 }
 
