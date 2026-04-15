@@ -162,14 +162,22 @@ img {
 	border: 1px solid color-mix(in srgb, var(--c-border) 78%, transparent);
 	background: color-mix(in srgb, var(--c-bg-mute) 72%, var(--c-bg) 28%);
 	border-radius: 12px;
+	width: clamp(72px, 10%, 88px); /* Around 80px or 10% for > 500px */
+}
+
+@media (max-width: 500px) {
+	.obsidian-media-embed-card {
+		width: clamp(64px, 15%, 80px); /* 15% for < 500px */
+	}
 }
 
 .obsidian-audio-card {
-	width: min(100%, 420px);
+	/* Keep compact but allow expansion if it contains a full player */
+	min-width: clamp(72px, 10%, 88px);
 }
 
 .obsidian-video-card {
-	width: min(100%, 680px);
+	min-width: clamp(72px, 10%, 88px);
 }
 
 .obsidian-audio-embed,
