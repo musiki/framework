@@ -975,8 +975,8 @@ details[open]>summary.conference-sidebar-heading::before {
   position: relative;
   margin: 0 !important;
   color: rgba(245, 247, 251, 0.78);
-  font-size: var(--conference-font-ui);
-  line-height: 1.2;
+  font-size: calc(var(--conference-font-ui) * 1.1);
+  line-height: 1.35;
   text-wrap: pretty;
 }
 
