@@ -876,7 +876,7 @@ details[open]>summary.conference-sidebar-heading::before {
 
 .conference-role-tag {
   color: var(--conference-muted);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   white-space: nowrap;
   text-transform: lowercase;
 }
@@ -928,7 +928,7 @@ details[open]>summary.conference-sidebar-heading::before {
   display: grid;
   align-content: start;
   gap: 0;
-  padding: 0.08rem 0.65rem;
+  padding: 0.15rem 0.65rem;
   margin: 0;
   border-bottom: 1px solid var(--conference-line-soft);
 }
@@ -965,8 +965,8 @@ details[open]>summary.conference-sidebar-heading::before {
 
 :global(.conference-chat-item .conference-chat-stamp) {
   display: inline;
-  color: rgba(245, 247, 251, 0.2);
-  font-size: var(--conference-font-ui);
+  color: rgba(245, 247, 251, 0.173);
+  font-size: 10px !important;
   font-style: italic;
   font-weight: 400;
 }
@@ -976,7 +976,7 @@ details[open]>summary.conference-sidebar-heading::before {
   margin: 0 !important;
   color: rgba(245, 247, 251, 0.78);
   font-size: var(--conference-font-ui);
-  line-height: 0;
+  line-height: 1.2;
   text-wrap: pretty;
 }
 

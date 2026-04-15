@@ -1,40 +1,40 @@
 ---
-import InstrumentsSidebar from './room/core/InstrumentsSidebar.astro';
-import RoomSidebar from './room/panels/RoomSidebar.astro';
-import StageFrame from './room/stage/StageFrame.astro';
-import type { RoomPresentationOption } from '../lib/live/presentation-options';
+import InstrumentsSidebar from "./room/core/InstrumentsSidebar.astro";
+import RoomSidebar from "./room/panels/RoomSidebar.astro";
+import StageFrame from "./room/stage/StageFrame.astro";
+import type { RoomPresentationOption } from "../lib/live/presentation-options";
 
 type Props = {
   livekitUrl?: string;
   courseId?: string;
   courseHomeHref?: string;
   defaultIdentity?: string;
-  defaultLayout?: 'grid' | 'teacher' | 'presentation' | 'screenshare';
+  defaultLayout?: "grid" | "teacher" | "presentation" | "screenshare";
   defaultName?: string;
   defaultPresentation?: string;
-  defaultRole?: 'teacher' | 'student';
+  defaultRole?: "teacher" | "student";
   defaultRoom?: string;
   inviteCode?: string;
   inviteError?: string;
   inviteLabel?: string;
-  inviteMode?: 'none' | 'external' | 'invalid';
+  inviteMode?: "none" | "external" | "invalid";
   presentationOptions?: RoomPresentationOption[];
 };
 
 const {
-  livekitUrl = '',
-  courseId = '',
-  courseHomeHref = '/cursos',
-  defaultIdentity = '',
-  defaultLayout = 'presentation',
-  defaultName = '',
-  defaultPresentation = '',
-  defaultRole = 'student',
-  defaultRoom = 'musiki-stage',
-  inviteCode = '',
-  inviteError = '',
-  inviteLabel = 'Acceso externo',
-  inviteMode = 'none',
+  livekitUrl = "",
+  courseId = "",
+  courseHomeHref = "/cursos",
+  defaultIdentity = "",
+  defaultLayout = "presentation",
+  defaultName = "",
+  defaultPresentation = "",
+  defaultRole = "student",
+  defaultRoom = "musiki-stage",
+  inviteCode = "",
+  inviteError = "",
+  inviteLabel = "Acceso externo",
+  inviteMode = "none",
   presentationOptions = [],
 } = Astro.props as Props;
 
@@ -44,13 +44,15 @@ const normalizedPresentationOptions = Array.isArray(presentationOptions)
 
 if (
   defaultPresentation &&
-  !normalizedPresentationOptions.some((option) => option.value === defaultPresentation)
+  !normalizedPresentationOptions.some(
+    (option) => option.value === defaultPresentation,
+  )
 ) {
   normalizedPresentationOptions.unshift({
-    courseId: '',
+    courseId: "",
     label: defaultPresentation,
-    lessonId: '',
-    theme: '',
+    lessonId: "",
+    theme: "",
     value: defaultPresentation,
   });
 }
@@ -94,11 +96,23 @@ if (
         aria-label="Conectar a la sala"
         data-tooltip="Conectar ⌘J"
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-connect-arrow conference-connect-arrow--in">
-          <path d="M4 12h12.2l-3.6-3.6 1.4-1.4L20 13l-6 6-1.4-1.4 3.6-3.6H4z" fill="currentColor"></path>
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          class="conference-connect-arrow conference-connect-arrow--in"
+        >
+          <path
+            d="M4 12h12.2l-3.6-3.6 1.4-1.4L20 13l-6 6-1.4-1.4 3.6-3.6H4z"
+            fill="currentColor"></path>
         </svg>
-        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-connect-arrow conference-connect-arrow--out">
-          <path d="M20 12H7.8l3.6 3.6-1.4 1.4L4 11l6-6 1.4 1.4L7.8 10H20z" fill="currentColor"></path>
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          class="conference-connect-arrow conference-connect-arrow--out"
+        >
+          <path
+            d="M20 12H7.8l3.6 3.6-1.4 1.4L4 11l6-6 1.4 1.4L7.8 10H20z"
+            fill="currentColor"></path>
         </svg>
         <span class="conference-sr-only">Connect</span>
       </button>
@@ -108,16 +122,26 @@ if (
         class="conference-layout-button conference-test-button"
         data-action="test-toggle"
         aria-label="Test micrófono y cámara"
-        data-tooltip="Test de Mic y Cámara"
-      >TEST</button>
+        data-tooltip="Test de Mic y Cámara">TEST</button
+      >
 
       <div class="conference-count-shell">
-        <button type="button" class="conference-count-button" aria-label="Participantes conectados">
-          <span class="conference-count" data-participant-count data-compact="true">0</span>
+        <button
+          type="button"
+          class="conference-count-button"
+          aria-label="Participantes conectados"
+        >
+          <span
+            class="conference-count"
+            data-participant-count
+            data-compact="true">0</span
+          >
         </button>
         <div class="conference-roster-popup">
           <ul class="conference-roster" data-participant-list>
-            <li class="conference-roster-empty">Todavia no hay participantes en la sala.</li>
+            <li class="conference-roster-empty">
+              Todavia no hay participantes en la sala.
+            </li>
           </ul>
         </div>
       </div>
@@ -131,7 +155,8 @@ if (
         hidden
       >
         <span class="conference-live-led" aria-hidden="true"></span>
-        <span class="conference-live-timer" data-live-activity-timer>--:--</span>
+        <span class="conference-live-timer" data-live-activity-timer>--:--</span
+        >
       </button>
 
       <button
@@ -139,8 +164,8 @@ if (
         class="conference-layout-button conference-mute-all-button"
         data-session-mute-all-button
         data-tooltip="Silenciar todos ⌘⌥M"
-        aria-label="Silenciar a todos"
-      >M</button>
+        aria-label="Silenciar a todos">M</button
+      >
     </div>
 
     <div class="conference-bar-group conference-bar-group--instrument">
@@ -156,25 +181,65 @@ if (
     </div>
 
     <div class="conference-bar-group conference-bar-group--layout">
-      <button type="button" class="conference-layout-button" data-layout-choice="teacher" data-tooltip="Full ⌘⌥1">F</button>
-      <button type="button" class="conference-layout-button" data-layout-choice="screenshare" data-tooltip="Screenshare ⌘⌥2">S</button>
-      <button type="button" class="conference-layout-button" data-layout-choice="presentation" data-tooltip="Presentación ⌘⌥3">P</button>
-      <button type="button" class="conference-layout-button" data-layout-choice="grid" data-tooltip="Grid ⌘⌥4">G</button>
-      <button type="button" class="conference-layout-button conference-chat-focus-btn" data-action="chat-focus" data-tooltip="Chat ⌘⌥C">C<span class="conference-chat-unread-dot" data-chat-unread hidden></span></button>
+      <button
+        type="button"
+        class="conference-layout-button"
+        data-layout-choice="teacher"
+        data-tooltip="Full ⌘⌥1">F</button
+      >
+      <button
+        type="button"
+        class="conference-layout-button"
+        data-layout-choice="screenshare"
+        data-tooltip="Screenshare ⌘⌥2">S</button
+      >
+      <button
+        type="button"
+        class="conference-layout-button"
+        data-layout-choice="presentation"
+        data-tooltip="Presentación ⌘⌥3">P</button
+      >
+      <button
+        type="button"
+        class="conference-layout-button"
+        data-layout-choice="grid"
+        data-tooltip="Grid ⌘⌥4">G</button
+      >
+      <button
+        type="button"
+        class="conference-layout-button conference-chat-focus-btn"
+        data-action="chat-focus"
+        data-tooltip="Chat ⌘⌥C"
+        >C<span class="conference-chat-unread-dot" data-chat-unread hidden
+        ></span></button
+      >
 
-      <div class="conference-external-media-controls-shell" data-external-media-controls-shell hidden>
+      <div
+        class="conference-external-media-controls-shell"
+        data-external-media-controls-shell
+        hidden
+      >
         <button
           type="button"
           class="conference-layout-button conference-external-media-btn"
           data-action="external-media-toggle"
           data-external-media-btn
           data-tooltip="Media externa"
-          aria-label="External Media Session"
-        >E</button>
-        <div class="conference-external-media-popup" data-external-media-popup hidden>
-          <div class="conference-break-rooms-panel conference-external-media-panel">
+          aria-label="External Media Session">E</button
+        >
+        <div
+          class="conference-external-media-popup"
+          data-external-media-popup
+          hidden
+        >
+          <div
+            class="conference-break-rooms-panel conference-external-media-panel"
+          >
             <div class="conference-break-rooms-section">
-              <label class="conference-sr-only" for="conference-external-media-input">Link multimedia</label>
+              <label
+                class="conference-sr-only"
+                for="conference-external-media-input">Link multimedia</label
+              >
               <input
                 id="conference-external-media-input"
                 type="text"
@@ -185,26 +250,36 @@ if (
                 autocomplete="off"
                 spellcheck="false"
               />
-              <div class="conference-session-action-row conference-external-media-actions-row">
+              <div
+                class="conference-session-action-row conference-external-media-actions-row"
+              >
                 <button
                   type="button"
                   class="conference-session-action conference-session-action--compact"
                   data-action="external-media-open"
                   title="Abrir media externa"
-                  aria-label="Abrir media externa"
-                >O</button>
+                  aria-label="Abrir media externa">O</button
+                >
                 <button
                   type="button"
                   class="conference-session-action conference-session-action--compact"
                   data-action="external-media-stop"
                   title="Cerrar media externa"
-                  aria-label="Cerrar media externa"
-                >C</button>
+                  aria-label="Cerrar media externa">C</button
+                >
               </div>
-              <div class="conference-external-media-results" data-external-media-results hidden></div>
+              <div
+                class="conference-external-media-results"
+                data-external-media-results
+                hidden
+              >
+              </div>
             </div>
 
-            <p class="conference-room-note conference-external-media-note" data-external-media-status>
+            <p
+              class="conference-room-note conference-external-media-note"
+              data-external-media-status
+            >
               Pega un link o escribe para buscar en YouTube.
             </p>
           </div>
@@ -218,8 +293,8 @@ if (
           data-action="break-rooms-toggle"
           data-break-rooms-btn
           data-tooltip="Break Rooms"
-          aria-label="Break Rooms"
-        >B</button>
+          aria-label="Break Rooms">B</button
+        >
         <button
           type="button"
           class="conference-layout-button conference-break-rooms-end-btn"
@@ -227,8 +302,8 @@ if (
           data-break-rooms-end-btn
           title="Terminar Break Rooms (con cuenta regresiva)"
           aria-label="Terminar Break Rooms"
-          hidden
-        >C</button>
+          hidden>C</button
+        >
         <button
           type="button"
           class="conference-layout-button conference-break-rooms-kill-btn"
@@ -236,10 +311,14 @@ if (
           data-break-rooms-kill-btn
           title="Terminar Break Rooms inmediatamente"
           aria-label="Terminar Break Rooms ahora"
-          hidden
-        >T</button>
+          hidden>T</button
+        >
         <div class="conference-break-rooms-popup" data-break-rooms-popup hidden>
-          <div class="conference-break-rooms-panel conference-break-rooms-popup-setup" data-break-rooms-popup-setup hidden>
+          <div
+            class="conference-break-rooms-panel conference-break-rooms-popup-setup"
+            data-break-rooms-popup-setup
+            hidden
+          >
             <div class="conference-break-rooms-section">
               <div class="conference-session-action-row">
                 <button
@@ -247,8 +326,8 @@ if (
                   class="conference-session-action conference-session-action--compact"
                   data-action="break-rooms-random"
                   title="Random Groups"
-                  aria-label="Random Groups"
-                >R</button>
+                  aria-label="Random Groups">R</button
+                >
                 <input
                   type="number"
                   class="conference-break-rooms-size-input"
@@ -269,16 +348,31 @@ if (
                   class="conference-session-action conference-session-action--compact"
                   data-action="break-rooms-grupos"
                   title="Group Rooms"
-                  aria-label="Group Rooms"
-                >G</button>
+                  aria-label="Group Rooms">G</button
+                >
               </div>
             </div>
 
             <div class="conference-break-rooms-section">
-              <div class="conference-break-rooms-custom-inputs" data-break-rooms-custom-inputs>
-                <input type="text" class="conference-break-rooms-custom-name" placeholder="Grupo A" />
-                <input type="text" class="conference-break-rooms-custom-name" placeholder="Grupo B" />
-                <input type="text" class="conference-break-rooms-custom-name" placeholder="Grupo C" />
+              <div
+                class="conference-break-rooms-custom-inputs"
+                data-break-rooms-custom-inputs
+              >
+                <input
+                  type="text"
+                  class="conference-break-rooms-custom-name"
+                  placeholder="Grupo A"
+                />
+                <input
+                  type="text"
+                  class="conference-break-rooms-custom-name"
+                  placeholder="Grupo B"
+                />
+                <input
+                  type="text"
+                  class="conference-break-rooms-custom-name"
+                  placeholder="Grupo C"
+                />
               </div>
               <div class="conference-session-action-row">
                 <button
@@ -286,29 +380,45 @@ if (
                   class="conference-session-action conference-session-action--compact"
                   data-action="break-rooms-add-custom"
                   title="Agregar grupo"
-                  aria-label="Agregar grupo"
-                >+</button>
+                  aria-label="Agregar grupo">+</button
+                >
                 <button
                   type="button"
                   class="conference-session-action conference-session-action--compact"
                   data-action="break-rooms-custom"
                   title="Create Break Rooms"
-                  aria-label="Create Break Rooms"
-                >C</button>
+                  aria-label="Create Break Rooms">C</button
+                >
               </div>
             </div>
 
             <p class="conference-session-note" data-break-rooms-status></p>
           </div>
-          <div class="conference-break-rooms-popup-divider" data-break-rooms-popup-divider hidden></div>
+          <div
+            class="conference-break-rooms-popup-divider"
+            data-break-rooms-popup-divider
+            hidden
+          >
+          </div>
           <ul class="conference-break-rooms-list" data-break-rooms-list></ul>
         </div>
       </div>
-      <select class="conference-sr-only" data-layout-input aria-hidden="true" tabindex="-1">
-        <option value="teacher" selected={defaultLayout === 'teacher'}>Focus</option>
-        <option value="screenshare" selected={defaultLayout === 'screenshare'}>Share</option>
-        <option value="presentation" selected={defaultLayout === 'presentation'}>Presentation</option>
-        <option value="grid" selected={defaultLayout === 'grid'}>Grid</option>
+      <select
+        class="conference-sr-only"
+        data-layout-input
+        aria-hidden="true"
+        tabindex="-1"
+      >
+        <option value="teacher" selected={defaultLayout === "teacher"}
+          >Focus</option
+        >
+        <option value="screenshare" selected={defaultLayout === "screenshare"}
+          >Share</option
+        >
+        <option value="presentation" selected={defaultLayout === "presentation"}
+          >Presentation</option
+        >
+        <option value="grid" selected={defaultLayout === "grid"}>Grid</option>
       </select>
     </div>
 
@@ -324,15 +434,18 @@ if (
           <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
             <path
               d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V7A3.5 3.5 0 1 0 8.5 7v5a3.5 3.5 0 0 0 3.5 3.5Zm-6-3a1 1 0 1 1 2 0 4 4 0 1 0 8 0 1 1 0 1 1 2 0 6 6 0 0 1-5 5.91V21h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.59A6 6 0 0 1 6 12.5Z"
-              fill="currentColor"
-            />
+              fill="currentColor"></path>
           </svg>
           <span class="conference-mic-meter" data-mic-meter hidden></span>
           <span class="conference-sr-only">Microphone</span>
         </button>
         <div class="conference-device-panel" data-audio-input-panel hidden>
           <label for="conference-audio-input-select">Microphone</label>
-          <select id="conference-audio-input-select" name="audio-input" data-audio-input-select>
+          <select
+            id="conference-audio-input-select"
+            name="audio-input"
+            data-audio-input-select
+          >
             <option value="">Selecciona un microfono</option>
           </select>
         </div>
@@ -349,14 +462,17 @@ if (
           <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
             <path
               d="M4 7.5A2.5 2.5 0 0 1 6.5 5h7A2.5 2.5 0 0 1 16 7.5v1.13l2.76-1.85A1.5 1.5 0 0 1 21 8.03v7.94a1.5 1.5 0 0 1-2.24 1.25L16 15.37v1.13A2.5 2.5 0 0 1 13.5 19h-7A2.5 2.5 0 0 1 4 16.5v-9Z"
-              fill="currentColor"
-            />
+              fill="currentColor"></path>
           </svg>
           <span class="conference-sr-only">Camera</span>
         </button>
         <div class="conference-device-panel" data-video-input-panel hidden>
           <label for="conference-video-input-select">Camera</label>
-          <select id="conference-video-input-select" name="video-input" data-video-input-select>
+          <select
+            id="conference-video-input-select"
+            name="video-input"
+            data-video-input-select
+          >
             <option value="">Selecciona una camara</option>
           </select>
         </div>
@@ -373,19 +489,27 @@ if (
     </div>
 
     <div class="conference-bar-group conference-bar-group--presentation">
-      <label class="conference-sr-only" for="conference-presentation-select">Presentacion</label>
-      <select id="conference-presentation-select" name="presentation" data-presentation-select>
+      <label class="conference-sr-only" for="conference-presentation-select"
+        >Presentacion</label
+      >
+      <select
+        id="conference-presentation-select"
+        name="presentation"
+        data-presentation-select
+      >
         <option value="">none</option>
-        {normalizedPresentationOptions.map((option) => (
-          <option
-            value={option.value}
-            data-course-id={option.courseId}
-            data-lesson-id={option.lessonId}
-            selected={option.value === defaultPresentation}
-          >
-            {option.label}
-          </option>
-        ))}
+        {
+          normalizedPresentationOptions.map((option) => (
+            <option
+              value={option.value}
+              data-course-id={option.courseId}
+              data-lesson-id={option.lessonId}
+              selected={option.value === defaultPresentation}
+            >
+              {option.label}
+            </option>
+          ))
+        }
       </select>
     </div>
 
@@ -394,14 +518,14 @@ if (
         class="conference-stat-indicator"
         data-stat-cpu
         title="CPU · uso del hilo principal estimado por RAF"
-        aria-label="CPU usage"
-      >--</span>
+        aria-label="CPU usage">--</span
+      >
       <span
         class="conference-stat-indicator"
         data-stat-bw
         title="Ancho de banda · bytes/s WebRTC"
-        aria-label="Bandwidth"
-      >--</span>
+        aria-label="Bandwidth">--</span
+      >
       <span class="conference-session-timer" data-session-timer>00:00:00</span>
       <button
         type="button"
@@ -422,8 +546,7 @@ if (
         <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
           <path
             d="M4 9V4h5v2H6v3H4Zm10-5h6v6h-2V6h-4V4ZM4 20v-6h2v4h4v2H4Zm14-2v-4h2v6h-6v-2h4Z"
-            fill="currentColor"
-          />
+            fill="currentColor"></path>
         </svg>
         <span class="conference-sr-only">Fullscreen</span>
       </button>
@@ -437,16 +560,24 @@ if (
         <span aria-hidden="true">?</span>
         <span class="conference-sr-only">Atajos</span>
       </button>
-      <a href={courseHomeHref} class="conference-exit-button" aria-label="Volver" title="Volver">
-        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-exit-icon">
+      <a
+        href={courseHomeHref}
+        class="conference-exit-button"
+        aria-label="Volver"
+        title="Volver"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          class="conference-exit-icon"
+        >
           <path
             d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5"
             fill="none"
             stroke="currentColor"
             stroke-linecap="round"
             stroke-linejoin="round"
-            stroke-width="2.6"
-          />
+            stroke-width="2.6"></path>
         </svg>
         <span class="conference-sr-only">Volver</span>
       </a>
@@ -456,7 +587,11 @@ if (
   <template data-template="participant-card">
     <article class="conference-tile conference-tile--participant">
       <div class="conference-tile-media" data-card-media></div>
-      <div class="conference-empty conference-empty--tile" data-card-placeholder></div>
+      <div
+        class="conference-empty conference-empty--tile"
+        data-card-placeholder
+      >
+      </div>
       <span class="conference-tile-hand" data-card-hand hidden>✋</span>
       <footer class="conference-tile-meta">
         <strong data-card-name>Participant</strong>
@@ -501,7 +636,9 @@ if (
             <li><kbd>O</kbd> overview</li>
             <li><kbd>K</kbd> / <kbd>L</kbd> previous / next slide</li>
             <li><kbd>S</kbd> speaker view</li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>G</kbd> go to slide</li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>G</kbd> go to slide
+            </li>
             <li><kbd>P</kbd> laser / marker</li>
             <li><kbd>G</kbd> graph</li>
           </ul>
@@ -510,8 +647,16 @@ if (
         <section class="conference-shortcuts-section">
           <h3>Layout</h3>
           <ul>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> / <kbd>4</kbd> full / share / presentation / grid</li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>5</kbd> / <kbd>6</kbd> / <kbd>7</kbd> circle / invert / delegar sesion</li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>1</kbd> / <kbd
+                >2</kbd
+              > / <kbd>3</kbd> / <kbd>4</kbd> full / share / presentation / grid
+            </li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>5</kbd> / <kbd
+                >6</kbd
+              > / <kbd>7</kbd> circle / invert / delegar sesion
+            </li>
           </ul>
         </section>
 
@@ -519,29 +664,59 @@ if (
           <h3>Room</h3>
           <ul>
             <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>\</kbd> instruments</li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>\</kbd> sidebar</li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>\</kbd> sidebar
+            </li>
             <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>J</kbd> join / leave</li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>F</kbd> / <kbd>I</kbd> fullscreen / copy invite</li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>R</kbd> / <kbd>T</kbd> rec / screenshot</li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>F</kbd> / <kbd
+                >I</kbd
+              > fullscreen / copy invite
+            </li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>R</kbd> / <kbd
+                >T</kbd
+              > rec / screenshot
+            </li>
           </ul>
         </section>
 
         <section class="conference-shortcuts-section">
           <h3>Media</h3>
           <ul>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>S</kbd> / <kbd>V</kbd> / <kbd>N</kbd> share / camera / next camera</li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>V</kbd> / <kbd>N</kbd> camera / next camera</li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>S</kbd> / <kbd
+                >V</kbd
+              > / <kbd>N</kbd> share / camera / next camera
+            </li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>V</kbd> / <kbd
+                >N</kbd
+              > camera / next camera
+            </li>
             <li><kbd>Space</kbd> hold mic</li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>M</kbd> mute all</li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>M</kbd> mute all
+            </li>
           </ul>
         </section>
 
         <section class="conference-shortcuts-section">
           <h3>Interaction</h3>
           <ul>
-            <li><kbd>H</kbd> / <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>Y</kbd> raise / lower hand</li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>C</kbd> focus chat</li>
-            <li><kbd>⇧</kbd> + <kbd>4</kbd> / <kbd>5</kbd> / <kbd>6</kbd> / <kbd>7</kbd> / <kbd>8</kbd> / <kbd>9</kbd> clap / thumb / heart / joy / wow / tada</li>
+            <li>
+              <kbd>H</kbd> / <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd
+                >Y</kbd
+              > raise / lower hand
+            </li>
+            <li>
+              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>C</kbd> focus chat
+            </li>
+            <li>
+              <kbd>⇧</kbd> + <kbd>4</kbd> / <kbd>5</kbd> / <kbd>6</kbd> / <kbd
+                >7</kbd
+              > / <kbd>8</kbd> / <kbd>9</kbd> clap / thumb / heart / joy / wow / tada
+            </li>
             <li><kbd>⇧</kbd> + <kbd>?</kbd> search</li>
           </ul>
         </section>
@@ -549,7 +724,11 @@ if (
     </div>
   </div>
 
-  <div class="conference-invite-modal" data-external-invite-gate hidden={inviteMode === 'none'}>
+  <div
+    class="conference-invite-modal"
+    data-external-invite-gate
+    hidden={inviteMode === "none"}
+  >
     <div
       class="conference-invite-dialog"
       role="dialog"
@@ -557,17 +736,27 @@ if (
       aria-labelledby="conference-invite-title"
     >
       <div class="conference-invite-brand" aria-hidden="true">
-        <img src="/logo-musiki.png" alt="" class="conference-invite-brand-logo" />
+        <img
+          src="/logo-musiki.png"
+          alt=""
+          class="conference-invite-brand-logo"
+        />
       </div>
       <div class="conference-invite-head">
         <div class="conference-invite-heading">
           <strong id="conference-invite-title">
-            {inviteMode === 'invalid' ? 'Invitación no disponible' : 'Entrar a la sala'}
+            {
+              inviteMode === "invalid"
+                ? "Invitación no disponible"
+                : "Entrar a la sala"
+            }
           </strong>
           <p>
-            {inviteMode === 'invalid'
-              ? inviteError || 'Esta invitación ya no está disponible.'
-              : inviteLabel}
+            {
+              inviteMode === "invalid"
+                ? inviteError || "Esta invitación ya no está disponible."
+                : inviteLabel
+            }
           </p>
         </div>
         <button
@@ -581,82 +770,86 @@ if (
         </button>
       </div>
 
-      {inviteMode === 'invalid' ? (
-        <div class="conference-invite-body">
-          <p class="conference-invite-note">
-            {inviteError || 'La invitación de esta sala venció o no existe.'}
-          </p>
-          <div class="conference-invite-actions">
-            <a href="/" class="conference-session-action">IR AL INICIO</a>
+      {
+        inviteMode === "invalid" ? (
+          <div class="conference-invite-body">
+            <p class="conference-invite-note">
+              {inviteError || "La invitación de esta sala venció o no existe."}
+            </p>
+            <div class="conference-invite-actions">
+              <a href="/" class="conference-session-action">
+                IR AL INICIO
+              </a>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div class="conference-invite-body">
-          <div class="conference-field">
-            <label for="conference-external-invite-name">Nombre</label>
-            <input
-              id="conference-external-invite-name"
-              name="external-invite-name"
-              type="text"
-              value=""
-              autocomplete="name"
-              data-external-invite-name
-            />
-          </div>
+        ) : (
+          <div class="conference-invite-body">
+            <div class="conference-field">
+              <label for="conference-external-invite-name">Nombre</label>
+              <input
+                id="conference-external-invite-name"
+                name="external-invite-name"
+                type="text"
+                value=""
+                autocomplete="name"
+                data-external-invite-name
+              />
+            </div>
 
-          <div class="conference-field">
-            <label for="conference-external-invite-email">Mail</label>
-            <input
-              id="conference-external-invite-email"
-              name="external-invite-email"
-              type="email"
-              value=""
-              autocomplete="email"
-              data-external-invite-email
-            />
-          </div>
+            <div class="conference-field">
+              <label for="conference-external-invite-email">Mail</label>
+              <input
+                id="conference-external-invite-email"
+                name="external-invite-email"
+                type="email"
+                value=""
+                autocomplete="email"
+                data-external-invite-email
+              />
+            </div>
 
-          <div class="conference-field">
-            <label for="conference-external-invite-password">Password</label>
-            <input
-              id="conference-external-invite-password"
-              name="external-invite-password"
-              type="password"
-              value=""
-              autocomplete="current-password"
-              data-external-invite-password
-            />
-          </div>
+            <div class="conference-field">
+              <label for="conference-external-invite-password">Password</label>
+              <input
+                id="conference-external-invite-password"
+                name="external-invite-password"
+                type="password"
+                value=""
+                autocomplete="current-password"
+                data-external-invite-password
+              />
+            </div>
 
-          <p class="conference-invite-note" data-external-invite-gate-status>
-            Completa tus datos para entrar como invitado externo.
-          </p>
+            <p class="conference-invite-note" data-external-invite-gate-status>
+              Completa tus datos para entrar como invitado externo.
+            </p>
 
-          <div class="conference-invite-actions">
-            <button
-              type="button"
-              class="conference-session-action"
-              data-action="external-invite-join"
-            >
-              ENTRAR
-            </button>
+            <div class="conference-invite-actions">
+              <button
+                type="button"
+                class="conference-session-action"
+                data-action="external-invite-join"
+              >
+                ENTRAR
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
     </div>
   </div>
 </section>
 
 <script>
-  import { mountLiveKitRoom } from '../scripts/room/index.ts';
+  import { mountLiveKitRoom } from "../scripts/room/index.ts";
 
   let teardown: ReturnType<typeof mountLiveKitRoom> | null = null;
 
   const mount = () => {
-    const root = document.querySelector('[data-conference-root]');
+    const root = document.querySelector("[data-conference-root]");
     if (!(root instanceof HTMLElement)) return;
 
-    if (typeof teardown === 'function') {
+    if (typeof teardown === "function") {
       teardown();
       teardown = null;
     }
@@ -664,24 +857,27 @@ if (
     try {
       teardown = mountLiveKitRoom(root);
     } catch (error) {
-      console.error('Conference room mount failed:', error);
-      root.dataset.mounted = 'false';
-      const status = root.querySelector('[data-room-status]');
+      console.error("Conference room mount failed:", error);
+      root.dataset.mounted = "false";
+      const status = root.querySelector("[data-room-status]");
       if (status instanceof HTMLElement) {
-        status.textContent = error instanceof Error ? error.message : 'No fue posible iniciar la sala.';
+        status.textContent =
+          error instanceof Error
+            ? error.message
+            : "No fue posible iniciar la sala.";
       }
     }
   };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mount, { once: true });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mount, { once: true });
   } else {
     mount();
   }
 
-  document.addEventListener('astro:page-load', mount);
-  window.addEventListener('pagehide', () => {
-    if (typeof teardown === 'function') teardown();
+  document.addEventListener("astro:page-load", mount);
+  window.addEventListener("pagehide", () => {
+    if (typeof teardown === "function") teardown();
     teardown = null;
   });
 </script>
@@ -689,23 +885,33 @@ if (
 <script>
   // ── Invite role switch (Externos / Estudiantes) ──────────────────────
   function initInviteSwitch() {
-    const toggle = document.querySelector('[data-invite-role-toggle]');
+    const toggle = document.querySelector("[data-invite-role-toggle]");
     if (!(toggle instanceof HTMLInputElement)) return;
 
-    const panelExternal = document.querySelector('[data-invite-panel="external"]');
-    const panelStudent  = document.querySelector('[data-invite-panel="student"]');
-    const labelExternal = document.querySelector('[data-role-label-external]');
-    const labelStudent  = document.querySelector('[data-role-label-student]');
+    const panelExternal = document.querySelector(
+      '[data-invite-panel="external"]',
+    );
+    const panelStudent = document.querySelector(
+      '[data-invite-panel="student"]',
+    );
+    const labelExternal = document.querySelector("[data-role-label-external]");
+    const labelStudent = document.querySelector("[data-role-label-student]");
 
     const updateSwitch = () => {
       const isStudent = toggle.checked;
-      panelExternal?.classList.toggle('conference-room-invite-controls--hidden',  isStudent);
-      panelStudent?.classList.toggle('conference-room-invite-controls--hidden',  !isStudent);
-      labelExternal?.classList.toggle('active', !isStudent);
-      labelStudent?.classList.toggle('active',   isStudent);
+      panelExternal?.classList.toggle(
+        "conference-room-invite-controls--hidden",
+        isStudent,
+      );
+      panelStudent?.classList.toggle(
+        "conference-room-invite-controls--hidden",
+        !isStudent,
+      );
+      labelExternal?.classList.toggle("active", !isStudent);
+      labelStudent?.classList.toggle("active", isStudent);
     };
 
-    toggle.addEventListener('change', updateSwitch);
+    toggle.addEventListener("change", updateSwitch);
     updateSwitch(); // init state
   }
 
@@ -713,68 +919,83 @@ if (
   function initDraggableCircle() {
     // The circle preview is the local tile in circle/presentation mode.
     // We target the wrapper element that has position:absolute inside the stage.
-    const root = document.querySelector('[data-conference-root]');
+    const root = document.querySelector("[data-conference-root]");
     if (!root) return;
 
     // Observe DOM for the circle element (rendered after connection)
     const observer = new MutationObserver(() => {
-      const circle = root.querySelector('.conference-tile--circle') as HTMLElement
-                  || root.querySelector('[data-local-circle]') as HTMLElement;
+      const circle =
+        (root.querySelector(".conference-tile--circle") as HTMLElement) ||
+        (root.querySelector("[data-local-circle]") as HTMLElement);
       if (!circle || circle.dataset.draggableInit) return;
-      circle.dataset.draggableInit = 'true';
+      circle.dataset.draggableInit = "true";
       makeDraggable(circle);
     });
     observer.observe(root, { childList: true, subtree: true });
   }
 
   function makeDraggable(el: HTMLElement) {
-    el.style.cursor = 'grab';
-    el.style.userSelect = 'none';
-    el.style.position = 'absolute';
+    el.style.cursor = "grab";
+    el.style.userSelect = "none";
+    el.style.position = "absolute";
 
-    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
+    let startX = 0,
+      startY = 0,
+      startLeft = 0,
+      startTop = 0;
 
     const onStart = (clientX: number, clientY: number) => {
       const computed = window.getComputedStyle(el);
       startLeft = parseInt(computed.left) || el.offsetLeft;
-      startTop  = parseInt(computed.top)  || el.offsetTop;
+      startTop = parseInt(computed.top) || el.offsetTop;
       startX = clientX;
       startY = clientY;
-      el.style.cursor = 'grabbing';
-      el.style.transition = 'none';
+      el.style.cursor = "grabbing";
+      el.style.transition = "none";
     };
 
     const onMove = (clientX: number, clientY: number) => {
       const dx = clientX - startX;
       const dy = clientY - startY;
       el.style.left = `${startLeft + dx}px`;
-      el.style.top  = `${startTop  + dy}px`;
-      el.style.right = 'auto';
-      el.style.bottom = 'auto';
+      el.style.top = `${startTop + dy}px`;
+      el.style.right = "auto";
+      el.style.bottom = "auto";
     };
 
     const onEnd = () => {
-      el.style.cursor = 'grab';
+      el.style.cursor = "grab";
     };
 
     // Mouse
-    el.addEventListener('mousedown', (e) => {
+    el.addEventListener("mousedown", (e) => {
       e.preventDefault();
       onStart(e.clientX, e.clientY);
       const move = (ev: MouseEvent) => onMove(ev.clientX, ev.clientY);
-      const up   = () => { onEnd(); window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', up);
+      const up = () => {
+        onEnd();
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+      };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
     });
 
     // Touch
-    el.addEventListener('touchstart', (e) => {
+    el.addEventListener("touchstart", (e) => {
       const t = e.touches[0];
       onStart(t.clientX, t.clientY);
-      const move = (ev: TouchEvent) => { const tt = ev.touches[0]; onMove(tt.clientX, tt.clientY); };
-      const end  = () => { onEnd(); window.removeEventListener('touchmove', move); window.removeEventListener('touchend', end); };
-      window.addEventListener('touchmove', move, { passive: true });
-      window.addEventListener('touchend', end);
+      const move = (ev: TouchEvent) => {
+        const tt = ev.touches[0];
+        onMove(tt.clientX, tt.clientY);
+      };
+      const end = () => {
+        onEnd();
+        window.removeEventListener("touchmove", move);
+        window.removeEventListener("touchend", end);
+      };
+      window.addEventListener("touchmove", move, { passive: true });
+      window.addEventListener("touchend", end);
     });
   }
 
@@ -789,9 +1010,12 @@ if (
     constructor(...args: ConstructorParameters<typeof RTCPeerConnection>) {
       super(...args);
       pcInstances.push(this);
-      this.addEventListener('connectionstatechange', () => {
-        if (this.connectionState === 'closed' || this.connectionState === 'failed') {
-          pcInstances = pcInstances.filter(pc => pc !== this);
+      this.addEventListener("connectionstatechange", () => {
+        if (
+          this.connectionState === "closed" ||
+          this.connectionState === "failed"
+        ) {
+          pcInstances = pcInstances.filter((pc) => pc !== this);
         }
       });
     }
@@ -820,10 +1044,10 @@ if (
   };
 
   const getRiskLevel = (pct: number): string => {
-    if (pct < 30) return 'ok';
-    if (pct < 60) return 'warn';
-    if (pct < 85) return 'high';
-    return 'crit';
+    if (pct < 30) return "ok";
+    if (pct < 60) return "warn";
+    if (pct < 85) return "high";
+    return "crit";
   };
 
   const formatBw = (bps: number): string => {
@@ -833,8 +1057,10 @@ if (
   };
 
   const updateStats = async () => {
-    const cpuEl = document.querySelector('[data-stat-cpu]') as HTMLElement | null;
-    const bwEl  = document.querySelector('[data-stat-bw]')  as HTMLElement | null;
+    const cpuEl = document.querySelector(
+      "[data-stat-cpu]",
+    ) as HTMLElement | null;
+    const bwEl = document.querySelector("[data-stat-bw]") as HTMLElement | null;
     if (!cpuEl || !bwEl) return;
 
     // CPU
@@ -849,24 +1075,28 @@ if (
       try {
         const stats = await pc.getStats();
         stats.forEach((s: RTCStats) => {
-          if (s.type === 'outbound-rtp' || s.type === 'inbound-rtp') {
+          if (s.type === "outbound-rtp" || s.type === "inbound-rtp") {
             // @ts-ignore
             totalBytes += (s.bytesSent ?? 0) + (s.bytesReceived ?? 0);
           }
         });
-      } catch { /* pc may be closed */ }
+      } catch {
+        /* pc may be closed */
+      }
     }
 
     const now = Date.now();
     const bps = prevStatsTime
-      ? Math.round((totalBytes - prevBytesTotal) / ((now - prevStatsTime) / 1000))
+      ? Math.round(
+          (totalBytes - prevBytesTotal) / ((now - prevStatsTime) / 1000),
+        )
       : 0;
     prevBytesTotal = totalBytes;
     prevStatsTime = now;
 
     if (bps >= 0) {
       const bwPct = Math.min(100, Math.round((bps / 2_000_000) * 100)); // 2Mbps = 100%
-      bwEl.textContent = formatBw(bps) + '/s';
+      bwEl.textContent = formatBw(bps) + "/s";
       bwEl.dataset.risk = getRiskLevel(bwPct);
       bwEl.dataset.statTooltip = `WebRTC BW\t${formatBw(bps)}/s\nTotal acum.\t${(totalBytes / 1_000_000).toFixed(1)} MB`;
     }
@@ -882,36 +1112,42 @@ if (
 
   // ── Stat tooltip ─────────────────────────────────────────────────────────
   const initStatTooltip = () => {
-    const tip = document.createElement('div');
-    tip.className = 'conference-stat-tooltip';
+    const tip = document.createElement("div");
+    tip.className = "conference-stat-tooltip";
     tip.hidden = true;
     document.body.appendChild(tip);
 
-    const accent = getComputedStyle(document.documentElement)
-      .getPropertyValue('--conference-accent').trim() || '#00ffc8';
+    const accent =
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--conference-accent")
+        .trim() || "#00ffc8";
 
     const showTip = (el: HTMLElement) => {
       const raw = el.dataset.statTooltip;
       if (!raw) return;
-      const lines = raw.split('\n').map(line => {
-        const [label, value] = line.split('\t');
-        return `<span class="cst-row"><span class="cst-label">${label ?? ''}</span><b class="cst-value">${value ?? ''}</b></span>`;
+      const lines = raw.split("\n").map((line) => {
+        const [label, value] = line.split("\t");
+        return `<span class="cst-row"><span class="cst-label">${label ?? ""}</span><b class="cst-value">${value ?? ""}</b></span>`;
       });
-      tip.innerHTML = lines.join('');
+      tip.innerHTML = lines.join("");
       tip.hidden = false;
       const r = el.getBoundingClientRect();
       tip.style.left = `${r.left + r.width / 2}px`;
-      tip.style.top  = `${r.top - 8}px`;
+      tip.style.top = `${r.top - 8}px`;
     };
 
-    const hideTip = () => { tip.hidden = true; };
+    const hideTip = () => {
+      tip.hidden = true;
+    };
 
-    document.addEventListener('mouseover', (e) => {
-      const el = (e.target as Element)?.closest('[data-stat-tooltip]') as HTMLElement | null;
+    document.addEventListener("mouseover", (e) => {
+      const el = (e.target as Element)?.closest(
+        "[data-stat-tooltip]",
+      ) as HTMLElement | null;
       if (el) showTip(el);
     });
-    document.addEventListener('mouseout', (e) => {
-      const el = (e.target as Element)?.closest('[data-stat-tooltip]');
+    document.addEventListener("mouseout", (e) => {
+      const el = (e.target as Element)?.closest("[data-stat-tooltip]");
       if (el) hideTip();
     });
   };
@@ -923,12 +1159,12 @@ if (
     initStatTooltip();
   };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initExtras, { once: true });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initExtras, { once: true });
   } else {
     initExtras();
   }
-  document.addEventListener('astro:page-load', initExtras);
+  document.addEventListener("astro:page-load", initExtras);
 </script>
 
 <style>
@@ -986,16 +1222,16 @@ if (
     --conference-sidebar-size: clamp(300px, 22vw, 420px);
     --conference-instruments-size: clamp(320px, 24vw, 400px);
     /* ── Typography scale ─────────────────────────────────────────────── */
-    --conference-font-caption: 0.62rem;   /* tiny labels, timestamps */
-    --conference-font-body: 0.72rem;      /* default UI text */
-    --conference-font-ui: 0.75rem;        /* action text, chat content */
-    --conference-font-title: 0.82rem;     /* section titles */
+    --conference-font-caption: 0.62rem; /* tiny labels, timestamps */
+    --conference-font-body: 0.8rem; /* default UI text */
+    --conference-font-ui: 1rem; /* action text, chat content */
+    --conference-font-title: 0.82rem; /* section titles */
     /* ── Color palette ────────────────────────────────────────────────── */
     --conference-fg: #f5f7fb;
-    --conference-fg-hi: var(--conference-fg-hi);  /* high-emphasis text */
-    --conference-muted: rgba(245, 247, 251, 0.58);  /* secondary text */
-    --conference-dim: rgba(245, 247, 251, 0.32);    /* disabled / hint */
-    --conference-line: rgba(255, 255, 255, 0.12);   /* border / divider */
+    --conference-fg-hi: var(--conference-fg-hi); /* high-emphasis text */
+    --conference-muted: rgba(245, 247, 251, 0.58); /* secondary text */
+    --conference-dim: rgba(245, 247, 251, 0.32); /* disabled / hint */
+    --conference-line: rgba(255, 255, 255, 0.12); /* border / divider */
     --conference-line-soft: rgba(255, 255, 255, 0.06);
     --conference-accent: #2a87ff;
     --conference-fx-delay: #76d3ff;
@@ -1031,19 +1267,24 @@ if (
     line-height: inherit;
   }
 
-  .conference-shell[data-show-circle='false'] .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+  .conference-shell[data-show-circle="false"]
+    .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus {
     display: none;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus:has(.conference-tile[data-show-circle='false']) {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus:has(
+      .conference-tile[data-show-circle="false"]
+    ) {
     display: none;
   }
 
-  .conference-shell[data-sidebar-collapsed='true'] {
+  .conference-shell[data-sidebar-collapsed="true"] {
     --conference-sidebar-size: 0px;
   }
 
-  .conference-shell[data-immersive='true'] {
+  .conference-shell[data-immersive="true"] {
     position: fixed;
     inset: 0;
     width: 100vw;
@@ -1075,7 +1316,8 @@ if (
     transition: transform 160ms ease;
   }
 
-  .conference-shell[data-instruments-open='true'] .conference-instruments-sidebar {
+  .conference-shell[data-instruments-open="true"]
+    .conference-instruments-sidebar {
     transform: translateX(0);
   }
 
@@ -1136,33 +1378,37 @@ if (
     pointer-events: none;
   }
 
-
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--presentation,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen,
-  .conference-stage[data-layout='grid'] .conference-stage-panel--grid {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--presentation,
+  .conference-stage[data-layout="presentation"] .conference-stage-panel--focus,
+  .conference-stage[data-layout="teacher"] .conference-stage-panel--focus,
+  .conference-stage[data-layout="screenshare"] .conference-stage-panel--screen,
+  .conference-stage[data-layout="grid"] .conference-stage-panel--grid {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--presentation,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen,
-  .conference-stage[data-layout='grid'] .conference-stage-panel--grid {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--presentation,
+  .conference-stage[data-layout="teacher"] .conference-stage-panel--focus,
+  .conference-stage[data-layout="screenshare"] .conference-stage-panel--screen,
+  .conference-stage[data-layout="grid"] .conference-stage-panel--grid {
     inset: 0;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--presentation {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--presentation {
     grid-template-rows: 1fr;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--presentation .conference-stage-heading {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--presentation
+    .conference-stage-heading {
     display: none;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+  .conference-stage[data-layout="presentation"] .conference-stage-panel--focus {
     inset: auto 1rem 1rem auto;
     width: clamp(101px, 13vw, 158px);
     aspect-ratio: 1;
@@ -1177,46 +1423,82 @@ if (
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-stage-heading,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--screen {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-stage-heading,
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--screen {
     display: none;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus {
+  .conference-stage[data-layout="teacher"] .conference-stage-panel--focus {
     grid-template-rows: 1fr;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus::before {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-slot--focus::before {
     display: none;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile-media,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-media-frame {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-slot--focus,
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-tile,
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-tile-media,
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-media-frame {
     width: 100%;
     height: 100%;
     min-height: 0;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-slot--focus {
     position: absolute;
     inset: 0;
     display: block;
     overflow: hidden;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > .conference-tile {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-slot--focus
+    > .conference-tile {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > *,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media > .conference-media-frame,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media > .conference-media-frame > video {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-slot--focus
+    > *,
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-slot--focus
+    > *
+    > .conference-tile-media,
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-slot--focus
+    > *
+    > .conference-tile-media
+    > .conference-media-frame,
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-slot--focus
+    > *
+    > .conference-tile-media
+    > .conference-media-frame
+    > video {
     position: absolute;
     inset: 0;
     width: 100% !important;
@@ -1225,50 +1507,89 @@ if (
     min-height: 0;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-tile {
     grid-template-rows: 1fr;
     border: 0;
     background: #000;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile-meta {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-tile-meta {
     position: absolute;
     inset: auto 0 0 0;
     border-top: 0;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.8) 100%);
+    background: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 0.8) 100%
+    );
   }
 
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen {
+  .conference-stage[data-layout="screenshare"] .conference-stage-panel--screen {
     grid-template-rows: 1fr;
   }
 
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile--screen,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile-media,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-media-frame {
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-slot--screen,
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-tile--screen,
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-tile-media,
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-media-frame {
     width: 100%;
     height: 100%;
     min-height: 0;
   }
 
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen {
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-slot--screen {
     position: absolute;
     inset: 0;
     display: block;
     overflow: hidden;
   }
 
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > .conference-tile--screen {
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-slot--screen
+    > .conference-tile--screen {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
   }
 
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > *,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media > .conference-media-frame,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media > .conference-media-frame > video {
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-slot--screen
+    > *,
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-slot--screen
+    > *
+    > .conference-tile-media,
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-slot--screen
+    > *
+    > .conference-tile-media
+    > .conference-media-frame,
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-slot--screen
+    > *
+    > .conference-tile-media
+    > .conference-media-frame
+    > video {
     position: absolute;
     inset: 0;
     width: 100% !important;
@@ -1277,17 +1598,23 @@ if (
     min-height: 0;
   }
 
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile--screen {
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-tile--screen {
     grid-template-rows: 1fr;
     border: 0;
     background: #000;
   }
 
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile-meta {
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-tile-meta {
     display: none;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-slot--focus {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-slot--focus {
     position: absolute;
     inset: 0;
     min-height: 0;
@@ -1297,19 +1624,23 @@ if (
     overflow: hidden;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-slot--focus::before {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-slot--focus::before {
     display: none;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--presentation,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--screen,
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--grid,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--presentation,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--focus,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--grid,
-  .conference-stage[data-layout='grid'] .conference-stage-panel--presentation,
-  .conference-stage[data-layout='grid'] .conference-stage-panel--focus,
-  .conference-stage[data-layout='grid'] .conference-stage-panel--screen {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--presentation,
+  .conference-stage[data-layout="teacher"] .conference-stage-panel--screen,
+  .conference-stage[data-layout="teacher"] .conference-stage-panel--grid,
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--presentation,
+  .conference-stage[data-layout="screenshare"] .conference-stage-panel--focus,
+  .conference-stage[data-layout="screenshare"] .conference-stage-panel--grid,
+  .conference-stage[data-layout="grid"] .conference-stage-panel--presentation,
+  .conference-stage[data-layout="grid"] .conference-stage-panel--focus,
+  .conference-stage[data-layout="grid"] .conference-stage-panel--screen {
     display: none;
   }
 
@@ -1325,7 +1656,9 @@ if (
   .conference-sidebar-heading {
     --conference-sidebar-strip-padding-y: 3px;
     --conference-sidebar-strip-padding-x: 0.65rem;
-    --conference-sidebar-strip-height: calc((0.56rem + (var(--conference-sidebar-strip-padding-y) * 2)) * 1.2);
+    --conference-sidebar-strip-height: calc(
+      (0.56rem + (var(--conference-sidebar-strip-padding-y) * 2)) * 1.2
+    );
     color: var(--conference-muted);
     font-size: 0.56rem;
     line-height: 1;
@@ -1351,12 +1684,20 @@ if (
     display: none;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-stage-heading,
-  .conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-stage-heading {
+  .conference-stage[data-layout="teacher"]
+    .conference-stage-panel--focus
+    .conference-stage-heading,
+  .conference-stage[data-layout="screenshare"]
+    .conference-stage-panel--screen
+    .conference-stage-heading {
     position: absolute;
     inset: 0 0 auto 0;
     z-index: 3;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0) 100%);
+    background: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.62) 0%,
+      rgba(0, 0, 0, 0) 100%
+    );
     pointer-events: none;
   }
 
@@ -1371,10 +1712,12 @@ if (
     box-sizing: border-box;
   }
 
-  summary.conference-sidebar-heading::-webkit-details-marker { display: none; }
+  summary.conference-sidebar-heading::-webkit-details-marker {
+    display: none;
+  }
 
   summary.conference-sidebar-heading::before {
-    content: '';
+    content: "";
     position: relative;
     top: -1px;
     width: 0.42rem;
@@ -1386,7 +1729,9 @@ if (
     opacity: 0.72;
     flex-shrink: 0;
     align-self: center;
-    transition: transform 140ms ease, top 140ms ease;
+    transition:
+      transform 140ms ease,
+      top 140ms ease;
   }
 
   details[open] > summary.conference-sidebar-heading::before {
@@ -1421,7 +1766,7 @@ if (
   .conference-slot:has(.conference-tile)::before,
   .conference-slot:has(.conference-media-frame)::before,
   .conference-self-preview:has(.conference-media-frame)::before {
-    content: '';
+    content: "";
   }
 
   .conference-slot--grid {
@@ -1498,17 +1843,18 @@ if (
     box-sizing: border-box;
   }
 
-.conference-sidebar-section {
+  .conference-sidebar-section {
     display: grid;
     gap: clamp(0.44rem, 0.6vw, 0.52rem);
-    padding: clamp(0.52rem, 0.7vw, 0.62rem) clamp(0.65rem, 1vw, 0.86rem) clamp(0.55rem, 0.8vw, 0.72rem);
+    padding: clamp(0.52rem, 0.7vw, 0.62rem) clamp(0.65rem, 1vw, 0.86rem)
+      clamp(0.55rem, 0.8vw, 0.72rem);
     border-bottom: 1px solid var(--conference-line);
   }
 
   .conference-sidebar-section.conference-sidebar-section--instrument {
     gap: 0;
     padding: 0;
-    margin: 0;                /* reset any browser <details> default margin */
+    margin: 0; /* reset any browser <details> default margin */
   }
 
   .conference-sidebar-section.conference-sidebar-section--mixer {
@@ -1549,7 +1895,7 @@ if (
     font: inherit;
   }
 
-  .conference-field input:not([type='range']):not([type='checkbox']),
+  .conference-field input:not([type="range"]):not([type="checkbox"]),
   .conference-field select,
   .conference-chat-compose textarea,
   .conference-bottombar select,
@@ -1580,7 +1926,7 @@ if (
     align-items: center;
   }
 
-  .conference-range-row input[type='range'] {
+  .conference-range-row input[type="range"] {
     width: 100%;
     margin: 0;
     appearance: none;
@@ -1590,7 +1936,7 @@ if (
     background: transparent;
   }
 
-  .conference-range-row input[type='range']::-webkit-slider-thumb {
+  .conference-range-row input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 8px;
     height: 8px;
@@ -1600,7 +1946,7 @@ if (
     box-shadow: none;
   }
 
-  .conference-range-row input[type='range']::-moz-range-thumb {
+  .conference-range-row input[type="range"]::-moz-range-thumb {
     width: 8px;
     height: 8px;
     border-radius: 999px;
@@ -1665,12 +2011,15 @@ if (
     opacity: 0;
     pointer-events: none;
     transform: translateY(0.2rem);
-    transition: opacity 140ms ease, transform 140ms ease;
+    transition:
+      opacity 140ms ease,
+      transform 140ms ease;
     z-index: 6;
   }
 
   .conference-synth-formula-shell:hover .conference-synth-formula-tooltip,
-  .conference-synth-formula-shell:focus-visible .conference-synth-formula-tooltip {
+  .conference-synth-formula-shell:focus-visible
+    .conference-synth-formula-tooltip {
     opacity: 1;
     transform: translateY(0);
   }
@@ -1693,7 +2042,9 @@ if (
     border: 1px solid rgba(143, 227, 255, 0.18);
     background: transparent;
     cursor: pointer;
-    transition: border-color 140ms ease, background-color 140ms ease;
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease;
   }
 
   .conference-synth-map-button:hover,
@@ -1703,7 +2054,7 @@ if (
     outline: none;
   }
 
-  .conference-synth-meter-row input[type='range'] {
+  .conference-synth-meter-row input[type="range"] {
     width: 100%;
     margin: 0;
     appearance: none;
@@ -1715,7 +2066,7 @@ if (
     opacity: 0.88;
   }
 
-  .conference-synth-meter-row input[type='range']::-webkit-slider-thumb {
+  .conference-synth-meter-row input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 8px;
     height: 8px;
@@ -1725,7 +2076,7 @@ if (
     box-shadow: none;
   }
 
-  .conference-synth-meter-row input[type='range']::-moz-range-thumb {
+  .conference-synth-meter-row input[type="range"]::-moz-range-thumb {
     width: 8px;
     height: 8px;
     border-radius: 999px;
@@ -1864,34 +2215,32 @@ if (
     position: absolute;
     inset: 0.05rem 0.35rem;
     border: 0;
-    background:
-      linear-gradient(
-        to top,
-        rgba(69, 211, 132, 0.04) 0%,
-        rgba(69, 211, 132, 0.04) 58%,
-        rgba(255, 216, 77, 0.04) 58%,
-        rgba(255, 216, 77, 0.04) 82%,
-        rgba(255, 92, 92, 0.04) 82%,
-        rgba(255, 92, 92, 0.04) 100%
-      );
+    background: linear-gradient(
+      to top,
+      rgba(69, 211, 132, 0.04) 0%,
+      rgba(69, 211, 132, 0.04) 58%,
+      rgba(255, 216, 77, 0.04) 58%,
+      rgba(255, 216, 77, 0.04) 82%,
+      rgba(255, 92, 92, 0.04) 82%,
+      rgba(255, 92, 92, 0.04) 100%
+    );
     overflow: hidden;
     pointer-events: none;
   }
 
   .conference-mixer-vumeter::before {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
-    background:
-      linear-gradient(
-        to top,
-        rgba(69, 211, 132, 0.96) 0%,
-        rgba(69, 211, 132, 0.96) 58%,
-        rgba(255, 216, 77, 0.96) 58%,
-        rgba(255, 216, 77, 0.96) 82%,
-        rgba(255, 92, 92, 0.96) 82%,
-        rgba(255, 92, 92, 0.96) 100%
-      );
+    background: linear-gradient(
+      to top,
+      rgba(69, 211, 132, 0.96) 0%,
+      rgba(69, 211, 132, 0.96) 58%,
+      rgba(255, 216, 77, 0.96) 58%,
+      rgba(255, 216, 77, 0.96) 82%,
+      rgba(255, 92, 92, 0.96) 82%,
+      rgba(255, 92, 92, 0.96) 100%
+    );
     transform: scaleY(var(--conference-meter-level));
     transform-origin: bottom center;
     box-shadow: 0 0 10px rgba(143, 227, 255, 0.18);
@@ -1910,7 +2259,9 @@ if (
     border-radius: 999px;
     background: rgba(69, 211, 132, 0.96);
     box-shadow: 0 0 8px rgba(69, 211, 132, 0.42);
-    transition: opacity 140ms ease, box-shadow 140ms ease;
+    transition:
+      opacity 140ms ease,
+      box-shadow 140ms ease;
   }
 
   .conference-mixer-led--mute {
@@ -1956,8 +2307,8 @@ if (
     box-shadow: none;
   }
 
-  .conference-mixer-channel-toggle[data-active='false'] .conference-mixer-led,
-  .conference-mixer-fx-led-toggle[data-active='false'] .conference-mixer-led {
+  .conference-mixer-channel-toggle[data-active="false"] .conference-mixer-led,
+  .conference-mixer-fx-led-toggle[data-active="false"] .conference-mixer-led {
     opacity: 0.2;
     box-shadow: none;
   }
@@ -1998,7 +2349,7 @@ if (
   }
 
   .conference-mixer-knob-control::before {
-    content: 'L/R';
+    content: "L/R";
     position: absolute;
     left: 50%;
     bottom: -0.62rem;
@@ -2061,11 +2412,13 @@ if (
     margin-left: auto;
     position: relative;
     min-width: 1.5rem;
-    transition: min-width 140ms ease, color 140ms ease;
+    transition:
+      min-width 140ms ease,
+      color 140ms ease;
   }
 
   .conference-video-module-reset::after {
-    content: 'RESET';
+    content: "RESET";
     position: absolute;
     inset: 0;
     display: grid;
@@ -2131,7 +2484,11 @@ if (
 
   .conference-mixer-knob-control:hover,
   .conference-mixer-knob-control:focus-visible {
-    border-color: color-mix(in srgb, var(--conference-knob-color) 38%, rgba(255, 255, 255, 0.22));
+    border-color: color-mix(
+      in srgb,
+      var(--conference-knob-color) 38%,
+      rgba(255, 255, 255, 0.22)
+    );
     outline: none;
   }
 
@@ -2145,7 +2502,8 @@ if (
     background: var(--conference-knob-color);
     transform: translate(-50%, -100%) rotate(var(--angle));
     transform-origin: 50% 100%;
-    box-shadow: 0 0 8px color-mix(in srgb, var(--conference-knob-color) 48%, transparent);
+    box-shadow: 0 0 8px
+      color-mix(in srgb, var(--conference-knob-color) 48%, transparent);
   }
 
   /* FX — independent bottom module, sibling of MIXER */
@@ -2159,7 +2517,9 @@ if (
   }
 
   /* FX summary inherits .conference-sidebar-heading — only need to clear defaults */
-  .conference-mixer-fx-summary::-webkit-details-marker { display: none; }
+  .conference-mixer-fx-summary::-webkit-details-marker {
+    display: none;
+  }
 
   .conference-mixer-fx-details[open] .conference-mixer-fx-summary::before {
     transform: rotate(45deg);
@@ -2272,7 +2632,7 @@ if (
     white-space: nowrap;
   }
 
-  .conference-mixer-fx-control input[type='range'] {
+  .conference-mixer-fx-control input[type="range"] {
     width: 100%;
     margin: 0;
     appearance: none;
@@ -2282,7 +2642,7 @@ if (
     background: transparent;
   }
 
-  .conference-mixer-fx-control input[type='range']::-webkit-slider-thumb {
+  .conference-mixer-fx-control input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 8px;
     height: 8px;
@@ -2292,7 +2652,7 @@ if (
     box-shadow: none;
   }
 
-  .conference-mixer-fx-control input[type='range']::-moz-range-thumb {
+  .conference-mixer-fx-control input[type="range"]::-moz-range-thumb {
     width: 8px;
     height: 8px;
     border-radius: 999px;
@@ -2323,7 +2683,7 @@ if (
     cursor: pointer;
   }
 
-  .conference-checkbox-row input[type='checkbox'] {
+  .conference-checkbox-row input[type="checkbox"] {
     margin: 0;
     accent-color: var(--conference-accent);
   }
@@ -2338,7 +2698,7 @@ if (
     text-transform: uppercase;
   }
 
-  .conference-ramp-row input[type='number'] {
+  .conference-ramp-row input[type="number"] {
     width: 4rem;
     min-height: 1.5rem;
     padding: 0.1rem 0.28rem;
@@ -2412,16 +2772,19 @@ if (
     user-select: none;
   }
 
-  .conference-streaming-setup-summary::-webkit-details-marker { display: none; }
+  .conference-streaming-setup-summary::-webkit-details-marker {
+    display: none;
+  }
 
   .conference-streaming-setup-summary::before {
-    content: '▸';
+    content: "▸";
     font-size: 0.5rem;
     color: var(--conference-muted);
     transition: transform 200ms ease;
   }
 
-  .conference-streaming-setup[open] .conference-streaming-setup-summary::before {
+  .conference-streaming-setup[open]
+    .conference-streaming-setup-summary::before {
     transform: rotate(90deg);
   }
 
@@ -2561,7 +2924,7 @@ if (
   }
 
   .conference-switch-slider::before {
-    content: '';
+    content: "";
     position: absolute;
     height: 0.9rem;
     width: 0.9rem;
@@ -2615,7 +2978,7 @@ if (
   }
 
   .conference-room-invite-panel-summary::before {
-    content: '';
+    content: "";
     width: 0.4rem;
     height: 0.4rem;
     border-right: 1px solid currentColor;
@@ -2626,7 +2989,8 @@ if (
     transition: transform 140ms ease;
   }
 
-  .conference-room-invite-panel[open] .conference-room-invite-panel-summary::before {
+  .conference-room-invite-panel[open]
+    .conference-room-invite-panel-summary::before {
     transform: rotate(45deg);
   }
 
@@ -2637,8 +3001,8 @@ if (
     line-height: 1.35;
   }
 
-  .conference-session-note[data-error='true'],
-  .conference-invite-note[data-error='true'] {
+  .conference-session-note[data-error="true"],
+  .conference-invite-note[data-error="true"] {
     color: #ff8787;
   }
 
@@ -2660,29 +3024,29 @@ if (
   }
 
   /* R = green (create), G = blue (group), matches INVITAR palette */
-  .conference-session-action[data-action='break-rooms-random'] {
+  .conference-session-action[data-action="break-rooms-random"] {
     border-color: rgba(100, 220, 140, 0.4);
     color: rgba(120, 220, 150, 0.7);
   }
-  .conference-session-action[data-action='break-rooms-random']:hover {
+  .conference-session-action[data-action="break-rooms-random"]:hover {
     border-color: rgba(120, 240, 160, 0.7);
     color: rgba(160, 255, 180, 0.95);
     background: rgba(60, 180, 100, 0.07);
   }
-  .conference-session-action[data-action='break-rooms-grupos'] {
+  .conference-session-action[data-action="break-rooms-grupos"] {
     border-color: rgba(80, 160, 220, 0.4);
     color: rgba(100, 180, 240, 0.7);
   }
-  .conference-session-action[data-action='break-rooms-grupos']:hover {
+  .conference-session-action[data-action="break-rooms-grupos"]:hover {
     border-color: rgba(100, 180, 240, 0.75);
     color: rgba(140, 210, 255, 0.95);
     background: rgba(60, 140, 200, 0.07);
   }
-  .conference-session-action[data-action='break-rooms-custom'] {
+  .conference-session-action[data-action="break-rooms-custom"] {
     border-color: rgba(160, 160, 170, 0.35);
     color: rgba(245, 247, 251, 0.55);
   }
-  .conference-session-action[data-action='break-rooms-custom']:hover {
+  .conference-session-action[data-action="break-rooms-custom"]:hover {
     border-color: rgba(160, 160, 170, 0.7);
     color: var(--conference-fg-hi);
   }
@@ -2743,7 +3107,8 @@ if (
     display: none;
   }
 
-  .conference-external-media-controls-shell[data-active='true'] .conference-external-media-btn {
+  .conference-external-media-controls-shell[data-active="true"]
+    .conference-external-media-btn {
     color: rgba(143, 227, 255, 0.92);
   }
 
@@ -2850,23 +3215,23 @@ if (
     text-transform: uppercase;
   }
 
-  .conference-session-action[data-action='external-media-open'] {
+  .conference-session-action[data-action="external-media-open"] {
     border-color: rgba(143, 227, 255, 0.36);
     color: rgba(160, 232, 255, 0.76);
   }
 
-  .conference-session-action[data-action='external-media-open']:hover {
+  .conference-session-action[data-action="external-media-open"]:hover {
     border-color: rgba(143, 227, 255, 0.72);
     color: rgba(214, 248, 255, 0.98);
     background: rgba(42, 122, 145, 0.08);
   }
 
-  .conference-session-action[data-action='external-media-stop'] {
+  .conference-session-action[data-action="external-media-stop"] {
     border-color: rgba(240, 100, 100, 0.34);
     color: rgba(255, 170, 170, 0.7);
   }
 
-  .conference-session-action[data-action='external-media-stop']:hover {
+  .conference-session-action[data-action="external-media-stop"]:hover {
     border-color: rgba(240, 100, 100, 0.68);
     color: rgba(255, 205, 205, 0.94);
     background: rgba(140, 52, 52, 0.08);
@@ -2882,13 +3247,19 @@ if (
   }
 
   /* B active = yellow when break rooms are active */
-  .conference-break-rooms-shell[data-active='true'] .conference-break-rooms-btn {
+  .conference-break-rooms-shell[data-active="true"]
+    .conference-break-rooms-btn {
     color: rgba(255, 226, 107, 0.9);
   }
 
   @keyframes conference-br-blink {
-    0%, 100% { color: rgba(255, 226, 107, 0.95); }
-    50%       { color: rgba(255, 226, 107, 0.1);  }
+    0%,
+    100% {
+      color: rgba(255, 226, 107, 0.95);
+    }
+    50% {
+      color: rgba(255, 226, 107, 0.1);
+    }
   }
 
   .conference-break-rooms-btn--blink {
@@ -2983,16 +3354,16 @@ if (
     cursor: default;
   }
 
-  .conference-break-rooms-list button[data-active='true'] {
+  .conference-break-rooms-list button[data-active="true"] {
     color: rgba(143, 227, 255, 0.9);
   }
 
   /* "Terminar" option — red, mirrors .conference-session-action revoke palette */
-  .conference-break-rooms-list button[data-end='true'] {
+  .conference-break-rooms-list button[data-end="true"] {
     color: rgba(240, 100, 100, 0.65);
     font-size: 0.54rem;
   }
-  .conference-break-rooms-list button[data-end='true']:hover {
+  .conference-break-rooms-list button[data-end="true"]:hover {
     color: rgba(255, 130, 130, 0.9);
   }
 
@@ -3043,13 +3414,21 @@ if (
     line-height: 1.1;
   }
 
-  .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument {
+  .conference-shell[data-instruments-allowed="false"][data-role="student"]
+    .conference-sidebar-section--instrument {
     opacity: 0.52;
   }
 
-  .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-checkbox-row,
-  .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-ramp-row,
-  .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-synth-meter label {
+  .conference-shell[data-instruments-allowed="false"][data-role="student"]
+    .conference-sidebar-section--instrument
+    .conference-checkbox-row,
+  .conference-shell[data-instruments-allowed="false"][data-role="student"]
+    .conference-sidebar-section--instrument
+    .conference-ramp-row,
+  .conference-shell[data-instruments-allowed="false"][data-role="student"]
+    .conference-sidebar-section--instrument
+    .conference-synth-meter
+    label {
     color: var(--conference-muted);
   }
 
@@ -3107,7 +3486,9 @@ if (
   }
 
   .conference-tile[data-speaking="true"] {
-    box-shadow: 0 0 0 2px #22c55e, 0 0 10px rgba(34, 197, 94, 0.3);
+    box-shadow:
+      0 0 0 2px #22c55e,
+      0 0 10px rgba(34, 197, 94, 0.3);
   }
 
   .conference-slot--grid .conference-tile {
@@ -3118,22 +3499,35 @@ if (
     grid-template-rows: 1fr;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile-media,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-empty--tile {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-tile,
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame,
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-tile-media,
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-empty--tile {
     width: 100%;
     height: 100%;
     border-radius: 999px;
     border: 0;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-tile {
     grid-template-rows: 1fr;
     background: transparent;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame video {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame
+    video {
     position: absolute;
     inset: 0;
     width: 100% !important;
@@ -3145,9 +3539,16 @@ if (
     transform: none !important;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame > video,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile-media {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame,
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame
+    > video,
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-tile-media {
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -3195,7 +3596,7 @@ if (
     transition: opacity 160ms ease;
   }
 
-  .conference-shell[data-hand-track='true'] .conference-hand-overlay {
+  .conference-shell[data-hand-track="true"] .conference-hand-overlay {
     opacity: 1;
   }
 
@@ -3211,7 +3612,8 @@ if (
     transition: opacity 160ms ease;
   }
 
-  .conference-shell[data-gravity-ball='true'][data-gravity-ball-stage-visible='true'] .conference-gravity-ball-overlay {
+  .conference-shell[data-gravity-ball="true"][data-gravity-ball-stage-visible="true"]
+    .conference-gravity-ball-overlay {
     opacity: 1;
   }
 
@@ -3222,7 +3624,8 @@ if (
     top: 0;
     width: 0;
     height: 0;
-    border: 1px dashed color-mix(in srgb, var(--conference-accent) 78%, transparent);
+    border: 1px dashed
+      color-mix(in srgb, var(--conference-accent) 78%, transparent);
     background: transparent;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.34);
     pointer-events: none;
@@ -3230,7 +3633,8 @@ if (
     transition: opacity 140ms ease;
   }
 
-  .conference-shell[data-recording-guide-visible='true'][data-recording-guide-suppressed='false'] .conference-recording-guide {
+  .conference-shell[data-recording-guide-visible="true"][data-recording-guide-suppressed="false"]
+    .conference-recording-guide {
     opacity: 0.92;
   }
 
@@ -3301,7 +3705,9 @@ if (
   }
 
   .conference-self-preview .conference-media-frame--local-preview,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3321,10 +3727,14 @@ if (
     object-fit: contain !important;
     object-position: 50% 62% !important;
     background: #000;
-    transform: scaleX(var(--conference-local-video-flip, 1)) scale(var(--conference-self-preview-zoom, 1)) !important;
+    transform: scaleX(var(--conference-local-video-flip, 1))
+      scale(var(--conference-self-preview-zoom, 1)) !important;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame > video {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame
+    > video {
     position: relative !important;
     inset: auto !important;
     display: block !important;
@@ -3337,15 +3747,31 @@ if (
     object-fit: contain !important;
     object-position: 50% 62% !important;
     background: #000;
-    transform: scale(var(--conference-participant-preview-zoom, var(--conference-circle-preview-zoom, 1))) !important;
+    transform: scale(
+      var(
+        --conference-participant-preview-zoom,
+        var(--conference-circle-preview-zoom, 1)
+      )
+    ) !important;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame--local-camera > video {
-    transform: scaleX(var(--conference-local-video-flip, 1)) scale(var(--conference-participant-preview-zoom, var(--conference-circle-preview-zoom, 1))) !important;
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame--local-camera
+    > video {
+    transform: scaleX(var(--conference-local-video-flip, 1))
+      scale(
+        var(
+          --conference-participant-preview-zoom,
+          var(--conference-circle-preview-zoom, 1)
+        )
+      ) !important;
   }
 
   .conference-media-frame--local-camera > video,
-  .conference-stage[data-layout='teacher'] .conference-media-frame--local-camera > video,
+  .conference-stage[data-layout="teacher"]
+    .conference-media-frame--local-camera
+    > video,
   .conference-slot--grid .conference-media-frame--local-camera > video {
     position: absolute;
     inset: 0;
@@ -3370,7 +3796,9 @@ if (
     background: rgba(0, 0, 0, 0.88);
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile-meta {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-tile-meta {
     display: none;
   }
 
@@ -3382,7 +3810,11 @@ if (
     min-height: 2rem;
     padding: 0.5rem 0.6rem 0.45rem;
     border-top: 0;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.76) 100%);
+    background: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 0.76) 100%
+    );
     pointer-events: none;
   }
 
@@ -3489,7 +3921,7 @@ if (
     color: var(--conference-green);
   }
 
-  .conference-connect-button[data-connected='true'] {
+  .conference-connect-button[data-connected="true"] {
     color: var(--conference-red);
   }
 
@@ -3503,11 +3935,13 @@ if (
     display: none;
   }
 
-  .conference-connect-button[data-connected='true'] .conference-connect-arrow--in {
+  .conference-connect-button[data-connected="true"]
+    .conference-connect-arrow--in {
     display: none;
   }
 
-  .conference-connect-button[data-connected='true'] .conference-connect-arrow--out {
+  .conference-connect-button[data-connected="true"]
+    .conference-connect-arrow--out {
     display: block;
   }
 
@@ -3614,11 +4048,11 @@ if (
     display: none !important;
   }
 
-  .conference-shell[data-state='disconnected'] .conference-test-button {
+  .conference-shell[data-state="disconnected"] .conference-test-button {
     display: inline-flex !important;
   }
 
-  .conference-test-button[data-active='true'] {
+  .conference-test-button[data-active="true"] {
     color: var(--conference-green) !important;
     opacity: 1;
   }
@@ -3766,7 +4200,8 @@ if (
     gap: 0;
   }
 
-  .conference-shell[data-invite-mode='external'] .conference-bar-group--presentation {
+  .conference-shell[data-invite-mode="external"]
+    .conference-bar-group--presentation {
     display: none;
   }
 
@@ -3834,7 +4269,7 @@ if (
   }
 
   .conference-mic-meter::before {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
@@ -3954,22 +4389,24 @@ if (
     color: var(--conference-stat-color, var(--conference-muted));
     background: var(--conference-stat-bg, transparent);
     cursor: default;
-    transition: color 0.4s, background 0.4s;
+    transition:
+      color 0.4s,
+      background 0.4s;
   }
 
-  .conference-stat-indicator[data-risk='ok'] {
+  .conference-stat-indicator[data-risk="ok"] {
     --conference-stat-color: #5d9;
     --conference-stat-bg: rgba(80, 200, 120, 0.08);
   }
-  .conference-stat-indicator[data-risk='warn'] {
+  .conference-stat-indicator[data-risk="warn"] {
     --conference-stat-color: #db8;
-    --conference-stat-bg: rgba(210, 180, 80, 0.10);
+    --conference-stat-bg: rgba(210, 180, 80, 0.1);
   }
-  .conference-stat-indicator[data-risk='high'] {
+  .conference-stat-indicator[data-risk="high"] {
     --conference-stat-color: #f86;
     --conference-stat-bg: rgba(255, 100, 60, 0.12);
   }
-  .conference-stat-indicator[data-risk='crit'] {
+  .conference-stat-indicator[data-risk="crit"] {
     --conference-stat-color: #f44;
     --conference-stat-bg: rgba(255, 60, 60, 0.15);
   }
@@ -3992,7 +4429,9 @@ if (
     gap: 0;
   }
 
-  .conference-stat-tooltip[hidden] { display: none; }
+  .conference-stat-tooltip[hidden] {
+    display: none;
+  }
 
   .cst-row {
     display: flex;
@@ -4016,12 +4455,12 @@ if (
     color: var(--conference-muted);
   }
 
-  .conference-record-button[data-recording='true'] {
+  .conference-record-button[data-recording="true"] {
     color: var(--conference-red);
     background: rgba(255, 77, 77, 0.08);
   }
 
-  .conference-fullscreen-button[data-active='true'] {
+  .conference-fullscreen-button[data-active="true"] {
     color: var(--conference-fg);
     background: rgba(255, 255, 255, 0.04);
   }
@@ -4034,7 +4473,7 @@ if (
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 
-  .conference-record-button[data-recording='true'] .conference-record-dot {
+  .conference-record-button[data-recording="true"] .conference-record-dot {
     animation: conference-record-pulse 1.15s ease-in-out infinite;
     box-shadow:
       0 0 0 0 rgba(255, 77, 77, 0.38),
@@ -4070,15 +4509,15 @@ if (
     box-shadow: 0 0 0 2px rgba(255, 77, 77, 0.24);
   }
 
-  .conference-layout-button[data-active='true'],
-  .conference-share-button[data-enabled='true'],
-  .conference-icon-button[data-enabled='true'],
-  .conference-instruments-button[data-active='true'] {
+  .conference-layout-button[data-active="true"],
+  .conference-share-button[data-enabled="true"],
+  .conference-icon-button[data-enabled="true"],
+  .conference-instruments-button[data-active="true"] {
     color: var(--conference-accent);
     background: rgba(255, 255, 255, 0.04);
   }
 
-  .conference-icon-button[data-open='true'] {
+  .conference-icon-button[data-open="true"] {
     color: var(--conference-fg);
     background: rgba(255, 255, 255, 0.04);
   }
@@ -4097,7 +4536,9 @@ if (
     pointer-events: none;
     box-sizing: border-box;
   }
-  .conference-chat-unread-dot[hidden] { display: none; }
+  .conference-chat-unread-dot[hidden] {
+    display: none;
+  }
   .conference-chat-unread-dot:not([hidden]) {
     display: inline-flex;
     align-items: center;
@@ -4165,15 +4606,24 @@ if (
     }
 
     .conference-stage-frame {
-      height: calc(100vh - var(--conference-sidebar-size) - var(--conference-bar-stack-height));
-      height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-stack-height));
+      height: calc(
+        100vh - var(--conference-sidebar-size) -
+          var(--conference-bar-stack-height)
+      );
+      height: calc(
+        100dvh - var(--conference-sidebar-size) -
+          var(--conference-bar-stack-height)
+      );
     }
 
     .conference-instruments-sidebar {
-      inset: 0 auto calc(var(--conference-sidebar-size) + var(--conference-bar-stack-height)) 0;
+      inset: 0 auto
+        calc(
+          var(--conference-sidebar-size) + var(--conference-bar-stack-height)
+        )
+        0;
       width: min(82vw, var(--conference-instruments-size));
     }
-
   }
 
   @media (max-width: 900px) and (orientation: landscape) {
@@ -4189,7 +4639,8 @@ if (
       height: calc(100dvh - var(--conference-bar-stack-height));
     }
 
-    .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+    .conference-stage[data-layout="presentation"]
+      .conference-stage-panel--focus {
       width: clamp(86px, 13.5vw, 119px);
       inset: auto 0.8rem 0.8rem auto;
     }
@@ -4312,7 +4763,11 @@ if (
     .conference-shell {
       --conference-bar-height: 36px; /* ~20% reduction from 44px */
       --conference-bar-stack-height: var(--conference-bar-height);
-      --conference-sidebar-size: clamp(140px, 30dvh, 220px); /* Reduced and capped */
+      --conference-sidebar-size: clamp(
+        140px,
+        30dvh,
+        220px
+      ); /* Reduced and capped */
       grid-template-columns: 1fr;
       grid-template-rows: 1fr auto;
       padding-bottom: var(--conference-bar-stack-height);
@@ -4321,9 +4776,12 @@ if (
     }
 
     .conference-stage-frame {
-      height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-stack-height));
+      height: calc(
+        100dvh - var(--conference-sidebar-size) -
+          var(--conference-bar-stack-height)
+      );
       min-height: 180px; /* Leave space for sidebar */
-      background: #000 !important; 
+      background: #000 !important;
       overflow-y: auto !important;
       -webkit-overflow-scrolling: touch;
     }
@@ -4421,23 +4879,56 @@ if (
     max-height: none !important;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile,
-  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile > .conference-tile-media,
-  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile > .conference-tile-media > .conference-media-frame,
-  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile > .conference-tile-media > .conference-media-frame > video {
+  .conference-stage[data-layout="teacher"]
+    .conference-slot--focus
+    > .conference-tile,
+  .conference-stage[data-layout="teacher"]
+    .conference-slot--focus
+    > .conference-tile
+    > .conference-tile-media,
+  .conference-stage[data-layout="teacher"]
+    .conference-slot--focus
+    > .conference-tile
+    > .conference-tile-media
+    > .conference-media-frame,
+  .conference-stage[data-layout="teacher"]
+    .conference-slot--focus
+    > .conference-tile
+    > .conference-tile-media
+    > .conference-media-frame
+    > video {
     width: 100% !important;
     height: 100% !important;
   }
 
-  .conference-stage[data-layout='screenshare'] .conference-slot--screen > .conference-tile--screen,
-  .conference-stage[data-layout='screenshare'] .conference-slot--screen > .conference-tile--screen > .conference-tile-media,
-  .conference-stage[data-layout='screenshare'] .conference-slot--screen > .conference-tile--screen > .conference-tile-media > .conference-media-frame,
-  .conference-stage[data-layout='screenshare'] .conference-slot--screen > .conference-tile--screen > .conference-tile-media > .conference-media-frame > video {
+  .conference-stage[data-layout="screenshare"]
+    .conference-slot--screen
+    > .conference-tile--screen,
+  .conference-stage[data-layout="screenshare"]
+    .conference-slot--screen
+    > .conference-tile--screen
+    > .conference-tile-media,
+  .conference-stage[data-layout="screenshare"]
+    .conference-slot--screen
+    > .conference-tile--screen
+    > .conference-tile-media
+    > .conference-media-frame,
+  .conference-stage[data-layout="screenshare"]
+    .conference-slot--screen
+    > .conference-tile--screen
+    > .conference-tile-media
+    > .conference-media-frame
+    > video {
     width: 100% !important;
     height: 100% !important;
   }
 
-  .conference-stage[data-layout='teacher'] .conference-slot--focus > .conference-tile > .conference-tile-media > .conference-media-frame > video,
+  .conference-stage[data-layout="teacher"]
+    .conference-slot--focus
+    > .conference-tile
+    > .conference-tile-media
+    > .conference-media-frame
+    > video,
   .conference-slot--grid .conference-media-frame--local-camera > video,
   .conference-media-frame--local-camera > video {
     object-fit: cover !important;
@@ -4450,7 +4941,9 @@ if (
   }
 
   .conference-self-preview .conference-media-frame--local-preview,
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -4466,10 +4959,14 @@ if (
     max-height: 100% !important;
     object-fit: contain !important;
     object-position: 50% 62% !important;
-    transform: scaleX(var(--conference-local-video-flip, 1)) scale(var(--conference-self-preview-zoom, 1)) !important;
+    transform: scaleX(var(--conference-local-video-flip, 1))
+      scale(var(--conference-self-preview-zoom, 1)) !important;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame > video {
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame
+    > video {
     position: relative !important;
     inset: auto !important;
     width: 100% !important;
@@ -4478,11 +4975,25 @@ if (
     max-height: 100% !important;
     object-fit: contain !important;
     object-position: 50% 62% !important;
-    transform: scale(var(--conference-participant-preview-zoom, var(--conference-circle-preview-zoom, 1))) !important;
+    transform: scale(
+      var(
+        --conference-participant-preview-zoom,
+        var(--conference-circle-preview-zoom, 1)
+      )
+    ) !important;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame--local-camera > video {
-    transform: scaleX(var(--conference-local-video-flip, 1)) scale(var(--conference-participant-preview-zoom, var(--conference-circle-preview-zoom, 1))) !important;
+  .conference-stage[data-layout="presentation"]
+    .conference-stage-panel--focus
+    .conference-media-frame--local-camera
+    > video {
+    transform: scaleX(var(--conference-local-video-flip, 1))
+      scale(
+        var(
+          --conference-participant-preview-zoom,
+          var(--conference-circle-preview-zoom, 1)
+        )
+      ) !important;
   }
 
   .conference-media-backdrop {
@@ -4502,7 +5013,8 @@ if (
     z-index: 0;
   }
 
-  .conference-media-frame--with-backdrop > video:not(.conference-media-backdrop) {
+  .conference-media-frame--with-backdrop
+    > video:not(.conference-media-backdrop) {
     position: relative !important;
     z-index: 1;
   }
