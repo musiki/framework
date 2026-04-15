@@ -13096,6 +13096,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   // ── CLASE ─────────────────────────────────────────────────────────────────
   const claseController = createClaseController({
     contentEl: root.querySelector<HTMLElement>('[data-clase-content]'),
+    focusBtnEl: root.querySelector<HTMLElement>('[data-clase-focus-btn]'),
     placeholderEl: root.querySelector<HTMLElement>('[data-clase-placeholder]'),
     sectionEl: root.querySelector<HTMLElement>('[data-clase-section]'),
   });

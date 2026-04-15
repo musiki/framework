@@ -233,6 +233,42 @@ details[open] > summary.conference-sidebar-heading::before {
   overscroll-behavior: contain;
 }
 
+.conference-sidebar-section--clase > summary.conference-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.clase-focus-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--conference-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-right: -0.2rem;
+}
+
+.clase-focus-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--conference-fg-hi);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
+.clase-focus-btn svg {
+  opacity: 0.72;
+}
+
 /* ── CLASE panel ─────────────────────────────────────────────────────────── */
 .conference-sidebar-panel-body--clase {
   padding: 0;

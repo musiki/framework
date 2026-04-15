@@ -5,65 +5,58 @@ type ClaseWindow = Window & {
 
 const loadMarked = async (): Promise<((md: string) => string) | null> => {
   const w = window as ClaseWindow;
-  if (typeof w.marked?.parse === 'function') return w.marked.parse.bind(w.marked);
+  if (w.marked?.parse) return w.marked.parse;
+  if (w.__claseMarkedPromise) return w.__claseMarkedPromise;
 
-  if (!w.__claseMarkedPromise) {
-    w.__claseMarkedPromise = new Promise<any>((resolve) => {
-      // Reuse the script tag if notes panel already added it
-      const existing = document.querySelector<HTMLScriptElement>('script[src*="marked"]');
-      if (existing) {
-        if (w.marked?.parse) { resolve(w.marked); return; }
-        existing.addEventListener('load', () => resolve(w.marked ?? null), { once: true });
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/marked@9/marked.min.js';
-      script.onload = () => resolve(w.marked ?? null);
-      script.onerror = () => resolve(null);
-      document.head.appendChild(script);
-    });
-  }
+  w.__claseMarkedPromise = new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
+    script.async = true;
+    script.onload = () => {
+      resolve(w.marked?.parse || null);
+    };
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
 
-  await w.__claseMarkedPromise;
-  const parseFn = (w.marked as any)?.parse;
-  return typeof parseFn === 'function' ? (parseFn as (md: string) => string).bind(w.marked) : null;
+  return w.__claseMarkedPromise;
 };
 
-// Strip YAML frontmatter from raw markdown body
-const stripFrontmatter = (raw: string): string => {
-  const trimmed = raw.trimStart();
-  if (!trimmed.startsWith('---')) return raw;
-  const rest = trimmed.slice(3);
-  const endIdx = rest.search(/^---/m);
-  if (endIdx === -1) return raw;
-  return rest.slice(endIdx + 3).replace(/^\r?\n/, '');
+const splitSlides = (markdown: string): string[] => {
+  if (!markdown) return [];
+  // Use the same separator as Reveal: \n---\n
+  return markdown
+    .split(/\n---\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 };
 
-// Split markdown by horizontal-rule slide separators (--- on own line)
-const splitSlides = (raw: string): string[] => {
-  const body = stripFrontmatter(raw);
-  // Match --- or *** or ___ as slide separators (Reveal.js default)
-  return body.split(/\n[ \t]*(?:---|___|\*\*\*)[ \t]*\n/).map((s) => s.trim()).filter(Boolean);
+const escapeHtml = (unsafe: string) => {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 };
 
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-type ClaseController = {
+export type ClaseController = {
   bind: () => void;
 };
 
 export const createClaseController = ({
   contentEl,
+  focusBtnEl,
 }: {
   contentEl: HTMLElement | null;
+  focusBtnEl?: HTMLElement | null;
   placeholderEl?: HTMLElement | null;
   sectionEl?: HTMLElement | null;
 }): ClaseController => {
   let sections: string[] = [];
   let activeIndex = 0;
+  let lastKnownRevealIndex = 0;
   let currentLessonId: string | null = null;
-  let followReveal = true;
   let ignoreScrollEventsUntil = 0;
 
   const showPlaceholder = (msg?: string) => {
@@ -97,26 +90,23 @@ export const createClaseController = ({
     }
   };
 
-  const updateActiveIndex = (index: number) => {
+  const updateActiveIndex = (index: number, scroll = false) => {
     if (!contentEl) return;
     const clamped = Math.max(0, Math.min(index, sections.length - 1));
-    const slideChanged = clamped !== activeIndex;
-    if (slideChanged) {
-      followReveal = true;
-    }
+    
     if (clamped === activeIndex && contentEl.querySelector('.clase-section')) {
       contentEl.querySelectorAll<HTMLElement>('.clase-section').forEach((el) => {
         el.classList.toggle('is-active', Number(el.dataset.claseIndex) === clamped);
       });
       activeIndex = clamped;
-      if (followReveal) {
+      if (scroll) {
         scrollToActive();
       }
       return;
     }
     activeIndex = clamped;
     void renderSections().then(() => {
-      if (followReveal) {
+      if (scroll) {
         scrollToActive();
       }
     });
@@ -135,7 +125,6 @@ export const createClaseController = ({
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const raw = await resp.text();
       sections = splitSlides(raw);
-      followReveal = true;
       if (sections.length === 0) {
         showPlaceholder('Sin contenido de diapositivas.');
         return;
@@ -152,15 +141,13 @@ export const createClaseController = ({
     currentLessonId = null;
     sections = [];
     activeIndex = 0;
-    followReveal = true;
     showPlaceholder();
   };
 
   const bind = () => {
-    contentEl?.addEventListener('scroll', () => {
-      if (Date.now() <= ignoreScrollEventsUntil) return;
-      followReveal = false;
-    }, { passive: true });
+    focusBtnEl?.addEventListener('click', () => {
+      updateActiveIndex(lastKnownRevealIndex, true);
+    });
 
     window.addEventListener('musiki:clase-presentation-changed', (e: Event) => {
       const ev = e as CustomEvent<{ lessonId: string | null }>;
@@ -175,7 +162,8 @@ export const createClaseController = ({
     window.addEventListener('musiki:clase-slide-changed', (e: Event) => {
       const ev = e as CustomEvent<{ indexh: number }>;
       const indexh = Number(ev.detail?.indexh ?? 0);
-      updateActiveIndex(indexh);
+      lastKnownRevealIndex = indexh;
+      // We no longer automatically updateActiveIndex here
     });
   };
 
