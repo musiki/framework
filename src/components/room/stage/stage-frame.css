@@ -786,17 +786,27 @@
 @media (max-width: 500px) {
   .conference-stage-frame {
     height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));
+    min-height: 200px;
+    background: #000 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .conference-stage {
+    background: #000 !important;
+    height: auto !important;
+    min-height: 100%;
   }
 
   .conference-slot--grid {
-    padding: 0.45rem;
-    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-    grid-auto-rows: minmax(112px, 1fr);
-    gap: 0.45rem;
+    padding: 0.4rem;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-auto-rows: minmax(100px, 1fr);
+    gap: 0.4rem;
   }
 
   .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
-    width: clamp(79px, 22.5vw, 101px);
-    inset: auto 0.72rem 0.72rem auto;
+    width: clamp(70px, 20vw, 90px);
+    inset: auto 0.5rem 0.5rem auto;
   }
 }

@@ -4310,70 +4310,36 @@ if (
 
   @media (max-width: 500px) {
     .conference-shell {
-      --conference-bar-height: 44px;
+      --conference-bar-height: 36px; /* ~20% reduction from 44px */
       --conference-bar-stack-height: var(--conference-bar-height);
       --conference-sidebar-size: clamp(180px, 34dvh, 260px);
       grid-template-columns: 1fr;
-      grid-template-rows: minmax(0, 1fr) var(--conference-sidebar-size);
+      grid-template-rows: 1fr auto;
       padding-bottom: var(--conference-bar-stack-height);
+      height: 100dvh;
+      overflow: hidden;
     }
 
     .conference-stage-frame {
       height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-stack-height));
+      min-height: 200px;
+      background: #000 !important; /* Ensure black background */
+      overflow-y: auto !important; /* Allow scrolling if content overflows */
+      -webkit-overflow-scrolling: touch;
     }
 
-    .conference-instruments-sidebar {
-      inset: 0 0 var(--conference-bar-stack-height) 0;
-      width: 100vw;
-      width: 100dvw;
-      border-right: 0;
+    .conference-stage {
+      background: #000 !important;
+      height: auto !important; /* Allow flexible height */
+      min-height: 100%;
     }
 
-    .conference-sidebar-section--mixer {
-      padding-bottom: 1rem;
-    }
-
-    .conference-mixer {
-      grid-template-columns: repeat(8, minmax(2.4rem, 1fr));
-      gap: 0.26rem 0.16rem;
-      align-items: start;
-    }
-
-    .conference-video-mixer-grid--module {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 0.28rem 0.18rem;
-      padding-top: 0.22rem;
-    }
-
-    .conference-mixer-fx {
-      gap: 0.35rem;
-      padding-top: 0.4rem;
-    }
-
-    .conference-mixer-fx-pair {
-      flex-direction: column;
-      gap: 0;
-    }
-
-    .conference-mixer-fx-card {
-      width: 100%;
-      padding: 0.35rem 0;
-    }
-
-    .conference-self-preview {
-      aspect-ratio: 1;
-    }
-
-    .conference-slot--grid {
-      padding: 0.45rem;
-      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-      grid-auto-rows: minmax(112px, 1fr);
-      gap: 0.45rem;
-    }
-
-    .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
-      width: clamp(79px, 22.5vw, 101px);
-      inset: auto 0.72rem 0.72rem auto;
+    /* Force Reveal iframe to allow internal scrolling if needed */
+    .conference-presentation,
+    .conference-presentation iframe {
+      height: 100% !important;
+      min-height: 300px;
+      background: #000 !important;
     }
 
     .conference-bottombar {
@@ -4389,91 +4355,43 @@ if (
       overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
-    }
-
-    .conference-bottombar::-webkit-scrollbar {
-      display: none;
+      background: #000;
+      z-index: 100;
+      /* Improve touch responsiveness */
+      touch-action: pan-x;
     }
 
     .conference-bar-group {
       flex: 0 0 auto;
-      min-height: var(--conference-bar-height);
       height: var(--conference-bar-height);
       border-right: 1px solid var(--conference-line);
-      border-top: 0;
-    }
-
-    .conference-bar-group--presentation {
-      padding: 0 0.45rem;
-      min-width: 9.5rem;
-    }
-
-    .conference-bar-group--presentation select {
-      min-width: 8.5rem;
-      width: 100%;
-    }
-
-    .conference-connect-button {
-      width: var(--conference-bar-height);
-      min-width: var(--conference-bar-height);
-      height: var(--conference-bar-height);
-      min-height: var(--conference-bar-height);
-      padding: 0;
     }
 
     .conference-icon-button,
     .conference-layout-button,
     .conference-share-button,
     .conference-record-button,
-    .conference-exit-button {
-      width: var(--conference-bar-height);
-      min-width: var(--conference-bar-height);
-      height: var(--conference-bar-height);
-      min-height: var(--conference-bar-height);
-      padding: 0;
+    .conference-exit-button,
+    .conference-connect-button,
+    .conference-count-button {
+      width: var(--conference-bar-height) !important;
+      height: var(--conference-bar-height) !important;
+      min-width: var(--conference-bar-height) !important;
+      min-height: var(--conference-bar-height) !important;
+      padding: 0 !important;
+      flex: 0 0 auto;
     }
 
-    .conference-count-button {
-      width: var(--conference-bar-height);
-      min-width: var(--conference-bar-height);
-      height: var(--conference-bar-height);
-      min-height: var(--conference-bar-height);
-      padding: 0;
+    .conference-icon-button svg {
+      width: 18px !important;
+      height: 18px !important;
     }
 
     .conference-layout-button,
     .conference-share-button,
-    .conference-exit-button,
-    .conference-live-timer,
-    .conference-session-timer {
-      font-size: 0.66rem;
-      letter-spacing: 0.1em;
-    }
-
-    .conference-session-timer {
-      min-width: 4.9rem;
-      padding: 0 0.45rem;
-    }
-
-    .conference-roster-popup {
-      left: auto;
-      right: 0;
-      min-width: min(220px, calc(100vw - 1rem));
-      max-width: calc(100vw - 1rem);
-    }
-
-    .conference-device-panel {
-      left: auto;
-      right: 0;
-      min-width: min(15rem, calc(100vw - 1rem));
-    }
-
-    .conference-shortcuts-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .conference-shortcuts-section {
-      border-right: 0;
+    .conference-exit-button {
+      font-size: 0.6rem !important;
+      line-height: 1 !important;
     }
   }
 </style>
@@ -4587,5 +4505,17 @@ if (
   .conference-media-frame--with-backdrop > video:not(.conference-media-backdrop) {
     position: relative !important;
     z-index: 1;
+  }
+
+  /* Force black background for presentation iframe containers */
+  .conference-presentation {
+    background: #000 !important;
+  }
+
+  /* Ensure Reveal content inside the iframe fills correctly without grey gaps */
+  @media (max-width: 500px) {
+    .conference-presentation iframe {
+      background: #000 !important;
+    }
   }
 </style>
