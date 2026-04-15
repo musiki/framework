@@ -156,6 +156,11 @@ img {
 	margin: 0.9rem 0;
 }
 
+/* Cover blocks for Reveal presentations */
+.musiki-cover-block {
+	display: none !important;
+}
+
 .obsidian-media-embed-card {
 	margin: 0.9rem 0;
 	padding: 0.45rem 0.55rem;

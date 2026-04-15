@@ -14,6 +14,7 @@ import remarkEvalBlocks from './src/plugins/remark-eval-blocks.mjs'
 import remarkDataviewLite from './src/plugins/remark-dataview-lite.mjs'
 import remarkWikiLink from './src/plugins/remark-wiki-link.mjs'
 import remarkLily from './src/plugins/remark-lily.mjs'
+import remarkCoverBlock from './src/plugins/remark-cover-block.mjs'
 
 import auth from 'auth-astro';
 import node from '@astrojs/node';
@@ -110,6 +111,7 @@ export default defineConfig({
     },
     remarkPlugins: [
       remarkGfm,
+      remarkCoverBlock,
       slugMathRemark,         // primero traducís $<
       remarkMath,
       remarkMermaid,          // luego procesá mermaid si aparece dentro
