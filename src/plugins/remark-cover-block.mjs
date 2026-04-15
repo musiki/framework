@@ -1,11 +1,28 @@
-import { visit } from 'unist-util-visit';
-
 /**
  * Remark plugin to handle cover blocks marked with:
  * <!--cover--> ... <!--/cover-->
  * or
  * %%cover%% ... %%/cover%%
  */
+const replaceMarkerInNode = (node, marker, replacement = '') => {
+  if (!node || typeof node !== 'object') return false;
+
+  if (typeof node.value === 'string' && node.value.includes(marker)) {
+    node.value = node.value.replace(marker, replacement);
+    return true;
+  }
+
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) {
+      if (replaceMarkerInNode(child, marker, replacement)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 export default function remarkCoverBlock() {
   return (tree) => {
     // We need to look for text nodes or html nodes that might contain our markers
@@ -55,12 +72,10 @@ export default function remarkCoverBlock() {
       const firstNode = coverChildren[0];
       const lastNode = coverChildren[coverChildren.length - 1];
       
-      if (firstNode.type === 'html' || firstNode.type === 'text') {
-        firstNode.value = firstNode.value.replace('<!--cover-->', '').replace('%%cover%%', '');
-      }
-      if (lastNode.type === 'html' || lastNode.type === 'text') {
-        lastNode.value = lastNode.value.replace('<!--/cover-->', '').replace('%%/cover%%', '');
-      }
+      replaceMarkerInNode(firstNode, '<!--cover-->');
+      replaceMarkerInNode(firstNode, '%%cover%%');
+      replaceMarkerInNode(lastNode, '<!--/cover-->');
+      replaceMarkerInNode(lastNode, '%%/cover%%');
 
       // Create a wrapper div
       const wrapper = {

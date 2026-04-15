@@ -2053,8 +2053,14 @@ const resolvedSlideTheme =
             .replace(/\u00a0/g, ' ');
         };
 
+        const stripCoverMarkers = (markdown) =>
+          String(markdown || '')
+            .replace(/<!--cover-->[\s\S]*?<!--\/cover-->/gi, '')
+            .replace(/%%cover%%[\s\S]*?%%\/cover%%/gi, '')
+            .replace(/^\s*(?:%%\/?cover%%|<!--\/?cover-->)\s*$/gim, '');
+
         const renderGridMarkdown = (rawValue) => {
-          const markdown = normalizeGridInnerMarkdown(rawValue);
+          const markdown = stripCoverMarkers(normalizeGridInnerMarkdown(rawValue));
           return String(marked.parse(markdown, { gfm: true, breaks: true }));
         };
 

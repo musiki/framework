@@ -8529,7 +8529,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const shouldIgnoreRoomShortcut = (target: EventTarget | null) => {
     if (!(target instanceof HTMLElement)) return false;
-    return Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'));
+    return Boolean(
+      target.closest(
+        'input, textarea, select, button, [contenteditable="true"], [data-room-shortcuts="ignore"]',
+      ),
+    );
   };
 
   const closeDevicePanels = () => {

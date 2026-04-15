@@ -5,73 +5,77 @@
 >
   <summary class="conference-sidebar-heading">CHAT</summary>
   <div class="conference-sidebar-panel-body conference-sidebar-panel-body--chat">
-    <div class="conference-chat-toolbar">
-      <div class="conference-reaction-buttons">
-        <button
-          type="button"
-          class="conference-reaction-button"
-          data-reaction="clap"
-          aria-label="Aplaudir"
-          title="Aplaudir 👏"
-        >👏</button>
-        <button
-          type="button"
-          class="conference-reaction-button"
-          data-reaction="heart"
-          aria-label="Corazón"
-          title="Corazón ❤️"
-        >❤️</button>
-        <button
-          type="button"
-          class="conference-reaction-button"
-          data-reaction="tada"
-          aria-label="Celebrar"
-          title="Celebrar 🎉"
-        >🎉</button>
-      </div>
-      <button
-        type="button"
-        class="conference-hand-button"
-        data-action="raise-hand"
-        aria-label="Levantar la mano"
-        title="Levantar la mano (M)"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
-          <path
-            d="M8.2 11.2V5.9a1.2 1.2 0 1 1 2.4 0v4.3h.8V4.8a1.2 1.2 0 1 1 2.4 0v5.4h.8V6.1a1.2 1.2 0 1 1 2.4 0v5.3h.8V8.3a1.2 1.2 0 1 1 2.4 0v6.2c0 3.3-2.7 6-6 6h-1.4c-1.8 0-3.5-.8-4.6-2.2L5 14.8a1.5 1.5 0 0 1 2.4-1.8l.8 1.1V11.2Z"
-            fill="currentColor"
-          />
-        </svg>
-        <span class="conference-sr-only">Raise hand</span>
-      </button>
-    </div>
-
     <div class="conference-chat">
       <ul class="conference-chat-list" data-chat-list></ul>
       <div class="conference-chat-compose-anchor">
         <div class="conference-chat-compose">
           <textarea rows="3" name="chat" placeholder="Escribe un mensaje" data-chat-input></textarea>
-          <div class="conference-chat-actions">
-            <button type="button" class="conference-chat-send" data-action="chat-send" disabled>
-              Send
-            </button>
+        </div>
+        <div class="conference-chat-toolbar conference-chat-actions conference-chat-bar">
+          <button
+            type="button"
+            class="conference-hand-button"
+            data-action="raise-hand"
+            aria-label="Levantar la mano"
+            title="Levantar la mano (M)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+              <path
+                d="M8.2 11.2V5.9a1.2 1.2 0 1 1 2.4 0v4.3h.8V4.8a1.2 1.2 0 1 1 2.4 0v5.4h.8V6.1a1.2 1.2 0 1 1 2.4 0v5.3h.8V8.3a1.2 1.2 0 1 1 2.4 0v6.2c0 3.3-2.7 6-6 6h-1.4c-1.8 0-3.5-.8-4.6-2.2L5 14.8a1.5 1.5 0 0 1 2.4-1.8l.8 1.1V11.2Z"
+                fill="currentColor"
+              />
+            </svg>
+            <span class="conference-sr-only">Raise hand</span>
+          </button>
+          <div class="conference-reaction-buttons">
             <button
               type="button"
-              class="conference-chat-download"
-              data-action="chat-download"
-              aria-label="Descargar chat"
-              title="Descargar chat"
-              disabled
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
-                <path
-                  d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
-                  fill="currentColor"
-                />
-              </svg>
-              <span class="conference-sr-only">Download chat</span>
-            </button>
+              class="conference-reaction-button"
+              data-reaction="clap"
+              aria-label="Aplaudir"
+              title="Aplaudir 👏"
+            >👏</button>
+            <button
+              type="button"
+              class="conference-reaction-button"
+              data-reaction="heart"
+              aria-label="Corazón"
+              title="Corazón ❤️"
+            >❤️</button>
+            <button
+              type="button"
+              class="conference-reaction-button"
+              data-reaction="tada"
+              aria-label="Celebrar"
+              title="Celebrar 🎉"
+            >🎉</button>
           </div>
+          <span class="conference-chat-bar-spacer" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="conference-chat-download"
+            data-action="chat-download"
+            aria-label="Descargar chat"
+            title="Descargar chat"
+            disabled
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+              <path
+                d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
+                fill="currentColor"
+              />
+            </svg>
+            <span class="conference-sr-only">Download chat</span>
+          </button>
+          <button type="button" class="conference-chat-send" data-action="chat-send" aria-label="Enviar mensaje" title="Enviar mensaje" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+              <path
+                d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z"
+                fill="currentColor"
+              />
+            </svg>
+            <span class="conference-sr-only">Send</span>
+          </button>
         </div>
       </div>
     </div>

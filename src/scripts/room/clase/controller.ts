@@ -31,6 +31,12 @@ const splitSlides = (markdown: string): string[] => {
     .filter(Boolean);
 };
 
+const stripCoverBlocks = (markdown: string) =>
+  String(markdown || '')
+    .replace(/<!--cover-->[\s\S]*?<!--\/cover-->/gi, '')
+    .replace(/%%cover%%[\s\S]*?%%\/cover%%/gi, '')
+    .replace(/^\s*(?:%%\/?cover%%|<!--\/?cover-->)\s*$/gim, '');
+
 const escapeHtml = (unsafe: string) => {
   return unsafe
     .replace(/&/g, '&amp;')
@@ -122,7 +128,7 @@ export const createClaseController = ({
       const resp = await fetch(`/api/get-lesson-content?path=${encodeURIComponent(lessonId)}`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const raw = await resp.text();
-      sections = splitSlides(raw);
+      sections = splitSlides(stripCoverBlocks(raw));
       if (sections.length === 0) {
         showPlaceholder('Sin contenido de diapositivas.');
         return;
