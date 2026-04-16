@@ -13,6 +13,7 @@ type CourseEntry = CollectionEntry<'cursos'>;
 export type PublicContentRouteProps =
   | {
       kind: 'content';
+      collection: 'content' | 'cursos';
       entryId: string;
       canonicalSlug: string;
       presentationHref: string;
@@ -102,6 +103,7 @@ const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
         params: { slug },
         props: {
           kind: 'content',
+          collection: 'content',
           entryId: entry.id,
           canonicalSlug,
           presentationHref,
@@ -126,6 +128,33 @@ const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
       props: {
         kind: 'redirect',
         redirectTo: `/${canonicalSlug}`,
+      },
+    });
+  }
+
+  // Handle concept and glossary from cursos
+  const conceptGlossaryEntries = courseEntries.filter(entry => {
+    const type = String(entry.data.type || '').trim().toLowerCase();
+    const status = String(entry.data.status || '').trim().toLowerCase();
+    return (type === 'concept' || type === 'glossary') && status === 'public';
+  });
+
+  const courseConceptBySlug = new Map<string, CourseEntry>();
+  registerUniqueMatches(courseConceptBySlug, groupBySlug(conceptGlossaryEntries, getContentFrontmatterSlug));
+  registerUniqueMatches(courseConceptBySlug, groupBySlug(conceptGlossaryEntries, getContentFilenameSlug));
+  registerUniqueMatches(courseConceptBySlug, groupBySlug(conceptGlossaryEntries, getContentTitleSlug));
+
+  for (const [slug, entry] of courseConceptBySlug.entries()) {
+    if (contentEntryBySlug.has(slug)) continue;
+
+    contentPaths.push({
+      params: { slug },
+      props: {
+        kind: 'content',
+        collection: 'cursos',
+        entryId: entry.id,
+        canonicalSlug: slug,
+        presentationHref: '', // Concepts usually don't have slides, but we could add them if needed
       },
     });
   }

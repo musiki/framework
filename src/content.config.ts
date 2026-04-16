@@ -10,9 +10,12 @@ const courseNoteTypes = [
 	'lesson-presentation',
 	'app-dataviewjs',
 	'public-note',
+	'info',
+	'concept',
+	'glossary',
 ] as const;
 
-const workflowStatuses = ['draft', 'private', 'review', 'approved', 'published', 'archived', 'nonshown'] as const;
+const workflowStatuses = ['draft', 'private', 'review', 'approved', 'published', 'archived', 'nonshown', 'public', 'inprocess'] as const;
 const publicStatuses = ['draft', 'review', 'approved', 'deprecated'] as const;
 
 const content = defineCollection({
@@ -74,6 +77,15 @@ const cursos = defineCollection({
 		public: z.boolean().optional().default(false),
 		coverImage: z.string().optional().nullable(),
 		tags: z.array(z.string()).optional().nullable(),
+		
+		// Concept / Glossary fields
+		alias: z.union([z.string(), z.array(z.string())]).optional().nullable(),
+		url: z.string().optional().nullable(),
+		parent: z.string().optional().nullable(),
+		project: z.string().optional().nullable(),
+		work: z.string().optional().nullable(),
+		source: z.string().optional().nullable(),
+		connect: z.union([z.string(), z.array(z.string())]).optional().nullable(),
 		
 		// Lesson/Assignment fields
 		chapter: z.string().optional().nullable(),

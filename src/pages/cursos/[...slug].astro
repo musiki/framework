@@ -163,9 +163,34 @@ if (isStudentEnrolled && !isRequestingWelcomePage) {
 
 // Statuses hidden from students but visible to teachers with indicator
 const teacherOnlyStatuses = new Set(['draft', 'private']);
+const conceptGlossaryTypes = new Set(['concept', 'glossary']);
+
+const conceptsAndGlossary = allLessons.filter((l) => {
+  const type = String(l.data.type || '').trim().toLowerCase();
+  if (!conceptGlossaryTypes.has(type)) return false;
+  
+  if (canManageLiveInteractions) return true;
+  
+  const status = String(l.data.status || '').trim().toLowerCase();
+  if (teacherOnlyStatuses.has(status)) return false;
+  
+  // They must be public or session must exist (as per user requirements for info but also implied here)
+  if (!session && status !== 'public') return false;
+  
+  return true;
+});
+
 const sidebarLessons = canManageLiveInteractions
-  ? allLessons
-  : allLessons.filter((l) => !teacherOnlyStatuses.has(String(l.data.status || '').trim().toLowerCase()));
+  ? allLessons.filter(l => !conceptGlossaryTypes.has(String(l.data.type || '').trim().toLowerCase()))
+  : allLessons.filter((l) => {
+      const status = String(l.data.status || '').trim().toLowerCase();
+      const type = String(l.data.type || '').trim().toLowerCase();
+      if (conceptGlossaryTypes.has(type)) return false;
+      if (teacherOnlyStatuses.has(status)) return false;
+      // Info type is only visible to logged-in users
+      if (type === 'info' && !session) return false;
+      return true;
+    });
 
 // Group lessons by chapter
 const chapters = sidebarLessons.reduce((acc, lesson) => {
@@ -179,6 +204,24 @@ const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapt
   leftChapter
     .replace(/-/g, ' ')
     .localeCompare(rightChapter.replace(/-/g, ' '), 'es', { sensitivity: 'base' }),
+);
+
+// Group concepts and glossary by project and parent
+const groupedConcepts: Record<string, Record<string, typeof allLessons>> = {};
+
+conceptsAndGlossary.forEach((entry) => {
+  const project = String((entry.data as any).project || 'General').trim();
+  const parent = String((entry.data as any).parent || 'Raíz').trim();
+  
+  if (!groupedConcepts[project]) groupedConcepts[project] = {};
+  if (!groupedConcepts[project][parent]) groupedConcepts[project][parent] = [];
+  
+  groupedConcepts[project][parent].push(entry);
+});
+
+// Sort grouped concepts
+const sortedProjects = Object.entries(groupedConcepts).sort(([a], [b]) => 
+  a.localeCompare(b, 'es', { sensitivity: 'base' })
 );
 
 // Determine what to show
@@ -206,6 +249,8 @@ if (parts.length === 1) {
 
   if (!currentEntry) return Astro.redirect(courseHref);
 
+  const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
+
   // Check visibility at lesson level
   const visibility = currentEntry.data.visibility;
   if (visibility === 'enrolled-only') {
@@ -218,6 +263,12 @@ if (parts.length === 1) {
     if (!canManageLiveInteractions && !hasCourseEnrollment) {
       return Astro.redirect(courseHref);
     }
+  }
+
+  // Info type requires login
+  if (currentEntryType === 'info' && !session) {
+    const lessonLoginRedirectTarget = `${courseHref}/${encodePathSegments(resolvedLessonRoutePath || lessonPath)}${Astro.url.search}`;
+    return Astro.redirect(`/login?redirect=${encodeURIComponent(lessonLoginRedirectTarget)}`);
   }
 
   // For _welcome, skip the canonical-path redirect (its path can't be slugified).
@@ -241,7 +292,6 @@ const dynamicHtml = dynamicContent?.html;
 const Content = StaticContent;
 
 const assignmentLikeTypes = new Set(['assignment', 'eval']);
-const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
 const isAssignment = assignmentLikeTypes.has(currentEntryType);
 const isLessonPage = parts.length > 1 && !isCourseForumPage;
 const currentEntryStatus = String(currentEntry.data.status || '').trim().toLowerCase();
@@ -2962,6 +3012,9 @@ order:
                     >
                       <span class="lesson-link-text">{lesson.data.title}</span>
                       <span class="lesson-link-trailing">
+                        {String(lesson.data.type || '').trim().toLowerCase() === 'info' && (
+                          <span class="lesson-type">ℹ️</span>
+                        )}
                         {assignmentLikeTypes.has(String(lesson.data.type || '').trim().toLowerCase()) && (
                           <span class="lesson-type">📝</span>
                         )}
@@ -2992,6 +3045,64 @@ order:
             </ul>
           </div>
         ))}
+
+        {sortedProjects.length > 0 && (
+          <div class="chapter concepts-glossary-chapter">
+            <details class="concepts-glossary-details">
+              <summary class="chapter-title" style="cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+                <span>📚 Conceptos y Glosario</span>
+                <span class="fold-indicator"></span>
+              </summary>
+              <div class="concepts-glossary-body" style="padding-top: 0.5rem;">
+                {sortedProjects.map(([projectName, parents]) => (
+                  <div class="concept-project">
+                    {projectName !== 'General' && (
+                      <div class="concept-project-title" style="font-size: 0.75rem; text-transform: uppercase; opacity: 0.6; margin: 0.6rem 0 0.3rem 0.5rem; letter-spacing: 0.05em;">
+                        {projectName}
+                      </div>
+                    )}
+                    {Object.entries(parents).sort(([a], [b]) => a.localeCompare(b)).map(([parentName, items]) => (
+                      <div class="concept-parent">
+                        {parentName !== 'Raíz' && (
+                          <div class="concept-parent-title" style="font-size: 0.8rem; font-weight: 500; margin: 0.4rem 0 0.2rem 0.75rem; opacity: 0.8;">
+                            {parentName}
+                          </div>
+                        )}
+                        <ul class="lesson-list">
+                          {items.sort((a,b) => (a.data.order || 0) - (b.data.order || 0)).map((item) => {
+                             const lessonHref = buildCourseLessonHref(
+                                canonicalCourseId,
+                                courseData,
+                                item,
+                                lessonPathIndex,
+                              );
+                              const isActive = currentEntry.id === item.id;
+                              return (
+                                <li class="lesson-item">
+                                  <a
+                                    href={lessonHref}
+                                    class:list={['lesson-link', { active: isActive }]}
+                                    style="padding-left: 1.25rem;"
+                                  >
+                                    <span class="lesson-link-text">{item.data.title}</span>
+                                    <span class="lesson-link-trailing">
+                                      <span class="lesson-type" title={item.data.type}>
+                                        {item.data.type === 'concept' ? '💡' : '📖'}
+                                      </span>
+                                    </span>
+                                  </a>
+                                </li>
+                              );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
 
         {isLessonPage && (
           <>
@@ -3850,6 +3961,7 @@ order:
       import { formatCountdown, getRemainingMs } from '../../lib/live/countdown.mjs';
       import { enhanceCourseNotesContent } from '../../scripts/course/notes/index.ts';
       import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
+      import { setupConceptLinks } from '../../scripts/concept-linker';
       import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
       const courseLayoutRoot = document.querySelector('[data-course-layout-root]');
@@ -11420,6 +11532,7 @@ a[node] -->|edge| b[hub]
           }
         });
 
+        setupConceptLinks();
         setupFoldableH2Sections();
         buildClassToc();
         mountLivePollTransport();

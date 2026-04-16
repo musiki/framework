@@ -35,7 +35,8 @@ if (route.kind === 'redirect') {
   return Astro.redirect(route.redirectTo);
 }
 
-const entry = await getEntry('content', route.entryId);
+// @ts-ignore
+const entry = await getEntry(route.collection, route.entryId);
 if (!entry) {
   return Astro.redirect('/404');
 }
@@ -88,4 +89,17 @@ const presentationHref = hasPresentationTheme ? route.presentationHref : '';
   >
     <Content />
   </WikiLayout>
+
+  <script>
+    import { setupConceptLinks } from '../scripts/concept-linker';
+    const init = () => {
+      setupConceptLinks();
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init, { once: true });
+    } else {
+      init();
+    }
+    document.addEventListener('astro:page-load', init);
+  </script>
 </>
