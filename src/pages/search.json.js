@@ -24,12 +24,19 @@ export async function GET() {
     const slug = getContentCanonicalSlug(item);
     const hasDataview =
       item.body && (item.body.includes('```dataview') || item.body.includes('```dataviewjs'));
+    const itemType = String(item.data.type || '').trim().toLowerCase();
+    const type =
+      (itemType === 'concept' && 'Concept')
+      || (itemType === 'glossary' && 'Glossary')
+      || (itemType === 'notes' && 'Note')
+      || (itemType === 'public-note' && 'Note')
+      || 'Note';
 
     return {
       title,
       slug: '/' + slug,
       content: item.body || '',
-      type: 'Note',
+      type,
       hasDataview,
     };
   });

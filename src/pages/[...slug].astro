@@ -83,42 +83,41 @@ let publicDescription = '';
 let publicTags = undefined;
 let publicPresentationHref = '';
 
-// If it's NOT a course, try to see if it's a general public content entry (like a concept or glossary)
-if (!canonicalCourseId && parts.length === 1) {
-  const allPaths = await getPublicContentStaticPaths();
-  const normalizedRequestedSlug = normalizeContentSlug(slug);
-  const routeMatch = allPaths.find(p => p.params.slug === normalizedRequestedSlug);
+// Check if it's a general public content entry (like a concept or glossary)
+// We check this for all paths as a fallback, but prioritize courses if canonicalCourseId matches
+const allPublicPaths = await getPublicContentStaticPaths();
+const normalizedRequestedSlug = normalizeContentSlug(slug);
+const routeMatch = allPublicPaths.find(p => p.params.slug === normalizedRequestedSlug);
 
-  if (routeMatch) {
-    const route = routeMatch.props as PublicContentRouteProps;
+if (routeMatch && !canonicalCourseId) {
+  const route = routeMatch.props as PublicContentRouteProps;
 
-    if (route.kind === 'redirect') {
-      return Astro.redirect(route.redirectTo);
-    }
+  if (route.kind === 'redirect') {
+    return Astro.redirect(route.redirectTo);
+  }
 
-    // @ts-ignore
-    publicEntry = await getEntry(route.collection, route.entryId);
-    if (publicEntry) {
-       const rendered = await render(publicEntry);
-       PublicContent = rendered.Content;
-       publicTitle = publicEntry.data.title || publicEntry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
-       publicDescription = publicEntry.data.summary || publicEntry.data.description || publicEntry.data.subtitle || '';
-       publicTags = Array.isArray(publicEntry.data.tags)
-          ? publicEntry.data.tags
-          : publicEntry.data.tags
-            ? String(publicEntry.data.tags).split(',').map((tag) => tag.trim()).filter(Boolean)
-            : undefined;
-       const rawPresentationTheme =
-          (publicEntry.data as Record<string, unknown>).theme ||
-          (publicEntry.data as Record<string, unknown>).slideTheme ||
-          (publicEntry.data as Record<string, unknown>).revealTheme;
-       const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
-       publicPresentationHref = hasPresentationTheme ? route.presentationHref : '';
-    }
+  // @ts-ignore
+  publicEntry = await getEntry(route.collection, route.entryId);
+  if (publicEntry) {
+     const rendered = await render(publicEntry);
+     PublicContent = rendered.Content;
+     publicTitle = publicEntry.data.title || publicEntry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
+     publicDescription = publicEntry.data.summary || publicEntry.data.description || publicEntry.data.subtitle || '';
+     publicTags = Array.isArray(publicEntry.data.tags)
+        ? publicEntry.data.tags
+        : publicEntry.data.tags
+          ? String(publicEntry.data.tags).split(',').map((tag) => tag.trim()).filter(Boolean)
+          : undefined;
+     const rawPresentationTheme =
+        (publicEntry.data as Record<string, unknown>).theme ||
+        (publicEntry.data as Record<string, unknown>).slideTheme ||
+        (publicEntry.data as Record<string, unknown>).revealTheme;
+     const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
+     publicPresentationHref = hasPresentationTheme ? route.presentationHref : '';
   }
 }
 
-const isPublicWikiPage = Boolean(publicEntry && PublicContent);
+const isPublicWikiPage = Boolean(publicEntry);
 
 // Get the final course index
 const courseIndex = !isPublicWikiPage ? courseIndexCandidate : null;
@@ -137,14 +136,6 @@ const courseHref = buildCourseHref(canonicalCourseId, courseData);
 const allLessons = canonicalCourseId ? (await getCollection('cursos'))
   .filter((entry) => isCourseLessonEntryForCourse(entry, canonicalCourseId))
   .sort((a, b) => (a.data.order || 0) - (b.data.order || 0)) : [];
-
-// Fetch global concepts from the 'content' collection
-const globalConcepts = (await getCollection('content')).filter((entry) => {
-  const type = String(entry.data.type || '').trim().toLowerCase();
-  const status = String(entry.data.status || '').trim().toLowerCase();
-  // Include if it's a concept/glossary and it's public (or user is teacher)
-  return (type === 'concept' || type === 'glossary') && (status === 'public' || (Astro.locals as any).session);
-});
 
 const lessonPathIndex = canonicalCourseId ? buildCourseLessonPathIndex(
   canonicalCourseId,
@@ -169,6 +160,7 @@ const preAuthLessonRedirect =
   )
     ? `${courseHref}/${encodePathSegments(preAuthCanonicalLessonPath)}${Astro.url.search}`
     : '';
+
 const loginRedirectTarget =
   preAuthLessonRedirect
   || preAuthCourseRedirect
@@ -178,6 +170,14 @@ const loginRedirectTarget =
 const session = (Astro.locals as any).session;
 const isPublicCourse = Boolean(courseIndex?.data?.public || isPublicWikiPage);
 if (!session && !isPublicCourse) return Astro.redirect(`/login?redirect=${encodeURIComponent(loginRedirectTarget)}`);
+
+// Fetch global concepts from the 'content' collection
+const globalConcepts = (await getCollection('content')).filter((entry) => {
+  const type = String(entry.data.type || '').trim().toLowerCase();
+  const status = String(entry.data.status || '').trim().toLowerCase();
+  // Include if it's a concept/glossary and it's public (or user is logged in)
+  return (type === 'concept' || type === 'glossary') && (status === 'public' || session);
+});
 
 const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 const normalizeRole = (value: unknown) => String(value || '').trim().toLowerCase();
