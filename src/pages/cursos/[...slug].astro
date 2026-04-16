@@ -11345,18 +11345,6 @@ a[node] -->|edge| b[hub]
         try {
           const classContent = document.querySelector('[data-class-content][data-entry-type="lesson"]');
           if (classContent instanceof HTMLElement) {
-            // Remove everything before (and including) the first <hr> — that's the presentation slide
-            const firstHr = classContent.querySelector('hr');
-            if (firstHr) {
-              const toRemove: Node[] = [];
-              let node: Node | null = classContent.firstChild;
-              while (node && node !== firstHr) {
-                toRemove.push(node);
-                node = node.nextSibling;
-              }
-              toRemove.forEach((n) => n.parentNode?.removeChild(n));
-              firstHr.parentNode?.removeChild(firstHr);
-            }
             // Strip "note:" prefix from paragraphs — keep the text, just remove the tag
             classContent.querySelectorAll('p').forEach((p) => {
               const first = p.firstChild;
@@ -11369,7 +11357,7 @@ a[node] -->|edge| b[hub]
             });
           }
         } catch (error) {
-          console.error('Lesson slide-strip error:', error);
+          console.error('Lesson note-prefix-strip error:', error);
         }
 
         try {
