@@ -1260,22 +1260,20 @@ details[open]>summary.conference-sidebar-heading::before {
   min-height: 0;
   max-height: none;
   flex: 1 1 auto;
-  padding: 0.2rem 0.45rem;
+  padding: 0.35rem 0.5rem;
   display: grid;
-  /* Use auto-fill to keep items at their minimum size if there's extra space */
-  grid-template-columns: repeat(auto-fill, minmax(72px, 88px));
-  gap: 0.45rem;
+  /* Always exactly two per row for desktop sidebar view */
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
   align-content: start;
-  justify-content: center;
-  /* Center them if there is space */
+  justify-content: stretch;
   overflow: auto;
 }
 
 .conference-slot--sidebar .conference-tile {
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 5; /* portrait near-square/crop */
   width: 100%;
-  max-width: 88px;
-  /* Hard cap to avoid giant single thumbnails */
+  max-width: none;
 }
 
 .conference-slot--sidebar .conference-tile-meta {
@@ -1284,22 +1282,21 @@ details[open]>summary.conference-sidebar-heading::before {
 
 @media (max-width: 500px) {
   .conference-slot--sidebar {
-    /* On mobile, prioritize fitting more columns and keeping height capped */
-    grid-template-columns: repeat(auto-fill, minmax(60px, 72px));
+    /* On mobile, keep two columns but slightly tighter */
+    grid-template-columns: repeat(2, 1fr);
     gap: 0.35rem;
     padding: 0.2rem 0.35rem;
-    /* If height is very narrow, allow horizontal scrolling instead of vertical stack */
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-
+    display: grid;
+    flex-wrap: none;
+    justify-content: stretch;
   }
 
   .conference-slot--sidebar .conference-tile {
-    /* Scale based on available sidebar height if needed, but 64px is a safe bet */
-    flex: 0 0 64px;
-    height: 64px;
-    max-width: 64px;
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 5;
+    max-width: none;
   }
 
   .conference-slot--sidebar .conference-tile[data-speaking="true"] {

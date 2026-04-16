@@ -419,7 +419,7 @@
   padding: 0.8rem;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  grid-auto-rows: minmax(187px, 1fr);
+  grid-auto-rows: minmax(140px, 1fr);
   gap: 0.8rem;
   align-content: start;
   overflow: auto;
@@ -503,7 +503,7 @@
 }
 
 .conference-slot--grid .conference-tile {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
 }
 
 .conference-tile--participant {
@@ -801,7 +801,7 @@
   .conference-slot--grid {
     padding: 0.4rem;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    grid-auto-rows: minmax(100px, 1fr);
+    grid-auto-rows: minmax(68px, 1fr);
     gap: 0.4rem;
   }
 
