@@ -269,7 +269,7 @@ export const findLessonByCoursePath = (
 export const buildCourseHref = (
   canonicalCourseId: string,
   courseData: Record<string, unknown> = {},
-) => `/cursos/${encodePathSegments(getPreferredCoursePathSegment(canonicalCourseId, courseData))}`;
+) => `/${encodePathSegments(getPreferredCoursePathSegment(canonicalCourseId, courseData))}`;
 
 export const buildCourseLessonHref = (
   canonicalCourseId: string,
@@ -290,5 +290,5 @@ export const buildCourseSlideLessonHref = (
 ) => {
   const resolvedIndex = pathIndex || buildCourseLessonPathIndex(canonicalCourseId, courseData, [lessonEntry]);
   const lessonPath = resolvedIndex.pathByEntryId.get(lessonEntry.id) || getLessonBaseSlug(lessonEntry);
-  return `/cursos/slides/${encodePathSegments(getPreferredCoursePathSegment(canonicalCourseId, courseData))}/${encodePathSegments(lessonPath)}`;
+  return `/slides/${encodePathSegments(getPreferredCoursePathSegment(canonicalCourseId, courseData))}/${encodePathSegments(lessonPath)}`;
 };

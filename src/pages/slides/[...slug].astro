@@ -1,0 +1,157 @@
+---
+export const prerender = false;
+
+import { getCollection, getEntry, render } from 'astro:content';
+import RevealSlidesLayout from '../../layouts/RevealSlidesLayout.astro';
+import { canonicalizeCourseId } from '../../lib/course-alias';
+import { resolveLiveManageAccess } from '../../lib/live/access';
+import {
+  getPublicSlidesStaticPaths,
+  type PublicSlidesRouteProps,
+} from '../../lib/public-content-routes';
+import {
+  buildCourseHref,
+  buildCourseLessonPathIndex,
+  buildCourseSlideLessonHref,
+  encodePathSegments,
+  findLessonByCoursePath,
+  getPreferredCoursePathSegment,
+  isCourseLessonEntryForCourse,
+} from '../../lib/course-routing';
+
+const rawSlug = Astro.params.slug;
+if (!rawSlug) return Astro.redirect('/cursos');
+
+const slug = rawSlug
+  .split('/')
+  .map((segment) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return segment;
+    }
+  })
+  .join('/');
+
+// Handle legacy /cursos/slides/ prefix
+if (slug.startsWith('cursos/slides/')) {
+  return Astro.redirect(`/slides/${slug.replace('cursos/slides/', '')}${Astro.url.search}`);
+}
+
+const parts = slug.split('/');
+const requestedCoursePathSegment = parts[0];
+const isCourseForumPage = parts.length === 2 && parts[1] === 'foro';
+const canonicalCourseId = await canonicalizeCourseId(requestedCoursePathSegment);
+
+let entry = null;
+let canManageLiveInteractions = false;
+
+// 1. Try course logic
+if (canonicalCourseId) {
+    const courseIndex = await getEntry('cursos', `${canonicalCourseId}/_index`);
+    if (courseIndex) {
+        const courseData = (courseIndex.data || {}) as Record<string, unknown>;
+        const preferredCoursePathSegment = getPreferredCoursePathSegment(
+            canonicalCourseId,
+            courseData,
+        );
+        const courseHref = buildCourseHref(canonicalCourseId, courseData);
+
+        const session = (Astro.locals as any).session;
+        const hasAccess = courseIndex.data.public || session;
+        if (!hasAccess) return Astro.redirect(`/login?redirect=${encodeURIComponent(`${Astro.url.pathname}${Astro.url.search}`)}`);
+
+        const liveAccess = await resolveLiveManageAccess(session, canonicalCourseId || requestedCoursePathSegment);
+        const sessionEnrollmentRole = String(liveAccess.enrollmentRole || '').trim();
+        canManageLiveInteractions = liveAccess.canManage;
+        const hasCourseEnrollment = Boolean(sessionEnrollmentRole);
+
+        const allLessons = (await getCollection('cursos'))
+            .filter((e) => isCourseLessonEntryForCourse(e, canonicalCourseId))
+            .sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
+        const lessonPathIndex = buildCourseLessonPathIndex(
+            canonicalCourseId,
+            courseData,
+            allLessons,
+        );
+
+        if (parts.length === 1 || isCourseForumPage) {
+            entry = courseIndex;
+        } else {
+            const lessonPath = parts.slice(1).join('/');
+            const lessonMatch = findLessonByCoursePath(lessonPath, lessonPathIndex);
+            entry = lessonMatch?.entry;
+            if (!entry) {
+                return Astro.redirect(courseHref);
+            }
+
+            const visibility = entry.data.visibility;
+            if (visibility === 'enrolled-only') {
+                if (!session) {
+                    return Astro.redirect(`/login?redirect=${encodeURIComponent(`${Astro.url.pathname}${Astro.url.search}`)}`);
+                }
+
+                if (!canManageLiveInteractions && !hasCourseEnrollment) {
+                    return Astro.redirect(courseHref);
+                }
+            }
+
+            if (
+                requestedCoursePathSegment !== preferredCoursePathSegment ||
+                lessonPath !== (lessonMatch?.shortPath || '')
+            ) {
+                return Astro.redirect(
+                `${buildCourseSlideLessonHref(
+                    canonicalCourseId,
+                    courseData,
+                    entry,
+                    lessonPathIndex,
+                )}${Astro.url.search}`,
+                );
+            }
+        }
+    }
+}
+
+// 2. Try static public content (from getPublicSlidesStaticPaths)
+if (!entry) {
+    const allPaths = await getPublicSlidesStaticPaths();
+    const routeMatch = allPaths.find(p => p.params.slug === slug);
+    if (routeMatch) {
+        const route = routeMatch.props as PublicSlidesRouteProps;
+        // Public slides currently come from 'content' collection in that helper
+        entry = await getEntry('content', route.entryId);
+    }
+}
+
+if (!entry) {
+    return Astro.redirect('/404');
+}
+
+const { Content } = await render(entry);
+
+const title = entry.data.title || 'Slides';
+const description =
+  entry.data.summary ||
+  entry.data.description ||
+  '';
+const defaultSlideTheme = 'zztt';
+const slideThemeFromData =
+  (entry.data as Record<string, unknown>).slideTheme ||
+  (entry.data as Record<string, unknown>).revealTheme ||
+  (entry.data as Record<string, unknown>).theme;
+const slideTheme =
+  typeof slideThemeFromData === 'string' && slideThemeFromData.trim()
+    ? slideThemeFromData.trim()
+    : defaultSlideTheme;
+---
+
+<RevealSlidesLayout
+  title={title}
+  description={description}
+  slideTheme={slideTheme}
+  canManageLive={canManageLiveInteractions}
+  canonicalCourseId={canonicalCourseId}
+>
+  <Content />
+</RevealSlidesLayout>

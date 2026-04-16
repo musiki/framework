@@ -1,5 +1,5 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
-import { buildCourseLessonHref } from './course-routing';
+import { buildCourseLessonHref, getPreferredCoursePathSegment } from './course-routing';
 import {
   getContentFilenameSlug,
   getContentFrontmatterSlug,
@@ -164,7 +164,24 @@ const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
     const isIndex = entry.id.endsWith('/_index') || entry.id.endsWith('_index');
     if (isIndex) {
       const courseId = entry.id.replace(/\/_index$/, '').replace(/_index$/, '');
-      if (courseId) courseIndexById.set(courseId, entry);
+      if (courseId) {
+        courseIndexById.set(courseId, entry);
+        
+        // Add top-level course route if it doesn't conflict
+        const courseSlug = normalizeSlug(getPreferredCoursePathSegment(courseId, entry.data as Record<string, unknown>));
+        if (courseSlug && !contentEntryBySlug.has(courseSlug) && !courseConceptBySlug.has(courseSlug)) {
+           contentPaths.push({
+             params: { slug: courseSlug },
+             props: {
+               kind: 'content',
+               collection: 'cursos',
+               entryId: entry.id,
+               canonicalSlug: courseSlug,
+               presentationHref: '',
+             }
+           });
+        }
+      }
       return false;
     }
     return true;

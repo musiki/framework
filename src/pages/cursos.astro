@@ -1,10 +1,10 @@
 ---
 import { getCollection } from 'astro:content';
-import BaseHead from '../../components/BaseHead.astro';
-import Header from '../../components/Header.astro';
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
 import { createClient } from '@supabase/supabase-js';
-import { buildCourseHref } from '../../lib/course-routing';
-import { isElevatedGlobalRole } from '../../lib/roles';
+import { buildCourseHref } from '../lib/course-routing';
+import { isElevatedGlobalRole } from '../lib/roles';
 
 // Get all courses (files named _index.md in cursos collection)
 const allCourseFiles = await getCollection('cursos');
@@ -369,7 +369,7 @@ if (currentUser?.email) {
 							button.textContent = 'Inscrito';
 							button.style.background = '#4caf50';
 							// Redirect to course — server-side welcome redirect will kick in
-							setTimeout(() => { window.location.href = `/cursos/${courseId}`; }, 800);
+							setTimeout(() => { window.location.href = `/${courseId}`; }, 800);
 						} else {
 							throw new Error(data.error || 'Error al inscribirse');
 						}

@@ -208,6 +208,24 @@
       "img": ""
     },
     {
+      "id": "cursos/s123/01-notas generales/materiales",
+      "name": "Materiales de Seminario",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "materiales",
+      "img": ""
+    },
+    {
+      "id": "cursos/s123/02-forma y estructura/Forma",
+      "name": "Forma",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "forma",
+      "img": ""
+    },
+    {
       "id": "cursos/s123/02-forma y estructura/el objeto estético-espistémico",
       "name": "el objeto estético-espistémico",
       "type": "document",
@@ -218,7 +236,7 @@
     },
     {
       "id": "cursos/s123/03 Metodología de la Investigación en Música/Metodología de la Investigación en Música MOC",
-      "name": "Introducción a la Organología",
+      "name": "Metodología de la Investigación en Música",
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
@@ -239,6 +257,15 @@
       "name": "composiciónmusical",
       "type": "tag",
       "group": "tags"
+    },
+    {
+      "id": "public/conceptos/objeto de sonido-movimiento",
+      "name": "objeto de sonido-movimiento",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "objetodesonidomovimiento",
+      "img": ""
     },
     {
       "id": "public/instrumentos/spectral parrot",

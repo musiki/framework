@@ -2,10 +2,15 @@
 export const prerender = false;
 
 import { getCollection, getEntry, render } from 'astro:content';
-import BaseHead from '../../components/BaseHead.astro';
-import Header from '../../components/Header.astro';
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
+import WikiLayout from '../layouts/WikiLayout.astro';
+import {
+  getPublicContentStaticPaths,
+  type PublicContentRouteProps,
+} from '../lib/public-content-routes';
 import { createClient } from '@supabase/supabase-js';
-import { canonicalizeCourseId, getCourseAliases } from '../../lib/course-alias';
+import { canonicalizeCourseId, getCourseAliases } from '../lib/course-alias';
 import {
   buildDefaultCreatePath,
   getEditableLocalRepoFile,
@@ -13,11 +18,11 @@ import {
   resolveCourseSource,
   sanitizeRepoMarkdownPath,
   sourcePathFromFrameworkFilePath,
-} from '../../lib/content-admin';
-import { createSupabaseServerClient } from '../../lib/forum-server';
-import { getRepoFile, isGitHubAppConfigured } from '../../lib/github-app';
-import { getCourseWelcomeFields } from '../../lib/dashboard/welcome-fields';
-import { resolveLiveManageAccess } from '../../lib/live/access';
+} from '../lib/content-admin';
+import { createSupabaseServerClient } from '../lib/forum-server';
+import { getRepoFile, isGitHubAppConfigured } from '../lib/github-app';
+import { getCourseWelcomeFields } from '../lib/dashboard/welcome-fields';
+import { resolveLiveManageAccess } from '../lib/live/access';
 import {
   buildCourseHref,
   buildCourseLessonHref,
@@ -27,10 +32,10 @@ import {
   getCourseEntryLegacyPath,
   getPreferredCoursePathSegment,
   isCourseLessonEntryForCourse,
-} from '../../lib/course-routing';
-import { getCoursePageHistory } from '../../lib/page-history';
+} from '../lib/course-routing';
+import { getCoursePageHistory } from '../lib/page-history';
 
-import { getRuntimeDynamicContent } from '../../lib/runtime-content';
+import { getRuntimeDynamicContent } from '../lib/runtime-content';
 
 // Forzamos SSR dinámico puro y desactivamos caché para contenido vivo
 Astro.response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -51,17 +56,67 @@ const slug = rawSlug
   })
   .join('/');
 
+// Handle legacy /cursos/ prefix by redirecting to top level
+if (slug.startsWith('cursos/')) {
+  const newPath = slug.replace(/^cursos\//, '/');
+  return Astro.redirect(newPath + Astro.url.search);
+}
+
 // Parse the slug to get course and optional path
 const parts = slug.split('/');
 const requestedCoursePathSegment = parts[0];
 const isCourseForumPage = parts.length === 2 && parts[1] === 'foro';
 const canonicalCourseId = await canonicalizeCourseId(requestedCoursePathSegment);
 
-// Get the course index
-const courseIndex = canonicalCourseId
+let publicEntry = null;
+let PublicContent = null;
+let publicTitle = '';
+let publicDescription = '';
+let publicTags = undefined;
+let publicPresentationHref = '';
+
+// If it's NOT a course, try to see if it's a general public content entry (like a concept or glossary)
+if (!canonicalCourseId && parts.length === 1) {
+  const allPaths = await getPublicContentStaticPaths();
+  const routeMatch = allPaths.find(p => p.params.slug === slug);
+
+  if (routeMatch) {
+    const route = routeMatch.props as PublicContentRouteProps;
+
+    if (route.kind === 'redirect') {
+      return Astro.redirect(route.redirectTo);
+    }
+
+    // @ts-ignore
+    publicEntry = await getEntry(route.collection, route.entryId);
+    if (publicEntry) {
+       const rendered = await render(publicEntry);
+       PublicContent = rendered.Content;
+       publicTitle = publicEntry.data.title || publicEntry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
+       publicDescription = publicEntry.data.summary || publicEntry.data.description || publicEntry.data.subtitle || '';
+       publicTags = Array.isArray(publicEntry.data.tags)
+          ? publicEntry.data.tags
+          : publicEntry.data.tags
+            ? String(publicEntry.data.tags).split(',').map((tag) => tag.trim()).filter(Boolean)
+            : undefined;
+       const rawPresentationTheme =
+          (publicEntry.data as Record<string, unknown>).theme ||
+          (publicEntry.data as Record<string, unknown>).slideTheme ||
+          (publicEntry.data as Record<string, unknown>).revealTheme;
+       const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
+       publicPresentationHref = hasPresentationTheme ? route.presentationHref : '';
+    }
+  }
+}
+
+const isPublicWikiPage = Boolean(publicEntry && PublicContent);
+
+// Get the course index (if it's a course)
+const courseIndex = !isPublicWikiPage && canonicalCourseId
   ? await getEntry('cursos', `${canonicalCourseId}/_index`)
   : null;
-if (!courseIndex) return Astro.redirect('/cursos');
+
+if (!isPublicWikiPage && !courseIndex) return Astro.redirect('/cursos');
 const courseSlug = canonicalCourseId;
 const courseData = (courseIndex.data || {}) as Record<string, unknown>;
 const preferredCoursePathSegment = getPreferredCoursePathSegment(
@@ -249,8 +304,6 @@ if (parts.length === 1) {
 
   if (!currentEntry) return Astro.redirect(courseHref);
 
-  const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
-
   // Check visibility at lesson level
   const visibility = currentEntry.data.visibility;
   if (visibility === 'enrolled-only') {
@@ -265,16 +318,18 @@ if (parts.length === 1) {
     }
   }
 
-  // Info type requires login
-  if (currentEntryType === 'info' && !session) {
-    const lessonLoginRedirectTarget = `${courseHref}/${encodePathSegments(resolvedLessonRoutePath || lessonPath)}${Astro.url.search}`;
-    return Astro.redirect(`/login?redirect=${encodeURIComponent(lessonLoginRedirectTarget)}`);
-  }
-
   // For _welcome, skip the canonical-path redirect (its path can't be slugified).
   if (!isRequestingWelcomePage && (requestedCoursePathSegment !== preferredCoursePathSegment || requestedLessonPath !== resolvedLessonRoutePath)) {
     return Astro.redirect(`${courseHref}/${encodePathSegments(resolvedLessonRoutePath)}${Astro.url.search}`);
   }
+}
+
+const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
+
+// Info type requires login
+if (currentEntryType === 'info' && !session) {
+  const lessonLoginRedirectTarget = `${courseHref}/${encodePathSegments(resolvedLessonRoutePath || requestedLessonPath)}${Astro.url.search}`;
+  return Astro.redirect(`/login?redirect=${encodeURIComponent(lessonLoginRedirectTarget)}`);
 }
 
 if ((parts.length === 1 || isCourseForumPage) && requestedCoursePathSegment !== preferredCoursePathSegment) {
@@ -3565,7 +3620,7 @@ order:
     </main>
     {isEditorActive && (
       <script>
-        import { mountIntegratedCourseNotesEditor } from '../../scripts/course/notes/index.ts';
+        import { mountIntegratedCourseNotesEditor } from '../scripts/course/notes/index.ts';
 
         mountIntegratedCourseNotesEditor();
         document.addEventListener('astro:page-load', () => {
@@ -3957,11 +4012,11 @@ order:
     </script>
 
     <script>
-      import { subscribeToLive } from '../../lib/live/client.mjs';
-      import { formatCountdown, getRemainingMs } from '../../lib/live/countdown.mjs';
-      import { enhanceCourseNotesContent } from '../../scripts/course/notes/index.ts';
-      import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
-      import { setupConceptLinks } from '../../scripts/concept-linker';
+      import { subscribeToLive } from '../lib/live/client.mjs';
+      import { formatCountdown, getRemainingMs } from '../lib/live/countdown.mjs';
+      import { enhanceCourseNotesContent } from '../scripts/course/notes/index.ts';
+      import { enhanceMarkdownTextarea } from '../scripts/markdown-editor-tools.ts';
+      import { setupConceptLinks } from '../scripts/concept-linker';
       import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
       const courseLayoutRoot = document.querySelector('[data-course-layout-root]');
@@ -11737,8 +11792,8 @@ a[node] -->|edge| b[hub]
     </script>
 
     <script>
-      import { subscribeToClassActivity } from '../../lib/class-activity/client.mjs';
-      import { normalizeActivityPageSlug, selectLessonActivityState } from '../../lib/class-activity/model.mjs';
+      import { subscribeToClassActivity } from '../lib/class-activity/client.mjs';
+      import { normalizeActivityPageSlug, selectLessonActivityState } from '../lib/class-activity/model.mjs';
 
       const setupLessonLiveBeacons = () => {
         const globalWindow = window;

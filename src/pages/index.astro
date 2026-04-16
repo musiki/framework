@@ -248,7 +248,8 @@ import Header from '../components/Header.astro';
           results.innerHTML = matched.map((item) => {
             const titleHl = highlight(item.title, query);
             const snippet = getSnippet(item.content, query);
-            return `<a class="home-search-result-item" href="${item.slug}" role="option">
+            const slug = item.slug.replace(/^\/cursos\//, '/');
+            return `<a class="home-search-result-item" href="${slug}" role="option">
               <p class="home-search-result-title">${titleHl}</p>
               ${snippet ? `<p class="home-search-result-meta">${snippet}</p>` : ''}
             </a>`;

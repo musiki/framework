@@ -1,8 +1,8 @@
 ---
 export const prerender = false;
 
-import BaseHead from '../../components/BaseHead.astro';
-import Header from '../../components/Header.astro';
+import BaseHead from '../components/BaseHead.astro';
+import Header from '../components/Header.astro';
 import {
   buildDefaultCreatePath,
   getEditableLocalRepoFile,
@@ -10,10 +10,10 @@ import {
   resolveCourseSource,
   sanitizeRepoDirectoryPath,
   sanitizeRepoMarkdownPath,
-} from '../../lib/content-admin';
-import { canonicalizeCourseId } from '../../lib/course-alias';
-import { getRepoFile, isGitHubAppConfigured } from '../../lib/github-app';
-import { resolveLiveManageAccess } from '../../lib/live/access';
+} from '../lib/content-admin';
+import { canonicalizeCourseId } from '../lib/course-alias';
+import { getRepoFile, isGitHubAppConfigured } from '../lib/github-app';
+import { resolveLiveManageAccess } from '../lib/live/access';
 
 const session = (Astro.locals as any).session;
 if (!session?.user?.email) {
@@ -28,7 +28,7 @@ if (!canonicalCourseId) {
 
 const access = await resolveLiveManageAccess(session, canonicalCourseId);
 if (!access.canManage) {
-  return Astro.redirect(`/cursos/${encodeURIComponent(canonicalCourseId)}`);
+  return Astro.redirect(`/${encodeURIComponent(canonicalCourseId)}`);
 }
 
 const source = resolveCourseSource(canonicalCourseId);
@@ -39,7 +39,7 @@ const mode = String(Astro.url.searchParams.get('mode') || 'edit').trim().toLower
   : 'edit';
 const requestedPath = sanitizeRepoMarkdownPath(Astro.url.searchParams.get('path') || '');
 const requestedDir = sanitizeRepoDirectoryPath(Astro.url.searchParams.get('dir') || '');
-const returnTo = String(Astro.url.searchParams.get('returnTo') || `/cursos/${canonicalCourseId}`).trim();
+const returnTo = String(Astro.url.searchParams.get('returnTo') || `/${canonicalCourseId}`).trim();
 
 let targetPath = requestedPath || buildDefaultCreatePath(canonicalCourseId, requestedDir);
 let initialContent = `---
@@ -508,7 +508,7 @@ if (!source?.repo) {
     </main>
 
     <script>
-      import { enhanceMarkdownTextarea } from '../../scripts/markdown-editor-tools.ts';
+      import { enhanceMarkdownTextarea } from '../scripts/markdown-editor-tools.ts';
 
       const mountContentEditor = () => {
         const form = document.getElementById('content-editor-form');

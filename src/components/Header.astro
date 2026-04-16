@@ -187,7 +187,7 @@ const resolvedActiveCourseId = normalizeCourseId(
 const resolvedActiveCourseLabel = resolvedActiveCourse?.title || '';
 const courseMenuLabel = resolvedActiveCourseLabel || 'Cursos';
 const activeCourseHref = resolvedActiveCourse
-	? `/cursos/${encodeCoursePath(resolvedActiveCourse.pathSegment || resolvedActiveCourse.courseId)}?course=${encodeURIComponent(resolvedActiveCourse.courseId)}`
+	? `/${encodeCoursePath(resolvedActiveCourse.pathSegment || resolvedActiveCourse.courseId)}`
 	: '/cursos';
 const showHeaderClassControls = Boolean(user && (resolvedActiveCourseId || hasPerformativeRoomLink));
 const normalizedTeacherCreateHref = typeof teacherCreateHref === 'string' ? teacherCreateHref.trim() : '';
@@ -262,7 +262,7 @@ const withActiveCourse = (href: string) => {
 							<div class="course-dropdown" id="course-dropdown" role="menu">
 								{enrolledCourses.map((course) => {
 									const isCurrent = normalizeCourseIdKey(course.courseId) === normalizeCourseIdKey(resolvedActiveCourseId);
-									const courseHref = `/cursos/${encodeCoursePath(course.pathSegment || course.courseId)}?course=${encodeURIComponent(course.courseId)}`;
+									const courseHref = `/${encodeCoursePath(course.pathSegment || course.courseId)}`;
 									return (
 										<a href={courseHref} role="menuitem" class:list={['course-dropdown-link', { active: isCurrent }]}>
 											<span class="course-dropdown-title">{course.title}</span>
