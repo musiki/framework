@@ -28,7 +28,7 @@
     "github:tokens:audit": "node scripts/github-token-audit.mjs"
   },
   "dependencies": {
-    "@astrojs/db": "^0.18.3",
+    "@astrojs/db": "^0.20.1",
     "@astrojs/node": "^10.0.4",
     "@astrojs/rss": "^4.0.12",
     "@astrojs/sitemap": "^3.6.0",
@@ -82,5 +82,8 @@
   "engines": {
     "node": "24.x"
   },
-  "packageManager": "npm@10.9.3"
+  "packageManager": "npm@10.9.3",
+  "overrides": {
+    "drizzle-orm": "^0.45.2"
+  }
 }
