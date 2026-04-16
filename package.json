@@ -43,7 +43,7 @@
     "auth-astro": "^4.2.0",
     "better-auth": "^1.4.3",
     "codemirror": "^6.0.2",
-    "drizzle-orm": "^0.44.7",
+    "drizzle-orm": "^0.45.2",
     "force-graph": "^1.51.0",
     "fuse.js": "^7.1.0",
     "glob": "^11.0.3",
