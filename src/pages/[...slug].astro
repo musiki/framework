@@ -36,7 +36,7 @@ import {
 import { getCoursePageHistory } from '../lib/page-history';
 
 import { getRuntimeDynamicContent } from '../lib/runtime-content';
-import { normalizeContentSlug } from '../lib/content-slug';
+import { normalizeContentSlug, getContentCanonicalSlug } from '../lib/content-slug';
 
 // Forzamos SSR dinámico puro y desactivamos caché para contenido vivo
 Astro.response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -67,7 +67,14 @@ if (slug.startsWith('cursos/')) {
 const parts = slug.split('/');
 const requestedCoursePathSegment = parts[0];
 const isCourseForumPage = parts.length === 2 && parts[1] === 'foro';
-const canonicalCourseId = await canonicalizeCourseId(requestedCoursePathSegment);
+const potentialCanonicalCourseId = await canonicalizeCourseId(requestedCoursePathSegment);
+
+// Check if this is actually a course
+const courseIndexCandidate = potentialCanonicalCourseId
+  ? await getEntry('cursos', `${potentialCanonicalCourseId}/_index`)
+  : null;
+
+const canonicalCourseId = courseIndexCandidate ? potentialCanonicalCourseId : null;
 
 let publicEntry = null;
 let PublicContent = null;
@@ -113,10 +120,8 @@ if (!canonicalCourseId && parts.length === 1) {
 
 const isPublicWikiPage = Boolean(publicEntry && PublicContent);
 
-// Get the course index (if it's a course)
-const courseIndex = !isPublicWikiPage && canonicalCourseId
-  ? await getEntry('cursos', `${canonicalCourseId}/_index`)
-  : null;
+// Get the final course index
+const courseIndex = !isPublicWikiPage ? courseIndexCandidate : null;
 
 if (!isPublicWikiPage && !courseIndex) return Astro.redirect('/cursos');
 const courseSlug = canonicalCourseId;
@@ -132,6 +137,15 @@ const courseHref = buildCourseHref(canonicalCourseId, courseData);
 const allLessons = canonicalCourseId ? (await getCollection('cursos'))
   .filter((entry) => isCourseLessonEntryForCourse(entry, canonicalCourseId))
   .sort((a, b) => (a.data.order || 0) - (b.data.order || 0)) : [];
+
+// Fetch global concepts from the 'content' collection
+const globalConcepts = (await getCollection('content')).filter((entry) => {
+  const type = String(entry.data.type || '').trim().toLowerCase();
+  const status = String(entry.data.status || '').trim().toLowerCase();
+  // Include if it's a concept/glossary and it's public (or user is teacher)
+  return (type === 'concept' || type === 'glossary') && (status === 'public' || (Astro.locals as any).session);
+});
+
 const lessonPathIndex = canonicalCourseId ? buildCourseLessonPathIndex(
   canonicalCourseId,
   courseData,
@@ -222,20 +236,23 @@ if (isStudentEnrolled && !isRequestingWelcomePage) {
 const teacherOnlyStatuses = new Set(['draft', 'private']);
 const conceptGlossaryTypes = new Set(['concept', 'glossary', 'notes', 'public-note']);
 
-const conceptsAndGlossary = allLessons.filter((l) => {
-  const type = String(l.data.type || '').trim().toLowerCase();
-  if (!conceptGlossaryTypes.has(type)) return false;
-  
-  if (canManageLiveInteractions) return true;
-  
-  const status = String(l.data.status || '').trim().toLowerCase();
-  if (teacherOnlyStatuses.has(status)) return false;
-  
-  // They must be public or session must exist (as per user requirements for info but also implied here)
-  if (!session && status !== 'public') return false;
-  
-  return true;
-});
+const conceptsAndGlossary = [
+  ...allLessons.filter((l) => {
+    const type = String(l.data.type || '').trim().toLowerCase();
+    if (!conceptGlossaryTypes.has(type)) return false;
+    
+    if (canManageLiveInteractions) return true;
+    
+    const status = String(l.data.status || '').trim().toLowerCase();
+    if (teacherOnlyStatuses.has(status)) return false;
+    
+    // They must be public or session must exist
+    if (!session && status !== 'public') return false;
+    
+    return true;
+  }),
+  ...globalConcepts
+];
 
 const sidebarLessons = canManageLiveInteractions
   ? allLessons.filter(l => !conceptGlossaryTypes.has(String(l.data.type || '').trim().toLowerCase()))
@@ -3055,31 +3072,39 @@ order:
             <div class="chapter-title">{chapterName.replace(/-/g, ' ')}</div>
             <ul class="lesson-list">
               {lessons.map((lesson) => {
-                const lessonHref = buildCourseLessonHref(
-                  canonicalCourseId,
-                  courseData,
-                  lesson,
-                  lessonPathIndex,
-                );
-                const lessonPageSlug =
-                  lessonPathIndex.pathByEntryId.get(lesson.id)
-                  || getCourseEntryLegacyPath(lesson, canonicalCourseId);
-                const isActive = currentEntry.id === lesson.id;
+                const isContentCollection = (lesson as any).collection === 'content';
+                const lessonHref = isContentCollection
+                  ? `/${getContentCanonicalSlug(lesson as any)}`
+                  : buildCourseLessonHref(
+                      canonicalCourseId,
+                      courseData,
+                      lesson as any,
+                      lessonPathIndex,
+                    );
+                const lessonPageSlug = isContentCollection
+                  ? getContentCanonicalSlug(lesson as any)
+                  : (lessonPathIndex.pathByEntryId.get(lesson.id)
+                     || getCourseEntryLegacyPath(lesson as any, canonicalCourseId));
+                const isActive = currentEntry?.id === lesson.id;
                 const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
+                const lessonType = String(lesson.data.type || '').trim().toLowerCase();
                 return (
                   <li class="lesson-item">
                     <a
                       href={lessonHref}
                       class:list={['lesson-link', { active: isActive }]}
                       data-course-id={canonicalCourseId || courseSlug}
-                      data-lesson-page-slug={`${canonicalCourseId}/${lessonPageSlug}`}
+                      data-lesson-page-slug={isContentCollection ? lessonPageSlug : `${canonicalCourseId}/${lessonPageSlug}`}
                     >
                       <span class="lesson-link-text">{lesson.data.title}</span>
                       <span class="lesson-link-trailing">
-                        {String(lesson.data.type || '').trim().toLowerCase() === 'info' && (
+                        {lessonType === 'info' && (
                           <span class="lesson-type">ℹ️</span>
                         )}
-                        {assignmentLikeTypes.has(String(lesson.data.type || '').trim().toLowerCase()) && (
+                        {(lessonType === 'concept' || lessonType === 'glossary') && (
+                          <span class="lesson-type" title={lessonType}>{lessonType === 'concept' ? '💡' : '📖'}</span>
+                        )}
+                        {assignmentLikeTypes.has(lessonType) && (
                           <span class="lesson-type">📝</span>
                         )}
                         {canManageLiveInteractions && lessonStatus === 'draft' && (
