@@ -419,27 +419,28 @@ const resolvedSlideTheme =
 
       .reveal .slides > section .slide-media-figure > :is(img, video, iframe) {
         display: block;
-        width: min(100%, 96vw) !important;
+        width: 100% !important;
+        height: 100% !important;
         max-width: 100% !important;
-        max-height: min(72vh, calc(100vh - 10rem)) !important;
-        height: auto !important;
+        max-height: 100% !important;
         margin: 0 auto;
         object-fit: contain;
       }
 
       .reveal .slides > section .slide-media-figure > iframe {
-        height: min(72vh, calc(100vh - 10rem)) !important;
+        width: 100% !important;
+        height: 100% !important;
         aspect-ratio: 16 / 9;
       }
 
       /* Force large responsive embeds even when source injects inline width/height */
       .reveal .slides > section iframe {
         display: block !important;
-        width: min(100%, 96vw) !important;
-        max-width: min(96vw, 1280px) !important;
+        width: 100% !important;
+        max-width: 100% !important;
         min-height: 320px !important;
-        height: clamp(320px, 65vh, 820px) !important;
-        max-height: min(72vh, calc(100vh - 10rem)) !important;
+        height: 100% !important;
+        max-height: 100% !important;
         margin-left: auto !important;
         margin-right: auto !important;
         aspect-ratio: auto !important;
@@ -447,11 +448,18 @@ const resolvedSlideTheme =
 
       /* Keep embed fit constrained when iframe is used inside custom grid blocks */
       .slide-grid-block iframe {
-        width: auto !important;
-        height: auto !important;
+        width: 100% !important;
+        height: 100% !important;
         max-width: 100% !important;
         max-height: 100% !important;
         aspect-ratio: auto !important;
+      }
+
+      /* Center MathJax equations */
+      .reveal .slides .katex-display {
+        text-align: center;
+        margin: 1em 0;
+        width: 100%;
       }
 
       .reveal .slides > section .slide-media-figure > figcaption {
