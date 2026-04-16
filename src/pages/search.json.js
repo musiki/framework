@@ -74,6 +74,10 @@ export async function GET() {
       || (itemType === 'lesson-presentation' && 'Presentation')
       || (itemType === 'app-dataviewjs' && 'Interactive App')
       || (itemType === 'course' && 'Course')
+      || (itemType === 'concept' && 'Concept')
+      || (itemType === 'glossary' && 'Glossary')
+      || (itemType === 'notes' && 'Note')
+      || (itemType === 'public-note' && 'Note')
       || (isCourseIndex ? 'Course' : 'Lesson');
 
     return {

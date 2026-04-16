@@ -36,6 +36,7 @@ import {
 import { getCoursePageHistory } from '../lib/page-history';
 
 import { getRuntimeDynamicContent } from '../lib/runtime-content';
+import { normalizeContentSlug } from '../lib/content-slug';
 
 // Forzamos SSR dinámico puro y desactivamos caché para contenido vivo
 Astro.response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -78,7 +79,8 @@ let publicPresentationHref = '';
 // If it's NOT a course, try to see if it's a general public content entry (like a concept or glossary)
 if (!canonicalCourseId && parts.length === 1) {
   const allPaths = await getPublicContentStaticPaths();
-  const routeMatch = allPaths.find(p => p.params.slug === slug);
+  const normalizedRequestedSlug = normalizeContentSlug(slug);
+  const routeMatch = allPaths.find(p => p.params.slug === normalizedRequestedSlug);
 
   if (routeMatch) {
     const route = routeMatch.props as PublicContentRouteProps;
@@ -218,7 +220,7 @@ if (isStudentEnrolled && !isRequestingWelcomePage) {
 
 // Statuses hidden from students but visible to teachers with indicator
 const teacherOnlyStatuses = new Set(['draft', 'private']);
-const conceptGlossaryTypes = new Set(['concept', 'glossary']);
+const conceptGlossaryTypes = new Set(['concept', 'glossary', 'notes', 'public-note']);
 
 const conceptsAndGlossary = allLessons.filter((l) => {
   const type = String(l.data.type || '').trim().toLowerCase();
@@ -255,11 +257,18 @@ const chapters = sidebarLessons.reduce((acc, lesson) => {
   return acc;
 }, {} as Record<string, typeof allLessons>);
 
-const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapter]) =>
-  leftChapter
+// Add concepts as a special chapter if they exist
+if (conceptsAndGlossary.length > 0) {
+  chapters['90 CONCEPTOS'] = conceptsAndGlossary;
+}
+
+const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapter]) => {
+  if (leftChapter === '90 CONCEPTOS') return 1;
+  if (rightChapter === '90 CONCEPTOS') return -1;
+  return leftChapter
     .replace(/-/g, ' ')
-    .localeCompare(rightChapter.replace(/-/g, ' '), 'es', { sensitivity: 'base' }),
-);
+    .localeCompare(rightChapter.replace(/-/g, ' '), 'es', { sensitivity: 'base' });
+});
 
 // Group concepts and glossary by project and parent
 const groupedConcepts: Record<string, Record<string, typeof allLessons>> = {};
@@ -3100,64 +3109,6 @@ order:
             </ul>
           </div>
         ))}
-
-        {sortedProjects.length > 0 && (
-          <div class="chapter concepts-glossary-chapter">
-            <details class="concepts-glossary-details">
-              <summary class="chapter-title" style="cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
-                <span>📚 Conceptos y Glosario</span>
-                <span class="fold-indicator"></span>
-              </summary>
-              <div class="concepts-glossary-body" style="padding-top: 0.5rem;">
-                {sortedProjects.map(([projectName, parents]) => (
-                  <div class="concept-project">
-                    {projectName !== 'General' && (
-                      <div class="concept-project-title" style="font-size: 0.75rem; text-transform: uppercase; opacity: 0.6; margin: 0.6rem 0 0.3rem 0.5rem; letter-spacing: 0.05em;">
-                        {projectName}
-                      </div>
-                    )}
-                    {Object.entries(parents).sort(([a], [b]) => a.localeCompare(b)).map(([parentName, items]) => (
-                      <div class="concept-parent">
-                        {parentName !== 'Raíz' && (
-                          <div class="concept-parent-title" style="font-size: 0.8rem; font-weight: 500; margin: 0.4rem 0 0.2rem 0.75rem; opacity: 0.8;">
-                            {parentName}
-                          </div>
-                        )}
-                        <ul class="lesson-list">
-                          {items.sort((a,b) => (a.data.order || 0) - (b.data.order || 0)).map((item) => {
-                             const lessonHref = buildCourseLessonHref(
-                                canonicalCourseId,
-                                courseData,
-                                item,
-                                lessonPathIndex,
-                              );
-                              const isActive = currentEntry.id === item.id;
-                              return (
-                                <li class="lesson-item">
-                                  <a
-                                    href={lessonHref}
-                                    class:list={['lesson-link', { active: isActive }]}
-                                    style="padding-left: 1.25rem;"
-                                  >
-                                    <span class="lesson-link-text">{item.data.title}</span>
-                                    <span class="lesson-link-trailing">
-                                      <span class="lesson-type" title={item.data.type}>
-                                        {item.data.type === 'concept' ? '💡' : '📖'}
-                                      </span>
-                                    </span>
-                                  </a>
-                                </li>
-                              );
-                          })}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </details>
-          </div>
-        )}
 
         {isLessonPage && (
           <>

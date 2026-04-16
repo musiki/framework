@@ -1,182 +1,78 @@
-# Deployment Guide - Vercel & Supabase
+# Deployment Guide - Musiki Framework (VPS)
 
-This project uses **Supabase** for the database and **Vercel** for hosting.
+This project is deployed on a **VPS** (`musiki.org.ar`) using **PM2** for process management and **Caddy** as a reverse proxy.
 
-## 1. Supabase Setup
+## 1. Infrastructure Overview
 
-1.  Create a new project at database.new.
-2.  Go to the **SQL Editor** in Supabase and run the schema creation script (see `db/schema.sql` or project docs).
-3.  Go to **Project Settings > API**.
-4.  Copy the **Project URL** and the **service_role** key (Secret).
+- **Host**: `musiki.org.ar`
+- **Application Server**: Node.js (Astro SSR) managed by PM2.
+- **Database**: Supabase (Remote).
+- **Reverse Proxy**: Caddy.
+- **Deployment User**: `deploy`
 
-> ⚠️ **Important:** We use the `service_role` key because the Astro dashboard performs admin actions server-side. Do not expose this key in client-side code.
+## 2. Process Management (PM2)
 
-## 2. Vercel Configuration
+The application is managed via `ecosystem.config.cjs`. There are three main processes:
 
-1.  Go to your project in Vercel.
-2.  Navigate to **Settings → Environment Variables**.
-3.  Add the following variables:
+1.  **musiki-framework**: The production Astro server (Port 4321).
+2.  **musiki-framework-dev**: A development instance (Port 4325).
+3.  **musiki-content-bus**: Manages content synchronization (Port 4322).
 
-    ```env
-    # Authentication (Google OAuth)
-    GOOGLE_CLIENT_ID=your-google-client-id
-    GOOGLE_CLIENT_SECRET=your-google-client-secret
-    AUTH_SECRET=your-32-char-random-secret
-
-    # Database (Supabase)
-    SUPABASE_URL=https://your-project.supabase.co
-    SUPABASE_KEY=your-service-role-key
-    ```
-
-## 3. Deployment
-
-Simply push to your main branch on GitHub/GitLab, and Vercel will automatically redeploy.
-
+### Common PM2 Commands (on Server)
 ```bash
-git add .
-git commit -m "Update database logic to Supabase"
-git push origin main
+pm2 list
+pm2 reload ecosystem.config.cjs --only musiki-framework
+pm2 logs musiki-framework
 ```
 
-## 4. Post-Deployment Setup
+## 3. Deployment Workflow
 
-1.  Log in to your deployed site.
-2.  Navigate to `/admin/setup`.
-3.  Click **"Promote to Teacher"** to grant yourself admin privileges.
-4.  Go to `/dashboard` to view the admin panel.
+Deployment is automated via a local script that pushes changes and triggers a pull/build on the server.
 
-## Troubleshooting
-
-## Variables de Entorno Necesarias
-
-Tu archivo `.env` debe tener:
-
-```env
-# Google OAuth (ya lo tienes)
-GOOGLE_CLIENT_ID="..."
-GOOGLE_CLIENT_SECRET="..."
-AUTH_SECRET="..."
-
-# Supabase
-SUPABASE_URL="..."
-SUPABASE_KEY="..."
+### Automated Deploy (Recommended)
+Run this from your local machine:
+```bash
+bash scripts/vps/deploy-framework.sh
 ```
+This script performs the following steps:
+1. SSH into the VPS.
+2. `git pull` the latest `main` branch.
+3. `npm ci` (install dependencies).
+4. `npm run build` (build production assets).
+5. `pm2 reload` the framework process.
 
-## Comandos Útiles
+### Manual Deploy (Emergency)
+If the script fails, you can manually deploy:
+1. `git push origin main`
+2. `ssh deploy@musiki.org.ar`
+3. `cd /opt/musiki/framework`
+4. `git pull`
+5. `npm run build`
+6. `pm2 reload musiki-framework`
+
+## 4. Environment Variables
+
+Variables are managed in a `.env` file on the VPS. Key variables include:
+
+- `SUPABASE_URL` & `SUPABASE_KEY`
+- `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`
+- `AUTH_SECRET`
+- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+- `CORRECTION_API_URL` (Ollama VPS)
+
+## 5. Maintenance Commands
 
 ```bash
-# Build local (development)
-npm run build:local
-
-# Build para Vercel (con remote DB)
+# Force a clean build of content and site
+npm run build:content
 npm run build
 
-# Push schema changes a producción
+# Push local database schema changes to Supabase
 astro db push --remote
-
-# Ver contenido de DB remota
-turso db shell cymp-production
 ```
 
-## Checklist Pre-Deployment
+## 6. Pre-deployment Checklist
 
-- [ ] Base de datos creada en Turso
-- [ ] Token generado
-- [ ] Variables de entorno configuradas en Vercel
-- [ ] Script de build actualizado en package.json
-- [ ] Schema pushed a Turso
-- [ ] Seed ejecutado en DB remota (si es necesario)
-
-## Costos
-
-- ✅ **Turso FREE tier**: 
-  - 9GB almacenamiento
-  - 1 billón de row reads
-  - Perfecto para empezar
-
-## Más Info
-
-- [Astro DB Docs](https://docs.astro.build/en/guides/astro-db/)
-- [Turso Docs](https://docs.turso.tech/)
-- [Vercel Environment Variables](https://vercel.com/docs/projects/environment-variables)
-
-
-
-# Deploy Checklist (mínimo)
-
-Este checklist está pensado para tu setup actual: Astro en Vercel + Supabase + API de corrección en VPS.
-
-## 1) Ejecutar preflight local
-
-```bash
-bash scripts/preflight.sh
-```
-
-Nota: este preflight está orientado a deploy y falla si `BETTER_AUTH_URL` apunta a `localhost`.
-
-Opciones útiles:
-
-```bash
-# Saltar build (rápido)
-bash scripts/preflight.sh --skip-build
-
-# Saltar test de API remota
-bash scripts/preflight.sh --skip-api
-
-# Usar un env de producción
-bash scripts/preflight.sh --env-file .env.production
-```
-
-## 2) Variables en Vercel (Production)
-
-Asegúrate de tener:
-
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `AUTH_SECRET`
-- `BETTER_AUTH_URL=https://musikiuntref.vercel.app`
-- `SUPABASE_URL`
-- `SUPABASE_KEY` (server-side, no cliente)
-- `CORRECTION_API_URL=https://ollama-api.zztt.org`
-- `CORRECTION_API_TOKEN`
-- `CORRECTION_API_TIMEOUT_MS=120000`
-
-## 3) OAuth Google
-
-En Google Cloud Console, verifica que el OAuth Client tenga:
-
-- `https://musikiuntref.vercel.app/api/auth/callback/google`
-- `http://localhost:4322/api/auth/callback/google` (dev local)
-
-## 4) VPS (API Ollama) listo
-
-Checks recomendados en VPS:
-
-```bash
-systemctl status ollama-correction-api --no-pager
-systemctl status ollama --no-pager
-curl -sS https://ollama-api.zztt.org/health
-```
-
-## 5) Deploy
-
-Push a `main`:
-
-```bash
-git add .
-git commit -m "deploy: preflight passed"
-git push origin main
-```
-
-## 6) Post-deploy smoke test
-
-- Login OK
-- `/dashboard` carga
-- `/admin/setup` carga
-- `/demo/ollama` devuelve corrección
-- `POST /api/ai/correct` responde 200 en app productiva
-
-## 7) Seguridad
-
-- Rotar secretos si se expusieron en terminal/chat.
-- No commitear `.env` ni `.vercel/output`.
+- [ ] Ensure all local changes are committed.
+- [ ] Run `bash scripts/preflight.sh` to verify build integrity.
+- [ ] Verify that `main` branch is pushed to origin.

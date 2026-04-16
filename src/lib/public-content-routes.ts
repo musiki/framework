@@ -132,19 +132,20 @@ const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
     });
   }
 
-  // Handle concept and glossary from cursos
-  const conceptGlossaryEntries = courseEntries.filter(entry => {
+  // Handle concept, glossary and public notes from cursos
+  const publicCourseEntries = courseEntries.filter(entry => {
     const type = String(entry.data.type || '').trim().toLowerCase();
     const status = String(entry.data.status || '').trim().toLowerCase();
-    return (type === 'concept' || type === 'glossary') && status === 'public';
+    const isPublicType = type === 'concept' || type === 'glossary' || type === 'notes' || type === 'public-note';
+    return isPublicType && status === 'public';
   });
 
-  const courseConceptBySlug = new Map<string, CourseEntry>();
-  registerUniqueMatches(courseConceptBySlug, groupBySlug(conceptGlossaryEntries, getContentFrontmatterSlug));
-  registerUniqueMatches(courseConceptBySlug, groupBySlug(conceptGlossaryEntries, getContentFilenameSlug));
-  registerUniqueMatches(courseConceptBySlug, groupBySlug(conceptGlossaryEntries, getContentTitleSlug));
+  const publicCourseEntryBySlug = new Map<string, CourseEntry>();
+  registerUniqueMatches(publicCourseEntryBySlug, groupBySlug(publicCourseEntries, getContentFrontmatterSlug));
+  registerUniqueMatches(publicCourseEntryBySlug, groupBySlug(publicCourseEntries, getContentFilenameSlug));
+  registerUniqueMatches(publicCourseEntryBySlug, groupBySlug(publicCourseEntries, getContentTitleSlug));
 
-  for (const [slug, entry] of courseConceptBySlug.entries()) {
+  for (const [slug, entry] of publicCourseEntryBySlug.entries()) {
     if (contentEntryBySlug.has(slug)) continue;
 
     contentPaths.push({
