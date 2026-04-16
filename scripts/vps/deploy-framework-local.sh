@@ -9,7 +9,7 @@ CONTENT_PULL_COMMAND="${VPS_CONTENT_PULL_COMMAND-npm run content:pull -- --clean
 CONTENT_ASSEMBLE_COMMAND="${VPS_CONTENT_ASSEMBLE_COMMAND-npm run content:assemble}"
 EVAL_SYNC_COMMAND="${VPS_EVAL_SYNC_COMMAND-npm run eval:sync:db}"
 ASTRO_BUILD_COMMAND="${VPS_ASTRO_BUILD_COMMAND-npx astro build --remote --outDir dist_tmp}"
-RELOAD_COMMAND="${VPS_RELOAD_COMMAND-pm2 reload ecosystem.config.cjs --only musiki-framework --update-env || pm2 start ecosystem.config.cjs --only musiki-framework}"
+RELOAD_COMMAND="${VPS_RELOAD_COMMAND-pm2 reload ecosystem.config.cjs --only musiki-framework,musiki-content-bus --update-env || pm2 start ecosystem.config.cjs --only musiki-framework,musiki-content-bus}"
 SAVE_PM2_STATE="${VPS_SAVE_PM2_STATE-1}"
 
 printf '\n[framework] Deploying in %s\n' "$FRAMEWORK_DIR"

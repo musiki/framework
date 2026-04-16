@@ -175,7 +175,26 @@ const main = () => {
     }
 
     ensureDir(path.dirname(destinationAbs));
-    fs.copyFileSync(sourceAbs, destinationAbs);
+    
+    // Auto-fix markdown files if they are missing a title
+    if (isMarkdown(sourceAbs)) {
+      try {
+        const raw = fs.readFileSync(sourceAbs, 'utf8');
+        const { data, content } = matter(raw);
+        if (!data.title) {
+          const fallbackTitle = path.basename(sourceAbs, path.extname(sourceAbs));
+          data.title = fallbackTitle;
+          fs.writeFileSync(destinationAbs, matter.stringify(content, data));
+        } else {
+          fs.copyFileSync(sourceAbs, destinationAbs);
+        }
+      } catch (e) {
+        fs.copyFileSync(sourceAbs, destinationAbs);
+      }
+    } else {
+      fs.copyFileSync(sourceAbs, destinationAbs);
+    }
+
     destinationMap.set(relativeDestination, { sourceAbs, meta });
     copiedFiles.push({
       destination: relativeDestination,
