@@ -170,7 +170,7 @@ const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
         
         // Add top-level course route if it doesn't conflict
         const courseSlug = normalizeSlug(getPreferredCoursePathSegment(courseId, entry.data as Record<string, unknown>));
-        if (courseSlug && !contentEntryBySlug.has(courseSlug) && !courseConceptBySlug.has(courseSlug)) {
+        if (courseSlug && !contentEntryBySlug.has(courseSlug) && !publicCourseEntryBySlug.has(courseSlug)) {
            contentPaths.push({
              params: { slug: courseSlug },
              props: {
