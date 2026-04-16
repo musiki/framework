@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import readline from 'node:readline';
 
 const PORT = process.env.CONTENT_BUS_PORT || 4322;
@@ -35,6 +35,7 @@ let status = {
   state: 'idle', // idle, running, ok, error, unknown
   title: 'Content Bus Idle',
   phase: 'idle',
+  frameworkCommit: getFrameworkCommit(),
   runNumber: null,
   createdAt: null,
   updatedAt: null,
@@ -63,6 +64,14 @@ const formatRepoLabel = (repo) => {
   if (!text) return 'content';
   const [, name] = text.split('/');
   return name || text;
+};
+
+const getFrameworkCommit = () => {
+  try {
+    return spawnSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+  } catch (e) {
+    return 'unknown';
+  }
 };
 
 const readDeployPhase = (line) => {

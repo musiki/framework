@@ -3,8 +3,9 @@ import type { APIRoute } from 'astro';
 export const POST: APIRoute = async ({ request }) => {
   console.log(`[Astro Bridge] Webhook request received: ${request.method} ${request.url}`);
   try {
-    const authHeader = request.headers.get('authorization');
-    console.log(`[Astro Bridge] Auth header present: ${!!authHeader}`);
+    const authHeader = request.headers.get('authorization') || '';
+    const maskedAuth = authHeader.length > 15 ? `${authHeader.slice(0, 15)}...` : 'too-short';
+    console.log(`[Astro Bridge] Auth header: ${maskedAuth}`);
     
     // Read the original payload to forward it
     const bodyText = await request.text();
