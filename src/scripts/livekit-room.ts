@@ -20,6 +20,7 @@ import { createClaseController } from './room/clase/controller';
 import { createRoomDeviceSelectController, createRoomMicMeterController } from './room/devices';
 import { createRoomNotesController } from './room/notes';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
+import { selectRoomElements } from './room/core/elements';
 import { buildRoomQueryUrl } from './room/layout';
 import {
   chooseFocusParticipantIdentity as chooseRoomFocusParticipantIdentity,
@@ -66,333 +67,92 @@ import {
   type SlideState,
 } from './room/session';
 
+import type {
+  LiveSnapshot,
+  LocalPreviewStreamMount,
+  ExternalMediaSessionState,
+  ExternalMediaSearchResult,
+  BackgroundImageSearchResult,
+  PresentationEmbeddedMediaState,
+  YouTubePlayerStateChangeEvent,
+  YouTubePlayer,
+  YouTubePlayerCtor,
+  YouTubeWindow,
+  WebkitDocument,
+  WebkitFullscreenElement,
+  PersistedRoomSetup,
+  StreamingProfileKey,
+  BandwidthProfile,
+  VideoTrackProcessorLike,
+  LocalCameraTrackLike,
+  VisionTasksModule,
+  ThreeModule,
+  VisionMask,
+  VisionHandLandmarker,
+  HandLandmarkPoint,
+  HandOverlayProjection,
+  GravityBallHandPoint,
+  GravityBallGrabAnchor,
+  GravityBallHandState,
+  HandSynthTelemetry,
+  HandControlKey,
+  HandControlRange,
+  HandControlValues,
+  VideoMixKey,
+  VideoMixSettings,
+  BackgroundEffectMode,
+  BackgroundRgbaColor,
+  RecordingPresetKey,
+  RecordingPresetConfig,
+} from './room/core';
+
+import {
+  BANDWIDTH_PROFILES,
+  GRAVITY_BALL_LUNAR_MS2,
+  GRAVITY_BALL_EARTH_MS2,
+  GRAVITY_BALL_HEAVY_MS2,
+  GRAVITY_BALL_SIM_EARTH,
+  RECORDING_PRESET_CONFIGS,
+  ROOM_SETUP_STORAGE_KEY,
+  BACKGROUND_BLUR_PROCESSOR_NAME,
+  DEFAULT_BACKGROUND_COLOR,
+  BACKGROUND_BLUR_MODEL_ASSET,
+  HAND_LANDMARKER_MODEL_ASSET,
+  BACKGROUND_BLUR_WASM_BASE,
+  HAND_CONTROL_KEYS,
+  SYNTH_BASE_MASTER_GAIN,
+} from './room/core';
+
+import {
+  normalizeRecordingPreset,
+  normalizeBackgroundEffectMode,
+  normalizeBackgroundColor,
+  hexToBackgroundRgba,
+  canPersistBackgroundImageUrl,
+  buildBackgroundImageProxyUrl,
+  getRecordingPresetConfig,
+  getAspectFitRect,
+  loadVisionTasksModule,
+  loadVisionTasksFileset,
+  loadThreeModule,
+  formatRoleLabel,
+  normalizeUnitValue,
+  clamp01,
+  lerp,
+  roundTo,
+  normalizeMasterGain,
+  clampNumber,
+  normalizeVideoMixValue,
+  hasActiveVideoMix,
+  createNeutralVideoMix,
+  createImpulseResponseBuffer,
+  formatDelayTimeLabel,
+  formatFrequencyLabel,
+} from './room/core';
+
 type Participant = RoomParticipant;
 
-type LiveSnapshot = {
-  active?: boolean;
-  courseId?: string;
-  pageSlug?: string;
-  sessionId?: string;
-  interactionId?: string;
-  endsAt?: string | null;
-  prompt?: string;
-  type?: string;
-    };
-
-type LocalPreviewStreamMount = {
-  cleanup?: () => Promise<void> | void;
-  deviceId: string;
-  element: HTMLVideoElement;
-  processed: boolean;
-  sourceStream?: MediaStream;
-  stream: MediaStream;
-  wrapper: HTMLElement;
-};
-
-type ExternalMediaSessionState = {
-  currentTime: number;
-  mediaId: string;
-  playbackState: ExternalMediaPlaybackState;
-  provider: ExternalMediaProvider;
-  sourceUrl: string;
-  title: string;
-};
-
-type ExternalMediaSearchResult = {
-  channelTitle: string;
-  mediaId: string;
-  publishedAt: string;
-  thumbnailUrl: string;
-  title: string;
-};
-
-type BackgroundImageSearchResult = {
-  imageUrl: string;
-  sourceLabel: string;
-  sourceUrl: string;
-  thumbnailUrl: string;
-  title: string;
-};
-
-type PresentationEmbeddedMediaState = PresentationMediaState;
-
-type YouTubePlayerStateChangeEvent = {
-  data: number;
-  target: YouTubePlayer;
-};
-
-type YouTubePlayer = {
-  destroy: () => void;
-  getCurrentTime: () => number;
-  getPlayerState: () => number;
-  getVideoData: () => { title?: string; video_id?: string };
-  loadVideoById: (videoId: string, startSeconds?: number) => void;
-  pauseVideo: () => void;
-  playVideo: () => void;
-  seekTo: (seconds: number, allowSeekAhead?: boolean) => void;
-};
-
-type YouTubePlayerCtor = new (
-  element: HTMLElement,
-  options: {
-    events?: {
-      onReady?: () => void;
-      onStateChange?: (event: YouTubePlayerStateChangeEvent) => void;
-    };
-    height?: string;
-    playerVars?: Record<string, number | string>;
-    videoId: string;
-    width?: string;
-  },
-) => YouTubePlayer;
-
-type YouTubeWindow = Window & {
-  YT?: {
-    Player: YouTubePlayerCtor;
-    PlayerState?: Record<string, number>;
-  };
-  __musikiYouTubeApiPromise?: Promise<YouTubePlayerCtor>;
-  onYouTubeIframeAPIReady?: () => void;
-};
-
-type WebkitDocument = Document & {
-  webkitExitFullscreen?: () => Promise<void> | void;
-  webkitFullscreenElement?: Element | null;
-};
-
-type WebkitFullscreenElement = HTMLElement & {
-  webkitRequestFullscreen?: () => Promise<void> | void;
-};
-
-type PersistedRoomSetup = {
-  handTrackEnabled?: boolean;
-  handRampMs?: number;
-  gravityBallEnabled?: boolean;
-  gravityBallGravity?: number;
-  gravityBallMirror?: boolean;
-  identity?: string;
-  instrumentsOpen?: boolean;
-  limiterEnabled?: boolean;
-  limiterRelease?: number;
-  limiterThreshold?: number;
-  name?: string;
-  preferredAudioInputId?: string;
-  preferredVideoInputId?: string;
-  backgroundColor?: string;
-  backgroundEffectMode?: BackgroundEffectMode;
-  backgroundImageLabel?: string;
-  backgroundImageUrl?: string;
-  previewBlur?: boolean;
-  previewInvert?: boolean;
-  previewZoom?: number;
-  recordingPreset?: RecordingPresetKey;
-  delayFeedback?: number;
-  delayMix?: number;
-  delayTime?: number;
-  delayTone?: number;
-  reverbMix?: number;
-  reverbTime?: number;
-  showCircle?: boolean;
-  compressorAttack?: number;
-  compressorEnabled?: boolean;
-  compressorKnee?: number;
-  compressorRatio?: number;
-  compressorRelease?: number;
-  compressorThreshold?: number;
-  mixerIncomingGain?: number;
-  mixerIncomingMuted?: boolean;
-  mixerIncomingPan?: number;
-  mixerBallGain?: number;
-  mixerBallDelaySend?: number;
-  mixerBallMuted?: boolean;
-  mixerBallPan?: number;
-  mixerBallReverbSend?: number;
-  mixerMasterGain?: number;
-  mixerMasterMuted?: boolean;
-  mixerMasterPan?: number;
-  mixerSynthGain?: number;
-  mixerSynthDelaySend?: number;
-  mixerSynthMuted?: boolean;
-  mixerSynthPan?: number;
-  mixerSynthReverbSend?: number;
-  mixerIncomingDelaySend?: number;
-  mixerIncomingReverbSend?: number;
-  videoBypassed?: boolean;
-  videoBrightness?: number;
-  videoContrast?: number;
-  videoLuma?: number;
-  videoSaturation?: number;
-  videoTint?: number;
-  synthControlRanges?: Partial<Record<HandControlKey, Partial<HandControlRange>>>;
-  room?: string;
-  streamingProfile?: StreamingProfileKey;
-  optimizeSpeaker?: boolean;
-  limitGridQuality?: boolean;
-};
-
-type StreamingProfileKey = 'auto' | 'high' | 'medium' | 'low';
-
-type BandwidthProfile = {
-  fps: number;
-  height: number;
-  maxBitrate: number;
-  width: number;
-};
-
-const BANDWIDTH_PROFILES: Record<StreamingProfileKey, BandwidthProfile> = {
-  auto:   { fps: 24, height: 720,  maxBitrate: 1_200_000, width: 1280 },
-  high:   { fps: 30, height: 1080, maxBitrate: 2_500_000, width: 1920 },
-  medium: { fps: 24, height: 480,  maxBitrate: 800_000,   width: 854  },
-  low:    { fps: 15, height: 360,  maxBitrate: 300_000,   width: 640  },
-};
-
-const getStreamingProfile = (
-  role: string,
-  profileKey: StreamingProfileKey = 'auto',
-): BandwidthProfile => {
-  if (profileKey !== 'auto') return BANDWIDTH_PROFILES[profileKey];
-  return role === 'teacher' ? BANDWIDTH_PROFILES.high : BANDWIDTH_PROFILES.medium;
-};
-
-type VideoTrackProcessorLike = {
-  destroy: () => Promise<void>;
-  init: (opts: {
-    element?: HTMLMediaElement;
-    kind: Track.Kind.Video;
-    track: MediaStreamTrack;
-  }) => Promise<void>;
-  name: string;
-  processedTrack?: MediaStreamTrack;
-  restart: (opts: {
-    element?: HTMLMediaElement;
-    kind: Track.Kind.Video;
-    track: MediaStreamTrack;
-  }) => Promise<void>;
-};
-
-type LocalCameraTrackLike = {
-  getProcessor?: () => { name?: string } | undefined;
-  kind: Track.Kind.Video;
-  setProcessor?: (
-    processor: VideoTrackProcessorLike,
-    showProcessedStreamLocally?: boolean,
-  ) => Promise<void>;
-  stopProcessor?: (keepElement?: boolean) => Promise<void>;
-};
-
-type VisionTasksModule = typeof import('@mediapipe/tasks-vision');
-type ThreeModule = typeof import('three');
-type VisionMask = import('@mediapipe/tasks-vision').MPMask;
-type VisionHandLandmarker = InstanceType<VisionTasksModule['HandLandmarker']>;
-type HandLandmarkPoint = {
-  x: number;
-  y: number;
-  z: number;
-};
-type HandOverlayProjection = {
-  drawHeight: number;
-  drawWidth: number;
-  drawX: number;
-  drawY: number;
-  height: number;
-  width: number;
-};
-type GravityBallHandPoint = {
-  index: number;
-  radius: number;
-  vx: number;
-  vy: number;
-  x: number;
-  y: number;
-};
-type GravityBallGrabAnchor = {
-  span: number;
-  vx: number;
-  vy: number;
-  x: number;
-  y: number;
-};
-type GravityBallHandState = {
-  anchor: GravityBallGrabAnchor | null;
-  canGrab: boolean;
-  points: GravityBallHandPoint[] | null;
-};
-type HandSynthTelemetry = {
-  carrier: number;
-  cutoff: number;
-  distortion: number;
-  gain: number;
-  modulator: number;
-  resonance: number;
-  waveformMorph: number;
-};
-type HandControlKey =
-  | 'carrier'
-  | 'modulator'
-  | 'gain'
-  | 'cutoff'
-  | 'resonance'
-  | 'waveformMorph'
-  | 'distortion';
-type HandControlRange = {
-  max: number;
-  min: number;
-};
-type HandControlValues = Record<HandControlKey, number>;
-type VideoMixKey = 'brightness' | 'contrast' | 'luma' | 'saturation' | 'tint';
-type VideoMixSettings = Record<VideoMixKey, number>;
-type BackgroundEffectMode = 'none' | 'blur' | 'image' | 'color';
-type BackgroundRgbaColor = {
-  a: number;
-  b: number;
-  g: number;
-  r: number;
-};
-type RecordingPresetKey = 'landscape-1080' | 'instagram-story' | 'tiktok';
-type RecordingPresetConfig = {
-  height: number;
-  key: RecordingPresetKey;
-  label: string;
-  width: number;
-};
-
-const GRAVITY_BALL_LUNAR_MS2 = 1.62;
-const GRAVITY_BALL_EARTH_MS2 = 9.8;
-const GRAVITY_BALL_HEAVY_MS2 = 14.7;
-const GRAVITY_BALL_SIM_EARTH = 0.35;
-const RECORDING_PRESET_CONFIGS: Record<RecordingPresetKey, RecordingPresetConfig> = {
-  'instagram-story': {
-    height: 1920,
-    key: 'instagram-story',
-    label: 'Instagram Story',
-    width: 1080,
-  },
-  'landscape-1080': {
-    height: 1080,
-    key: 'landscape-1080',
-    label: '1080p',
-    width: 1920,
-  },
-  tiktok: {
-    height: 1920,
-    key: 'tiktok',
-    label: 'TikTok',
-    width: 1080,
-  },
-};
-const ROOM_SETUP_STORAGE_KEY = 'musiki:room:setup:v1';
-const BACKGROUND_BLUR_PROCESSOR_NAME = 'musiki-background-blur';
-const DEFAULT_BACKGROUND_COLOR = '#101820';
-const BACKGROUND_BLUR_MODEL_ASSET =
-  'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite';
-const HAND_LANDMARKER_MODEL_ASSET =
-  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-const BACKGROUND_BLUR_WASM_BASE =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm';
 const textEncoder = new TextEncoder();
-let visionTasksModulePromise: Promise<VisionTasksModule> | null = null;
-let visionTasksFilesetPromise: Promise<unknown> | null = null;
-let threeModulePromise: Promise<ThreeModule> | null = null;
 const localCameraHandOverlayState: {
   enabled: boolean;
   landmarks: HandLandmarkPoint[] | null;
@@ -416,188 +176,6 @@ const localCameraGravityBallStreamState: {
   canvas: null,
   enabled: false,
 };
-
-const normalizeRecordingPreset = (
-  value: unknown,
-  fallback: RecordingPresetKey = 'landscape-1080',
-): RecordingPresetKey => {
-  const normalized = normalizeText(value) as RecordingPresetKey;
-  return normalized in RECORDING_PRESET_CONFIGS ? normalized : fallback;
-};
-
-const normalizeBackgroundEffectMode = (
-  value: unknown,
-  fallback: BackgroundEffectMode = 'none',
-): BackgroundEffectMode => {
-  const normalized = normalizeText(value).toLowerCase();
-  if (normalized === 'blur' || normalized === 'image' || normalized === 'color' || normalized === 'none') {
-    return normalized;
-  }
-  return fallback;
-};
-
-const normalizeBackgroundColor = (value: unknown, fallback = DEFAULT_BACKGROUND_COLOR) => {
-  const normalized = normalizeText(value);
-  return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized.toUpperCase() : fallback.toUpperCase();
-};
-
-const hexToBackgroundRgba = (value: string): BackgroundRgbaColor => {
-  const normalized = normalizeBackgroundColor(value, DEFAULT_BACKGROUND_COLOR).slice(1);
-  const r = Number.parseInt(normalized.slice(0, 2), 16);
-  const g = Number.parseInt(normalized.slice(2, 4), 16);
-  const b = Number.parseInt(normalized.slice(4, 6), 16);
-  return {
-    a: 255,
-    b,
-    g,
-    r,
-  };
-};
-
-const canPersistBackgroundImageUrl = (value: string) => Boolean(value) && !value.startsWith('blob:');
-
-const buildBackgroundImageProxyUrl = (value: string) => {
-  const normalized = normalizeText(value);
-  if (!normalized) return '';
-  return `/api/live/background-image/proxy?url=${encodeURIComponent(normalized)}`;
-};
-
-const getRecordingPresetConfig = (
-  value: unknown,
-  fallback: RecordingPresetKey = 'landscape-1080',
-): RecordingPresetConfig => RECORDING_PRESET_CONFIGS[normalizeRecordingPreset(value, fallback)];
-
-const getAspectFitRect = (width: number, height: number, targetAspectRatio: number) => {
-  const safeWidth = Math.max(2, width);
-  const safeHeight = Math.max(2, height);
-  const currentAspectRatio = safeWidth / safeHeight;
-
-  if (Math.abs(currentAspectRatio - targetAspectRatio) < 0.0001) {
-    return { height: safeHeight, width: safeWidth, x: 0, y: 0 };
-  }
-
-  if (currentAspectRatio > targetAspectRatio) {
-    const nextWidth = safeHeight * targetAspectRatio;
-    return {
-      height: safeHeight,
-      width: nextWidth,
-      x: (safeWidth - nextWidth) / 2,
-      y: 0,
-    };
-  }
-
-  const nextHeight = safeWidth / targetAspectRatio;
-  return {
-    height: nextHeight,
-    width: safeWidth,
-    x: 0,
-    y: (safeHeight - nextHeight) / 2,
-  };
-};
-
-const loadVisionTasksModule = () => {
-  if (!visionTasksModulePromise) {
-    visionTasksModulePromise = import('@mediapipe/tasks-vision');
-  }
-  return visionTasksModulePromise;
-};
-
-const loadVisionTasksFileset = async () => {
-  if (!visionTasksFilesetPromise) {
-    const vision = await loadVisionTasksModule();
-    visionTasksFilesetPromise = vision.FilesetResolver.forVisionTasks(BACKGROUND_BLUR_WASM_BASE);
-  }
-  return visionTasksFilesetPromise;
-};
-
-const loadThreeModule = () => {
-  if (!threeModulePromise) {
-    threeModulePromise = import('three');
-  }
-  return threeModulePromise;
-};
-
-const formatRoleLabel = (role: ParticipantRole) => (role === 'teacher' ? 'Teacher' : 'Student');
-
-const normalizeUnitValue = (value: unknown, fallback = 0) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(1, Math.max(0, Math.round(parsed * 100) / 100));
-};
-
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
-const lerp = (start: number, end: number, amount: number) => start + (end - start) * amount;
-const roundTo = (value: number, digits = 2) => {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
-};
-const HAND_CONTROL_KEYS: HandControlKey[] = [
-  'carrier',
-  'modulator',
-  'gain',
-  'cutoff',
-  'resonance',
-  'waveformMorph',
-  'distortion',
-];
-
-const normalizeMasterGain = (value: unknown, fallback = 0.35) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(1, Math.max(0, Math.round(parsed * 100) / 100));
-};
-
-const normalizeVideoMixValue = (value: unknown, fallback = 0) =>
-  clampNumber(value, -1, 1, fallback, 2);
-
-const hasActiveVideoMix = (settings: VideoMixSettings) =>
-  Object.values(settings).some((entry) => Math.abs(entry) > 0.01);
-
-function createNeutralVideoMix(): VideoMixSettings {
-  return {
-    brightness: 0,
-    contrast: 0,
-    luma: 0,
-    saturation: 0,
-    tint: 0,
-  };
-}
-
-const SYNTH_BASE_MASTER_GAIN = 0.35;
-
-const clampNumber = (value: unknown, minimum: number, maximum: number, fallback: number, digits = 3) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  const factor = 10 ** digits;
-  return Math.round(Math.min(maximum, Math.max(minimum, parsed)) * factor) / factor;
-};
-
-const createImpulseResponseBuffer = (
-  context: AudioContext,
-  durationSeconds: number,
-  decay: number,
-) => {
-  const sampleRate = context.sampleRate;
-  const frameCount = Math.max(1, Math.round(sampleRate * durationSeconds));
-  const buffer = context.createBuffer(2, frameCount, sampleRate);
-
-  for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
-    const channel = buffer.getChannelData(channelIndex);
-    for (let index = 0; index < frameCount; index += 1) {
-      const t = index / frameCount;
-      const envelope = Math.pow(1 - t, decay);
-      channel[index] = (Math.random() * 2 - 1) * envelope;
-    }
-  }
-
-  return buffer;
-};
-
-const formatDelayTimeLabel = (value: number) =>
-  value >= 1 ? `${value.toFixed(2)}s` : `${Math.round(value * 1000)}ms`;
-
-const formatFrequencyLabel = (value: number) =>
-  value >= 1000 ? `${(value / 1000).toFixed(1)}kHz` : `${Math.round(value)}Hz`;
 
 const createDefaultHandControlRanges = (): Record<HandControlKey, HandControlRange> => ({
   carrier: { min: 0, max: 1 },
@@ -3859,253 +3437,247 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const isExternalInviteMode = inviteMode === 'external';
   const isInvalidInviteMode = inviteMode === 'invalid';
 
-  const roomInput = root.querySelector('[data-room-input]');
-  const identityInput = root.querySelector('[data-identity-input]');
-  const nameInput = root.querySelector('[data-name-input]');
-  const roleInput = root.querySelector('[data-role-input]');
-  const roleLabel = root.querySelector('[data-role-label]');
-  const layoutInput = root.querySelector('[data-layout-input]');
-  const audioInputSelects = Array.from(root.querySelectorAll('[data-audio-input-select]')).filter(
-    (node): node is HTMLSelectElement => node instanceof HTMLSelectElement,
-  );
-  const videoInputSelects = Array.from(root.querySelectorAll('[data-video-input-select]')).filter(
-    (node): node is HTMLSelectElement => node instanceof HTMLSelectElement,
-  );
-  const audioInputSelect = audioInputSelects[0] || null;
-  const videoInputSelect = videoInputSelects[0] || null;
-  const presentationSelect = root.querySelector('[data-presentation-select]');
-  const sessionSetupDetails = root.querySelector('[data-session-setup]');
-  const previewZoomInput = root.querySelector('[data-preview-zoom-input]');
-  const previewZoomOutput = root.querySelector('[data-preview-zoom-output]');
-  const backgroundBlurToggleButton = root.querySelector('[data-action="background-blur-toggle"]');
-  const backgroundReplaceToggleButton = root.querySelector('[data-action="background-replace-toggle"]');
-  const backgroundReplacePopup = root.querySelector('[data-background-replace-popup]');
-  const backgroundReplaceCloseButton = root.querySelector('[data-action="background-replace-close"]');
-  const backgroundEffectClearButton = root.querySelector('[data-action="background-effect-clear"]');
-  const backgroundImagePreviewShell = root.querySelector('[data-background-image-preview-shell]');
-  const backgroundImagePreview = root.querySelector('[data-background-image-preview]');
-  const backgroundImageLabel = root.querySelector('[data-background-image-label]');
-  const backgroundImageClearButton = root.querySelector('[data-action="background-image-clear"]');
-  const backgroundImageFileInput = root.querySelector('[data-background-image-file-input]');
-  const backgroundImageDropzone = root.querySelector('[data-background-image-dropzone]');
-  const backgroundImagePickButton = root.querySelector('[data-action="background-image-pick"]');
-  const backgroundImageSearchInput = root.querySelector('[data-background-image-search-input]');
-  const backgroundImageSearchButton = root.querySelector('[data-action="background-image-search"]');
-  const backgroundImageStatus = root.querySelector('[data-background-image-status]');
-  const backgroundImageResults = root.querySelector('[data-background-image-results]');
-  const backgroundColorInput = root.querySelector('[data-background-color-input]');
-  const backgroundColorApplyButton = root.querySelector('[data-action="background-color-apply"]');
-  const previewInvertInput = root.querySelector('[data-preview-invert-input]');
-  const showCircleInput = root.querySelector('[data-show-circle-input]');
-  const statusNode = root.querySelector('[data-room-status]');
-  const stateNode = root.querySelector('[data-room-state]');
-  const countNode = root.querySelector('[data-participant-count]');
-  const connectToggleButton = root.querySelector('[data-action="connect-toggle"]');
-  const connectButton = root.querySelector('[data-action="connect"]');
-  const disconnectButton = root.querySelector('[data-action="disconnect"]');
-  const cameraButton = root.querySelector('[data-action="camera"]');
-  const microphoneButton = root.querySelector('[data-action="microphone"]');
-  const micMeter = root.querySelector('[data-mic-meter]');
-  const shareScreenButton = root.querySelector('[data-action="screen-share"]');
-  const presentationButton = root.querySelector('[data-action="presentation"]');
-  const presentationClearButton = root.querySelector('[data-action="presentation-clear"]');
-  const layoutChoiceButtons = Array.from(root.querySelectorAll('[data-layout-choice]'));
-  const audioInputPanel = root.querySelector('[data-audio-input-panel]');
-  const videoInputPanel = root.querySelector('[data-video-input-panel]');
-  const teacherSlot = root.querySelector('[data-slot="teacher"]');
-  const gridSlot = root.querySelector('[data-slot="grid"]');
-  const studentsSlot = root.querySelector('[data-slot="students"]');
-  const screenSlot = root.querySelector('[data-slot="screen"]');
-  const identityPreviewSlot = root.querySelector('[data-slot="identity-preview"]');
-  const teacherPanel = root.querySelector('[data-panel="teacher"]');
-  const participantList = root.querySelector('[data-participant-list]');
-  const stage = root.querySelector('[data-stage]');
-  const stageFrameNode = root.querySelector('.conference-stage-frame');
-  const gravityBallCanvas = root.querySelector('[data-gravity-ball-canvas]');
-  const recordingGuide = root.querySelector('[data-recording-guide]');
-  const reactionsLayer = root.querySelector('[data-reactions-layer]');
-  const stageHandOverlay = root.querySelector('[data-stage-hand-overlay]');
-  const participantTemplate = root.querySelector('[data-template="participant-card"]');
-  const screenTemplate = root.querySelector('[data-template="screen-card"]');
-  const presentationFrame = root.querySelector('[data-presentation-frame]');
-  const presentationPlaceholder = root.querySelector('[data-presentation-placeholder]');
-  const liveActivityButton = root.querySelector('[data-live-activity-button]');
-  const liveActivityTimer = root.querySelector('[data-live-activity-timer]');
-  const sessionTimer = root.querySelector('[data-session-timer]');
-  const recordButton = root.querySelector('[data-action="record"]');
-  const fullscreenButton = root.querySelector('[data-action="fullscreen"]');
-  const shortcutsHelpButton = root.querySelector('[data-action="shortcuts-help"]');
-  const sidebarToggleButton = root.querySelector('[data-action="sidebar-toggle"]');
-  const instrumentsToggleButton = root.querySelector('[data-action="instruments-toggle"]');
-  const shortcutsModal = root.querySelector('[data-shortcuts-modal]');
-  const shortcutsCloseButton = root.querySelector('[data-shortcuts-close]');
-  const externalInviteGate = root.querySelector('[data-external-invite-gate]');
-  const externalInviteCloseButton = root.querySelector('[data-external-invite-close]');
-  const externalInviteNameInput = root.querySelector('[data-external-invite-name]');
-  const externalInviteEmailInput = root.querySelector('[data-external-invite-email]');
-  const externalInvitePasswordInput = root.querySelector('[data-external-invite-password]');
-  const externalInviteGateStatus = root.querySelector('[data-external-invite-gate-status]');
-  const externalInviteJoinButton = root.querySelector('[data-action="external-invite-join"]');
-  const externalInviteTeacherPasswordInput = root.querySelector('[data-external-password-input]');
-  const externalInviteExpirySelect = root.querySelector('[data-external-expiry-select]');
-  const externalInviteLinkOutput = root.querySelector('[data-external-invite-link-output]');
-  const externalInviteStatus = root.querySelector('[data-external-invite-status]');
-  const externalInviteCreateButton = root.querySelector('[data-action="external-invite-create"]');
-  const externalInviteCopyButton = root.querySelector('[data-action="external-invite-copy"]');
-  const externalInviteRevokeButton = root.querySelector('[data-action="external-invite-revoke"]');
-  const studentInviteExpirySelect = root.querySelector('[data-student-expiry-select]');
-  const studentInviteLinkOutput = root.querySelector('[data-student-invite-link-output]');
-  const studentInviteStatus = root.querySelector('[data-student-invite-status]');
-  const studentInviteCreateButton = root.querySelector('[data-action="student-invite-create"]');
-  const studentInviteCopyButton = root.querySelector('[data-action="student-invite-copy"]');
-  const studentInviteRevokeButton = root.querySelector('[data-action="student-invite-revoke"]');
-  const chatList = root.querySelector('[data-chat-list]');
-  const chatInput = root.querySelector('[data-chat-input]');
-  const chatSection = root.querySelector('[data-chat-section]');
-  const chatFocusButton = root.querySelector('[data-action="chat-focus"]');
-  const chatUnreadDot = root.querySelector('[data-chat-unread]');
-  const chatSendButton = root.querySelector('[data-action="chat-send"]');
-  const chatDownloadButton = root.querySelector('[data-action="chat-download"]');
-  const raiseHandButton = root.querySelector('[data-action="raise-hand"]');
-  const handTrackInput = root.querySelector('[data-hand-track-input]');
-  const handTrackToggleButton = root.querySelector('[data-hand-track-toggle]');
-  const handRampInput = root.querySelector('[data-hand-ramp-input]');
-  const gravityBallInput = root.querySelector('[data-gravity-ball-input]');
-  const gravityBallToggleButton = root.querySelector('[data-gravity-ball-toggle]');
-  const gravityBallGravityInput = root.querySelector('[data-gravity-ball-gravity-input]');
-  const gravityBallMirrorInput = root.querySelector('[data-gravity-ball-mirror-input]');
-  const synthMappingResetButton = root.querySelector('[data-synth-mapping-reset]');
-  const recordingPresetSelect = root.querySelector('[data-recording-preset-select]');
-  const sessionControlsField = root.querySelector('[data-session-controls-field]');
-  const sessionAllowInstrumentsInput = root.querySelector('[data-session-allow-instruments-input]');
-  const breakRoomsShell = root.querySelector('[data-break-rooms-shell]');
-  const breakRoomsPopup = root.querySelector('[data-break-rooms-popup]');
-  const breakRoomsPopupSetup = root.querySelector('[data-break-rooms-popup-setup]');
-  const breakRoomsPopupDivider = root.querySelector('[data-break-rooms-popup-divider]');
-  const breakRoomsList = root.querySelector('[data-break-rooms-list]');
-  const breakRoomsStatusNote = root.querySelector('[data-break-rooms-status]');
-  const breakRoomsSizeInput = root.querySelector('[data-break-rooms-size]');
-  const breakRoomsCustomInputsContainer = root.querySelector('[data-break-rooms-custom-inputs]');
-  const breakRoomsBBtn = root.querySelector('[data-break-rooms-btn]');
-  const breakRoomsEndBtn = root.querySelector('[data-break-rooms-end-btn]');
-  const breakRoomsKillBtn = root.querySelector('[data-break-rooms-kill-btn]');
-  const externalMediaControlsShell = root.querySelector('[data-external-media-controls-shell]');
-  const externalMediaBtn = root.querySelector('[data-external-media-btn]');
-  const externalMediaPopup = root.querySelector('[data-external-media-popup]');
-  const externalMediaInput = root.querySelector('[data-external-media-input]');
-  const externalMediaOpenButton = root.querySelector('[data-action="external-media-open"]');
-  const externalMediaResults = root.querySelector('[data-external-media-results]');
-  const externalMediaStatus = root.querySelector('[data-external-media-status]');
-  const externalMediaStage = root.querySelector('[data-external-media-stage]');
-  const externalMediaPlayerHost = root.querySelector('[data-external-media-player-host]');
-  const externalMediaEmpty = root.querySelector('[data-external-media-empty]');
-  const externalMediaTitle = root.querySelector('[data-external-media-title]');
-  const externalMediaProviderLabel = root.querySelector('[data-external-media-provider-label]');
-  const externalMediaPlayToggleButtons = Array.from(
-    root.querySelectorAll('[data-action="external-media-play-toggle"]'),
-  );
-  const externalMediaCloseButtons = Array.from(
-    root.querySelectorAll('[data-action="external-media-close"], [data-action="external-media-stop"]'),
-  );
-  const brCountdownEl = root.querySelector('[data-br-countdown]');
-  const brCountdownText = root.querySelector('[data-br-countdown-text]');
-  const sessionMuteAllButton = root.querySelector('[data-session-mute-all-button]');
-  const recentSpeakersEls = Array.from(root.querySelectorAll('[data-recent-speakers]'));
-  const streamingProfileSelect = root.querySelector('[data-streaming-profile-select]');
-  const optimizeSpeakerInput = root.querySelector('[data-optimize-speaker-input]');
-  const limitGridQualityInput = root.querySelector('[data-limit-grid-input]');
-  const synthCarrierInput = root.querySelector('[data-synth-carrier-input]');
-  const synthCarrierOutput = root.querySelector('[data-synth-carrier-output]');
-  const synthModulatorInput = root.querySelector('[data-synth-modulator-input]');
-  const synthModulatorOutput = root.querySelector('[data-synth-modulator-output]');
-  const synthGainInput = root.querySelector('[data-synth-gain-input]');
-  const synthGainOutput = root.querySelector('[data-synth-gain-output]');
-  const synthCutoffInput = root.querySelector('[data-synth-cutoff-input]');
-  const synthCutoffOutput = root.querySelector('[data-synth-cutoff-output]');
-  const synthResonanceInput = root.querySelector('[data-synth-resonance-input]');
-  const synthResonanceOutput = root.querySelector('[data-synth-resonance-output]');
-  const synthWaveformInput = root.querySelector('[data-synth-waveform-input]');
-  const synthWaveformOutput = root.querySelector('[data-synth-waveform-output]');
-  const synthDistortionInput = root.querySelector('[data-synth-distortion-input]');
-  const synthDistortionOutput = root.querySelector('[data-synth-distortion-output]');
-  const synthMapButtons = Array.from(root.querySelectorAll('[data-synth-map-capture]'));
-  const sessionLeaderField = root.querySelector('[data-session-leader-field]');
-  const sessionLeaderSelect = root.querySelector('[data-session-leader-select]');
-  const mixerSynthGainInput = root.querySelector('[data-mixer-synth-gain]');
-  const mixerSynthMeter = root.querySelector('[data-mixer-meter="synth"]');
-  const mixerSynthMuteButton = root.querySelector('[data-mixer-synth-mute]');
-  const mixerSynthPanInput = root.querySelector('[data-mixer-synth-pan]');
-  const mixerSynthPanKnob = root.querySelector('[data-mixer-synth-pan-knob]');
-  const mixerSynthReverbSendInput = root.querySelector('[data-mixer-synth-reverb-send]');
-  const mixerSynthReverbSendKnob = root.querySelector('[data-mixer-synth-reverb-send-knob]');
-  const mixerSynthDelaySendInput = root.querySelector('[data-mixer-synth-delay-send]');
-  const mixerSynthDelaySendKnob = root.querySelector('[data-mixer-synth-delay-send-knob]');
-  const mixerBallGainInput = root.querySelector('[data-mixer-ball-gain]');
-  const mixerBallMeter = root.querySelector('[data-mixer-meter="ball"]');
-  const mixerBallMuteButton = root.querySelector('[data-mixer-ball-mute]');
-  const mixerBallPanInput = root.querySelector('[data-mixer-ball-pan]');
-  const mixerBallPanKnob = root.querySelector('[data-mixer-ball-pan-knob]');
-  const mixerBallReverbSendInput = root.querySelector('[data-mixer-ball-reverb-send]');
-  const mixerBallReverbSendKnob = root.querySelector('[data-mixer-ball-reverb-send-knob]');
-  const mixerBallDelaySendInput = root.querySelector('[data-mixer-ball-delay-send]');
-  const mixerBallDelaySendKnob = root.querySelector('[data-mixer-ball-delay-send-knob]');
-  const mixerIncomingGainInput = root.querySelector('[data-mixer-incoming-gain]');
-  const mixerIncomingMeter = root.querySelector('[data-mixer-meter="incoming"]');
-  const mixerIncomingMuteButton = root.querySelector('[data-mixer-incoming-mute]');
-  const mixerIncomingPanInput = root.querySelector('[data-mixer-incoming-pan]');
-  const mixerIncomingPanKnob = root.querySelector('[data-mixer-incoming-pan-knob]');
-  const mixerIncomingReverbSendInput = root.querySelector('[data-mixer-incoming-reverb-send]');
-  const mixerIncomingReverbSendKnob = root.querySelector('[data-mixer-incoming-reverb-send-knob]');
-  const mixerIncomingDelaySendInput = root.querySelector('[data-mixer-incoming-delay-send]');
-  const mixerIncomingDelaySendKnob = root.querySelector('[data-mixer-incoming-delay-send-knob]');
-  const mixerMasterGainInput = root.querySelector('[data-mixer-master-gain]');
-  const mixerMasterMeter = root.querySelector('[data-mixer-meter="master"]');
-  const mixerMasterMuteButton = root.querySelector('[data-mixer-master-mute]');
-  const mixerMasterPanInput = root.querySelector('[data-mixer-master-pan]');
-  const mixerMasterPanKnob = root.querySelector('[data-mixer-master-pan-knob]');
-  const mixerVideoLumaInput = root.querySelector('[data-mixer-video-luma]');
-  const mixerVideoLumaKnob = root.querySelector('[data-mixer-video-luma-knob]');
-  const mixerVideoTintInput = root.querySelector('[data-mixer-video-tint]');
-  const mixerVideoTintKnob = root.querySelector('[data-mixer-video-tint-knob]');
-  const mixerVideoSaturationInput = root.querySelector('[data-mixer-video-saturation]');
-  const mixerVideoSaturationKnob = root.querySelector('[data-mixer-video-saturation-knob]');
-  const mixerVideoContrastInput = root.querySelector('[data-mixer-video-contrast]');
-  const mixerVideoContrastKnob = root.querySelector('[data-mixer-video-contrast-knob]');
-  const mixerVideoBrightnessInput = root.querySelector('[data-mixer-video-brightness]');
-  const mixerVideoBrightnessKnob = root.querySelector('[data-mixer-video-brightness-knob]');
-  const videoBypassToggleButton = root.querySelector('[data-video-bypass-toggle]');
-  const mixerResetButtonNodes = Array.from(root.querySelectorAll('[data-mixer-reset-button]'));
-  const mixerResetScopeNodes = Array.from(root.querySelectorAll('[data-mixer-reset-scope]'));
-  const mixerResetControlNodes = Array.from(root.querySelectorAll('[data-mixer-reset-control]'));
-  const summaryActionButtons = Array.from(root.querySelectorAll('[data-summary-action]'));
-  const synthReverbTimeInput = root.querySelector('[data-synth-reverb-time-input]');
-  const synthReverbTimeOutput = root.querySelector('[data-synth-reverb-time-output]');
-  const synthReverbMixInput = root.querySelector('[data-synth-reverb-mix-input]');
-  const synthReverbMixOutput = root.querySelector('[data-synth-reverb-mix-output]');
-  const synthDelayTimeInput = root.querySelector('[data-synth-delay-time-input]');
-  const synthDelayTimeOutput = root.querySelector('[data-synth-delay-time-output]');
-  const synthDelayFeedbackInput = root.querySelector('[data-synth-delay-feedback-input]');
-  const synthDelayFeedbackOutput = root.querySelector('[data-synth-delay-feedback-output]');
-  const synthDelayMixInput = root.querySelector('[data-synth-delay-mix-input]');
-  const synthDelayMixOutput = root.querySelector('[data-synth-delay-mix-output]');
-  const synthDelayToneInput = root.querySelector('[data-synth-delay-tone-input]');
-  const synthDelayToneOutput = root.querySelector('[data-synth-delay-tone-output]');
-  const synthCompToggle = root.querySelector('[data-synth-comp-toggle]');
-  const synthCompThresholdInput = root.querySelector('[data-synth-comp-threshold-input]');
-  const synthCompThresholdOutput = root.querySelector('[data-synth-comp-threshold-output]');
-  const synthCompRatioInput = root.querySelector('[data-synth-comp-ratio-input]');
-  const synthCompRatioOutput = root.querySelector('[data-synth-comp-ratio-output]');
-  const synthCompAttackInput = root.querySelector('[data-synth-comp-attack-input]');
-  const synthCompAttackOutput = root.querySelector('[data-synth-comp-attack-output]');
-  const synthCompReleaseInput = root.querySelector('[data-synth-comp-release-input]');
-  const synthCompReleaseOutput = root.querySelector('[data-synth-comp-release-output]');
-  const synthCompKneeInput = root.querySelector('[data-synth-comp-knee-input]');
-  const synthCompKneeOutput = root.querySelector('[data-synth-comp-knee-output]');
-  const synthLimiterToggle = root.querySelector('[data-synth-limiter-toggle]');
-  const synthLimiterThresholdInput = root.querySelector('[data-synth-limiter-threshold-input]');
-  const synthLimiterThresholdOutput = root.querySelector('[data-synth-limiter-threshold-output]');
-  const synthLimiterReleaseInput = root.querySelector('[data-synth-limiter-release-input]');
-  const synthLimiterReleaseOutput = root.querySelector('[data-synth-limiter-release-output]');
+  const {
+    roomInput,
+    identityInput,
+    nameInput,
+    roleInput,
+    roleLabel,
+    layoutInput,
+    audioInputSelects,
+    videoInputSelects,
+    audioInputSelect,
+    videoInputSelect,
+    presentationSelect,
+    sessionSetupDetails,
+    previewZoomInput,
+    previewZoomOutput,
+    backgroundBlurToggleButton,
+    backgroundReplaceToggleButton,
+    backgroundReplacePopup,
+    backgroundReplaceCloseButton,
+    backgroundEffectClearButton,
+    backgroundImagePreviewShell,
+    backgroundImagePreview,
+    backgroundImageLabel,
+    backgroundImageClearButton,
+    backgroundImageFileInput,
+    backgroundImageDropzone,
+    backgroundImagePickButton,
+    backgroundImageSearchInput,
+    backgroundImageSearchButton,
+    backgroundImageStatus,
+    backgroundImageResults,
+    backgroundColorInput,
+    backgroundColorApplyButton,
+    previewInvertInput,
+    showCircleInput,
+    statusNode,
+    stateNode,
+    countNode,
+    connectToggleButton,
+    connectButton,
+    disconnectButton,
+    cameraButton,
+    microphoneButton,
+    micMeter,
+    shareScreenButton,
+    presentationButton,
+    presentationClearButton,
+    layoutChoiceButtons,
+    audioInputPanel,
+    videoInputPanel,
+    teacherSlot,
+    gridSlot,
+    studentsSlot,
+    screenSlot,
+    identityPreviewSlot,
+    teacherPanel,
+    participantList,
+    stage,
+    stageFrameNode,
+    gravityBallCanvas,
+    recordingGuide,
+    reactionsLayer,
+    stageHandOverlay,
+    participantTemplate,
+    screenTemplate,
+    presentationFrame,
+    presentationPlaceholder,
+    liveActivityButton,
+    liveActivityTimer,
+    sessionTimer,
+    recordButton,
+    fullscreenButton,
+    shortcutsHelpButton,
+    sidebarToggleButton,
+    instrumentsToggleButton,
+    shortcutsModal,
+    shortcutsCloseButton,
+    externalInviteGate,
+    externalInviteCloseButton,
+    externalInviteNameInput,
+    externalInviteEmailInput,
+    externalInvitePasswordInput,
+    externalInviteGateStatus,
+    externalInviteJoinButton,
+    externalInviteTeacherPasswordInput,
+    externalInviteExpirySelect,
+    externalInviteLinkOutput,
+    externalInviteStatus,
+    externalInviteCreateButton,
+    externalInviteCopyButton,
+    externalInviteRevokeButton,
+    studentInviteExpirySelect,
+    studentInviteLinkOutput,
+    studentInviteStatus,
+    studentInviteCreateButton,
+    studentInviteCopyButton,
+    studentInviteRevokeButton,
+    chatList,
+    chatInput,
+    chatSection,
+    chatFocusButton,
+    chatUnreadDot,
+    chatSendButton,
+    chatDownloadButton,
+    raiseHandButton,
+    handTrackInput,
+    handTrackToggleButton,
+    handRampInput,
+    gravityBallInput,
+    gravityBallToggleButton,
+    gravityBallGravityInput,
+    gravityBallMirrorInput,
+    synthMappingResetButton,
+    recordingPresetSelect,
+    sessionControlsField,
+    sessionAllowInstrumentsInput,
+    breakRoomsShell,
+    breakRoomsPopup,
+    breakRoomsPopupSetup,
+    breakRoomsPopupDivider,
+    breakRoomsList,
+    breakRoomsStatusNote,
+    breakRoomsSizeInput,
+    breakRoomsCustomInputsContainer,
+    breakRoomsBBtn,
+    breakRoomsEndBtn,
+    breakRoomsKillBtn,
+    externalMediaControlsShell,
+    externalMediaBtn,
+    externalMediaPopup,
+    externalMediaInput,
+    externalMediaOpenButton,
+    externalMediaResults,
+    externalMediaStatus,
+    externalMediaStage,
+    externalMediaPlayerHost,
+    externalMediaEmpty,
+    externalMediaTitle,
+    externalMediaProviderLabel,
+    externalMediaPlayToggleButtons,
+    externalMediaCloseButtons,
+    brCountdownEl,
+    brCountdownText,
+    sessionMuteAllButton,
+    recentSpeakersEls,
+    streamingProfileSelect,
+    optimizeSpeakerInput,
+    limitGridQualityInput,
+    synthCarrierInput,
+    synthCarrierOutput,
+    synthModulatorInput,
+    synthModulatorOutput,
+    synthGainInput,
+    synthGainOutput,
+    synthCutoffInput,
+    synthCutoffOutput,
+    synthResonanceInput,
+    synthResonanceOutput,
+    synthWaveformInput,
+    synthWaveformOutput,
+    synthDistortionInput,
+    synthDistortionOutput,
+    synthMapButtons,
+    sessionLeaderField,
+    sessionLeaderSelect,
+    mixerSynthGainInput,
+    mixerSynthMeter,
+    mixerSynthMuteButton,
+    mixerSynthPanInput,
+    mixerSynthPanKnob,
+    mixerSynthReverbSendInput,
+    mixerSynthReverbSendKnob,
+    mixerSynthDelaySendInput,
+    mixerSynthDelaySendKnob,
+    mixerBallGainInput,
+    mixerBallMeter,
+    mixerBallMuteButton,
+    mixerBallPanInput,
+    mixerBallPanKnob,
+    mixerBallReverbSendInput,
+    mixerBallReverbSendKnob,
+    mixerBallDelaySendInput,
+    mixerBallDelaySendKnob,
+    mixerIncomingGainInput,
+    mixerIncomingMeter,
+    mixerIncomingMuteButton,
+    mixerIncomingPanInput,
+    mixerIncomingPanKnob,
+    mixerIncomingReverbSendInput,
+    mixerIncomingReverbSendKnob,
+    mixerIncomingDelaySendInput,
+    mixerIncomingDelaySendKnob,
+    mixerMasterGainInput,
+    mixerMasterMeter,
+    mixerMasterMuteButton,
+    mixerMasterPanInput,
+    mixerMasterPanKnob,
+    mixerVideoLumaInput,
+    mixerVideoLumaKnob,
+    mixerVideoTintInput,
+    mixerVideoTintKnob,
+    mixerVideoSaturationInput,
+    mixerVideoSaturationKnob,
+    mixerVideoContrastInput,
+    mixerVideoContrastKnob,
+    mixerVideoBrightnessInput,
+    mixerVideoBrightnessKnob,
+    videoBypassToggleButton,
+    mixerResetButtonNodes,
+    mixerResetScopeNodes,
+    mixerResetControlNodes,
+    summaryActionButtons,
+    synthReverbTimeInput,
+    synthReverbTimeOutput,
+    synthReverbMixInput,
+    synthReverbMixOutput,
+    synthDelayTimeInput,
+    synthDelayTimeOutput,
+    synthDelayFeedbackInput,
+    synthDelayFeedbackOutput,
+    synthDelayMixInput,
+    synthDelayMixOutput,
+    synthDelayToneInput,
+    synthDelayToneOutput,
+    synthCompToggle,
+    synthCompThresholdInput,
+    synthCompThresholdOutput,
+    synthCompRatioInput,
+    synthCompRatioOutput,
+    synthCompAttackInput,
+    synthCompAttackOutput,
+    synthCompReleaseInput,
+    synthCompReleaseOutput,
+    synthCompKneeInput,
+    synthCompKneeOutput,
+    synthLimiterToggle,
+    synthLimiterThresholdInput,
+    synthLimiterThresholdOutput,
+    synthLimiterReleaseInput,
+    synthLimiterReleaseOutput,
+  } = selectRoomElements(root);
 
   if (
     !(roomInput instanceof HTMLInputElement) ||

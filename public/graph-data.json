@@ -208,12 +208,21 @@
       "img": ""
     },
     {
-      "id": "cursos/s123/02-forma y estructura/forma y estructura",
-      "name": "forma y estructura",
+      "id": "cursos/s123/02-forma y estructura/el objeto estético-espistémico",
+      "name": "el objeto estético-espistémico",
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
-      "canonicalSlug": "forma-y-estructura",
+      "canonicalSlug": "el-objeto-estetico-espistemico",
+      "img": ""
+    },
+    {
+      "id": "cursos/s123/03 Metodología de la Investigación en Música/Metodología de la Investigación en Música MOC",
+      "name": "Introducción a la Organología",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "metodologia-de-la-investigacion-en-musica-moc",
       "img": ""
     },
     {

@@ -272,7 +272,7 @@ const main = () => {
 
   if (targetRepo) {
     console.log(
-      `[content:pull] target repo=${targetRepo} branch=${targetBranch || '(default)'} sha=${targetSha || '(none)'}`,
+      `[content:pull] targeted sync: repo=${targetRepo} branch=${targetBranch || '(default)'} sha=${targetSha || '(none)'}`,
     );
   }
 

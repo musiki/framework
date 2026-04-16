@@ -20,7 +20,8 @@ export const POST: APIRoute = async ({ request }) => {
     
     const busUrl = 'http://127.0.0.1:4322/webhook/content-update';
     
-    console.log('[Astro Bridge] Forwarding webhook to Content Bus...');
+    console.log(`[Astro Bridge] Forwarding webhook to Content Bus at ${busUrl}...`);
+    console.log(`[Astro Bridge] Payload: ${JSON.stringify(payload)}`);
 
     const response = await fetch(busUrl, {
       method: 'POST',

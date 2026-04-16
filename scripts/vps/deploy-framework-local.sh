@@ -16,13 +16,21 @@ printf '\n[framework] Deploying in %s\n' "$FRAMEWORK_DIR"
 printf '[framework] Content source strategy: %s\n' "$CONTENT_SOURCE_STRATEGY"
 
 export CONTENT_SOURCE_STRATEGY
+# Ensure targeted sync variables are exported if they were passed by Content Bus
+export CONTENT_SOURCE_TARGET_REPO="${CONTENT_SOURCE_TARGET_REPO:-}"
+export CONTENT_SOURCE_TARGET_SHA="${CONTENT_SOURCE_TARGET_SHA:-}"
+export CONTENT_SOURCE_TARGET_BRANCH="${CONTENT_SOURCE_TARGET_BRANCH:-}"
 
 cd "$FRAMEWORK_DIR"
 export PATH="$PATH:$(npm config get prefix)/bin"
 
 printf '::deploy-phase::pull::Syncing framework repo to latest commit\n'
-git fetch origin
-git reset --hard origin/main
+if [[ "${VPS_SKIP_FRAMEWORK_RESET:-0}" == "1" ]]; then
+  printf '[framework] Skipping git reset --hard origin/main as requested\n'
+else
+  git fetch origin
+  git reset --hard origin/main
+fi
 
 if [[ -n "$INSTALL_COMMAND" ]]; then
   printf '::deploy-phase::install::Installing dependencies\n'

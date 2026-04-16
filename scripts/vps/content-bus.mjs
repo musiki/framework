@@ -103,6 +103,7 @@ async function runPipeline(payload) {
       CONTENT_SOURCE_STRATEGY,
       VPS_CONTENT_SOURCE_STRATEGY: CONTENT_SOURCE_STRATEGY,
       VPS_INSTALL_COMMAND: CONTENT_BUS_INSTALL_COMMAND,
+      VPS_SKIP_FRAMEWORK_RESET: process.env.VPS_SKIP_FRAMEWORK_RESET || '0',
       CONTENT_SOURCE_TARGET_REPO: normalizeRepoSlug(payload?.source_repo),
       CONTENT_SOURCE_TARGET_BRANCH: normalizeBranchName(payload?.source_ref),
       CONTENT_SOURCE_TARGET_SHA: normalizeCommitSha(payload?.source_sha),
@@ -199,6 +200,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Debug endpoint (no secrets)
+  if (req.method === 'GET' && req.url === '/debug') {
+    const debugInfo = {
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        CONTENT_BUS_PORT: process.env.CONTENT_BUS_PORT,
+        CONTENT_SOURCE_STRATEGY: process.env.CONTENT_SOURCE_STRATEGY,
+        VPS_CONTENT_SOURCE_STRATEGY: process.env.VPS_CONTENT_SOURCE_STRATEGY,
+        CONTENT_BUS_DEPLOY_COMMAND: process.env.CONTENT_BUS_DEPLOY_COMMAND,
+        VPS_SKIP_FRAMEWORK_RESET: process.env.VPS_SKIP_FRAMEWORK_RESET,
+      },
+      status
+    };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(debugInfo, null, 2));
+    return;
+  }
+
   // Webhook endpoint
   if (req.method === 'POST' && req.url === '/webhook/content-update') {
     const authHeader = req.headers['authorization'];
@@ -233,5 +252,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[Content Bus] Listening on port ${PORT}`);
+  const maskedSecret = SECRET.length > 4 ? `${SECRET.slice(0, 2)}****${SECRET.slice(-2)}` : '****';
+  console.log(`[Content Bus] Listening on port ${PORT} (secret: ${maskedSecret})`);
 });
