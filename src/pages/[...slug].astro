@@ -118,23 +118,23 @@ const courseIndex = !isPublicWikiPage && canonicalCourseId
 
 if (!isPublicWikiPage && !courseIndex) return Astro.redirect('/cursos');
 const courseSlug = canonicalCourseId;
-const courseData = (courseIndex.data || {}) as Record<string, unknown>;
+const courseData = ((courseIndex?.data || {}) as Record<string, unknown>);
 const preferredCoursePathSegment = getPreferredCoursePathSegment(
-  canonicalCourseId,
+  canonicalCourseId || '',
   courseData,
 );
 const courseHref = buildCourseHref(canonicalCourseId, courseData);
 
 // Build lesson path index before auth redirects so legacy lesson URLs can
 // canonicalize to the frontmatter slug even for anonymous access.
-const allLessons = (await getCollection('cursos'))
+const allLessons = canonicalCourseId ? (await getCollection('cursos'))
   .filter((entry) => isCourseLessonEntryForCourse(entry, canonicalCourseId))
-  .sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
-const lessonPathIndex = buildCourseLessonPathIndex(
+  .sort((a, b) => (a.data.order || 0) - (b.data.order || 0)) : [];
+const lessonPathIndex = canonicalCourseId ? buildCourseLessonPathIndex(
   canonicalCourseId,
   courseData,
   allLessons,
-);
+) : { coursePathSegment: '', entryByLegacyPath: new Map(), entryByShortPath: new Map(), entryByAliasPath: new Map(), pathByEntryId: new Map() };
 
 const requestedLessonPath = parts.slice(1).join('/');
 const preAuthLessonMatch =
@@ -160,7 +160,7 @@ const loginRedirectTarget =
 
 // Check if user has base access to course.
 const session = (Astro.locals as any).session;
-const isPublicCourse = Boolean(courseIndex.data.public);
+const isPublicCourse = Boolean(courseIndex?.data?.public || isPublicWikiPage);
 if (!session && !isPublicCourse) return Astro.redirect(`/login?redirect=${encodeURIComponent(loginRedirectTarget)}`);
 
 const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
@@ -282,7 +282,9 @@ const sortedProjects = Object.entries(groupedConcepts).sort(([a], [b]) =>
 // Determine what to show
 let currentEntry;
 let resolvedLessonRoutePath = '';
-if (parts.length === 1) {
+if (isPublicWikiPage) {
+  currentEntry = publicEntry;
+} else if (parts.length === 1) {
   // Show course overview
   currentEntry = courseIndex;
 } else if (isCourseForumPage) {
@@ -361,17 +363,15 @@ const lessonSlug = isLessonPage
   )
   : '';
 const rawPresentationTheme =
-  (currentEntry.data as Record<string, unknown>).theme ||
-  (currentEntry.data as Record<string, unknown>).slideTheme ||
-  (currentEntry.data as Record<string, unknown>).revealTheme;
+  (currentEntry?.data as Record<string, unknown>).theme ||
+  (currentEntry?.data as Record<string, unknown>).slideTheme ||
+  (currentEntry?.data as Record<string, unknown>).revealTheme;
 const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
 const presentationHref =
-  isLessonPage && hasPresentationTheme && Astro.url.pathname.startsWith('/cursos/')
-    ? Astro.url.pathname.replace('/cursos/', '/cursos/slides/')
-    : '';
+  (hasPresentationTheme ? `/slides${Astro.url.pathname}` : '') || publicPresentationHref;
 const isLiveEnabled =
   Boolean(courseData?.live) ||
-  Boolean((currentEntry.data as Record<string, unknown>)?.live);
+  Boolean((currentEntry?.data as Record<string, unknown>)?.live);
 const performativeRoomHref = (presentationHref || isLiveEnabled)
   ? `/room?room=${encodeURIComponent(`${canonicalCourseId || courseSlug}-stage`)}&course=${encodeURIComponent(canonicalCourseId || courseSlug)}${presentationHref ? `&slides=${encodeURIComponent(presentationHref)}` : ''}`
   : '';

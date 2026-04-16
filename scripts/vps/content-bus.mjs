@@ -30,6 +30,14 @@ const normalizeCommitSha = (value) => {
   return /^[0-9a-f]{7,40}$/i.test(text) ? text : '';
 };
 
+const getFrameworkCommit = () => {
+  try {
+    return spawnSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+  } catch (e) {
+    return 'unknown';
+  }
+};
+
 // In-memory status for the beacon
 let status = {
   state: 'idle', // idle, running, ok, error, unknown
@@ -64,14 +72,6 @@ const formatRepoLabel = (repo) => {
   if (!text) return 'content';
   const [, name] = text.split('/');
   return name || text;
-};
-
-const getFrameworkCommit = () => {
-  try {
-    return spawnSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
-  } catch (e) {
-    return 'unknown';
-  }
 };
 
 const readDeployPhase = (line) => {

@@ -103,3 +103,10 @@ Cuando escribas notas localmente, no tenes que esperar al Github Action.
 **Solución:** Se corrigió en los templates ubicados en `/framework/docs/templates/notify-platform-on-content-change.yml` haciendo dos cosas:
 1. Usando explícitamente `https://musiki.org.ar/api...` (Dominio sin WWW).
 2. Agregando explícitamente `-L` al comando `curl` dentro del Action de GitHub (`curl -sS -L --fail-with-body ...`) para que siga consistentemente cualquier configuración de red en el futuro y entregue sí o sí el Payload.
+
+### 2026-04-16: PM2 no levantaba `musiki-content-bus` y Astro arrojaba HTTP 500
+**Síntoma:** Aunque el Curl con `-L` empezó a llegar a la API de Astro `/api/webhook/content-update`, la API respondía `HTTP 500: Internal Bridge Error (TypeError: fetch failed)`. Al verificar `pm2 status` en el VPS, `musiki-content-bus` estaba desaparecido de la tabla de procesos.
+
+**Causa:** Un error de tipo "Temporal Dead Zone" (ZTD) en Node.js ES Modules. En `scripts/vps/content-bus.mjs` se intentaba invocar `getFrameworkCommit()` dentro de la inicialización de la variable `let status = { ... }`, pero la función estaba declarada más abajo bajo un contexto de constante (`const getFrameworkCommit = () => {}`). En ES Modules, esto lanza una excepción `ReferenceError: Cannot access 'X' before initialization`, matando el proceso de pm2 de forma instantánea al reinicio.
+
+**Solución:** Se movió la declaración funcional de `getFrameworkCommit` arriba del objeto `status` en `content-bus.mjs` para garantizar que la ejecución top-level la encuentre ya inicializada en memoria. Luego se reinició el servicio localmente con `pm2 start ecosystem.config.cjs --only musiki-content-bus`.
