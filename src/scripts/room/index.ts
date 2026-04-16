@@ -1,5 +1,5 @@
 // Room runtime root entrypoint.
-export { mountLiveKitRoom } from './core';
+export { mountLiveKitRoom } from '../livekit-room';
 export { createRoomChatController } from './chat';
 export { normalizePreviewZoom, normalizeText } from './core/normalize';
 export { createRoomDeviceSelectController, createRoomMicMeterController } from './devices';

@@ -229,9 +229,12 @@ const server = http.createServer(async (req, res) => {
 
   // Webhook endpoint
   if (req.method === 'POST' && req.url === '/webhook/content-update') {
-    const authHeader = req.headers['authorization'];
+    const authHeader = req.headers['authorization'] || '';
+    const maskedAuth = authHeader.length > 15 ? `${authHeader.slice(0, 15)}...` : 'too-short';
+    console.log(`[Content Bus] Incoming POST request. Auth: ${maskedAuth}`);
+
     if (authHeader !== `Bearer ${SECRET}`) {
-      console.warn(`[Content Bus] Unauthorized access attempt.`);
+      console.warn(`[Content Bus] Unauthorized access attempt. Expected secret length: ${SECRET.length}`);
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Unauthorized' }));
       return;

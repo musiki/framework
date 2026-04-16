@@ -1,5 +1,4 @@
 // Room core entrypoint domain.
-export { mountLiveKitRoom } from '../../livekit-room';
 export * from './elements';
 export * from './normalize';
 export * from './types';

@@ -33,7 +33,9 @@ export const POST: APIRoute = async ({ request }) => {
       body: JSON.stringify(payload)
     });
 
+    console.log(`[Astro Bridge] Content Bus responded with status ${response.status}`);
     const data = await response.json();
+    console.log(`[Astro Bridge] Content Bus response data: ${JSON.stringify(data)}`);
 
     return new Response(JSON.stringify(data), {
       status: response.status,
