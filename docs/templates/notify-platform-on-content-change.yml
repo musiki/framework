@@ -22,7 +22,7 @@ jobs:
           # Avisamos al Content Bus del Framework (Zero Downtime)
           # Usamos -sS --fail-with-body para que falle en errores 4xx/5xx pero nos muestre el porqué
           # El '-d @-' es fundamental para leer el JSON del heredoc
-          curl -sS --fail-with-body -X POST https://www.musiki.org.ar/api/webhook/content-update \
+          curl -sS -L --fail-with-body -X POST https://musiki.org.ar/api/webhook/content-update \
             -H "Authorization: Bearer ${CONTENT_BUS_SECRET}" \
             -H "Content-Type: application/json" \
             -d @- <<JSON

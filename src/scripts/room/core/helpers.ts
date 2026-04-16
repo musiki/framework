@@ -1,6 +1,7 @@
 import { normalizeText } from './normalize';
 import {
   BACKGROUND_BLUR_WASM_BASE,
+  BANDWIDTH_PROFILES,
   DEFAULT_BACKGROUND_COLOR,
   RECORDING_PRESET_CONFIGS,
 } from './constants';
@@ -12,6 +13,8 @@ import type {
   VideoMixSettings,
   VisionTasksModule,
   ThreeModule,
+  StreamingProfileKey,
+  BandwidthProfile,
 } from './types';
 import type { ParticipantRole } from '../session';
 
@@ -189,3 +192,12 @@ export const formatDelayTimeLabel = (value: number) =>
 
 export const formatFrequencyLabel = (value: number) =>
   value >= 1000 ? `${(value / 1000).toFixed(1)}kHz` : `${Math.round(value)}Hz`;
+
+export const getStreamingProfile = (
+  role: string,
+  profileKey: StreamingProfileKey = 'auto',
+): BandwidthProfile => {
+  if (profileKey !== 'auto') return BANDWIDTH_PROFILES[profileKey];
+  // Default to High for everyone now as requested
+  return BANDWIDTH_PROFILES.high;
+};

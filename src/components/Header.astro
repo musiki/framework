@@ -737,6 +737,11 @@ const withActiveCourse = (href: string) => {
 				(state === 'ok' || state === 'idle');
 
 			brandLink.dataset.buildState = state;
+			
+			const sourceRepo = String(payload.sourceRepo || '').trim();
+			const buildScope = sourceRepo && !sourceRepo.endsWith('/framework') ? 'course' : 'framework';
+			brandLink.dataset.buildScope = buildScope;
+
 			brandLink.title = title;
 			brandLink.setAttribute('aria-label', title);
 			lastState = state;
@@ -1136,9 +1141,14 @@ const withActiveCourse = (href: string) => {
 	.brand-link[data-build-state='ok'] .brand-logo {
 		filter: drop-shadow(0 0 8px rgba(26, 163, 111, 0.6));
 	}
-	.brand-link[data-build-state='running'] .brand-logo {
+	.brand-link[data-build-state='running'] .brand-logo,
+	.brand-link[data-build-state='running'][data-build-scope='framework'] .brand-logo {
 		animation: header-brand-sync-pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 		filter: drop-shadow(0 0 12px rgba(255, 191, 0, 0.8));
+	}
+	.brand-link[data-build-state='running'][data-build-scope='course'] .brand-logo {
+		animation: header-brand-sync-pulse-course 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+		filter: drop-shadow(0 0 12px rgba(186, 85, 211, 0.8));
 	}
 	.brand-link[data-build-state='error'] .brand-logo {
 		filter: drop-shadow(0 0 10px rgba(209, 67, 67, 0.7));
@@ -1154,6 +1164,16 @@ const withActiveCourse = (href: string) => {
 		50% {
 			transform: scale(1.1);
 			filter: drop-shadow(0 0 18px rgba(255, 191, 0, 0.9)) brightness(1.2);
+		}
+	}
+	@keyframes header-brand-sync-pulse-course {
+		0%, 100% {
+			transform: scale(1);
+			filter: drop-shadow(0 0 6px rgba(186, 85, 211, 0.6)) brightness(1);
+		}
+		50% {
+			transform: scale(1.1);
+			filter: drop-shadow(0 0 18px rgba(186, 85, 211, 0.9)) brightness(1.2);
 		}
 	}
 	nav {

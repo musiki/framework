@@ -148,6 +148,7 @@ import {
   createImpulseResponseBuffer,
   formatDelayTimeLabel,
   formatFrequencyLabel,
+  getStreamingProfile,
 } from './room/core';
 
 type Participant = RoomParticipant;
@@ -10630,7 +10631,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       await ensureIncomingAudioContext().catch(() => undefined);
 
       try {
-        await room.localParticipant.enableCameraAndMicrophone();
+        const profile = getStreamingProfile(localRole, streamingProfileSelect instanceof HTMLSelectElement ? (streamingProfileSelect.value as StreamingProfileKey) : 'auto');
+        await room.localParticipant.enableCameraAndMicrophone({
+          video: {
+            resolution: { width: profile.width, height: profile.height, frameRate: profile.fps },
+            encoding: { maxBitrate: profile.maxBitrate },
+          },
+          audio: {
+            echoCancellation: audioEchoCancellationInput instanceof HTMLInputElement ? audioEchoCancellationInput.checked : true,
+            noiseSuppression: audioNoiseSuppressionInput instanceof HTMLInputElement ? audioNoiseSuppressionInput.checked : true,
+            autoGainControl: audioAutoGainControlInput instanceof HTMLInputElement ? audioAutoGainControlInput.checked : true,
+          }
+        });
       } catch (error) {
         setStatus(
           `Connected, but camera or microphone permissions were not granted: ${safeErrorMessage(error)}`,
@@ -13105,13 +13117,37 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   if (audioEchoCancellationInput instanceof HTMLInputElement) {
-    audioEchoCancellationInput.addEventListener('change', persistSetupState);
+    audioEchoCancellationInput.addEventListener('change', async () => {
+      persistSetupState();
+      if (room.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
+        const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+        if (publication?.audioTrack) {
+          await publication.audioTrack.restart({ echoCancellation: audioEchoCancellationInput.checked });
+        }
+      }
+    });
   }
   if (audioNoiseSuppressionInput instanceof HTMLInputElement) {
-    audioNoiseSuppressionInput.addEventListener('change', persistSetupState);
+    audioNoiseSuppressionInput.addEventListener('change', async () => {
+      persistSetupState();
+      if (room.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
+        const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+        if (publication?.audioTrack) {
+          await publication.audioTrack.restart({ noiseSuppression: audioNoiseSuppressionInput.checked });
+        }
+      }
+    });
   }
   if (audioAutoGainControlInput instanceof HTMLInputElement) {
-    audioAutoGainControlInput.addEventListener('change', persistSetupState);
+    audioAutoGainControlInput.addEventListener('change', async () => {
+      persistSetupState();
+      if (room.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
+        const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+        if (publication?.audioTrack) {
+          await publication.audioTrack.restart({ autoGainControl: audioAutoGainControlInput.checked });
+        }
+      }
+    });
   }
 
   [roomInput, identityInput, nameInput].forEach((input) => {
