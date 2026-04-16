@@ -178,6 +178,10 @@ export type PersistedRoomSetup = {
   streamingProfile?: StreamingProfileKey;
   optimizeSpeaker?: boolean;
   limitGridQuality?: boolean;
+  // Audio processing
+  audioEchoCancellation?: boolean;
+  audioNoiseSuppression?: boolean;
+  audioAutoGainControl?: boolean;
 };
 
 export type BandwidthProfile = {

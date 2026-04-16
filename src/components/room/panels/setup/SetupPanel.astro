@@ -255,7 +255,7 @@ const {
       <label for="conference-streaming-profile-select">Quality profile</label>
       <select id="conference-streaming-profile-select" data-streaming-profile-select>
         <option value="auto">Auto (Adaptive)</option>
-        <option value="high">High — 1080p · 2.5 Mbps</option>
+        <option value="high" selected>High — 1080p · 2.5 Mbps</option>
         <option value="medium">Medium — 480p · 800 kbps</option>
         <option value="low">Low — 360p · 300 kbps</option>
       </select>
@@ -284,6 +284,47 @@ const {
           data-limit-grid-input
         />
         <span>Limit grid quality</span>
+      </label>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid var(--c-border); margin: 0.8rem 0;" />
+
+    <div class="conference-field conference-field--checkbox">
+      <label class="conference-checkbox-row" for="conference-audio-echo-input" title="Acoustic Echo Cancellation (AEC): Modela la ruta altavoz→micrófono y resta del micrófono una copia estimada del audio remoto. Evita oír la propia voz y rebotes del sistema.">
+        <input
+          id="conference-audio-echo-input"
+          name="audio-echo"
+          type="checkbox"
+          checked
+          data-audio-echo-cancellation-input
+        />
+        <span>AEC (Echo Cancellation)</span>
+      </label>
+    </div>
+
+    <div class="conference-field conference-field--checkbox">
+      <label class="conference-checkbox-row" for="conference-audio-noise-input" title="Noise suppression: Atenúa ruidos no vocales: teclado, ventilador, tráfico, construcción. No cancela el eco, pero limpia la señal para que AEC funcione mejor.">
+        <input
+          id="conference-audio-noise-input"
+          name="audio-noise"
+          type="checkbox"
+          checked
+          data-audio-noise-suppression-input
+        />
+        <span>Noise Suppression</span>
+      </label>
+    </div>
+
+    <div class="conference-field conference-field--checkbox">
+      <label class="conference-checkbox-row" for="conference-audio-agc-input" title="Automatic Gain Control (AGC): Ajusta automáticamente el nivel del micrófono para mantener volumen estable. Evita señales demasiado débiles o fuertes.">
+        <input
+          id="conference-audio-agc-input"
+          name="audio-agc"
+          type="checkbox"
+          checked
+          data-audio-auto-gain-control-input
+        />
+        <span>Auto Gain Control</span>
       </label>
     </div>
   </div>

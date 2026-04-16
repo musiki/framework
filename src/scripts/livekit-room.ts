@@ -3828,9 +3828,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     },
     dynacast: true,
     audioCaptureDefaults: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
+      echoCancellation: persistedSetup.audioEchoCancellation !== false,
+      noiseSuppression: persistedSetup.audioNoiseSuppression !== false,
+      autoGainControl: persistedSetup.audioAutoGainControl !== false,
     },
   });
 
@@ -3945,6 +3945,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
   if (limitGridQualityInput instanceof HTMLInputElement && persistedSetup.limitGridQuality !== undefined) {
     limitGridQualityInput.checked = persistedSetup.limitGridQuality;
+  }
+  if (audioEchoCancellationInput instanceof HTMLInputElement) {
+    audioEchoCancellationInput.checked = persistedSetup.audioEchoCancellation !== false;
+  }
+  if (audioNoiseSuppressionInput instanceof HTMLInputElement) {
+    audioNoiseSuppressionInput.checked = persistedSetup.audioNoiseSuppression !== false;
+  }
+  if (audioAutoGainControlInput instanceof HTMLInputElement) {
+    audioAutoGainControlInput.checked = persistedSetup.audioAutoGainControl !== false;
   }
   let instrumentsOpen = persistedSetup.instrumentsOpen === true;
   let handTrackEnabled = Boolean(persistedSetup.handTrackEnabled);
@@ -7545,6 +7554,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       limiterEnabled: synthLimiterEnabled,
       limiterRelease: synthLimiterRelease,
       limiterThreshold: synthLimiterThreshold,
+      streamingProfile: streamingProfileSelect instanceof HTMLSelectElement ? (streamingProfileSelect.value as StreamingProfileKey) : undefined,
+      optimizeSpeaker: optimizeSpeakerInput instanceof HTMLInputElement ? optimizeSpeakerInput.checked : undefined,
+      limitGridQuality: limitGridQualityInput instanceof HTMLInputElement ? limitGridQualityInput.checked : undefined,
+      audioEchoCancellation: audioEchoCancellationInput instanceof HTMLInputElement ? audioEchoCancellationInput.checked : undefined,
+      audioNoiseSuppression: audioNoiseSuppressionInput instanceof HTMLInputElement ? audioNoiseSuppressionInput.checked : undefined,
+      audioAutoGainControl: audioAutoGainControlInput instanceof HTMLInputElement ? audioAutoGainControlInput.checked : undefined,
     });
   };
 
@@ -13087,6 +13102,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       persistSetupState();
       queuePreferredRemoteVideoDimensionsSync();
     });
+  }
+
+  if (audioEchoCancellationInput instanceof HTMLInputElement) {
+    audioEchoCancellationInput.addEventListener('change', persistSetupState);
+  }
+  if (audioNoiseSuppressionInput instanceof HTMLInputElement) {
+    audioNoiseSuppressionInput.addEventListener('change', persistSetupState);
+  }
+  if (audioAutoGainControlInput instanceof HTMLInputElement) {
+    audioAutoGainControlInput.addEventListener('change', persistSetupState);
   }
 
   [roomInput, identityInput, nameInput].forEach((input) => {
