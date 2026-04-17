@@ -80,10 +80,16 @@ const hasPresentationTheme = (entry: ContentEntry) => {
 };
 
 const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
-  const [contentEntries, courseEntries] = await Promise.all([
+  const [allContentEntries, courseEntries] = await Promise.all([
     safeGetCollection<ContentEntry>('content'),
     getCollection('cursos'),
   ]);
+
+  const contentEntries = allContentEntries.filter(entry => {
+    const status = String(entry.data?.status || '').trim().toLowerCase();
+    // For general content, we allow it if status is public/published OR if no status is defined yet
+    return !status || status === 'public' || status === 'published';
+  });
 
   const contentEntryBySlug = new Map<string, ContentEntry>();
   registerUniqueMatches(contentEntryBySlug, groupBySlug(contentEntries, getContentFrontmatterSlug));
@@ -137,7 +143,7 @@ const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
     const type = String(entry.data.type || '').trim().toLowerCase();
     const status = String(entry.data.status || '').trim().toLowerCase();
     const isPublicType = type === 'concept' || type === 'glossary' || type === 'notes' || type === 'public-note';
-    return isPublicType && status === 'public';
+    return isPublicType && (status === 'public' || status === 'published');
   });
 
   const publicCourseEntryBySlug = new Map<string, CourseEntry>();

@@ -857,17 +857,17 @@ const resolvedSlideTheme =
           return Boolean(localIdentity) && localIdentity === sessionLeaderIdentity;
         };
 
-        /** @typedef {{ capturedAt: number; currentTime: number; embedId: string; mediaId: string; playbackState: 'playing' | 'paused' | 'ended'; provider: 'youtube'; volume: number; muted: boolean; }} RevealEmbeddedMediaState */
+        /** @typedef {{ capturedAt: number; currentTime: number; embedId: string; mediaId: string; playbackState: 'playing' | 'paused' | 'ended'; provider: 'youtube'; volume: number; muted: boolean; force: boolean; }} RevealEmbeddedMediaState */
         /** @typedef {{ embedId: string; iframe: HTMLIFrameElement; mediaId: string; player: any; ready: boolean; readyPromise: Promise<any> | null; }} RevealEmbeddedPlayerEntry */
         const revealWindow = /** @type {Window & {
           YT?: { Player?: any };
           onYouTubeIframeAPIReady?: (() => void) | undefined;
           __musikiRevealYouTubeApiPromise?: Promise<any>;
         }} */ (window);
-        const REVEAL_EMBEDDED_MEDIA_SYNC_INTERVAL_MS = 2500; // Align with External Media
+        const REVEAL_EMBEDDED_MEDIA_SYNC_INTERVAL_MS = 1500; // More frequent sync
         const REVEAL_EMBEDDED_MEDIA_BURST_DELAYS_MS = [200, 800, 1600];
         const REVEAL_EMBEDDED_MEDIA_VERIFY_DELAYS_MS = [400, 1200, 2400];
-        const REVEAL_EMBEDDED_MEDIA_SEEK_THRESHOLD_S = 1.25; // Align with External Media
+        const REVEAL_EMBEDDED_MEDIA_SEEK_THRESHOLD_S = 0.8; // Tighten sync
         const REVEAL_EMBEDDED_MEDIA_VERIFY_THRESHOLD_S = 0.8;
         /** @type {Map<string, RevealEmbeddedPlayerEntry>} */
         const revealEmbeddedPlayers = new Map();
@@ -1133,6 +1133,8 @@ const resolvedSlideTheme =
             snapshot.embedId,
             snapshot.mediaId,
             snapshot.playbackState,
+            snapshot.volume,
+            snapshot.muted ? 'm' : 'u',
             snapshot.currentTime.toFixed(1), 
           ].join(':');
 
@@ -1194,7 +1196,7 @@ const resolvedSlideTheme =
               }
 
               withRevealEmbeddedRemoteGuard(() => {
-                if (shouldSeek) {
+                if (expectedState.force || shouldSeek) {
                   currentEntry.player.seekTo(expectedTime, true);
                 }
 
@@ -1232,7 +1234,7 @@ const resolvedSlideTheme =
             // Use a clear timeout to avoid lingering state
             window.setTimeout(() => {
               revealEmbeddedMediaApplyingRemoteState = false;
-            }, 500); 
+            }, 320); 
           }
         };
 
@@ -1430,6 +1432,7 @@ const resolvedSlideTheme =
             provider: 'youtube',
             volume: Math.min(100, Math.max(0, Number(state.volume) || 100)),
             muted: Boolean(state.muted),
+            force: Boolean(state.force),
           };
 
           if (
@@ -1447,7 +1450,7 @@ const resolvedSlideTheme =
           const entry = await ensureRevealEmbeddedPlayer(targetIframe);
           if (!entry?.ready || !entry.player) return;
 
-          const nextState = revealEmbeddedMediaPendingState;
+          const nextState = /** @type {RevealEmbeddedMediaState} */ (revealEmbeddedMediaPendingState);
           if (!nextState) return;
           revealEmbeddedMediaPendingState = null;
           revealEmbeddedMediaActiveEmbedId = entry.embedId;
@@ -1458,7 +1461,7 @@ const resolvedSlideTheme =
             const currentTime = Math.max(0, Number(entry.player.getCurrentTime?.() ?? 0) || 0);
             const targetTime = getRevealEmbeddedExpectedTime(nextState);
             
-            if (Math.abs(currentTime - targetTime) > REVEAL_EMBEDDED_MEDIA_SEEK_THRESHOLD_S) {
+            if (nextState.force || Math.abs(currentTime - targetTime) > REVEAL_EMBEDDED_MEDIA_SEEK_THRESHOLD_S) {
               entry.player.seekTo(targetTime, true);
             }
 

@@ -66,15 +66,15 @@ if (slug.startsWith('cursos/')) {
 // Parse the slug to get course and optional path
 const parts = slug.split('/');
 const requestedCoursePathSegment = parts[0];
-const isCourseForumPage = parts.length === 2 && parts[1] === 'foro';
+const isCourseForumPage = (parts.length === 2 && parts[1] === 'foro') || (parts.length === 1 && Astro.url.searchParams.has('board'));
 const potentialCanonicalCourseId = await canonicalizeCourseId(requestedCoursePathSegment);
 
 // Check if this is actually a course
-const courseIndexCandidate = potentialCanonicalCourseId
+const initialCourseIndexCandidate = potentialCanonicalCourseId
   ? await getEntry('cursos', `${potentialCanonicalCourseId}/_index`)
   : null;
 
-const canonicalCourseId = courseIndexCandidate ? potentialCanonicalCourseId : null;
+const canonicalCourseId = initialCourseIndexCandidate ? potentialCanonicalCourseId : null;
 
 let publicEntry = null;
 let PublicContent = null;
@@ -86,59 +86,87 @@ let publicPresentationHref = '';
 // Check if it's a general public content entry (like a concept or glossary)
 // We check this for all paths as a fallback, but prioritize courses if canonicalCourseId matches
 const allPublicPaths = await getPublicContentStaticPaths();
-const normalizedRequestedSlug = normalizeContentSlug(slug);
+let normalizedRequestedSlug = normalizeContentSlug(slug);
+
+// Manual redirect fallback for common missing slugs
+if (normalizedRequestedSlug === 'objetodesonido' && !allPublicPaths.find(p => p.params.slug === 'objetodesonido')) {
+   return Astro.redirect('/objetodesonidomovimiento' + Astro.url.search);
+}
+
 const routeMatch = allPublicPaths.find(p => p.params.slug === normalizedRequestedSlug);
 
-if (routeMatch && !canonicalCourseId) {
+if (routeMatch) {
   const route = routeMatch.props as PublicContentRouteProps;
 
   if (route.kind === 'redirect') {
     return Astro.redirect(route.redirectTo);
   }
 
-  // @ts-ignore
-  publicEntry = await getEntry(route.collection, route.entryId);
-  if (publicEntry) {
-     const rendered = await render(publicEntry);
-     PublicContent = rendered.Content;
-     publicTitle = publicEntry.data.title || publicEntry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
-     publicDescription = publicEntry.data.summary || publicEntry.data.description || publicEntry.data.subtitle || '';
-     publicTags = Array.isArray(publicEntry.data.tags)
-        ? publicEntry.data.tags
-        : publicEntry.data.tags
-          ? String(publicEntry.data.tags).split(',').map((tag) => tag.trim()).filter(Boolean)
-          : undefined;
-     const rawPresentationTheme =
-        (publicEntry.data as Record<string, unknown>).theme ||
-        (publicEntry.data as Record<string, unknown>).slideTheme ||
-        (publicEntry.data as Record<string, unknown>).revealTheme;
-     const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
-     publicPresentationHref = hasPresentationTheme ? route.presentationHref : '';
+  // Determine if we should treat this as a course context or a public wiki context.
+  // If slug has parts and the first part is a course, we might be in course context.
+  // But for public wiki entries, we often want the public view unless specifically requested via course.
+  
+  if (!canonicalCourseId) {
+    // @ts-ignore
+    publicEntry = await getEntry(route.collection, route.entryId);
+    if (publicEntry) {
+       const rendered = await render(publicEntry);
+       PublicContent = rendered.Content;
+       publicTitle = publicEntry.data.title || publicEntry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
+       publicDescription = publicEntry.data.summary || publicEntry.data.description || publicEntry.data.subtitle || '';
+       publicTags = Array.isArray(publicEntry.data.tags)
+          ? publicEntry.data.tags
+          : publicEntry.data.tags
+            ? String(publicEntry.data.tags).split(',').map((tag) => tag.trim()).filter(Boolean)
+            : undefined;
+       const rawPresentationTheme =
+          (publicEntry.data as Record<string, unknown>).theme ||
+          (publicEntry.data as Record<string, unknown>).slideTheme ||
+          (publicEntry.data as Record<string, unknown>).revealTheme;
+       const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
+       publicPresentationHref = (hasPresentationTheme && route.kind === 'content') ? route.presentationHref : '';
+    }
   }
 }
 
 const isPublicWikiPage = Boolean(publicEntry);
 
-// Get the final course index
-const courseIndex = !isPublicWikiPage ? courseIndexCandidate : null;
+// Check auth session early as it's used for course context determination
+const session = (Astro.locals as any).session;
 
+// We need a course context for public notes if the user is logged in
+// and the note belongs to an enrolled course.
+const requestedCourseId = canonicalCourseId || (session && publicEntry ? (publicEntry.data as any).project : null);
+const finalCanonicalCourseId = await canonicalizeCourseId(requestedCourseId);
+
+const courseIndexCandidate = finalCanonicalCourseId
+  ? await getEntry('cursos', `${finalCanonicalCourseId}/_index`)
+  : null;
+
+// Get the final course index
+const courseIndex = (!isPublicWikiPage || session) ? courseIndexCandidate : null;
+
+// If not a public wiki page and not a course, redirect to catalog
 if (!isPublicWikiPage && !courseIndex) return Astro.redirect('/cursos');
-const courseSlug = canonicalCourseId;
+
+const canonicalCourseIdToUse = courseIndex ? finalCanonicalCourseId : null;
+const courseSlug = canonicalCourseIdToUse;
 const courseData = ((courseIndex?.data || {}) as Record<string, unknown>);
 const preferredCoursePathSegment = getPreferredCoursePathSegment(
-  canonicalCourseId || '',
-  courseData,
+  canonicalCourseIdToUse || '',
+  courseIndex?.data as Record<string, unknown>
 );
-const courseHref = buildCourseHref(canonicalCourseId, courseData);
+const courseHref = buildCourseHref(canonicalCourseIdToUse || '', courseData);
+
 
 // Build lesson path index before auth redirects so legacy lesson URLs can
 // canonicalize to the frontmatter slug even for anonymous access.
-const allLessons = canonicalCourseId ? (await getCollection('cursos'))
-  .filter((entry) => isCourseLessonEntryForCourse(entry, canonicalCourseId))
+const allLessons = canonicalCourseIdToUse ? (await getCollection('cursos'))
+  .filter((entry) => isCourseLessonEntryForCourse(entry, canonicalCourseIdToUse))
   .sort((a, b) => (a.data.order || 0) - (b.data.order || 0)) : [];
 
-const lessonPathIndex = canonicalCourseId ? buildCourseLessonPathIndex(
-  canonicalCourseId,
+const lessonPathIndex = canonicalCourseIdToUse ? buildCourseLessonPathIndex(
+  canonicalCourseIdToUse,
   courseData,
   allLessons,
 ) : { coursePathSegment: '', entryByLegacyPath: new Map(), entryByShortPath: new Map(), entryByAliasPath: new Map(), pathByEntryId: new Map() };
@@ -167,26 +195,37 @@ const loginRedirectTarget =
   || `${Astro.url.pathname}${Astro.url.search}`;
 
 // Check if user has base access to course.
-const session = (Astro.locals as any).session;
 const isPublicCourse = Boolean(courseIndex?.data?.public || isPublicWikiPage);
 if (!session && !isPublicCourse) return Astro.redirect(`/login?redirect=${encodeURIComponent(loginRedirectTarget)}`);
+
+
+const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+const normalizeRole = (value: unknown) => String(value || '').trim().toLowerCase();
+const normalizeForumBoardSlug = (value: unknown) => String(value || '').trim().toLowerCase() || 'general';
+const courseIdAliases = await getCourseAliases(canonicalCourseIdToUse || requestedCoursePathSegment);
+const liveAccess = await resolveLiveManageAccess(session, canonicalCourseIdToUse || requestedCoursePathSegment);
+const sessionEnrollmentRole = String(liveAccess.enrollmentRole || '').trim();
+const canManageLiveInteractions = liveAccess.canManage || normalizeRole(sessionEnrollmentRole) === 'teacher';
+const hasCourseEnrollment = Boolean(sessionEnrollmentRole);
 
 // Fetch global concepts from the 'content' collection
 const globalConcepts = (await getCollection('content')).filter((entry) => {
   const type = String(entry.data.type || '').trim().toLowerCase();
   const status = String(entry.data.status || '').trim().toLowerCase();
-  // Include if it's a concept/glossary and it's public (or user is logged in)
-  return (type === 'concept' || type === 'glossary') && (status === 'public' || session);
-});
+  
+  // They must be concept/glossary
+  if (type !== 'concept' && type !== 'glossary') return false;
+  
+  // They must be public or session must exist
+  if (!session && status !== 'public' && status !== 'published') return false;
 
-const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-const normalizeRole = (value: unknown) => String(value || '').trim().toLowerCase();
-const normalizeForumBoardSlug = (value: unknown) => String(value || '').trim().toLowerCase() || 'general';
-const courseIdAliases = await getCourseAliases(canonicalCourseId || requestedCoursePathSegment);
-const liveAccess = await resolveLiveManageAccess(session, canonicalCourseId || requestedCoursePathSegment);
-const sessionEnrollmentRole = String(liveAccess.enrollmentRole || '').trim();
-const canManageLiveInteractions = liveAccess.canManage || normalizeRole(sessionEnrollmentRole) === 'teacher';
-const hasCourseEnrollment = Boolean(sessionEnrollmentRole);
+  // Filter by project/course
+  const project = String(entry.data.project || '').trim().toLowerCase();
+  const courseIdLower = (canonicalCourseIdToUse || '').toLowerCase();
+  const aliasesLower = courseIdAliases.map(a => a.toLowerCase());
+  
+  return !project || project === 'general' || project === courseIdLower || aliasesLower.includes(project);
+});
 
 if (session && !hasCourseEnrollment && !canManageLiveInteractions) {
   return Astro.redirect('/cursos');
@@ -196,13 +235,13 @@ if (session && !hasCourseEnrollment && !canManageLiveInteractions) {
 const isStudentEnrolled = session && hasCourseEnrollment && !canManageLiveInteractions && normalizeRole(sessionEnrollmentRole) === 'student';
 const isRequestingWelcomePage = requestedLessonPath === '_welcome' || requestedLessonPath.startsWith('_welcome/');
 if (isStudentEnrolled && !isRequestingWelcomePage) {
-  const welcomeEntry = allLessons.find((entry) => entry.id === `${canonicalCourseId}/_welcome`);
+  const welcomeEntry = allLessons.find((entry) => entry.id === `${canonicalCourseIdToUse}/_welcome`);
   if (welcomeEntry) {
     const frontmatterEvalIds = Array.isArray((welcomeEntry.data as any).welcomeEvalIds)
       ? ((welcomeEntry.data as any).welcomeEvalIds as string[]).filter(Boolean)
       : [];
     const derivedWelcomeFields = frontmatterEvalIds.length === 0
-      ? await getCourseWelcomeFields(canonicalCourseId)
+      ? await getCourseWelcomeFields(canonicalCourseIdToUse)
       : [];
     const welcomeEvalIds = frontmatterEvalIds.length > 0
       ? frontmatterEvalIds
@@ -274,14 +313,28 @@ const chapters = sidebarLessons.reduce((acc, lesson) => {
   return acc;
 }, {} as Record<string, typeof allLessons>);
 
-// Add concepts as a special chapter if they exist
-if (conceptsAndGlossary.length > 0) {
-  chapters['90 CONCEPTOS'] = conceptsAndGlossary;
-}
+// Group concepts and glossary by chapter as well
+conceptsAndGlossary.forEach((lesson) => {
+  let chapter = lesson.data.chapter;
+  if (!chapter) {
+    const type = String(lesson.data.type || '').trim().toLowerCase();
+    if (type === 'concept') chapter = '90 CONCEPTOS';
+    else if (type === 'glossary') chapter = '91 GLOSARIO';
+    else if (type === 'public-note' || type === 'notes') chapter = '92 NOTAS PÚBLICAS';
+    else chapter = '99 OTROS';
+  }
+  
+  if (!chapters[chapter]) chapters[chapter] = [];
+  chapters[chapter].push(lesson);
+});
 
 const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapter]) => {
-  if (leftChapter === '90 CONCEPTOS') return 1;
-  if (rightChapter === '90 CONCEPTOS') return -1;
+  const leftIsPublic = leftChapter.startsWith('90') || leftChapter.startsWith('91') || leftChapter.startsWith('92');
+  const rightIsPublic = rightChapter.startsWith('90') || rightChapter.startsWith('91') || rightChapter.startsWith('92');
+  
+  if (leftIsPublic && !rightIsPublic) return 1;
+  if (!leftIsPublic && rightIsPublic) return -1;
+  
   return leftChapter
     .replace(/-/g, ' ')
     .localeCompare(rightChapter.replace(/-/g, ' '), 'es', { sensitivity: 'base' });
@@ -330,7 +383,33 @@ if (isPublicWikiPage) {
     resolvedLessonRoutePath = lessonMatch?.shortPath || '';
   }
 
-  if (!currentEntry) return Astro.redirect(courseHref);
+  if (!currentEntry) {
+    if (routeMatch) {
+       const route = routeMatch.props as PublicContentRouteProps;
+       // @ts-ignore
+       publicEntry = await getEntry(route.collection, route.entryId);
+       if (publicEntry) {
+          currentEntry = publicEntry;
+          const rendered = await render(publicEntry);
+          PublicContent = rendered.Content;
+          publicTitle = publicEntry.data.title || publicEntry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
+          publicDescription = publicEntry.data.summary || publicEntry.data.description || publicEntry.data.subtitle || '';
+          publicTags = Array.isArray(publicEntry.data.tags)
+             ? publicEntry.data.tags
+             : publicEntry.data.tags
+               ? String(publicEntry.data.tags).split(',').map((tag) => tag.trim()).filter(Boolean)
+               : undefined;
+          const rawPresentationTheme =
+             (publicEntry.data as Record<string, unknown>).theme ||
+             (publicEntry.data as Record<string, unknown>).slideTheme ||
+             (publicEntry.data as Record<string, unknown>).revealTheme;
+          const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
+          publicPresentationHref = (hasPresentationTheme && route.kind === 'content') ? route.presentationHref : '';
+       }
+    }
+    
+    if (!currentEntry) return Astro.redirect(courseHref);
+  }
 
   // Check visibility at lesson level
   const visibility = currentEntry.data.visibility;
@@ -1212,21 +1291,42 @@ order:
         letter-spacing: 0.05em;
       }
 
+      .sidebar--left .chapter {
+        margin-bottom: 0.5rem;
+      }
+      
       .sidebar--left .chapter-title {
-        font-size: 1rem;
-        font-weight: 650;
-      }
-      
-      .lesson-list {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.2rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--c-fg-subtle);
+        cursor: pointer;
+        user-select: none;
         list-style: none;
-        padding: 0;
       }
       
-      .lesson-item {
-        margin-bottom: 0.25rem;
+      .sidebar--left .chapter-title::-webkit-details-marker {
+        display: none;
+      }
+      
+      .sidebar--left .chapter-caret {
+        display: inline-flex;
+        transition: transform 0.2s;
+        color: var(--c-fg-subtle);
+        opacity: 0.5;
+      }
+      
+      .sidebar--left .chapter-details[open] .chapter-caret {
+        transform: rotate(180deg);
       }
 
       .sidebar--left .lesson-item {
+        list-style: none;
         margin-bottom: 0;
         padding-left: 0 !important;
       }
@@ -1238,24 +1338,26 @@ order:
 
       .sidebar--left .lesson-list {
         display: grid;
-        gap: 0.08rem;
+        gap: 0;
+        padding-top: 0;
       }
 
       .sidebar--left .lesson-link {
-        padding: 0.3rem 0.45rem;
+        padding: 0.15rem 0.6rem;
       }
       
       .lesson-link {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 0.5rem;
-        padding: 0.5rem 0.45rem;
+        gap: 0.4rem;
+        padding: 0.4rem 0.45rem;
         border-radius: 4px;
         text-decoration: none;
         color: var(--c-fg);
-        font-size: 0.9rem;
-        transition: all 0.2s;
+        font-size: 1rem;
+        transition: all 0.15s;
+        line-height: 1.2;
       }
 
       .lesson-link-text {
@@ -3067,73 +3169,105 @@ order:
           )}
         </div>
 
-        {sortedChapters.map(([chapterName, lessons]) => (
-          <div class="chapter">
-            <div class="chapter-title">{chapterName.replace(/-/g, ' ')}</div>
-            <ul class="lesson-list">
-              {lessons.map((lesson) => {
-                const isContentCollection = (lesson as any).collection === 'content';
-                const lessonHref = isContentCollection
-                  ? `/${getContentCanonicalSlug(lesson as any)}`
-                  : buildCourseLessonHref(
-                      canonicalCourseId,
-                      courseData,
-                      lesson as any,
-                      lessonPathIndex,
+        {sortedChapters.map(([chapterName, lessons]) => {
+          const isPublicFolder = chapterName.startsWith('90 ');
+          const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
+          const isTOC = chapterName === 'TOC de clase';
+          
+          return (
+            <div class="chapter">
+              <details class="chapter-details" open={!isPublicFolder && !isTOC}>
+                <summary class="chapter-title">
+                  <span class="chapter-title-text">{displayTitle}</span>
+                  <span class="chapter-caret">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </span>
+                </summary>
+                <ul class="lesson-list">
+                  {lessons.map((lesson) => {
+                    const isContentCollection = (lesson as any).collection === 'content';
+                    const lessonType = String(lesson.data.type || '').trim().toLowerCase();
+                    const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
+                    
+                    // IF logged in and it belongs to this course, we prefer the course-prefixed URL
+                    // ELSE we use the generic top-level URL for public notes
+                    let lessonHref;
+                    if (session && (isConceptGlossary || isContentCollection)) {
+                      lessonHref = buildCourseLessonHref(
+                          canonicalCourseIdToUse || '',
+                          courseData,
+                          lesson as any,
+                          lessonPathIndex,
+                        );
+                    } else if (isContentCollection || isConceptGlossary) {
+                      lessonHref = `/${getContentCanonicalSlug(lesson as any)}`;
+                    } else {
+                      lessonHref = buildCourseLessonHref(
+                          canonicalCourseIdToUse || '',
+                          courseData,
+                          lesson as any,
+                          lessonPathIndex,
+                        );
+                    }
+                    
+                    const lessonPageSlug = isContentCollection
+                      ? getContentCanonicalSlug(lesson as any)
+                      : (lessonPathIndex.pathByEntryId.get(lesson.id)
+                         || getCourseEntryLegacyPath(lesson as any, canonicalCourseIdToUse || ''));
+                    
+                    const isActive = currentEntry?.id === lesson.id;
+                    const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
+                    
+                    return (
+                      <li class="lesson-item">
+                        <a
+                          href={lessonHref}
+                          class:list={['lesson-link', { active: isActive }]}
+                          data-course-id={canonicalCourseIdToUse || courseSlug}
+                          data-lesson-page-slug={isContentCollection ? lessonPageSlug : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
+                        >
+                          <span class="lesson-link-text">{lesson.data.title}</span>
+                          <span class="lesson-link-trailing">
+                            {lessonType === 'info' && (
+                              <span class="lesson-type">ℹ️</span>
+                            )}
+                            {(lessonType === 'concept' || lessonType === 'glossary') && (
+                              <span class="lesson-type" title={lessonType}>{lessonType === 'concept' ? '💡' : '📖'}</span>
+                            )}
+                            {assignmentLikeTypes.has(lessonType) && (
+                              <span class="lesson-type">📝</span>
+                            )}
+                            {canManageLiveInteractions && lessonStatus === 'draft' && (
+                              <span class="lesson-status-badge lesson-status-badge--draft">
+                                <span class="lesson-status-blob" aria-hidden="true"></span>DRAFT
+                              </span>
+                            )}
+                            {canManageLiveInteractions && lessonStatus === 'private' && (
+                              <span class="lesson-status-badge lesson-status-badge--private">
+                                <span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE
+                              </span>
+                            )}
+                            <span class="lesson-activity-indicators">
+                              <span class="lesson-room-indicator" data-lesson-room-indicator hidden aria-hidden="true">
+                                <span class="lesson-live-led lesson-live-led--room" aria-hidden="true"></span>
+                              </span>
+                              <span class="lesson-live-indicator" data-lesson-live-indicator hidden aria-live="polite">
+                                <span class="lesson-live-led" aria-hidden="true"></span>
+                                <span class="lesson-live-countdown" data-lesson-live-countdown hidden></span>
+                              </span>
+                            </span>
+                          </span>
+                        </a>
+                      </li>
                     );
-                const lessonPageSlug = isContentCollection
-                  ? getContentCanonicalSlug(lesson as any)
-                  : (lessonPathIndex.pathByEntryId.get(lesson.id)
-                     || getCourseEntryLegacyPath(lesson as any, canonicalCourseId));
-                const isActive = currentEntry?.id === lesson.id;
-                const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
-                const lessonType = String(lesson.data.type || '').trim().toLowerCase();
-                return (
-                  <li class="lesson-item">
-                    <a
-                      href={lessonHref}
-                      class:list={['lesson-link', { active: isActive }]}
-                      data-course-id={canonicalCourseId || courseSlug}
-                      data-lesson-page-slug={isContentCollection ? lessonPageSlug : `${canonicalCourseId}/${lessonPageSlug}`}
-                    >
-                      <span class="lesson-link-text">{lesson.data.title}</span>
-                      <span class="lesson-link-trailing">
-                        {lessonType === 'info' && (
-                          <span class="lesson-type">ℹ️</span>
-                        )}
-                        {(lessonType === 'concept' || lessonType === 'glossary') && (
-                          <span class="lesson-type" title={lessonType}>{lessonType === 'concept' ? '💡' : '📖'}</span>
-                        )}
-                        {assignmentLikeTypes.has(lessonType) && (
-                          <span class="lesson-type">📝</span>
-                        )}
-                        {canManageLiveInteractions && lessonStatus === 'draft' && (
-                          <span class="lesson-status-badge lesson-status-badge--draft">
-                            <span class="lesson-status-blob" aria-hidden="true"></span>DRAFT
-                          </span>
-                        )}
-                        {canManageLiveInteractions && lessonStatus === 'private' && (
-                          <span class="lesson-status-badge lesson-status-badge--private">
-                            <span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE
-                          </span>
-                        )}
-                        <span class="lesson-activity-indicators">
-                          <span class="lesson-room-indicator" data-lesson-room-indicator hidden aria-hidden="true">
-                            <span class="lesson-live-led lesson-live-led--room" aria-hidden="true"></span>
-                          </span>
-                          <span class="lesson-live-indicator" data-lesson-live-indicator hidden aria-live="polite">
-                            <span class="lesson-live-led" aria-hidden="true"></span>
-                            <span class="lesson-live-countdown" data-lesson-live-countdown hidden></span>
-                          </span>
-                        </span>
-                      </span>
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+                  })}
+                </ul>
+              </details>
+            </div>
+          );
+        })}
 
         {isLessonPage && (
           <>

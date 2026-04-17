@@ -22,6 +22,9 @@ export type PresentationMediaState = {
   mediaId: string;
   playbackState: PresentationMediaPlaybackState;
   provider: PresentationMediaProvider;
+  volume: number;
+  muted: boolean;
+  force?: boolean;
 };
 
 export type ConferenceMessage =
@@ -299,6 +302,9 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         mediaId,
         playbackState,
         provider,
+        volume: Math.min(100, Math.max(0, Number((parsed as { volume?: number }).volume) ?? 100)),
+        muted: Boolean((parsed as { muted?: boolean }).muted),
+        force: Boolean((parsed as { force?: boolean }).force),
       };
     }
 

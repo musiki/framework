@@ -1123,6 +1123,9 @@ const normalizePresentationMediaState = (
     mediaId,
     playbackState,
     provider: 'youtube',
+    volume: Math.min(100, Math.max(0, Number(value.volume) ?? 100)),
+    muted: Boolean(value.muted),
+    force: Boolean(value.force),
   };
 };
 
@@ -9782,7 +9785,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     pendingRemotePresentationMediaState = mediaState;
     postToPresentation({
       type: 'musiki:reveal-embedded-media-sync',
-      state: mediaState,
+      state: {
+        capturedAt: mediaState.capturedAt,
+        currentTime: mediaState.currentTime,
+        embedId: mediaState.embedId,
+        mediaId: mediaState.mediaId,
+        playbackState: mediaState.playbackState,
+        provider: mediaState.provider,
+        volume: mediaState.volume,
+        muted: mediaState.muted,
+        force: mediaState.force,
+      },
     });
   };
 
@@ -9795,9 +9808,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mediaState.embedId,
       mediaState.mediaId,
       mediaState.playbackState,
-      mediaState.currentTime.toFixed(2),
+      mediaState.volume,
+      mediaState.muted ? 'm' : 'u',
+      mediaState.currentTime.toFixed(1),
     ].join(':');
-    if (!force && presentationMediaKey === lastPublishedPresentationMediaKey) return;
+    if (!force && !mediaState.force && presentationMediaKey === lastPublishedPresentationMediaKey) return;
     lastPublishedPresentationMediaKey = presentationMediaKey;
     currentPresentationMediaState = mediaState;
     await publishMessage({
