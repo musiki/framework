@@ -103,14 +103,15 @@ if (routeMatch) {
   const route = routeMatch.props as PublicContentRouteProps;
 
   if (route.kind === 'redirect') {
-    return Astro.redirect(route.redirectTo);
-  }
-
-  // Determine if we should treat this as a course context or a public wiki context.
-  // If slug has parts and the first part is a course, we might be in course context.
-  // But for public wiki entries, we often want the public view unless specifically requested via course.
-
-  if (!canonicalCourseId || parts.length > 1) {
+    // Skip redirect if it would send us to the same URL (prevents infinite loops
+    // when a course lesson URL like /i1/lesson matches a public-routes redirect to /i1/lesson).
+    const currentPath = Astro.url.pathname;
+    const normalize = (u: string) => decodeURIComponent(u).replace(/\/+/g, '/').replace(/\/$/, '');
+    if (normalize(route.redirectTo) !== normalize(currentPath)) {
+      return Astro.redirect(route.redirectTo);
+    }
+    // Same-URL redirect skipped — treat as no public route match for this path.
+  } else if (!canonicalCourseId || parts.length > 1) {
     // @ts-ignore
     publicEntry = await getEntry(route.collection, route.entryId);
     if (publicEntry) {
@@ -231,7 +232,7 @@ const globalConcepts = (await getCollection('content')).filter((entry) => {
   return project === 'general' || project === courseIdLower || aliasesLower.includes(project);
 });
 
-if (session && canonicalCourseIdToUse && !hasCourseEnrollment && !canManageLiveInteractions) {
+if (session && canonicalCourseIdToUse && !isPublicWikiPage && !hasCourseEnrollment && !canManageLiveInteractions) {
   return Astro.redirect('/cursos');
 }
 
@@ -378,6 +379,7 @@ let isServingPublicFallback = false;
 if (parts.length === 1) {
   if (isPublicWikiPage && !canonicalCourseId) {
     currentEntry = publicEntry;
+    isServingPublicFallback = true;
   } else {
     // Show course overview
     currentEntry = courseIndex;
@@ -403,6 +405,8 @@ if (parts.length === 1) {
   if (!currentEntry && isPublicWikiPage) {
      currentEntry = publicEntry;
      isServingPublicFallback = true;
+     // Set resolved path for fallback to prevent redirecting to course index
+     resolvedLessonRoutePath = normalizedLessonPath || slug;
   }
 
   if (!currentEntry) return Astro.redirect(courseHref);
@@ -422,10 +426,30 @@ if (parts.length === 1) {
     }
   }
 
-  // For _welcome, skip the canonical-path redirect (its path can't be slugified).
-  // Also skip for public wiki entries served as course-context fallback (e.g. /i1/conceptoPublico).
-  if (!isServingPublicFallback && canonicalCourseIdToUse && !isRequestingWelcomePage && (requestedCoursePathSegment !== preferredCoursePathSegment || requestedLessonPath !== resolvedLessonRoutePath)) {
-    return Astro.redirect(`${courseHref}/${encodePathSegments(resolvedLessonRoutePath)}${Astro.url.search}`);
+  // Canonical path redirection with loop protection.
+  const isRootPublicContextUpgrade = parts.length === 1 && isPublicWikiPage && session && !canonicalCourseId;
+
+  if ((!isServingPublicFallback || isRootPublicContextUpgrade) && canonicalCourseIdToUse && !isRequestingWelcomePage) {
+    const isCoursePathMismatch = requestedCoursePathSegment !== preferredCoursePathSegment;
+    const isLessonPathMismatch = (parts.length > 1 && !isCourseForumPage) && requestedLessonPath !== resolvedLessonRoutePath;
+
+    if (isCoursePathMismatch || isLessonPathMismatch || isRootPublicContextUpgrade) {
+      const targetPath = (isRootPublicContextUpgrade)
+        ? `${courseHref.replace(/\/$/, '')}/${encodePathSegments(resolvedLessonRoutePath || slug)}`
+        : (parts.length === 1 || isCourseForumPage)
+          ? `${courseHref}${isCourseForumPage ? '/foro' : ''}`
+          : `${courseHref.replace(/\/$/, '')}/${encodePathSegments(resolvedLessonRoutePath)}`;
+      
+      const targetUrl = `${targetPath}${Astro.url.search}`;
+      const currentUrl = `${Astro.url.pathname}${Astro.url.search}`;
+
+      // Only redirect if the target is truly different to avoid infinite loops.
+      // Normalize slashes and trailing slashes for comparison.
+      const normalize = (u: string) => decodeURIComponent(u).replace(/\/+/g, '/').replace(/\/$/, '');
+      if (normalize(targetUrl) !== normalize(currentUrl)) {
+        return Astro.redirect(targetUrl);
+      }
+    }
   }
 
 const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
@@ -434,11 +458,6 @@ const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase
 if (currentEntryType === 'info' && !session) {
   const lessonLoginRedirectTarget = `${courseHref}/${encodePathSegments(resolvedLessonRoutePath || requestedLessonPath)}${Astro.url.search}`;
   return Astro.redirect(`/login?redirect=${encodeURIComponent(lessonLoginRedirectTarget)}`);
-}
-
-if (canonicalCourseIdToUse && (parts.length === 1 || isCourseForumPage) && requestedCoursePathSegment !== preferredCoursePathSegment) {
-  const forumSuffix = isCourseForumPage ? '/foro' : '';
-  return Astro.redirect(`${courseHref}${forumSuffix}${Astro.url.search}`);
 }
 
 const renderedEntry = PublicContent ? { Content: PublicContent } : await render(currentEntry);
