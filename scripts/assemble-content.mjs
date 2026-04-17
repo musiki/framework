@@ -156,7 +156,7 @@ const main = () => {
   const promotedFiles = [];
   const skippedPromotions = [];
 
-  const registerCopy = (sourceAbs, destinationAbs, meta) => {
+  const registerCopy = (sourceAbs, destinationAbs, meta, injectFrontmatter = null) => {
     const relativeDestination = normalizeRel(path.relative(stagingDir, destinationAbs));
     const existing = destinationMap.get(relativeDestination);
 
@@ -175,15 +175,26 @@ const main = () => {
     }
 
     ensureDir(path.dirname(destinationAbs));
-    
-    // Auto-fix markdown files if they are missing a title
+
+    // Auto-fix markdown files: add missing title and inject frontmatter fields
     if (isMarkdown(sourceAbs)) {
       try {
         const raw = fs.readFileSync(sourceAbs, 'utf8');
         const { data, content } = matter(raw);
+        let modified = false;
         if (!data.title) {
-          const fallbackTitle = path.basename(sourceAbs, path.extname(sourceAbs));
-          data.title = fallbackTitle;
+          data.title = path.basename(sourceAbs, path.extname(sourceAbs));
+          modified = true;
+        }
+        if (injectFrontmatter) {
+          for (const [key, value] of Object.entries(injectFrontmatter)) {
+            if (data[key] === undefined || data[key] === null || data[key] === '') {
+              data[key] = value;
+              modified = true;
+            }
+          }
+        }
+        if (modified) {
           fs.writeFileSync(destinationAbs, matter.stringify(content, data));
         } else {
           fs.copyFileSync(sourceAbs, destinationAbs);
@@ -204,7 +215,7 @@ const main = () => {
     return true;
   };
 
-  const copyTree = (sourceId, sourceRoot, destinationRoot, mode) => {
+  const copyTree = (sourceId, sourceRoot, destinationRoot, mode, injectFrontmatter = null) => {
     if (!fs.existsSync(sourceRoot)) return;
     const files = walkFiles(sourceRoot);
     for (const filePath of files) {
@@ -216,7 +227,7 @@ const main = () => {
       registerCopy(filePath, destination, {
         sourceLabel: `${sourceId}:${normalizeRel(path.relative(path.dirname(sourceRoot), filePath))}`,
         mode,
-      });
+      }, injectFrontmatter);
     }
   };
 
@@ -242,7 +253,7 @@ const main = () => {
     const sourcePublicRoot = path.join(sourceContentRoot, assembly.publicDir);
 
     copyTree(source.id, sourceCoursesRoot, path.join(stagingDir, assembly.coursesDir), 'courses');
-    copyTree(source.id, sourcePublicRoot, path.join(stagingDir, assembly.publicDir), 'public');
+    copyTree(source.id, sourcePublicRoot, path.join(stagingDir, assembly.publicDir), 'public', { project: source.id });
 
     if (!assembly.promoteFromCourses || !fs.existsSync(sourceCoursesRoot)) continue;
 

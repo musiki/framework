@@ -93,7 +93,11 @@ if (normalizedRequestedSlug === 'objetodesonido' && !allPublicPaths.find(p => p.
    return Astro.redirect('/objetodesonidomovimiento' + Astro.url.search);
 }
 
-const routeMatch = allPublicPaths.find(p => p.params.slug === normalizedRequestedSlug);
+const lessonPathPart = parts.slice(1).join('/');
+const normalizedLessonPath = normalizeContentSlug(lessonPathPart);
+
+const routeMatch = allPublicPaths.find(p => p.params.slug === normalizedRequestedSlug)
+  || (parts.length > 1 ? allPublicPaths.find(p => p.params.slug === normalizedLessonPath) : null);
 
 if (routeMatch) {
   const route = routeMatch.props as PublicContentRouteProps;
@@ -105,8 +109,8 @@ if (routeMatch) {
   // Determine if we should treat this as a course context or a public wiki context.
   // If slug has parts and the first part is a course, we might be in course context.
   // But for public wiki entries, we often want the public view unless specifically requested via course.
-  
-  if (!canonicalCourseId) {
+
+  if (!canonicalCourseId || parts.length > 1) {
     // @ts-ignore
     publicEntry = await getEntry(route.collection, route.entryId);
     if (publicEntry) {
@@ -212,10 +216,10 @@ const hasCourseEnrollment = Boolean(sessionEnrollmentRole);
 const globalConcepts = (await getCollection('content')).filter((entry) => {
   const type = String(entry.data.type || '').trim().toLowerCase();
   const status = String(entry.data.status || '').trim().toLowerCase();
-  
+
   // They must be concept/glossary
   if (type !== 'concept' && type !== 'glossary') return false;
-  
+
   // They must be public or session must exist
   if (!session && status !== 'public' && status !== 'published') return false;
 
@@ -223,11 +227,11 @@ const globalConcepts = (await getCollection('content')).filter((entry) => {
   const project = String(entry.data.project || '').trim().toLowerCase();
   const courseIdLower = (canonicalCourseIdToUse || '').toLowerCase();
   const aliasesLower = courseIdAliases.map(a => a.toLowerCase());
-  
-  return !project || project === 'general' || project === courseIdLower || aliasesLower.includes(project);
+
+  return project === 'general' || project === courseIdLower || aliasesLower.includes(project);
 });
 
-if (session && !hasCourseEnrollment && !canManageLiveInteractions) {
+if (session && canonicalCourseIdToUse && !hasCourseEnrollment && !canManageLiveInteractions) {
   return Astro.redirect('/cursos');
 }
 
@@ -279,15 +283,15 @@ const conceptsAndGlossary = [
   ...allLessons.filter((l) => {
     const type = String(l.data.type || '').trim().toLowerCase();
     if (!conceptGlossaryTypes.has(type)) return false;
-    
+
     if (canManageLiveInteractions) return true;
-    
+
     const status = String(l.data.status || '').trim().toLowerCase();
     if (teacherOnlyStatuses.has(status)) return false;
-    
+
     // They must be public or session must exist
     if (!session && status !== 'public') return false;
-    
+
     return true;
   }),
   ...globalConcepts
@@ -317,24 +321,32 @@ const chapters = sidebarLessons.reduce((acc, lesson) => {
 conceptsAndGlossary.forEach((lesson) => {
   let chapter = lesson.data.chapter;
   if (!chapter) {
-    const type = String(lesson.data.type || '').trim().toLowerCase();
-    if (type === 'concept') chapter = '90 CONCEPTOS';
-    else if (type === 'glossary') chapter = '91 GLOSARIO';
-    else if (type === 'public-note' || type === 'notes') chapter = '92 NOTAS PÚBLICAS';
-    else chapter = '99 OTROS';
+    const isFromContentCollection = (lesson as any).collection === 'content';
+    if (isFromContentCollection) {
+      // Derive chapter from folder path in the entry ID: public/{folderName}/filename
+      const idParts = String((lesson as any).id || '').split('/');
+      const folderName = idParts.length >= 2 ? idParts[idParts.length - 2] : '';
+      chapter = folderName ? `90 ${folderName.toUpperCase()}` : '90 CONCEPTOS';
+    } else {
+      const type = String(lesson.data.type || '').trim().toLowerCase();
+      if (type === 'concept') chapter = '90 CONCEPTOS';
+      else if (type === 'glossary') chapter = '91 GLOSARIO';
+      else if (type === 'public-note' || type === 'notes') chapter = '92 NOTAS PÚBLICAS';
+      else chapter = '99 OTROS';
+    }
   }
-  
+
   if (!chapters[chapter]) chapters[chapter] = [];
   chapters[chapter].push(lesson);
 });
 
 const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapter]) => {
-  const leftIsPublic = leftChapter.startsWith('90') || leftChapter.startsWith('91') || leftChapter.startsWith('92');
-  const rightIsPublic = rightChapter.startsWith('90') || rightChapter.startsWith('91') || rightChapter.startsWith('92');
-  
+  const leftIsPublic = /^9\d/.test(leftChapter);
+  const rightIsPublic = /^9\d/.test(rightChapter);
+
   if (leftIsPublic && !rightIsPublic) return 1;
   if (!leftIsPublic && rightIsPublic) return -1;
-  
+
   return leftChapter
     .replace(/-/g, ' ')
     .localeCompare(rightChapter.replace(/-/g, ' '), 'es', { sensitivity: 'base' });
@@ -346,26 +358,30 @@ const groupedConcepts: Record<string, Record<string, typeof allLessons>> = {};
 conceptsAndGlossary.forEach((entry) => {
   const project = String((entry.data as any).project || 'General').trim();
   const parent = String((entry.data as any).parent || 'Raíz').trim();
-  
+
   if (!groupedConcepts[project]) groupedConcepts[project] = {};
   if (!groupedConcepts[project][parent]) groupedConcepts[project][parent] = [];
-  
+
   groupedConcepts[project][parent].push(entry);
 });
 
 // Sort grouped concepts
-const sortedProjects = Object.entries(groupedConcepts).sort(([a], [b]) => 
+const sortedProjects = Object.entries(groupedConcepts).sort(([a], [b]) =>
   a.localeCompare(b, 'es', { sensitivity: 'base' })
 );
 
 // Determine what to show
 let currentEntry;
 let resolvedLessonRoutePath = '';
-if (isPublicWikiPage) {
-  currentEntry = publicEntry;
-} else if (parts.length === 1) {
-  // Show course overview
-  currentEntry = courseIndex;
+let isServingPublicFallback = false;
+
+if (parts.length === 1) {
+  if (isPublicWikiPage && !canonicalCourseId) {
+    currentEntry = publicEntry;
+  } else {
+    // Show course overview
+    currentEntry = courseIndex;
+  }
 } else if (isCourseForumPage) {
   // Show course forum hub
   currentEntry = courseIndex;
@@ -375,7 +391,7 @@ if (isPublicWikiPage) {
   // _welcome uses a literal underscore path that toCoursePathSlug would mangle,
   // so we bypass the slug index and look it up directly by entry ID.
   if (isRequestingWelcomePage) {
-    currentEntry = allLessons.find((e) => e.id === `${canonicalCourseId}/_welcome`);
+    currentEntry = allLessons.find((e) => e.id === `${canonicalCourseIdToUse}/_welcome`);
     resolvedLessonRoutePath = '_welcome';
   } else {
     const lessonMatch = findLessonByCoursePath(lessonPath, lessonPathIndex);
@@ -383,33 +399,14 @@ if (isPublicWikiPage) {
     resolvedLessonRoutePath = lessonMatch?.shortPath || '';
   }
 
-  if (!currentEntry) {
-    if (routeMatch) {
-       const route = routeMatch.props as PublicContentRouteProps;
-       // @ts-ignore
-       publicEntry = await getEntry(route.collection, route.entryId);
-       if (publicEntry) {
-          currentEntry = publicEntry;
-          const rendered = await render(publicEntry);
-          PublicContent = rendered.Content;
-          publicTitle = publicEntry.data.title || publicEntry.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'Untitled';
-          publicDescription = publicEntry.data.summary || publicEntry.data.description || publicEntry.data.subtitle || '';
-          publicTags = Array.isArray(publicEntry.data.tags)
-             ? publicEntry.data.tags
-             : publicEntry.data.tags
-               ? String(publicEntry.data.tags).split(',').map((tag) => tag.trim()).filter(Boolean)
-               : undefined;
-          const rawPresentationTheme =
-             (publicEntry.data as Record<string, unknown>).theme ||
-             (publicEntry.data as Record<string, unknown>).slideTheme ||
-             (publicEntry.data as Record<string, unknown>).revealTheme;
-          const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
-          publicPresentationHref = (hasPresentationTheme && route.kind === 'content') ? route.presentationHref : '';
-       }
-    }
-    
-    if (!currentEntry) return Astro.redirect(courseHref);
+  // Fallback to public wiki entry if no course lesson matched
+  if (!currentEntry && isPublicWikiPage) {
+     currentEntry = publicEntry;
+     isServingPublicFallback = true;
   }
+
+  if (!currentEntry) return Astro.redirect(courseHref);
+}
 
   // Check visibility at lesson level
   const visibility = currentEntry.data.visibility;
@@ -426,10 +423,10 @@ if (isPublicWikiPage) {
   }
 
   // For _welcome, skip the canonical-path redirect (its path can't be slugified).
-  if (!isRequestingWelcomePage && (requestedCoursePathSegment !== preferredCoursePathSegment || requestedLessonPath !== resolvedLessonRoutePath)) {
+  // Also skip for public wiki entries served as course-context fallback (e.g. /i1/conceptoPublico).
+  if (!isServingPublicFallback && canonicalCourseIdToUse && !isRequestingWelcomePage && (requestedCoursePathSegment !== preferredCoursePathSegment || requestedLessonPath !== resolvedLessonRoutePath)) {
     return Astro.redirect(`${courseHref}/${encodePathSegments(resolvedLessonRoutePath)}${Astro.url.search}`);
   }
-}
 
 const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
 
@@ -439,12 +436,13 @@ if (currentEntryType === 'info' && !session) {
   return Astro.redirect(`/login?redirect=${encodeURIComponent(lessonLoginRedirectTarget)}`);
 }
 
-if ((parts.length === 1 || isCourseForumPage) && requestedCoursePathSegment !== preferredCoursePathSegment) {
+if (canonicalCourseIdToUse && (parts.length === 1 || isCourseForumPage) && requestedCoursePathSegment !== preferredCoursePathSegment) {
   const forumSuffix = isCourseForumPage ? '/foro' : '';
   return Astro.redirect(`${courseHref}${forumSuffix}${Astro.url.search}`);
 }
 
-const { Content: StaticContent } = await render(currentEntry);
+const renderedEntry = PublicContent ? { Content: PublicContent } : await render(currentEntry);
+const { Content: StaticContent } = renderedEntry;
 const dynamicContent = !isCourseForumPage
   ? await getRuntimeDynamicContent(currentEntry.id)
   : null;
@@ -459,7 +457,7 @@ const isLessonPage = parts.length > 1 && !isCourseForumPage;
 const currentEntryStatus = String(currentEntry.data.status || '').trim().toLowerCase();
 const lessonDescription =
   String(currentEntry.data.summary || currentEntry.data.description || '').trim() ||
-  String(courseIndex.data.summary || courseIndex.data.description || '').trim();
+  String(courseIndex?.data?.summary || courseIndex?.data?.description || '').trim();
 const lessonSlug = isLessonPage
   ? (
     resolvedLessonRoutePath
@@ -654,7 +652,7 @@ if (isEditorActive) {
   if (isEditing) {
     try {
       const source = resolveCourseSource(canonicalCourseId);
-      
+
       if (!source?.repo) {
         editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
       } else {
@@ -703,9 +701,9 @@ order:
 <!doctype html>
 <html lang="es">
   <head>
-    <BaseHead 
-      title={isEditorActive ? `${isCreating ? 'Creando' : 'Editando'}: ${currentEntry.data.title || 'Nueva nota'}` : (currentEntry.data.title || courseIndex.data.title)} 
-      description={lessonDescription} 
+    <BaseHead
+      title={isEditorActive ? `${isCreating ? 'Creando' : 'Editando'}: ${currentEntry.data.title || 'Nueva nota'}` : (currentEntry.data.title || courseIndex?.data?.title)}
+      description={lessonDescription}
     />
     {isEditorActive && (
       <style>
@@ -791,13 +789,24 @@ order:
         .editor-status[data-tone='error'] { color: #b3261e; }
       </style>
     )}
+    <style is:global>
+      html, body {
+        overflow: hidden !important;
+        height: 100% !important;
+      }
+    </style>
     <style>
       .course-container {
-        --course-shell-top-gap: clamp(1rem, 1.45vw, 1.35rem);
-        --course-shell-top: calc(var(--musiki-header-height, 4.5rem) + var(--course-shell-top-gap));
-        --course-shell-bottom-gap: 0.7rem;
+        --course-shell-top-gap: 0px;
+        --course-shell-top: var(--musiki-header-height, 4.5rem);
+        --course-shell-bottom-gap: 0px;
         --left-sidebar-width: clamp(258px, calc(19vw + 10px), 322px);
         --right-sidebar-width: clamp(400px, 31vw, 520px);
+        /* reset global main styles */
+        width: 100%;
+        max-width: none;
+        margin: 0 !important;
+        padding: 0 !important;
         --course-fold-cursor-down:
           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 22 6 10h20Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
           s-resize;
@@ -809,13 +818,10 @@ order:
           minmax(0, var(--left-sidebar-width))
           minmax(0, 1fr)
           minmax(0, var(--right-sidebar-width));
-        gap: clamp(0.9rem, 1.35vw, 1.3rem);
-        width: 100%;
-        max-width: none;
-        margin: 0;
-        padding: var(--course-shell-top-gap) clamp(0.7rem, 1.5vw, 1.4rem) 1.35rem;
-        min-height: calc(100dvh - 6.75rem);
-        align-items: start;
+        gap: 0;
+        height: calc(100dvh - var(--musiki-header-height, 4.5rem));
+        overflow: hidden;
+        align-items: stretch;
         position: relative;
       }
 
@@ -843,7 +849,10 @@ order:
       }
 
       .course-container[data-left-open='false'][data-right-open='false'] {
-        grid-template-columns: 0 minmax(0, 1fr) 0;
+        grid-template-columns:
+          0
+          minmax(0, 1fr)
+          0;
       }
 
       .course-sidebar-overlay {
@@ -863,30 +872,56 @@ order:
 
       .course-sidebar-handle {
         position: fixed;
-        top: calc(var(--musiki-header-height, 4.5rem) + 1.05rem);
+        top: calc(var(--musiki-header-height, 4.5rem) + 0.5rem);
         z-index: 46;
-        width: 2.3rem;
-        height: 2.3rem;
+        width: 2.25rem;
+        height: 4.5rem;
         border: 1px solid var(--c-border);
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--c-bg) 92%, var(--c-bg-mute) 8%);
+        background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%);
         color: var(--c-fg);
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         display: none;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        font-size: 0.95rem;
-        line-height: 1;
-        transition: opacity 180ms ease, transform 180ms ease;
+        transition: all 180ms ease;
       }
 
       .course-sidebar-handle--left {
-        left: 0.55rem;
+        left: 0;
+        border-left: none;
+        border-radius: 0 99px 99px 0;
+        padding-right: 0.2rem;
       }
 
       .course-sidebar-handle--right {
-        right: 0.55rem;
+        right: 0;
+        border-right: none;
+        border-radius: 99px 0 0 99px;
+        padding-left: 0.2rem;
+      }
+
+      .course-sidebar-handle:hover {
+        width: 2.5rem;
+        background: color-mix(in srgb, var(--c-bg) 90%, var(--c-fg) 10%);
+      }
+
+      .course-sidebar-handle svg {
+        width: 1.6rem;
+        height: 1.6rem;
+        transition: transform 0.2s;
+      }
+
+      .course-sidebar-handle--left svg {
+        /* No rotation needed for list icon */
+      }
+
+      .course-sidebar-handle--left:hover svg {
+        transform: scale(1.1) translateX(2px);
+      }
+
+      .course-sidebar-handle--right:hover svg {
+        transform: scale(1.1) translateX(-2px);
       }
 
       .course-container[data-has-right-sidebar='false'] .course-sidebar-handle--right {
@@ -900,14 +935,14 @@ order:
       .course-container[data-right-open='false'][data-has-right-sidebar='true'] .course-sidebar-handle--right {
         display: inline-flex;
       }
-      
+
       .sidebar {
-        --course-sidebar-pad-top: 1.1rem;
+        --course-sidebar-pad-top: 0.75rem;
         --course-sidebar-pad-x: 1rem;
         --course-sidebar-pad-bottom: 1.2rem;
-        position: sticky;
-        top: var(--course-shell-top);
-        height: calc(100dvh - var(--course-shell-top) - var(--course-shell-bottom-gap));
+        position: relative;
+        height: 100%;
+        margin-top: 0;
         min-height: 0;
         min-width: 0;
         width: 100%;
@@ -916,15 +951,15 @@ order:
         overscroll-behavior: contain;
         overscroll-behavior-x: none;
         scrollbar-gutter: stable;
-        border: 1px solid var(--c-border);
-        border-radius: 12px;
+        border: none;
+        border-radius: 0;
         padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
-        background: var(--c-bg);
+        background: color-mix(in srgb, var(--c-fg) 3%, var(--c-bg));
+        z-index: 10;
         transition:
           transform 180ms ease,
           opacity 180ms ease,
-          padding 180ms ease,
-          border-color 180ms ease;
+          padding 180ms ease;
       }
 
       .sidebar--left {
@@ -933,10 +968,7 @@ order:
 
       .sidebar--right {
         justify-self: stretch;
-        top: var(--course-shell-top);
-        height: calc(100dvh - var(--course-shell-top) - var(--course-shell-bottom-gap));
         touch-action: pan-y;
-        position: sticky;
       }
 
       .page-info-sidebar-panel {
@@ -1099,7 +1131,6 @@ order:
         overflow: hidden;
         padding-left: 0;
         padding-right: 0;
-        border-color: transparent;
       }
 
       .course-container[data-right-open='false'] .sidebar--right {
@@ -1109,7 +1140,6 @@ order:
         overflow: hidden;
         padding-left: 0;
         padding-right: 0;
-        border-color: transparent;
       }
 
       .sidebar-panel-heading {
@@ -1175,6 +1205,9 @@ order:
         background: var(--c-bg-mute);
       }
 
+      .sidebar-fold-all-btn[data-folded="true"] .icon-fold-all { display: none; }
+      .sidebar-fold-all-btn[data-folded="false"] .icon-unfold-all { display: none; }
+
       .course-sidebar-state-note {
         margin: 0;
         font-size: 0.84rem;
@@ -1185,13 +1218,13 @@ order:
         padding: 0.8rem 0.85rem;
         background: color-mix(in srgb, var(--c-bg-mute) 60%, var(--c-bg) 40%);
       }
-      
+
       .course-title {
         font-size: 1.1rem;
         font-weight: 600;
         margin-bottom: 1.5rem;
         padding-bottom: 1rem;
-        border-bottom: 1px solid var(--c-border);
+        border-bottom: 1px solid color-mix(in srgb, var(--c-border) 35%, transparent);
       }
 
       .course-title-row {
@@ -1277,11 +1310,11 @@ order:
         display: inline-block;
         overflow-wrap: anywhere;
       }
-      
+
       .chapter {
         margin-bottom: 1.5rem;
       }
-      
+
       .chapter-title {
         font-size: 0.9rem;
         font-weight: 600;
@@ -1294,7 +1327,7 @@ order:
       .sidebar--left .chapter {
         margin-bottom: 0.5rem;
       }
-      
+
       .sidebar--left .chapter-title {
         display: flex;
         align-items: center;
@@ -1309,25 +1342,25 @@ order:
         user-select: none;
         list-style: none;
       }
-      
+
       .sidebar--left .chapter-title::-webkit-details-marker {
         display: none;
       }
-      
+
       .sidebar--left .chapter-caret {
         display: inline-flex;
         transition: transform 0.2s;
         color: var(--c-fg-subtle);
         opacity: 0.5;
       }
-      
+
       .sidebar--left .chapter-details[open] .chapter-caret {
         transform: rotate(180deg);
       }
 
       .sidebar--left .lesson-item {
         list-style: none;
-        margin-bottom: 0;
+        margin: 0;
         padding-left: 0 !important;
       }
 
@@ -1338,14 +1371,16 @@ order:
 
       .sidebar--left .lesson-list {
         display: grid;
-        gap: 0;
+        gap: 2px;
         padding-top: 0;
+        margin-top: 0.4rem;
+        margin-bottom: 0;
       }
 
       .sidebar--left .lesson-link {
         padding: 0.15rem 0.6rem;
       }
-      
+
       .lesson-link {
         display: flex;
         align-items: center;
@@ -1372,18 +1407,18 @@ order:
         margin-left: auto;
         flex: 0 0 auto;
       }
-      
+
       .lesson-link:hover {
         background: var(--c-bg-mute);
       }
-      
+
       .lesson-link.active {
         background: transparent;
         color: var(--accent);
         font-weight: 500;
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 78%, transparent);
       }
-      
+
       .lesson-type {
         font-size: 0.75rem;
         opacity: 0.7;
@@ -1776,17 +1811,16 @@ order:
       .progress-label {
         line-height: 1.35;
       }
-      
+
       .content-area {
-        border: 1px solid var(--c-border);
-        border-radius: 12px;
+        border: none;
+        border-radius: 0;
         padding: clamp(1.15rem, 2.2vw, 2.5rem);
         background: var(--c-bg);
         width: min(100%, clamp(42rem, 54vw, 60rem));
         justify-self: center;
-        height: auto;
-        min-height: calc(100dvh - 7.4rem);
-        overflow-y: visible;
+        height: 100%;
+        overflow-y: auto;
         scrollbar-gutter: stable;
         font-size: 1.15rem;
       }
@@ -1868,7 +1902,7 @@ order:
       .content-fold-body > :first-child {
         margin-top: 0 !important;
       }
-      
+
       .assignment-badge {
         display: inline-block;
         background: var(--accent);
@@ -1891,7 +1925,7 @@ order:
         background: color-mix(in srgb, #f59e0b 14%, var(--c-bg));
         border: 1px solid color-mix(in srgb, #f59e0b 34%, transparent);
       }
-      
+
       .course-nav {
         display: flex;
         justify-content: space-between;
@@ -1899,7 +1933,7 @@ order:
         padding-top: 2rem;
         border-top: 1px solid var(--c-border);
       }
-      
+
       .nav-button {
         padding: 0.5rem 1rem;
         background: var(--accent);
@@ -1908,11 +1942,11 @@ order:
         border-radius: 4px;
         transition: opacity 0.2s;
       }
-      
+
       .nav-button:hover {
         opacity: 0.9;
       }
-      
+
       .nav-button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
@@ -1966,7 +2000,7 @@ order:
           var(--course-sidebar-pad-x)
           0.5rem;
         border-bottom: 1px solid var(--forum-border-soft);
-        background: var(--c-bg);
+        background: color-mix(in srgb, var(--c-fg) 3%, var(--c-bg));
       }
 
       .forum-switcher-shell {
@@ -2744,12 +2778,12 @@ order:
         padding: 1rem;
         font-size: 0.92rem;
       }
-      
+
       @media (max-width: 1024px) {
         .course-container {
           grid-template-columns: minmax(0, 1fr);
           min-height: auto;
-          padding: 0.92rem 0.65rem 0.65rem;
+          padding: 0;
         }
 
         .course-container[data-left-open='false'],
@@ -2761,28 +2795,24 @@ order:
         .course-sidebar-handle {
           display: none;
           top: auto;
-          bottom: 0.8rem;
-          background: #ffffff;
-          border: 1px solid color-mix(in srgb, var(--c-border) 82%, var(--c-fg) 18%);
-          box-shadow:
-            0 10px 24px rgba(15, 23, 42, 0.16),
-            0 0 0 1px rgba(15, 23, 42, 0.06);
-        }
-
-        :global(.dark) .course-sidebar-handle {
-          background: #111827;
-          border-color: color-mix(in srgb, var(--c-border) 76%, white 24%);
-          box-shadow:
-            0 12px 28px rgba(0, 0, 0, 0.44),
-            0 0 0 1px rgba(255, 255, 255, 0.08);
+          bottom: 5%;
+          width: 2.5rem;
+          height: 5rem;
+          background: var(--c-bg);
+          border: 1px solid var(--c-border);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
         }
 
         .course-sidebar-handle--left {
-          left: 0.8rem;
+          left: 0;
+          border-left: none;
+          border-radius: 0 99px 99px 0;
         }
 
         .course-sidebar-handle--right {
-          right: 0.8rem;
+          right: 0;
+          border-right: none;
+          border-radius: 99px 0 0 99px;
         }
 
         .course-container[data-left-open='false'] .course-sidebar-handle--left,
@@ -2795,16 +2825,17 @@ order:
           --course-sidebar-pad-x: 0.95rem;
           --course-sidebar-pad-bottom: 1.2rem;
           position: fixed;
-          top: calc(var(--musiki-header-height, 4.5rem) + 0.32rem);
+          top: 0;
           bottom: 0;
           z-index: 44;
           width: min(84vw, 320px);
-          height: calc(100dvh - var(--musiki-header-height, 4.5rem) - 0.32rem);
+          height: 100dvh;
           max-height: none;
           border-radius: 0;
-          padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
+          padding: calc(var(--musiki-header-height, 4.5rem) + var(--course-sidebar-pad-top)) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
           overflow-y: auto;
           scrollbar-gutter: auto;
+          background: var(--c-bg);
           box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18);
         }
 
@@ -2834,7 +2865,6 @@ order:
         .course-container[data-right-open='true'] .sidebar--right {
           opacity: 1;
           pointer-events: auto;
-          border-color: var(--c-border);
         }
 
         .course-container[data-left-open='true'] .sidebar--left {
@@ -2910,18 +2940,25 @@ order:
           --course-sidebar-pad-x: 0.9rem;
           --course-sidebar-pad-bottom: 1.1rem;
           top: var(--musiki-header-height, 4.5rem);
-          right: 0;
           bottom: 0;
-          left: 0;
-          width: 100vw;
-          width: 100dvw;
+          width: 95vw;
+          width: 95dvw;
           max-width: none;
-          height: auto;
-          min-height: calc(100dvh - var(--musiki-header-height, 4.5rem));
+          height: calc(100dvh - var(--musiki-header-height, 4.5rem));
           padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
-          border-top: none;
-          border-radius: 0;
-          box-shadow: 0 16px 34px rgba(0, 0, 0, 0.14);
+          background: var(--c-bg);
+          box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+        }
+
+        .sidebar--left {
+          left: 0;
+          right: auto;
+        }
+
+        .sidebar--right {
+          right: 0;
+          left: auto;
+          box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
         }
 
         .sidebar-panel-actions {
@@ -2939,8 +2976,8 @@ order:
           width: 100%;
           max-width: 100vw;
           margin: 0;
-          padding: 0.5rem;
-          gap: 0.7rem;
+          padding: 0;
+          gap: 0;
         }
 
         .sidebar {
@@ -3109,7 +3146,7 @@ order:
       class="course-container"
       data-course-layout-root
       data-user-key={String(session?.user?.email || '').trim()}
-      data-left-open="true"
+      data-left-open={isPublicWikiPage && !session ? "false" : "true"}
       data-right-open="false"
       data-right-maximized="false"
       data-has-right-sidebar={hasForumSidebar ? 'true' : 'false'}
@@ -3123,14 +3160,22 @@ order:
         data-sidebar-handle="left"
         aria-label="Mostrar navegación del curso"
         title="Mostrar navegación del curso (⌘/Ctrl + \\)"
-      >→</button>
+      >
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 6.00067L21 6.00139M8 12.0007L21 12.0015M8 18.0007L21 18.0015M3.5 6H3.51M3.5 12H3.51M3.5 18H3.51M4 6C4 6.27614 3.77614 6.5 3.5 6.5C3.22386 6.5 3 6.27614 3 6C3 5.72386 3.22386 5.5 3.5 5.5C3.77614 5.5 4 5.72386 4 6ZM4 12C4 12.2761 3.77614 12.5 3.5 12.5C3.22386 12.5 3 12.2761 3 12C3 11.7239 3.22386 11.5 3.5 11.5C3.77614 11.5 4 11.7239 4 12ZM4 18C4 18.2761 3.77614 18.5 3.5 18.5C3.22386 18.5 3 18.2761 3 18C3 17.7239 3.22386 17.5 3.5 17.5C3.77614 17.5 4 17.7239 4 18Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <button
         type="button"
         class="course-sidebar-handle course-sidebar-handle--right"
         data-sidebar-handle="right"
         aria-label="Mostrar foros"
         title="Mostrar foros (⌘/Ctrl + Shift + \\)"
-      >←</button>
+      >
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M16.1795 3.26875C15.7889 2.87823 15.1558 2.87823 14.7652 3.26875L8.12078 9.91322C6.94952 11.0845 6.94916 12.9833 8.11996 14.155L14.6903 20.7304C15.0808 21.121 15.714 21.121 16.1045 20.7304C16.495 20.3399 16.495 19.7067 16.1045 19.3162L9.53246 12.7442C9.14194 12.3536 9.14194 11.7205 9.53246 11.33L16.1795 4.68297C16.57 4.29244 16.57 3.65928 16.1795 3.26875Z" fill="currentColor"/>
+        </svg>
+      </button>
       <div class="course-sidebar-overlay" data-course-sidebar-overlay></div>
 
       <!-- Sidebar Navigation -->
@@ -3138,7 +3183,7 @@ order:
         <div class="course-title">
           <div class="course-title-row">
             <a href={courseHref} class="course-title-link">
-              <span class="course-title-link-text">{courseIndex.data.title}</span>
+              <span class="course-title-link-text">{courseIndex?.data?.title}</span>
             </a>
             <div class="course-title-actions">
               {(teacherEditHref || teacherCreateHref) && (
@@ -3151,6 +3196,23 @@ order:
                   )}
                 </div>
               )}
+              <button
+                type="button"
+                class="sidebar-toggle-btn sidebar-fold-all-btn"
+                id="sidebar-fold-all-btn"
+                aria-label="Desplegar todas las secciones"
+                title="Desplegar todas las secciones"
+                data-folded="true"
+              >
+                <svg class="icon-unfold-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                  <polyline points="6 9 12 15 18 9"/>
+                  <polyline points="6 3 12 9 18 3"/>
+                </svg>
+                <svg class="icon-fold-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                  <polyline points="6 15 12 9 18 15"/>
+                  <polyline points="6 21 12 15 18 21"/>
+                </svg>
+              </button>
               <button
                 type="button"
                 class="sidebar-toggle-btn"
@@ -3169,14 +3231,14 @@ order:
           )}
         </div>
 
-        {sortedChapters.map(([chapterName, lessons]) => {
-          const isPublicFolder = chapterName.startsWith('90 ');
+        {(!isPublicWikiPage || Boolean(session)) && sortedChapters.map(([chapterName, lessons]) => {
+          const isPublicFolder = /^9\d /.test(chapterName);
           const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
           const isTOC = chapterName === 'TOC de clase';
-          
+
           return (
             <div class="chapter">
-              <details class="chapter-details" open={!isPublicFolder && !isTOC}>
+              <details class="chapter-details" open={lessons.some(l => currentEntry?.id === l.id)}>
                 <summary class="chapter-title">
                   <span class="chapter-title-text">{displayTitle}</span>
                   <span class="chapter-caret">
@@ -3190,7 +3252,7 @@ order:
                     const isContentCollection = (lesson as any).collection === 'content';
                     const lessonType = String(lesson.data.type || '').trim().toLowerCase();
                     const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
-                    
+
                     // IF logged in and it belongs to this course, we prefer the course-prefixed URL
                     // ELSE we use the generic top-level URL for public notes
                     let lessonHref;
@@ -3211,15 +3273,15 @@ order:
                           lessonPathIndex,
                         );
                     }
-                    
+
                     const lessonPageSlug = isContentCollection
                       ? getContentCanonicalSlug(lesson as any)
                       : (lessonPathIndex.pathByEntryId.get(lesson.id)
                          || getCourseEntryLegacyPath(lesson as any, canonicalCourseIdToUse || ''));
-                    
+
                     const isActive = currentEntry?.id === lesson.id;
                     const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
-                    
+
                     return (
                       <li class="lesson-item">
                         <a
@@ -3269,11 +3331,11 @@ order:
           );
         })}
 
-        {isLessonPage && (
+        {(isLessonPage || (isPublicWikiPage && !session)) && (
           <>
             <div class="chapter class-toc" id="class-toc" hidden>
-              <details id="class-toc-details">
-                <summary class="chapter-title">TOC de clase</summary>
+              <details id="class-toc-details" data-start-folded={isPublicWikiPage && !session ? 'true' : 'false'}>
+                <summary class="chapter-title">Contenido</summary>
                 <ul id="class-toc-list" class="lesson-list class-toc-list"></ul>
               </details>
             </div>
@@ -3352,11 +3414,11 @@ order:
             </div>
           </section>
         )}
-        
+
       <div class="class-content" data-class-content data-entry-type={currentEntryType} hidden={isEditorActive}>
         {dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />}
       </div>
-        
+
         {isAssignment && (
           <div style="margin-top: 2rem; padding: 1.5rem; background: var(--c-bg-mute); border-radius: 8px;">
             <p><em>Nota: Las respuestas se guardarán en una próxima actualización. Por ahora, puedes trabajar en el ejercicio localmente.</em></p>
@@ -3784,7 +3846,10 @@ order:
           return fallback;
         };
 
-        let leftOpen = true;
+        let leftOpen = coerceBoolean(
+          window.localStorage.getItem('musiki:course:left-open'),
+          root.dataset.leftOpen !== 'false',
+        );
         let rightOpen = hasRightSidebar && coerceBoolean(
           window.localStorage.getItem('musiki:course:right-open'),
           root.dataset.rightOpen !== 'false',
@@ -3829,7 +3894,6 @@ order:
           const leftHandle = root.querySelector('[data-sidebar-handle="left"]');
           if (leftHandle instanceof HTMLButtonElement) {
             const nextLabel = leftOpen ? 'Ocultar navegación del curso' : 'Mostrar navegación del curso';
-            leftHandle.textContent = leftOpen ? '←' : '→';
             leftHandle.setAttribute('aria-label', nextLabel);
             leftHandle.title = `${nextLabel} (⌘/Ctrl + \\)`;
           }
@@ -3837,7 +3901,6 @@ order:
           const rightHandle = root.querySelector('[data-sidebar-handle="right"]');
           if (rightHandle instanceof HTMLButtonElement) {
             const nextLabel = rightOpen ? 'Ocultar foros' : 'Mostrar foros';
-            rightHandle.textContent = rightOpen ? '→' : '←';
             rightHandle.setAttribute('aria-label', nextLabel);
             rightHandle.title = nextLabel;
           }
@@ -4110,6 +4173,30 @@ order:
         window.__musikiCourseLayoutTouchCancelHandler = clearActiveSwipe;
 
         syncLayoutState();
+
+        const foldAllBtn = document.getElementById('sidebar-fold-all-btn');
+        if (foldAllBtn instanceof HTMLButtonElement) {
+          const getSidebarDetails = () =>
+            Array.from(document.querySelectorAll('.sidebar--left details.chapter-details, #class-toc-details'));
+
+          const syncFoldBtn = () => {
+            const allOpen = getSidebarDetails().every((d) => (d as HTMLDetailsElement).open);
+            foldAllBtn.dataset.folded = allOpen ? 'false' : 'true';
+            foldAllBtn.setAttribute('aria-label', allOpen ? 'Colapsar todas las secciones' : 'Desplegar todas las secciones');
+            foldAllBtn.title = allOpen ? 'Colapsar todas las secciones' : 'Desplegar todas las secciones';
+          };
+
+          foldAllBtn.addEventListener('click', () => {
+            const details = getSidebarDetails();
+            const anyOpen = details.some((d) => (d as HTMLDetailsElement).open);
+            details.forEach((d) => { (d as HTMLDetailsElement).open = !anyOpen; });
+            syncFoldBtn();
+          });
+
+          getSidebarDetails().forEach((d) => {
+            d.addEventListener('toggle', syncFoldBtn);
+          });
+        }
       };
 
       if (document.readyState === 'loading') {
@@ -8224,7 +8311,9 @@ order:
           tocList.appendChild(createTocNodeElement(rootNode));
         });
 
-        tocDetails.open = true;
+        if (tocDetails.dataset.startFolded !== 'true') {
+          tocDetails.open = true;
+        }
         tocRoot.hidden = tocList.children.length === 0;
       }
 
@@ -11898,7 +11987,7 @@ a[node] -->|edge| b[hub]
           window.__musikiCourseContentTeardown();
         }
       });
-      
+
     </script>
 
     <script>
@@ -12064,7 +12153,7 @@ a[node] -->|edge| b[hub]
       }
       document.addEventListener('astro:page-load', setupLessonLiveBeacons);
     </script>
-    
+
     <style is:global>
       .eval-block {
         margin: 2rem 0;

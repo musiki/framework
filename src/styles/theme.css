@@ -4,6 +4,9 @@
   --c-subtle: #444444;
   --c-link: #0b6cff;
   --c-border: #dcdcdc;
+  --c-bg-mute: #f9f9f9;
+  --c-fg-dim: #666666;
+  --c-fg-subtle: #888888;
 }
 :root.dark{
   /* Catppuccin Mocha */
@@ -14,6 +17,9 @@
   --c-subtle: #a6adc8;    /* Subtext1 */
   --c-link: #89b4fa;      /* Blue */
   --c-border: #45475a;    /* Surface1 */
+  --c-bg-mute: #313244;   /* Surface0 */
+  --c-fg-dim: #9399b2;    /* Overlay2 */
+  --c-fg-subtle: #7f849c; /* Overlay0 */
 }
 
 html, body{

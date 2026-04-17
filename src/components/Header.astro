@@ -439,7 +439,7 @@ const withActiveCourse = (href: string) => {
 		const syncHeaderHeight = () => {
 			const header = document.querySelector('header');
 			if (!(header instanceof HTMLElement)) return;
-			document.documentElement.style.setProperty('--musiki-header-height', `${Math.ceil(header.offsetHeight)}px`);
+			document.documentElement.style.setProperty('--musiki-header-height', `${header.getBoundingClientRect().height}px`);
 		};
 
 		const toggleRightSidebarGlobal = () => {
@@ -1099,6 +1099,7 @@ const withActiveCourse = (href: string) => {
 		padding: 0 1em;
 		background: white;
 		box-shadow: none;
+		border-bottom: 1px solid color-mix(in srgb, currentColor 5%, transparent);
 		position: fixed;
 		top: 0;
 		left: 0;
@@ -1106,7 +1107,7 @@ const withActiveCourse = (href: string) => {
 		z-index: 1200;
 	}
 	:global(body) {
-		padding-top: var(--musiki-header-height, 4.5rem);
+		padding-top: var(--musiki-header-height, 4.5rem) !important;
 	}
 	h2 {
 		margin: 0;
