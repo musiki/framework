@@ -2914,9 +2914,10 @@ order:
 
         .content-area {
           width: 100%;
-          height: auto;
-          min-height: calc(100dvh - 8.4rem);
-          overflow: visible;
+          height: 100%;
+          min-height: 0;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
           scrollbar-gutter: auto;
         }
 
@@ -2955,8 +2956,8 @@ order:
 
       @media (max-width: 640px) {
         .course-sidebar-handle {
-          width: 2.15rem;
-          height: 2.15rem;
+          width: 2.25rem;
+          height: 4rem;
         }
 
         .sidebar {
@@ -2972,6 +2973,11 @@ order:
       }
 
       @media (max-width: 500px) {
+        .course-sidebar-handle {
+          width: 2rem;
+          height: 3.5rem;
+        }
+
         .sidebar {
           --course-sidebar-pad-top: 0.9rem;
           --course-sidebar-pad-x: 0.9rem;
