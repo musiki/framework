@@ -25,12 +25,39 @@
       "img": ""
     },
     {
-      "id": "cursos/i1/01-mentes/Introducción",
-      "name": "Introducción a Mentes",
+      "id": "cursos/i1/00-materiales/Biblografía",
+      "name": "Biblografía",
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
-      "canonicalSlug": "introduccion",
+      "canonicalSlug": "biblografia",
+      "img": ""
+    },
+    {
+      "id": "cursos/i1/01-mentes/Introducción a IA",
+      "name": "Introducción a IA",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "introduccion-a-ia",
+      "img": ""
+    },
+    {
+      "id": "cursos/i1/01-mentes/TPC02 noticias AI",
+      "name": "TPC02 noticias AI",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "tpc02-noticias-ai",
+      "img": ""
+    },
+    {
+      "id": "cursos/i1/01-mentes/Vibecoding",
+      "name": "Introducción a IA",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "vibecoding",
       "img": ""
     },
     {
