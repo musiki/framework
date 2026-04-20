@@ -3539,6 +3539,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     studentInviteCopyButton,
     studentInviteRevokeButton,
     chatList,
+    chatScroller,
     chatInput,
     chatSection,
     chatFocusButton,
@@ -3712,6 +3713,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     !(sessionTimer instanceof HTMLElement) ||
     !(recordButton instanceof HTMLButtonElement) ||
     !(chatList instanceof HTMLElement) ||
+    !(chatScroller instanceof HTMLElement) ||
     !(chatInput instanceof HTMLTextAreaElement) ||
     !(chatSendButton instanceof HTMLButtonElement) ||
     !(chatDownloadButton instanceof HTMLButtonElement)
@@ -3748,6 +3750,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (!(sessionTimer instanceof HTMLElement)) missingDomNodes.push('session timer');
     if (!(recordButton instanceof HTMLButtonElement)) missingDomNodes.push('record button');
     if (!(chatList instanceof HTMLElement)) missingDomNodes.push('chat list');
+    if (!(chatScroller instanceof HTMLElement)) missingDomNodes.push('chat scroller');
     if (!(chatInput instanceof HTMLTextAreaElement)) missingDomNodes.push('chat input');
     if (!(chatSendButton instanceof HTMLButtonElement)) missingDomNodes.push('chat send button');
     if (!(chatDownloadButton instanceof HTMLButtonElement)) missingDomNodes.push('chat download button');
@@ -9982,6 +9985,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     chatFocusButton: chatFocusButton instanceof HTMLButtonElement ? chatFocusButton : null,
     chatInput,
     chatList,
+    chatScroller,
     chatSection,
     chatSendButton,
     chatUnreadDot: chatUnreadDot instanceof HTMLElement ? chatUnreadDot : null,

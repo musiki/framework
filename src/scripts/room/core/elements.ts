@@ -108,6 +108,7 @@ export const selectRoomElements = (root: HTMLElement) => {
     studentInviteCopyButton: root.querySelector('[data-action="student-invite-copy"]'),
     studentInviteRevokeButton: root.querySelector('[data-action="student-invite-revoke"]'),
     chatList: root.querySelector('[data-chat-list]'),
+    chatScroller: root.querySelector('[data-chat-scroller]'),
     chatInput: root.querySelector('[data-chat-input]'),
     chatSection: root.querySelector('[data-chat-section]'),
     chatFocusButton: root.querySelector('[data-action="chat-focus"]'),

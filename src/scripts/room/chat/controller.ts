@@ -8,6 +8,7 @@ type CreateRoomChatControllerOptions = {
   chatFocusButton?: HTMLButtonElement | null;
   chatInput: HTMLInputElement | HTMLTextAreaElement;
   chatList: HTMLElement;
+  chatScroller?: HTMLElement | null;
   chatSection?: Element | null;
   chatSendButton: HTMLButtonElement;
   chatUnreadDot?: HTMLElement | null;
@@ -262,7 +263,11 @@ export const createRoomChatController = ({
       chatList.appendChild(item);
     });
 
-    chatList.scrollTop = chatList.scrollHeight;
+    if (chatScroller instanceof HTMLElement) {
+      chatScroller.scrollTop = chatScroller.scrollHeight;
+    } else {
+      chatList.scrollTop = chatList.scrollHeight;
+    }
   };
 
   const resetUnread = () => {

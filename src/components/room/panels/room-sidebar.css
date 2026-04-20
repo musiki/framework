@@ -171,55 +171,40 @@ details[open]>summary.conference-sidebar-heading::before {
   flex: 0 0 auto;
 }
 
+.conference-sidebar-information-stack>.conference-sidebar-section--clase,
+.conference-sidebar-information-stack>.conference-sidebar-section--notes,
 .conference-sidebar-information-stack>.conference-sidebar-section--chat,
 .conference-sidebar-information-stack>.conference-sidebar-section--grid {
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.conference-sidebar-information-stack>.conference-sidebar-section--clase[open] {
-  flex: 0 1 auto;
-  min-height: 0;
-  height: calc(var(--conference-sidebar-strip-height) + var(--conference-clase-section-max-height));
-  max-height: calc(var(--conference-sidebar-strip-height) + var(--conference-clase-section-max-height));
-  overflow: hidden;
-  display: grid;
-  grid-template-rows: var(--conference-sidebar-strip-height) minmax(0, 1fr);
-}
-
-.conference-sidebar-information-stack>.conference-sidebar-section--chat[open] {
-  flex: 2 1 0;
-  min-height: 0;
-  max-height: calc(var(--conference-sidebar-strip-height) + var(--conference-chat-section-max-height));
   display: grid;
   grid-template-rows: var(--conference-sidebar-strip-height) minmax(0, 1fr);
   overflow: hidden;
 }
 
-.conference-sidebar-information-stack>.conference-sidebar-section--grid[open] {
-  flex: 3 1 0;
-}
-
+.conference-sidebar-information-stack>.conference-sidebar-section--clase:not([open]),
+.conference-sidebar-information-stack>.conference-sidebar-section--notes:not([open]),
 .conference-sidebar-information-stack>.conference-sidebar-section--chat:not([open]),
 .conference-sidebar-information-stack>.conference-sidebar-section--grid:not([open]) {
   flex: 0 0 auto;
-  display: block;
-  flex: 0 0 auto;
-  min-height: var(--conference-sidebar-strip-height);
+  grid-template-rows: var(--conference-sidebar-strip-height);
   max-height: var(--conference-sidebar-strip-height);
-  overflow: hidden;
 }
 
-.conference-sidebar-information-stack>.conference-sidebar-section--clase,
-.conference-sidebar-information-stack>.conference-sidebar-section--notes {
+.conference-sidebar-information-stack>.conference-sidebar-section--clase[open],
+.conference-sidebar-information-stack>.conference-sidebar-section--notes[open] {
   flex: 0 1 auto;
-  min-height: 0;
   max-height: calc(var(--conference-sidebar-strip-height) + 400px);
-  overflow: hidden;
-  display: grid;
-  grid-template-rows: var(--conference-sidebar-strip-height) minmax(0, 1fr);
+}
+
+.conference-sidebar-information-stack>.conference-sidebar-section--chat[open] {
+  flex: 2 1 180px;
+  min-height: 120px;
+  max-height: calc(var(--conference-sidebar-strip-height) + var(--conference-chat-section-max-height));
+}
+
+.conference-sidebar-information-stack>.conference-sidebar-section--grid[open] {
+  flex: 3 1 200px;
+  min-height: 100px;
 }
 
 .conference-sidebar-information-stack>.conference-sidebar-section--notes {
@@ -236,7 +221,7 @@ details[open]>summary.conference-sidebar-heading::before {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  padding-top: 0.45rem;
+  padding-top: 0;
 }
 
 .conference-sidebar-panel-body--chat,
@@ -253,11 +238,12 @@ details[open]>summary.conference-sidebar-heading::before {
 }
 
 .conference-sidebar-panel-body--chat {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  height: 100%;
 }
 
 .conference-sidebar-panel-body--clase,
@@ -321,6 +307,7 @@ details[open]>summary.conference-sidebar-heading::before {
   scrollbar-gutter: stable;
   user-select: text;
 }
+
 
 .clase-content:focus-visible {
   outline: none;
@@ -1271,7 +1258,7 @@ details[open]>summary.conference-sidebar-heading::before {
 }
 
 .conference-slot--sidebar .conference-tile {
-  aspect-ratio: 4 / 5; /* portrait near-square/crop */
+  aspect-ratio: 16 / 9;
   width: 100%;
   max-width: none;
 }
@@ -1295,7 +1282,7 @@ details[open]>summary.conference-sidebar-heading::before {
     flex: 0 0 auto;
     width: 100%;
     height: auto;
-    aspect-ratio: 4 / 5;
+    aspect-ratio: 16 / 9;
     max-width: none;
   }
 
