@@ -1,10 +1,15 @@
 /* Room stage domain: stage panels, overlays, countdown, and tile layout. */
 
-.conference-shell[data-show-circle='false'] .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+.conference-shell[data-show-circle="false"]
+  .conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus {
   display: none;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus:has(.conference-tile[data-show-circle='false']) {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus:has(
+    .conference-tile[data-show-circle="false"]
+  ) {
   display: none;
 }
 
@@ -172,32 +177,37 @@
   pointer-events: none;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--presentation,
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen,
-.conference-stage[data-layout='grid'] .conference-stage-panel--grid {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--presentation,
+.conference-stage[data-layout="presentation"] .conference-stage-panel--focus,
+.conference-stage[data-layout="teacher"] .conference-stage-panel--focus,
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--screen,
+.conference-stage[data-layout="grid"] .conference-stage-panel--grid {
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--presentation,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen,
-.conference-stage[data-layout='grid'] .conference-stage-panel--grid {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--presentation,
+.conference-stage[data-layout="teacher"] .conference-stage-panel--focus,
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--screen,
+.conference-stage[data-layout="grid"] .conference-stage-panel--grid {
   inset: 0;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--presentation {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--presentation {
   grid-template-rows: 1fr;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--presentation .conference-stage-heading {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--presentation
+  .conference-stage-heading {
   display: none;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+.conference-stage[data-layout="presentation"] .conference-stage-panel--focus {
   inset: auto 1rem 1rem auto;
   width: clamp(101px, 13vw, 158px);
   aspect-ratio: 1;
@@ -210,46 +220,81 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-stage-heading,
-.conference-stage[data-layout='presentation'] .conference-stage-panel--screen {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-stage-heading,
+.conference-stage[data-layout="presentation"] .conference-stage-panel--screen {
   display: none;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus {
+.conference-stage[data-layout="teacher"] .conference-stage-panel--focus {
   grid-template-rows: 1fr;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus::before {
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus::before {
   display: none;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile-media,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-media-frame {
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-tile,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-tile-media,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-media-frame {
   width: 100%;
   height: 100%;
   min-height: 0;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus {
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus {
   position: absolute;
   inset: 0;
   display: block;
   overflow: hidden;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > .conference-tile {
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > .conference-tile {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > *,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media > .conference-media-frame,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-slot--focus > * > .conference-tile-media > .conference-media-frame > video {
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > *,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > *
+  > .conference-tile-media,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > *
+  > .conference-tile-media
+  > .conference-media-frame,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > *
+  > .conference-tile-media
+  > .conference-media-frame
+  > video {
   position: absolute;
   inset: 0;
   width: 100% !important;
@@ -258,50 +303,89 @@
   min-height: 0;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile {
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-tile {
   grid-template-rows: 1fr;
   border: 0;
   background: #000;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-tile-meta {
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-tile-meta {
   position: absolute;
   inset: auto 0 0 0;
   border-top: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.8) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
 }
 
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen {
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--screen {
   grid-template-rows: 1fr;
 }
 
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile--screen,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile-media,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-media-frame {
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-tile--screen,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-tile-media,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-media-frame {
   width: 100%;
   height: 100%;
   min-height: 0;
 }
 
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen {
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen {
   position: absolute;
   inset: 0;
   display: block;
   overflow: hidden;
 }
 
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > .conference-tile--screen {
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > .conference-tile--screen {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > *,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media > .conference-media-frame,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-slot--screen > * > .conference-tile-media > .conference-media-frame > video {
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > *,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > *
+  > .conference-tile-media,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > *
+  > .conference-tile-media
+  > .conference-media-frame,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > *
+  > .conference-tile-media
+  > .conference-media-frame
+  > video {
   position: absolute;
   inset: 0;
   width: 100% !important;
@@ -310,17 +394,23 @@
   min-height: 0;
 }
 
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile--screen {
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-tile--screen {
   grid-template-rows: 1fr;
   border: 0;
   background: #000;
 }
 
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-tile-meta {
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-tile-meta {
   display: none;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-slot--focus {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-slot--focus {
   position: absolute;
   inset: 0;
   min-height: 0;
@@ -330,19 +420,22 @@
   overflow: hidden;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-slot--focus::before {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-slot--focus::before {
   display: none;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--presentation,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--screen,
-.conference-stage[data-layout='teacher'] .conference-stage-panel--grid,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--presentation,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--focus,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--grid,
-.conference-stage[data-layout='grid'] .conference-stage-panel--presentation,
-.conference-stage[data-layout='grid'] .conference-stage-panel--focus,
-.conference-stage[data-layout='grid'] .conference-stage-panel--screen {
+.conference-stage[data-layout="teacher"] .conference-stage-panel--presentation,
+.conference-stage[data-layout="teacher"] .conference-stage-panel--screen,
+.conference-stage[data-layout="teacher"] .conference-stage-panel--grid,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--presentation,
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--focus,
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--grid,
+.conference-stage[data-layout="grid"] .conference-stage-panel--presentation,
+.conference-stage[data-layout="grid"] .conference-stage-panel--focus,
+.conference-stage[data-layout="grid"] .conference-stage-panel--screen {
   display: none;
 }
 
@@ -379,12 +472,20 @@
   display: none;
 }
 
-.conference-stage[data-layout='teacher'] .conference-stage-panel--focus .conference-stage-heading,
-.conference-stage[data-layout='screenshare'] .conference-stage-panel--screen .conference-stage-heading {
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-stage-heading,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-stage-heading {
   position: absolute;
   inset: 0 0 auto 0;
   z-index: 3;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.62) 0%,
+    rgba(0, 0, 0, 0) 100%
+  );
   pointer-events: none;
 }
 
@@ -412,7 +513,7 @@
 
 .conference-slot:has(.conference-tile)::before,
 .conference-slot:has(.conference-media-frame)::before {
-  content: '';
+  content: "";
 }
 
 .conference-slot--grid {
@@ -510,17 +611,27 @@
   grid-template-rows: 1fr;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile,
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-media-frame,
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile-media,
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-empty--tile {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-tile,
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-media-frame,
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-tile-media,
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-empty--tile {
   width: 100%;
   height: 100%;
   border-radius: 999px;
   border: 0;
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-tile {
   grid-template-rows: 1fr;
   background: transparent;
 }
@@ -569,7 +680,7 @@
   transition: opacity 160ms ease;
 }
 
-.conference-shell[data-hand-track='true'] .conference-hand-overlay {
+.conference-shell[data-hand-track="true"] .conference-hand-overlay {
   opacity: 1;
 }
 
@@ -585,7 +696,8 @@
   transition: opacity 160ms ease;
 }
 
-.conference-shell[data-gravity-ball='true'][data-gravity-ball-stage-visible='true'] .conference-gravity-ball-overlay {
+.conference-shell[data-gravity-ball="true"][data-gravity-ball-stage-visible="true"]
+  .conference-gravity-ball-overlay {
   opacity: 1;
 }
 
@@ -596,7 +708,8 @@
   top: 0;
   width: 0;
   height: 0;
-  border: 1px dashed color-mix(in srgb, var(--conference-accent) 78%, transparent);
+  border: 1px dashed
+    color-mix(in srgb, var(--conference-accent) 78%, transparent);
   background: transparent;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.34);
   pointer-events: none;
@@ -604,7 +717,8 @@
   transition: opacity 140ms ease;
 }
 
-.conference-shell[data-recording-guide-visible='true'][data-recording-guide-suppressed='false'] .conference-recording-guide {
+.conference-shell[data-recording-guide-visible="true"][data-recording-guide-suppressed="false"]
+  .conference-recording-guide {
   opacity: 0.92;
 }
 
@@ -668,7 +782,9 @@
   background: rgba(0, 0, 0, 0.88);
 }
 
-.conference-stage[data-layout='presentation'] .conference-stage-panel--focus .conference-tile-meta {
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-tile-meta {
   display: none;
 }
 
@@ -680,7 +796,11 @@
   min-height: 1.6rem;
   padding: 0.5rem 0.6rem 0.28rem;
   border-top: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.76) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.76) 100%
+  );
   pointer-events: none;
 }
 
@@ -713,8 +833,12 @@
 
 @media (max-width: 1080px) {
   .conference-stage-frame {
-    height: calc(100vh - var(--conference-sidebar-size) - var(--conference-bar-height));
-    height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));
+    height: calc(
+      100vh - var(--conference-sidebar-size) - var(--conference-bar-height)
+    );
+    height: calc(
+      100dvh - var(--conference-sidebar-size) - var(--conference-bar-height)
+    );
   }
 }
 
@@ -724,7 +848,7 @@
     height: calc(100dvh - var(--conference-bar-height));
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+  .conference-stage[data-layout="presentation"] .conference-stage-panel--focus {
     width: clamp(86px, 13.5vw, 119px);
     inset: auto 0.8rem 0.8rem auto;
   }
@@ -753,7 +877,7 @@
 }
 
 .conference-test-vumeter::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -787,7 +911,9 @@
 
 @media (max-width: 500px) {
   .conference-stage-frame {
-    height: calc(100dvh - var(--conference-sidebar-size) - var(--conference-bar-height));
+    height: calc(
+      100dvh - var(--conference-sidebar-size) - var(--conference-bar-height)
+    );
     min-height: 180px;
     background: #000 !important;
     overflow-y: auto !important;
@@ -807,7 +933,7 @@
     gap: 0.4rem;
   }
 
-  .conference-stage[data-layout='presentation'] .conference-stage-panel--focus {
+  .conference-stage[data-layout="presentation"] .conference-stage-panel--focus {
     width: clamp(70px, 20vw, 90px);
     inset: auto 0.5rem 0.5rem auto;
   }
@@ -817,6 +943,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  /*background: red;*/
   max-width: 100%;
 }
 
@@ -840,5 +967,5 @@
 .conference-tile--participant .conference-tile-meta {
   justify-content: flex-start;
   align-items: flex-end;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0rem !important;
 }
