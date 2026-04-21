@@ -1,5 +1,7 @@
 import type { APIRoute } from 'astro';
 
+export const prerender = false;
+
 export const POST: APIRoute = async ({ request }) => {
   console.log(`[Astro Bridge] Webhook request received: ${request.method} ${request.url}`);
   try {

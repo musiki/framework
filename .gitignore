@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+dist_old/
+dist_tmp/
 .tmp/
 .cache/
 

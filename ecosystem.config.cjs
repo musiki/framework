@@ -62,6 +62,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         CONTENT_BUS_PORT: '4322',
+        VPS_FRAMEWORK_DIR: __dirname,
+        PATH: `/Users/zztt/.local/share/nvm/v24.14.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${process.env.PATH}`,
         ...dotEnv,
         CONTENT_BUS_SECRET: dotEnv.CONTENT_BUS_SECRET || 'musiki-local-secret'
       },

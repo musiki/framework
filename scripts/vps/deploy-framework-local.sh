@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# Ensure PM2 and node are in PATH
+export PATH="/Users/zztt/.local/share/nvm/v24.14.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
 FRAMEWORK_DIR="${VPS_FRAMEWORK_DIR:-/opt/musiki/framework}"
 INSTALL_COMMAND="${VPS_INSTALL_COMMAND-npm ci}"
 CONTENT_SOURCE_STRATEGY="${VPS_CONTENT_SOURCE_STRATEGY:-remote-only}"
