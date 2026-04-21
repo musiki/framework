@@ -12795,6 +12795,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         (node) => normalizeLayoutMode(node.dataset.layoutChoice || '') === 'teacher',
       );
       (button instanceof HTMLButtonElement ? button : null)?.click();
+
+      // Ensure sidebar is open so participants moved to the sidebar grid are visible
+      if (sidebarCollapsed) {
+        sidebarCollapsed = false;
+        applySidebarCollapsedState();
+      }
       return;
     }
 
