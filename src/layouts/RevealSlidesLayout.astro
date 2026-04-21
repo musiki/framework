@@ -942,25 +942,31 @@ const resolvedSlideTheme =
 
         /** @param {HTMLIFrameElement} iframe */
         const prepareRevealIframeForApi = (iframe) => {
-          const src = String(iframe.getAttribute('src') || '').trim();
-          if (!src) return;
-          try {
-            const url = new URL(src, window.location.origin);
-            let changed = false;
-            if (url.searchParams.get('enablejsapi') !== '1') {
-              url.searchParams.set('enablejsapi', '1');
-              changed = true;
+          return new Promise((resolve) => {
+            const src = String(iframe.getAttribute('src') || '').trim();
+            if (!src) return resolve();
+            try {
+              const url = new URL(src, window.location.origin);
+              let changed = false;
+              if (url.searchParams.get('enablejsapi') !== '1') {
+                url.searchParams.set('enablejsapi', '1');
+                changed = true;
+              }
+              if (url.searchParams.get('origin') !== window.location.origin) {
+                url.searchParams.set('origin', window.location.origin);
+                changed = true;
+              }
+              if (changed) {
+                iframe.addEventListener('load', () => resolve(), { once: true });
+                iframe.setAttribute('src', url.toString());
+              } else {
+                resolve();
+              }
+            } catch (e) {
+              resolve();
+              // ignore malformed URLs
             }
-            if (url.searchParams.get('origin') !== window.location.origin) {
-              url.searchParams.set('origin', window.location.origin);
-              changed = true;
-            }
-            if (changed) {
-              iframe.setAttribute('src', url.toString());
-            }
-          } catch (e) {
-            // ignore malformed URLs
-          }
+          });
         };
 
         const stopRevealEmbeddedMediaSyncLoop = () => {
@@ -1275,11 +1281,11 @@ const resolvedSlideTheme =
           entry.mediaId = mediaId;
           revealEmbeddedPlayers.set(embedId, entry);
 
-          // Crucial: Ensure iframe has JS API enabled before YouTube API tries to bind to it
-          prepareRevealIframeForApi(iframe);
-
           entry.readyPromise = (async () => {
             try {
+              // Crucial: Ensure iframe has JS API enabled before YouTube API tries to bind to it
+              await prepareRevealIframeForApi(iframe);
+
               const Player = await loadRevealYouTubePlayerApi();
 
               await new Promise((resolve, reject) => {
@@ -1844,7 +1850,8 @@ const resolvedSlideTheme =
             iframe.dataset.musikiRevealEmbedId = existingEmbedId
               || `${slideId || 'slide'}-media-${slideEmbedIndex >= 0 ? slideEmbedIndex : embedIndex}`;
 
-            const src = String(iframe.getAttribute('src') || '').trim();
+            const srcAttr = iframe.hasAttribute('src') ? 'src' : 'data-src';
+            const src = String(iframe.getAttribute(srcAttr) || '').trim();
             if (!src) return;
 
             try {
@@ -1886,9 +1893,9 @@ const resolvedSlideTheme =
               }
 
               const nextSrc = url.toString();
-              const currentSrc = String(iframe.getAttribute('src') || '').trim();
+              const currentSrc = String(iframe.getAttribute(srcAttr) || '').trim();
               if (nextSrc !== currentSrc) {
-                iframe.setAttribute('src', nextSrc);
+                iframe.setAttribute(srcAttr, nextSrc);
               }
             } catch {
               // Ignore malformed iframe src values.
