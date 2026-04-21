@@ -572,20 +572,13 @@ const resolvedSlideTheme =
         position: absolute;
         inset: 0;
         width: 100%;
-        height: calc(100% + var(--slides-extra-height));
-        min-height: calc(100% + var(--slides-extra-height));
-        padding-top: calc(var(--slides-extra-height) * 0.5);
-        padding-bottom: calc(var(--slides-extra-height) * 0.5 + 1.5rem);
-        box-sizing: border-box;
-        transform: translateY(calc(var(--slides-extra-height) * -0.5)) scale(var(--slides-user-zoom));
+        height: 100%;
+        transform: scale(var(--slides-user-zoom));
         transform-origin: center center;
         will-change: transform;
       }
 
       .slides-zoom-shell > .reveal .slides {
-        min-height: 100%;
-        padding-top: calc(var(--slides-extra-height) * 0.5);
-        padding-bottom: calc(var(--slides-extra-height) * 0.5 + 1.5rem);
         box-sizing: border-box;
       }
 
@@ -3709,6 +3702,11 @@ const resolvedSlideTheme =
           jumpToSlide: true,
           slideNumber: 'c/t',
           transition: 'slide',
+          width: 960,
+          height: 700,
+          margin: 0.04,
+          minScale: 0.1,
+          maxScale: 2.0,
           plugins: [
             RevealHighlight,
             RevealNotes,
@@ -3716,7 +3714,6 @@ const resolvedSlideTheme =
             RevealMarkdown,
           ].filter(Boolean),
         });
-
         emitDeckState = (reason = 'change') => {
           if (window.parent === window) return;
           const indices = deck.getIndices?.();

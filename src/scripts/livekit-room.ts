@@ -10394,6 +10394,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (!card) return;
     const isSpeaking = room.activeSpeakers.some((s) => s.identity === participant.identity);
     card.card.dataset.speaking = isSpeaking ? 'true' : 'false';
+    card.speakingIcon.hidden = !isSpeaking;
     syncParticipantVideo(room, participant, card, mounts, {
       blurLocalVideo: previewBlur,
       isTrackBackgroundBlurred: (track) =>

@@ -530,6 +530,8 @@
   min-height: 0;
   position: relative;
   width: 100%;
+  max-width: 200px;
+  margin-inline: auto;
   height: 100%;
   background: #000;
   overflow: hidden;
@@ -675,8 +677,8 @@
   inset: auto 0 0 0;
   display: flex;
   align-items: flex-end;
-  min-height: 2rem;
-  padding: 0.5rem 0.6rem 0.45rem;
+  min-height: 1.6rem;
+  padding: 0.5rem 0.6rem 0.28rem;
   border-top: 0;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.76) 100%);
   pointer-events: none;
@@ -809,4 +811,34 @@
     width: clamp(70px, 20vw, 90px);
     inset: auto 0.5rem 0.5rem auto;
   }
+}
+
+.conference-tile-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+
+.conference-speaker-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--conference-green, #25cf6b);
+  opacity: 0.92;
+}
+
+.conference-speaker-icon svg {
+  width: 11px;
+  height: 11px;
+}
+
+.conference-speaker-icon[hidden] {
+  display: none !important;
+}
+
+.conference-tile--participant .conference-tile-meta {
+  justify-content: flex-start;
+  align-items: flex-end;
+  padding-bottom: 0.35rem;
 }

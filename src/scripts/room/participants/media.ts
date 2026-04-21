@@ -13,6 +13,7 @@ export type ParticipantCardRefs = {
   media: HTMLElement;
   name: HTMLElement;
   placeholder: HTMLElement;
+  speakingIcon: HTMLElement;
 };
 
 export type ScreenCardRefs = {

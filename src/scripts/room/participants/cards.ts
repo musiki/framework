@@ -67,12 +67,14 @@ export const ensureParticipantCard = ({
     const name = node.querySelector('[data-card-name]');
     const placeholder = node.querySelector('[data-card-placeholder]');
     const hand = node.querySelector('[data-card-hand]');
+    const speakingIcon = node.querySelector('[data-card-speaking-icon]');
 
     if (
       !(media instanceof HTMLElement) ||
       !(name instanceof HTMLElement) ||
       !(placeholder instanceof HTMLElement) ||
-      !(hand instanceof HTMLElement)
+      !(hand instanceof HTMLElement) ||
+      !(speakingIcon instanceof HTMLElement)
     ) {
       throw new Error('Participant card template is invalid.');
     }
@@ -83,6 +85,7 @@ export const ensureParticipantCard = ({
       media,
       name,
       placeholder,
+      speakingIcon,
     };
 
     participantCards.set(identity, card);
