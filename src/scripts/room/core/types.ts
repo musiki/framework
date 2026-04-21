@@ -22,6 +22,7 @@ export type LocalPreviewStreamMount = {
 };
 
 export type ExternalMediaSessionState = {
+  capturedAt: number;
   currentTime: number;
   mediaId: string;
   playbackState: ExternalMediaPlaybackState;

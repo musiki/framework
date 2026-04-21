@@ -114,6 +114,7 @@ export type ConferenceMessage =
     }
   | {
       action: 'open' | 'sync';
+      capturedAt: number;
       currentTime: number;
       mediaId: string;
       playbackState: ExternalMediaPlaybackState;
@@ -334,6 +335,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
 
       return {
         action,
+        capturedAt: Math.max(0, Number((parsed as { capturedAt?: number }).capturedAt) || Date.now()),
         currentTime: Math.max(0, Number((parsed as { currentTime?: number }).currentTime) || 0),
         mediaId,
         playbackState,

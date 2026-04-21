@@ -864,7 +864,7 @@ const resolvedSlideTheme =
           onYouTubeIframeAPIReady?: (() => void) | undefined;
           __musikiRevealYouTubeApiPromise?: Promise<any>;
         }} */ (window);
-        const REVEAL_EMBEDDED_MEDIA_SYNC_INTERVAL_MS = 1500; // More frequent sync
+        const REVEAL_EMBEDDED_MEDIA_SYNC_INTERVAL_MS = 800; // More frequent sync
         const REVEAL_EMBEDDED_MEDIA_BURST_DELAYS_MS = [200, 800, 1600];
         const REVEAL_EMBEDDED_MEDIA_VERIFY_DELAYS_MS = [400, 1200, 2400];
         const REVEAL_EMBEDDED_MEDIA_SEEK_THRESHOLD_S = 0.8; // Tighten sync
@@ -940,10 +940,10 @@ const resolvedSlideTheme =
           return revealWindow.__musikiRevealYouTubeApiPromise;
         };
 
-        /** @param {HTMLIFrameElement} iframe */
-        const prepareRevealIframeForApi = (iframe) => {
+        /** @param {HTMLIFrameElement} iframe @param {string} [srcAttr] */
+        const prepareRevealIframeForApi = (iframe, srcAttr = 'src') => {
           return new Promise((resolve) => {
-            const src = String(iframe.getAttribute('src') || '').trim();
+            const src = String(iframe.getAttribute(srcAttr) || '').trim();
             if (!src) return resolve();
             try {
               const url = new URL(src, window.location.origin);
@@ -957,8 +957,13 @@ const resolvedSlideTheme =
                 changed = true;
               }
               if (changed) {
-                iframe.addEventListener('load', () => resolve(), { once: true });
-                iframe.setAttribute('src', url.toString());
+                if (srcAttr === 'src') {
+                  iframe.addEventListener('load', () => resolve(), { once: true });
+                  iframe.setAttribute(srcAttr, url.toString());
+                } else {
+                  iframe.setAttribute(srcAttr, url.toString());
+                  resolve();
+                }
               } else {
                 resolve();
               }
@@ -1135,13 +1140,18 @@ const resolvedSlideTheme =
           if (!snapshot) return;
           
           const now = Date.now();
+          // Use a coarser key for periodic sync to avoid spamming every 0.1s
+          const timeKey = snapshot.playbackState === 'playing' 
+            ? Math.floor(snapshot.currentTime / 2) 
+            : snapshot.currentTime.toFixed(1);
+
           const stateKey = [
             snapshot.embedId,
             snapshot.mediaId,
             snapshot.playbackState,
             snapshot.volume,
             snapshot.muted ? 'm' : 'u',
-            snapshot.currentTime.toFixed(1), 
+            timeKey, 
           ].join(':');
 
           if (!force && stateKey === revealEmbeddedMediaLastSentKey && now - revealEmbeddedMediaLastSentAt < 450) {

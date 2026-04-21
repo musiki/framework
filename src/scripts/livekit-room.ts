@@ -5769,6 +5769,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const videoData = externalMediaPlayer?.getVideoData?.() ?? {};
     return {
       ...externalMediaSession,
+      capturedAt: Date.now(),
       currentTime: Math.max(
         0,
         Number(externalMediaPlayer?.getCurrentTime?.() ?? externalMediaSession.currentTime) || 0,
@@ -5847,7 +5848,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (isActive && playbackState === 'playing' && canControl && room.state === ConnectionState.Connected) {
       externalMediaSyncIntervalId = window.setInterval(() => {
         void broadcastExternalMediaState('sync');
-      }, 2500);
+      }, 1000);
     }
   };
 
@@ -5904,6 +5905,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     await publishMessage({
       type: 'external-media',
       action,
+      capturedAt: snapshot.capturedAt,
       currentTime: snapshot.currentTime,
       mediaId: snapshot.mediaId,
       playbackState: snapshot.playbackState,
@@ -5919,9 +5921,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (!externalMediaPlayerReady || !player) return;
 
     withExternalMediaRemoteGuard(() => {
+      const now = Date.now();
+      const capturedAt = session.capturedAt || now;
+      let targetTime = session.currentTime;
+      if (session.playbackState === 'playing') {
+        targetTime += Math.max(0, (now - capturedAt) / 1000);
+      }
+
       const currentTime = Math.max(0, Number(player.getCurrentTime?.() ?? 0) || 0);
-      if (Math.abs(currentTime - session.currentTime) > 1.25) {
-        player.seekTo(session.currentTime, true);
+      if (Math.abs(currentTime - targetTime) > 0.8) {
+        player.seekTo(targetTime, true);
       }
 
       if (session.playbackState === 'playing') {
@@ -5992,7 +6001,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             };
             syncExternalMediaShell();
             if (!externalMediaApplyingRemoteState && getExternalMediaAuthority()) {
-              void broadcastExternalMediaState('sync');
+              void broadcastExternalMediaState('sync', true);
             }
           },
         },
@@ -7151,10 +7160,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const joinedAtDifference = getParticipantJoinedAtMs(left) - getParticipantJoinedAtMs(right);
     if (joinedAtDifference !== 0) return joinedAtDifference;
 
-    const localIdentity = normalizeText(room.localParticipant?.identity);
-    if (left.identity === localIdentity && right.identity !== localIdentity) return -1;
-    if (right.identity === localIdentity && left.identity !== localIdentity) return 1;
-
     return left.identity.localeCompare(right.identity, 'es');
   };
 
@@ -7198,7 +7203,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (sessionLeaderSelect instanceof HTMLSelectElement) {
       const teachers = allParticipants()
         .filter((participant) => readParticipantRole(room, participant, localRole) === 'teacher')
-        .sort((left, right) => readParticipantName(left).localeCompare(readParticipantName(right), 'es'));
+        .sort(compareSessionLeaderCandidates);
 
       sessionLeaderSelect.innerHTML = '';
       teachers.forEach((participant) => {
@@ -10995,6 +11000,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
         void applyExternalMediaSession(
           {
+            capturedAt: message.capturedAt,
             currentTime: message.currentTime,
             mediaId: message.mediaId,
             playbackState: message.playbackState,
