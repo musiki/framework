@@ -88,6 +88,41 @@ export type ConferenceMessage =
       zoom: number;
     }
   | {
+      type: 'whiteboard-draw';
+      x: number;
+      y: number;
+      action: 'start' | 'draw' | 'end';
+      color: string;
+    }
+  | {
+      type: 'whiteboard-clear';
+    }
+  | {
+      type: 'whiteboard-text';
+      x: number;
+      y: number;
+      text: string;
+      color: string;
+      size: 'sm' | 'lg';
+    }
+  | {
+      type: 'whiteboard-bg';
+      bg: 'none' | 'staff' | 'grid';
+    }
+  | {
+      type: 'concept-load';
+      href: string | null;
+    }
+  | {
+      type: 'layout-split';
+      left: LayoutMode;
+      right: LayoutMode;
+    }
+  | {
+      type: 'layout-overlay';
+      overlay: LayoutMode | null;
+    }
+  | {
       type: 'circle-move';
       x: number;
       y: number;
@@ -385,6 +420,66 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'presentation-zoom',
         zoom: Number((parsed as { zoom?: number }).zoom) || 1,
+      };
+    }
+
+    if (parsed.type === 'whiteboard-draw') {
+      return {
+        type: 'whiteboard-draw',
+        x: Number((parsed as { x?: number }).x) || 0,
+        y: Number((parsed as { y?: number }).y) || 0,
+        action: (parsed as { action?: 'start' | 'draw' | 'end' }).action || 'draw',
+        color: normalizeText((parsed as { color?: string }).color) || '#ffffff',
+      };
+    }
+
+    if (parsed.type === 'whiteboard-clear') {
+      return {
+        type: 'whiteboard-clear',
+      };
+    }
+
+    if (parsed.type === 'whiteboard-text') {
+      return {
+        type: 'whiteboard-text',
+        x: Number((parsed as { x?: number }).x) || 0,
+        y: Number((parsed as { y?: number }).y) || 0,
+        text: normalizeText((parsed as { text?: string }).text),
+        color: normalizeText((parsed as { color?: string }).color) || '#ffffff',
+        size: (parsed as { size?: string }).size === 'lg' ? 'lg' : 'sm',
+      };
+    }
+
+    if (parsed.type === 'whiteboard-bg') {
+      const bg = (parsed as { bg?: string }).bg;
+      return {
+        type: 'whiteboard-bg',
+        bg: bg === 'staff' || bg === 'grid' ? bg : 'none',
+      };
+    }
+
+    if (parsed.type === 'concept-load') {
+      return {
+        type: 'concept-load',
+        href: typeof (parsed as { href?: string | null }).href === 'string'
+          ? (parsed as { href: string }).href
+          : null,
+      };
+    }
+
+    if (parsed.type === 'layout-split') {
+      return {
+        type: 'layout-split',
+        left: normalizeLayoutMode((parsed as { left?: string }).left),
+        right: normalizeLayoutMode((parsed as { right?: string }).right),
+      };
+    }
+
+    if (parsed.type === 'layout-overlay') {
+      const overlay = (parsed as { overlay?: string | null }).overlay;
+      return {
+        type: 'layout-overlay',
+        overlay: overlay ? normalizeLayoutMode(overlay) : null,
       };
     }
 

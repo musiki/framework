@@ -967,3 +967,209 @@
   align-items: flex-end;
   padding-bottom: 0rem !important;
 }
+
+/* New Shells: Concept & Whiteboard */
+
+.conference-stage-panel--concept,
+.conference-stage-panel--whiteboard {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Base Layout Visibility */
+.conference-stage[data-layout="concept"] .conference-stage-panel--concept,
+.conference-stage[data-layout="whiteboard"] .conference-stage-panel--whiteboard {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  inset: 0;
+}
+
+/* Split Layout */
+.conference-stage[data-layout="split"] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--conference-line);
+}
+
+.conference-stage[data-layout="split"] .conference-stage-panel {
+  position: relative;
+  inset: auto !important;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Left Panel */
+.conference-stage[data-layout="split"][data-layout-split-left="presentation"] .conference-stage-panel--presentation,
+.conference-stage[data-layout="split"][data-layout-split-left="teacher"] .conference-stage-panel--focus,
+.conference-stage[data-layout="split"][data-layout-split-left="grid"] .conference-stage-panel--grid,
+.conference-stage[data-layout="split"][data-layout-split-left="screenshare"] .conference-stage-panel--screen,
+.conference-stage[data-layout="split"][data-layout-split-left="concept"] .conference-stage-panel--concept,
+.conference-stage[data-layout="split"][data-layout-split-left="whiteboard"] .conference-stage-panel--whiteboard {
+  grid-column: 1;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Right Panel */
+.conference-stage[data-layout="split"][data-layout-split-right="presentation"] .conference-stage-panel--presentation,
+.conference-stage[data-layout="split"][data-layout-split-right="teacher"] .conference-stage-panel--focus,
+.conference-stage[data-layout="split"][data-layout-split-right="grid"] .conference-stage-panel--grid,
+.conference-stage[data-layout="split"][data-layout-split-right="screenshare"] .conference-stage-panel--screen,
+.conference-stage[data-layout="split"][data-layout-split-right="concept"] .conference-stage-panel--concept,
+.conference-stage[data-layout="split"][data-layout-split-right="whiteboard"] .conference-stage-panel--whiteboard {
+  grid-column: 2;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Overlay Layer */
+.conference-stage[data-layout-overlay] .conference-stage-panel {
+  z-index: 1;
+}
+
+.conference-stage[data-layout-overlay="presentation"] .conference-stage-panel--presentation,
+.conference-stage[data-layout-overlay="teacher"] .conference-stage-panel--focus,
+.conference-stage[data-layout-overlay="grid"] .conference-stage-panel--grid,
+.conference-stage[data-layout-overlay="screenshare"] .conference-stage-panel--screen,
+.conference-stage[data-layout-overlay="concept"] .conference-stage-panel--concept,
+.conference-stage[data-layout-overlay="whiteboard"] .conference-stage-panel--whiteboard {
+  position: absolute;
+  inset: 1rem;
+  z-index: 50;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.96);
+  border: 1px solid var(--conference-line);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.8);
+  border-radius: 4px;
+}
+
+.conference-panel-close {
+  background: transparent;
+  border: 1px solid var(--conference-line);
+  color: var(--conference-muted);
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  font-size: 0.65rem;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.conference-panel-close:hover {
+  color: var(--conference-fg);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.conference-panel-close[hidden] {
+  display: none;
+}
+
+/* Whiteboard Styles */
+.conference-whiteboard-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #111;
+  display: grid;
+  place-items: stretch;
+  cursor: crosshair;
+}
+
+.conference-whiteboard-canvas,
+.conference-whiteboard-bg {
+  width: 100%;
+  height: 100%;
+}
+
+.conference-whiteboard-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.conference-whiteboard-toolbar {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.25rem;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0.25rem;
+  border-radius: 2px;
+  border: 1px solid var(--conference-line);
+}
+
+.conference-whiteboard-tool {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--conference-muted);
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.conference-whiteboard-tool:hover {
+  color: var(--conference-fg);
+  border-color: var(--conference-line);
+}
+
+.conference-whiteboard-toolbar {
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem;
+}
+
+.conference-whiteboard-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.conference-whiteboard-color {
+  background: transparent;
+  border: 1px solid transparent;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.conference-whiteboard-color:hover,
+.conference-whiteboard-color[data-active="true"] {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--conference-line);
+}
+
+.conference-whiteboard-tool[data-active="true"] {
+  color: var(--conference-fg-hi);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--conference-line);
+}
+
+.conference-whiteboard-text-input {
+  position: absolute;
+  background: transparent;
+  border: 1px dashed var(--conference-line);
+  color: inherit;
+  font-family: inherit;
+  padding: 2px 4px;
+  margin: 0;
+  outline: none;
+  z-index: 10;
+}

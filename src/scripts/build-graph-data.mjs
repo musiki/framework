@@ -161,10 +161,67 @@ export function buildGraphData() {
   return { nodes, links };
 }
 
-// Write to public directory
+export function buildSearchIndex() {
+  const ROOT = path.resolve('src/content');
+  const files = [];
+  
+  (function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(md|mdx)$/i.test(e.name)) files.push(p);
+    }
+  })(ROOT);
+
+  const index = [];
+  for (const abs of files) {
+    const rel = abs.slice(ROOT.length + 1);
+    const posix = rel.split(path.sep).join('/');
+    const slug = posix.replace(/\.(md|mdx)$/i, '');
+    
+    try {
+      const raw = fs.readFileSync(abs, 'utf8');
+      const { data } = matter(raw);
+      
+      if (data.title) {
+        const parts = slug.split('/');
+        let courseId = null;
+        let finalSlug = slug;
+
+        if (parts[0] === 'cursos' && parts.length > 1) {
+            courseId = parts[1];
+            // Lesson slug is everything after cursos/courseId
+            finalSlug = parts.slice(2).join('/');
+        }
+
+        index.push({
+          slug: finalSlug,
+          title: data.title,
+          description: data.description || '',
+          theme: data.theme || null,
+          reveal: data.reveal === true || data.reveal === 'true',
+          type: data.type || null,
+          courseId,
+          isPublic: parts[0] === 'public'
+        });
+      }
+    } catch (e) {
+      console.warn(`Error indexing ${abs}:`, e.message);
+    }
+  }
+  return index;
+}
+
+// Write Graph Data
 const graphData = buildGraphData();
-const outputPath = path.resolve('public/graph-data.json');
-fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-fs.writeFileSync(outputPath, JSON.stringify(graphData, null, 2));
-console.log(`Graph data written to ${outputPath}`);
-console.log(`Nodes: ${graphData.nodes.length}, Links: ${graphData.links.length}`);
+const graphPath = path.resolve('public/graph-data.json');
+fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+fs.writeFileSync(graphPath, JSON.stringify(graphData, null, 2));
+console.log(`Graph data written to ${graphPath}`);
+
+// Write Search Index
+const searchIndex = buildSearchIndex();
+const indexPath = path.resolve('public/search-index.json');
+fs.writeFileSync(indexPath, JSON.stringify(searchIndex, null, 2));
+console.log(`Search index written to ${indexPath} with ${searchIndex.length} entries.`);

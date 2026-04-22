@@ -13,12 +13,14 @@ import {
 
 import { subscribeToLive } from '../lib/live/client.mjs';
 import { formatCountdown, getRemainingMs } from '../lib/live/countdown.mjs';
-import { normalizeLayoutMode, setLayout } from './layout-controller';
+import { normalizeLayoutMode, setLayout, setSplitLayout, setOverlayLayout } from './layout-controller';
 import { createPresentationController } from './presentation';
 import { createRoomChatController } from './room/chat';
 import { createClaseController } from './room/clase/controller';
+import { ConceptsController } from './room/concepts';
 import { createRoomDeviceSelectController, createRoomMicMeterController } from './room/devices';
 import { createRoomNotesController } from './room/notes';
+import { WhiteboardController } from './room/whiteboard';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
 import { buildRoomQueryUrl } from './room/layout';
@@ -3583,6 +3585,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     externalMediaProviderLabel,
     externalMediaPlayToggleButtons,
     externalMediaCloseButtons,
+    conceptsShell,
+    conceptsBtn,
+    conceptsPopup,
+    conceptSearchInput,
+    conceptResults,
+    conceptFrame,
+    conceptPlaceholder,
+    whiteboardCanvas,
+    whiteboardBgCanvas,
+    whiteboardToolbar,
+    whiteboardBgButtons,
+    panelCloseButtons,
     brCountdownEl,
     brCountdownText,
     sessionMuteAllButton,
@@ -3849,8 +3863,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     placeholder: presentationPlaceholder,
   });
 
-  const participantCards = new Map<string, ParticipantCardRefs>();
-  const screenCards = new Map<string, ScreenCardRefs>();
+  const whiteboard = new WhiteboardController((msg) => void publishMessage(msg));
+  const concepts = new ConceptsController((msg) => void publishMessage(msg));
+  const participantCards = new Map<string, ParticipantCardRefs>();  const screenCards = new Map<string, ScreenCardRefs>();
   const mounts: MountCollection = {
     participantAudioMounts: new Map(),
     participantVideoMounts: new Map(),
@@ -5780,6 +5795,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         : externalMediaSession.playbackState,
       title: normalizeText(videoData.title) || externalMediaSession.title,
     };
+  };
+
+  const syncConceptsShell = () => {
+    const isTeacher = localRole === 'teacher';
+    if (conceptsShell instanceof HTMLElement) {
+      conceptsShell.hidden = !isTeacher;
+    }
   };
 
   const syncExternalMediaShell = () => {
@@ -7838,6 +7860,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     syncBreakRoomsShell();
     syncExternalMediaShell();
+    syncConceptsShell();
+    syncWhiteboardUi();
   };
 
   const readParticipantHandRaised = (participant: Participant) =>
@@ -10351,6 +10375,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     );
     shareScreenButton.title = shareEnabled ? 'Detener pantalla' : 'Compartir pantalla';
     syncExternalMediaShell();
+    syncConceptsShell();
+    syncWhiteboardUi();
     syncLayoutChoiceButtons();
     applySessionLeaderState();
     applySessionControlState();
@@ -10904,6 +10930,38 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
+      if (message.type === 'whiteboard-draw') {
+        whiteboard.handleStroke(message);
+        return;
+      }
+
+      if (message.type === 'whiteboard-text') {
+        whiteboard.drawText(message);
+        return;
+      }
+
+      if (message.type === 'whiteboard-bg') {
+        whiteboard.setBackground(message.bg);
+        return;
+      }
+
+      if (message.type === 'whiteboard-clear') {        whiteboard.clear();
+        return;
+      }
+      if (message.type === 'concept-load') {
+        concepts.load(message.href || '');
+        return;
+      }
+
+      if (message.type === 'layout-split') {
+        setSplitLayout(conferenceRoot, message.left, message.right);
+        return;
+      }
+
+      if (message.type === 'layout-overlay') {
+        setOverlayLayout(conferenceRoot, message.overlay);
+        return;
+      }
       if (message.type === 'reaction') {
         appendReactionBurst(message.reaction, readParticipantName(participant));
         return;
@@ -12541,11 +12599,163 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   });
 
+  conceptsBtn?.addEventListener('click', () => {
+    if (!(conceptsPopup instanceof HTMLElement)) return;
+    const willOpen = conceptsPopup.hidden;
+    conceptsPopup.hidden = !willOpen;
+    if (willOpen && conceptSearchInput instanceof HTMLInputElement) {
+      window.setTimeout(() => {
+        conceptSearchInput.focus();
+        conceptSearchInput.select();
+      }, 0);
+    }
+  });
+
+  const renderConceptSearchResults = async () => {
+    if (!conceptResults || !conceptSearchInput || !(conceptSearchInput instanceof HTMLInputElement)) return;
+    const query = conceptSearchInput.value.trim();
+    if (query.length < 1) {
+      conceptResults.hidden = true;
+      return;
+    }
+
+    const results = await concepts.search(query);
+    conceptResults.innerHTML = '';
+    conceptResults.hidden = results.length === 0;
+
+    results.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.className = 'conference-break-rooms-item';
+      btn.textContent = item.title;
+      btn.addEventListener('click', () => {
+        conceptSearchInput.value = item.title;
+        let href = '';
+        if (item.reveal) {
+          if (item.courseId) {
+            href = `/slides/${item.courseId}/${item.slug}`;
+          } else {
+            href = `/slides/${item.slug}`;
+          }
+        } else {
+          // Normal note fallback - add view=embedded to hide site UI
+          if (item.courseId) {
+            href = `/cursos/${item.courseId}/${item.slug}?view=embedded`;
+          } else {
+            href = `/${item.slug}?view=embedded`;
+          }
+        }
+        conceptSearchInput.dataset.href = href;
+        renderConceptSearchResults();
+      });
+      conceptResults.appendChild(btn);
+    });
+  };
+
+  conceptSearchInput?.addEventListener('input', () => {
+    void renderConceptSearchResults();
+  });
+
+  const launchConcept = (mode: 'split' | 'overlay') => {
+    const href = conceptSearchInput instanceof HTMLInputElement ? conceptSearchInput.dataset.href : '';
+    if (href) {
+      concepts.launch(href, mode);
+      if (conceptsPopup instanceof HTMLElement) conceptsPopup.hidden = true;
+
+      // Apply locally
+      const stage = root.querySelector('[data-stage]') as HTMLElement;
+      if (mode === 'split') {
+        setSplitLayout(stage, 'presentation', 'concept');
+      } else {
+        setOverlayLayout(stage, 'concept');
+      }
+    }
+  };
+
+  root.querySelector('[data-action="concept-launch-split"]')?.addEventListener('click', () => launchConcept('split'));
+  root.querySelector('[data-action="concept-launch-overlay"]')?.addEventListener('click', () => launchConcept('overlay'));
+
+  panelCloseButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const panel = btn.closest('[data-panel]');
+      if (panel instanceof HTMLElement) {
+        const panelType = panel.dataset.panel;
+        if (panelType === 'concept' || panelType === 'whiteboard') {
+            // If it's a secondary panel, just close it by going back to presentation or grid
+            setLayout(stage, 'presentation');
+        } else {
+            setOverlayLayout(stage, null);
+        }
+      }
+    });
+  });
+
+  if (whiteboardCanvas instanceof HTMLCanvasElement) {
+    whiteboard.init(whiteboardCanvas);
+  }
+
+  if (whiteboardBgCanvas instanceof HTMLCanvasElement) {
+    whiteboard.initBg(whiteboardBgCanvas);
+  }
+
+  const syncWhiteboardUi = () => {
+    const isTeacher = localRole === 'teacher';
+    if (whiteboardToolbar instanceof HTMLElement) {
+      whiteboardToolbar.hidden = !isTeacher;
+    }
+  };
+
+  root.querySelector('[data-action="whiteboard-clear"]')?.addEventListener('click', () => {
+    whiteboard.clear(true);
+  });
+
+  whiteboardBgButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const bg = (btn as HTMLElement).dataset.whiteboardBgBtn as 'staff' | 'grid';
+      const isActive = (btn as HTMLElement).dataset.active === 'true';
+      const nextBg = isActive ? 'none' : bg;
+      
+      whiteboard.setBackground(nextBg, true);
+      
+      whiteboardBgButtons.forEach(b => (b as HTMLElement).dataset.active = 'false');
+      if (nextBg !== 'none') {
+        (btn as HTMLElement).dataset.active = 'true';
+      }
+    });
+  });
+
+  root.querySelectorAll('[data-whiteboard-tool]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tool = (btn as HTMLElement).dataset.whiteboardTool as 'draw' | 'text-sm' | 'text-lg';
+      if (tool) {
+        whiteboard.setTool(tool);
+        root.querySelectorAll('[data-whiteboard-tool]').forEach(b => (b as HTMLElement).dataset.active = 'false');
+        (btn as HTMLElement).dataset.active = 'true';
+      }
+    });
+  });
+
+  root.querySelectorAll('[data-whiteboard-color]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const color = (btn as HTMLElement).dataset.whiteboardColor;
+      if (color) {
+        whiteboard.setColor(color);
+        root.querySelectorAll('[data-whiteboard-color]').forEach(b => (b as HTMLElement).dataset.active = 'false');
+        (btn as HTMLElement).dataset.active = 'true';
+      }
+    });
+  });
+
   document.addEventListener('click', (e) => {
     if (!(externalMediaPopup instanceof HTMLElement) || externalMediaPopup.hidden) return;
     if (!(externalMediaControlsShell instanceof HTMLElement)) return;
     if (!externalMediaControlsShell.contains(e.target as Node)) {
       closeExternalMediaPopup();
+    }
+
+    if (conceptsPopup instanceof HTMLElement && !conceptsPopup.hidden) {
+      if (conceptsShell instanceof HTMLElement && !conceptsShell.contains(e.target as Node)) {
+        conceptsPopup.hidden = true;
+      }
     }
   });
 

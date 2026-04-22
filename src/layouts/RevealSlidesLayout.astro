@@ -1552,6 +1552,9 @@ const resolvedSlideTheme =
         const isSeparator = (node) =>
           node?.nodeType === Node.ELEMENT_NODE && node.tagName === 'HR';
 
+        const isCoverBlock = (node) =>
+          node?.nodeType === Node.ELEMENT_NODE && node.classList.contains('musiki-cover-block');
+
         const isIgnorableText = (node) =>
           node?.nodeType === Node.TEXT_NODE && !String(node.textContent || '').trim();
 
@@ -1815,6 +1818,13 @@ const resolvedSlideTheme =
             flushSection();
             continue;
           }
+          if (isCoverBlock(node)) {
+            flushSection();
+            section.appendChild(node);
+            hasContent = true;
+            flushSection();
+            continue;
+          }
           section.appendChild(node);
           hasContent = true;
         }
@@ -1907,7 +1917,7 @@ const resolvedSlideTheme =
         };
 
         const gridAttributeRegex =
-          /^(?:(-?\d*(?:px)?)(?:\s*|x)(-?\d*(?:px)?)|(center|top|bottom|left|right|topleft|topright|bottomleft|bottomright))$/i;
+          /^(?:(-?\d*(?:px|%)?)(?:\s*|x)(-?\d*(?:px|%)?)|(center|top|bottom|left|right|topleft|topright|bottomleft|bottomright))$/i;
 
         const toRelativeValue = (max, input) => {
           if (typeof input !== 'string') return Number.NaN;
@@ -1916,7 +1926,7 @@ const resolvedSlideTheme =
           if (value.endsWith('px')) {
             return (Number(value.replace('px', '').trim()) / max) * 100;
           }
-          return Number(value);
+          return Number(value.replace('%', '').trim());
         };
 
         const toPixelValue = (max, input) => {
@@ -1925,6 +1935,9 @@ const resolvedSlideTheme =
           if (!value) return Number.NaN;
           if (value.endsWith('px')) {
             return Number(value.replace('px', '').trim());
+          }
+          if (value.endsWith('%')) {
+            return (max / 100) * Number(value.replace('%', '').trim());
           }
           return (max / 100) * Number(value);
         };

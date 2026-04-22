@@ -184,11 +184,49 @@ try {
 const commitUrl = commitSha && repoOwner !== 'unknown' && repoSlug !== 'unknown'
   ? `https://github.com/${repoOwner}/${repoSlug}/commit/${commitSha}`
   : null;
+
+const view = Astro.url.searchParams.get('view');
 ---
 
-<html lang="es" class="scroll-smooth">
+<html lang="es" class="scroll-smooth" data-view={view || 'default'}>
   <head>
     <BaseHead title={pageTitle} description={pageDescription} image={resolvedHeroImage} />
+    <style is:global>
+      /* Embed-only styles */
+      html[data-view='embedded'],
+      html[data-view='shell'] {
+        background-color: transparent !important;
+      }
+      html[data-view='embedded'] body,
+      html[data-view='shell'] body {
+        background-color: transparent !important;
+        padding: 0 !important;
+        overflow-x: hidden;
+      }
+      html[data-view='embedded'] .wiki-layout,
+      html[data-view='shell'] .wiki-layout {
+        padding: 1rem !important;
+        max-width: 100% !important;
+        grid-template-columns: 1fr !important;
+        gap: 0 !important;
+      }
+      html[data-view='embedded'] #infobox-sidebar,
+      html[data-view='shell'] #infobox-sidebar,
+      html[data-view='embedded'] footer,
+      html[data-view='shell'] footer,
+      html[data-view='embedded'] .header-container,
+      html[data-view='shell'] .header-container,
+      html[data-view='embedded'] .conference-bottombar,
+      html[data-view='shell'] .conference-bottombar {
+        display: none !important;
+      }
+      html[data-view='embedded'] .article-header h1,
+      html[data-view='shell'] .article-header h1 {
+        font-size: 1.5rem !important;
+        margin-top: 0 !important;
+      }
+    </style>
+
 
     <!-- Mermaid -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" defer></script>

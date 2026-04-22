@@ -1,6 +1,9 @@
 # MEMORY.md — Project Activity Log
 
-## Recent Activity (Last 11 Commits)
+## Recent Activity (Last 12 Commits)
+
+<2026-04-22 concept-whiteboard-shells> <br>
+Implemented a "Stage Layout Orchestrator" (Split-View & Overlays) and two new interactive shells: **Concept Shell** (O) and **Whiteboard Shell** (Z). Refactored `layout-controller.ts` and `stage-frame.css` to support side-by-side layouts and floating overlays. Added modular controllers for whiteboard drawing (synchronized via LiveKit Data Channel) and dynamic concept searching/launching.
 
 <2026-04-21 1e7a33a sidebar-fix> <br>
 Modified `src/scripts/livekit-room.ts` to automatically open the sidebar when the "layout-full" (Teacher) shortcut is used. This ensures participants moved to the sidebar grid are not hidden by a collapsed sidebar in "FULL F" mode.

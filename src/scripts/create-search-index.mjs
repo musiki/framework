@@ -20,6 +20,8 @@ async function createSearchIndex() {
         slug: `/${file.replace(/\.md$/, '')}`,
         title: data.title,
         description: data.description || '',
+        theme: data.theme || null,
+        reveal: data.reveal || false,
       });
     }
   }
