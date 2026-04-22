@@ -2,6 +2,9 @@
 
 ## Recent Activity (Last 12 Commits)
 
+<2026-04-22 mosaic-horizontal-split-and-url-fixes> <br>
+Updated `stage-frame.css` to implement a mandatory horizontal split for the "Mosaico" mode (Concept + Presentation), ensuring the **Concept is on top** and the **Presentation (Reveal) is on bottom** to optimize screen real estate. Removed gap (set to 0) and set background to black for a cleaner split. Refined `buildRoomQueryUrl` in `query-state.ts` to properly clean up redundant `presentation` parameters when `slides` is present, avoiding malformed URLs and potential state inconsistencies.
+
 <2026-04-22 concept-whiteboard-shells> <br>
 Implemented a "Stage Layout Orchestrator" (Split-View & Overlays) and two new interactive shells: **Concept Shell** (O) and **Whiteboard Shell** (Z). Refactored `layout-controller.ts` and `stage-frame.css` to support side-by-side layouts and floating overlays. Added modular controllers for whiteboard drawing (synchronized via LiveKit Data Channel) and dynamic concept searching/launching.
 

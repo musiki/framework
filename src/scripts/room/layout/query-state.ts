@@ -51,11 +51,15 @@ export const buildRoomQueryUrl = ({
 
     if (presentationHref) {
       params.set('slides', presentationHref);
+      params.delete('presentation');
     } else {
       params.delete('slides');
+      params.delete('presentation');
     }
   }
 
   const nextQuery = params.toString();
-  return nextQuery ? `${pathname}?${nextQuery}` : pathname;
+  // Ensure we don't double the slash or lose the pathname
+  const base = pathname.endsWith('/') ? pathname : pathname;
+  return nextQuery ? `${base}?${nextQuery}` : base;
 };
