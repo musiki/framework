@@ -132,6 +132,8 @@ export type ConferenceMessage =
   | {
       type: 'lilypond-render';
       body: string;
+      url?: string;
+      midiUrl?: string;
     }
   | {
       type: 'concept-load';
@@ -521,11 +523,21 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
     }
 
     if (parsed.type === 'lilypond-render') {
+      const body = typeof (parsed as { body?: string }).body === 'string'
+        ? (parsed as { body: string }).body
+        : '';
+      const url = typeof (parsed as { url?: string }).url === 'string'
+        ? (parsed as { url: string }).url
+        : undefined;
+      const midiUrl = typeof (parsed as { midiUrl?: string }).midiUrl === 'string'
+        ? (parsed as { midiUrl: string }).midiUrl
+        : undefined;
+
       return {
         type: 'lilypond-render',
-        body: typeof (parsed as { body?: string }).body === 'string'
-          ? (parsed as { body: string }).body
-          : '',
+        body,
+        url,
+        midiUrl,
       };
     }
 

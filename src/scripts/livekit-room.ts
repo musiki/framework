@@ -10176,9 +10176,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       await publishMessage({
         type: 'lilypond-render',
         body: lilyRenderSnapshot.body,
+        url: lilyRenderSnapshot.url,
+        midiUrl: lilyRenderSnapshot.midiUrl,
       });
     }
-
     if (externalMediaSession) {
       await broadcastExternalMediaState('open', true);
     }
@@ -11271,10 +11272,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'lilypond-render') {
-        lilypondLive.handleIncomingRenderState(message.body);
+        lilypondLive.handleIncomingRenderState(message);
         return;
       }
-
       if (message.type === 'presentation') {
         schedulePresentationLoad({
           href: message.href,

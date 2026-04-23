@@ -1,87 +1,91 @@
 :root {
-	--accent: #2337ff;
-	--accent-dark: #000d8a;
-	--black: 15, 18, 25;
-	--gray: 96, 115, 159;
-	--gray-light: 229, 233, 240;
-	--gray-dark: 34, 41, 57;
-	--gray-gradient: rgba(var(--gray-light), 50%), #fff;
-	--box-shadow: 0 0 0 transparent;
-	--font-size-base: clamp(1.02rem, 0.96rem + 0.24vw, 1.1rem);
-	--line-height-base: 1.72;
-	--content-measure: 74ch;
-	--space-xs: 0.75rem;
-	--space-sm: 1rem;
-	--space-md: 1.35rem;
-	--space-lg: 2rem;
-	--space-xl: 2.8rem;
-	--font-ui-helvetica: "Helvetica Neue", Helvetica, Arial, sans-serif;
-	--font-ui-dank: "Dank Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-	--font-ui-current: var(--font-ui-helvetica);
-	--font-family-primary: var(--font-ui-current);
-	--font-family-mono: var(--font-ui-dank);
+  --accent: #2337ff;
+  --accent-dark: #000d8a;
+  --black: 15, 18, 25;
+  --gray: 96, 115, 159;
+  --gray-light: 229, 233, 240;
+  --gray-dark: 34, 41, 57;
+  --gray-gradient: rgba(var(--gray-light), 50%), #fff;
+  --box-shadow: 0 0 0 transparent;
+  --font-size-base: clamp(1.02rem, 0.96rem + 0.24vw, 1.1rem);
+  --line-height-base: 1.72;
+  --content-measure: 74ch;
+  --space-xs: 0.75rem;
+  --space-sm: 1rem;
+  --space-md: 1.35rem;
+  --space-lg: 2rem;
+  --space-xl: 2.8rem;
+  --font-ui-helvetica: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-ui-dank:
+    "Dank Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --font-ui-current: var(--font-ui-helvetica);
+  --font-family-primary: var(--font-ui-current);
+  --font-family-mono: var(--font-ui-dank);
 }
 
 html {
-	width: 100%;
-	overflow-x: hidden;
-	font-synthesis: none;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
+  width: 100%;
+  overflow-x: hidden;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 *,
 *::before,
 *::after {
-	box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 header[data-astro-cid-3ef6ksr2] {
-    margin: 0;
-    padding: 0 1em;
-    background: white;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  margin: 0;
+  padding: 0 1em;
+  background: white;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 @font-face {
-	font-family: "Dank Mono";
-	src: url("/fonts/DankMonoNerdFontMono-Regular.woff2") format("woff2");
-	font-weight: 400;
-	font-style: normal;
-	font-display: optional;
+  font-family: "Dank Mono";
+  src: url("/fonts/DankMonoNerdFontMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: optional;
 }
 @font-face {
-	font-family: "Dank Mono";
-	src: url("/fonts/DankMonoNerdFontMono-Italic.woff2") format("woff2");
-	font-weight: 400;
-	font-style: italic;
-	font-display: optional;
+  font-family: "Dank Mono";
+  src: url("/fonts/DankMonoNerdFontMono-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: optional;
 }
 @font-face {
-	font-family: "Dank Mono";
-	src: url("/fonts/DankMonoNerdFontMono-Bold.woff2") format("woff2");
-	font-weight: 700;
-	font-style: normal;
-	font-display: optional;
+  font-family: "Dank Mono";
+  src: url("/fonts/DankMonoNerdFontMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: optional;
 }
 body {
-	font-family: var(--font-family-primary);
-	margin: 0;
-	padding: 0;
-	max-width: 100%;
-	text-align: left;
-	background: #fff;
-	word-wrap: break-word;
-	overflow-wrap: break-word;
-	overflow-x: hidden;
-	color: rgb(var(--gray-dark));
-	font-size: var(--font-size-base);
-	line-height: var(--line-height-base);
+  font-family: var(--font-family-primary);
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+  text-align: left;
+  background: #fff;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  overflow-x: hidden;
+  color: rgb(var(--gray-dark));
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
 }
 main {
-	width: min(100%, 1200px);
-	max-width: 1200px;
-	margin: 0 auto;
-	padding: clamp(1.4rem, 2.5vw, 2.8rem) clamp(1rem, 2vw, 1.5rem);
+  width: min(100%, 1200px);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(1.4rem, 2.5vw, 2.8rem) clamp(1rem, 2vw, 1.5rem);
 }
 h1,
 h2,
@@ -89,279 +93,282 @@ h3,
 h4,
 h5,
 h6 {
-	margin: 0 0 var(--space-xs) 0;
-	color: rgb(var(--black));
-	line-height: 1.22;
+  margin: 0 0 var(--space-xs) 0;
+  color: rgb(var(--black));
+  line-height: 1.22;
 }
 h1 {
-	font-size: clamp(1.75rem, 1.46rem + 1.2vw, 2.3rem);
-	font-weight: bold;
+  font-size: clamp(1.75rem, 1.46rem + 1.2vw, 2.3rem);
+  font-weight: bold;
 }
 h2 {
-	font-size: clamp(1.42rem, 1.28rem + 0.62vw, 1.76rem);
+  font-size: clamp(1.42rem, 1.28rem + 0.62vw, 1.76rem);
 }
 h3 {
-	font-size: clamp(1.25rem, 1.16rem + 0.44vw, 1.48rem);
+  font-size: clamp(1.25rem, 1.16rem + 0.44vw, 1.48rem);
 }
 h4 {
-	font-size: clamp(1.12rem, 1.06rem + 0.28vw, 1.25rem);
+  font-size: clamp(1.12rem, 1.06rem + 0.28vw, 1.25rem);
 }
 h5 {
-	font-size: 1rem;
+  font-size: 1rem;
 }
 strong,
 b {
-	font-weight: 700;
+  font-weight: 700;
 }
 a {
-	color: var(--accent);
-	text-decoration: none;
-	border-bottom: 1px solid transparent;
-	transition: color 0.2s ease, border-bottom-color 0.2s ease;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    color 0.2s ease,
+    border-bottom-color 0.2s ease;
 }
 a:hover {
-	color: var(--accent-dark);
-	border-bottom-color: var(--accent);
+  color: var(--accent-dark);
+  border-bottom-color: var(--accent);
 }
 p {
-	margin: 0 0 var(--space-md) 0;
+  margin: 0 0 var(--space-md) 0;
 }
 .prose p {
-	margin-bottom: var(--space-md);
+  margin-bottom: var(--space-md);
 }
 textarea {
-	width: 100%;
+  width: 100%;
 }
 input {
-	font-size: 1rem;
+  font-size: 1rem;
 }
 textarea,
 input,
 button,
 select,
 option {
-	font-family: var(--font-family-primary);
-	font-size: 1rem;
+  font-family: var(--font-family-primary);
+  font-size: 1rem;
 }
 table {
-	width: 100%;
+  width: 100%;
 }
 img {
-	max-width: 100%;
-	height: auto;
-	border-radius: 0;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
 }
 
 .obsidian-media-embed {
-	margin: 0.9rem 0;
+  margin: 0.9rem 0;
 }
 
 /* Cover blocks for Reveal presentations */
 .musiki-cover-block {
-	display: none !important;
+  display: none !important;
 }
 
 .obsidian-media-embed-card {
-	margin: 0.9rem 0;
-	padding: 0.45rem 0.55rem;
-	border: 1px solid color-mix(in srgb, var(--c-border) 78%, transparent);
-	background: color-mix(in srgb, var(--c-bg-mute) 72%, var(--c-bg) 28%);
-	border-radius: 12px;
-	width: clamp(72px, 10%, 88px); /* Around 80px or 10% for > 500px */
+  margin: 0.9rem 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--c-border) 78%, transparent);
+  background: color-mix(in srgb, var(--c-bg-mute) 72%, var(--c-bg) 28%);
+  border-radius: 12px;
+  width: clamp(72px, 10%, 88px); /* Around 80px or 10% for > 500px */
 }
 
 @media (max-width: 500px) {
-	.obsidian-media-embed-card {
-		width: clamp(64px, 15%, 80px); /* 15% for < 500px */
-	}
+  .obsidian-media-embed-card {
+    width: clamp(64px, 15%, 80px); /* 15% for < 500px */
+  }
 }
 
 .obsidian-audio-card {
-	/* Keep compact but allow expansion if it contains a full player */
-	min-width: clamp(72px, 10%, 88px);
+  /* Keep compact but allow expansion if it contains a full player */
+  min-width: clamp(72px, 10%, 88px);
 }
 
 .obsidian-video-card {
-	min-width: clamp(72px, 10%, 88px);
+  min-width: clamp(72px, 10%, 88px);
 }
 
 .obsidian-audio-embed,
 .obsidian-video-embed {
-	display: block;
-	width: min(100%, 680px);
-	max-width: 100%;
+  display: block;
+  width: min(100%, 680px);
+  max-width: 100%;
 }
 
 .obsidian-audio-card .obsidian-audio-embed,
 .obsidian-video-card .obsidian-video-embed {
-	margin: 0;
-	width: 100%;
+  margin: 0;
+  width: 100%;
 }
 
 .obsidian-media-caption {
-	margin: 0.35rem 0 0 0;
-	font-size: 0.82rem;
-	color: rgb(var(--gray-dark), 0.72);
+  margin: 0.35rem 0 0 0;
+  font-size: 0.82rem;
+  color: rgb(var(--gray-dark), 0.72);
 }
 code {
-	font-family: var(--font-family-mono);
-	padding: 2px 5px;
-	background-color: transparent;
-	border-radius: 0;
+  font-family: var(--font-family-mono);
+  padding: 2px 5px;
+  background-color: transparent;
+  border-radius: 0;
 }
 pre {
-	font-family: var(--font-family-mono);
-	padding: 1rem 1.15rem;
-	margin: var(--space-md) 0;
-	border-radius: 0;
+  font-family: var(--font-family-mono);
+  padding: 1rem 1.15rem;
+  margin: var(--space-md) 0;
+  border-radius: 0;
 }
 pre > code {
-	all: unset;
+  all: unset;
 }
 blockquote {
-	border-left: 4px solid var(--accent);
-	padding: 0 0 0 1rem;
-	margin: var(--space-md) 0;
-	font-size: 1rem;
-	line-height: 1.7;
+  border-left: 4px solid var(--accent);
+  padding: 0 0 0 1rem;
+  margin: var(--space-md) 0;
+  font-size: 1rem;
+  line-height: 1.7;
 }
 hr {
-	border: none;
-	border-top: 1px solid transparent;
-	margin: var(--space-xl) 0;
+  border: none;
+  border-top: 1px solid transparent;
+  margin: var(--space-xl) 0;
 }
 
 :where(article, .prose, .content-area) {
-	line-height: 1.75;
+  line-height: 1.75;
 }
 
-:where(article, .prose, .content-area) :where(p, ul, ol, pre, blockquote, table, figure, hr) {
-	margin-top: var(--space-md);
-	margin-bottom: var(--space-md);
+:where(article, .prose, .content-area)
+  :where(p, ul, ol, pre, blockquote, table, figure, hr) {
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-md);
 }
 
 :where(article, .prose, .content-area) :where(h1, h2, h3, h4) {
-	margin-top: calc(var(--space-xl) + 1.2em);
-	margin-bottom: var(--space-sm);
-	scroll-margin-top: 5.5rem;
+  margin-top: calc(var(--space-xl) + 1.2em);
+  margin-bottom: var(--space-sm);
+  scroll-margin-top: 5.5rem;
 }
 
 :where(article, .prose, .content-area) :where(h5, h6) {
-	margin-top: var(--space-xl);
-	margin-bottom: var(--space-sm);
-	scroll-margin-top: 5.5rem;
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-sm);
+  scroll-margin-top: 5.5rem;
 }
 
 :where(article, .prose, .content-area) :where(p + p) {
-	margin-top: var(--space-sm);
+  margin-top: var(--space-sm);
 }
 
 :where(article, .prose, .content-area) > :first-child {
-	margin-top: 0 !important;
+  margin-top: 0 !important;
 }
 
 :where(article, .prose, .content-area) :where(li) {
-	line-height: 1.65;
+  line-height: 1.65;
 }
 
 /* KaTeX fallback guards (avoid double layer if external stylesheet fails to load) */
 .katex {
-	position: relative;
+  position: relative;
 }
 
 .katex .katex-mathml {
-	position: absolute !important;
-	width: 1px !important;
-	height: 1px !important;
-	padding: 0 !important;
-	margin: -1px !important;
-	overflow: hidden !important;
-	clip: rect(0, 0, 0, 0) !important;
-	white-space: nowrap !important;
-	border: 0 !important;
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 .katex-display {
-	display: block;
-	margin: var(--space-md) 0;
-	overflow-x: auto;
-	overflow-y: hidden;
+  display: block;
+  margin: var(--space-md) 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .katex-display > .katex {
-	display: block;
-	text-align: center;
+  display: block;
+  text-align: center;
 }
 @media (max-width: 968px) {
-	main {
-		padding-inline: 0;
-	}
+  main {
+    padding-inline: 0;
+  }
 }
 
 @media (max-width: 720px) {
-	body {
-		font-size: 1rem;
-		line-height: 1.68;
-	}
-	main {
-		padding-block: 1rem;
-	}
-	:where(article, .prose, .content-area) :where(h1, h2, h3, h4) {
-		margin-top: calc(2rem + 1.2em);
-	}
-	:where(article, .prose, .content-area) :where(h5, h6) {
-		margin-top: 2rem;
-	}
+  body {
+    font-size: 1rem;
+    line-height: 1.68;
+  }
+  main {
+    padding-block: 1rem;
+  }
+  :where(article, .prose, .content-area) :where(h1, h2, h3, h4) {
+    margin-top: calc(2rem + 1.2em);
+  }
+  :where(article, .prose, .content-area) :where(h5, h6) {
+    margin-top: 2rem;
+  }
 }
 
 /* Dark mode styles — Catppuccin Mocha palette */
 .dark {
-	/* Catppuccin Mocha */
-	--accent: #89b4fa;          /* Blue */
-	--accent-dark: #45475a;     /* Surface1 */
-	--black: 205, 214, 244;     /* Text (rgb) */
-	--gray: 166, 173, 200;      /* Subtext0 (rgb) */
-	--gray-light: 69, 71, 90;   /* Surface1 (rgb) */
-	--gray-dark: 205, 214, 244; /* Text (rgb) */
-	--gray-gradient: rgba(var(--gray-light), 50%), #1e1e2e;
+  /* Catppuccin Mocha */
+  --accent: #89b4fa; /* Blue */
+  --accent-dark: #45475a; /* Surface1 */
+  --black: 205, 214, 244; /* Text (rgb) */
+  --gray: 166, 173, 200; /* Subtext0 (rgb) */
+  --gray-light: 69, 71, 90; /* Surface1 (rgb) */
+  --gray-dark: 205, 214, 244; /* Text (rgb) */
+  --gray-gradient: rgba(var(--gray-light), 50%), #1e1e2e;
 
-	/* Semantic tokens from reference palette */
-	--surface-background: #1e1e2e;  /* Base */
-	--surface-ground: #181825;      /* Mantle */
-	--surface-gray: #313244;        /* Surface0 */
-	--surface-light-gray: #45475a;  /* Surface1 */
-	--text-color: #cdd6f4;
-	--primary-color: #cba6f7;       /* Mauve */
-	--primary-light-color: #f5c2e7; /* Pink */
-	--error: #f38ba8;               /* Red */
-	--error-dark: #eba0ac;          /* Maroon */
-	--warning: #f9e2af;             /* Yellow */
-	--warning-dark: #fab387;        /* Peach */
-	--success: #a6e3a1;             /* Green */
-	--info-light: #89dceb;          /* Sky */
+  /* Semantic tokens from reference palette */
+  --surface-background: #1e1e2e; /* Base */
+  --surface-ground: #181825; /* Mantle */
+  --surface-gray: #313244; /* Surface0 */
+  --surface-light-gray: #45475a; /* Surface1 */
+  --text-color: #cdd6f4;
+  --primary-color: #cba6f7; /* Mauve */
+  --primary-light-color: #f5c2e7; /* Pink */
+  --error: #f38ba8; /* Red */
+  --error-dark: #eba0ac; /* Maroon */
+  --warning: #f9e2af; /* Yellow */
+  --warning-dark: #fab387; /* Peach */
+  --success: #a6e3a1; /* Green */
+  --info-light: #89dceb; /* Sky */
 }
 
 .dark body {
-	background: #1e1e2e !important;
-	color: #cdd6f4;
+  background: #1e1e2e !important;
+  color: #cdd6f4;
 }
 
 .dark header {
-	background: #181825 !important;
-	border-bottom: 1px solid #313244;
+  background: #181825 !important;
+  border-bottom: 1px solid #313244;
 }
 
 .dark nav {
-	background: #181825;
+  background: #181825;
 }
 
 .dark .card {
-	background: #181825;
-	border-color: #313244;
+  background: #181825;
+  border-color: #313244;
 }
 
 .dark main {
-	color: #cdd6f4;
+  color: #cdd6f4;
 }
 
 .dark h1,
@@ -370,52 +377,51 @@ hr {
 .dark h4,
 .dark h5,
 .dark h6 {
-	color: rgb(var(--black));
+  color: rgb(var(--black));
 }
 
 .dark a {
-	color: var(--accent);
+  color: var(--accent);
 }
 
 .dark code {
-	background-color: #313244;
-	color: #a6e3a1;
-	border-radius: 3px;
-	padding: 0 3px;
+  background-color: #313244;
+  color: #a6e3a1;
+  border-radius: 3px;
+  padding: 0 3px;
 }
 
 .dark pre {
-	background-color: #181825;
-	border: 1px solid #313244;
+  background-color: #181825;
+  border: 1px solid #313244;
 }
 
 .dark blockquote {
-	border-left-color: #cba6f7;
-	color: #a6adc8;
+  border-left-color: #cba6f7;
+  color: #a6adc8;
 }
 
 .dark hr {
-	border-top-color: #313244;
+  border-top-color: #313244;
 }
 
 .sr-only {
-	border: 0;
-	padding: 0;
-	margin: 0;
-	position: absolute !important;
-	height: 1px;
-	width: 1px;
-	overflow: hidden;
-	/* IE6, IE7 - a 0 height clip, off to the bottom right of the visible 1px box */
-	clip: rect(1px 1px 1px 1px);
-	/* maybe deprecated but we need to support legacy browsers */
-	clip: rect(1px, 1px, 1px, 1px);
-	/* modern browsers, clip-path works inwards from each corner */
-	clip-path: inset(50%);
-	/* added line to stop words getting smushed together (as they go onto separate lines and some screen readers do not understand line feeds as a space */
-	white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  position: absolute !important;
+  height: 1px;
+  width: 1px;
+  overflow: hidden;
+  /* IE6, IE7 - a 0 height clip, off to the bottom right of the visible 1px box */
+  clip: rect(1px 1px 1px 1px);
+  /* maybe deprecated but we need to support legacy browsers */
+  clip: rect(1px, 1px, 1px, 1px);
+  /* modern browsers, clip-path works inwards from each corner */
+  clip-path: inset(50%);
+  /* added line to stop words getting smushed together (as they go onto separate lines and some screen readers do not understand line feeds as a space */
+  white-space: nowrap;
 }
-
 
 /* Callouts base */
 .callout {
@@ -458,22 +464,83 @@ hr {
   font-size: 0.8em;
   letter-spacing: 0.01em;
   padding-right: 1.9rem;
-  margin: 0 0 .5rem 0;
+  margin: 0 0 0.5rem 0;
 }
 
 /* Cuerpo */
-.callout-body > :first-child { margin-top: 0; }
-.callout-body > :last-child { margin-bottom: 0; }
+.callout-body > :first-child {
+  margin-top: 0;
+}
+.callout-body > :last-child {
+  margin-bottom: 0;
+}
 
 /* Paletas por tipo (podés ajustar a gusto) */
-.callout-note    { --c-accent:#64748b; --c-border:rgba(100, 116, 139, 0.36); --c-bg:rgba(100, 116, 139, 0.13); --c-icon:"ⓘ"; --c-icon-bg:rgba(100, 116, 139, 0.2); --c-icon-border:rgba(100, 116, 139, 0.34); }
-.callout-info    { --c-accent:#2563eb; --c-border:rgba(37, 99, 235, 0.36); --c-bg:rgba(37, 99, 235, 0.12); --c-icon:"ℹ"; --c-icon-bg:rgba(37, 99, 235, 0.2); --c-icon-border:rgba(37, 99, 235, 0.35); }
-.callout-tip     { --c-accent:#059669; --c-border:rgba(5, 150, 105, 0.36); --c-bg:rgba(5, 150, 105, 0.12); --c-icon:"✓"; --c-icon-bg:rgba(5, 150, 105, 0.2); --c-icon-border:rgba(5, 150, 105, 0.35); }
-.callout-important { --c-accent:#7c3aed; --c-border:rgba(124, 58, 237, 0.38); --c-bg:rgba(124, 58, 237, 0.12); --c-icon:"★"; --c-icon-bg:rgba(124, 58, 237, 0.2); --c-icon-border:rgba(124, 58, 237, 0.35); }
-.callout-warning { --c-accent:#d97706; --c-border:rgba(217, 119, 6, 0.39); --c-bg:rgba(217, 119, 6, 0.14); --c-icon:"⚠"; --c-icon-bg:rgba(217, 119, 6, 0.21); --c-icon-border:rgba(217, 119, 6, 0.36); }
-.callout-caution { --c-accent:#dc2626; --c-border:rgba(220, 38, 38, 0.4); --c-bg:rgba(220, 38, 38, 0.14); --c-icon:"⛔"; --c-icon-bg:rgba(220, 38, 38, 0.2); --c-icon-border:rgba(220, 38, 38, 0.36); }
-.callout-danger  { --c-accent:#dc2626; --c-border:rgba(220, 38, 38, 0.4); --c-bg:rgba(220, 38, 38, 0.14); --c-icon:"⛔"; --c-icon-bg:rgba(220, 38, 38, 0.2); --c-icon-border:rgba(220, 38, 38, 0.36); }
-.callout-quote   { --c-accent:#334155; --c-border:rgba(51, 65, 85, 0.3); --c-bg:rgba(51, 65, 85, 0.1); --c-icon:"❝"; --c-icon-bg:rgba(51, 65, 85, 0.18); --c-icon-border:rgba(51, 65, 85, 0.3); font-style: italic; }
+.callout-note {
+  --c-accent: #64748b;
+  --c-border: rgba(100, 116, 139, 0.36);
+  --c-bg: rgba(100, 116, 139, 0.13);
+  --c-icon: "ⓘ";
+  --c-icon-bg: rgba(100, 116, 139, 0.2);
+  --c-icon-border: rgba(100, 116, 139, 0.34);
+}
+.callout-info {
+  --c-accent: #2563eb;
+  --c-border: rgba(37, 99, 235, 0.36);
+  --c-bg: rgba(37, 99, 235, 0.12);
+  --c-icon: "ℹ";
+  --c-icon-bg: rgba(37, 99, 235, 0.2);
+  --c-icon-border: rgba(37, 99, 235, 0.35);
+}
+.callout-tip {
+  --c-accent: #059669;
+  --c-border: rgba(5, 150, 105, 0.36);
+  --c-bg: rgba(5, 150, 105, 0.12);
+  --c-icon: "✓";
+  --c-icon-bg: rgba(5, 150, 105, 0.2);
+  --c-icon-border: rgba(5, 150, 105, 0.35);
+}
+.callout-important {
+  --c-accent: #7c3aed;
+  --c-border: rgba(124, 58, 237, 0.38);
+  --c-bg: rgba(124, 58, 237, 0.12);
+  --c-icon: "★";
+  --c-icon-bg: rgba(124, 58, 237, 0.2);
+  --c-icon-border: rgba(124, 58, 237, 0.35);
+}
+.callout-warning {
+  --c-accent: #d97706;
+  --c-border: rgba(217, 119, 6, 0.39);
+  --c-bg: rgba(217, 119, 6, 0.14);
+  --c-icon: "⚠";
+  --c-icon-bg: rgba(217, 119, 6, 0.21);
+  --c-icon-border: rgba(217, 119, 6, 0.36);
+}
+.callout-caution {
+  --c-accent: #dc2626;
+  --c-border: rgba(220, 38, 38, 0.4);
+  --c-bg: rgba(220, 38, 38, 0.14);
+  --c-icon: "⛔";
+  --c-icon-bg: rgba(220, 38, 38, 0.2);
+  --c-icon-border: rgba(220, 38, 38, 0.36);
+}
+.callout-danger {
+  --c-accent: #dc2626;
+  --c-border: rgba(220, 38, 38, 0.4);
+  --c-bg: rgba(220, 38, 38, 0.14);
+  --c-icon: "⛔";
+  --c-icon-bg: rgba(220, 38, 38, 0.2);
+  --c-icon-border: rgba(220, 38, 38, 0.36);
+}
+.callout-quote {
+  --c-accent: #334155;
+  --c-border: rgba(51, 65, 85, 0.3);
+  --c-bg: rgba(51, 65, 85, 0.1);
+  --c-icon: "❝";
+  --c-icon-bg: rgba(51, 65, 85, 0.18);
+  --c-icon-border: rgba(51, 65, 85, 0.3);
+  font-style: italic;
+}
 
 /* Dark mode callouts */
 .dark .callout {
@@ -484,14 +551,72 @@ hr {
   --c-icon-border: rgba(248, 250, 252, 0.32);
 }
 
-.dark .callout-note    { --c-accent:#cbd5e1; --c-border:rgba(148, 163, 184, 0.45); --c-bg:rgba(100, 116, 139, 0.2); --c-icon:"ⓘ"; --c-icon-bg:rgba(148, 163, 184, 0.26); --c-icon-border:rgba(148, 163, 184, 0.46); }
-.dark .callout-info    { --c-accent:#93c5fd; --c-border:rgba(96, 165, 250, 0.48); --c-bg:rgba(37, 99, 235, 0.22); --c-icon:"ℹ"; --c-icon-bg:rgba(96, 165, 250, 0.26); --c-icon-border:rgba(96, 165, 250, 0.5); }
-.dark .callout-tip     { --c-accent:#6ee7b7; --c-border:rgba(52, 211, 153, 0.48); --c-bg:rgba(5, 150, 105, 0.22); --c-icon:"✓"; --c-icon-bg:rgba(52, 211, 153, 0.25); --c-icon-border:rgba(52, 211, 153, 0.48); }
-.dark .callout-important { --c-accent:#ddd6fe; --c-border:rgba(196, 181, 253, 0.5); --c-bg:rgba(124, 58, 237, 0.24); --c-icon:"★"; --c-icon-bg:rgba(196, 181, 253, 0.27); --c-icon-border:rgba(196, 181, 253, 0.5); }
-.dark .callout-warning { --c-accent:#fcd34d; --c-border:rgba(251, 191, 36, 0.5); --c-bg:rgba(217, 119, 6, 0.24); --c-icon:"⚠"; --c-icon-bg:rgba(251, 191, 36, 0.28); --c-icon-border:rgba(251, 191, 36, 0.5); }
-.dark .callout-caution { --c-accent:#fca5a5; --c-border:rgba(248, 113, 113, 0.5); --c-bg:rgba(220, 38, 38, 0.24); --c-icon:"⛔"; --c-icon-bg:rgba(248, 113, 113, 0.27); --c-icon-border:rgba(248, 113, 113, 0.5); }
-.dark .callout-danger  { --c-accent:#fca5a5; --c-border:rgba(248, 113, 113, 0.5); --c-bg:rgba(220, 38, 38, 0.24); --c-icon:"⛔"; --c-icon-bg:rgba(248, 113, 113, 0.27); --c-icon-border:rgba(248, 113, 113, 0.5); }
-.dark .callout-quote   { --c-accent:#e2e8f0; --c-border:rgba(148, 163, 184, 0.44); --c-bg:rgba(51, 65, 85, 0.24); --c-icon:"❝"; --c-icon-bg:rgba(148, 163, 184, 0.22); --c-icon-border:rgba(148, 163, 184, 0.4); font-style: italic; color: #f3f4f6; }
+.dark .callout-note {
+  --c-accent: #cbd5e1;
+  --c-border: rgba(148, 163, 184, 0.45);
+  --c-bg: rgba(100, 116, 139, 0.2);
+  --c-icon: "ⓘ";
+  --c-icon-bg: rgba(148, 163, 184, 0.26);
+  --c-icon-border: rgba(148, 163, 184, 0.46);
+}
+.dark .callout-info {
+  --c-accent: #93c5fd;
+  --c-border: rgba(96, 165, 250, 0.48);
+  --c-bg: rgba(37, 99, 235, 0.22);
+  --c-icon: "ℹ";
+  --c-icon-bg: rgba(96, 165, 250, 0.26);
+  --c-icon-border: rgba(96, 165, 250, 0.5);
+}
+.dark .callout-tip {
+  --c-accent: #6ee7b7;
+  --c-border: rgba(52, 211, 153, 0.48);
+  --c-bg: rgba(5, 150, 105, 0.22);
+  --c-icon: "✓";
+  --c-icon-bg: rgba(52, 211, 153, 0.25);
+  --c-icon-border: rgba(52, 211, 153, 0.48);
+}
+.dark .callout-important {
+  --c-accent: #ddd6fe;
+  --c-border: rgba(196, 181, 253, 0.5);
+  --c-bg: rgba(124, 58, 237, 0.24);
+  --c-icon: "★";
+  --c-icon-bg: rgba(196, 181, 253, 0.27);
+  --c-icon-border: rgba(196, 181, 253, 0.5);
+}
+.dark .callout-warning {
+  --c-accent: #fcd34d;
+  --c-border: rgba(251, 191, 36, 0.5);
+  --c-bg: rgba(217, 119, 6, 0.24);
+  --c-icon: "⚠";
+  --c-icon-bg: rgba(251, 191, 36, 0.28);
+  --c-icon-border: rgba(251, 191, 36, 0.5);
+}
+.dark .callout-caution {
+  --c-accent: #fca5a5;
+  --c-border: rgba(248, 113, 113, 0.5);
+  --c-bg: rgba(220, 38, 38, 0.24);
+  --c-icon: "⛔";
+  --c-icon-bg: rgba(248, 113, 113, 0.27);
+  --c-icon-border: rgba(248, 113, 113, 0.5);
+}
+.dark .callout-danger {
+  --c-accent: #fca5a5;
+  --c-border: rgba(248, 113, 113, 0.5);
+  --c-bg: rgba(220, 38, 38, 0.24);
+  --c-icon: "⛔";
+  --c-icon-bg: rgba(248, 113, 113, 0.27);
+  --c-icon-border: rgba(248, 113, 113, 0.5);
+}
+.dark .callout-quote {
+  --c-accent: #e2e8f0;
+  --c-border: rgba(148, 163, 184, 0.44);
+  --c-bg: rgba(51, 65, 85, 0.24);
+  --c-icon: "❝";
+  --c-icon-bg: rgba(148, 163, 184, 0.22);
+  --c-icon-border: rgba(148, 163, 184, 0.4);
+  font-style: italic;
+  color: #f3f4f6;
+}
 
 /* Mermaid centering and padding for all modes */
 .mermaid {
@@ -584,11 +709,9 @@ hr {
   filter: drop-shadow(0 0 8px var(--mermaid-cluster-border)) !important;
 }
 
-
-
 .tag {
-  font-size: .85rem;
-  padding: .01rem 1rem !important;
+  font-size: 0.85rem;
+  padding: 0.01rem 1rem !important;
   border: 1px solid transparent;
   border-radius: 0;
   color: #374151;
@@ -608,14 +731,26 @@ hr {
   background: transparent !important;
 }
 
-
 /* DATAVIEW PLUGIN */
 
-  .dvlist { margin: 1rem 0; }
-  .dvlist-header { font-size: .9rem; color: var(--c-subtle); margin-bottom: .25rem; }
-  .dvlist-items { padding-left: 1rem; }
-  .dvlist-items li { margin: .15rem 0; }
-  .dvlist .meta { color: var(--c-subtle); font-size: .85em; }
+.dvlist {
+  margin: 1rem 0;
+}
+.dvlist-header {
+  font-size: 0.9rem;
+  color: var(--c-subtle);
+  margin-bottom: 0.25rem;
+}
+.dvlist-items {
+  padding-left: 1rem;
+}
+.dvlist-items li {
+  margin: 0.15rem 0;
+}
+.dvlist .meta {
+  color: var(--c-subtle);
+  font-size: 0.85em;
+}
 
 /* === LISTAS NO ORDENADAS (UL) === */
 ul {
@@ -720,7 +855,7 @@ ol ol ol ol > li::before {
 
 ol ol {
   list-style: none;
-  padding-left: 2.0em;
+  padding-left: 2em;
   margin-left: 0;
   list-style-position: inside;
 }
@@ -752,7 +887,7 @@ ol ol ol > li::marker {
 
 ol ol ol ol {
   list-style: none;
-  padding-left: 5.0em;
+  padding-left: 5em;
   margin-left: 0;
   list-style-position: inside;
 }
@@ -831,7 +966,6 @@ ol ol ol ol > li::marker {
 .hljs-meta {
   color: #7f9f7f;
 }
-
 
 .hljs-emphasis {
   font-style: italic;
@@ -916,7 +1050,8 @@ ol ol ol ol > li::marker {
 }
 
 .musiki-codemirror-host--editor.is-upload-target {
-  outline: 2px dashed color-mix(in srgb, var(--accent, #2f6fff) 42%, transparent);
+  outline: 2px dashed
+    color-mix(in srgb, var(--accent, #2f6fff) 42%, transparent);
   outline-offset: 1px;
 }
 
@@ -935,14 +1070,28 @@ ol ol ol ol > li::marker {
 }
 
 .musiki-codemirror-host--forum:focus-within {
-  outline: 2px solid color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 34%, transparent);
+  outline: 2px solid
+    color-mix(
+      in srgb,
+      var(--forum-accent, var(--accent, #2f6fff)) 34%,
+      transparent
+    );
   outline-offset: 1px;
 }
 
 .musiki-codemirror-host--forum.is-upload-target {
-  outline: 2px dashed color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 42%, transparent);
+  outline: 2px dashed
+    color-mix(
+      in srgb,
+      var(--forum-accent, var(--accent, #2f6fff)) 42%,
+      transparent
+    );
   outline-offset: 1px;
-  background: color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 6%, var(--forum-bg-panel, #fff));
+  background: color-mix(
+    in srgb,
+    var(--forum-accent, var(--accent, #2f6fff)) 6%,
+    var(--forum-bg-panel, #fff)
+  );
 }
 
 .musiki-codemirror-host--forum.is-uploading {
@@ -1054,22 +1203,22 @@ ol ol ol ol > li::marker {
 }
 
 .bibtex.normal {
-    color: var(--text-faint);
+  color: var(--text-faint);
 }
 
 .bibtex.value {
-    color: var(--text-muted);
+  color: var(--text-muted);
 }
 
 .bibtex.key {
-    color: var(--text-faint);
+  color: var(--text-faint);
 }
 
 .bibtex.header {
-    color: var(--text-accent);
+  color: var(--text-accent);
 }
 .bibtex.entry {
-    color: var(--text-accent);
+  color: var(--text-accent);
 }
 
 /* LilyPond Scores */
@@ -1125,7 +1274,8 @@ ol ol ol ol > li::marker {
   flex: 0 0 1.68rem !important;
   aspect-ratio: 1 / 1 !important;
   box-sizing: border-box !important;
-  border: 1px solid color-mix(in srgb, var(--c-border, #dcdcdc) 82%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--c-border, #dcdcdc) 82%, transparent) !important;
   border-radius: 0 !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -1135,14 +1285,22 @@ ol ol ol ol > li::marker {
   line-height: 1 !important;
   font-size: 0 !important;
   color: var(--c-fg, #111111) !important;
-  background: color-mix(in srgb, var(--c-bg, #ffffff) 88%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--c-bg, #ffffff) 88%,
+    transparent
+  ) !important;
   appearance: none;
   overflow: hidden;
   vertical-align: middle;
 }
 
 .lily-miniplayer-btn:hover {
-  background: color-mix(in srgb, var(--c-bg, #ffffff) 70%, var(--c-fg, #111111) 8%);
+  background: color-mix(
+    in srgb,
+    var(--c-bg, #ffffff) 70%,
+    var(--c-fg, #111111) 8%
+  );
 }
 
 .lily-miniplayer-btn:focus-visible {
@@ -1165,7 +1323,9 @@ ol ol ol ol > li::marker {
 .lily-score .is-active-note {
   fill: #e74c3c !important;
   stroke: #e74c3c !important;
-  transition: fill 0.1s, stroke 0.1s;
+  transition:
+    fill 0.1s,
+    stroke 0.1s;
 }
 
 .lilypond-block .lily-playhead,
@@ -1208,7 +1368,8 @@ ol ol ol ol > li::marker {
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-panel {
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
@@ -1247,7 +1408,8 @@ ol ol ol ol > li::marker {
 
 :is(#lesson-forum, #forum-reader-root) .forum-new-thread,
 :is(#lesson-forum, #forum-reader-root) .forum-thread-item {
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
@@ -1282,7 +1444,9 @@ ol ol ol ol > li::marker {
   border: 0 !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-new-thread[open] .forum-fold-summary {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-new-thread[open]
+  .forum-fold-summary {
   border-bottom: 0 !important;
 }
 
@@ -1340,18 +1504,26 @@ ol ol ol ol > li::marker {
   width: 0.48rem !important;
   height: 0.48rem !important;
   border-radius: 999px !important;
-  border: 1px solid color-mix(in srgb, var(--forum-accent, #2f5d8c) 55%, transparent) !important;
-  background: color-mix(in srgb, var(--forum-accent, #2f5d8c) 72%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-accent, #2f5d8c) 55%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-accent, #2f5d8c) 72%,
+    transparent
+  ) !important;
   opacity: 0.85 !important;
   pointer-events: none !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-thread-item:has(.forum-thread-more-btn) .forum-thread-pin-indicator {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-thread-item:has(.forum-thread-more-btn)
+  .forum-thread-pin-indicator {
   right: 1.82rem !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--forum-accent, #2f5d8c) 42%, transparent) !important;
+  outline: 2px solid
+    color-mix(in srgb, var(--forum-accent, #2f5d8c) 42%, transparent) !important;
   outline-offset: 2px !important;
   border-radius: 0 !important;
 }
@@ -1409,12 +1581,15 @@ ol ol ol ol > li::marker {
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
   z-index: 12;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-count:hover::after,
-:is(#lesson-forum, #forum-reader-root) .forum-thread-count:focus-visible::after {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-thread-count:focus-visible::after {
   opacity: 1;
   transform: translate(-50%, 0);
 }
@@ -1453,8 +1628,13 @@ ol ol ol ol > li::marker {
   display: inline-flex !important;
   gap: 0.22rem !important;
   padding: 0.2rem !important;
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
-  background: color-mix(in srgb, var(--forum-bg-panel, rgba(255,255,255,0.94)) 92%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-bg-panel, rgba(255, 255, 255, 0.94)) 92%,
+    transparent
+  ) !important;
   backdrop-filter: blur(10px) !important;
 }
 
@@ -1468,7 +1648,9 @@ ol ol ol ol > li::marker {
   box-sizing: border-box !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-thread-pin-btn[data-pinned="true"] .forum-thread-pin-glyph {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-thread-pin-btn[data-pinned="true"]
+  .forum-thread-pin-glyph {
   background: currentColor !important;
 }
 
@@ -1479,8 +1661,14 @@ ol ol ol ol > li::marker {
   z-index: 9 !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-thread-item.is-thread-menu-open .forum-thread-more-btn {
-  background: color-mix(in srgb, var(--forum-bg-subtle, #eef2f5) 78%, transparent) !important;
+:is(#lesson-forum, #forum-reader-root)
+  .forum-thread-item.is-thread-menu-open
+  .forum-thread-more-btn {
+  background: color-mix(
+    in srgb,
+    var(--forum-bg-subtle, #eef2f5) 78%,
+    transparent
+  ) !important;
   color: var(--forum-text-primary, var(--c-fg, #1c1f23)) !important;
 }
 
@@ -1490,7 +1678,8 @@ ol ol ol ol > li::marker {
 
 :is(#lesson-forum, #forum-reader-root) .forum-fold {
   margin-top: 0.72rem !important;
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
   border-radius: 0 !important;
   background: transparent !important;
 }
@@ -1509,22 +1698,28 @@ ol ol ol ol > li::marker {
   color: var(--forum-text-secondary, var(--c-fg-dim, #6b7480)) !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-fold-summary::-webkit-details-marker {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-fold-summary::-webkit-details-marker {
   display: none !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-fold[open] .forum-fold-summary {
-  border-bottom: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-thread-inline-panel .forum-post-list {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-thread-inline-panel
+  .forum-post-list {
   max-height: none !important;
   overflow: visible !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-panel .forum-field,
 :is(#lesson-forum, #forum-reader-root) .forum-panel .forum-textarea,
-:is(#lesson-forum, #forum-reader-root) .forum-panel .musiki-codemirror-host--forum,
+:is(#lesson-forum, #forum-reader-root)
+  .forum-panel
+  .musiki-codemirror-host--forum,
 :is(#lesson-forum, #forum-reader-root) .forum-panel .forum-select {
   width: 100% !important;
   max-width: 100% !important;
@@ -1540,7 +1735,8 @@ ol ol ol ol > li::marker {
   grid-template-columns: 1fr !important;
   gap: 0.44rem !important;
   padding: 0.52rem !important;
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-sizing: border-box;
@@ -1564,12 +1760,20 @@ ol ol ol ol > li::marker {
 
 :is(#lesson-forum, #forum-reader-root) .forum-post.forum-post-role-instructor {
   background: transparent !important;
-  border-color: color-mix(in srgb, var(--forum-role-instructor, #2f5d8c) 30%, var(--forum-border-soft, #e2e8ee) 70%) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--forum-role-instructor, #2f5d8c) 30%,
+    var(--forum-border-soft, #e2e8ee) 70%
+  ) !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post.forum-post-role-student {
   background: transparent !important;
-  border-color: color-mix(in srgb, var(--forum-text-secondary, #6b7480) 14%, var(--forum-border-soft, #e2e8ee) 86%) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--forum-text-secondary, #6b7480) 14%,
+    var(--forum-border-soft, #e2e8ee) 86%
+  ) !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-main {
@@ -1623,23 +1827,24 @@ ol ol ol ol > li::marker {
   white-space: nowrap !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) :is(
-  .forum-post-identity,
-  .forum-post-identity *,
-  .forum-post-header,
-  .forum-post-header *,
-  .forum-post-meta-inline,
-  .forum-post-meta-inline *,
-  .forum-post-actions,
-  .forum-post-actions *,
-  .forum-post-reactions,
-  .forum-post-reactions *,
-  .forum-post-quick-actions,
-  .forum-post-quick-actions *,
-  .forum-thread-more-btn,
-  .forum-thread-actions-menu,
-  .forum-thread-actions-menu *
-) {
+:is(#lesson-forum, #forum-reader-root)
+  :is(
+    .forum-post-identity,
+    .forum-post-identity *,
+    .forum-post-header,
+    .forum-post-header *,
+    .forum-post-meta-inline,
+    .forum-post-meta-inline *,
+    .forum-post-actions,
+    .forum-post-actions *,
+    .forum-post-reactions,
+    .forum-post-reactions *,
+    .forum-post-quick-actions,
+    .forum-post-quick-actions *,
+    .forum-thread-more-btn,
+    .forum-thread-actions-menu,
+    .forum-thread-actions-menu *
+  ) {
   user-select: none !important;
   -webkit-user-select: none !important;
   -webkit-touch-callout: none !important;
@@ -1674,13 +1879,25 @@ ol ol ol ol > li::marker {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  border: 1.5px dashed color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 24%, transparent) !important;
+  border: 1.5px dashed
+    color-mix(
+      in srgb,
+      var(--forum-accent, var(--accent, #2f6fff)) 24%,
+      transparent
+    ) !important;
   border-radius: 10px !important;
-  background: color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 10%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-accent, var(--accent, #2f6fff)) 10%,
+    transparent
+  ) !important;
   color: var(--forum-accent, var(--accent, #2f6fff)) !important;
   opacity: 0 !important;
   pointer-events: none !important;
-  transition: opacity 140ms ease, background 140ms ease, border-color 140ms ease !important;
+  transition:
+    opacity 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease !important;
   z-index: 2 !important;
   backdrop-filter: blur(1.5px) !important;
 }
@@ -1692,26 +1909,52 @@ ol ol ol ol > li::marker {
   min-width: 7.2rem !important;
   padding: 0.38rem 0.72rem !important;
   border-radius: 999px !important;
-  border: 1px solid color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 26%, transparent) !important;
-  background: color-mix(in srgb, var(--forum-bg-panel, rgba(255,255,255,0.94)) 78%, var(--forum-accent, var(--accent, #2f6fff)) 22%) !important;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--forum-accent, var(--accent, #2f6fff)) 26%,
+      transparent
+    ) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-bg-panel, rgba(255, 255, 255, 0.94)) 78%,
+    var(--forum-accent, var(--accent, #2f6fff)) 22%
+  ) !important;
   font-size: 0.76rem !important;
   font-weight: 600 !important;
   letter-spacing: 0.06em !important;
   text-transform: uppercase !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-editor-dropzone.is-upload-target .forum-editor-dropzone-overlay {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-editor-dropzone.is-upload-target
+  .forum-editor-dropzone-overlay {
   opacity: 1 !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-editor-dropzone.is-upload-target .forum-textarea,
-:is(#lesson-forum, #forum-reader-root) .forum-editor-dropzone.is-upload-target .musiki-codemirror-host--forum {
-  outline: 2px dashed color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 42%, transparent) !important;
+:is(#lesson-forum, #forum-reader-root)
+  .forum-editor-dropzone.is-upload-target
+  .forum-textarea,
+:is(#lesson-forum, #forum-reader-root)
+  .forum-editor-dropzone.is-upload-target
+  .musiki-codemirror-host--forum {
+  outline: 2px dashed
+    color-mix(
+      in srgb,
+      var(--forum-accent, var(--accent, #2f6fff)) 42%,
+      transparent
+    ) !important;
   outline-offset: 1px !important;
-  background: color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 6%, var(--forum-bg-panel, #fff)) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-accent, var(--accent, #2f6fff)) 6%,
+    var(--forum-bg-panel, #fff)
+  ) !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-editor-dropzone.is-uploading .forum-editor-dropzone-overlay {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-editor-dropzone.is-uploading
+  .forum-editor-dropzone-overlay {
   opacity: 0.82 !important;
 }
 
@@ -1742,29 +1985,44 @@ ol ol ol ol > li::marker {
   -webkit-user-select: text !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-post-body :is(p, ul, ol, pre, blockquote, table, .mermaid, .katex-display, .lily-score, .callout) {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-post-body
+  :is(
+    p,
+    ul,
+    ol,
+    pre,
+    blockquote,
+    table,
+    .mermaid,
+    .katex-display,
+    .lily-score,
+    .callout
+  ) {
   max-width: 100% !important;
   margin: 0 0 0.32rem 0 !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-post-body :is(
-  p,
-  ul,
-  ol,
-  li,
-  div,
-  span,
-  strong,
-  em,
-  a,
-  blockquote,
-  table,
-  thead,
-  tbody,
-  tr,
-  th,
-  td
-) {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-post-body
+  :is(
+    p,
+    ul,
+    ol,
+    li,
+    div,
+    span,
+    strong,
+    em,
+    a,
+    blockquote,
+    table,
+    thead,
+    tbody,
+    tr,
+    th,
+    td
+  ) {
   color: inherit !important;
   opacity: 1 !important;
   visibility: visible !important;
@@ -1860,7 +2118,8 @@ ol ol ol ol > li::marker {
   height: 1.56rem !important;
   min-width: 1.56rem !important;
   min-height: 1.56rem !important;
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
   border-radius: 0 !important;
   display: inline-flex !important;
   align-items: center;
@@ -1878,11 +2137,18 @@ ol ol ol ol > li::marker {
   opacity: 1 !important;
   touch-action: manipulation;
   position: relative;
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-action-btn:hover {
-  background: color-mix(in srgb, var(--forum-bg-subtle, #eef2f5) 65%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-bg-subtle, #eef2f5) 65%,
+    transparent
+  ) !important;
   color: var(--forum-text-primary, var(--c-fg, #1c1f23)) !important;
   opacity: 1 !important;
 }
@@ -1892,7 +2158,12 @@ ol ol ol ol > li::marker {
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-action-btn:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--forum-accent, var(--accent, #2f6fff)) 70%, transparent);
+  outline: 1px solid
+    color-mix(
+      in srgb,
+      var(--forum-accent, var(--accent, #2f6fff)) 70%,
+      transparent
+    );
   outline-offset: 1px;
 }
 
@@ -1911,7 +2182,9 @@ ol ol ol ol > li::marker {
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.14s ease, transform 0.14s ease;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
   z-index: 15;
 }
 
@@ -1933,11 +2206,19 @@ ol ol ol ol > li::marker {
 :is(#lesson-forum, #forum-reader-root) .forum-action-b,
 :is(#lesson-forum, #forum-reader-root) .forum-action-c {
   color: #b3261e !important;
-  border-color: color-mix(in srgb, #b3261e 42%, var(--forum-border-soft, #d8dee6) 58%) !important;
+  border-color: color-mix(
+    in srgb,
+    #b3261e 42%,
+    var(--forum-border-soft, #d8dee6) 58%
+  ) !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-action-more {
-  color: color-mix(in srgb, var(--forum-text-secondary, #6b7480) 82%, #9ca3af 18%) !important;
+  color: color-mix(
+    in srgb,
+    var(--forum-text-secondary, #6b7480) 82%,
+    #9ca3af 18%
+  ) !important;
   border-color: transparent !important;
   font-size: 0.96rem !important;
   font-weight: 800 !important;
@@ -1965,7 +2246,11 @@ ol ol ol ol > li::marker {
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-btn:hover,
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-btn:focus-visible {
   opacity: 1 !important;
-  background: color-mix(in srgb, var(--forum-bg-subtle, #eef2f5) 82%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-bg-subtle, #eef2f5) 82%,
+    transparent
+  ) !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-post-reaction-btn.is-active {
@@ -1979,11 +2264,13 @@ ol ol ol ol > li::marker {
   background: transparent !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-post-reaction-clarifies.is-active {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-post-reaction-clarifies.is-active {
   background: transparent !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-post-reaction-reference.is-active {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-post-reaction-reference.is-active {
   background: transparent !important;
 }
 
@@ -1996,7 +2283,10 @@ ol ol ol ol > li::marker {
   visibility: hidden !important;
   pointer-events: none !important;
   transform: translateY(0.18rem) !important;
-  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s ease !important;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease,
+    visibility 0.14s ease !important;
   z-index: 6 !important;
 }
 
@@ -2005,12 +2295,19 @@ ol ol ol ol > li::marker {
   align-items: center !important;
   gap: 0.18rem !important;
   padding: 0.18rem !important;
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
-  background: color-mix(in srgb, var(--forum-bg-panel, rgba(255,255,255,0.94)) 92%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-bg-panel, rgba(255, 255, 255, 0.94)) 92%,
+    transparent
+  ) !important;
   backdrop-filter: blur(10px) !important;
 }
 
-:is(#lesson-forum, #forum-reader-root) .forum-post.is-quick-open .forum-post-quick-actions {
+:is(#lesson-forum, #forum-reader-root)
+  .forum-post.is-quick-open
+  .forum-post-quick-actions {
   opacity: 1 !important;
   visibility: visible !important;
   pointer-events: auto !important;
@@ -2030,8 +2327,12 @@ ol ol ol ol > li::marker {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  :is(#lesson-forum, #forum-reader-root) .forum-post:hover .forum-post-quick-actions,
-  :is(#lesson-forum, #forum-reader-root) .forum-post:focus-within .forum-post-quick-actions {
+  :is(#lesson-forum, #forum-reader-root)
+    .forum-post:hover
+    .forum-post-quick-actions,
+  :is(#lesson-forum, #forum-reader-root)
+    .forum-post:focus-within
+    .forum-post-quick-actions {
     opacity: 1 !important;
     visibility: visible !important;
     pointer-events: auto !important;
@@ -2045,7 +2346,8 @@ ol ol ol ol > li::marker {
   height: 1.56rem !important;
   min-width: 1.56rem !important;
   min-height: 1.56rem !important;
-  border: 1px solid color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--forum-border-soft, #d8dee6) 88%, transparent) !important;
   border-radius: 0 !important;
   display: inline-flex !important;
   align-items: center;
@@ -2063,11 +2365,18 @@ ol ol ol ol > li::marker {
   opacity: 1 !important;
   touch-action: manipulation;
   position: relative;
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-secondary-btn:hover {
-  background: color-mix(in srgb, var(--forum-bg-subtle, #eef2f5) 65%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    var(--forum-bg-subtle, #eef2f5) 65%,
+    transparent
+  ) !important;
   color: var(--forum-text-primary, var(--c-fg, #1c1f23)) !important;
 }
 
@@ -2093,7 +2402,9 @@ ol ol ol ol > li::marker {
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.14s ease, transform 0.14s ease;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
   z-index: 15;
 }
 

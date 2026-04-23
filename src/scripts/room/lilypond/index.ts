@@ -21,15 +21,6 @@ type LilyRenderResult = {
   url: string;
 };
 
-const LILY_CODE_SELECTOR = [
-  'pre > code.language-lily',
-  'pre > code.lang-lily',
-  'pre > code.language-lilypond',
-  'pre > code.lang-lilypond',
-  'pre > code.language-ly',
-  'pre > code.lang-ly',
-].join(', ');
-
 const escapeHtml = (value: string) =>
   String(value || '')
     .replace(/&/g, '&amp;')
@@ -37,23 +28,6 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-
-const normalizeMermaidSource = (value: string) =>
-  String(value || '')
-    .replace(/\u00a0/g, ' ')
-    .replace(/\r\n?/g, '\n')
-    .trim();
-
-const looksLikePlainLilySource = (value: string) => {
-  const normalized = String(value || '').trim();
-  if (!normalized || normalized.includes('```')) return false;
-  return (
-    normalized.includes('\\score')
-    || normalized.includes('\\relative')
-    || normalized.includes('\\version')
-    || normalized.includes('\\new Staff')
-  );
-};
 
 type LilyTransportMessage = Extract<ConferenceMessage, { type: 'lilypond-live' | 'lilypond-render' }>;
 
@@ -71,6 +45,7 @@ export class LilyPondLiveController {
   private liveSyncTimer: number | null = null;
   private liveSyncNeedsBody = false;
   private lastRenderedBody = '';
+  private lastRenderResult: LilyRenderResult | null = null;
   private newBtn: HTMLButtonElement | null = null;
   private onPublish: (msg: LilyTransportMessage) => void;
   private previewEl: HTMLElement | null = null;
@@ -212,6 +187,8 @@ export class LilyPondLiveController {
     return {
       body: this.lastRenderedBody,
       published: this.hasRenderedPreviewSnapshot,
+      url: this.lastRenderResult?.url,
+      midiUrl: this.lastRenderResult?.midiUrl,
     };
   }
 
@@ -222,9 +199,24 @@ export class LilyPondLiveController {
     this.applyRemoteSelection(message.anchor, message.head, true);
   }
 
-  public handleIncomingRenderState(body: string) {
+  public handleIncomingRenderState(message: Extract<LilyTransportMessage, { type: 'lilypond-render' }>) {
     this.hasRenderedPreviewSnapshot = true;
-    this.lastRenderedBody = String(body || '');
+    this.lastRenderedBody = String(message.body || '');
+
+    if (message.url) {
+      const normalized = this.lastRenderedBody.replace(/\r\n?/g, '\n').trim();
+      const result = {
+        url: message.url,
+        midiUrl: message.midiUrl || '',
+      };
+      if (normalized) {
+        this.lilyRenderCache.set(normalized, Promise.resolve(result));
+      }
+      this.lastRenderResult = result;
+    } else {
+      this.lastRenderResult = null;
+    }
+
     void this.renderLocally(this.lastRenderedBody);
   }
 
@@ -459,46 +451,36 @@ export class LilyPondLiveController {
     this.onPublish(message);
   }
 
-  private publishRender() {
+  private async publishRender() {
     if (!this.isTeacher) return;
     this.publishLiveSync(true);
 
     const body = this.getCurrentBody();
     this.hasRenderedPreviewSnapshot = true;
     this.lastRenderedBody = body;
+
+    // Trigger local render first to get the result from cache or API
+    await this.renderLocally(body);
+
+    let finalUrl: string | undefined;
+    let finalMidiUrl: string | undefined;
+
+    if (this.previewEl) {
+      const figure = this.previewEl.querySelector('[data-lily-url]');
+      if (figure instanceof HTMLElement) {
+        finalUrl = figure.dataset.lilyUrl;
+        finalMidiUrl = figure.dataset.midiUrl;
+      }
+    }
+
+    this.lastRenderResult = finalUrl ? { url: finalUrl, midiUrl: finalMidiUrl || '' } : null;
+
     this.onPublish({
       type: 'lilypond-render',
       body,
+      url: finalUrl,
+      midiUrl: finalMidiUrl,
     });
-    void this.renderLocally(body);
-  }
-
-  private async createMarkedLoader() {
-    const previewWindow = window as MarkdownPreviewWindow;
-    if (previewWindow.marked?.parse) return previewWindow.marked;
-    if (previewWindow.__roomLilyMarkedPromise) return previewWindow.__roomLilyMarkedPromise;
-
-    previewWindow.__roomLilyMarkedPromise = new Promise((resolve) => {
-      const existing = document.querySelector('script[src*="marked"]');
-      if (existing) {
-        const poll = () => {
-          if (previewWindow.marked) {
-            resolve(previewWindow.marked);
-            return;
-          }
-          window.setTimeout(poll, 40);
-        };
-        poll();
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/marked@9/marked.min.js';
-      script.onload = () => resolve(previewWindow.marked ?? null);
-      script.onerror = () => resolve(null);
-      document.head.appendChild(script);
-    });
-
-    return previewWindow.__roomLilyMarkedPromise;
   }
 
   private async loadMermaid() {
@@ -542,14 +524,16 @@ export class LilyPondLiveController {
           startOnLoad: false,
           theme: 'dark',
           securityLevel: 'loose',
-          suppressErrorRendering: false,
         });
-        mermaid.run({ nodes });
+        mermaid.run({ 
+          nodes,
+          suppressErrors: true
+        });
         nodes.forEach((node) => {
           node.dataset.mermaidRendered = 'true';
         });
-      } catch {
-        // Keep markdown preview readable even if a diagram fails.
+      } catch (error) {
+        console.error('[lilypond-live] Mermaid render error:', error);
       }
     });
   }
@@ -563,106 +547,6 @@ export class LilyPondLiveController {
     if (typeof (window as any).hydrateLilypondBlocks === 'function') {
       (window as any).hydrateLilypondBlocks(container);
     }
-  }
-
-  private async requestLilyRender(source: string) {
-    const normalized = String(source || '').replace(/\r\n?/g, '\n').trim();
-    if (!normalized) return null;
-    if (this.lilyRenderCache.has(normalized)) {
-      return this.lilyRenderCache.get(normalized) ?? null;
-    }
-
-    const requestPromise = fetch('/api/lily/render', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: normalized }),
-    })
-      .then(async (response) => {
-        if (!response.ok) return null;
-        const payload = await response.json().catch(() => null);
-        if (!payload || payload.success !== true || !payload.url) return null;
-        return {
-          midiUrl: String(payload.midiUrl || ''),
-          url: String(payload.url),
-        } satisfies LilyRenderResult;
-      })
-      .catch(() => null);
-
-    this.lilyRenderCache.set(normalized, requestPromise);
-    return requestPromise;
-  }
-
-  private buildLilyFigureMarkup(result: LilyRenderResult) {
-    const midiAttr = result.midiUrl ? ` data-midi-url="${escapeHtml(result.midiUrl)}"` : '';
-    return [
-      `<figure class="lilypond-block lily-score" data-lily-url="${escapeHtml(result.url)}"${midiAttr}>`,
-      `<img src="${escapeHtml(result.url)}" alt="LilyPond render" loading="lazy" />`,
-      '</figure>',
-    ].join('');
-  }
-
-  private rewriteMermaidCodeBlocks(container: HTMLElement) {
-    const nodes = Array.from(
-      container.querySelectorAll<HTMLElement>('pre > code.language-mermaid, pre > code.lang-mermaid'),
-    );
-    nodes.forEach((codeNode) => {
-      const pre = codeNode.closest('pre');
-      if (!pre) return;
-      const mermaidNode = document.createElement('div');
-      mermaidNode.className = 'mermaid';
-      mermaidNode.dataset.mermaidSource = normalizeMermaidSource(codeNode.textContent || '');
-      mermaidNode.textContent = mermaidNode.dataset.mermaidSource;
-      pre.replaceWith(mermaidNode);
-    });
-  }
-
-  private async rewriteLilyCodeBlocks(container: HTMLElement) {
-    const nodes = Array.from(container.querySelectorAll<HTMLElement>(LILY_CODE_SELECTOR));
-    if (nodes.length === 0) return;
-
-    await Promise.all(nodes.map(async (codeNode) => {
-      const pre = codeNode.closest('pre');
-      if (!pre || pre.dataset.lilyStatus === 'done') return;
-
-      const source = String(codeNode.textContent || '');
-      if (!source.trim()) return;
-
-      pre.dataset.lilyStatus = 'processing';
-      const result = await this.requestLilyRender(source);
-      if (!result || !pre.isConnected) {
-        pre.dataset.lilyStatus = 'failed';
-        return;
-      }
-
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = this.buildLilyFigureMarkup(result);
-      const figure = wrapper.firstElementChild;
-      if (!figure) return;
-
-      pre.replaceWith(figure);
-    }));
-  }
-
-  private async renderPreviewMarkup(body: string) {
-    const source = String(body || '').replace(/\r\n?/g, '\n');
-    if (!source.trim()) return '';
-
-    if (looksLikePlainLilySource(source)) {
-      const result = await this.requestLilyRender(source);
-      if (result) return this.buildLilyFigureMarkup(result);
-      return `<pre><code>${escapeHtml(source)}</code></pre>`;
-    }
-
-    const marked = await this.createMarkedLoader();
-    const html = marked?.parse
-      ? String(marked.parse(source))
-      : `<pre><code>${escapeHtml(source)}</code></pre>`;
-
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    this.rewriteMermaidCodeBlocks(container);
-    await this.rewriteLilyCodeBlocks(container);
-    return container.innerHTML;
   }
 
   private async renderLocally(body: string) {
@@ -679,10 +563,24 @@ export class LilyPondLiveController {
     this.previewEl.dataset.loading = 'true';
 
     try {
-      const html = await this.renderPreviewMarkup(source);
+      const response = await fetch('/api/live/preview-markdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markdown: source }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      const html = String(payload.html || '');
+
       if (ticket !== this.renderNonce) return;
+      
       this.previewEl.innerHTML = html;
       delete this.previewEl.dataset.loading;
+      
       this.runMermaidIn(this.previewEl);
       this.hydrateRenderedLilyBlocks(this.previewEl);
     } catch (error: any) {
