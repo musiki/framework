@@ -3517,6 +3517,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     fullscreenButton,
     shortcutsHelpButton,
     sidebarToggleButton,
+    kickToggleButton,
     instrumentsToggleButton,
     shortcutsModal,
     shortcutsCloseButton,
@@ -5315,6 +5316,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sessionAllowInstrumentsInput.disabled =
         localRole !== 'teacher' ||
         (room.state === ConnectionState.Connected && !canLeadSession());
+    }
+
+    if (kickToggleButton instanceof HTMLButtonElement) {
+      const canKick = localRole === 'teacher';
+      kickToggleButton.hidden = !canKick;
+      kickToggleButton.disabled = !canKick || room.state !== ConnectionState.Connected || !canLeadSession();
+      kickToggleButton.dataset.active = kickModeActive ? 'true' : 'false';
+      
+      // Force hide via style if still visible (extra safety for students)
+      if (!canKick) {
+        kickToggleButton.style.display = 'none';
+      }
     }
 
     if (sessionMuteAllButton instanceof HTMLButtonElement) {
@@ -9800,11 +9813,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       type: 'musiki:reveal-goto',
       state: slideState,
     });
+    // Ensure pointer mode is synced if provided
+    if (typeof slideState.pointerMode === 'boolean') {
+      postToPresentation({
+        type: 'musiki:reveal-pointer-mode',
+        enabled: slideState.pointerMode,
+      });
+    }
   };
 
   const publishSlideState = async (slideState: SlideState, force = false) => {
     if (!canLeadSession()) return;
-    const slideKey = `${slideState.indexh}:${slideState.indexv}:${slideState.indexf}:${slideState.zoom.toFixed(3)}`;
+    const slideKey = `${slideState.indexh}:${slideState.indexv}:${slideState.indexf}:${slideState.zoom.toFixed(3)}:${slideState.pointerMode ? 'p1' : 'p0'}`;
     if (!force && slideKey === lastPublishedSlideKey) return;
     lastPublishedSlideKey = slideKey;
     await publishMessage({
@@ -10448,6 +10468,25 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  let kickModeActive = false;
+
+  const kickParticipant = async (identity: string) => {
+    if (!canLeadSession()) return;
+    if (identity === room.localParticipant.identity) return;
+
+    if (!confirm('¿Estás seguro de que quieres expulsar a este participante?')) return;
+
+    try {
+      await publishMessage({
+        type: 'session-kick',
+        identity,
+      });
+      setStatus('Participante expulsado.');
+    } catch (error) {
+      console.error('Kick failed:', error);
+    }
+  };
+
   const renderParticipantList = () => {
     renderParticipantRoster({
       participantList,
@@ -10455,6 +10494,46 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       readRole: (participant) => readParticipantRole(room, participant, localRole),
       room,
     });
+
+    if (canLeadSession()) {
+      const items = participantList.querySelectorAll('.conference-roster-item');
+      items.forEach((item, index) => {
+        const participant = allParticipants().sort((left, right) => {
+          const leftRole = readParticipantRole(room, left, localRole);
+          const rightRole = readParticipantRole(room, right, localRole);
+          if (leftRole !== rightRole) return leftRole === 'teacher' ? -1 : 1;
+          return readParticipantName(left).localeCompare(readParticipantName(right), 'es');
+        })[index];
+
+        if (!participant || isLocalParticipant(room, participant)) return;
+
+        if (kickModeActive) {
+          const kickBtn = document.createElement('button');
+          kickBtn.className = 'conference-roster-kick-btn';
+          kickBtn.textContent = '×';
+          kickBtn.title = 'Expulsar';
+          kickBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            void kickParticipant(participant.identity);
+          });
+          
+          // Wrap content in a container for better flex layout
+          const content = document.createElement('div');
+          content.style.flex = '1';
+          content.style.minWidth = '0';
+          content.style.display = 'flex';
+          content.style.alignItems = 'baseline';
+          content.style.gap = '0.4rem';
+          
+          while (item.firstChild) {
+            content.appendChild(item.firstChild);
+          }
+          
+          item.append(content, kickBtn);
+          item.classList.add('is-kickable');
+        }
+      });
+    }
   };
 
   const syncAllParticipants = () => {
@@ -10919,6 +10998,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       const message = readMessage(payload);
       if (!message) return;
+
+      if (message.type === 'session-kick') {
+        if (message.identity === room.localParticipant.identity) {
+          setStatus('Has sido expulsado de la sala.');
+          void disconnect();
+        }
+        return;
+      }
 
       if (message.type === 'chat') {
         appendChatMessage({
@@ -11690,6 +11777,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   if (shortcutsHelpButton instanceof HTMLButtonElement) {
     shortcutsHelpButton.addEventListener('click', () => {
       setShortcutsModalOpen(true);
+    });
+  }
+
+  if (kickToggleButton instanceof HTMLButtonElement) {
+    kickToggleButton.addEventListener('click', () => {
+      kickModeActive = !kickModeActive;
+      kickToggleButton.dataset.active = kickModeActive ? 'true' : 'false';
+      renderParticipantList();
     });
   }
 
@@ -13070,6 +13165,19 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (normalizedCommand === 'layout-overlay:media') {
+      const button = root.querySelector('[data-action="external-media-toggle"]');
+      (button instanceof HTMLButtonElement ? button : null)?.click();
+      return;
+    }
+
+    if (normalizedCommand === 'break-rooms-toggle') {
+      if (breakRoomsPopup instanceof HTMLElement) {
+        setBreakRoomsPopupOpen(!breakRoomsPopupVisible);
+      }
+      return;
+    }
+
     if (normalizedCommand === 'toggle-record') {
       if (recordButton instanceof HTMLButtonElement) {
         recordButton.click();
@@ -13103,10 +13211,44 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (normalizedCommand === 'session-kick-toggle') {
+      if (localRole === 'teacher' && kickToggleButton instanceof HTMLButtonElement && !kickToggleButton.disabled) {
+        kickToggleButton.click();
+      }
+      return;
+    }
+
     if (normalizedCommand === 'toggle-hand') {
       if (raiseHandButton instanceof HTMLButtonElement && !raiseHandButton.disabled) {
         raiseHandButton.click();
       }
+      return;
+    }
+
+    if (normalizedCommand === 'toggle-microphone') {
+      if (microphoneButton instanceof HTMLButtonElement && !microphoneButton.disabled) {
+        microphoneButton.click();
+      }
+      return;
+    }
+
+    if (normalizedCommand === 'instruments-toggle') {
+      if (instrumentsToggleButton instanceof HTMLButtonElement && !instrumentsToggleButton.disabled) {
+        instrumentsToggleButton.click();
+      }
+      return;
+    }
+
+    if (normalizedCommand === 'share-screen') {
+      if (shareScreenButton instanceof HTMLButtonElement && !shareScreenButton.disabled) {
+        shareScreenButton.click();
+      }
+      return;
+    }
+
+    if (normalizedCommand.startsWith('layout-overlay:')) {
+      const overlay = normalizedCommand.split(':')[1] as LayoutMode;
+      setOverlayLayout(stage, overlay);
       return;
     }
 
@@ -13177,8 +13319,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const isModifierKey = isMac ? event.ctrlKey : (event.metaKey || event.ctrlKey);
+
     const isRightSidebarShortcut =
-      (event.metaKey || event.ctrlKey) &&
+      isModifierKey &&
       event.shiftKey &&
       !event.altKey &&
       (event.code === 'Backslash' || event.key === '?' || event.key === '/');
@@ -13190,7 +13335,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     const isLeftSidebarShortcut =
-      (event.metaKey || event.ctrlKey) &&
+      isModifierKey &&
       !event.shiftKey &&
       !event.altKey &&
       event.code === 'Backslash';
@@ -13203,13 +13348,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     if (ignoreShortcutTarget) return;
 
-    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'j') {
+    if (isModifierKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'j') {
       event.preventDefault();
       executeRoomShortcutCommand('toggle-connect');
       return;
     }
 
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey) {
+    if (isModifierKey && event.shiftKey && !event.altKey) {
       const key = String(event.key || '').toLowerCase();
       if (key === 'f') {
         event.preventDefault();
@@ -13233,7 +13378,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
     }
 
-    if ((event.metaKey || event.ctrlKey) && event.altKey && !event.shiftKey) {
+    if (isModifierKey && event.altKey && !event.shiftKey) {
       const key = String(event.key || '').toLowerCase();
       if (key === 'g') {
         event.preventDefault();
@@ -13249,6 +13394,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         '6': 'toggle-invert-video',
         '7': 'open-delegate-session',
         c: 'focus-chat',
+        k: 'session-kick-toggle',
         m: 'mute-all',
         n: 'cycle-camera',
         r: 'toggle-record',
@@ -13284,6 +13430,68 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     const plainKey = String(event.key || '').toLowerCase();
 
+    // Direct Bottom Bar Shortcuts (Zoom/Meet style)
+    if (plainKey === 'f') {
+      event.preventDefault();
+      executeRoomShortcutCommand('layout-full');
+      return;
+    }
+    if (plainKey === 'm') {
+      if (canLeadSession()) {
+        event.preventDefault();
+        executeRoomShortcutCommand('mute-all');
+      } else {
+        event.preventDefault();
+        executeRoomShortcutCommand('toggle-hand');
+      }
+      return;
+    }
+    if (plainKey === 'i') {
+      event.preventDefault();
+      executeRoomShortcutCommand('instruments-toggle');
+      return;
+    }
+    if (plainKey === 's') {
+      event.preventDefault();
+      executeRoomShortcutCommand('share-screen');
+      return;
+    }
+    if (plainKey === 'p') {
+      event.preventDefault();
+      executeRoomShortcutCommand('layout-presentation');
+      return;
+    }
+    if (plainKey === 'g') {
+      event.preventDefault();
+      executeRoomShortcutCommand('layout-grid');
+      return;
+    }
+    if (plainKey === 'z') {
+      event.preventDefault();
+      executeRoomShortcutCommand('layout-overlay:whiteboard');
+      return;
+    }
+    if (plainKey === 'o') {
+      event.preventDefault();
+      executeRoomShortcutCommand('layout-overlay:concept');
+      return;
+    }
+    if (plainKey === 'c') {
+      event.preventDefault();
+      executeRoomShortcutCommand('focus-chat');
+      return;
+    }
+    if (plainKey === 'e') {
+      event.preventDefault();
+      executeRoomShortcutCommand('layout-overlay:media');
+      return;
+    }
+    if (plainKey === 'b') {
+      event.preventDefault();
+      executeRoomShortcutCommand('break-rooms-toggle');
+      return;
+    }
+
     if (plainKey === 'h') {
       event.preventDefault();
       executeRoomShortcutCommand('toggle-hand');
@@ -13292,14 +13500,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     if (event.key === ' ' || event.code === 'Space') {
       event.preventDefault();
-      executeRoomShortcutCommand('hold-mic-start');
+      executeRoomShortcutCommand('toggle-microphone');
       return;
     }
 
-    if (event.key.toLowerCase() === 'm') {
-      event.preventDefault();
-      executeRoomShortcutCommand('toggle-hand');
-    }
   };
 
   const handleRoomShortcutKeyup = (event: KeyboardEvent) => {
@@ -13329,7 +13533,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   document.addEventListener('keydown', handleRoomShortcutKeydown);
-  document.addEventListener('keyup', handleRoomShortcutKeyup);
   window.addEventListener('graph:statechange', handleGraphStateChange as EventListener);
 
   if (streamingProfileSelect instanceof HTMLSelectElement) {

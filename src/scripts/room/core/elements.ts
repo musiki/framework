@@ -82,6 +82,7 @@ export const selectRoomElements = (root: HTMLElement) => {
     sessionTimer: root.querySelector('[data-session-timer]'),
     recordButton: root.querySelector('[data-action="record"]'),
     fullscreenButton: root.querySelector('[data-action="fullscreen"]'),
+    kickToggleButton: root.querySelector('[data-action="session-kick-toggle"]'),
     shortcutsHelpButton: root.querySelector('[data-action="shortcuts-help"]'),
     sidebarToggleButton: root.querySelector('[data-action="sidebar-toggle"]'),
     instrumentsToggleButton: root.querySelector('[data-action="instruments-toggle"]'),

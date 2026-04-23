@@ -262,6 +262,15 @@
       "img": ""
     },
     {
+      "id": "cursos/s123/02-forma y estructura/estructura",
+      "name": "estructura",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "estructura",
+      "img": ""
+    },
+    {
       "id": "cursos/s123/03 Metodología de la Investigación en Música/Metodología de la Investigación en Música MOC",
       "name": "Metodología de la Investigación en Música",
       "type": "document",
@@ -310,8 +319,8 @@
       "group": "tags"
     },
     {
-      "id": "tag:dss/feedback",
-      "name": "dss/feedback",
+      "id": "tag:feedback",
+      "name": "feedback",
       "type": "tag",
       "group": "tags"
     }
@@ -379,7 +388,7 @@
     },
     {
       "source": "public/instrumentos/spectral parrot",
-      "target": "tag:dss/feedback",
+      "target": "tag:feedback",
       "type": "tag"
     }
   ]

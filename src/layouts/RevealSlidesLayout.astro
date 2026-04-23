@@ -438,12 +438,11 @@ const resolvedSlideTheme =
         display: block !important;
         width: 100% !important;
         max-width: 100% !important;
-        min-height: 320px !important;
-        height: 100% !important;
+        height: auto !important;
         max-height: 100% !important;
+        aspect-ratio: 16 / 9 !important;
         margin-left: auto !important;
         margin-right: auto !important;
-        aspect-ratio: auto !important;
       }
 
       /* Keep embed fit constrained when iframe is used inside custom grid blocks */
@@ -3720,6 +3719,10 @@ const resolvedSlideTheme =
           margin: 0.04,
           minScale: 0.1,
           maxScale: 2.0,
+          keyboard: {
+            79: null, // Disable default 'o'
+            80: null, // Disable default 'p'
+          },
           plugins: [
             RevealHighlight,
             RevealNotes,
@@ -3739,6 +3742,7 @@ const resolvedSlideTheme =
                 indexv: Number(indices.v || 0),
                 indexf: Number(indices.f || 0),
                 zoom: slidesZoom,
+                pointerMode: pointerMode,
               },
             },
             window.location.origin,
@@ -4092,6 +4096,20 @@ const resolvedSlideTheme =
           }
 
           if (event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+            if (key === 'o') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              deck.toggleOverview();
+              return;
+            }
+            if (key === 'p') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              togglePointerMode();
+              emitDeckState('pointer'); // Force emit pointer state for broadcast
+              return;
+            }
+
             const reactionMap = {
               Digit4: 'reaction:clap',
               Digit5: 'reaction:thumbsup',

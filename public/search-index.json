@@ -233,9 +233,9 @@
     "slug": "02-forma y estructura/Forma",
     "title": "Forma",
     "description": "",
-    "theme": "zztt",
+    "theme": null,
     "reveal": false,
-    "type": "lesson",
+    "type": null,
     "courseId": "s123",
     "isPublic": false
   },
@@ -246,6 +246,16 @@
     "theme": "zztt",
     "reveal": false,
     "type": "lesson",
+    "courseId": "s123",
+    "isPublic": false
+  },
+  {
+    "slug": "02-forma y estructura/estructura",
+    "title": "estructura",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": "concept",
     "courseId": "s123",
     "isPublic": false
   },

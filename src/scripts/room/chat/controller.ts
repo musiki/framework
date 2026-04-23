@@ -254,20 +254,26 @@ export const createRoomChatController = ({
         minute: '2-digit',
       });
 
+      header.append(sender, separator, sentAt);
+
       const body = document.createElement('div');
       body.className = 'conference-chat-text';
       setConferenceChatBody(body, message.text);
 
-      header.append(sender, separator, sentAt);
       item.append(header, body);
       chatList.appendChild(item);
     });
 
-    if (chatScroller instanceof HTMLElement) {
-      chatScroller.scrollTop = chatScroller.scrollHeight;
-    } else {
-      chatList.scrollTop = chatList.scrollHeight;
-    }
+    // Use a small timeout to ensure DOM is settled for scroll calculation
+    window.setTimeout(() => {
+        const lastItem = chatList.lastElementChild;
+        if (lastItem instanceof HTMLElement) {
+          lastItem.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        } else {
+          const scroller = chatScroller instanceof HTMLElement ? chatScroller : chatList;
+          scroller.scrollTop = scroller.scrollHeight;
+        }
+    }, 100);
   };
 
   const resetUnread = () => {
@@ -368,6 +374,13 @@ export const createRoomChatController = ({
 
     appendMessage(message, true);
     chatInput.value = '';
+    
+    // Force clear and resize in next tick
+    window.requestAnimationFrame(() => {
+        chatInput.value = '';
+        chatInput.dispatchEvent(new Event('input'));
+    });
+    
     syncControlState();
 
     try {

@@ -9,6 +9,7 @@ export type SlideState = {
   indexh: number;
   indexv: number;
   zoom: number;
+  pointerMode?: boolean;
 };
 
 export type ExternalMediaProvider = 'youtube';
@@ -28,6 +29,10 @@ export type PresentationMediaState = {
 };
 
 export type ConferenceMessage =
+  | {
+      type: 'session-kick';
+      identity: string;
+    }
   | {
       type: 'layout';
       layout: LayoutMode;
@@ -202,6 +207,7 @@ export const normalizeSlideState = (value: Partial<SlideState> | null | undefine
     indexh: Math.max(0, Math.round(indexh)),
     indexv: Math.max(0, Math.round(indexv)),
     zoom: Math.min(1.4, Math.max(0.45, Number.isFinite(zoom) ? zoom : 1)),
+    pointerMode: Boolean(value.pointerMode),
   };
 };
 
@@ -215,6 +221,13 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
     const parsed = JSON.parse(textDecoder.decode(payload));
     if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
       return null;
+    }
+
+    if (parsed.type === 'session-kick') {
+      return {
+        type: 'session-kick',
+        identity: normalizeText((parsed as { identity?: string }).identity),
+      };
     }
 
     if (parsed.type === 'layout') {
