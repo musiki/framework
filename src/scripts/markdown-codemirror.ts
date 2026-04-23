@@ -64,9 +64,8 @@ export type MarkdownCodeMirrorBinding = {
   getValue(): string;
   onChange(listener: (snapshot: MarkdownCodeMirrorSnapshot) => void): () => void;
   setEditable(editable: boolean): void;
-  setRemoteSelection(
-    anchor: number,
-    head?: number,
+  setRemoteSelections(
+    selections: RemoteCursorState[],
     options?: {
       scrollIntoView?: boolean;
     },
@@ -96,41 +95,102 @@ const unmatchedStringDecoration = Decoration.mark({
   class: 'cm-musiki-code-string cm-musiki-code-unmatched',
 });
 
+export type RemoteCursorState = {
+  anchor: number;
+  head: number;
+  id: string;
+  name: string;
+  color: string;
+};
+
 class RemoteCursorWidget extends WidgetType {
+  constructor(public color: string, public name: string) {
+    super();
+  }
+
+  override eq(other: RemoteCursorWidget) {
+    return this.color === other.color && this.name === other.name;
+  }
+
   override toDOM() {
     const cursor = document.createElement('span');
     cursor.className = 'cm-musiki-remote-cursor';
     cursor.setAttribute('aria-hidden', 'true');
+    cursor.style.borderLeftColor = this.color;
+    
+    if (this.name) {
+      const label = document.createElement('span');
+      label.className = 'cm-musiki-remote-cursor-label';
+      label.textContent = this.name;
+      label.style.backgroundColor = this.color;
+      cursor.appendChild(label);
+    }
+    
     return cursor;
   }
 }
 
-const setRemoteSelectionEffect = StateEffect.define<MarkdownCodeMirrorSelection | null>();
-const remoteCursorWidget = Decoration.widget({
-  widget: new RemoteCursorWidget(),
-  side: 1,
-});
+const setRemoteSelectionsEffect = StateEffect.define<RemoteCursorState[]>();
 
 const buildRemoteSelectionDecorations = (
-  selection: MarkdownCodeMirrorSelection | null,
+  selections: RemoteCursorState[],
   state: EditorState,
 ): DecorationSet => {
-  if (!selection) return Decoration.none;
+  if (!selections || selections.length === 0) return Decoration.none;
 
   const docLength = state.doc.length;
-  const anchor = Math.max(0, Math.min(Number(selection.anchor) || 0, docLength));
-  const head = Math.max(0, Math.min(Number(selection.head) || anchor, docLength));
-  const from = Math.min(anchor, head);
-  const to = Math.max(anchor, head);
   const builder = new RangeSetBuilder<Decoration>();
+  
+  const marks: { from: number; to: number; deco: Decoration }[] = [];
+  const widgets: { pos: number; deco: Decoration }[] = [];
 
-  if (from !== to) {
-    builder.add(from, to, Decoration.mark({ class: 'cm-musiki-remote-selection' }));
+  for (const sel of selections) {
+    const anchor = Math.max(0, Math.min(Number(sel.anchor) || 0, docLength));
+    const head = Math.max(0, Math.min(Number(sel.head) || anchor, docLength));
+    const from = Math.min(anchor, head);
+    const to = Math.max(anchor, head);
+
+    if (from !== to) {
+      marks.push({ 
+        from, 
+        to, 
+        deco: Decoration.mark({ 
+          class: 'cm-musiki-remote-selection',
+          attributes: { style: `background-color: color-mix(in srgb, ${sel.color} 20%, transparent);` }
+        }) 
+      });
+    }
+
+    const line = state.doc.lineAt(head);
+    // We add line background too
+    marks.push({
+      from: line.from,
+      to: line.from,
+      deco: Decoration.line({ 
+        class: 'cm-musiki-remote-line',
+      })
+    });
+
+    widgets.push({
+      pos: head,
+      deco: Decoration.widget({
+        widget: new RemoteCursorWidget(sel.color, sel.name),
+        side: 1,
+      })
+    });
   }
 
-  const line = state.doc.lineAt(head);
-  builder.add(line.from, line.from, Decoration.line({ class: 'cm-musiki-remote-line' }));
-  builder.add(head, head, remoteCursorWidget);
+  // Sort and build
+  marks.sort((a, b) => a.from - b.from || a.to - b.to);
+  for (const m of marks) {
+    builder.add(m.from, m.to, m.deco);
+  }
+  
+  widgets.sort((a, b) => a.pos - b.pos);
+  for (const w of widgets) {
+    builder.add(w.pos, w.pos, w.deco);
+  }
+
   return builder.finish();
 };
 
@@ -142,7 +202,7 @@ const remoteSelectionField = StateField.define<DecorationSet>({
     let nextDecorations = decorations.map(transaction.changes);
 
     for (const effect of transaction.effects) {
-      if (effect.is(setRemoteSelectionEffect)) {
+      if (effect.is(setRemoteSelectionsEffect)) {
         nextDecorations = buildRemoteSelectionDecorations(effect.value, transaction.state);
       }
     }
@@ -234,25 +294,29 @@ const markdownEditorTheme = EditorView.theme({
     backgroundColor: 'rgba(86, 196, 255, 0.18)',
   },
   '.cm-musiki-remote-cursor': {
+    position: 'relative',
     display: 'inline-block',
     width: '0',
     height: '1.18em',
     marginLeft: '-1px',
     marginRight: '-1px',
-    borderLeft: '2px solid #56c4ff',
+    borderLeft: '2px solid',
     verticalAlign: 'text-bottom',
     pointerEvents: 'none',
-    filter: 'drop-shadow(0 0 4px rgba(86, 196, 255, 0.6))',
   },
-  '.cm-musiki-remote-cursor::after': {
-    content: '""',
+  '.cm-musiki-remote-cursor-label': {
     position: 'absolute',
-    top: '-0.16rem',
-    left: '-4px',
-    width: '0.42rem',
-    height: '0.42rem',
-    borderRadius: '999px',
-    backgroundColor: '#56c4ff',
+    top: '-1.4em',
+    left: '-2px',
+    padding: '0.1rem 0.3rem',
+    borderRadius: '0.25rem',
+    color: '#fff',
+    fontSize: '0.65rem',
+    fontWeight: 'bold',
+    whiteSpace: 'nowrap',
+    lineHeight: '1',
+    zIndex: '10',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
   },
 });
 
@@ -876,16 +940,13 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
         ]),
       });
     },
-    setRemoteSelection(anchor, head = anchor, options = {}) {
+    setRemoteSelections(selections, options = {}) {
       const effects: Array<StateEffect<unknown>> = [
-        setRemoteSelectionEffect.of({
-          anchor,
-          head,
-        }),
+        setRemoteSelectionsEffect.of(selections),
       ];
 
-      if (options.scrollIntoView !== false) {
-        effects.push(EditorView.scrollIntoView(Math.max(0, Math.min(head, view.state.doc.length)), {
+      if (options.scrollIntoView !== false && selections.length > 0) {
+        effects.push(EditorView.scrollIntoView(Math.max(0, Math.min(selections[0].head, view.state.doc.length)), {
           y: 'center',
           yMargin: 48,
         }));

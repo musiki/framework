@@ -136,6 +136,10 @@ export type ConferenceMessage =
       midiUrl?: string;
     }
   | {
+      type: 'lilypond-setup';
+      allowStudents: boolean;
+    }
+  | {
       type: 'concept-load';
       href: string | null;
     }
@@ -538,6 +542,13 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         body,
         url,
         midiUrl,
+      };
+    }
+
+    if (parsed.type === 'lilypond-setup') {
+      return {
+        type: 'lilypond-setup',
+        allowStudents: Boolean((parsed as { allowStudents?: boolean }).allowStudents),
       };
     }
 

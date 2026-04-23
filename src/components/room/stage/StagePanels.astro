@@ -116,7 +116,10 @@
     <div class="conference-stage-label">LilyPond Live</div>
     <button type="button" class="conference-panel-close" data-action="close-panel" aria-label="Cerrar panel" hidden>X</button>
   </div>
-  <div class="conference-lilypond-layout">
+  <div class="conference-lilypond-layout" data-editor-visible="true">
+    <button type="button" class="conference-lilypond-toggle" data-lilypond-toggle-editor title="Alternar editor">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.75 12.25h10.5M2.75 8h10.5M2.75 3.75h10.5"/></svg>
+    </button>
     <div class="conference-lilypond-editor">
       <form class="conference-lilypond-form" data-lilypond-form autocomplete="off">
         <textarea
@@ -125,33 +128,28 @@
           placeholder="Escribe markdown, ```mermaid o ```lilypond…"
         ></textarea>
         <div class="conference-lilypond-toolbar" data-lilypond-toolbar>
-          <label class="conference-lilypond-field">
-            <span class="conference-lilypond-field-label">Library</span>
+          <div class="conference-lilypond-toolbar-row">
             <input
               type="search"
-              class="conference-lilypond-input"
+              class="conference-lilypond-input conference-lilypond-input--compact"
               data-lilypond-library-search
-              placeholder="Buscar snippet…"
+              placeholder="Biblioteca…"
               autocomplete="off"
             />
-          </label>
+            <input
+              type="text"
+              data-lilypond-filename
+              class="conference-lilypond-input conference-lilypond-input--compact"
+              placeholder="Archivo.ly"
+              autocomplete="off"
+            />
+          </div>
 
           <div
             class="conference-lilypond-library-list"
             data-lilypond-library-list
             aria-live="polite"
           ></div>
-
-          <label class="conference-lilypond-field">
-            <span class="conference-lilypond-field-label">File</span>
-            <input
-              type="text"
-              data-lilypond-filename
-              class="conference-lilypond-input"
-              placeholder="nombre.ly"
-              autocomplete="off"
-            />
-          </label>
 
           <div class="conference-lilypond-actions" data-lilypond-actions>
             <button type="button" class="conference-lilypond-action" data-lilypond-new title="Nuevo / limpiar">N</button>
@@ -172,6 +170,7 @@
         </div>
       </form>
     </div>
+    <div class="conference-lilypond-resizer" data-lilypond-resizer></div>
     <div class="conference-lilypond-preview">
       <div class="conference-lilypond-render-target" data-lilypond-preview></div>
       <div class="conference-empty conference-empty--lilypond" data-lilypond-placeholder aria-hidden="true"></div>

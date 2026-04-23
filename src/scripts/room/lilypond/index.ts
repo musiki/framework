@@ -1,4 +1,4 @@
-import type { MarkdownCodeMirrorBinding } from '../../markdown-codemirror.ts';
+import type { MarkdownCodeMirrorBinding, RemoteCursorState } from '../../markdown-codemirror.ts';
 import { enhanceMarkdownTextarea } from '../../markdown-editor-tools';
 import type { ConferenceMessage } from '../session/messages.ts';
 
@@ -29,7 +29,10 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-type LilyTransportMessage = Extract<ConferenceMessage, { type: 'lilypond-live' | 'lilypond-render' }>;
+type LilyTransportMessage = Extract<
+  ConferenceMessage,
+  { type: 'lilypond-live' | 'lilypond-render' | 'lilypond-setup' }
+>;
 
 export class LilyPondLiveController {
   private bodyInput: HTMLTextAreaElement | null = null;
@@ -39,6 +42,7 @@ export class LilyPondLiveController {
   private hasRenderedPreviewSnapshot = false;
   private inputFilename: HTMLInputElement | null = null;
   private isTeacher = false;
+  private allowStudents = false;
   private libraryListEl: HTMLElement | null = null;
   private librarySearchInput: HTMLInputElement | null = null;
   private lilyRenderCache = new Map<string, Promise<LilyRenderResult | null>>();
@@ -51,13 +55,19 @@ export class LilyPondLiveController {
   private previewEl: HTMLElement | null = null;
   private renderNonce = 0;
   private reportStatus: (msg: string) => void = () => {};
-  private saveBtn: HTMLButtonElement | null = null;
   private snippets: string[] = [];
   private stopEditorSync: (() => void) | null = null;
   private suppressLivePublish = false;
 
+  private remoteCursors = new Map<string, RemoteCursorState>();
+  private remoteCursorTimeout = new Map<string, number>();
+
   constructor(onPublish: (msg: LilyTransportMessage) => void) {
     this.onPublish = onPublish;
+  }
+
+  private canEdit() {
+    return this.isTeacher || this.allowStudents;
   }
 
   public init(container: HTMLElement, isTeacher: boolean, reportStatus: (msg: string) => void) {
@@ -67,7 +77,6 @@ export class LilyPondLiveController {
     this.reportStatus = reportStatus;
     this.bodyInput = container.querySelector('[data-lilypond-body]');
     this.previewEl = container.querySelector('[data-lilypond-preview]');
-    this.saveBtn = container.querySelector('[data-lilypond-save]');
     this.newBtn = container.querySelector('[data-lilypond-new]');
     this.btnSaveActual = container.querySelector('[data-lilypond-btn-save]');
     this.btnEraseActual = container.querySelector('[data-lilypond-btn-erase]');
@@ -77,22 +86,75 @@ export class LilyPondLiveController {
 
     const editorEl = container.querySelector<HTMLElement>('.conference-lilypond-editor');
     const layoutEl = container.querySelector<HTMLElement>('.conference-lilypond-layout');
+    const toggleBtn = container.querySelector<HTMLElement>('[data-lilypond-toggle-editor]');
+
+    // Collaboration toggle button for teacher
+    const actionsContainer = container.querySelector('[data-lilypond-actions]');
+    if (actionsContainer && this.isTeacher && !container.querySelector('[data-lilypond-collab]')) {
+      const collabBtn = document.createElement('button');
+      collabBtn.type = 'button';
+      collabBtn.className = 'conference-lilypond-action';
+      collabBtn.dataset.lilypondCollab = 'true';
+      collabBtn.title = 'Permitir a estudiantes editar (Actualmente desactivado)';
+      collabBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5ZM1.5 14.5c0-2 1.5-3.5 3.5-3.5h1c2 0 3.5 1.5 3.5 3.5M10.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z"/></svg>';
+      
+      const updateCollabBtnUI = () => {
+        if (this.allowStudents) {
+          collabBtn.classList.add('conference-lilypond-action--active');
+          collabBtn.title = 'Permitir a estudiantes editar (Activado)';
+        } else {
+          collabBtn.classList.remove('conference-lilypond-action--active');
+          collabBtn.title = 'Permitir a estudiantes editar (Desactivado)';
+        }
+      };
+
+      collabBtn.addEventListener('click', () => {
+        this.allowStudents = !this.allowStudents;
+        updateCollabBtnUI();
+        this.updateSetup(this.allowStudents);
+        this.onPublish({ type: 'lilypond-setup', allowStudents: this.allowStudents });
+      });
+
+      actionsContainer.prepend(collabBtn);
+      updateCollabBtnUI();
+    }
+
+    if (toggleBtn && layoutEl) {
+      const newToggleBtn = toggleBtn.cloneNode(true) as HTMLElement;
+      toggleBtn.replaceWith(newToggleBtn);
+      newToggleBtn.addEventListener('click', () => {
+        const isVisible = layoutEl.dataset.editorVisible === 'true';
+        layoutEl.dataset.editorVisible = (!isVisible).toString();
+      });
+    }
+
+    const canEdit = this.canEdit();
 
     if (editorEl) {
       editorEl.hidden = false;
-      editorEl.dataset.editorMode = isTeacher ? 'teacher' : 'viewer';
+      editorEl.dataset.editorMode = canEdit ? 'teacher' : 'viewer';
     }
     if (layoutEl) {
       layoutEl.dataset.editorVisible = 'true';
     }
 
     if (this.bodyInput) {
-      this.bodyInput.readOnly = !this.isTeacher;
+      this.bodyInput.readOnly = !canEdit;
+      
+      if (this.editorBinding) {
+        this.editorBinding.destroy();
+      }
+      
+      // Clear datasets to allow re-enhancement
+      delete this.bodyInput.dataset.markdownEditorEnhanced;
+      delete this.bodyInput.dataset.markdownCodeMirrorEnhanced;
+      delete this.bodyInput.dataset.markdownEditorActionsEnhanced;
+
       this.editorBinding = enhanceMarkdownTextarea(this.bodyInput, {
-        actionsContainer: this.isTeacher
+        actionsContainer: this.canEdit()
           ? container.querySelector<HTMLElement>('[data-lilypond-actions]')
           : null,
-        status: reportStatus,
+        status: this.reportStatus,
         buttonClassName: 'conference-lilypond-action conference-lilypond-action--icon',
         actionSpacerClassName: 'conference-lilypond-action-spacer',
         dropzoneClassName: 'conference-lilypond-dropzone',
@@ -102,72 +164,147 @@ export class LilyPondLiveController {
         dropLabel: 'Soltar archivo',
         useCodeMirror: true,
       }) ?? null;
-      this.editorBinding?.setEditable(this.isTeacher);
-    }
+      
+      this.editorBinding?.setEditable(canEdit);
 
-    if (this.isTeacher && this.bodyInput) {
-      if (this.editorBinding) {
-        this.stopEditorSync = this.editorBinding.onChange((snapshot) => {
-          if (this.suppressLivePublish) return;
-          if (snapshot.docChanged) {
-            this.liveSyncNeedsBody = true;
-          }
-          if (!snapshot.docChanged && !snapshot.selectionChanged) return;
-          this.scheduleLiveSync();
-        });
-      } else {
-        this.bodyInput.addEventListener('input', () => {
-          if (this.suppressLivePublish) return;
-          this.liveSyncNeedsBody = true;
-          this.scheduleLiveSync();
-        });
-      }
+      const unsubscribe = this.editorBinding?.onChange((snapshot) => {
+        if (this.suppressLivePublish) return;
+        if (!snapshot.docChanged && !snapshot.selectionChanged) return;
+        if (snapshot.docChanged) this.liveSyncNeedsBody = true;
+        this.scheduleLiveSync();
+      }) || (() => {});
 
-      this.newBtn?.addEventListener('click', () => {
-        this.setBodyValue('');
-        if (this.inputFilename) this.inputFilename.value = '';
-        if (this.librarySearchInput) this.librarySearchInput.value = '';
-        this.renderSnippetResults();
-        this.publishLiveSync(true);
+      this.stopEditorSync = () => {
+        unsubscribe();
+        this.editorBinding?.destroy();
+        this.editorBinding = null;
+      };
+
+      this.bodyInput.addEventListener('input', () => {
+        if (this.suppressLivePublish) return;
+        this.liveSyncNeedsBody = true;
+        this.scheduleLiveSync();
       });
 
-      this.saveBtn?.addEventListener('click', () => {
-        this.publishRender();
-      });
-
-      this.btnSaveActual?.addEventListener('click', () => {
-        void this.saveCurrentSnippet();
-      });
-
-      this.btnEraseActual?.addEventListener('click', () => {
-        void this.eraseCurrentSnippet();
-      });
-
-      this.librarySearchInput?.addEventListener('input', () => {
-        this.renderSnippetResults();
-      });
-
-      this.librarySearchInput?.addEventListener('keydown', (event) => {
-        if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return;
-        event.preventDefault();
-        const nextName = this.getFilteredSnippets()[0];
-        if (nextName) {
-          void this.loadSnippet(nextName);
-        }
+      this.bodyInput.addEventListener('selectionchange', () => {
+        if (this.suppressLivePublish) return;
+        this.scheduleLiveSync();
       });
 
       container.querySelector('[data-lilypond-form]')?.addEventListener('keydown', (event) => {
         if (!(event instanceof KeyboardEvent)) return;
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           event.preventDefault();
-          this.publishRender();
+          if (this.isTeacher) {
+            void this.publishRender();
+          }
         }
       });
 
       void this.fetchSnippetsList();
     }
 
+    if (this.newBtn) {
+      this.newBtn.addEventListener('click', () => {
+        if (!this.canEdit()) return;
+        this.setBodyValue('');
+        if (this.inputFilename) this.inputFilename.value = '';
+        this.liveSyncNeedsBody = true;
+        this.publishLiveSync(true);
+      });
+    }
+
+    const btnRender = container.querySelector('[data-lilypond-save]');
+    if (btnRender) {
+      if (this.isTeacher) {
+        btnRender.addEventListener('click', () => {
+          void this.publishRender();
+        });
+      } else {
+        btnRender.remove();
+      }
+    }
+
+    if (this.btnSaveActual) {
+      this.btnSaveActual.addEventListener('click', () => {
+        if (!this.canEdit()) return;
+        this.saveCurrentSnippetLocally();
+      });
+    }
+
+    if (this.btnEraseActual) {
+      this.btnEraseActual.addEventListener('click', () => {
+        if (!this.canEdit()) return;
+        this.eraseCurrentSnippetLocally();
+      });
+    }
+
+    this.librarySearchInput?.addEventListener('input', () => {
+      this.renderSnippetResults();
+    });
+
+    this.initResizer(container);
     this.clearPreview();
+  }
+
+  private initResizer(container: HTMLElement) {
+    const resizer = container.querySelector<HTMLElement>('[data-lilypond-resizer]');
+    const layout = container.querySelector<HTMLElement>('.conference-lilypond-layout');
+    if (!resizer || !layout) return;
+
+    let isDragging = false;
+
+    const onStart = (e: MouseEvent | TouchEvent) => {
+      isDragging = true;
+      resizer.classList.add('is-dragging');
+      document.body.style.cursor = 'col-resize';
+      e.preventDefault();
+    };
+
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!isDragging) return;
+      const clientX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+      const rect = layout.getBoundingClientRect();
+      const offset = clientX - rect.left;
+      
+      const minWidth = 120;
+      const maxWidth = rect.width - 120;
+      const width = Math.max(minWidth, Math.min(offset, maxWidth));
+      
+      layout.style.setProperty('--lily-editor-width', `${width}px`);
+    };
+
+    const onEnd = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      resizer.classList.remove('is-dragging');
+      document.body.style.cursor = '';
+    };
+
+    resizer.addEventListener('mousedown', onStart);
+    resizer.addEventListener('touchstart', onStart, { passive: false });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchend', onEnd);
+  }
+
+  public updateSetup(allowStudents: boolean) {
+    this.allowStudents = allowStudents;
+    const canEdit = this.canEdit();
+    if (this.bodyInput) this.bodyInput.readOnly = !canEdit;
+    if (this.editorBinding) {
+      this.editorBinding.setEditable(canEdit);
+    }
+
+    const editorEl = this.bodyInput?.closest('.conference-lilypond-editor') as HTMLElement;
+    if (editorEl) {
+      editorEl.dataset.editorMode = canEdit ? 'teacher' : 'viewer';
+    }
+  }
+
+  public getSetupSnapshot() {
+    return { allowStudents: this.allowStudents };
   }
 
   public getCurrentBody() {
@@ -192,11 +329,44 @@ export class LilyPondLiveController {
     };
   }
 
-  public handleIncomingLiveState(message: Extract<ConferenceMessage, { type: 'lilypond-live' }>) {
+  public handleIncomingLiveState(
+    message: Extract<ConferenceMessage, { type: 'lilypond-live' }>,
+    sender?: { id: string; name: string; color: string },
+  ) {
     if (typeof message.body === 'string' && this.getCurrentBody() !== message.body) {
       this.setBodyValue(message.body);
     }
-    this.applyRemoteSelection(message.anchor, message.head, true);
+
+    if (sender) {
+      this.remoteCursors.set(sender.id, {
+        id: sender.id,
+        name: sender.name,
+        color: sender.color,
+        anchor: message.anchor,
+        head: message.head,
+      });
+
+      if (this.remoteCursorTimeout.has(sender.id)) {
+        window.clearTimeout(this.remoteCursorTimeout.get(sender.id));
+      }
+
+      this.remoteCursorTimeout.set(
+        sender.id,
+        window.setTimeout(() => {
+          this.remoteCursors.delete(sender.id);
+          this.updateRemoteCursors();
+        }, 5000),
+      );
+    }
+
+    this.updateRemoteCursors();
+  }
+
+  private updateRemoteCursors() {
+    if (this.editorBinding) {
+      const selections = Array.from(this.remoteCursors.values());
+      this.editorBinding.setRemoteSelections(selections, { scrollIntoView: false });
+    }
   }
 
   public handleIncomingRenderState(message: Extract<LilyTransportMessage, { type: 'lilypond-render' }>) {
@@ -223,6 +393,8 @@ export class LilyPondLiveController {
   private setBodyValue(value: string) {
     if (!this.bodyInput) return;
     const nextValue = String(value || '');
+    
+    // Crucial: avoid feedback loops
     this.suppressLivePublish = true;
 
     if (this.editorBinding) {
@@ -234,9 +406,11 @@ export class LilyPondLiveController {
       this.bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    queueMicrotask(() => {
+    // Use a small delay to ensure CodeMirror has finished its internal update
+    // before re-enabling publishing.
+    setTimeout(() => {
       this.suppressLivePublish = false;
-    });
+    }, 50);
   }
 
   private clearPreview() {
@@ -254,23 +428,6 @@ export class LilyPondLiveController {
     const anchor = Math.max(0, Math.min(this.bodyInput?.selectionStart ?? bodyLength, bodyLength));
     const head = Math.max(0, Math.min(this.bodyInput?.selectionEnd ?? anchor, bodyLength));
     return { anchor, head };
-  }
-
-  private applyRemoteSelection(anchor: number, head: number, scrollIntoView = true) {
-    const bodyLength = this.getCurrentBody().length;
-    const nextAnchor = Math.max(0, Math.min(Number(anchor) || 0, bodyLength));
-    const nextHead = Math.max(0, Math.min(Number(head) || nextAnchor, bodyLength));
-
-    if (this.editorBinding) {
-      this.editorBinding.setRemoteSelection(nextAnchor, nextHead, {
-        scrollIntoView,
-      });
-      return;
-    }
-
-    if (this.bodyInput instanceof HTMLTextAreaElement) {
-      this.bodyInput.setSelectionRange(nextAnchor, nextHead);
-    }
   }
 
   private getFilteredSnippets() {
@@ -353,7 +510,7 @@ export class LilyPondLiveController {
     }
   }
 
-  private async saveCurrentSnippet() {
+  private async saveCurrentSnippetLocally() {
     const name = String(this.inputFilename?.value || '').trim();
     const code = this.getCurrentBody();
     if (!name) {
@@ -384,7 +541,7 @@ export class LilyPondLiveController {
     }
   }
 
-  private async eraseCurrentSnippet() {
+  private async eraseCurrentSnippetLocally() {
     const name = String(this.inputFilename?.value || '').trim();
     if (!name) {
       this.reportStatus('Nombre de archivo vacío.');
@@ -416,7 +573,9 @@ export class LilyPondLiveController {
   }
 
   private scheduleLiveSync() {
-    if (!this.isTeacher) return;
+    if (!this.canEdit()) return;
+    if (this.suppressLivePublish) return;
+
     if (this.liveSyncTimer) {
       window.clearTimeout(this.liveSyncTimer);
     }
@@ -426,7 +585,9 @@ export class LilyPondLiveController {
   }
 
   private publishLiveSync(forceIncludeBody = false) {
-    if (!this.isTeacher) return;
+    if (!this.canEdit()) return;
+    if (this.suppressLivePublish) return;
+
     if (this.liveSyncTimer) {
       window.clearTimeout(this.liveSyncTimer);
       this.liveSyncTimer = null;
@@ -526,8 +687,7 @@ export class LilyPondLiveController {
           securityLevel: 'loose',
         });
         mermaid.run({ 
-          nodes,
-          suppressErrors: true
+          nodes
         });
         nodes.forEach((node) => {
           node.dataset.mermaidRendered = 'true';
@@ -546,6 +706,18 @@ export class LilyPondLiveController {
     }
     if (typeof (window as any).hydrateLilypondBlocks === 'function') {
       (window as any).hydrateLilypondBlocks(container);
+    }
+  }
+
+  private runScriptsIn(container: HTMLElement) {
+    const scripts = Array.from(container.querySelectorAll('script'));
+    for (const oldScript of scripts) {
+      const newScript = document.createElement('script');
+      Array.from(oldScript.attributes).forEach((attr) => {
+        newScript.setAttribute(attr.name, attr.value);
+      });
+      newScript.textContent = oldScript.textContent;
+      oldScript.parentNode?.replaceChild(newScript, oldScript);
     }
   }
 
@@ -583,6 +755,7 @@ export class LilyPondLiveController {
       
       this.runMermaidIn(this.previewEl);
       this.hydrateRenderedLilyBlocks(this.previewEl);
+      this.runScriptsIn(this.previewEl);
     } catch (error: any) {
       if (ticket !== this.renderNonce) return;
       delete this.previewEl.dataset.loading;

@@ -1317,11 +1317,76 @@
 /* Lilypond Split View */
 .conference-lilypond-layout {
   display: grid;
-  grid-template-columns: minmax(22rem, 36vw) minmax(0, 1fr);
+  grid-template-columns: var(--lily-editor-width, minmax(22rem, 36vw)) 6px minmax(0, 1fr);
   height: 100%;
   width: 100%;
-  background: transparent;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 28%),
+    linear-gradient(180deg, rgba(9, 9, 11, 0.98), rgba(0, 0, 0, 0.98));
   overflow: hidden;
+  position: relative;
+}
+
+.conference-lilypond-resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: rgba(255, 255, 255, 0.04);
+  z-index: 20;
+  transition: background 0.2s ease;
+  position: relative;
+}
+
+.conference-lilypond-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 -4px;
+}
+
+.conference-lilypond-resizer:hover,
+.conference-lilypond-resizer.is-dragging {
+  background: rgba(118, 211, 255, 0.4);
+}
+
+.conference-lilypond-layout[data-editor-visible="false"] .conference-lilypond-resizer {
+  display: none;
+}
+
+.conference-lilypond-toggle {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.65rem;
+  z-index: 25;
+  width: 1.62rem;
+  height: 1.62rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0;
+  color: var(--conference-muted);
+  cursor: pointer;
+  transition: all 0.14s ease;
+  backdrop-filter: blur(10px);
+}
+
+.conference-lilypond-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--conference-fg-hi);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.conference-lilypond-toggle svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.conference-lilypond-layout[data-editor-visible="false"] .conference-lilypond-toggle {
+  left: 0.65rem;
+}
+
+.conference-lilypond-layout[data-editor-visible="false"] .conference-lilypond-editor {
+  display: none;
 }
 
 .conference-lilypond-layout[data-editor-visible="false"] {
@@ -1335,22 +1400,85 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  background: linear-gradient(
-    180deg,
-    rgba(13, 13, 15, 0.94),
-    rgba(4, 4, 6, 0.94)
-  );
+  background:
+    linear-gradient(180deg, rgba(13, 13, 15, 0.98), rgba(4, 4, 6, 0.98));
   backdrop-filter: blur(8px);
+  padding-top: 2.8rem; /* Space for the toggle button */
+  /* Force dark mode variables for CodeMirror host */
+  --c-bg-mute: transparent;
+  --c-fg: #cdd6f4;
+  --c-border: rgba(255, 255, 255, 0.08);
+}
+
+.conference-lilypond-editor .musiki-codemirror-host {
+  background: transparent !important;
+  border: none !important;
+}
+
+.conference-lilypond-editor .cm-selectionBackground,
+.conference-lilypond-editor .cm-content ::selection {
+  background-color: rgba(255, 179, 0, 0.4) !important;
+  mix-blend-mode: difference !important;
+}
+
+/* Ensure selected text is still readable with difference mode */
+.conference-lilypond-editor .cm-content *::selection {
+  color: #000 !important;
+}
+
+/* Ensure the MIDI player and blocks respect dark theme/accent colors */
+.lilypond-block.is-hydrated-player {
+  background: rgba(0, 0, 0, 0.18) !important;
+  border-radius: 0.5rem;
+  padding: 0.8rem;
+  border: none !important;
+}
+
+.conference-lilypond-render-target .lily-miniplayer-inline-start {
+  float: left;
+  display: inline-flex;
+  margin: 0 0.8rem 0 0;
+}
+
+.lily-miniplayer-btn {
+  background: transparent !important;
+  border: 1px solid color-mix(in srgb, var(--conference-accent-hi, #76d3ff) 40%, transparent) !important;
+  border-radius: 0 !important;
+  width: 1.62rem !important;
+  height: 1.62rem !important;
+  color: var(--conference-accent-hi, #76d3ff) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  transition: all 0.14s ease;
+  backdrop-filter: blur(10px);
+}
+
+.lily-miniplayer-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--conference-fg-hi) !important;
+  border-color: var(--conference-accent-hi, #76d3ff) !important;
+}
+
+.lily-miniplayer-btn svg {
+  width: 0.95rem !important;
+  height: 0.95rem !important;
+}
+
+.conference-lilypond-render-target .lilypond-block {
+  clear: both;
+}
+
+/* Offset content when editor is folded to avoid overlapping with sandwich */
+.conference-lilypond-layout[data-editor-visible="false"] .conference-lilypond-render-target {
+  padding-top: 3.2rem;
 }
 
 .conference-lilypond-editor[data-editor-mode="viewer"] {
   background:
-    radial-gradient(
-      circle at top left,
-      rgba(86, 196, 255, 0.06),
-      transparent 26%
-    ),
-    linear-gradient(180deg, rgba(11, 11, 13, 0.94), rgba(2, 2, 4, 0.94));
+    radial-gradient(circle at top left, rgba(86, 196, 255, 0.06), transparent 26%),
+    linear-gradient(180deg, rgba(11, 11, 13, 0.98), rgba(2, 2, 4, 0.98));
 }
 
 .conference-lilypond-editor[data-editor-mode="viewer"]
@@ -1482,14 +1610,27 @@
 
 .conference-lilypond-toolbar {
   display: grid;
-  gap: 0.7rem;
-  padding: 0.85rem 0.9rem 0.95rem;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem 0.8rem;
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  flex-shrink: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(
     180deg,
     rgba(10, 10, 12, 0.98),
     rgba(0, 0, 0, 0.98)
   );
+  backdrop-filter: blur(12px);
+}
+
+.conference-lilypond-toolbar-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
 }
 
 .conference-lilypond-field {
@@ -1516,6 +1657,12 @@
   font: inherit;
 }
 
+.conference-lilypond-input--compact {
+  min-height: 1.8rem;
+  font-size: 0.82rem;
+  padding: 0 0.6rem;
+}
+
 .conference-lilypond-input::placeholder {
   color: rgba(235, 240, 246, 0.34);
 }
@@ -1528,26 +1675,27 @@
 
 .conference-lilypond-library-list {
   display: grid;
-  gap: 0.38rem;
-  max-height: 8.9rem;
-  padding: 0.15rem;
+  gap: 0.3rem;
+  max-height: 7.2rem;
+  padding: 0.1rem;
   overflow: auto;
 }
 
 .conference-lilypond-library-item,
 .conference-lilypond-library-empty {
-  min-height: 2.15rem;
-  border-radius: 0.55rem;
+  min-height: 1.8rem;
+  border-radius: 0.4rem;
 }
 
 .conference-lilypond-library-item {
   width: 100%;
-  padding: 0 0.8rem;
+  padding: 0 0.6rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
   color: rgba(235, 240, 246, 0.84);
   text-align: left;
   font: inherit;
+  font-size: 0.82rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1571,35 +1719,45 @@
   color: rgba(235, 240, 246, 0.46);
   background: rgba(255, 255, 255, 0.02);
   border: 1px dashed rgba(255, 255, 255, 0.08);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .conference-lilypond-actions {
   display: flex;
   align-items: center;
-  gap: 0.38rem;
+  gap: 0.3rem;
   flex-wrap: wrap;
 }
 
 .conference-lilypond-action,
 .conference-lilypond-action--icon {
-  min-width: 2.2rem;
-  width: 2.2rem;
-  height: 2.2rem;
-  padding: 0;
+  min-width: 1.62rem;
+  height: 1.62rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(235, 240, 246, 0.82);
+  border-radius: 0;
+  background: transparent;
+  color: var(--conference-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  transition: all 0.14s ease;
+  backdrop-filter: blur(10px);
+}
+
+.conference-lilypond-action {
+  width: auto;
+  padding: 0 0.6rem;
+}
+
+.conference-lilypond-action--icon {
+  width: 1.62rem;
+  padding: 0;
 }
 
 .conference-lilypond-action svg {
@@ -1610,18 +1768,15 @@
 }
 
 .conference-lilypond-action:hover {
-  border-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.08);
   color: var(--conference-fg-hi);
+  border-color: rgba(255, 255, 255, 0.24);
 }
 
 .conference-lilypond-action--accent {
-  border-color: color-mix(
-    in srgb,
-    var(--conference-accent-hi) 58%,
-    transparent
-  );
+  border-color: color-mix(in srgb, var(--conference-accent-hi) 58%, transparent);
   color: var(--conference-accent-hi);
+  padding: 0 0.8rem;
 }
 
 .conference-lilypond-action--danger {
@@ -1629,16 +1784,24 @@
   color: rgba(255, 152, 152, 0.94);
 }
 
+.conference-lilypond-action--active {
+  border-color: var(--conference-accent-hi, #76d3ff) !important;
+  color: var(--conference-accent-hi, #76d3ff) !important;
+  background: rgba(118, 211, 255, 0.08) !important;
+}
+
 .conference-lilypond-action-spacer {
   flex: 1 1 auto;
-  min-width: 0.65rem;
+  min-width: 0.5rem;
 }
 
 .conference-lilypond-preview {
   position: relative;
   min-width: 0;
   min-height: 0;
-  background: transparent;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent 24%),
+    linear-gradient(180deg, rgba(6, 6, 8, 0.99), rgba(0, 0, 0, 0.99));
   display: grid;
   place-items: stretch;
   overflow: auto;
@@ -1648,7 +1811,7 @@
   position: relative;
   min-width: 0;
   min-height: 0;
-  padding: 1.1rem 1.2rem 1.3rem;
+  padding: 0.65rem 1.2rem 1.3rem;
   color: #cdd6f4 !important;
   --lily-score-ink: #cdd6f4 !important;
 }

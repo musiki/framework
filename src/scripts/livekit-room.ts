@@ -10171,6 +10171,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       head: lilyLiveState.head,
     });
 
+    const lilySetupSnapshot = lilypondLive.getSetupSnapshot();
+    await publishMessage({
+      type: 'lilypond-setup',
+      allowStudents: lilySetupSnapshot.allowStudents,
+    });
+
     const lilyRenderSnapshot = lilypondLive.getRenderSnapshot();
     if (lilyRenderSnapshot.published) {
       await publishMessage({
@@ -11267,7 +11273,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'lilypond-live') {
-        lilypondLive.handleIncomingLiveState(message);
+        const hash = Array.from(participant.identity).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const colors = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'];
+        const color = colors[hash % colors.length];
+
+        lilypondLive.handleIncomingLiveState(message, {
+          id: participant.identity,
+          name: participant.name || 'Estudiante',
+          color
+        });
+        return;
+      }
+
+      if (message.type === 'lilypond-setup') {
+        lilypondLive.updateSetup(message.allowStudents);
         return;
       }
 
