@@ -9,7 +9,7 @@ type Props = {
   courseId?: string;
   courseHomeHref?: string;
   defaultIdentity?: string;
-  defaultLayout?: "grid" | "teacher" | "presentation" | "screenshare";
+  defaultLayout?: "grid" | "teacher" | "presentation" | "screenshare" | "whiteboard" | "concept" | "lilypond";
   defaultName?: string;
   defaultPresentation?: string;
   defaultRole?: "teacher" | "student";
@@ -224,6 +224,12 @@ if (
         data-layout-choice="whiteboard"
         data-tooltip="Pizarra Ctrl + Z">Z</button
       >
+      <button
+        type="button"
+        class="conference-layout-button"
+        data-layout-choice="lilypond"
+        data-tooltip="LilyPond Live">L</button
+      >
 
       <div class="conference-concepts-shell" data-concepts-shell hidden>
         <button
@@ -306,6 +312,9 @@ if (
         <option value="grid" selected={defaultLayout === "grid"}>Grid</option>
         <option value="whiteboard" selected={defaultLayout === "whiteboard"}
           >Whiteboard</option
+        >
+        <option value="lilypond" selected={defaultLayout === "lilypond"}
+          >LilyPond</option
         >
         <option value="concept" selected={defaultLayout === "concept"}
           >Concept</option
@@ -729,6 +738,7 @@ if (
             <li><kbd>Ctrl</kbd> + <kbd>F</kbd> full stage</li>
             <li><kbd>Ctrl</kbd> + <kbd>S</kbd> share stage</li>
             <li><kbd>Ctrl</kbd> + <kbd>P</kbd> presentation stage</li>
+            <li><kbd>L</kbd> boton del stage bar abre LilyPond live</li>
             <li><kbd>Ctrl</kbd> + <kbd>G</kbd> grid stage</li>
             <li><kbd>Ctrl</kbd> + <kbd>Z</kbd> whiteboard</li>
           </ul>

@@ -21,6 +21,7 @@ import { ConceptsController } from './room/concepts';
 import { createRoomDeviceSelectController, createRoomMicMeterController } from './room/devices';
 import { createRoomNotesController } from './room/notes';
 import { WhiteboardController } from './room/whiteboard';
+import { LilyPondLiveController } from './room/lilypond';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
 import { buildRoomQueryUrl } from './room/layout';
@@ -3865,6 +3866,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   const whiteboard = new WhiteboardController((msg) => void publishMessage(msg));
+  const lilypondLive = new LilyPondLiveController((msg) => void publishMessage(msg));
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
   const participantCards = new Map<string, ParticipantCardRefs>();  const screenCards = new Map<string, ScreenCardRefs>();
   const mounts: MountCollection = {
@@ -4892,6 +4894,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
+  const setRoomStatus = (message: string) => {
+    setStatus(message);
+  };
+
   const applySidebarCollapsedState = () => {
     root.dataset.sidebarCollapsed = sidebarCollapsed ? 'true' : 'false';
     if (sidebarToggleButton instanceof HTMLButtonElement) {
@@ -5827,6 +5833,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const isTeacher = localRole === 'teacher';
     if (conceptsShell instanceof HTMLElement) {
       conceptsShell.hidden = !isTeacher;
+    }
+  };
+
+  const syncWhiteboardUi = () => {
+    const isTeacher = localRole === 'teacher';
+    if (whiteboardToolbar instanceof HTMLElement) {
+      whiteboardToolbar.hidden = !isTeacher;
     }
   };
 
@@ -10150,6 +10163,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       open: graphVisible,
     });
 
+    const lilyLiveState = lilypondLive.getCurrentLiveState();
+    await publishMessage({
+      type: 'lilypond-live',
+      body: lilyLiveState.body,
+      anchor: lilyLiveState.anchor,
+      head: lilyLiveState.head,
+    });
+
+    const lilyRenderSnapshot = lilypondLive.getRenderSnapshot();
+    if (lilyRenderSnapshot.published) {
+      await publishMessage({
+        type: 'lilypond-render',
+        body: lilyRenderSnapshot.body,
+      });
+    }
+
     if (externalMediaSession) {
       await broadcastExternalMediaState('open', true);
     }
@@ -11233,6 +11262,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         }
         screenshareWasActive = hasActiveScreenShare();
         syncAllParticipants();
+        return;
+      }
+
+      if (message.type === 'lilypond-live') {
+        lilypondLive.handleIncomingLiveState(message);
+        return;
+      }
+
+      if (message.type === 'lilypond-render') {
+        lilypondLive.handleIncomingRenderState(message.body);
         return;
       }
 
@@ -12866,16 +12905,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     whiteboard.init(whiteboardCanvas);
   }
 
+  const lilypondPanel = root.querySelector<HTMLElement>('[data-panel="lilypond"]');
+  if (lilypondPanel) {
+    lilypondLive.init(lilypondPanel, localRole === 'teacher', setRoomStatus);
+  }
+
   if (whiteboardBgCanvas instanceof HTMLCanvasElement) {
     whiteboard.initBg(whiteboardBgCanvas);
   }
-
-  const syncWhiteboardUi = () => {
-    const isTeacher = localRole === 'teacher';
-    if (whiteboardToolbar instanceof HTMLElement) {
-      whiteboardToolbar.hidden = !isTeacher;
-    }
-  };
 
   root.querySelector('[data-action="whiteboard-clear"]')?.addEventListener('click', () => {
     whiteboard.clear(true);

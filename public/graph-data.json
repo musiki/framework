@@ -262,15 +262,6 @@
       "img": ""
     },
     {
-      "id": "cursos/s123/02-forma y estructura/estructura",
-      "name": "estructura",
-      "type": "document",
-      "group": "cursos",
-      "publicFolder": null,
-      "canonicalSlug": "estructura",
-      "img": ""
-    },
-    {
       "id": "cursos/s123/03 Metodología de la Investigación en Música/Metodología de la Investigación en Música MOC",
       "name": "Metodología de la Investigación en Música",
       "type": "document",
@@ -293,6 +284,15 @@
       "name": "composiciónmusical",
       "type": "tag",
       "group": "tags"
+    },
+    {
+      "id": "public/conceptos/estructura",
+      "name": "estructura",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "estructura",
+      "img": ""
     },
     {
       "id": "public/conceptos/objeto de sonido-movimiento",

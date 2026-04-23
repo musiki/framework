@@ -1,10 +1,19 @@
-import { EditorSelection, EditorState, Prec, RangeSetBuilder } from '@codemirror/state';
+import {
+  Compartment,
+  EditorSelection,
+  EditorState,
+  Prec,
+  RangeSetBuilder,
+  StateEffect,
+  StateField,
+} from '@codemirror/state';
 import { basicSetup } from 'codemirror';
 import {
   Decoration,
   type DecorationSet,
   EditorView,
   ViewPlugin,
+  WidgetType,
   keymap,
   type ViewUpdate,
   placeholder as codeMirrorPlaceholder,
@@ -34,11 +43,41 @@ type FenceDiagnosticState = {
   openStringFrom: number | null;
 };
 
+export type MarkdownCodeMirrorSelection = {
+  anchor: number;
+  head: number;
+};
+
+export type MarkdownCodeMirrorSnapshot = {
+  docChanged: boolean;
+  selectionChanged: boolean;
+  selection: MarkdownCodeMirrorSelection;
+  value: string;
+};
+
 export type MarkdownCodeMirrorBinding = {
   destroy(): void;
   focus(): void;
   getInteractionSurface(): HTMLElement;
   getHost(): HTMLElement;
+  getSelection(): MarkdownCodeMirrorSelection;
+  getValue(): string;
+  onChange(listener: (snapshot: MarkdownCodeMirrorSnapshot) => void): () => void;
+  setEditable(editable: boolean): void;
+  setRemoteSelection(
+    anchor: number,
+    head?: number,
+    options?: {
+      scrollIntoView?: boolean;
+    },
+  ): void;
+  setValue(
+    value: string,
+    options?: {
+      selection?: MarkdownCodeMirrorSelection;
+      scrollIntoView?: boolean;
+    },
+  ): void;
 };
 
 const commentDecoration = Decoration.mark({ class: 'cm-musiki-code-comment' });
@@ -55,6 +94,62 @@ const unmatchedBraceDecoration = Decoration.mark({
 });
 const unmatchedStringDecoration = Decoration.mark({
   class: 'cm-musiki-code-string cm-musiki-code-unmatched',
+});
+
+class RemoteCursorWidget extends WidgetType {
+  override toDOM() {
+    const cursor = document.createElement('span');
+    cursor.className = 'cm-musiki-remote-cursor';
+    cursor.setAttribute('aria-hidden', 'true');
+    return cursor;
+  }
+}
+
+const setRemoteSelectionEffect = StateEffect.define<MarkdownCodeMirrorSelection | null>();
+const remoteCursorWidget = Decoration.widget({
+  widget: new RemoteCursorWidget(),
+  side: 1,
+});
+
+const buildRemoteSelectionDecorations = (
+  selection: MarkdownCodeMirrorSelection | null,
+  state: EditorState,
+): DecorationSet => {
+  if (!selection) return Decoration.none;
+
+  const docLength = state.doc.length;
+  const anchor = Math.max(0, Math.min(Number(selection.anchor) || 0, docLength));
+  const head = Math.max(0, Math.min(Number(selection.head) || anchor, docLength));
+  const from = Math.min(anchor, head);
+  const to = Math.max(anchor, head);
+  const builder = new RangeSetBuilder<Decoration>();
+
+  if (from !== to) {
+    builder.add(from, to, Decoration.mark({ class: 'cm-musiki-remote-selection' }));
+  }
+
+  const line = state.doc.lineAt(head);
+  builder.add(line.from, line.from, Decoration.line({ class: 'cm-musiki-remote-line' }));
+  builder.add(head, head, remoteCursorWidget);
+  return builder.finish();
+};
+
+const remoteSelectionField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, transaction) {
+    let nextDecorations = decorations.map(transaction.changes);
+
+    for (const effect of transaction.effects) {
+      if (effect.is(setRemoteSelectionEffect)) {
+        nextDecorations = buildRemoteSelectionDecorations(effect.value, transaction.state);
+      }
+    }
+
+    return nextDecorations;
+  },
+  provide: (field) => EditorView.decorations.from(field),
 });
 
 const lilyLanguages = new Set(['lily', 'lilypond', 'ly', 'scheme', 'guile']);
@@ -131,6 +226,33 @@ const markdownEditorTheme = EditorView.theme({
   },
   '.cm-musiki-code-fence': {
     color: 'color-mix(in srgb, currentColor 62%, transparent)',
+  },
+  '.cm-musiki-remote-line': {
+    backgroundColor: 'rgba(86, 196, 255, 0.055)',
+  },
+  '.cm-musiki-remote-selection': {
+    backgroundColor: 'rgba(86, 196, 255, 0.18)',
+  },
+  '.cm-musiki-remote-cursor': {
+    display: 'inline-block',
+    width: '0',
+    height: '1.18em',
+    marginLeft: '-1px',
+    marginRight: '-1px',
+    borderLeft: '2px solid #56c4ff',
+    verticalAlign: 'text-bottom',
+    pointerEvents: 'none',
+    filter: 'drop-shadow(0 0 4px rgba(86, 196, 255, 0.6))',
+  },
+  '.cm-musiki-remote-cursor::after': {
+    content: '""',
+    position: 'absolute',
+    top: '-0.16rem',
+    left: '-4px',
+    width: '0.42rem',
+    height: '0.42rem',
+    borderRadius: '999px',
+    backgroundColor: '#56c4ff',
   },
 });
 
@@ -584,9 +706,11 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
   if (textarea.dataset.markdownCodeMirrorEnhanced === 'true') return null;
 
   const host = document.createElement('div');
+  const editabilityCompartment = new Compartment();
   const variant = resolveEditorVariant(textarea);
   const originalClassName = textarea.className;
   const originalHidden = textarea.hidden;
+  const changeListeners = new Set<(snapshot: MarkdownCodeMirrorSnapshot) => void>();
   host.className = `musiki-codemirror-host musiki-codemirror-host--${variant}`;
   host.dataset.editorVariant = variant;
 
@@ -609,6 +733,11 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
         ),
         basicSetup,
         markdown(),
+        remoteSelectionField,
+        editabilityCompartment.of([
+          EditorState.readOnly.of(false),
+          EditorView.editable.of(true),
+        ]),
         EditorView.lineWrapping,
         markdownEditorTheme,
         fencedCodeHighlighter,
@@ -632,6 +761,23 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
             isMirroringToTextarea = false;
           });
         }),
+        EditorView.updateListener.of((update) => {
+          if (!update.docChanged && !update.selectionSet) return;
+
+          const snapshot: MarkdownCodeMirrorSnapshot = {
+            docChanged: update.docChanged,
+            selectionChanged: update.selectionSet,
+            selection: {
+              anchor: update.state.selection.main.anchor,
+              head: update.state.selection.main.head,
+            },
+            value: update.state.doc.toString(),
+          };
+
+          changeListeners.forEach((listener) => {
+            listener(snapshot);
+          });
+        }),
       ],
     }),
     parent: host,
@@ -653,9 +799,6 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
       ),
     });
     isApplyingExternalValue = false;
-    requestAnimationFrame(() => {
-      view.focus();
-    });
   };
 
   const syncSelectionToCodeMirror = () => {
@@ -686,6 +829,7 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
 
   return {
     destroy() {
+      changeListeners.clear();
       textarea.removeEventListener('input', syncFromTextarea);
       textarea.removeEventListener('focus', syncSelectionToCodeMirror);
       textarea.removeEventListener('click', syncSelectionToCodeMirror);
@@ -707,6 +851,77 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
     },
     getHost() {
       return host;
+    },
+    getSelection() {
+      return {
+        anchor: view.state.selection.main.anchor,
+        head: view.state.selection.main.head,
+      };
+    },
+    getValue() {
+      return view.state.doc.toString();
+    },
+    onChange(listener) {
+      changeListeners.add(listener);
+      return () => {
+        changeListeners.delete(listener);
+      };
+    },
+    setEditable(editable) {
+      host.dataset.readonly = editable ? 'false' : 'true';
+      view.dispatch({
+        effects: editabilityCompartment.reconfigure([
+          EditorState.readOnly.of(!editable),
+          EditorView.editable.of(editable),
+        ]),
+      });
+    },
+    setRemoteSelection(anchor, head = anchor, options = {}) {
+      const effects: Array<StateEffect<unknown>> = [
+        setRemoteSelectionEffect.of({
+          anchor,
+          head,
+        }),
+      ];
+
+      if (options.scrollIntoView !== false) {
+        effects.push(EditorView.scrollIntoView(Math.max(0, Math.min(head, view.state.doc.length)), {
+          y: 'center',
+          yMargin: 48,
+        }));
+      }
+
+      view.dispatch({ effects });
+    },
+    setValue(value, options = {}) {
+      const nextValue = String(value || '');
+      const selection = options.selection ?? {
+        anchor: Math.min(view.state.selection.main.anchor, nextValue.length),
+        head: Math.min(view.state.selection.main.head, nextValue.length),
+      };
+      const effects: Array<StateEffect<unknown>> = [];
+
+      if (options.scrollIntoView !== false) {
+        effects.push(EditorView.scrollIntoView(Math.max(0, Math.min(selection.head, nextValue.length)), {
+          y: 'center',
+          yMargin: 48,
+        }));
+      }
+
+      textarea.value = nextValue;
+      textarea.selectionStart = Math.max(0, Math.min(selection.anchor, nextValue.length));
+      textarea.selectionEnd = Math.max(0, Math.min(selection.head, nextValue.length));
+
+      isApplyingExternalValue = true;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: nextValue },
+        selection: EditorSelection.range(
+          Math.max(0, Math.min(selection.anchor, nextValue.length)),
+          Math.max(0, Math.min(selection.head, nextValue.length)),
+        ),
+        effects,
+      });
+      isApplyingExternalValue = false;
     },
   };
 }

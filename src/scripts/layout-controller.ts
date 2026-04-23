@@ -5,6 +5,7 @@ export const LAYOUT_MODES = [
   'screenshare',
   'concept',
   'whiteboard',
+  'lilypond',
 ] as const;
 
 export type LayoutMode = (typeof LAYOUT_MODES)[number];

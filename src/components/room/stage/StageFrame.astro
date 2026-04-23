@@ -4,7 +4,7 @@ import StagePanels from './StagePanels.astro';
 import StageOverlays from '../overlays/StageOverlays.astro';
 
 type Props = {
-  defaultLayout?: 'grid' | 'teacher' | 'presentation' | 'screenshare';
+  defaultLayout?: 'grid' | 'teacher' | 'presentation' | 'screenshare' | 'whiteboard' | 'concept' | 'lilypond';
 };
 
 const { defaultLayout = 'presentation' } = Astro.props as Props;

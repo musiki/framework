@@ -124,6 +124,16 @@ export type ConferenceMessage =
       bg: 'none' | 'staff' | 'grid';
     }
   | {
+      type: 'lilypond-live';
+      anchor: number;
+      head: number;
+      body?: string;
+    }
+  | {
+      type: 'lilypond-render';
+      body: string;
+    }
+  | {
       type: 'concept-load';
       href: string | null;
     }
@@ -494,6 +504,28 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'whiteboard-bg',
         bg: bg === 'staff' || bg === 'grid' ? bg : 'none',
+      };
+    }
+
+    if (parsed.type === 'lilypond-live') {
+      const anchor = Number((parsed as { anchor?: number }).anchor);
+      const head = Number((parsed as { head?: number }).head);
+      return {
+        type: 'lilypond-live',
+        anchor: Number.isFinite(anchor) ? Math.max(0, Math.round(anchor)) : 0,
+        head: Number.isFinite(head) ? Math.max(0, Math.round(head)) : 0,
+        body: typeof (parsed as { body?: string }).body === 'string'
+          ? (parsed as { body: string }).body
+          : undefined,
+      };
+    }
+
+    if (parsed.type === 'lilypond-render') {
+      return {
+        type: 'lilypond-render',
+        body: typeof (parsed as { body?: string }).body === 'string'
+          ? (parsed as { body: string }).body
+          : '',
       };
     }
 

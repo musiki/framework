@@ -408,8 +408,8 @@ export function enhanceMarkdownTextarea(
   textarea: HTMLTextAreaElement | null | undefined,
   options: EnhanceMarkdownTextareaOptions = {},
 ) {
-  if (!(textarea instanceof HTMLTextAreaElement)) return;
-  if (textarea.dataset.markdownEditorEnhanced === 'true') return;
+  if (!(textarea instanceof HTMLTextAreaElement)) return null;
+  if (textarea.dataset.markdownEditorEnhanced === 'true') return null;
   textarea.dataset.markdownEditorEnhanced = 'true';
 
   const inputClassName = options.inputClassName || DEFAULT_INPUT_CLASS_NAME;
@@ -521,4 +521,6 @@ export function enhanceMarkdownTextarea(
     visualTarget.classList.remove('is-upload-target');
     await handleMediaUpload(textarea, uploadFiles, 'arrastre', options);
   });
+
+  return codeMirrorBinding;
 }

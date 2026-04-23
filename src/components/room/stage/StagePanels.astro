@@ -110,3 +110,71 @@
     data-empty-label="Participants grid"
   ></div>
 </section>
+
+<section class="conference-stage-panel conference-stage-panel--lilypond" data-panel="lilypond">
+  <div class="conference-stage-heading">
+    <div class="conference-stage-label">LilyPond Live</div>
+    <button type="button" class="conference-panel-close" data-action="close-panel" aria-label="Cerrar panel" hidden>X</button>
+  </div>
+  <div class="conference-lilypond-layout">
+    <div class="conference-lilypond-editor">
+      <form class="conference-lilypond-form" data-lilypond-form autocomplete="off">
+        <textarea
+          class="conference-lilypond-source editor-textarea"
+          data-lilypond-body
+          placeholder="Escribe markdown, ```mermaid o ```lilypond…"
+        ></textarea>
+        <div class="conference-lilypond-toolbar" data-lilypond-toolbar>
+          <label class="conference-lilypond-field">
+            <span class="conference-lilypond-field-label">Library</span>
+            <input
+              type="search"
+              class="conference-lilypond-input"
+              data-lilypond-library-search
+              placeholder="Buscar snippet…"
+              autocomplete="off"
+            />
+          </label>
+
+          <div
+            class="conference-lilypond-library-list"
+            data-lilypond-library-list
+            aria-live="polite"
+          ></div>
+
+          <label class="conference-lilypond-field">
+            <span class="conference-lilypond-field-label">File</span>
+            <input
+              type="text"
+              data-lilypond-filename
+              class="conference-lilypond-input"
+              placeholder="nombre.ly"
+              autocomplete="off"
+            />
+          </label>
+
+          <div class="conference-lilypond-actions" data-lilypond-actions>
+            <button type="button" class="conference-lilypond-action" data-lilypond-new title="Nuevo / limpiar">N</button>
+            <button
+              type="button"
+              class="conference-lilypond-action conference-lilypond-action--accent"
+              data-lilypond-save
+              title="Render y transmitir (Cmd/Ctrl + Enter)"
+            >R</button>
+            <button type="button" class="conference-lilypond-action" data-lilypond-btn-save title="Guardar snippet">S</button>
+            <button
+              type="button"
+              class="conference-lilypond-action conference-lilypond-action--danger"
+              data-lilypond-btn-erase
+              title="Borrar snippet"
+            >D</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="conference-lilypond-preview">
+      <div class="conference-lilypond-render-target" data-lilypond-preview></div>
+      <div class="conference-empty conference-empty--lilypond" data-lilypond-placeholder aria-hidden="true"></div>
+    </div>
+  </div>
+</section>

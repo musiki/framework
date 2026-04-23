@@ -233,9 +233,9 @@
     "slug": "02-forma y estructura/Forma",
     "title": "Forma",
     "description": "",
-    "theme": null,
+    "theme": "zztt",
     "reveal": false,
-    "type": null,
+    "type": "lesson",
     "courseId": "s123",
     "isPublic": false
   },
@@ -246,16 +246,6 @@
     "theme": "zztt",
     "reveal": false,
     "type": "lesson",
-    "courseId": "s123",
-    "isPublic": false
-  },
-  {
-    "slug": "02-forma y estructura/estructura",
-    "title": "estructura",
-    "description": "",
-    "theme": null,
-    "reveal": false,
-    "type": "concept",
     "courseId": "s123",
     "isPublic": false
   },
@@ -278,6 +268,16 @@
     "type": "course",
     "courseId": "s123",
     "isPublic": false
+  },
+  {
+    "slug": "public/conceptos/estructura",
+    "title": "estructura",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": "concept",
+    "courseId": null,
+    "isPublic": true
   },
   {
     "slug": "public/conceptos/objeto de sonido-movimiento",
