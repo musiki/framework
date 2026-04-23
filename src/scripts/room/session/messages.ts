@@ -12,6 +12,8 @@ export type SlideState = {
   pointerMode?: boolean;
 };
 
+export type PresentationPointerKind = 'move' | 'mark' | 'clear';
+
 export type ExternalMediaProvider = 'youtube';
 export type ExternalMediaPlaybackState = 'playing' | 'paused' | 'ended';
 export type PresentationMediaProvider = 'youtube';
@@ -91,6 +93,13 @@ export type ConferenceMessage =
   | {
       type: 'presentation-zoom';
       zoom: number;
+    }
+  | {
+      type: 'presentation-pointer';
+      active: boolean;
+      kind: PresentationPointerKind;
+      x: number;
+      y: number;
     }
   | {
       type: 'whiteboard-draw';
@@ -215,6 +224,8 @@ const isReactionKind = (value: string): value is ReactionKind => value in REACTI
 const isExternalMediaPlaybackState = (value: string): value is ExternalMediaPlaybackState =>
   value === 'playing' || value === 'paused' || value === 'ended';
 const isPresentationMediaProvider = (value: string): value is PresentationMediaProvider => value === 'youtube';
+const isPresentationPointerKind = (value: string): value is PresentationPointerKind =>
+  value === 'move' || value === 'mark' || value === 'clear';
 
 export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage | null => {
   try {
@@ -433,6 +444,21 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'presentation-zoom',
         zoom: Number((parsed as { zoom?: number }).zoom) || 1,
+      };
+    }
+
+    if (parsed.type === 'presentation-pointer') {
+      const kind = normalizeText((parsed as { kind?: string }).kind);
+      if (!isPresentationPointerKind(kind)) {
+        return null;
+      }
+
+      return {
+        type: 'presentation-pointer',
+        active: Boolean((parsed as { active?: boolean }).active),
+        kind,
+        x: Math.min(1, Math.max(0, Number((parsed as { x?: number }).x) || 0)),
+        y: Math.min(1, Math.max(0, Number((parsed as { y?: number }).y) || 0)),
       };
     }
 

@@ -94,7 +94,7 @@ if (
         class="conference-connect-button"
         data-action="connect-toggle"
         aria-label="Conectar a la sala"
-        data-tooltip="Conectar ⌘J"
+        data-tooltip="Conectar Ctrl + J"
       >
         <svg
           viewBox="0 0 24 24"
@@ -138,19 +138,24 @@ if (
           >
         </button>
         <div class="conference-roster-popup">
-          <button
-            type="button"
-            class="conference-layout-button conference-kick-button"
-            data-action="session-kick-toggle"
-            data-tooltip="Modo expulsar (K)"
-            aria-label="Expulsar participantes"
-            hidden>K</button
-          >
-          <ul class="conference-roster" data-participant-list>
-            <li class="conference-roster-empty">
-              Todavia no hay participantes en la sala.
-            </li>
-          </ul>
+          <div class="conference-roster-popup-head">
+            <span class="conference-roster-popup-title">Participantes</span>
+            <button
+              type="button"
+              class="conference-layout-button conference-kick-button"
+              data-action="session-kick-toggle"
+              data-tooltip="Modo expulsar Ctrl + K"
+              aria-label="Expulsar participantes"
+              hidden>K</button
+            >
+          </div>
+          <div class="conference-roster-scroll">
+            <ul class="conference-roster" data-participant-list>
+              <li class="conference-roster-empty">
+                Todavia no hay participantes en la sala.
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -171,7 +176,7 @@ if (
         type="button"
         class="conference-layout-button conference-mute-all-button"
         data-session-mute-all-button
-        data-tooltip="Silenciar todos ⌘⌥M"
+        data-tooltip="Silenciar todos Ctrl + M"
         aria-label="Silenciar a todos">M</button
       >
     </div>
@@ -182,7 +187,7 @@ if (
         class="conference-layout-button conference-instruments-button"
         data-action="instruments-toggle"
         aria-label="Instruments"
-        data-tooltip="Instruments"
+        data-tooltip="Instruments Ctrl + I"
       >
         I
       </button>
@@ -193,31 +198,31 @@ if (
         type="button"
         class="conference-layout-button"
         data-layout-choice="teacher"
-        data-tooltip="Full ⌘⌥1">F</button
+        data-tooltip="Full Ctrl + F">F</button
       >
       <button
         type="button"
         class="conference-layout-button"
         data-layout-choice="screenshare"
-        data-tooltip="Screenshare ⌘⌥2">S</button
+        data-tooltip="Screenshare Ctrl + S">S</button
       >
       <button
         type="button"
         class="conference-layout-button"
         data-layout-choice="presentation"
-        data-tooltip="Presentación ⌘⌥3">P</button
+        data-tooltip="Presentación Ctrl + P">P</button
       >
       <button
         type="button"
         class="conference-layout-button"
         data-layout-choice="grid"
-        data-tooltip="Grid ⌘⌥4">G</button
+        data-tooltip="Grid Ctrl + G">G</button
       >
       <button
         type="button"
         class="conference-layout-button"
         data-layout-choice="whiteboard"
-        data-tooltip="Pizarra (Z)">Z</button
+        data-tooltip="Pizarra Ctrl + Z">Z</button
       >
 
       <div class="conference-concepts-shell" data-concepts-shell hidden>
@@ -226,7 +231,7 @@ if (
           class="conference-layout-button conference-concepts-btn"
           data-action="concepts-toggle"
           data-concepts-btn
-          data-tooltip="Conceptos (O)"
+          data-tooltip="Conceptos Ctrl + O"
           aria-label="Conceptos">O</button
         >
       </div>
@@ -235,7 +240,7 @@ if (
         type="button"
         class="conference-layout-button conference-chat-focus-btn"
         data-action="chat-focus"
-        data-tooltip="Chat ⌘⌥C"
+        data-tooltip="Chat Ctrl + C"
         >C<span class="conference-chat-unread-dot" data-chat-unread hidden
         ></span></button
       >
@@ -250,7 +255,7 @@ if (
           class="conference-layout-button conference-external-media-btn"
           data-action="external-media-toggle"
           data-external-media-btn
-          data-tooltip="Media externa"
+          data-tooltip="Media externa Ctrl + E"
           aria-label="External Media Session">E</button
         >
       </div>
@@ -261,7 +266,7 @@ if (
           class="conference-layout-button conference-break-rooms-btn"
           data-action="break-rooms-toggle"
           data-break-rooms-btn
-          data-tooltip="Break Rooms"
+          data-tooltip="Break Rooms Ctrl + B"
           aria-label="Break Rooms">B</button
         >
         <button
@@ -710,91 +715,68 @@ if (
         <section class="conference-shortcuts-section">
           <h3>Reveal</h3>
           <ul>
-            <li><kbd>O</kbd> overview</li>
+            <li><kbd>Shift</kbd> + <kbd>O</kbd> overview</li>
+            <li><kbd>Shift</kbd> + <kbd>P</kbd> laser pointer</li>
+            <li><kbd>Shift</kbd> + <kbd>S</kbd> speaker view</li>
             <li><kbd>K</kbd> / <kbd>L</kbd> previous / next slide</li>
-            <li><kbd>S</kbd> speaker view</li>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>G</kbd> go to slide
-            </li>
-            <li><kbd>P</kbd> laser / marker</li>
-            <li><kbd>G</kbd> graph</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd> go to slide</li>
           </ul>
         </section>
 
         <section class="conference-shortcuts-section">
-          <h3>Layout</h3>
+          <h3>Stage</h3>
           <ul>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>1</kbd> / <kbd
-                >2</kbd
-              > / <kbd>3</kbd> / <kbd>4</kbd> full / share / presentation / grid
-            </li>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>5</kbd> / <kbd
-                >6</kbd
-              > / <kbd>7</kbd> circle / invert / delegar sesion
-            </li>
+            <li><kbd>Ctrl</kbd> + <kbd>F</kbd> full stage</li>
+            <li><kbd>Ctrl</kbd> + <kbd>S</kbd> share stage</li>
+            <li><kbd>Ctrl</kbd> + <kbd>P</kbd> presentation stage</li>
+            <li><kbd>Ctrl</kbd> + <kbd>G</kbd> grid stage</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Z</kbd> whiteboard</li>
           </ul>
         </section>
 
         <section class="conference-shortcuts-section">
-          <h3>Room</h3>
+          <h3>Panels</h3>
           <ul>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>\</kbd> instruments</li>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>\</kbd> sidebar
-            </li>
-            <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>J</kbd> join / leave</li>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>F</kbd> / <kbd
-                >I</kbd
-              > fullscreen / copy invite
-            </li>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>R</kbd> / <kbd
-                >T</kbd
-              > rec / screenshot
-            </li>
+            <li><kbd>Ctrl</kbd> + <kbd>O</kbd> concepts</li>
+            <li><kbd>Ctrl</kbd> + <kbd>C</kbd> focus chat</li>
+            <li><kbd>Ctrl</kbd> + <kbd>E</kbd> external media</li>
+            <li><kbd>Ctrl</kbd> + <kbd>B</kbd> break rooms</li>
+            <li><kbd>Ctrl</kbd> + <kbd>I</kbd> instruments</li>
+            <li><kbd>Ctrl</kbd> + <kbd>K</kbd> kick mode</li>
           </ul>
         </section>
 
         <section class="conference-shortcuts-section">
           <h3>Media</h3>
           <ul>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>S</kbd> / <kbd
-                >V</kbd
-              > / <kbd>N</kbd> share / camera / next camera
-            </li>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⇧</kbd> + <kbd>V</kbd> / <kbd
-                >N</kbd
-              > camera / next camera
-            </li>
-            <li><kbd>Space</kbd> hold mic</li>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>M</kbd> mute all
-            </li>
+            <li><kbd>Ctrl</kbd> + <kbd>J</kbd> join / leave room</li>
+            <li><kbd>Ctrl</kbd> + <kbd>M</kbd> mute all</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> share screen</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>V</kbd> camera on / off</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd> next camera</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> record</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd> screenshot</li>
           </ul>
         </section>
 
         <section class="conference-shortcuts-section">
-          <h3>Interaction</h3>
+          <h3>Utility</h3>
           <ul>
-            <li>
-              <kbd>H</kbd> / <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd
-                >Y</kbd
-              > raise / lower hand
-            </li>
-            <li>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>⌥</kbd> + <kbd>C</kbd> focus chat
-            </li>
-            <li>
-              <kbd>⇧</kbd> + <kbd>4</kbd> / <kbd>5</kbd> / <kbd>6</kbd> / <kbd
-                >7</kbd
-              > / <kbd>8</kbd> / <kbd>9</kbd> clap / thumb / heart / joy / wow / tada
-            </li>
-            <li><kbd>⇧</kbd> + <kbd>?</kbd> search</li>
+            <li><kbd>Ctrl</kbd> + <kbd>\</kbd> left sidebar</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>\</kbd> right sidebar</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd> copy invite</li>
+            <li><kbd>Space</kbd> hold mic</li>
+            <li><kbd>Ctrl</kbd> + <kbd>H</kbd> raise / lower hand</li>
+            <li><kbd>Shift</kbd> + <kbd>4</kbd> / <kbd>5</kbd> / <kbd>6</kbd> / <kbd>7</kbd> / <kbd>8</kbd> / <kbd>9</kbd> clap / thumb / heart / joy / wow / tada</li>
+            <li><kbd>Shift</kbd> + <kbd>?</kbd> search</li>
+          </ul>
+        </section>
+
+        <section class="conference-shortcuts-section">
+          <h3>Notes</h3>
+          <ul>
+            <li><kbd>Ctrl</kbd> + <kbd>C</kbd> keeps copy when text is selected</li>
+            <li>Fullscreen has no keyboard shortcut now</li>
           </ul>
         </section>
       </div>
@@ -4119,7 +4101,7 @@ if (
     pointer-events: none;
     opacity: 0;
     transition: opacity 120ms ease;
-    z-index: 200;
+    z-index: 1200;
   }
 
   .conference-bottombar [data-tooltip]:hover::after {
@@ -4271,7 +4253,7 @@ if (
   }
 
   .conference-shortcuts-head strong {
-    font-size: 0.86rem;
+    font-size: 0.95rem;
     letter-spacing: 0.18em;
     text-transform: uppercase;
   }
@@ -4306,7 +4288,7 @@ if (
   .conference-shortcuts-section h3 {
     margin: 0 0 0.55rem;
     color: var(--conference-fg);
-    font-size: 0.77rem;
+    font-size: 0.85rem;
     font-weight: 700;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -4325,7 +4307,7 @@ if (
     align-items: baseline;
     gap: 0.4rem;
     color: var(--conference-muted);
-    font-size: 0.79rem;
+    font-size: 0.87rem;
     line-height: 1.18;
   }
 
@@ -4337,7 +4319,7 @@ if (
     padding: 0.04rem 0.3rem;
     border: 1px solid var(--conference-line);
     font: inherit;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     line-height: 1;
     color: var(--conference-fg);
     background: transparent;
@@ -4393,10 +4375,12 @@ if (
     bottom: calc(100% + 1px);
     min-width: 280px;
     max-width: 360px;
-    max-height: 85vh;
     z-index: 1000;
-    overflow-y: auto;
-    padding: 0.65rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    overflow: visible;
+    padding: 0.65rem 0.8rem 0.75rem;
     border: 1px solid var(--conference-line);
     background: rgba(0, 0, 0, 0.98);
     opacity: 0;
@@ -4412,10 +4396,31 @@ if (
     pointer-events: auto;
   }
 
+  .conference-roster-popup-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+
+  .conference-roster-popup-title {
+    color: var(--conference-muted);
+    font-size: 0.58rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .conference-roster-scroll {
+    max-height: min(24rem, 72vh);
+    overflow-y: auto;
+    overflow-x: visible;
+    padding-right: 0.1rem;
+  }
+
   /* ── Roster: :global() — participant list injected by JS ─────────── */
   .conference-roster {
     margin: 0;
-    padding: 0.2rem 0.65rem;
+    padding: 0 0.2rem 0 0;
     list-style: none;
     display: grid;
     gap: 0.12rem;

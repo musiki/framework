@@ -629,8 +629,8 @@ const resolvedSlideTheme =
           <path d="M12 4 4 12" />
         </svg>
       </button>
-      <button id="slides-speaker-btn" type="button" title="Speaker view (Ctrl+S)" aria-label="Speaker view">S</button>
-      <button id="slides-fs-btn" type="button" title="Entrar en fullscreen (Ctrl+E)" aria-label="Entrar en fullscreen">
+      <button id="slides-speaker-btn" type="button" title="Speaker view (Shift + S)" aria-label="Speaker view">S</button>
+      <button id="slides-fs-btn" type="button" title="Entrar en fullscreen" aria-label="Entrar en fullscreen">
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <path d="M5 2.5H2.5V5" />
           <path d="M11 2.5h2.5V5" />
@@ -707,10 +707,15 @@ const resolvedSlideTheme =
         let pinchStartDistance = 0;
         let pinchStartZoom = slidesZoom;
         let pointerMode = false;
+        let remotePointerMode = false;
         let pointerAnimationFrame = 0;
+        let pointerBroadcastFrame = 0;
         let pointerPointerDown = false;
         let pointerTrail = [];
         let pointerMarks = [];
+        let remotePointerTrail = [];
+        let remotePointerMarks = [];
+        let queuedPointerEvent = null;
         let pointerCanvasContext = null;
 
         const postParentMessage = (payload) => {
@@ -729,6 +734,11 @@ const resolvedSlideTheme =
         const shouldIgnoreRevealShortcutTarget = (target) =>
           target instanceof HTMLElement &&
           Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'));
+
+        const hasSelectedRevealText = () => {
+          const selection = window.getSelection();
+          return Boolean(selection && !selection.isCollapsed && String(selection.toString() || '').trim());
+        };
 
         const syncPointerModeUi = () => {
           zoomShell.dataset.pointerMode = pointerMode ? 'true' : 'false';
@@ -765,56 +775,89 @@ const resolvedSlideTheme =
             const markLifetime = 1200;
             pointerTrail = pointerTrail.filter((point) => now - point.t <= trailLifetime);
             pointerMarks = pointerMarks.filter((mark) => now - mark.t <= markLifetime);
+            remotePointerTrail = remotePointerTrail.filter((point) => now - point.t <= trailLifetime);
+            remotePointerMarks = remotePointerMarks.filter((mark) => now - mark.t <= markLifetime);
 
             pointerCanvasContext.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
-            if (pointerTrail.length > 1) {
-              for (let index = 1; index < pointerTrail.length; index += 1) {
-                const previous = pointerTrail[index - 1];
-                const current = pointerTrail[index];
-                const alpha = Math.max(0, 1 - (now - current.t) / trailLifetime);
-                pointerCanvasContext.strokeStyle = `rgba(255, 64, 64, ${alpha * 0.95})`;
-                pointerCanvasContext.lineWidth = 3;
-                pointerCanvasContext.lineCap = 'round';
-                pointerCanvasContext.lineJoin = 'round';
-                pointerCanvasContext.shadowColor = `rgba(255, 72, 72, ${alpha})`;
-                pointerCanvasContext.shadowBlur = 18;
-                pointerCanvasContext.beginPath();
-                pointerCanvasContext.moveTo(previous.x, previous.y);
-                pointerCanvasContext.lineTo(current.x, current.y);
-                pointerCanvasContext.stroke();
+            const drawPointerSeries = (trail, marks) => {
+              if (trail.length > 1) {
+                for (let index = 1; index < trail.length; index += 1) {
+                  const previous = trail[index - 1];
+                  const current = trail[index];
+                  const alpha = Math.max(0, 1 - (now - current.t) / trailLifetime);
+                  pointerCanvasContext.strokeStyle = `rgba(255, 64, 64, ${alpha * 0.95})`;
+                  pointerCanvasContext.lineWidth = 3;
+                  pointerCanvasContext.lineCap = 'round';
+                  pointerCanvasContext.lineJoin = 'round';
+                  pointerCanvasContext.shadowColor = `rgba(255, 72, 72, ${alpha})`;
+                  pointerCanvasContext.shadowBlur = 18;
+                  pointerCanvasContext.beginPath();
+                  pointerCanvasContext.moveTo(previous.x, previous.y);
+                  pointerCanvasContext.lineTo(current.x, current.y);
+                  pointerCanvasContext.stroke();
+                }
               }
-            }
 
-            pointerMarks.forEach((mark) => {
-              const alpha = Math.max(0, 1 - (now - mark.t) / markLifetime);
-              pointerCanvasContext.fillStyle = `rgba(255, 52, 52, ${alpha * 0.92})`;
-              pointerCanvasContext.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
-              pointerCanvasContext.lineWidth = 1.5;
-              pointerCanvasContext.shadowColor = `rgba(255, 64, 64, ${alpha})`;
-              pointerCanvasContext.shadowBlur = 12;
-              pointerCanvasContext.beginPath();
-              pointerCanvasContext.arc(mark.x, mark.y, mark.r, 0, Math.PI * 2);
-              pointerCanvasContext.fill();
-              pointerCanvasContext.stroke();
-            });
+              marks.forEach((mark) => {
+                const alpha = Math.max(0, 1 - (now - mark.t) / markLifetime);
+                pointerCanvasContext.fillStyle = `rgba(255, 52, 52, ${alpha * 0.92})`;
+                pointerCanvasContext.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+                pointerCanvasContext.lineWidth = 1.5;
+                pointerCanvasContext.shadowColor = `rgba(255, 64, 64, ${alpha})`;
+                pointerCanvasContext.shadowBlur = 12;
+                pointerCanvasContext.beginPath();
+                pointerCanvasContext.arc(mark.x, mark.y, mark.r, 0, Math.PI * 2);
+                pointerCanvasContext.fill();
+                pointerCanvasContext.stroke();
+              });
+            };
 
-            if (pointerTrail.length || pointerMarks.length) {
+            drawPointerSeries(pointerTrail, pointerMarks);
+            drawPointerSeries(remotePointerTrail, remotePointerMarks);
+
+            if (pointerTrail.length || pointerMarks.length || remotePointerTrail.length || remotePointerMarks.length) {
               queuePointerRender();
             }
           });
         };
 
-        const pushPointerTrail = (x, y) => {
-          pointerTrail.push({ t: performance.now(), x, y });
-          if (pointerTrail.length > 40) {
-            pointerTrail = pointerTrail.slice(-40);
+        const pushPointerTrail = (x, y, scope = 'local') => {
+          const nextPoint = { t: performance.now(), x, y };
+          if (scope === 'remote') {
+            remotePointerTrail.push(nextPoint);
+            if (remotePointerTrail.length > 40) {
+              remotePointerTrail = remotePointerTrail.slice(-40);
+            }
+          } else {
+            pointerTrail.push(nextPoint);
+            if (pointerTrail.length > 40) {
+              pointerTrail = pointerTrail.slice(-40);
+            }
           }
           queuePointerRender();
         };
 
-        const pushPointerMark = (x, y) => {
-          pointerMarks.push({ r: 6, t: performance.now(), x, y });
+        const pushPointerMark = (x, y, scope = 'local') => {
+          const nextMark = { r: 6, t: performance.now(), x, y };
+          if (scope === 'remote') {
+            remotePointerMarks.push(nextMark);
+          } else {
+            pointerMarks.push(nextMark);
+          }
+          queuePointerRender();
+        };
+
+        const clearLocalPointerArtifacts = () => {
+          pointerPointerDown = false;
+          pointerTrail = [];
+          pointerMarks = [];
+          queuePointerRender();
+        };
+
+        const clearRemotePointerArtifacts = () => {
+          remotePointerTrail = [];
+          remotePointerMarks = [];
           queuePointerRender();
         };
 
@@ -829,6 +872,87 @@ const resolvedSlideTheme =
             return { x: event.clientX, y: event.clientY };
           }
           return null;
+        };
+
+        const normalizePointerPosition = (x, y) => ({
+          x: Math.min(1, Math.max(0, x / Math.max(1, window.innerWidth))),
+          y: Math.min(1, Math.max(0, y / Math.max(1, window.innerHeight))),
+        });
+
+        const denormalizePointerPosition = (x, y) => ({
+          x: Math.min(1, Math.max(0, Number(x) || 0)) * window.innerWidth,
+          y: Math.min(1, Math.max(0, Number(y) || 0)) * window.innerHeight,
+        });
+
+        const flushQueuedPointerEvent = () => {
+          pointerBroadcastFrame = 0;
+          if (!queuedPointerEvent) return;
+          postParentMessage({
+            type: 'musiki:reveal-pointer-event',
+            event: queuedPointerEvent,
+          });
+          queuedPointerEvent = null;
+        };
+
+        const queuePointerEvent = (kind, x, y, active = pointerMode) => {
+          queuedPointerEvent = {
+            active,
+            kind,
+            ...normalizePointerPosition(x, y),
+          };
+          if (pointerBroadcastFrame) return;
+          pointerBroadcastFrame = window.requestAnimationFrame(flushQueuedPointerEvent);
+        };
+
+        const postImmediatePointerEvent = (kind, x, y, active = pointerMode) => {
+          postParentMessage({
+            type: 'musiki:reveal-pointer-event',
+            event: {
+              active,
+              kind,
+              ...normalizePointerPosition(x, y),
+            },
+          });
+        };
+
+        const setRemotePointerMode = (enabled) => {
+          remotePointerMode = Boolean(enabled);
+          if (!remotePointerMode) {
+            clearRemotePointerArtifacts();
+          }
+        };
+
+        const togglePointerMode = (broadcast = false) => {
+          pointerMode = !pointerMode;
+          if (!pointerMode) {
+            clearLocalPointerArtifacts();
+            postParentMessage({
+              type: 'musiki:reveal-pointer-event',
+              event: { active: false, kind: 'clear', x: 0, y: 0 },
+            });
+          }
+          syncPointerModeUi();
+          if (broadcast) {
+            emitDeckState('pointer');
+          }
+        };
+
+        const applyRemotePointerEvent = (nextEvent) => {
+          const kind = String(nextEvent?.kind || '').trim();
+          if (kind !== 'move' && kind !== 'mark' && kind !== 'clear') return;
+
+          setRemotePointerMode(Boolean(nextEvent?.active));
+
+          if (kind === 'clear' || !remotePointerMode) {
+            clearRemotePointerArtifacts();
+            return;
+          }
+
+          const point = denormalizePointerPosition(nextEvent?.x, nextEvent?.y);
+          pushPointerTrail(point.x, point.y, 'remote');
+          if (kind === 'mark') {
+            pushPointerMark(point.x, point.y, 'remote');
+          }
         };
 
         const persistSlidesZoom = () => {
@@ -1523,23 +1647,11 @@ const resolvedSlideTheme =
           goToNote();
         });
 
-        const isToggleShortcut = (event) => {
-          const key = String(event.key || '').toLowerCase();
-          const code = String(event.code || '').toLowerCase();
-          return (event.ctrlKey || event.metaKey) && !event.altKey && (key === 'e' || code === 'keye');
-        };
-
-        const isSpeakerShortcut = (event) => {
-          const key = String(event.key || '').toLowerCase();
-          const code = String(event.code || '').toLowerCase();
-          return (event.ctrlKey || event.metaKey) && !event.altKey && (key === 's' || code === 'keys');
-        };
-
         const setFsButtonLabel = () => {
           if (!fsBtn) return;
           const isActive = Boolean(document.fullscreenElement);
           fsBtn.dataset.active = isActive ? 'true' : 'false';
-          fsBtn.title = isActive ? 'Salir de fullscreen (Ctrl+E)' : 'Entrar en fullscreen (Ctrl+E)';
+          fsBtn.title = isActive ? 'Salir de fullscreen' : 'Entrar en fullscreen';
           fsBtn.setAttribute(
             'aria-label',
             isActive ? 'Salir de fullscreen' : 'Entrar en fullscreen',
@@ -3800,6 +3912,16 @@ const resolvedSlideTheme =
             return;
           }
 
+          if (type === 'musiki:reveal-pointer-mode') {
+            setRemotePointerMode(Boolean(payload.enabled));
+            return;
+          }
+
+          if (type === 'musiki:reveal-remote-pointer') {
+            applyRemotePointerEvent(payload.event);
+            return;
+          }
+
           if (type !== 'musiki:reveal-goto') return;
           const state = payload.state && typeof payload.state === 'object' ? payload.state : null;
           if (!state) return;
@@ -4015,6 +4137,7 @@ const resolvedSlideTheme =
           if (pointerPointerDown) {
             pushPointerMark(event.clientX, event.clientY);
           }
+          queuePointerEvent('move', event.clientX, event.clientY);
         });
 
         zoomShell.addEventListener('pointerdown', (event) => {
@@ -4022,6 +4145,7 @@ const resolvedSlideTheme =
           pointerPointerDown = true;
           pushPointerTrail(event.clientX, event.clientY);
           pushPointerMark(event.clientX, event.clientY);
+          postImmediatePointerEvent('mark', event.clientX, event.clientY);
         });
 
         zoomShell.addEventListener('pointerup', () => {
@@ -4037,6 +4161,7 @@ const resolvedSlideTheme =
           const point = extractPointerPosition(event);
           if (!point) return;
           pushPointerTrail(point.x, point.y);
+          queuePointerEvent('move', point.x, point.y);
         }, { passive: true });
 
         zoomShell.addEventListener('touchstart', (event) => {
@@ -4045,12 +4170,14 @@ const resolvedSlideTheme =
           if (!point) return;
           pushPointerTrail(point.x, point.y);
           pushPointerMark(point.x, point.y);
+          postImmediatePointerEvent('mark', point.x, point.y);
         }, { passive: true });
 
         document.addEventListener('keydown', (event) => {
           const key = String(event.key || '').toLowerCase();
+          const isPrimaryShortcutModifier = event.ctrlKey && !event.metaKey;
 
-          if ((event.metaKey || event.ctrlKey) && !event.altKey && event.code === 'Backslash') {
+          if (isPrimaryShortcutModifier && !event.altKey && event.code === 'Backslash') {
             event.preventDefault();
             event.stopImmediatePropagation();
             window.parent.postMessage(
@@ -4062,39 +4189,6 @@ const resolvedSlideTheme =
 
           if (shouldIgnoreRevealShortcutTarget(event.target)) return;
 
-          if ((event.ctrlKey || event.metaKey) && event.altKey && !event.shiftKey) {
-            if (key === 'g') {
-              event.preventDefault();
-              event.stopImmediatePropagation();
-              deck.toggleJumpToSlide?.();
-              return;
-            }
-
-            if (['1', '2', '3', '4', '5', '6', '7', 'c', 'm', 'n', 'r', 's', 't', 'v', 'y'].includes(key)) {
-              event.preventDefault();
-              event.stopImmediatePropagation();
-              const commandMap = {
-                '1': 'layout-full',
-                '2': 'layout-share',
-                '3': 'layout-presentation',
-                '4': 'layout-grid',
-                '5': 'toggle-circle',
-                '6': 'toggle-invert-video',
-                '7': 'open-delegate-session',
-                c: 'focus-chat',
-                m: 'mute-all',
-                n: 'cycle-camera',
-                r: 'toggle-record',
-                s: 'share-screen',
-                t: 'stage-screenshot',
-                v: 'toggle-camera',
-                y: 'toggle-hand',
-              };
-              postRoomCommand(commandMap[key]);
-              return;
-            }
-          }
-
           if (event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
             if (key === 'o') {
               event.preventDefault();
@@ -4102,15 +4196,22 @@ const resolvedSlideTheme =
               deck.toggleOverview();
               return;
             }
+
             if (key === 'p') {
               event.preventDefault();
               event.stopImmediatePropagation();
-              togglePointerMode();
-              emitDeckState('pointer'); // Force emit pointer state for broadcast
+              togglePointerMode(true);
               return;
             }
 
-            const reactionMap = {
+            if (key === 's') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              openSpeakerView();
+              return;
+            }
+
+            const reactionMap: Record<string, string> = {
               Digit4: 'reaction:clap',
               Digit5: 'reaction:thumbsup',
               Digit6: 'reaction:heart',
@@ -4127,14 +4228,23 @@ const resolvedSlideTheme =
             }
           }
 
-          if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey) {
-            if (key === 'f' || key === 'i' || key === 'n' || key === 'v') {
+          if (isPrimaryShortcutModifier && event.shiftKey && !event.altKey) {
+            if (key === 'g') {
               event.preventDefault();
               event.stopImmediatePropagation();
-              const commandMap = {
-                f: 'toggle-fullscreen',
+              deck.toggleJumpToSlide?.();
+              return;
+            }
+
+            if (key === 'i' || key === 'n' || key === 'r' || key === 's' || key === 't' || key === 'v') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              const commandMap: Record<string, string> = {
                 i: 'copy-invite-link',
                 n: 'cycle-camera',
+                r: 'toggle-record',
+                s: 'share-screen',
+                t: 'stage-screenshot',
                 v: 'toggle-camera',
               };
               postRoomCommand(commandMap[key]);
@@ -4142,42 +4252,34 @@ const resolvedSlideTheme =
             }
           }
 
-          if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && key === 'j') {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            postRoomCommand('toggle-connect');
-            return;
+          if (isPrimaryShortcutModifier && !event.shiftKey && !event.altKey) {
+            const primaryCommandMap: Record<string, string> = {
+              b: 'break-rooms-toggle',
+              c: 'focus-chat',
+              e: 'layout-overlay:media',
+              f: 'layout-full',
+              g: 'layout-grid',
+              h: 'toggle-hand',
+              i: 'instruments-toggle',
+              j: 'toggle-connect',
+              k: 'session-kick-toggle',
+              m: 'mute-all',
+              o: 'layout-overlay:concept',
+              p: 'layout-presentation',
+              s: 'layout-share',
+              z: 'layout-overlay:whiteboard',
+            };
+            const command = primaryCommandMap[key];
+            if (command) {
+              if (key === 'c' && hasSelectedRevealText()) return;
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              postRoomCommand(command);
+              return;
+            }
           }
 
           if (!event.metaKey && !event.ctrlKey && !event.altKey) {
-            if (key === 'g') {
-              event.preventDefault();
-              event.stopImmediatePropagation();
-              postRoomCommand('toggle-graph');
-              return;
-            }
-
-            if (key === 'h') {
-              event.preventDefault();
-              event.stopImmediatePropagation();
-              postRoomCommand('toggle-hand');
-              return;
-            }
-
-            if (key === 'p') {
-              event.preventDefault();
-              event.stopImmediatePropagation();
-              pointerMode = !pointerMode;
-              pointerPointerDown = false;
-              if (!pointerMode) {
-                pointerTrail = [];
-                pointerMarks = [];
-                queuePointerRender();
-              }
-              syncPointerModeUi();
-              return;
-            }
-
             if (event.key === ' ' || event.code === 'Space') {
               event.preventDefault();
               event.stopImmediatePropagation();
@@ -4193,21 +4295,7 @@ const resolvedSlideTheme =
             return;
           }
 
-          if (isSpeakerShortcut(event)) {
-            if (event.defaultPrevented) return;
-            event.preventDefault();
-            openSpeakerView();
-            return;
-          }
-
-          if (isToggleShortcut(event)) {
-            if (event.defaultPrevented) return;
-            event.preventDefault();
-            toggleFullscreen();
-            return;
-          }
-
-          if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+          if (isPrimaryShortcutModifier && !event.altKey) {
             if (event.key === '-' || event.key === '_') {
               event.preventDefault();
               nudgeSlidesZoom(-0.06);

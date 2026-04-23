@@ -13,7 +13,7 @@ import {
 
 import { subscribeToLive } from '../lib/live/client.mjs';
 import { formatCountdown, getRemainingMs } from '../lib/live/countdown.mjs';
-import { normalizeLayoutMode, setLayout, setSplitLayout, setOverlayLayout } from './layout-controller';
+import { normalizeLayoutMode, setLayout, setSplitLayout, setOverlayLayout, type LayoutMode } from './layout-controller';
 import { createPresentationController } from './presentation';
 import { createRoomChatController } from './room/chat';
 import { createClaseController } from './room/clase/controller';
@@ -4288,6 +4288,19 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const getCurrentLayout = () => setLayout(stage, layoutInput.value);
+  const getCurrentOverlayLayout = (): LayoutMode | null => {
+    const overlay = normalizeText(stage.dataset.layoutOverlay);
+    return overlay ? normalizeLayoutMode(overlay) : null;
+  };
+  const applyStageOverlayLayout = (overlay: LayoutMode | null, broadcast = false) => {
+    setOverlayLayout(stage, overlay);
+    if (broadcast && room.state === ConnectionState.Connected && canLeadSession()) {
+      void publishMessage({
+        type: 'layout-overlay',
+        overlay,
+      }).catch(() => undefined);
+    }
+  };
 
   const getFullscreenTarget = () => root as WebkitFullscreenElement;
 
@@ -8175,6 +8188,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     );
   };
 
+  const hasSelectedRoomText = () => {
+    const selection = window.getSelection();
+    return Boolean(selection && !selection.isCollapsed && selection.toString().trim());
+  };
+
   const closeDevicePanels = () => {
     deviceController.closePanels();
   };
@@ -9942,6 +9960,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (type === 'musiki:reveal-pointer-event') {
+      const nextEvent = (payload as {
+        event?: { active?: boolean; kind?: string; x?: number; y?: number };
+      }).event;
+      const kind = normalizeText(nextEvent?.kind);
+      if (kind !== 'move' && kind !== 'mark' && kind !== 'clear') {
+        return;
+      }
+      if (canLeadSession()) {
+        void publishMessage({
+          type: 'presentation-pointer',
+          active: Boolean(nextEvent?.active),
+          kind,
+          x: Math.min(1, Math.max(0, Number(nextEvent?.x) || 0)),
+          y: Math.min(1, Math.max(0, Number(nextEvent?.y) || 0)),
+        }).catch(() => undefined);
+      }
+      return;
+    }
+
     if (type === 'musiki:reveal-ready') {
       if (pendingRemoteSlideState) {
         applyRemoteSlideState(pendingRemoteSlideState);
@@ -10095,6 +10133,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     await publishMessage({
       type: 'layout',
       layout: getCurrentLayout(),
+    });
+
+    await publishMessage({
+      type: 'layout-overlay',
+      overlay: getCurrentOverlayLayout(),
     });
 
     await publishMessage({
@@ -10469,12 +10512,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   let kickModeActive = false;
+  const redirectToRoomHomepage = () => {
+    window.location.assign('/');
+  };
 
   const kickParticipant = async (identity: string) => {
     if (!canLeadSession()) return;
     if (identity === room.localParticipant.identity) return;
-
-    if (!confirm('¿Estás seguro de que quieres expulsar a este participante?')) return;
 
     try {
       await publishMessage({
@@ -11000,9 +11044,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (!message) return;
 
       if (message.type === 'session-kick') {
+        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+        if (!isSessionLeader(participant)) return;
         if (message.identity === room.localParticipant.identity) {
           setStatus('Has sido expulsado de la sala.');
-          void disconnect();
+          disconnectRoom();
+          window.setTimeout(() => {
+            redirectToRoomHomepage();
+          }, 40);
         }
         return;
       }
@@ -11041,12 +11090,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'layout-split') {
-        setSplitLayout(conferenceRoot, message.left, message.right);
+        setSplitLayout(stage, message.left, message.right);
         return;
       }
 
       if (message.type === 'layout-overlay') {
-        setOverlayLayout(conferenceRoot, message.overlay);
+        applyStageOverlayLayout(message.overlay, false);
         return;
       }
       if (message.type === 'reaction') {
@@ -11206,6 +11255,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           indexh: message.indexh,
           indexv: message.indexv,
           zoom: message.zoom,
+          pointerMode: message.pointerMode,
         };
         window.dispatchEvent(new CustomEvent('musiki:clase-slide-changed', { detail: { indexh: message.indexh } }));
         applyRemoteSlideState(currentSlideState);
@@ -11216,6 +11266,19 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         clearPresentationStateRecoveryRequests();
         currentPresentationMediaState = message;
         applyRemotePresentationMediaState(message);
+        return;
+      }
+
+      if (message.type === 'presentation-pointer') {
+        postToPresentation({
+          type: 'musiki:reveal-remote-pointer',
+          event: {
+            active: message.active,
+            kind: message.kind,
+            x: message.x,
+            y: message.y,
+          },
+        });
         return;
       }
 
@@ -12774,12 +12837,27 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       const panel = btn.closest('[data-panel]');
       if (panel instanceof HTMLElement) {
         const panelType = panel.dataset.panel;
-        if (panelType === 'concept' || panelType === 'whiteboard') {
-            // If it's a secondary panel, just close it by going back to presentation or grid
-            setLayout(stage, 'presentation');
-        } else {
-            setOverlayLayout(stage, null);
+        if (!panelType) return;
+
+        const isOverlayPanel = normalizeText(stage.dataset.layoutOverlay) === panelType;
+        const isBasePanel = normalizeText(stage.dataset.layout) === panelType;
+        const isSplitPanel =
+          normalizeText(stage.dataset.layout) === 'split' &&
+          (normalizeText(stage.dataset.layoutSplitLeft) === panelType ||
+            normalizeText(stage.dataset.layoutSplitRight) === panelType);
+
+        if (isOverlayPanel) {
+          applyStageOverlayLayout(null, true);
+          return;
         }
+
+        if (isBasePanel || isSplitPanel) {
+          layoutInput.value = 'presentation';
+          layoutInput.dispatchEvent(new Event('change', { bubbles: true }));
+          return;
+        }
+
+        applyStageOverlayLayout(null, false);
       }
     });
   });
@@ -13248,7 +13326,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     if (normalizedCommand.startsWith('layout-overlay:')) {
       const overlay = normalizedCommand.split(':')[1] as LayoutMode;
-      setOverlayLayout(stage, overlay);
+      applyStageOverlayLayout(overlay, true);
       return;
     }
 
@@ -13319,11 +13397,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const isModifierKey = isMac ? event.ctrlKey : (event.metaKey || event.ctrlKey);
+    const isPrimaryShortcutModifier = event.ctrlKey && !event.metaKey;
 
     const isRightSidebarShortcut =
-      isModifierKey &&
+      isPrimaryShortcutModifier &&
       event.shiftKey &&
       !event.altKey &&
       (event.code === 'Backslash' || event.key === '?' || event.key === '/');
@@ -13335,7 +13412,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     const isLeftSidebarShortcut =
-      isModifierKey &&
+      isPrimaryShortcutModifier &&
       !event.shiftKey &&
       !event.altKey &&
       event.code === 'Backslash';
@@ -13348,62 +13425,44 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     if (ignoreShortcutTarget) return;
 
-    if (isModifierKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'j') {
-      event.preventDefault();
-      executeRoomShortcutCommand('toggle-connect');
-      return;
-    }
-
-    if (isModifierKey && event.shiftKey && !event.altKey) {
+    if (isPrimaryShortcutModifier && !event.shiftKey && !event.altKey) {
       const key = String(event.key || '').toLowerCase();
-      if (key === 'f') {
-        event.preventDefault();
-        executeRoomShortcutCommand('toggle-fullscreen');
-        return;
-      }
-      if (key === 'i') {
-        event.preventDefault();
-        executeRoomShortcutCommand('copy-invite-link');
-        return;
-      }
-      if (key === 'v') {
-        event.preventDefault();
-        executeRoomShortcutCommand('toggle-camera');
-        return;
-      }
-      if (key === 'n') {
-        event.preventDefault();
-        executeRoomShortcutCommand('cycle-camera');
-        return;
-      }
-    }
-
-    if (isModifierKey && event.altKey && !event.shiftKey) {
-      const key = String(event.key || '').toLowerCase();
-      if (key === 'g') {
-        event.preventDefault();
-        postToPresentation({ type: 'musiki:reveal-toggle-jump-to-slide' });
-        return;
-      }
-      const altCommandMap: Record<string, string> = {
-        '1': 'layout-full',
-        '2': 'layout-share',
-        '3': 'layout-presentation',
-        '4': 'layout-grid',
-        '5': 'toggle-circle',
-        '6': 'toggle-invert-video',
-        '7': 'open-delegate-session',
+      const primaryCommandMap: Record<string, string> = {
+        b: 'break-rooms-toggle',
         c: 'focus-chat',
+        e: 'layout-overlay:media',
+        f: 'layout-full',
+        g: 'layout-grid',
+        h: 'toggle-hand',
+        i: 'instruments-toggle',
+        j: 'toggle-connect',
         k: 'session-kick-toggle',
         m: 'mute-all',
+        o: 'layout-overlay:concept',
+        p: 'layout-presentation',
+        s: 'layout-share',
+        z: 'layout-overlay:whiteboard',
+      };
+      const command = primaryCommandMap[key];
+      if (command) {
+        if (key === 'c' && hasSelectedRoomText()) return;
+        event.preventDefault();
+        executeRoomShortcutCommand(command);
+        return;
+      }
+    }
+
+    if (isPrimaryShortcutModifier && event.shiftKey && !event.altKey) {
+      const key = String(event.key || '').toLowerCase();
+      const utilityCommandMap: Record<string, string> = {
+        i: 'copy-invite-link',
         n: 'cycle-camera',
         r: 'toggle-record',
         s: 'share-screen',
         t: 'stage-screenshot',
         v: 'toggle-camera',
-        y: 'toggle-hand',
       };
-      const command = altCommandMap[key];
+      const command = utilityCommandMap[key];
       if (command) {
         event.preventDefault();
         executeRoomShortcutCommand(command);
@@ -13425,76 +13484,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (event.shiftKey && event.key === '?') {
       event.preventDefault();
       executeRoomShortcutCommand('open-search');
-      return;
-    }
-
-    const plainKey = String(event.key || '').toLowerCase();
-
-    // Direct Bottom Bar Shortcuts (Zoom/Meet style)
-    if (plainKey === 'f') {
-      event.preventDefault();
-      executeRoomShortcutCommand('layout-full');
-      return;
-    }
-    if (plainKey === 'm') {
-      if (canLeadSession()) {
-        event.preventDefault();
-        executeRoomShortcutCommand('mute-all');
-      } else {
-        event.preventDefault();
-        executeRoomShortcutCommand('toggle-hand');
-      }
-      return;
-    }
-    if (plainKey === 'i') {
-      event.preventDefault();
-      executeRoomShortcutCommand('instruments-toggle');
-      return;
-    }
-    if (plainKey === 's') {
-      event.preventDefault();
-      executeRoomShortcutCommand('share-screen');
-      return;
-    }
-    if (plainKey === 'p') {
-      event.preventDefault();
-      executeRoomShortcutCommand('layout-presentation');
-      return;
-    }
-    if (plainKey === 'g') {
-      event.preventDefault();
-      executeRoomShortcutCommand('layout-grid');
-      return;
-    }
-    if (plainKey === 'z') {
-      event.preventDefault();
-      executeRoomShortcutCommand('layout-overlay:whiteboard');
-      return;
-    }
-    if (plainKey === 'o') {
-      event.preventDefault();
-      executeRoomShortcutCommand('layout-overlay:concept');
-      return;
-    }
-    if (plainKey === 'c') {
-      event.preventDefault();
-      executeRoomShortcutCommand('focus-chat');
-      return;
-    }
-    if (plainKey === 'e') {
-      event.preventDefault();
-      executeRoomShortcutCommand('layout-overlay:media');
-      return;
-    }
-    if (plainKey === 'b') {
-      event.preventDefault();
-      executeRoomShortcutCommand('break-rooms-toggle');
-      return;
-    }
-
-    if (plainKey === 'h') {
-      event.preventDefault();
-      executeRoomShortcutCommand('toggle-hand');
       return;
     }
 
