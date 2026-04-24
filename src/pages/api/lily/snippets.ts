@@ -21,7 +21,7 @@ export const GET: APIRoute = async () => {
     ensureSnippetsDir();
     const files = fs.readdirSync(SNIPPETS_DIR);
     const snippets = files
-      .filter((file) => file.endsWith('.ly') || file.endsWith('.txt'))
+      .filter((file) => file.endsWith('.ly') || file.endsWith('.txt') || file.endsWith('.md'))
       .sort();
     return json({ snippets });
   } catch (error: any) {
@@ -43,10 +43,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (!name) return json({ error: 'Name is required' }, 400);
 
-    // Sanitize filename
-    name = name.replace(/[^a-zA-Z0-9_-]/g, '-');
-    if (!name.endsWith('.ly') && !name.endsWith('.txt')) {
-      name += '.ly';
+    // Sanitize filename but preserve dots for extensions
+    const ext = path.extname(name).toLowerCase();
+    const base = path.basename(name, ext).replace(/[^a-zA-Z0-9_.-]/g, '-');
+    
+    if (ext === '.md' || ext === '.ly' || ext === '.txt') {
+      name = base + ext;
+    } else {
+      name = base + '.md';
     }
 
     ensureSnippetsDir();

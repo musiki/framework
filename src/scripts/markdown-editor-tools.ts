@@ -22,6 +22,7 @@ type EnhanceMarkdownTextareaOptions = {
   inputClassName?: string;
   dropLabel?: string;
   useCodeMirror?: boolean;
+  templateOverrides?: Record<string, string>;
 };
 
 const CURSOR_TOKEN = '<cursor here>';
@@ -358,7 +359,12 @@ function createTemplateButton(
   templateKey: keyof typeof TEMPLATES,
   options: EnhanceMarkdownTextareaOptions,
 ) {
-  const template = TEMPLATES[templateKey];
+  const template = { ...TEMPLATES[templateKey] };
+  if (options.templateOverrides && options.templateOverrides[templateKey]) {
+    template.snippet = options.templateOverrides[templateKey];
+    // If it's a custom snippet, we might not have the cursor token in the same place, 
+    // but the user can include it if they want.
+  }
   const button = document.createElement('button');
   button.type = 'button';
   button.className = options.buttonClassName || DEFAULT_BUTTON_CLASS_NAME;

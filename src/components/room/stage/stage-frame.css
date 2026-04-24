@@ -1353,11 +1353,11 @@
 
 .conference-lilypond-toggle {
   position: absolute;
-  top: 0.65rem;
-  left: 0.65rem;
+  top: 0.5rem;
+  left: 0.5rem;
   z-index: 25;
-  width: 1.62rem;
-  height: 1.62rem;
+  width: 1.45rem;
+  height: 1.45rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1377,12 +1377,13 @@
 }
 
 .conference-lilypond-toggle svg {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
 .conference-lilypond-layout[data-editor-visible="false"] .conference-lilypond-toggle {
   left: 0.65rem;
+  top: 0.65rem;
 }
 
 .conference-lilypond-layout[data-editor-visible="false"] .conference-lilypond-editor {
@@ -1403,16 +1404,40 @@
   background:
     linear-gradient(180deg, rgba(13, 13, 15, 0.98), rgba(4, 4, 6, 0.98));
   backdrop-filter: blur(8px);
-  padding-top: 2.8rem; /* Space for the toggle button */
   /* Force dark mode variables for CodeMirror host */
   --c-bg-mute: transparent;
   --c-fg: #cdd6f4;
   --c-border: rgba(255, 255, 255, 0.08);
+  
+  /* Container for internal toolbar responsiveness */
+  container-type: inline-size;
+  container-name: lily-editor;
+}
+
+@container lily-editor (max-width: 450px) {
+  .conference-lilypond-toolbar {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
+  }
+  
+  .conference-lilypond-file-manager {
+    width: 100%;
+  }
+
+  .conference-lilypond-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
 }
 
 .conference-lilypond-editor .musiki-codemirror-host {
   background: transparent !important;
   border: none !important;
+  height: 100%;
+}
+
+.conference-lilypond-editor .cm-editor {
+  padding-top: 0;
 }
 
 .conference-lilypond-editor .cm-selectionBackground,
@@ -1428,7 +1453,7 @@
 
 /* Ensure the MIDI player and blocks respect dark theme/accent colors */
 .lilypond-block.is-hydrated-player {
-  background: rgba(0, 0, 0, 0.18) !important;
+  background: transparent !important;
   border-radius: 0.5rem;
   padding: 0.8rem;
   border: none !important;
@@ -1610,6 +1635,8 @@
 
 .conference-lilypond-toolbar {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 0.6rem;
   padding: 0.7rem 0.8rem 0.8rem;
   margin-top: auto;
@@ -1627,99 +1654,90 @@
   backdrop-filter: blur(12px);
 }
 
-.conference-lilypond-toolbar-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.4rem;
+.conference-lilypond-file-manager {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.conference-lilypond-field {
-  display: grid;
-  gap: 0.35rem;
+.conference-lilypond-combobox {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.conference-lilypond-field-label {
-  color: rgba(235, 240, 246, 0.58);
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.conference-lilypond-input {
+.conference-lilypond-combobox-input {
   width: 100%;
-  min-height: 2.4rem;
-  padding: 0 0.8rem;
+  min-height: 2rem;
+  padding: 0 0.7rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.55rem;
+  border-radius: 0.4rem;
   background: rgba(255, 255, 255, 0.04);
   color: var(--conference-fg-hi);
-  font: inherit;
-}
-
-.conference-lilypond-input--compact {
-  min-height: 1.8rem;
   font-size: 0.82rem;
-  padding: 0 0.6rem;
-}
-
-.conference-lilypond-input::placeholder {
-  color: rgba(235, 240, 246, 0.34);
-}
-
-.conference-lilypond-input:focus {
+  font-family: inherit;
   outline: none;
+  transition: all 0.14s ease;
+}
+
+.conference-lilypond-combobox-input:focus {
   border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
-.conference-lilypond-library-list {
-  display: grid;
-  gap: 0.3rem;
-  max-height: 7.2rem;
-  padding: 0.1rem;
-  overflow: auto;
+.conference-lilypond-combobox-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 0.4rem;
+  padding: 0.3rem;
+  list-style: none;
+  max-height: 12rem;
+  overflow-y: auto;
+  background: rgba(15, 15, 18, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.5rem;
+  backdrop-filter: blur(16px);
+  z-index: 50;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
 }
 
-.conference-lilypond-library-item,
-.conference-lilypond-library-empty {
-  min-height: 1.8rem;
-  border-radius: 0.4rem;
+.conference-lilypond-combobox-menu[hidden] {
+  display: none;
 }
 
-.conference-lilypond-library-item {
-  width: 100%;
-  padding: 0 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  color: rgba(235, 240, 246, 0.84);
-  text-align: left;
-  font: inherit;
-  font-size: 0.82rem;
+.conference-lilypond-combobox-item {
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: rgba(235, 240, 246, 0.82);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: all 0.1s ease;
 }
 
-.conference-lilypond-library-item:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.conference-lilypond-library-item[data-active="true"] {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.1);
+.conference-lilypond-combobox-item:hover,
+.conference-lilypond-combobox-item:focus {
+  background: rgba(255, 255, 255, 0.08);
   color: var(--conference-fg-hi);
+  outline: none;
 }
 
-.conference-lilypond-library-empty {
-  display: grid;
-  place-items: center;
-  padding: 0.55rem 0.8rem;
-  color: rgba(235, 240, 246, 0.46);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px dashed rgba(255, 255, 255, 0.08);
-  font-size: 0.72rem;
+.conference-lilypond-combobox-item--active {
+  background: rgba(118, 211, 255, 0.12);
+  color: var(--conference-accent-hi);
+}
+
+.conference-lilypond-combobox-empty {
+  padding: 0.7rem;
+  font-size: 0.78rem;
+  color: var(--conference-muted);
+  text-align: center;
 }
 
 .conference-lilypond-actions {
@@ -1831,7 +1849,6 @@
 .conference-lilypond-render-target :where(svg:not(.lily-miniplayer-btn svg)) line,
 .conference-lilypond-render-target :where(svg:not(.lily-miniplayer-btn svg)) polyline {
   stroke: #cdd6f4 !important;
-  fill: none !important;
 }
 
 .conference-lilypond-render-target :where(svg:not(.lily-miniplayer-btn svg)) .is-active-note,
@@ -1994,16 +2011,25 @@
 
 @media (max-width: 980px) {
   .conference-lilypond-layout {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(20rem, 48vh) minmax(0, 1fr);
+    grid-template-columns: 1fr !important;
+    grid-template-rows: minmax(18rem, 45vh) minmax(0, 1fr) !important;
   }
 
-  .conference-lilypond-layout[data-editor-visible="false"] {
-    grid-template-rows: minmax(0, 1fr);
+  .conference-lilypond-preview {
+    grid-row: 1;
   }
 
   .conference-lilypond-editor {
+    grid-row: 2;
     border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .conference-lilypond-resizer {
+    display: none !important;
+  }
+
+  .conference-lilypond-layout[data-editor-visible="false"] {
+    grid-template-rows: 1fr !important;
   }
 }

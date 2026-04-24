@@ -134,6 +134,7 @@ export type ConferenceMessage =
       body: string;
       url?: string;
       midiUrl?: string;
+      pdfUrl?: string;
     }
   | {
       type: 'lilypond-setup';
@@ -536,12 +537,16 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       const midiUrl = typeof (parsed as { midiUrl?: string }).midiUrl === 'string'
         ? (parsed as { midiUrl: string }).midiUrl
         : undefined;
+      const pdfUrl = typeof (parsed as { pdfUrl?: string }).pdfUrl === 'string'
+        ? (parsed as { pdfUrl: string }).pdfUrl
+        : undefined;
 
       return {
         type: 'lilypond-render',
         body,
         url,
         midiUrl,
+        pdfUrl,
       };
     }
 

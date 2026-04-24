@@ -128,43 +128,35 @@
           placeholder="Escribe markdown, ```mermaid o ```lilypond…"
         ></textarea>
         <div class="conference-lilypond-toolbar" data-lilypond-toolbar>
-          <div class="conference-lilypond-toolbar-row">
-            <input
-              type="search"
-              class="conference-lilypond-input conference-lilypond-input--compact"
-              data-lilypond-library-search
-              placeholder="Biblioteca…"
-              autocomplete="off"
-            />
-            <input
-              type="text"
-              data-lilypond-filename
-              class="conference-lilypond-input conference-lilypond-input--compact"
-              placeholder="Archivo.ly"
-              autocomplete="off"
-            />
+          <div class="conference-lilypond-file-manager">
+            <div class="conference-lilypond-combobox" data-lilypond-combobox>
+              <input
+                type="text"
+                class="conference-lilypond-combobox-input"
+                data-lilypond-combobox-input
+                placeholder="Buscar o nombrar archivo…"
+                autocomplete="off"
+              />
+              <ul class="conference-lilypond-combobox-menu" data-lilypond-combobox-menu hidden></ul>
+            </div>
           </div>
 
-          <div
-            class="conference-lilypond-library-list"
-            data-lilypond-library-list
-            aria-live="polite"
-          ></div>
-
           <div class="conference-lilypond-actions" data-lilypond-actions>
-            <button type="button" class="conference-lilypond-action" data-lilypond-new title="Nuevo / limpiar">N</button>
+            <button type="button" class="conference-lilypond-action" data-lilypond-new title="Nuevo documento">N</button>
             <button
               type="button"
               class="conference-lilypond-action conference-lilypond-action--accent"
               data-lilypond-save
               title="Render y transmitir (Cmd/Ctrl + Enter)"
             >R</button>
-            <button type="button" class="conference-lilypond-action" data-lilypond-btn-save title="Guardar snippet">S</button>
+            <button type="button" class="conference-lilypond-action" data-lilypond-btn-save title="Guardar archivo">S</button>
+            <button type="button" class="conference-lilypond-action" data-lilypond-btn-midi title="Descargar MIDI">MIDI</button>
+            <button type="button" class="conference-lilypond-action" data-lilypond-btn-pdf title="Descargar PDF">PDF</button>
             <button
               type="button"
               class="conference-lilypond-action conference-lilypond-action--danger"
               data-lilypond-btn-erase
-              title="Borrar snippet"
+              title="Eliminar archivo"
             >D</button>
           </div>
         </div>

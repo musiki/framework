@@ -19,6 +19,7 @@ type MarkdownPreviewWindow = Window & {
 type LilyRenderResult = {
   midiUrl: string;
   url: string;
+  pdfUrl: string;
 };
 
 const escapeHtml = (value: string) =>
@@ -29,6 +30,17 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+const looksLikePlainLilySource = (value: string) => {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized.includes('```')) return false;
+  return (
+    normalized.includes('\\score') ||
+    normalized.includes('\\relative') ||
+    normalized.includes('\\version') ||
+    normalized.includes('\\new Staff')
+  );
+};
+
 type LilyTransportMessage = Extract<
   ConferenceMessage,
   { type: 'lilypond-live' | 'lilypond-render' | 'lilypond-setup' }
@@ -38,14 +50,19 @@ export class LilyPondLiveController {
   private bodyInput: HTMLTextAreaElement | null = null;
   private btnEraseActual: HTMLButtonElement | null = null;
   private btnSaveActual: HTMLButtonElement | null = null;
+  private btnDownloadMidi: HTMLButtonElement | null = null;
+  private btnDownloadPdf: HTMLButtonElement | null = null;
   private editorBinding: MarkdownCodeMirrorBinding | null = null;
   private hasRenderedPreviewSnapshot = false;
-  private inputFilename: HTMLInputElement | null = null;
   private isTeacher = false;
   private allowStudents = false;
-  private libraryListEl: HTMLElement | null = null;
-  private librarySearchInput: HTMLInputElement | null = null;
+
+  // Combobox elements
+  private comboboxInput: HTMLInputElement | null = null;
+  private comboboxMenu: HTMLElement | null = null;
+
   private lilyRenderCache = new Map<string, Promise<LilyRenderResult | null>>();
+  private lilypondTemplateOverride: string | null = null;
   private liveSyncTimer: number | null = null;
   private liveSyncNeedsBody = false;
   private lastRenderedBody = '';
@@ -58,6 +75,8 @@ export class LilyPondLiveController {
   private snippets: string[] = [];
   private stopEditorSync: (() => void) | null = null;
   private suppressLivePublish = false;
+  private currentFilename = '';
+  private lastLilySource = '';
 
   private remoteCursors = new Map<string, RemoteCursorState>();
   private remoteCursorTimeout = new Map<string, number>();
@@ -80,13 +99,20 @@ export class LilyPondLiveController {
     this.newBtn = container.querySelector('[data-lilypond-new]');
     this.btnSaveActual = container.querySelector('[data-lilypond-btn-save]');
     this.btnEraseActual = container.querySelector('[data-lilypond-btn-erase]');
-    this.inputFilename = container.querySelector('[data-lilypond-filename]');
-    this.librarySearchInput = container.querySelector('[data-lilypond-library-search]');
-    this.libraryListEl = container.querySelector('[data-lilypond-library-list]');
+    this.btnDownloadMidi = container.querySelector('[data-lilypond-btn-midi]');
+    this.btnDownloadPdf = container.querySelector('[data-lilypond-btn-pdf]');
+
+    this.comboboxInput = container.querySelector('[data-lilypond-combobox-input]');
+    this.comboboxMenu = container.querySelector('[data-lilypond-combobox-menu]');
 
     const editorEl = container.querySelector<HTMLElement>('.conference-lilypond-editor');
     const layoutEl = container.querySelector<HTMLElement>('.conference-lilypond-layout');
     const toggleBtn = container.querySelector<HTMLElement>('[data-lilypond-toggle-editor]');
+
+    // Prevent form submission
+    container.querySelector('[data-lilypond-form]')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+    });
 
     // Collaboration toggle button for teacher
     const actionsContainer = container.querySelector('[data-lilypond-actions]');
@@ -96,8 +122,9 @@ export class LilyPondLiveController {
       collabBtn.className = 'conference-lilypond-action';
       collabBtn.dataset.lilypondCollab = 'true';
       collabBtn.title = 'Permitir a estudiantes editar (Actualmente desactivado)';
-      collabBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5ZM1.5 14.5c0-2 1.5-3.5 3.5-3.5h1c2 0 3.5 1.5 3.5 3.5M10.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z"/></svg>';
-      
+      collabBtn.innerHTML =
+        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5ZM1.5 14.5c0-2 1.5-3.5 3.5-3.5h1c2 0 3.5 1.5 3.5 3.5M10.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z"/></svg>';
+
       const updateCollabBtnUI = () => {
         if (this.allowStudents) {
           collabBtn.classList.add('conference-lilypond-action--active');
@@ -108,7 +135,8 @@ export class LilyPondLiveController {
         }
       };
 
-      collabBtn.addEventListener('click', () => {
+      collabBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         this.allowStudents = !this.allowStudents;
         updateCollabBtnUI();
         this.updateSetup(this.allowStudents);
@@ -122,7 +150,8 @@ export class LilyPondLiveController {
     if (toggleBtn && layoutEl) {
       const newToggleBtn = toggleBtn.cloneNode(true) as HTMLElement;
       toggleBtn.replaceWith(newToggleBtn);
-      newToggleBtn.addEventListener('click', () => {
+      newToggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         const isVisible = layoutEl.dataset.editorVisible === 'true';
         layoutEl.dataset.editorVisible = (!isVisible).toString();
       });
@@ -140,45 +169,81 @@ export class LilyPondLiveController {
 
     if (this.bodyInput) {
       this.bodyInput.readOnly = !canEdit;
-      
+
       if (this.editorBinding) {
         this.editorBinding.destroy();
       }
-      
-      // Clear datasets to allow re-enhancement
-      delete this.bodyInput.dataset.markdownEditorEnhanced;
-      delete this.bodyInput.dataset.markdownCodeMirrorEnhanced;
-      delete this.bodyInput.dataset.markdownEditorActionsEnhanced;
 
-      this.editorBinding = enhanceMarkdownTextarea(this.bodyInput, {
-        actionsContainer: this.canEdit()
-          ? container.querySelector<HTMLElement>('[data-lilypond-actions]')
-          : null,
-        status: this.reportStatus,
-        buttonClassName: 'conference-lilypond-action conference-lilypond-action--icon',
-        actionSpacerClassName: 'conference-lilypond-action-spacer',
-        dropzoneClassName: 'conference-lilypond-dropzone',
-        dropzoneOverlayClassName: 'conference-lilypond-dropzone-overlay',
-        dropzoneLabelClassName: 'conference-lilypond-dropzone-label',
-        inputClassName: 'conference-lilypond-editor-input',
-        dropLabel: 'Soltar archivo',
-        useCodeMirror: true,
-      }) ?? null;
-      
-      this.editorBinding?.setEditable(canEdit);
+      const setupEditor = () => {
+        if (!this.bodyInput) return;
 
-      const unsubscribe = this.editorBinding?.onChange((snapshot) => {
-        if (this.suppressLivePublish) return;
-        if (!snapshot.docChanged && !snapshot.selectionChanged) return;
-        if (snapshot.docChanged) this.liveSyncNeedsBody = true;
-        this.scheduleLiveSync();
-      }) || (() => {});
+        // DESTROY existing binding before creating a new one to prevent duplication
+        if (this.editorBinding) {
+          this.editorBinding.destroy();
+          this.editorBinding = null;
+        }
 
-      this.stopEditorSync = () => {
-        unsubscribe();
-        this.editorBinding?.destroy();
-        this.editorBinding = null;
+        // Clear action buttons from the toolbar to prevent duplication
+        const actions = container.querySelector<HTMLElement>('[data-lilypond-actions]');
+        if (actions) {
+          // Remove only the injected template/upload buttons, preserving manual ones like RENDER/SAVE
+          actions
+            .querySelectorAll('.conference-lilypond-action--icon, .conference-lilypond-action-spacer')
+            .forEach((el) => el.remove());
+          // Also remove any hidden file inputs created by enhanceMarkdownTextarea
+          actions.querySelectorAll('input[type="file"]').forEach((el) => el.remove());
+        }
+
+        // Clear datasets to allow re-enhancement
+        delete this.bodyInput.dataset.markdownEditorEnhanced;
+        delete this.bodyInput.dataset.markdownCodeMirrorEnhanced;
+        delete this.bodyInput.dataset.markdownEditorActionsEnhanced;
+
+        this.editorBinding =
+          enhanceMarkdownTextarea(this.bodyInput, {
+            actionsContainer: this.canEdit() ? actions : null,
+            status: this.reportStatus,
+            buttonClassName: 'conference-lilypond-action conference-lilypond-action--icon',
+            actionSpacerClassName: 'conference-lilypond-action-spacer',
+            dropzoneClassName: 'conference-lilypond-dropzone',
+            dropzoneOverlayClassName: 'conference-lilypond-dropzone-overlay',
+            dropzoneLabelClassName: 'conference-lilypond-dropzone-label',
+            inputClassName: 'conference-lilypond-editor-input',
+            dropLabel: 'Soltar archivo',
+            useCodeMirror: true,
+            templateOverrides: this.lilypondTemplateOverride
+              ? {
+                  lilypond: this.lilypondTemplateOverride,
+                }
+              : undefined,
+          }) ?? null;
+
+        this.editorBinding?.setEditable(this.canEdit());
+
+        const unsubscribe =
+          this.editorBinding?.onChange((snapshot) => {
+            if (this.suppressLivePublish) return;
+            if (!snapshot.docChanged && !snapshot.selectionChanged) return;
+            if (snapshot.docChanged) this.liveSyncNeedsBody = true;
+            this.scheduleLiveSync();
+          }) || (() => {});
+
+        this.stopEditorSync = () => {
+          unsubscribe();
+          if (this.editorBinding) {
+            this.editorBinding.destroy();
+            this.editorBinding = null;
+          }
+        };
       };
+
+      // Initial setup
+      setupEditor();
+
+      // Try to load default.ly and refresh if found
+      void this.loadDefaultTemplate().then((found) => {
+        if (found) setupEditor();
+      });
 
       this.bodyInput.addEventListener('input', () => {
         if (this.suppressLivePublish) return;
@@ -205,10 +270,15 @@ export class LilyPondLiveController {
     }
 
     if (this.newBtn) {
-      this.newBtn.addEventListener('click', () => {
+      const newNewBtn = this.newBtn.cloneNode(true) as HTMLButtonElement;
+      this.newBtn.replaceWith(newNewBtn);
+      this.newBtn = newNewBtn;
+      this.newBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         if (!this.canEdit()) return;
         this.setBodyValue('');
-        if (this.inputFilename) this.inputFilename.value = '';
+        this.currentFilename = '';
+        if (this.comboboxInput) this.comboboxInput.value = '';
         this.liveSyncNeedsBody = true;
         this.publishLiveSync(true);
       });
@@ -217,7 +287,10 @@ export class LilyPondLiveController {
     const btnRender = container.querySelector('[data-lilypond-save]');
     if (btnRender) {
       if (this.isTeacher) {
-        btnRender.addEventListener('click', () => {
+        const newRenderBtn = btnRender.cloneNode(true) as HTMLButtonElement;
+        btnRender.replaceWith(newRenderBtn);
+        newRenderBtn.addEventListener('click', (e) => {
+          e.preventDefault();
           void this.publishRender();
         });
       } else {
@@ -226,25 +299,118 @@ export class LilyPondLiveController {
     }
 
     if (this.btnSaveActual) {
-      this.btnSaveActual.addEventListener('click', () => {
+      const newSaveBtn = this.btnSaveActual.cloneNode(true) as HTMLButtonElement;
+      this.btnSaveActual.replaceWith(newSaveBtn);
+      this.btnSaveActual = newSaveBtn;
+      this.btnSaveActual.addEventListener('click', (e) => {
+        e.preventDefault();
         if (!this.canEdit()) return;
-        this.saveCurrentSnippetLocally();
+        void this.saveCurrentSnippetLocally();
       });
     }
 
     if (this.btnEraseActual) {
-      this.btnEraseActual.addEventListener('click', () => {
+      const newEraseBtn = this.btnEraseActual.cloneNode(true) as HTMLButtonElement;
+      this.btnEraseActual.replaceWith(newEraseBtn);
+      this.btnEraseActual = newEraseBtn;
+      this.btnEraseActual.addEventListener('click', (e) => {
+        e.preventDefault();
         if (!this.canEdit()) return;
-        this.eraseCurrentSnippetLocally();
+        void this.eraseCurrentSnippetLocally();
       });
     }
 
-    this.librarySearchInput?.addEventListener('input', () => {
-      this.renderSnippetResults();
+    if (this.btnDownloadMidi) {
+      this.btnDownloadMidi.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.downloadAsset('midi');
+      });
+    }
+
+    if (this.btnDownloadPdf) {
+      this.btnDownloadPdf.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.downloadAsset('pdf');
+      });
+    }
+
+    // Combobox Event Listeners
+    if (this.comboboxInput) {
+      this.comboboxInput.addEventListener('input', () => {
+        this.currentFilename = this.comboboxInput?.value || '';
+        this.renderComboboxMenu(this.currentFilename);
+      });
+      this.comboboxInput.addEventListener('focus', () => {
+        this.renderComboboxMenu(this.comboboxInput?.value || '');
+      });
+      // Handle Enter in combobox to prevent page reset
+      this.comboboxInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (this.comboboxMenu) this.comboboxMenu.hidden = true;
+        }
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (
+        this.comboboxMenu &&
+        !container.querySelector('[data-lilypond-combobox]')?.contains(e.target as Node)
+      ) {
+        this.comboboxMenu.hidden = true;
+      }
     });
 
     this.initResizer(container);
     this.clearPreview();
+    this.updateDownloadButtons();
+  }
+
+  private updateDownloadButtons() {
+    if (this.btnDownloadMidi) {
+      this.btnDownloadMidi.disabled = !this.lastRenderResult?.midiUrl;
+      this.btnDownloadMidi.style.opacity = this.btnDownloadMidi.disabled ? '0.3' : '1';
+    }
+    if (this.btnDownloadPdf) {
+      // PDF can be generated on demand if we have source
+      this.btnDownloadPdf.disabled = !this.lastLilySource;
+      this.btnDownloadPdf.style.opacity = this.btnDownloadPdf.disabled ? '0.3' : '1';
+    }
+  }
+
+  private async downloadAsset(kind: 'midi' | 'pdf') {
+    let url = kind === 'midi' ? this.lastRenderResult?.midiUrl : this.lastRenderResult?.pdfUrl;
+    
+    if (kind === 'pdf' && !url && this.lastLilySource) {
+      this.reportStatus('Generando PDF...');
+      try {
+        const response = await fetch('/api/lily/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: this.lastLilySource, format: 'pdf' }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && payload.url) {
+          url = payload.url;
+          if (this.lastRenderResult) this.lastRenderResult.pdfUrl = url;
+          this.reportStatus('PDF generado.');
+        } else {
+          throw new Error(payload.error || 'Error en servidor');
+        }
+      } catch (err: any) {
+        this.reportStatus(`No se pudo generar el PDF: ${err.message}`);
+        return;
+      }
+    }
+
+    if (!url) return;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${this.currentFilename || 'score'}.${kind === 'midi' ? 'mid' : 'pdf'}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   private initResizer(container: HTMLElement) {
@@ -266,11 +432,11 @@ export class LilyPondLiveController {
       const clientX = 'touches' in e ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
       const rect = layout.getBoundingClientRect();
       const offset = clientX - rect.left;
-      
+
       const minWidth = 120;
       const maxWidth = rect.width - 120;
       const width = Math.max(minWidth, Math.min(offset, maxWidth));
-      
+
       layout.style.setProperty('--lily-editor-width', `${width}px`);
     };
 
@@ -326,6 +492,7 @@ export class LilyPondLiveController {
       published: this.hasRenderedPreviewSnapshot,
       url: this.lastRenderResult?.url,
       midiUrl: this.lastRenderResult?.midiUrl,
+      pdfUrl: this.lastRenderResult?.pdfUrl,
     };
   }
 
@@ -369,22 +536,36 @@ export class LilyPondLiveController {
     }
   }
 
-  public handleIncomingRenderState(message: Extract<LilyTransportMessage, { type: 'lilypond-render' }>) {
+  public handleIncomingRenderState(
+    message: Extract<LilyTransportMessage, { type: 'lilypond-render' }>,
+  ) {
     this.hasRenderedPreviewSnapshot = true;
     this.lastRenderedBody = String(message.body || '');
+
+    // Extract lily source from incoming body for students to be able to download PDF
+    const body = this.lastRenderedBody;
+    if (looksLikePlainLilySource(body)) {
+      this.lastLilySource = body;
+    } else {
+      const match = body.match(/```lily(?:pond)?\n([\s\S]*?)```/);
+      this.lastLilySource = match ? match[1] : '';
+    }
 
     if (message.url) {
       const normalized = this.lastRenderedBody.replace(/\r\n?/g, '\n').trim();
       const result = {
         url: message.url,
         midiUrl: message.midiUrl || '',
+        pdfUrl: message.pdfUrl || '',
       };
       if (normalized) {
         this.lilyRenderCache.set(normalized, Promise.resolve(result));
       }
       this.lastRenderResult = result;
+      this.updateDownloadButtons();
     } else {
       this.lastRenderResult = null;
+      this.updateDownloadButtons();
     }
 
     void this.renderLocally(this.lastRenderedBody);
@@ -393,7 +574,7 @@ export class LilyPondLiveController {
   private setBodyValue(value: string) {
     if (!this.bodyInput) return;
     const nextValue = String(value || '');
-    
+
     // Crucial: avoid feedback loops
     this.suppressLivePublish = true;
 
@@ -408,7 +589,9 @@ export class LilyPondLiveController {
       }
     } finally {
       // Re-enable immediately since CodeMirror's update is synchronous
-      this.suppressLivePublish = false;
+      setTimeout(() => {
+        this.suppressLivePublish = false;
+      }, 50);
     }
   }
 
@@ -429,45 +612,44 @@ export class LilyPondLiveController {
     return { anchor, head };
   }
 
-  private getFilteredSnippets() {
-    const query = String(this.librarySearchInput?.value || '').trim().toLowerCase();
-    const source = [...this.snippets];
-    if (!query) return source.slice(0, 16);
+  private renderComboboxMenu(query = '') {
+    if (!this.comboboxMenu) return;
 
-    const exactMatches = source.filter((name) => name.toLowerCase().startsWith(query));
-    const partialMatches = source.filter(
-      (name) => !exactMatches.includes(name) && name.toLowerCase().includes(query),
-    );
-    return [...exactMatches, ...partialMatches].slice(0, 16);
-  }
+    const matches = this.snippets.filter((file) => file.toLowerCase().includes(query.toLowerCase()));
 
-  private renderSnippetResults() {
-    if (!(this.libraryListEl instanceof HTMLElement)) return;
-
-    this.libraryListEl.innerHTML = '';
-    const currentName = String(this.inputFilename?.value || '').trim();
-    const matches = this.getFilteredSnippets();
+    this.comboboxMenu.innerHTML = '';
 
     if (matches.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'conference-lilypond-library-empty';
-      empty.textContent = this.snippets.length > 0 ? 'No hay coincidencias.' : 'No hay snippets guardados.';
-      this.libraryListEl.appendChild(empty);
-      return;
+      const li = document.createElement('li');
+      li.className = 'conference-lilypond-combobox-empty';
+      li.textContent = 'Sin coincidencias.';
+      this.comboboxMenu.appendChild(li);
+    } else {
+      for (const file of matches) {
+        const li = document.createElement('li');
+        li.className = 'conference-lilypond-combobox-item';
+        if (file === this.currentFilename)
+          li.classList.add('conference-lilypond-combobox-item--active');
+        li.textContent = file;
+        li.tabIndex = 0;
+
+        li.addEventListener('click', (e) => {
+          e.preventDefault();
+          this.selectFile(file);
+        });
+
+        this.comboboxMenu.appendChild(li);
+      }
     }
 
-    matches.forEach((name) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'conference-lilypond-library-item';
-      button.dataset.active = currentName === name ? 'true' : 'false';
-      button.title = name;
-      button.textContent = name;
-      button.addEventListener('click', () => {
-        void this.loadSnippet(name);
-      });
-      this.libraryListEl?.appendChild(button);
-    });
+    this.comboboxMenu.hidden = false;
+  }
+
+  private selectFile(file: string) {
+    this.currentFilename = file;
+    if (this.comboboxInput) this.comboboxInput.value = file;
+    if (this.comboboxMenu) this.comboboxMenu.hidden = true;
+    void this.loadSnippet(file);
   }
 
   private async fetchSnippetsList() {
@@ -480,10 +662,26 @@ export class LilyPondLiveController {
             .map((name: unknown) => String(name || '').trim())
             .filter(Boolean)
         : [];
-      this.renderSnippetResults();
+      // No automatic render here, wait for interaction
     } catch {
-      this.renderSnippetResults();
+      // Ignore
     }
+  }
+
+  private async loadDefaultTemplate(): Promise<boolean> {
+    try {
+      const response = await fetch('/lily/snippets/default.ly');
+      if (response.ok) {
+        const code = await response.text();
+        if (code.trim()) {
+          this.lilypondTemplateOverride = `\`\`\`lily\n${code.trim()}\n\`\`\``;
+          return true;
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+    return false;
   }
 
   private async loadSnippet(name: string) {
@@ -493,31 +691,44 @@ export class LilyPondLiveController {
     try {
       const response = await fetch(`/lily/snippets/${encodeURIComponent(name)}`);
       if (!response.ok) {
-        this.reportStatus('No se pudo descargar el snippet.');
+        this.reportStatus('No se pudo descargar el archivo.');
         return;
       }
 
       const code = await response.text();
       this.setBodyValue(code);
-      if (this.inputFilename) this.inputFilename.value = name;
-      if (this.librarySearchInput) this.librarySearchInput.value = name;
-      this.renderSnippetResults();
+      this.currentFilename = name;
+      if (this.comboboxInput) this.comboboxInput.value = name;
+
       this.publishLiveSync(true);
-      this.reportStatus(`Snippet ${name} cargado.`);
+      // Trigger render after loading
+      void this.renderLocally(code);
+
+      this.reportStatus(`${name} cargado.`);
+
+      if (name === 'default.ly') {
+        this.lilypondTemplateOverride = `\`\`\`lily\n${code.trim()}\n\`\`\``;
+      }
     } catch (error: any) {
-      this.reportStatus(error?.message || 'Error descargando snippet.');
+      this.reportStatus(error?.message || 'Error descargando archivo.');
     }
   }
 
   private async saveCurrentSnippetLocally() {
-    const name = String(this.inputFilename?.value || '').trim();
+    let name = String(this.currentFilename || this.comboboxInput?.value || '').trim();
     const code = this.getCurrentBody();
+
     if (!name) {
       this.reportStatus('Un nombre de archivo es requerido.');
       return;
     }
 
-    this.reportStatus('Guardando snippet...');
+    // Ensure .md if no extension
+    if (!name.includes('.')) {
+      name += '.md';
+    }
+
+    this.reportStatus('Guardando...');
     try {
       const response = await fetch('/api/lily/snippets', {
         method: 'POST',
@@ -526,46 +737,54 @@ export class LilyPondLiveController {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        this.reportStatus(String(payload?.error || 'Error guardando snippet.'));
+        this.reportStatus(String(payload?.error || 'Error guardando.'));
         return;
       }
 
       const savedName = String(payload?.name || name).trim() || name;
-      if (this.inputFilename) this.inputFilename.value = savedName;
-      if (this.librarySearchInput) this.librarySearchInput.value = savedName;
+      this.currentFilename = savedName;
+      if (this.comboboxInput) this.comboboxInput.value = savedName;
+
       await this.fetchSnippetsList();
-      this.reportStatus(`Snippet ${savedName} guardado.`);
+      this.reportStatus(`${savedName} guardado.`);
+
+      if (savedName === 'default.ly') {
+        this.lilypondTemplateOverride = `\`\`\`lily\n${code.trim()}\n\`\`\``;
+      }
+
+      // TRIGGER RENDER AFTER SAVE as requested
+      void this.renderLocally(code);
     } catch (error: any) {
       this.reportStatus(error?.message || 'Error de red.');
     }
   }
 
   private async eraseCurrentSnippetLocally() {
-    const name = String(this.inputFilename?.value || '').trim();
+    const name = String(this.currentFilename || this.comboboxInput?.value || '').trim();
     if (!name) {
       this.reportStatus('Nombre de archivo vacío.');
       return;
     }
 
-    if (!window.confirm(`¿Borrar el snippet ${name}?`)) return;
+    if (!window.confirm(`¿Borrar el archivo ${name}?`)) return;
 
-    this.reportStatus('Borrando snippet...');
+    this.reportStatus('Borrando...');
     try {
       const response = await fetch(`/api/lily/snippets?name=${encodeURIComponent(name)}`, {
         method: 'DELETE',
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        this.reportStatus(String(payload?.error || 'Error borrando snippet.'));
+        this.reportStatus(String(payload?.error || 'Error borrando.'));
         return;
       }
 
-      if (this.inputFilename) this.inputFilename.value = '';
-      if (this.librarySearchInput) this.librarySearchInput.value = '';
+      this.currentFilename = '';
+      if (this.comboboxInput) this.comboboxInput.value = '';
       this.setBodyValue('');
       await this.fetchSnippetsList();
       this.publishLiveSync(true);
-      this.reportStatus(`Snippet ${name} borrado.`);
+      this.reportStatus(`${name} borrado.`);
     } catch (error: any) {
       this.reportStatus(error?.message || 'Error de red.');
     }
@@ -619,27 +838,14 @@ export class LilyPondLiveController {
     this.hasRenderedPreviewSnapshot = true;
     this.lastRenderedBody = body;
 
-    // Trigger local render first to get the result from cache or API
-    await this.renderLocally(body);
-
-    let finalUrl: string | undefined;
-    let finalMidiUrl: string | undefined;
-
-    if (this.previewEl) {
-      const figure = this.previewEl.querySelector('[data-lily-url]');
-      if (figure instanceof HTMLElement) {
-        finalUrl = figure.dataset.lilyUrl;
-        finalMidiUrl = figure.dataset.midiUrl;
-      }
-    }
-
-    this.lastRenderResult = finalUrl ? { url: finalUrl, midiUrl: finalMidiUrl || '' } : null;
+    const result = await this.renderLocally(body);
 
     this.onPublish({
       type: 'lilypond-render',
       body,
-      url: finalUrl,
-      midiUrl: finalMidiUrl,
+      url: result?.url,
+      midiUrl: result?.midiUrl,
+      pdfUrl: result?.pdfUrl,
     });
   }
 
@@ -673,8 +879,9 @@ export class LilyPondLiveController {
   }
 
   private runMermaidIn(container: HTMLElement) {
-    const nodes = Array.from(container.querySelectorAll<HTMLElement>('.mermaid'))
-      .filter((node) => node.dataset.mermaidRendered !== 'true');
+    const nodes = Array.from(container.querySelectorAll<HTMLElement>('.mermaid')).filter(
+      (node) => node.dataset.mermaidRendered !== 'true',
+    );
     if (nodes.length === 0) return;
 
     void this.loadMermaid().then((mermaid) => {
@@ -685,8 +892,8 @@ export class LilyPondLiveController {
           theme: 'dark',
           securityLevel: 'loose',
         });
-        mermaid.run({ 
-          nodes
+        mermaid.run({
+          nodes,
         });
         nodes.forEach((node) => {
           node.dataset.mermaidRendered = 'true';
@@ -720,24 +927,70 @@ export class LilyPondLiveController {
     }
   }
 
-  private async renderLocally(body: string) {
-    if (!(this.previewEl instanceof HTMLElement)) return;
+  private async requestLilyRender(source: string): Promise<LilyRenderResult | null> {
+    const normalized = String(source || '').replace(/\r\n?/g, '\n').trim();
+    if (!normalized) return null;
+    
+    if (this.lilyRenderCache.has(normalized)) {
+      return this.lilyRenderCache.get(normalized) ?? null;
+    }
+
+    const requestPromise = fetch('/api/lily/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: normalized }),
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const payload = await response.json().catch(() => null);
+        if (!payload || payload.success !== true || !payload.url) return null;
+        return {
+          midiUrl: String(payload.midiUrl || ''),
+          url: String(payload.url),
+          pdfUrl: String(payload.pdfUrl || ''),
+        } satisfies LilyRenderResult;
+      })
+      .catch(() => null);
+
+    this.lilyRenderCache.set(normalized, requestPromise);
+    return requestPromise;
+  }
+
+  private async renderLocally(body: string): Promise<LilyRenderResult | null> {
+    if (!(this.previewEl instanceof HTMLElement)) return null;
 
     const ticket = ++this.renderNonce;
     const source = String(body || '');
     if (!source.trim()) {
       this.previewEl.innerHTML = '';
       delete this.previewEl.dataset.loading;
-      return;
+      return null;
     }
 
     this.previewEl.dataset.loading = 'true';
 
     try {
+      // Find the first Lilypond block to extract metadata for download buttons
+      let firstLilySource = '';
+      if (looksLikePlainLilySource(source)) {
+        firstLilySource = source;
+      } else {
+        const match = source.match(/```lily(?:pond)?\n([\s\S]*?)```/);
+        if (match) firstLilySource = match[1];
+      }
+
+      const resultPromise = firstLilySource ? this.requestLilyRender(firstLilySource) : Promise.resolve(null);
+
+      // Main markdown render
+      let markdown = source;
+      if (looksLikePlainLilySource(source)) {
+        markdown = `\`\`\`lily\n${source}\n\`\`\``;
+      }
+
       const response = await fetch('/api/live/preview-markdown', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown: source }),
+        body: JSON.stringify({ markdown }),
       });
 
       if (!response.ok) {
@@ -746,21 +999,31 @@ export class LilyPondLiveController {
 
       const payload = await response.json().catch(() => ({}));
       const html = String(payload.html || '');
+      const result = await resultPromise;
+      this.lastLilySource = firstLilySource;
 
-      if (ticket !== this.renderNonce) return;
-      
+      if (ticket !== this.renderNonce) return result;
+
       this.previewEl.innerHTML = html;
       delete this.previewEl.dataset.loading;
-      
+
+      if (result) {
+        this.lastRenderResult = result;
+        this.updateDownloadButtons();
+      }
+
       this.runMermaidIn(this.previewEl);
       this.hydrateRenderedLilyBlocks(this.previewEl);
       this.runScriptsIn(this.previewEl);
+      
+      return result;
     } catch (error: any) {
-      if (ticket !== this.renderNonce) return;
+      if (ticket !== this.renderNonce) return null;
       delete this.previewEl.dataset.loading;
       this.previewEl.innerHTML = `<div class="conference-lilypond-render-error">${escapeHtml(
         error?.message || 'No se pudo renderizar el contenido.',
       )}</div>`;
+      return null;
     }
   }
 }

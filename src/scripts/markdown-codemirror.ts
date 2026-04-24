@@ -256,36 +256,36 @@ const markdownEditorTheme = EditorView.theme({
     color: 'color-mix(in srgb, currentColor 46%, transparent)',
   },
   '.cm-musiki-code-comment': {
-    color: '#7f9f7f',
+    color: '#75715e',
     fontStyle: 'italic',
   },
   '.cm-musiki-code-string': {
-    color: '#cc9393',
+    color: '#e6db74',
   },
   '.cm-musiki-code-command': {
-    color: '#2f6fbe',
+    color: '#f92672',
     fontWeight: '600',
   },
   '.cm-musiki-code-scheme': {
-    color: '#7a3fa1',
+    color: '#a6e22e',
     fontWeight: '600',
   },
   '.cm-musiki-code-number': {
-    color: '#8cd0d3',
+    color: '#ae81ff',
   },
   '.cm-musiki-code-note': {
-    color: '#1b7a5e',
+    color: '#66d9ef',
     fontWeight: '600',
   },
   '.cm-musiki-code-symbol': {
-    color: '#efdcbc',
+    color: '#fd971f',
     fontWeight: '600',
   },
   '.cm-musiki-code-brace': {
-    color: '#8f8f8f',
+    color: '#f8f8f2',
   },
   '.cm-musiki-code-fence': {
-    color: 'color-mix(in srgb, currentColor 62%, transparent)',
+    color: '#666666',
   },
   '.cm-musiki-remote-line': {
     backgroundColor: 'rgba(86, 196, 255, 0.055)',
@@ -411,7 +411,7 @@ function highlightLilyLine(lineStart: number, lineText: string) {
     spans,
     codeText,
     lineStart,
-    /##?[tf]\b|#'[A-Za-z][\w-]*|#:[A-Za-z][\w-]*/g,
+    /##?[tf]\b|#'[A-Za-z][\w-]*|#:[A-Za-z][\w-]*|#\(.*?\)/g,
     schemeDecoration,
     2,
   );
@@ -419,7 +419,7 @@ function highlightLilyLine(lineStart: number, lineText: string) {
     spans,
     codeText,
     lineStart,
-    /\b[a-g](?:es|is|eh|ih|s|f)?[,']*\d*\.?(?:\*[\d/]+)?\b/gi,
+    /\b(?:[a-g](?:es|is|eh|ih|s|f)?[,']*\d*\.?(?:\*[\d/]+)?|[rs])\b/gi,
     noteDecoration,
     3,
   );
