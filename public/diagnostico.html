@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Diagnóstico Musiki (Offline)</title>
+  <style>
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+    h1 { color: #f8fafc; font-size: 1.8rem; margin-bottom: 0.5rem; }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    pre {
+      background: #000;
+      color: #22c55e;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      font-family: monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 0.4rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-copy { background: #10b981; }
+    .info { font-size: 0.9rem; color: #94a3b8; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Diagnóstico de Conectividad</h1>
+  <p>Esta herramienta local ayuda a identificar por qué Google bloquea el acceso desde tu navegador.</p>
+
+  <div class="card">
+    <div id="status">Ejecutando pruebas...</div>
+    <pre id="out">Cargando datos...</pre>
+    <button class="btn btn-copy" id="copyBtn">Copiar Informe Completo</button>
+  </div>
+
+  <div class="info">
+    <strong>Nota:</strong> Si el informe muestra que las cookies están deshabilitadas, esa es la causa principal del bloqueo de Google.
+  </div>
+
+  <script>
+    async function test(url) {
+      const start = performance.now();
+      try {
+        await fetch(url, { mode: "no-cors", cache: 'no-store' });
+        return { url, status: "OK", time: Math.round(performance.now() - start) + "ms" };
+      } catch (e) {
+        return { url, status: "FAILED", error: String(e) };
+      }
+    }
+
+    (async () => {
+      const storage = {
+        cookies: navigator.cookieEnabled,
+        localStorage: false
+      };
+      try { localStorage.setItem('t','1'); localStorage.removeItem('t'); storage.localStorage = true; } catch(e){}
+
+      const results = {
+        meta: {
+          tool: "Musiki Diagnostic Standalone",
+          timestamp: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        },
+        browser: {
+          userAgent: navigator.userAgent,
+          language: navigator.language,
+          platform: navigator.platform,
+          storage: storage
+        },
+        network: [
+          await test("https://musiki.org.ar"),
+          await test("https://accounts.google.com"),
+          await test("https://www.googleapis.com"),
+          await test("https://1.1.1.1")
+        ]
+      };
+
+      const out = document.getElementById("out");
+      const json = JSON.stringify(results, null, 2);
+      out.textContent = json;
+      document.getElementById("status").textContent = "Pruebas finalizadas.";
+
+      document.getElementById("copyBtn").addEventListener("click", () => {
+        navigator.clipboard.writeText(json).then(() => {
+          alert("Informe copiado al portapapeles. Pégalo en tu respuesta de mail.");
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

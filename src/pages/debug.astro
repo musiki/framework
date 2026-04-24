@@ -1,0 +1,229 @@
+---
+import BaseHead from '../components/BaseHead.astro';
+import { SITE_TITLE } from '../consts';
+---
+
+<html lang="es">
+  <head>
+    <BaseHead title={`Diagnóstico | ${SITE_TITLE}`} description="Página de diagnóstico técnico para Musiki" />
+    <style>
+      main {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+        font-family: var(--font-family-body, system-ui, sans-serif);
+        line-height: 1.5;
+        color: var(--c-fg);
+      }
+      h1 {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+        color: var(--c-fg-hi);
+      }
+      .intro {
+        margin-bottom: 2rem;
+        color: var(--c-fg-dim);
+      }
+      .debug-card {
+        background: var(--c-bg-mute);
+        border: 1px solid var(--c-border);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+      pre {
+        background: #000;
+        color: #0f0;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        font-family: var(--font-family-mono, monospace);
+        font-size: 0.85rem;
+        margin: 1rem 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      button {
+        background: var(--c-accent);
+        color: #white;
+        border: none;
+        padding: 0.75rem 1.25rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+      button.secondary {
+        background: var(--c-border);
+        color: var(--c-fg-hi);
+      }
+      .status-tag {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-left: 0.5rem;
+      }
+      .status-ok { background: #059669; color: white; }
+      .status-err { background: #dc2626; color: white; }
+      .status-warn { background: #d97706; color: white; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Diagnóstico del Sistema</h1>
+      <p class="intro">
+        Esta página recopila información técnica para ayudar a resolver problemas de acceso. 
+        Por favor, copia los resultados y envíalos al equipo de soporte.
+      </p>
+
+      <div class="debug-card">
+        <h2 id="status-title">Ejecutando pruebas...</h2>
+        <pre id="out">Cargando...</pre>
+        
+        <div class="actions">
+          <button id="copy-btn">Copiar Informe</button>
+          <button id="retry-btn" class="secondary">Reintentar</button>
+        </div>
+      </div>
+
+      <div class="debug-card">
+        <h3>¿Qué significa el error de Google?</h3>
+        <p>
+          Si ves el mensaje <strong>"Esta aplicación está bloqueada"</strong>, suele deberse a:
+        </p>
+        <ul>
+          <li>Navegadores en modo incógnito con cookies de terceros bloqueadas.</li>
+          <li>Configuraciones de seguridad de cuentas de Workspace (institucionales) que restringen aplicaciones externas.</li>
+          <li>Uso de una cuenta de Google que no ha sido autorizada previamente (si la app está en modo testing).</li>
+        </ul>
+      </div>
+    </main>
+
+    <script>
+      async function testConnectivity(url) {
+        const start = performance.now();
+        try {
+          // Use no-cors to avoid CORS issues for simple reachability check
+          await fetch(url, { mode: "no-cors", cache: 'no-store' });
+          return {
+            url,
+            status: "REACHABLE",
+            timeMs: Math.round(performance.now() - start)
+          };
+        } catch (e) {
+          return {
+            url,
+            status: "ERROR",
+            error: String(e),
+            timeMs: Math.round(performance.now() - start)
+          };
+        }
+      }
+
+      async function runDiagnostics() {
+        const out = document.getElementById('out');
+        const title = document.getElementById('status-title');
+        if (!out) return;
+
+        out.textContent = "Ejecutando pruebas de conectividad...";
+
+        const storageStats = {
+          localStorage: false,
+          sessionStorage: false,
+          cookies: navigator.cookieEnabled
+        };
+
+        try {
+          localStorage.setItem('__debug_test', '1');
+          localStorage.removeItem('__debug_test');
+          storageStats.localStorage = true;
+        } catch(e) {}
+
+        try {
+          sessionStorage.setItem('__debug_test', '1');
+          sessionStorage.removeItem('__debug_test');
+          storageStats.sessionStorage = true;
+        } catch(e) {}
+
+        const connectivityTests = await Promise.all([
+          testConnectivity(window.location.origin),
+          testConnectivity("https://accounts.google.com/o/oauth2/auth"),
+          testConnectivity("https://www.googleapis.com/discovery/v1/apis"),
+          testConnectivity("https://1.1.1.1")
+        ]);
+
+        const results = {
+          timestamp: new Date().toISOString(),
+          app: {
+            url: window.location.href,
+            origin: window.location.origin
+          },
+          browser: {
+            userAgent: navigator.userAgent,
+            vendor: navigator.vendor,
+            language: navigator.language,
+            platform: navigator.platform,
+            cookieEnabled: navigator.cookieEnabled,
+            doNotTrack: navigator.doNotTrack
+          },
+          system: {
+            screen: `${window.screen.width}x${window.screen.height}`,
+            viewport: `${window.innerWidth}x${window.innerHeight}`,
+            devicePixelRatio: window.devicePixelRatio,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+          },
+          storage: storageStats,
+          connectivity: connectivityTests
+        };
+
+        const json = JSON.stringify(results, null, 2);
+        out.textContent = json;
+        title.textContent = "Informe de Diagnóstico Listo";
+        
+        return json;
+      }
+
+      let currentReport = "";
+
+      const init = async () => {
+        currentReport = await runDiagnostics();
+
+        document.getElementById('copy-btn')?.addEventListener('click', () => {
+          navigator.clipboard.writeText(currentReport).then(() => {
+            const btn = document.getElementById('copy-btn');
+            if (btn) {
+              const originalText = btn.textContent;
+              btn.textContent = "¡Copiado!";
+              btn.style.background = "#059669";
+              setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = "";
+              }, 2000);
+            }
+          });
+        });
+
+        document.getElementById('retry-btn')?.addEventListener('click', async () => {
+          const out = document.getElementById('out');
+          const title = document.getElementById('status-title');
+          if (out) out.textContent = "Reiniciando...";
+          if (title) title.textContent = "Ejecutando pruebas...";
+          currentReport = await runDiagnostics();
+        });
+      };
+
+      init();
+    </script>
+  </body>
+</html>

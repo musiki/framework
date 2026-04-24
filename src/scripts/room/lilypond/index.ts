@@ -397,20 +397,19 @@ export class LilyPondLiveController {
     // Crucial: avoid feedback loops
     this.suppressLivePublish = true;
 
-    if (this.editorBinding) {
-      this.editorBinding.setValue(nextValue, {
-        scrollIntoView: false,
-      });
-    } else {
-      this.bodyInput.value = nextValue;
-      this.bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
-    // Use a small delay to ensure CodeMirror has finished its internal update
-    // before re-enabling publishing.
-    setTimeout(() => {
+    try {
+      if (this.editorBinding) {
+        this.editorBinding.setValue(nextValue, {
+          scrollIntoView: false,
+        });
+      } else {
+        this.bodyInput.value = nextValue;
+        this.bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } finally {
+      // Re-enable immediately since CodeMirror's update is synchronous
       this.suppressLivePublish = false;
-    }, 50);
+    }
   }
 
   private clearPreview() {

@@ -11139,6 +11139,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
+      if (message.type === 'lilypond-live') {
+        const hash = Array.from(participant.identity).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const colors = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'];
+        const color = colors[hash % colors.length];
+
+        lilypondLive.handleIncomingLiveState(message, {
+          id: participant.identity,
+          name: participant.name || 'Estudiante',
+          color,
+        });
+        return;
+      }
+
+      if (message.type === 'lilypond-setup') {
+        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+        lilypondLive.updateSetup(message.allowStudents);
+        return;
+      }
+
+      if (message.type === 'lilypond-render') {
+        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+        lilypondLive.handleIncomingRenderState(message);
+        return;
+      }
+
       if (message.type === 'session-leader') {
         if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
         manualSessionLeaderIdentity = normalizeText(message.identity);
@@ -11272,28 +11297,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
-      if (message.type === 'lilypond-live') {
-        const hash = Array.from(participant.identity).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const colors = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'];
-        const color = colors[hash % colors.length];
-
-        lilypondLive.handleIncomingLiveState(message, {
-          id: participant.identity,
-          name: participant.name || 'Estudiante',
-          color
-        });
-        return;
-      }
-
-      if (message.type === 'lilypond-setup') {
-        lilypondLive.updateSetup(message.allowStudents);
-        return;
-      }
-
-      if (message.type === 'lilypond-render') {
-        lilypondLive.handleIncomingRenderState(message);
-        return;
-      }
       if (message.type === 'presentation') {
         schedulePresentationLoad({
           href: message.href,
