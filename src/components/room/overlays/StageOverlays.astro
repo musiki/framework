@@ -35,3 +35,44 @@
 </section>
 <canvas class="conference-gravity-ball-overlay" data-gravity-ball-canvas aria-hidden="true"></canvas>
 <canvas class="conference-hand-overlay conference-hand-overlay--stage" data-stage-hand-overlay aria-hidden="true"></canvas>
+
+<!-- Floating Speaker Circle (always on top of mosaic) -->
+<div class="conference-speaker-circle-wrap" data-floating-circle hidden>
+  <div class="conference-slot conference-slot--circle" data-slot="circle"></div>
+</div>
+
+<style is:global>
+  .conference-speaker-circle-wrap {
+    position: fixed;
+    top: var(--conference-circle-y, 5rem);
+    right: var(--conference-circle-x, 2rem);
+    width: var(--conference-circle-size, 180px);
+    height: var(--conference-circle-size, 180px);
+    z-index: 15000;
+    pointer-events: none;
+    transition: width 0.2s ease, height 0.2s ease;
+    display: none;
+  }
+  
+  /* Show only when data-show-circle is true on root */
+  :global([data-show-circle="true"]) .conference-speaker-circle-wrap {
+    display: block;
+  }
+  
+  @media (max-width: 500px) {
+    .conference-speaker-circle-wrap {
+      --conference-circle-size: calc(var(--conference-circle-base-size, 180px) * 0.5);
+    }
+  }
+  
+  .conference-speaker-circle-wrap .conference-slot--circle {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    /* border: 3px solid var(--conference-accent-hi, #76d3ff); */ /* Border removed as requested */
+    box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+    pointer-events: auto;
+    background: #000;
+  }
+</style>

@@ -941,13 +941,17 @@ details[open] > summary.conference-sidebar-heading::before {
   box-shadow: none;
 }
 
-.conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument {
+.conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument,
+.conference-shell[data-instruments-allowed='false'][data-role='external'] .conference-sidebar-section--instrument {
   opacity: 0.52;
 }
 
 .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-checkbox-row,
+.conference-shell[data-instruments-allowed='false'][data-role='external'] .conference-sidebar-section--instrument .conference-checkbox-row,
 .conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-ramp-row,
-.conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-synth-meter label {
+.conference-shell[data-instruments-allowed='false'][data-role='external'] .conference-sidebar-section--instrument .conference-ramp-row,
+.conference-shell[data-instruments-allowed='false'][data-role='student'] .conference-sidebar-section--instrument .conference-synth-meter label,
+.conference-shell[data-instruments-allowed='false'][data-role='external'] .conference-sidebar-section--instrument .conference-synth-meter label {
   color: var(--conference-muted);
 }
 

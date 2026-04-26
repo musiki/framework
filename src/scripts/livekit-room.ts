@@ -22,6 +22,8 @@ import { createRoomDeviceSelectController, createRoomMicMeterController } from '
 import { createRoomNotesController } from './room/notes';
 import { WhiteboardController } from './room/whiteboard';
 import { LilyPondLiveController } from './room/lilypond';
+import { RoomWorkspaceManager } from './room/workspace/RoomWorkspaceManager';
+import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
 import { buildRoomQueryUrl } from './room/layout';
@@ -3444,7 +3446,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const isExternalInviteMode = inviteMode === 'external';
   const isInvalidInviteMode = inviteMode === 'invalid';
 
-  const {
+  const elements = selectRoomElements(root);
+  let presentationSelect = elements.presentationSelect;
+
+  let {
+    teacherSlot,
+    gridSlot,
+    studentsSlot,
+    screenSlot,
+    circleSlot,
+  } = elements;
+
+  let {
     roomInput,
     identityInput,
     nameInput,
@@ -3453,12 +3466,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     layoutInput,
     audioInputSelects,
     videoInputSelects,
+    midiInputSelects,
     audioInputSelect,
     videoInputSelect,
-    presentationSelect,
+    midiInputSelect,
     sessionSetupDetails,
     previewZoomInput,
     previewZoomOutput,
+    circleSizeInput,
+    circleSizeOutput,
     backgroundBlurToggleButton,
     backgroundReplaceToggleButton,
     backgroundReplacePopup,
@@ -3494,10 +3510,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     layoutChoiceButtons,
     audioInputPanel,
     videoInputPanel,
-    teacherSlot,
-    gridSlot,
-    studentsSlot,
-    screenSlot,
+    floatingCircleWrap,
     identityPreviewSlot,
     teacherPanel,
     participantList,
@@ -3522,7 +3535,21 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     instrumentsToggleButton,
     shortcutsModal,
     shortcutsCloseButton,
+    setupModal,
+    setupModalCloseButton,
+    setupModalTriggerButton,
+    setupSearchInput,
+    welcomeModal,
+    welcomeVideoPreview,
+    welcomeVumeter,
+    welcomeMicSelect,
+    welcomeCamSelect,
+    welcomeTestToggleButton,
+    welcomeTestTimer,
+    welcomeJoinButton,
+    welcomeOpenButton,
     externalInviteGate,
+    externalInviteForm,
     externalInviteCloseButton,
     externalInviteNameInput,
     externalInviteEmailInput,
@@ -3577,8 +3604,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     externalMediaBtn,
     externalMediaPopup,
     externalMediaInput,
+    externalMediaInputs,
     externalMediaOpenButton,
+    externalMediaOpenButtons,
     externalMediaResults,
+    externalMediaResultsEls,
     externalMediaStatus,
     externalMediaStage,
     externalMediaPlayerHost,
@@ -3592,6 +3622,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     conceptsPopup,
     conceptSearchInput,
     conceptResults,
+    conceptSearchInputs,
+    conceptResultsEls,
     conceptFrame,
     conceptPlaceholder,
     whiteboardCanvas,
@@ -3653,6 +3685,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     mixerIncomingReverbSendKnob,
     mixerIncomingDelaySendInput,
     mixerIncomingDelaySendKnob,
+    mixerHpGainInput,
+    mixerHpMeter,
+    mixerHpMuteButton,
+    mixerHpPanInput,
+    mixerHpPanKnob,
+    mixerHpReverbSendInput,
+    mixerHpReverbSendKnob,
+    mixerHpDelaySendInput,
+    mixerHpDelaySendKnob,
     mixerMasterGainInput,
     mixerMasterMeter,
     mixerMasterMuteButton,
@@ -3865,10 +3906,45 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     placeholder: presentationPlaceholder,
   });
 
-  const whiteboard = new WhiteboardController((msg) => void publishMessage(msg));
-  const lilypondLive = new LilyPondLiveController((msg) => void publishMessage(msg));
-  const concepts = new ConceptsController((msg) => void publishMessage(msg));
-  const participantCards = new Map<string, ParticipantCardRefs>();  const screenCards = new Map<string, ScreenCardRefs>();
+  const participantCards = new Map<string, ParticipantCardRefs>();
+  const screenCards = new Map<string, ScreenCardRefs>();
+
+  const syncParticipant = (participant: Participant) => {
+    const card = ensureParticipantCard(participant);
+    if (!card) return;
+    const isSpeaking = room.activeSpeakers.some((s) => s.identity === participant.identity);
+    card.card.dataset.speaking = isSpeaking ? 'true' : 'false';
+    card.speakingIcon.hidden = !isSpeaking;
+    syncParticipantVideo(room, participant, card, mounts, {
+      blurLocalVideo: previewBlur,
+      isTrackBackgroundBlurred: (track) =>
+        isBackgroundBlurProcessorActive(isLocalCameraTrackLike(track) ? track : null),
+      renderBackdrop: ({ track, wrapper }) => {
+        appendBlurBackdrop({ track, wrapper });
+      },
+    });
+    syncParticipantAudio(room, participant, card, mounts, {
+      onAudioMount: (key, track) => {
+        void connectIncomingAudioTrack(key, track);
+        return () => {
+          disconnectIncomingAudioSource(key);
+        };
+      },
+    });
+  };
+
+  const syncScreenTrack = (participant: Participant) => {
+    syncScreenVideo(participant, screenSlot, screenTemplate, screenCards, mounts);
+    syncScreenAudio(room, participant, screenCards, mounts, {
+      onAudioMount: (key, track) => {
+        void connectIncomingAudioTrack(key, track);
+        return () => {
+          disconnectIncomingAudioSource(key);
+        };
+      },
+    });
+  };
+
   const mounts: MountCollection = {
     participantAudioMounts: new Map(),
     participantVideoMounts: new Map(),
@@ -3882,6 +3958,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let pendingPresentationTask = 0;
   let preferredAudioInputId = normalizeText(persistedSetup.preferredAudioInputId) || normalizeText(audioInputSelect?.value);
   let preferredVideoInputId = normalizeText(persistedSetup.preferredVideoInputId) || normalizeText(videoInputSelect?.value);
+  let preferredMidiInputId = normalizeText(persistedSetup.preferredMidiInputId) || normalizeText(midiInputSelect?.value);
   let focusedParticipantIdentity = '';
   let localPreviewMount: ParticipantMount | null = null;
   let localPreviewStreamMount: LocalPreviewStreamMount | null = null;
@@ -3964,7 +4041,32 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     normalizeRecordingPreset(persistedSetup.recordingPreset, 'landscape-1080'),
   );
   let presentationCircleZoom = previewZoom;
-  let showPresentationCircle = persistedSetup.showCircle !== false;
+  let showPresentationCircle = persistedSetup.showCircle === true;
+  let presentationCircleSize = Number(persistedSetup.circleSize) || 180;
+
+  const applyCircleSize = (size: number) => {
+    presentationCircleSize = size;
+    root.style.setProperty('--conference-circle-base-size', `${size}px`);
+    root.style.setProperty('--conference-circle-size', `${size}px`);
+    if (circleSizeInput instanceof HTMLInputElement) {
+      circleSizeInput.value = String(size);
+    }
+    if (circleSizeOutput instanceof HTMLElement) {
+      circleSizeOutput.textContent = `${size}px`;
+    }
+    
+    if (canLeadSession()) {
+      void publishMessage({
+        type: 'circle-move',
+        x: circleX / window.innerWidth,
+        y: circleY / window.innerHeight,
+        identity: 'focus-slot',
+        zoom: presentationCircleZoom,
+        size: presentationCircleSize,
+        show: showPresentationCircle,
+      });
+    }
+  };
   if (streamingProfileSelect instanceof HTMLSelectElement && persistedSetup.streamingProfile) {
     streamingProfileSelect.value = persistedSetup.streamingProfile;
   }
@@ -4032,6 +4134,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let incomingAudioMasterMeterData: Uint8Array | null = null;
   let incomingAudioMasterGainNode: GainNode | null = null;
   let incomingAudioMasterPannerNode: StereoPannerNode | null = null;
+  let hpAudioGroupGainNode: GainNode | null = null;
+  let hpAudioGroupPannerNode: StereoPannerNode | null = null;
+  let hpAudioGroupAnalyser: AnalyserNode | null = null;
+  let hpAudioGroupMeterData: Uint8Array | null = null;
+  let hpAudioReverbSendNode: GainNode | null = null;
+  let hpAudioDelaySendNode: GainNode | null = null;
   let incomingAudioReverbConvolverNode: ConvolverNode | null = null;
   let incomingAudioReverbReturnGainNode: GainNode | null = null;
   let incomingAudioReverbSendNode: GainNode | null = null;
@@ -4070,6 +4178,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let mixerIncomingDelaySend = clampNumber(persistedSetup.mixerIncomingDelaySend, 0, 1, 0, 2);
   let mixerIncomingMuted = persistedSetup.mixerIncomingMuted !== false;
   let mixerIncomingPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerIncomingPan) || 0));
+  let mixerHpGain = normalizeMasterGain(persistedSetup.mixerHpGain, 0.5);
+  let mixerHpReverbSend = clampNumber(persistedSetup.mixerHpReverbSend, 0, 1, 0, 2);
+  let mixerHpDelaySend = clampNumber(persistedSetup.mixerHpDelaySend, 0, 1, 0, 2);
+  let mixerHpMuted = Boolean(persistedSetup.mixerHpMuted);
+  let mixerHpPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerHpPan) || 0));
   let mixerMasterGain = normalizeMasterGain(persistedSetup.mixerMasterGain, 0.5);
   let mixerMasterMuted = Boolean(persistedSetup.mixerMasterMuted);
   let mixerMasterPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerMasterPan) || 0));
@@ -4380,6 +4493,173 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     shortcutsModal.hidden = !open;
     shortcutsModal.dataset.open = open ? 'true' : 'false';
   };
+
+  const setSetupModalOpen = (open: boolean) => {
+    if (!(setupModal instanceof HTMLElement)) return;
+    setupModal.hidden = !open;
+    setupModal.dataset.open = open ? 'true' : 'false';
+    if (open && setupSearchInput instanceof HTMLInputElement) {
+      setupSearchInput.focus();
+    }
+  };
+
+  // ── Welcome Modal Logic ───────────────────────────────────────────────
+  let welcomePreviewStream: MediaStream | null = null;
+  let welcomeMicMeter: ReturnType<typeof createRoomMicMeterController> | null = null;
+  let welcomeRecorder: MediaRecorder | null = null;
+  let welcomeChunks: Blob[] = [];
+  let welcomeTestTimerId = 0;
+
+  const closeWelcomeModal = () => {
+    if (welcomeModal instanceof HTMLElement) welcomeModal.hidden = true;
+    stopWelcomePreview();
+  };
+
+  const stopWelcomePreview = () => {
+    if (welcomePreviewStream) {
+      welcomePreviewStream.getTracks().forEach(t => t.stop());
+      welcomePreviewStream = null;
+    }
+    if (welcomeMicMeter) {
+      welcomeMicMeter.stop();
+    }
+    if (welcomeVideoPreview instanceof HTMLVideoElement) {
+      welcomeVideoPreview.srcObject = null;
+    }
+    if (welcomeTestTimerId) {
+      window.clearInterval(welcomeTestTimerId);
+      welcomeTestTimerId = 0;
+    }
+  };
+
+  const startWelcomePreview = async () => {
+    stopWelcomePreview();
+    
+    const audioId = welcomeMicSelect instanceof HTMLSelectElement ? welcomeMicSelect.value : undefined;
+    const videoId = welcomeCamSelect instanceof HTMLSelectElement ? welcomeCamSelect.value : undefined;
+
+    try {
+      welcomePreviewStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioId ? { deviceId: { exact: audioId } } : true,
+        video: videoId ? { deviceId: { exact: videoId } } : { width: 1280, height: 720 }
+      });
+
+      if (welcomeVideoPreview instanceof HTMLVideoElement) {
+        welcomeVideoPreview.srcObject = welcomePreviewStream;
+      }
+
+      if (welcomeVumeter instanceof HTMLElement) {
+        welcomeMicMeter = createRoomMicMeterController({ micMeter: welcomeVumeter });
+        welcomeMicMeter.start(welcomePreviewStream);
+      }
+      
+      // Refresh device list if labels are missing (browser privacy feature)
+      if (welcomeMicSelect instanceof HTMLSelectElement && (!welcomeMicSelect.options[1] || !welcomeMicSelect.options[1].text)) {
+         await updateWelcomeDeviceList();
+      }
+
+    } catch (err) {
+      console.warn('Welcome preview failed:', err);
+    }
+  };
+
+  const updateWelcomeDeviceList = async () => {
+    if (!welcomeMicSelect || !welcomeCamSelect) return;
+    
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    
+    const fillSelect = (select: HTMLSelectElement, kind: string, currentId?: string) => {
+      const filtered = devices.filter(d => d.kind === kind);
+      const prevVal = currentId || select.value;
+      select.innerHTML = filtered.map(d => `<option value="${d.deviceId}" ${d.deviceId === prevVal ? 'selected' : ''}>${d.label || `${kind} ${d.deviceId.slice(0, 5)}`}</option>`).join('');
+      if (filtered.length === 0) {
+        select.innerHTML = '<option value="">No disponible</option>';
+      }
+    };
+
+    fillSelect(welcomeMicSelect as HTMLSelectElement, 'audioinput');
+    fillSelect(welcomeCamSelect as HTMLSelectElement, 'videoinput');
+  };
+
+  const openWelcomeModal = async () => {
+    if (!(welcomeModal instanceof HTMLElement)) return;
+    welcomeModal.hidden = false;
+    await updateWelcomeDeviceList();
+    await startWelcomePreview();
+  };
+
+  if (welcomeOpenButton instanceof HTMLButtonElement) {
+    welcomeOpenButton.addEventListener('click', () => {
+      void openWelcomeModal();
+    });
+  }
+
+  if (welcomeMicSelect instanceof HTMLSelectElement) {
+    welcomeMicSelect.addEventListener('change', () => void startWelcomePreview());
+  }
+  if (welcomeCamSelect instanceof HTMLSelectElement) {
+    welcomeCamSelect.addEventListener('change', () => void startWelcomePreview());
+  }
+
+  if (welcomeJoinButton instanceof HTMLButtonElement) {
+    welcomeJoinButton.addEventListener('click', () => {
+      closeWelcomeModal();
+      void connectRoom();
+    });
+  }
+
+  if (welcomeTestToggleButton instanceof HTMLButtonElement) {
+    welcomeTestToggleButton.addEventListener('click', () => {
+      const isActive = welcomeTestToggleButton.dataset.active === 'true';
+      
+      if (!isActive) {
+        // Start recording
+        if (!welcomePreviewStream) return;
+        welcomeChunks = [];
+        welcomeRecorder = new MediaRecorder(welcomePreviewStream);
+        welcomeRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) welcomeChunks.push(e.data);
+        };
+        welcomeRecorder.onstop = () => {
+           const blob = new Blob(welcomeChunks, { type: 'video/webm' });
+           const url = URL.createObjectURL(blob);
+           const playVideo = document.createElement('video');
+           playVideo.src = url;
+           playVideo.controls = true;
+           playVideo.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:10;background:#000;';
+           welcomeVideoPreview?.parentElement?.appendChild(playVideo);
+           playVideo.play();
+           playVideo.onended = () => {
+             playVideo.remove();
+             URL.revokeObjectURL(url);
+           };
+        };
+        welcomeRecorder.start();
+        welcomeTestToggleButton.dataset.active = 'true';
+        welcomeTestToggleButton.querySelector('.test-label')!.textContent = 'DETENER';
+        
+        let secs = 0;
+        if (welcomeTestTimer) {
+           welcomeTestTimer.hidden = false;
+           welcomeTestTimer.textContent = '0s';
+           welcomeTestTimerId = window.setInterval(() => {
+             secs++;
+             welcomeTestTimer.textContent = `${secs}s`;
+           }, 1000);
+        }
+      } else {
+        // Stop
+        if (welcomeRecorder) welcomeRecorder.stop();
+        welcomeTestToggleButton.dataset.active = 'false';
+        welcomeTestToggleButton.querySelector('.test-label')!.textContent = 'GRABAR TEST';
+        if (welcomeTestTimer) welcomeTestTimer.hidden = true;
+        if (welcomeTestTimerId) {
+          window.clearInterval(welcomeTestTimerId);
+          welcomeTestTimerId = 0;
+        }
+      }
+    });
+  }
 
   const openSessionSetup = () => {
     if (sidebarCollapsed) {
@@ -4923,12 +5203,39 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (previewZoomOutput instanceof HTMLOutputElement || previewZoomOutput instanceof HTMLElement) {
       previewZoomOutput.textContent = `${previewZoom.toFixed(2)}x`;
     }
+
+    if (canLeadSession()) {
+      void publishMessage({
+        type: 'circle-move',
+        x: circleX / window.innerWidth,
+        y: circleY / window.innerHeight,
+        identity: 'focus-slot',
+        zoom: presentationCircleZoom,
+        size: presentationCircleSize,
+        show: showPresentationCircle,
+      });
+    }
   };
 
   const applyShowCircleState = () => {
     root.dataset.showCircle = showPresentationCircle ? 'true' : 'false';
     if (showCircleInput instanceof HTMLInputElement) {
       showCircleInput.checked = showPresentationCircle;
+    }
+    if (floatingCircleWrap instanceof HTMLElement) {
+      floatingCircleWrap.hidden = !showPresentationCircle;
+    }
+    
+    if (canLeadSession()) {
+       void publishMessage({
+        type: 'circle-move',
+        x: circleX / window.innerWidth,
+        y: circleY / window.innerHeight,
+        identity: 'focus-slot',
+        zoom: presentationCircleZoom,
+        size: presentationCircleSize,
+        show: showPresentationCircle,
+      });
     }
   };
 
@@ -5236,15 +5543,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const applyInstrumentsOpenState = () => {
     root.dataset.instrumentsOpen = instrumentsOpen ? 'true' : 'false';
+    const shell = root.querySelector('.conference-shell');
+    if (shell instanceof HTMLElement) {
+      shell.dataset.instrumentsOpen = instrumentsOpen ? 'true' : 'false';
+    }
     if (instrumentsToggleButton instanceof HTMLButtonElement) {
       instrumentsToggleButton.dataset.active = instrumentsOpen ? 'true' : 'false';
       instrumentsToggleButton.setAttribute('aria-pressed', instrumentsOpen ? 'true' : 'false');
       instrumentsToggleButton.title = instrumentsOpen
-        ? 'Hide Instruments (Cmd/Ctrl + \\)'
-        : 'Instruments (Cmd/Ctrl + \\)';
+        ? 'Hide Instruments (Cmd/Ctrl + I)'
+        : 'Instruments (Cmd/Ctrl + I)';
     }
   };
-
   const applyHandTrackState = () => {
     root.dataset.handTrack = handTrackEnabled ? 'true' : 'false';
     localCameraHandOverlayState.enabled = handTrackEnabled;
@@ -5534,78 +5844,78 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const renderExternalMediaSearchResults = () => {
-    if (!(externalMediaResults instanceof HTMLElement)) return;
+    externalMediaResultsEls.forEach((resEl) => {
+      const inputValue = normalizeText(externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
+      const isUrlInput = Boolean(normalizeYouTubeMediaUrl(inputValue));
+      const shouldShowResults =
+        !isUrlInput &&
+        Boolean(externalMediaSearchQuery || externalMediaSearchLoading || externalMediaSearchResultsState.length > 0);
 
-    const inputValue = normalizeText(externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
-    const isUrlInput = Boolean(normalizeYouTubeMediaUrl(inputValue));
-    const shouldShowResults =
-      !isUrlInput &&
-      Boolean(externalMediaSearchQuery || externalMediaSearchLoading || externalMediaSearchResultsState.length > 0);
+      resEl.hidden = !shouldShowResults;
+      resEl.replaceChildren();
+      if (!shouldShowResults) return;
 
-    externalMediaResults.hidden = !shouldShowResults;
-    externalMediaResults.replaceChildren();
-    if (!shouldShowResults) return;
+      if (externalMediaSearchLoading) {
+        const loadingState = document.createElement('div');
+        loadingState.className = 'conference-external-media-results-empty';
+        loadingState.textContent = 'Buscando en YouTube...';
+        resEl.appendChild(loadingState);
+        return;
+      }
 
-    if (externalMediaSearchLoading) {
-      const loadingState = document.createElement('div');
-      loadingState.className = 'conference-external-media-results-empty';
-      loadingState.textContent = 'Buscando en YouTube...';
-      externalMediaResults.appendChild(loadingState);
-      return;
-    }
+      if (externalMediaSearchResultsState.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'conference-external-media-results-empty';
+        emptyState.textContent = externalMediaSearchQuery
+          ? 'Sin resultados. Prueba otro término o pega el link.'
+          : 'Escribe para buscar en YouTube.';
+        resEl.appendChild(emptyState);
+        return;
+      }
 
-    if (externalMediaSearchResultsState.length === 0) {
-      const emptyState = document.createElement('div');
-      emptyState.className = 'conference-external-media-results-empty';
-      emptyState.textContent = externalMediaSearchQuery
-        ? 'Sin resultados. Prueba otro término o pega el link.'
-        : 'Escribe para buscar en YouTube.';
-      externalMediaResults.appendChild(emptyState);
-      return;
-    }
+      externalMediaSearchResultsState.forEach((result) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'conference-external-media-result';
 
-    externalMediaSearchResultsState.forEach((result) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'conference-external-media-result';
+        const thumb = document.createElement('img');
+        thumb.className = 'conference-external-media-result-thumb';
+        thumb.alt = '';
+        thumb.loading = 'lazy';
+        thumb.decoding = 'async';
+        thumb.src = result.thumbnailUrl || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
 
-      const thumb = document.createElement('img');
-      thumb.className = 'conference-external-media-result-thumb';
-      thumb.alt = '';
-      thumb.loading = 'lazy';
-      thumb.decoding = 'async';
-      thumb.src = result.thumbnailUrl || 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+        const meta = document.createElement('span');
+        meta.className = 'conference-external-media-result-meta';
 
-      const meta = document.createElement('span');
-      meta.className = 'conference-external-media-result-meta';
+        const title = document.createElement('strong');
+        title.className = 'conference-external-media-result-title';
+        title.textContent = result.title;
 
-      const title = document.createElement('strong');
-      title.className = 'conference-external-media-result-title';
-      title.textContent = result.title;
+        const subtitle = document.createElement('span');
+        subtitle.className = 'conference-external-media-result-subtitle';
+        const publishedYear = normalizeText(result.publishedAt) ? new Date(result.publishedAt).getFullYear() : '';
+        subtitle.textContent = [result.channelTitle, Number.isFinite(publishedYear) ? String(publishedYear) : '']
+          .filter(Boolean)
+          .join(' / ');
 
-      const subtitle = document.createElement('span');
-      subtitle.className = 'conference-external-media-result-subtitle';
-      const publishedYear = normalizeText(result.publishedAt) ? new Date(result.publishedAt).getFullYear() : '';
-      subtitle.textContent = [result.channelTitle, Number.isFinite(publishedYear) ? String(publishedYear) : '']
-        .filter(Boolean)
-        .join(' / ');
-
-      meta.append(title, subtitle);
-      button.append(thumb, meta);
-      button.addEventListener('click', () => {
-        void applyExternalMediaSession(
-          {
-            currentTime: 0,
-            mediaId: result.mediaId,
-            playbackState: 'playing',
-            provider: 'youtube',
-            sourceUrl: buildYouTubeEmbedUrl(result.mediaId),
-            title: result.title,
-          },
-          'local',
-        );
+        meta.append(title, subtitle);
+        button.append(thumb, meta);
+        button.addEventListener('click', () => {
+          void applyExternalMediaSession(
+            {
+              currentTime: 0,
+              mediaId: result.mediaId,
+              playbackState: 'playing',
+              provider: 'youtube',
+              sourceUrl: buildYouTubeEmbedUrl(result.mediaId),
+              title: result.title,
+            },
+            'local',
+          );
+        });
+        resEl.appendChild(button);
       });
-      externalMediaResults.appendChild(button);
     });
   };
 
@@ -5646,8 +5956,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (requestId !== externalMediaSearchRequestId) return;
 
       if (!response.ok) {
+        const errorMsg = typeof payload?.error === 'object' ? payload.error.message : payload?.error;
         throw new Error(
-          normalizeText(payload?.error) || 'No fue posible buscar en YouTube.',
+          normalizeText(errorMsg) || 'No fue posible buscar en YouTube.',
         );
       }
 
@@ -5775,8 +6086,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const queueExternalMediaSearch = () => {
-    const query = normalizeText(externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
+  const queueExternalMediaSearch = (queryOverride?: string) => {
+    const query = normalizeText(queryOverride ?? (externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : ''));
     if (externalMediaSearchDebounceId) {
       window.clearTimeout(externalMediaSearchDebounceId);
       externalMediaSearchDebounceId = 0;
@@ -6131,14 +6442,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const openExternalMediaFromInput = async () => {
-    if (!(externalMediaInput instanceof HTMLInputElement)) return;
+  const openExternalMediaFromInput = async (valueOverride?: string) => {
+    const inputValue = valueOverride ?? (externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
+    if (!inputValue) return;
     if (!getExternalMediaAuthority()) {
       syncExternalMediaShell();
       return;
     }
 
-    const normalizedInput = normalizeText(externalMediaInput.value);
+    const normalizedInput = normalizeText(inputValue);
     const parsedMedia = normalizeYouTubeMediaUrl(normalizedInput);
     if (!parsedMedia) {
       await runExternalMediaSearch(normalizedInput);
@@ -6481,7 +6793,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     ) || 3));
 
     const students = allParticipants().filter(
-      (p) => readParticipantRole(room, p, localRole) === 'student',
+      (p) => ['student', 'external'].includes(readParticipantRole(room, p, localRole)),
     );
 
     if (students.length === 0) {
@@ -6697,6 +7009,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (mixerIncomingDelaySendInput instanceof HTMLInputElement) {
       mixerIncomingDelaySendInput.value = mixerIncomingDelaySend.toFixed(2);
     }
+    if (mixerHpGainInput instanceof HTMLInputElement) {
+      mixerHpGainInput.value = mixerHpGain.toFixed(2);
+    }
+    if (mixerHpPanInput instanceof HTMLInputElement) {
+      mixerHpPanInput.value = mixerHpPan.toFixed(2);
+    }
+    if (mixerHpReverbSendInput instanceof HTMLInputElement) {
+      mixerHpReverbSendInput.value = mixerHpReverbSend.toFixed(2);
+    }
+    if (mixerHpDelaySendInput instanceof HTMLInputElement) {
+      mixerHpDelaySendInput.value = mixerHpDelaySend.toFixed(2);
+    }
     if (mixerMasterGainInput instanceof HTMLInputElement) {
       mixerMasterGainInput.value = mixerMasterGain.toFixed(2);
     }
@@ -6715,6 +7039,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mixerIncomingMuteButton.dataset.active = mixerIncomingMuted ? 'false' : 'true';
       mixerIncomingMuteButton.setAttribute('aria-pressed', mixerIncomingMuted ? 'true' : 'false');
     }
+    if (mixerHpMuteButton instanceof HTMLButtonElement) {
+      mixerHpMuteButton.dataset.active = mixerHpMuted ? 'false' : 'true';
+      mixerHpMuteButton.setAttribute('aria-pressed', mixerHpMuted ? 'true' : 'false');
+    }
     if (mixerMasterMuteButton instanceof HTMLButtonElement) {
       mixerMasterMuteButton.dataset.active = mixerMasterMuted ? 'false' : 'true';
       mixerMasterMuteButton.setAttribute('aria-pressed', mixerMasterMuted ? 'true' : 'false');
@@ -6723,6 +7051,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     syncPanKnob(mixerSynthPanKnob, mixerSynthPan);
     syncPanKnob(mixerBallPanKnob, mixerBallPan);
     syncPanKnob(mixerIncomingPanKnob, mixerIncomingPan);
+    syncPanKnob(mixerHpPanKnob, mixerHpPan);
     syncPanKnob(mixerMasterPanKnob, mixerMasterPan);
     syncValueKnob(mixerSynthReverbSendKnob, mixerSynthReverbSendInput, mixerSynthReverbSend);
     syncValueKnob(mixerSynthDelaySendKnob, mixerSynthDelaySendInput, mixerSynthDelaySend);
@@ -6730,11 +7059,30 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     syncValueKnob(mixerBallDelaySendKnob, mixerBallDelaySendInput, mixerBallDelaySend);
     syncValueKnob(mixerIncomingReverbSendKnob, mixerIncomingReverbSendInput, mixerIncomingReverbSend);
     syncValueKnob(mixerIncomingDelaySendKnob, mixerIncomingDelaySendInput, mixerIncomingDelaySend);
+    syncValueKnob(mixerHpReverbSendKnob, mixerHpReverbSendInput, mixerHpReverbSend);
+    syncValueKnob(mixerHpDelaySendKnob, mixerHpDelaySendInput, mixerHpDelaySend);
 
     fmSynth.setChannelGain(mixerSynthMuted ? 0 : mixerSynthGain);
     fmSynth.setChannelPan(mixerSynthPan);
     fmSynth.setReverbSend(mixerSynthReverbSend);
     fmSynth.setDelaySend(mixerSynthDelaySend);
+
+    if (hpAudioGroupGainNode) {
+        hpAudioGroupGainNode.gain.setTargetAtTime(
+            (mixerHpMuted ? 0 : mixerHpGain) * (mixerMasterMuted ? 0 : mixerMasterGain),
+            incomingAudioContext!.currentTime,
+            0.03
+        );
+    }
+    if (hpAudioGroupPannerNode) {
+        hpAudioGroupPannerNode.pan.setTargetAtTime(mixerHpPan, incomingAudioContext!.currentTime, 0.03);
+    }
+    if (hpAudioReverbSendNode) {
+        hpAudioReverbSendNode.gain.setTargetAtTime(mixerHpReverbSend, incomingAudioContext!.currentTime, 0.03);
+    }
+    if (hpAudioDelaySendNode) {
+        hpAudioDelaySendNode.gain.setTargetAtTime(mixerHpDelaySend, incomingAudioContext!.currentTime, 0.03);
+    }
     gravityBallRenderer?.setAudioChannelGain(
       Math.min(1, Math.max(0, (mixerBallMuted ? 0 : mixerBallGain) * (mixerMasterMuted ? 0 : mixerMasterGain))),
     );
@@ -6839,11 +7187,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const synthLevels = fmSynth.getMeterLevels();
     const ballLevel = gravityBallRenderer?.getAudioMeterLevel() || 0;
     const incomingLevel = readAnalyserLevel(incomingAudioGroupAnalyser, incomingAudioGroupMeterData, 4.2);
+    const hpLevel = readAnalyserLevel(hpAudioGroupAnalyser, hpAudioGroupMeterData, 4.2);
     const incomingMasterLevel = readAnalyserLevel(incomingAudioMasterAnalyser, incomingAudioMasterMeterData, 4.2);
     setMixerMeterLevel(mixerSynthMeter, synthLevels.channel);
     setMixerMeterLevel(mixerBallMeter, ballLevel);
     setMixerMeterLevel(mixerIncomingMeter, incomingLevel);
-    setMixerMeterLevel(mixerMasterMeter, Math.max(synthLevels.master, ballLevel, incomingMasterLevel));
+    setMixerMeterLevel(mixerHpMeter, hpLevel);
+    setMixerMeterLevel(mixerMasterMeter, Math.max(synthLevels.master, ballLevel, incomingMasterLevel, hpLevel));
     mixerMeterAnimationId = window.requestAnimationFrame(renderMixerMeters);
   };
 
@@ -6862,6 +7212,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     setMixerMeterLevel(mixerSynthMeter, 0);
     setMixerMeterLevel(mixerBallMeter, 0);
     setMixerMeterLevel(mixerIncomingMeter, 0);
+    setMixerMeterLevel(mixerHpMeter, 0);
     setMixerMeterLevel(mixerMasterMeter, 0);
   };
 
@@ -7019,6 +7370,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       incomingAudioDryGainNode.gain.value = 1;
       incomingAudioReverbSendNode = incomingAudioContext.createGain();
       incomingAudioReverbSendNode.gain.value = mixerIncomingReverbSend;
+
+      hpAudioGroupGainNode = incomingAudioContext.createGain();
+      hpAudioGroupPannerNode = incomingAudioContext.createStereoPanner();
+      hpAudioReverbSendNode = incomingAudioContext.createGain();
+      hpAudioDelaySendNode = incomingAudioContext.createGain();
+      hpAudioGroupAnalyser = incomingAudioContext.createAnalyser();
+      hpAudioGroupAnalyser.fftSize = 256;
+      hpAudioGroupMeterData = new Uint8Array(hpAudioGroupAnalyser.frequencyBinCount);
+
+      hpAudioGroupGainNode.connect(hpAudioGroupPannerNode);
+      hpAudioGroupPannerNode.connect(incomingAudioMasterGainNode!);
+      hpAudioGroupPannerNode.connect(hpAudioGroupAnalyser);
+      
+      // FX Sends
+      hpAudioGroupGainNode.connect(hpAudioReverbSendNode);
+      hpAudioGroupGainNode.connect(hpAudioDelaySendNode);
+
       incomingAudioReverbConvolverNode = incomingAudioContext.createConvolver();
       incomingAudioReverbConvolverNode.buffer = createImpulseResponseBuffer(
         incomingAudioContext,
@@ -7054,8 +7422,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       incomingAudioGroupPannerNode.connect(incomingAudioDryGainNode);
       incomingAudioGroupPannerNode.connect(incomingAudioReverbSendNode);
       incomingAudioReverbSendNode.connect(incomingAudioReverbConvolverNode);
+      hpAudioReverbSendNode.connect(incomingAudioReverbConvolverNode);
       incomingAudioReverbConvolverNode.connect(incomingAudioReverbReturnGainNode);
       incomingAudioGroupPannerNode.connect(incomingAudioDelaySendNode);
+      hpAudioDelaySendNode.connect(incomingAudioDelayNode);
       incomingAudioDelaySendNode.connect(incomingAudioDelayNode);
       incomingAudioDelayNode.connect(incomingAudioDelayFilterNode);
       incomingAudioDelayFilterNode.connect(incomingAudioDelayReturnGainNode);
@@ -7145,12 +7515,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     incomingAudioReverbSendNode = null;
   };
 
-  const getParticipantJoinedAtMs = (participant: Participant | null | undefined) => {
+  function getParticipantJoinedAtMs(participant: Participant | null | undefined) {
     const joinedAt = participant?.joinedAt;
     if (!(joinedAt instanceof Date)) return Number.POSITIVE_INFINITY;
     const joinedAtMs = joinedAt.getTime();
     return Number.isFinite(joinedAtMs) ? joinedAtMs : Number.POSITIVE_INFINITY;
-  };
+  }
 
   const compareParticipantsForDisplay = (left: Participant, right: Participant) => {
     const leftHasCamera = hasCameraTrack(left);
@@ -7217,21 +7587,21 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     container.hidden = names.length === 0;
   };
 
-  const compareSessionLeaderCandidates = (left: Participant, right: Participant) => {
+  function compareSessionLeaderCandidates(left: Participant, right: Participant) {
     const joinedAtDifference = getParticipantJoinedAtMs(left) - getParticipantJoinedAtMs(right);
     if (joinedAtDifference !== 0) return joinedAtDifference;
 
     return left.identity.localeCompare(right.identity, 'es');
-  };
+  }
 
-  const getFallbackSessionLeaderIdentity = () => {
+  function getFallbackSessionLeaderIdentity() {
     const teachers = allParticipants()
       .filter((participant) => readParticipantRole(room, participant, localRole) === 'teacher')
       .sort(compareSessionLeaderCandidates);
     return teachers[0]?.identity || '';
-  };
+  }
 
-  const getResolvedSessionLeaderIdentity = () => {
+  function getResolvedSessionLeaderIdentity() {
     if (
       manualSessionLeaderIdentity &&
       allParticipants().some(
@@ -7243,15 +7613,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return manualSessionLeaderIdentity;
     }
     return getFallbackSessionLeaderIdentity();
-  };
+  }
 
   const isSessionLeader = (participant: Participant | { identity: string } | null | undefined) =>
     Boolean(participant && getResolvedSessionLeaderIdentity() && participant.identity === getResolvedSessionLeaderIdentity());
 
-  const canLeadSession = () =>
-    localRole === 'teacher' &&
-    room.state === ConnectionState.Connected &&
-    room.localParticipant.identity === getResolvedSessionLeaderIdentity();
+  function canLeadSession() {
+    return (
+      localRole === 'teacher' &&
+      room.state === ConnectionState.Connected &&
+      room.localParticipant.identity === getResolvedSessionLeaderIdentity()
+    );
+  }
 
   const applySessionLeaderState = () => {
     sessionLeaderIdentity = getResolvedSessionLeaderIdentity();
@@ -7585,6 +7958,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       name: normalizeText(nameInput.value),
       preferredAudioInputId,
       preferredVideoInputId,
+      preferredMidiInputId,
       previewBlur,
       previewInvert,
       previewZoom,
@@ -7603,6 +7977,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mixerMasterGain,
       mixerMasterMuted,
       mixerMasterPan,
+      mixerHpGain,
+      mixerHpDelaySend,
+      mixerHpMuted,
+      mixerHpPan,
+      mixerHpReverbSend,
       mixerSynthGain,
       mixerSynthDelaySend,
       mixerSynthMuted,
@@ -8188,8 +8567,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const toggleInstrumentsOpen = () => {
     instrumentsOpen = !instrumentsOpen;
+    if (instrumentsOpen) {
+      sidebarCollapsed = false;
+      applySidebarCollapsedState();
+    }
     applyInstrumentsOpenState();
     persistSetupState();
+    queuePreferredRemoteVideoDimensionsSync();
   };
 
   const shouldIgnoreRoomShortcut = (target: EventTarget | null) => {
@@ -9381,9 +9765,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const canChangeLayoutLocally = () => true;
 
-  const resolveParticipantTargetSlot = (participant: Participant): HTMLElement | null =>
-    resolveRoomParticipantTargetSlot({
+  const resolveParticipantTargetSlot = (participant: Participant): HTMLElement | null => {
+    // Show/Hide floating circle wrapper
+    if (floatingCircleWrap instanceof HTMLElement) {
+       floatingCircleWrap.hidden = !showPresentationCircle;
+    }
+
+    return resolveRoomParticipantTargetSlot({
       canLeadSession: canLeadSession(),
+      circleSlot,
       focusedParticipantIdentity,
       gridSlot,
       isLocalParticipant: isLocalParticipant(room, participant),
@@ -9395,6 +9785,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       studentsSlot,
       teacherSlot,
     });
+  };
 
   const clearIdentityPreviewSlot = () => {
     if (identityPreviewSlot instanceof HTMLElement) {
@@ -10080,6 +10471,90 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  const whiteboard = new WhiteboardController((msg) => void publishMessage(msg));
+  const lilypondLive = new LilyPondLiveController((msg) => void publishMessage(msg));
+
+    // Hyperpiano integration
+    const onHyperpianoInit = (container: HTMLElement) => {
+      const hp = new HyperpianoController({
+        audioContext: incomingAudioContext!, // Will be ensured on play
+        container,
+        outputNode: hpAudioGroupGainNode!,
+        getMidiInputId: () => preferredMidiInputId,
+        onStatusChange: (status) => setStatus(status),
+        onNoteEvent: (note, velocity, action) => {
+          // Transmission logic: Teachers always transmit, students only if allowed
+          if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
+            void publishMessage({
+              type: 'hyperpiano',
+              note,
+              velocity,
+              action
+            });
+          }
+        }
+      });
+      
+      // Init directly
+      const runInit = () => {
+        if (!(hp as any).initialized) {
+            hp.init();
+            (hp as any).initialized = true;
+        }
+      };
+
+      if (incomingAudioContext) {
+          runInit();
+      } else {
+        container.addEventListener('mousedown', async () => {
+          await ensureIncomingAudioContext();
+          runInit();
+        }, { once: true });
+      }
+
+      return hp;
+    };
+
+  const workspaceManager = new RoomWorkspaceManager(
+    root.querySelector('[data-workspace-root]') as HTMLElement,
+    canLeadSession,
+    (layout) => void publishMessage({ type: 'session-workspace', layout }),
+    onHyperpianoInit
+  );
+
+  const concepts = new ConceptsController((msg) => void publishMessage(msg));
+  concepts.bindToolbar();
+
+  window.addEventListener('musiki:workspace:changed', () => {
+    // Small delay to ensure Dockview has finished moving elements
+    setTimeout(() => {
+      // Re-select slots because Dockview moved them in the DOM
+      const nextElements = selectRoomElements(root);
+      if (nextElements.teacherSlot) teacherSlot = nextElements.teacherSlot;
+      if (nextElements.gridSlot) gridSlot = nextElements.gridSlot;
+      if (nextElements.studentsSlot) studentsSlot = nextElements.studentsSlot;
+      if (nextElements.screenSlot) screenSlot = nextElements.screenSlot;
+      if (nextElements.circleSlot) circleSlot = nextElements.circleSlot;
+      
+      // Update external media and concept references which might have moved
+      if (nextElements.externalMediaInput) externalMediaInput = nextElements.externalMediaInput;
+      if (nextElements.externalMediaInputs) externalMediaInputs = nextElements.externalMediaInputs;
+      if (nextElements.externalMediaResultsEls) externalMediaResultsEls = nextElements.externalMediaResultsEls;
+      if (nextElements.conceptSearchInput) conceptSearchInput = nextElements.conceptSearchInput;
+      if (nextElements.conceptSearchInputs) conceptSearchInputs = nextElements.conceptSearchInputs;
+      if (nextElements.conceptResultsEls) conceptResultsEls = nextElements.conceptResultsEls;
+
+      // Force re-attachment by clearing and re-syncing
+      // We clear the video mounts specifically to force syncParticipantVideo to rebuild them
+      mounts.participantVideoMounts.forEach((m) => removeMount(m));
+      mounts.participantVideoMounts.clear();
+      mounts.screenVideoMounts.forEach((m) => removeMount(m));
+      mounts.screenVideoMounts.clear();
+
+      syncAllParticipants();
+    }, 100);
+  });
+
   const chatController = createRoomChatController({
     chatDownloadButton,
     chatFocusButton: chatFocusButton instanceof HTMLButtonElement ? chatFocusButton : null,
@@ -10186,6 +10661,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         midiUrl: lilyRenderSnapshot.midiUrl,
       });
     }
+
+    const currentLayout = workspaceManager.getLayout();
+    if (currentLayout) {
+      await publishMessage({
+        type: 'session-workspace',
+        layout: currentLayout,
+      });
+    }
+
     if (externalMediaSession) {
       await broadcastExternalMediaState('open', true);
     }
@@ -10201,12 +10685,21 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
+  const getPresentationSelect = () => {
+    if (presentationSelect && root.contains(presentationSelect)) return presentationSelect;
+    const found = root.querySelector<HTMLSelectElement>('[data-presentation-select]');
+    if (found) presentationSelect = found;
+    return presentationSelect;
+  };
+
   const syncPresentationSelection = (href: string | null) => {
-    if (href && Array.from(presentationSelect.options).some((option) => option.value === href)) {
-      presentationSelect.value = href;
+    const sel = getPresentationSelect();
+    if (!(sel instanceof HTMLSelectElement)) return;
+    if (href && Array.from(sel.options).some((option) => option.value === href)) {
+      sel.value = href;
       return;
     }
-    presentationSelect.value = '';
+    sel.value = '';
   };
 
   const refreshDeviceOptions = async (requestPermissions = false) => {
@@ -10409,6 +10902,33 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       studentInviteRevokeButton.disabled =
         localRole !== 'teacher' || !currentStudentInviteCode || connecting;
     }
+    midiInputSelects.forEach((select) => {
+      select.addEventListener('change', () => {
+        preferredMidiInputId = normalizeText(select.value);
+        persistSetupState();
+        // Notify controller if it exists
+        (workspaceManager as any).hyperpianoController?.syncMidiInput();
+      });
+    });
+
+    const refreshMidiOptions = async () => {
+       if (!navigator.requestMIDIAccess) return;
+       try {
+         const midi = await navigator.requestMIDIAccess();
+         const inputs = Array.from(midi.inputs.values());
+         midiInputSelects.forEach(select => {
+            select.innerHTML = '<option value="">Selecciona dispositivo MIDI</option>';
+            inputs.forEach(input => {
+               const opt = document.createElement('option');
+               opt.value = input.id;
+               opt.textContent = input.label || input.name || 'MIDI Input';
+               select.appendChild(opt);
+            });
+            if (preferredMidiInputId) select.value = preferredMidiInputId;
+         });
+       } catch (e) {}
+    };
+
     const hasAudioChoices = deviceController.hasChoices('audio');
     audioInputSelects.forEach((select) => {
       select.disabled = !hasAudioChoices;
@@ -10423,6 +10943,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         (!presentation.getHref() && !normalizeText(presentationSelect.value));
     }
     chatController.syncControlState();
+    void refreshMidiOptions();
     if (raiseHandButton instanceof HTMLButtonElement) {
       raiseHandButton.disabled = !connected;
     }
@@ -10512,40 +11033,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
-  const allParticipants = () => listRoomParticipants(room);
-
-  const syncParticipant = (participant: Participant) => {
-    const card = ensureParticipantCard(participant);
-    if (!card) return;
-    const isSpeaking = room.activeSpeakers.some((s) => s.identity === participant.identity);
-    card.card.dataset.speaking = isSpeaking ? 'true' : 'false';
-    card.speakingIcon.hidden = !isSpeaking;
-    syncParticipantVideo(room, participant, card, mounts, {
-      blurLocalVideo: previewBlur,
-      isTrackBackgroundBlurred: (track) =>
-        isBackgroundBlurProcessorActive(isLocalCameraTrackLike(track) ? track : null),
-      renderBackdrop: ({ track, wrapper }) => {
-        appendBlurBackdrop({ track, wrapper });
-      },
-    });
-    syncParticipantAudio(room, participant, card, mounts, {
-      onAudioMount: (key, track) => {
-        void connectIncomingAudioTrack(key, track);
-        return () => {
-          disconnectIncomingAudioSource(key);
-        };
-      },
-    });
-    syncScreenVideo(participant, screenSlot, screenTemplate, screenCards, mounts);
-    syncScreenAudio(room, participant, screenCards, mounts, {
-      onAudioMount: (key, track) => {
-        void connectIncomingAudioTrack(key, track);
-        return () => {
-          disconnectIncomingAudioSource(key);
-        };
-      },
-    });
-  };
+  function allParticipants() {
+    return listRoomParticipants(room);
+  }
 
   let kickModeActive = false;
   const redirectToRoomHomepage = () => {
@@ -10632,7 +11122,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const identitiesBySlot = new Map<HTMLElement, string[]>();
 
     orderedParticipants.forEach((participant) => {
+      // Force refresh of the mount by clearing it first in syncParticipant/syncScreenTrack
+      // actually syncParticipant already checks for existing mount.
       syncParticipant(participant);
+      syncScreenTrack(participant);
+      
       const card = participantCards.get(participant.identity)?.card;
       const slot = card?.parentElement;
       if (!(slot instanceof HTMLElement)) return;
@@ -10941,7 +11435,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
       // Late-join: student connects to main room while break rooms are already active
       // (teacher may be in a break room so can't re-broadcast — fetch state from server)
-      if (localRole === 'student' && breakRoomsActive.length === 0 && !isInBreakRoom()) {
+      if (['student', 'external'].includes(localRole) && breakRoomsActive.length === 0 && !isInBreakRoom()) {
         const currentRoom = roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) : '';
         const cid = getEffectiveCourseId();
         if (currentRoom && cid) {
@@ -11079,7 +11573,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       const message = readMessage(payload);
       if (!message) return;
 
-      if (message.type === 'session-kick') {
+    if (message.type === 'hyperpiano') {
+      const pods = workspaceManager.getActivePods();
+      pods.forEach(pod => {
+        if (pod.controller instanceof HyperpianoController) {
+          if (message.action === 'on') {
+            pod.controller.triggerKeyOn(null, message.velocity, null, message.note, true);
+          } else {
+            pod.controller.triggerKeyOff(null, message.note, true);
+          }
+        }
+      });
+      return;
+    }
+
+    if (message.type === 'lilypond-play') {
+      lilypondLive.handleIncomingPlayState(message);
+      return;
+    }
+
+    if (message.type === 'session-kick') {
         if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
         if (!isSessionLeader(participant)) return;
         if (message.identity === room.localParticipant.identity) {
@@ -11164,6 +11677,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
+      if (message.type === 'session-workspace') {
+        workspaceManager.applyLayout(message.layout);
+        return;
+      }
+
       if (message.type === 'session-leader') {
         if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
         manualSessionLeaderIdentity = normalizeText(message.identity);
@@ -11182,7 +11700,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         syncBreakRoomsShell();
         renderBreakRoomsPopup();
 
-        if (localRole === 'student') {
+        if (['student', 'external'].includes(localRole)) {
           const myAssignment = breakRoomAssignments[room.localParticipant.identity];
 
           if (myAssignment) {
@@ -11344,29 +11862,48 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'circle-move') {
-        let target: HTMLElement | null = null;
         if (message.identity === 'focus-slot') {
-          target = teacherPanel instanceof HTMLElement ? teacherPanel : null;
-        } else if (message.identity === room.localParticipant.identity) {
-          target = identityPreviewSlot instanceof HTMLElement ? identityPreviewSlot : null;
-        }
-        if (target) {
           const absX = message.x * window.innerWidth;
           const absY = message.y * window.innerHeight;
-          target.style.transform = `translate(${absX}px, ${absY}px)`;
+
+          if (teacherPanel instanceof HTMLElement) {
+            teacherPanel.style.transform = `translate(${absX}px, ${absY}px)`;
+          }
+          if (floatingCircleWrap instanceof HTMLElement) {
+            floatingCircleWrap.style.transform = `translate(${absX}px, ${absY}px)`;
+          }
+          if (message.zoom !== undefined) {
+            presentationCircleZoom = message.zoom;
+            applyPreviewZoomState();
+          }
+          if (message.size !== undefined) {
+            applyCircleSize(message.size);
+          }
+          if (message.show !== undefined) {
+            showPresentationCircle = message.show;
+            applyShowCircleState();
+          }
+        } else if (message.identity === room.localParticipant.identity) {
+          if (identityPreviewSlot instanceof HTMLElement) {
+            const absX = message.x * window.innerWidth;
+            const absY = message.y * window.innerHeight;
+            identityPreviewSlot.style.transform = `translate(${absX}px, ${absY}px)`;
+          }
         }
         return;
       }
 
     });
 
+  // Drag state for circle
+  let circleX = 0;
+  let circleY = 0;
+
   // Drag logic for Camera Circle (Teacher Panel and Self Preview)
   const setupDraggable = (el: HTMLElement, isSelf: boolean) => {
     let isDragging = false;
     let startX = 0;
     let startY = 0;
-    let currentX = 0;
-    let currentY = 0;
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -11376,11 +11913,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       const transform = window.getComputedStyle(el).transform;
       if (transform !== 'none') {
         const matrix = new DOMMatrix(transform);
-        currentX = matrix.m41;
-        currentY = matrix.m42;
+        circleX = matrix.m41;
+        circleY = matrix.m42;
       }
-      startX = e.clientX - currentX;
-      startY = e.clientY - currentY;
+      startX = e.clientX - circleX;
+      startY = e.clientY - circleY;
       el.style.cursor = 'grabbing';
       el.setPointerCapture(e.pointerId);
       document.body.style.userSelect = 'none';
@@ -11390,22 +11927,25 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const onPointerMove = (e: PointerEvent) => {
       if (!isDragging) return;
       if (e.cancelable) e.preventDefault();
-      currentX = e.clientX - startX;
-      currentY = e.clientY - startY;
+      circleX = e.clientX - startX;
+      circleY = e.clientY - startY;
       const rect = el.getBoundingClientRect();
-      const nextX = Math.max(-rect.left, Math.min(currentX, window.innerWidth - rect.right + currentX));
-      const nextY = Math.max(-rect.top, Math.min(currentY, window.innerHeight - rect.bottom + currentY));
-      currentX = nextX;
-      currentY = nextY;
-      el.style.transform = `translate(${currentX}px, ${currentY}px)`;
+      const nextX = Math.max(-rect.left, Math.min(circleX, window.innerWidth - rect.right + circleX));
+      const nextY = Math.max(-rect.top, Math.min(circleY, window.innerHeight - rect.bottom + circleY));
+      circleX = nextX;
+      circleY = nextY;
+      el.style.transform = `translate(${circleX}px, ${circleY}px)`;
       if (canLeadSession()) {
-        const pctX = currentX / window.innerWidth;
-        const pctY = currentY / window.innerHeight;
+        const pctX = circleX / window.innerWidth;
+        const pctY = circleY / window.innerHeight;
         void publishMessage({
           type: 'circle-move',
           x: pctX,
           y: pctY,
           identity: isSelf ? room.localParticipant.identity : 'focus-slot',
+          zoom: presentationCircleZoom,
+          size: presentationCircleSize,
+          show: showPresentationCircle,
         });
       }
     };
@@ -11433,6 +11973,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
   if (teacherPanel instanceof HTMLElement) {
     setupDraggable(teacherPanel, false);
+  }
+  if (floatingCircleWrap instanceof HTMLElement) {
+    setupDraggable(floatingCircleWrap, false);
   }
 
   if (connectButton instanceof HTMLButtonElement) {
@@ -11756,6 +12299,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     externalInviteJoinButton.addEventListener('click', submitExternalInviteJoin);
   }
 
+  if (externalInviteForm instanceof HTMLFormElement) {
+    externalInviteForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitExternalInviteJoin();
+    });
+  }
+
   [externalInviteNameInput, externalInviteEmailInput, externalInvitePasswordInput].forEach((input) => {
     if (!(input instanceof HTMLInputElement)) return;
     input.addEventListener('keydown', (event) => {
@@ -11918,6 +12468,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
+  if (setupModalTriggerButton instanceof HTMLButtonElement) {
+    setupModalTriggerButton.addEventListener('click', () => {
+      setSetupModalOpen(!(setupModal instanceof HTMLElement && !setupModal.hidden));
+    });
+  }
+
+  if (setupModalCloseButton instanceof HTMLButtonElement) {
+    setupModalCloseButton.addEventListener('click', () => {
+      setSetupModalOpen(false);
+    });
+  }
+
+  if (setupModal instanceof HTMLElement) {
+    setupModal.addEventListener('click', (event) => {
+      if (event.target === setupModal) {
+        setSetupModalOpen(false);
+      }
+    });
+  }
+
   if (shortcutsModal instanceof HTMLElement) {
     shortcutsModal.addEventListener('click', (event) => {
       if (event.target === shortcutsModal) {
@@ -11941,6 +12511,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   deviceController.bind();
 
+  if (circleSizeInput instanceof HTMLInputElement) {
+    circleSizeInput.addEventListener('input', () => {
+      const size = Number(circleSizeInput.value) || 180;
+      applyCircleSize(size);
+      if (canLeadSession()) {
+        void publishMessage({
+          type: 'circle-move',
+          x: currentX / window.innerWidth,
+          y: currentY / window.innerHeight,
+          identity: 'focus-slot',
+          size,
+        });
+      }
+    });
+  }
+
   if (previewZoomInput instanceof HTMLInputElement) {
     previewZoomInput.addEventListener('input', () => {
       previewZoom = normalizePreviewZoom(previewZoomInput.value, previewZoom);
@@ -11958,6 +12544,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       showPresentationCircle = showCircleInput.checked;
       applyShowCircleState();
       persistSetupState();
+
+      if (canLeadSession()) {
+        void publishMessage({
+          type: 'circle-move',
+          x: currentX / window.innerWidth,
+          y: currentY / window.innerHeight,
+          identity: 'focus-slot',
+          show: showPresentationCircle,
+        });
+      }
+
       syncAllParticipants(); // recompute self-in-sidebar when circle toggles
       if (room.state === ConnectionState.Connected) {
         void syncLocalParticipantMetadata().catch(() => undefined);
@@ -12414,6 +13011,42 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     persistSetupState();
   });
 
+  bindMixerRange(mixerHpGainInput, () => {
+    if (!(mixerHpGainInput instanceof HTMLInputElement)) return;
+    mixerHpGain = normalizeMasterGain(mixerHpGainInput.value, mixerHpGain);
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerHpPanInput, () => {
+    if (!(mixerHpPanInput instanceof HTMLInputElement)) return;
+    mixerHpPan = Math.min(1, Math.max(-1, Number(mixerHpPanInput.value) || 0));
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerHpReverbSendInput, () => {
+    if (!(mixerHpReverbSendInput instanceof HTMLInputElement)) return;
+    mixerHpReverbSend = clampNumber(mixerHpReverbSendInput.value, 0, 1, mixerHpReverbSend);
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerHpDelaySendInput, () => {
+    if (!(mixerHpDelaySendInput instanceof HTMLInputElement)) return;
+    mixerHpDelaySend = clampNumber(mixerHpDelaySendInput.value, 0, 1, mixerHpDelaySend);
+    applyMixerState();
+    persistSetupState();
+  });
+
+  if (mixerHpMuteButton instanceof HTMLButtonElement) {
+    mixerHpMuteButton.addEventListener('click', () => {
+      mixerHpMuted = !mixerHpMuted;
+      applyMixerState();
+      persistSetupState();
+    });
+  }
+
   bindMixerRange(mixerMasterGainInput, () => {
     if (!(mixerMasterGainInput instanceof HTMLInputElement)) return;
     mixerMasterGain = normalizeMasterGain(mixerMasterGainInput.value, mixerMasterGain);
@@ -12830,48 +13463,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   });
 
-  const renderConceptSearchResults = async () => {
-    if (!conceptResults || !conceptSearchInput || !(conceptSearchInput instanceof HTMLInputElement)) return;
-    const query = conceptSearchInput.value.trim();
-    if (query.length < 1) {
-      conceptResults.hidden = true;
-      return;
+  // Bind all concept search inputs (global and pod-specific)
+  conceptSearchInputs.forEach((input, index) => {
+    const results = conceptResultsEls[index];
+    if (results) {
+      concepts.bind({ input, results });
     }
-
-    const results = await concepts.search(query);
-    conceptResults.innerHTML = '';
-    conceptResults.hidden = results.length === 0;
-
-    results.forEach((item) => {
-      const btn = document.createElement('button');
-      btn.className = 'conference-break-rooms-item';
-      btn.textContent = item.title;
-      btn.addEventListener('click', () => {
-        conceptSearchInput.value = item.title;
-        let href = '';
-        if (item.reveal) {
-          if (item.courseId) {
-            href = `/slides/${item.courseId}/${item.slug}`;
-          } else {
-            href = `/slides/${item.slug}`;
-          }
-        } else {
-          // Normal note fallback - add view=embedded to hide site UI
-          if (item.courseId) {
-            href = `/cursos/${item.courseId}/${item.slug}?view=embedded`;
-          } else {
-            href = `/${item.slug}?view=embedded`;
-          }
-        }
-        conceptSearchInput.dataset.href = href;
-        renderConceptSearchResults();
-      });
-      conceptResults.appendChild(btn);
-    });
-  };
-
-  conceptSearchInput?.addEventListener('input', () => {
-    void renderConceptSearchResults();
   });
 
   const launchConcept = (mode: 'split' | 'overlay') => {
@@ -12927,10 +13524,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     whiteboard.init(whiteboardCanvas);
   }
 
-  const lilypondPanel = root.querySelector<HTMLElement>('[data-panel="lilypond"]');
-  if (lilypondPanel) {
-    lilypondLive.init(lilypondPanel, localRole === 'teacher', setRoomStatus);
-  }
+  lilypondLive.init(root, localRole === 'teacher', setRoomStatus);
+
+  workspaceManager.init();
 
   if (whiteboardBgCanvas instanceof HTMLCanvasElement) {
     whiteboard.initBg(whiteboardBgCanvas);
@@ -12952,6 +13548,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (nextBg !== 'none') {
         (btn as HTMLElement).dataset.active = 'true';
       }
+    });
+  });
+
+  root.querySelectorAll('[data-whiteboard-snap-btn]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const isActive = (btn as HTMLElement).dataset.active === 'true';
+      const nextSnap = !isActive;
+      whiteboard.setSnap(nextSnap);
+      (btn as HTMLElement).dataset.active = nextSnap ? 'true' : 'false';
     });
   });
 
@@ -13033,20 +13638,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     void handleBreakRoomsKill();
   });
 
-  externalMediaOpenButton?.addEventListener('click', () => {
-    void openExternalMediaFromInput();
+  externalMediaOpenButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      // Find the associated input if possible, or use the global one
+      const container = btn.closest('.musiki-pod-toolbar, .conference-external-media-popup');
+      const input = container?.querySelector('[data-external-media-input]');
+      const value = (input instanceof HTMLInputElement) ? input.value : undefined;
+      void openExternalMediaFromInput(value);
+    });
   });
 
-  if (externalMediaInput instanceof HTMLInputElement) {
-    externalMediaInput.addEventListener('input', () => {
-      queueExternalMediaSearch();
+  externalMediaInputs.forEach((input) => {
+    input.addEventListener('input', () => {
+      queueExternalMediaSearch(input.value);
     });
-    externalMediaInput.addEventListener('keydown', (event) => {
+    input.addEventListener('keydown', (event) => {
       if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return;
       event.preventDefault();
-      void openExternalMediaFromInput();
+      void openExternalMediaFromInput(input.value);
     });
-  }
+  });
 
   externalMediaPlayToggleButtons.forEach((button) => {
     if (!(button instanceof HTMLButtonElement)) return;
@@ -13106,14 +13717,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  presentationSelect.addEventListener('change', () => {
-    const selectedHref = normalizeText(presentationSelect.value) || null;
-    schedulePresentationLoad({
-      broadcast: canLeadSession(),
-      href: selectedHref,
-      successMessage: selectedHref ? 'Escena Reveal cargada.' : 'Escena limpia.',
-    });
-    setControlState();
+  root.addEventListener('change', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-presentation-select]')) {
+      const sel = target.closest('[data-presentation-select]') as HTMLSelectElement;
+      const selectedHref = normalizeText(sel.value) || null;
+      schedulePresentationLoad({
+        broadcast: canLeadSession(),
+        href: selectedHref,
+        successMessage: selectedHref ? 'Escena Reveal cargada.' : 'Escena limpia.',
+      });
+      setControlState();
+    }
   });
 
   if (presentationClearButton instanceof HTMLButtonElement) {
@@ -13232,6 +13847,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (normalizedCommand === 'setup-modal-toggle') {
+      setSetupModalOpen(!(setupModal instanceof HTMLElement && !setupModal.hidden));
+      return;
+    }
+
     if (normalizedCommand === 'layout-full') {
       const button = layoutChoiceButtons.find(
         (node) => normalizeLayoutMode(node.dataset.layoutChoice || '') === 'teacher',
@@ -13262,9 +13882,25 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (normalizedCommand === 'layout-clase') {
+      const button = layoutChoiceButtons.find(
+        (node) => (node.dataset.layoutChoice || '') === 'clase',
+      );
+      (button instanceof HTMLButtonElement ? button : null)?.click();
+      return;
+    }
+
     if (normalizedCommand === 'layout-grid') {
       const button = layoutChoiceButtons.find(
         (node) => normalizeLayoutMode(node.dataset.layoutChoice || '') === 'grid',
+      );
+      (button instanceof HTMLButtonElement ? button : null)?.click();
+      return;
+    }
+
+    if (normalizedCommand === 'layout-graph') {
+      const button = layoutChoiceButtons.find(
+        (node) => (node.dataset.layoutChoice || '') === 'graph',
       );
       (button instanceof HTMLButtonElement ? button : null)?.click();
       return;
@@ -13362,6 +13998,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (normalizedCommand === 'toggle-forum') {
+      const button = root.querySelector('[data-action="forum-toggle"]');
+      if (button instanceof HTMLButtonElement && !button.disabled) {
+        button.click();
+      }
+      return;
+    }
+
     if (normalizedCommand === 'toggle-microphone') {
       if (microphoneButton instanceof HTMLButtonElement && !microphoneButton.disabled) {
         microphoneButton.click();
@@ -13431,6 +14075,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       void endReverseMicState();
       return;
     }
+
+    if (normalizedCommand === 'workspace:apply:presentation') {
+      workspaceManager.applyLayoutByKey('presentation');
+      return;
+    }
+
+    if (normalizedCommand === 'workspace:apply:debate') {
+      workspaceManager.applyLayoutByKey('debate');
+      return;
+    }
+
+    if (normalizedCommand === 'workspace:apply:full-win-speaker') {
+      workspaceManager.applyLayoutByKey('full-win-speaker');
+      return;
+    }
+
+    if (normalizedCommand === 'workspace:apply:clase') {
+      workspaceManager.applyLayoutByKey('clase');
+      return;
+    }
+
+    if (normalizedCommand === 'workspace:apply:hyperpiano') {
+      workspaceManager.togglePod('hyperpiano', true);
+      return;
+    }
   };
 
   searchWindow.handleSearchNavigation = async ({ href }) => {
@@ -13456,7 +14125,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (setupModal instanceof HTMLElement && !setupModal.hidden && event.key === 'Escape') {
+      event.preventDefault();
+      setSetupModalOpen(false);
+      return;
+    }
+
     const isPrimaryShortcutModifier = event.ctrlKey && !event.metaKey;
+    const isMetaShortcutModifier = event.metaKey && !event.ctrlKey;
+
+    if ((isPrimaryShortcutModifier || isMetaShortcutModifier) && event.key === ',') {
+      event.preventDefault();
+      executeRoomShortcutCommand('setup-modal-toggle');
+      return;
+    }
 
     const isRightSidebarShortcut =
       isPrimaryShortcutModifier &&
@@ -13489,16 +14171,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       const primaryCommandMap: Record<string, string> = {
         b: 'break-rooms-toggle',
         c: 'focus-chat',
+        d: 'workspace:apply:clase',
         e: 'layout-overlay:media',
-        f: 'layout-full',
-        g: 'layout-grid',
-        h: 'toggle-hand',
+        f: 'workspace:apply:full-win-speaker',
+        g: 'workspace:apply:debate',
+        h: 'workspace:apply:hyperpiano',
         i: 'instruments-toggle',
         j: 'toggle-connect',
         k: 'session-kick-toggle',
         m: 'mute-all',
         o: 'layout-overlay:concept',
-        p: 'layout-presentation',
+        p: 'workspace:apply:presentation',
         s: 'layout-share',
         z: 'layout-overlay:whiteboard',
       };
@@ -13514,6 +14197,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (isPrimaryShortcutModifier && event.shiftKey && !event.altKey) {
       const key = String(event.key || '').toLowerCase();
       const utilityCommandMap: Record<string, string> = {
+        f: 'toggle-forum',
+        g: 'layout-grid',
         i: 'copy-invite-link',
         n: 'cycle-camera',
         r: 'toggle-record',
@@ -13814,6 +14499,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     void handleVpsStatsTick();
   }
   window.addEventListener('resize', handleViewportResize);
+
+  // Auto-open welcome modal for setup if not admin
+  if (localRole !== 'admin' && room.state === ConnectionState.Disconnected) {
+    void openWelcomeModal();
+  }
 
   const teardown = () => {
     if (destroyed) return;

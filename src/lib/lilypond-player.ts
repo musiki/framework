@@ -1545,6 +1545,16 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
 
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
+      const isStarting = !controller.isPlaying();
+      
+      // Broadcast to room via custom event that the controller/room logic will catch
+      window.dispatchEvent(new CustomEvent('musiki:lilypond:play', {
+          detail: {
+              action: isStarting ? 'start' : 'stop',
+              url: midiUrl
+          }
+      }));
+
       if (controller.isPlaying()) {
         controller.stop();
       } else {
@@ -1574,6 +1584,14 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
       },
     };
 
+    // Add play/stop methods to handle for remote control
+    (handle as any).play = () => {
+        if (!controller.isPlaying()) controller.play().catch(() => {});
+    };
+    (handle as any).stop = () => {
+        if (controller.isPlaying()) controller.stop();
+    };
+
     lilypondPlayerHandles.set(container, handle);
     return handle;
   } catch (err) {
@@ -1588,6 +1606,26 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
     btn.style.cursor = 'default';
     return null;
   }
+}
+
+// Global registry for remote control
+if (typeof window !== 'undefined') {
+    window.addEventListener('musiki:lilypond:remote-play', (e: any) => {
+        const { action, url } = e.detail;
+        console.log(`[lilypond-player] Remote play request: ${action} for ${url}`);
+        
+        // Find all containers that might have this MIDI URL installed
+        const containers = Array.from(document.querySelectorAll<HTMLElement>('[data-lily-player-installed]'));
+        for (const container of containers) {
+            if (container.dataset.lilyPlayerInstalled === url) {
+                const handle = lilypondPlayerHandles.get(container);
+                if (handle) {
+                    if (action === 'start') (handle as any).play();
+                    else (handle as any).stop();
+                }
+            }
+        }
+    });
 }
 
 console.log('[lilypond-player] Library loaded. Auto-hydration starting...');

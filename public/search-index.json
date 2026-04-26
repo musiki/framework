@@ -290,6 +290,16 @@
     "isPublic": true
   },
   {
+    "slug": "public/conceptos/tropo",
+    "title": "tropo",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": "concept",
+    "courseId": null,
+    "isPublic": true
+  },
+  {
     "slug": "public/instrumentos/spectral parrot",
     "title": "spectral parrot",
     "description": "",

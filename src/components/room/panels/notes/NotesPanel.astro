@@ -1,6 +1,4 @@
-<details class="conference-sidebar-section conference-sidebar-panel conference-sidebar-section--notes" data-notes-section>
-  <summary class="conference-sidebar-heading">NOTAS</summary>
-
+<div class="musiki-pod" data-pod="notes" data-pod-title="NOTAS" data-notes-section>
   <div class="conference-sidebar-panel-body conference-sidebar-panel-body--notes">
     <form class="conference-notes-form" data-notes-form autocomplete="off">
       <textarea
@@ -9,33 +7,32 @@
         placeholder="Escribe tu nota… (markdown, ```mermaid, ```lilypond)"
         rows="5"
       ></textarea>
-      <div class="conference-notes-actions">
-        <button type="button" class="conference-notes-new-btn" data-notes-new title="Nueva nota">+</button>
-        <button type="submit" class="conference-notes-save" data-notes-save title="Guardar">G</button>
-        <button type="button" class="conference-notes-preview-btn" data-notes-preview-btn title="Vista previa">V</button>
+      <div class="musiki-pod-toolbar">
+        <button type="button" class="musiki-pod-btn conference-notes-new-btn" data-notes-new title="Nueva nota">+</button>
+        <button type="submit" class="musiki-pod-btn musiki-pod-btn--accent conference-notes-save" data-notes-save title="Guardar">G</button>
+        <button type="button" class="musiki-pod-btn conference-notes-preview-btn" data-notes-preview-btn title="Vista previa">V</button>
         <button
           type="button"
-          class="conference-notes-download"
+          class="musiki-pod-btn conference-notes-download"
           data-notes-download
           aria-label="Descargar nota"
           title="Descargar nota (.txt)"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14">
             <path
               d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
               fill="currentColor"
             />
           </svg>
-          <span class="conference-sr-only">Descargar nota</span>
         </button>
         <div class="conference-notes-archive-wrap">
           <button
             type="button"
-            class="conference-notes-archive-trigger"
+            class="musiki-pod-btn conference-notes-archive-trigger"
             data-notes-archive-trigger
             title="Archivo de notas"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14">
               <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z" fill="currentColor"/>
             </svg>
           </button>
@@ -46,4 +43,12 @@
 
     <div class="conference-notes-preview-pane" data-notes-preview hidden></div>
   </div>
-</details>
+</div>
+
+<style>
+  .musiki-pod[data-pod="notes"] {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+</style>

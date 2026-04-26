@@ -19,6 +19,14 @@
   height: calc(100vh - var(--conference-bar-height));
   height: calc(100dvh - var(--conference-bar-height));
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+#musiki-workspace-root {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
 }
 
 .conference-external-media-shell {
@@ -1401,17 +1409,53 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  background:
-    linear-gradient(180deg, rgba(13, 13, 15, 0.98), rgba(4, 4, 6, 0.98));
+  background: #09090b !important;
   backdrop-filter: blur(8px);
   /* Force dark mode variables for CodeMirror host */
-  --c-bg-mute: transparent;
-  --c-fg: #cdd6f4;
-  --c-border: rgba(255, 255, 255, 0.08);
+  --c-bg: #09090b !important;
+  --c-bg-mute: #09090b !important;
+  --c-fg: #cdd6f4 !important;
+  --c-fg-hi: #f8fafc !important;
+  --c-border: rgba(255, 255, 255, 0.08) !important;
   
   /* Container for internal toolbar responsiveness */
   container-type: inline-size;
   container-name: lily-editor;
+}
+
+.musiki-pod[data-pod="lilypond-editor"],
+.musiki-pod[data-pod="lilypond-editor"] .conference-stage-panel,
+.musiki-pod[data-pod="lilypond-editor"] .conference-lilypond-editor,
+.musiki-pod[data-pod="lilypond-editor"] .musiki-codemirror-host,
+.musiki-pod[data-pod="lilypond-editor"] .cm-editor {
+  background-color: #09090b !important;
+  background: #09090b !important;
+  color: #cdd6f4 !important;
+}
+
+.conference-lilypond-source {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  background: #000 !important;
+  color: #cdd6f4 !important;
+  border: none;
+  padding: 1rem;
+  font-family: var(--font-family-mono, monospace);
+  outline: none;
+}
+
+.conference-lilypond-editor .musiki-codemirror-host,
+.conference-lilypond-editor .cm-editor {
+  background-color: #09090b !important;
+  color: #cdd6f4 !important;
+  height: 100%;
+}
+
+.conference-lilypond-editor .cm-gutters {
+  background-color: #0c0c0e !important;
+  color: #585b70 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
 @container lily-editor (max-width: 450px) {

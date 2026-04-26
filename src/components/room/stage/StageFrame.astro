@@ -1,13 +1,14 @@
 ---
 import './stage-frame.css';
-import StagePanels from './StagePanels.astro';
 import StageOverlays from '../overlays/StageOverlays.astro';
+import PodTemplates from '../workspace/PodTemplates.astro';
 
 type Props = {
   defaultLayout?: 'grid' | 'teacher' | 'presentation' | 'screenshare' | 'whiteboard' | 'concept' | 'lilypond';
+  presentationOptions?: any[];
 };
 
-const { defaultLayout = 'presentation' } = Astro.props as Props;
+const { defaultLayout = 'presentation', presentationOptions = [] } = Astro.props as Props;
 ---
 
 <section class="conference-stage-frame">
@@ -16,9 +17,24 @@ const { defaultLayout = 'presentation' } = Astro.props as Props;
     <span class="conference-br-countdown-secs" data-br-countdown-text></span>
   </div>
 
-  <section class="conference-stage" data-stage data-layout={defaultLayout}>
-    <StagePanels />
-  </section>
+  <div id="musiki-workspace-root" class="dockview-theme-dark" data-workspace-root data-stage>
+    <!-- Dockview will inject its grid here -->
+  </div>
 
+  <PodTemplates presentationOptions={presentationOptions} />
   <StageOverlays />
 </section>
+
+<style>
+  #musiki-workspace-root {
+    width: 100%;
+    height: 100%;
+    background: #000;
+  }
+  
+  .conference-stage-frame {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+</style>

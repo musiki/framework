@@ -32,6 +32,10 @@ const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || 'G-0N
 	(function() {
 		const readStoredTheme = () => {
 			try {
+				const params = new URLSearchParams(window.location.search);
+				const urlTheme = params.get('theme');
+				if (urlTheme === 'dark' || urlTheme === 'light') return urlTheme;
+
 				const value = localStorage.getItem('theme');
 				return value === 'dark' || value === 'light' ? value : null;
 			} catch {

@@ -129,6 +129,7 @@ export type PersistedRoomSetup = {
   name?: string;
   preferredAudioInputId?: string;
   preferredVideoInputId?: string;
+  preferredMidiInputId?: string;
   backgroundColor?: string;
   backgroundEffectMode?: BackgroundEffectMode;
   backgroundImageLabel?: string;
@@ -161,6 +162,11 @@ export type PersistedRoomSetup = {
   mixerMasterGain?: number;
   mixerMasterMuted?: boolean;
   mixerMasterPan?: number;
+  mixerHpGain?: number;
+  mixerHpDelaySend?: number;
+  mixerHpMuted?: boolean;
+  mixerHpPan?: number;
+  mixerHpReverbSend?: number;
   mixerSynthGain?: number;
   mixerSynthDelaySend?: number;
   mixerSynthMuted?: boolean;

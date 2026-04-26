@@ -1918,3 +1918,59 @@ details[open]>summary.conference-sidebar-heading::before {
     display: none !important;
   }
 }
+
+.pod-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+  padding: 0.8rem;
+}
+
+.pod-gallery-item {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid color-mix(in srgb, var(--pod-color, #76d3ff) 80%, white);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 5px color-mix(in srgb, var(--pod-color, #76d3ff) 40%, transparent);
+}
+
+.pod-gallery-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: #fff;
+  box-shadow: 0 0 12px var(--pod-color, #76d3ff), inset 0 0 4px var(--pod-color, #76d3ff);
+  transform: scale(1.05);
+  z-index: 10;
+}
+
+.pod-gallery-item-icon {
+  font-size: 2.2rem; 
+  font-weight: 700;
+  color: #fff;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  pointer-events: none;
+  margin-top: 0.4rem;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--pod-color, #76d3ff) 50%, transparent);
+}
+
+.pod-gallery-item-title {
+  position: absolute;
+  bottom: 0.25rem;
+  font-size: 0.4rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  color: #fff;
+  opacity: 0.7;
+  letter-spacing: 0.05em;
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
+}

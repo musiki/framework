@@ -94,6 +94,7 @@ export const getPresentationCircleIdentity = ({
 
 export const resolveParticipantTargetSlot = ({
   canLeadSession,
+  circleSlot,
   focusedParticipantIdentity,
   gridSlot,
   isLocalParticipant,
@@ -106,6 +107,7 @@ export const resolveParticipantTargetSlot = ({
   teacherSlot,
 }: {
   canLeadSession: boolean;
+  circleSlot: HTMLElement | null;
   focusedParticipantIdentity: string;
   gridSlot: HTMLElement;
   isLocalParticipant: boolean;
@@ -117,6 +119,10 @@ export const resolveParticipantTargetSlot = ({
   studentsSlot: HTMLElement;
   teacherSlot: HTMLElement;
 }) => {
+  if (showPresentationCircle && circleSlot && participant.identity === presentationCircleIdentity) {
+    return circleSlot;
+  }
+
   if (layout === 'grid') {
     return gridSlot;
   }

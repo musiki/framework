@@ -1,3 +1,5 @@
+@import "dockview-core/dist/styles/dockview.css";
+
 :root {
   --accent: #2337ff;
   --accent-dark: #000d8a;

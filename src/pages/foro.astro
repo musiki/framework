@@ -89,6 +89,7 @@ const courseParam = await canonicalizeCourseId(String(requestUrl.searchParams.ge
 const requestedView = String(requestUrl.searchParams.get('view') || '').trim().toLowerCase();
 const requestedScope = String(requestUrl.searchParams.get('scope') || '').trim();
 const requestedThreadId = String(requestUrl.searchParams.get('thread') || '').trim();
+const isEmbedded = String(requestUrl.searchParams.get('view_mode') || '').trim().toLowerCase() === 'embedded';
 const activeCourse =
   accessibleCourses.find((course) => course.courseId === courseParam) ||
   accessibleCourses[0] ||
@@ -1394,120 +1395,158 @@ if (activeCourse) {
           gap: 0.2rem;
         }
       }
+      #forum-reader-root.is-embedded {
+        margin-top: 0;
+        border: none;
+        background: transparent;
+        padding: 0.5rem;
+      }
+      
+      #forum-reader-root.is-embedded .forum-panel {
+        background: rgba(255, 255, 255, 0.03);
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+
+      #forum-reader-root.is-embedded .forum-thread-item,
+      #forum-reader-root.is-embedded .forum-post,
+      #forum-reader-root.is-embedded .forum-field,
+      #forum-reader-root.is-embedded .forum-textarea {
+        background: #000;
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.15);
+      }
+
+      #forum-reader-root.is-embedded .forum-thread-title,
+      #forum-reader-root.is-embedded .forum-post-name {
+        color: #fff;
+      }
+
+      #forum-reader-root.is-embedded .forum-post-body {
+        color: #e0e0e0;
+      }
     </style>
   </head>
   <body>
-    <Header
-      courseId={activeCourse?.courseId || ''}
-      activeCourseId={activeCourse?.courseId || ''}
-      activeCourseCode={activeCourse?.code || ''}
-    />
-    <main class="forum-shell">
-      <aside class="forum-sidebar">
-        <div class="forum-sidebar-top">
-          <form method="get">
-            <label for="forum-course-select">Curso</label>
-            <select
-              id="forum-course-select"
-              name="course"
-              class="forum-course-select"
-              onchange="this.form.requestSubmit()"
-              disabled={accessibleCourses.length === 0}
-            >
-              {accessibleCourses.length === 0 ? (
-                <option value="">Sin cursos con acceso</option>
-              ) : (
-                accessibleCourses.map((course) => (
-                  <option value={course.courseId} selected={activeCourse?.courseId === course.courseId}>
-                    {course.title}
-                  </option>
-                ))
-              )}
-            </select>
-          </form>
-        </div>
-
-        <h3 class="forum-sidebar-title">MAIN</h3>
-        <ul class="forum-nav-list">
-          {mainForumItems.length === 0 ? (
-            <li class="forum-nav-link">
-              <span class="forum-nav-label">No hay foros principales</span>
-            </li>
-          ) : (
-            mainForumItems.map((item) => (
-              <li>
-                <a
-                  href={item.href}
-                  class:list={['forum-nav-link', { 'is-active': item.isActive }]}
-                  data-forum-scope-key={item.scopeKey}
-                  data-forum-total={item.totalMessages}
-                  data-forum-last-activity={item.lastActivityAt || ''}
-                  aria-current={item.isActive ? 'page' : undefined}
-                >
-                  <span class="forum-nav-label">{item.title}</span>
-                  <span class="forum-nav-counts">
-                    <span class="forum-count-total" title="mensajes totales">{item.totalMessages}</span>
-                    <span class="forum-count-unread" title="mensajes no leídos">0</span>
-                  </span>
-                </a>
-              </li>
-            ))
-          )}
-        </ul>
-
-        <hr class="forum-divider" />
-
-        <h3 class="forum-sidebar-title">ON CLASSES</h3>
-        <ul class="forum-nav-list">
-          {classForumItems.length === 0 ? (
-            <li class="forum-nav-link">
-              <span class="forum-nav-label">No hay foros de clase</span>
-            </li>
-          ) : (
-            classForumItems.map((item) => (
-              <li>
-                <a
-                  href={item.href}
-                  class:list={['forum-nav-link', { 'is-active': item.isActive }]}
-                  data-forum-scope-key={item.scopeKey}
-                  data-forum-total={item.totalMessages}
-                  data-forum-last-activity={item.lastActivityAt || ''}
-                  aria-current={item.isActive ? 'page' : undefined}
-                >
-                  <span class="forum-nav-label">{item.title}</span>
-                  <span class="forum-nav-counts">
-                    <span class="forum-count-total" title="mensajes totales">{item.totalMessages}</span>
-                    <span class="forum-count-unread" title="mensajes no leídos">0</span>
-                  </span>
-                </a>
-              </li>
-            ))
-          )}
-        </ul>
-      </aside>
-
-      <section class="forum-main">
-        <div class="forum-main-header">
-          <div>
-            <h1>Foro</h1>
-            {activeCourse ? (
-              <p>
-                Lectura dedicada de hilos para <strong>{activeCourse.title}</strong>.
-              </p>
-            ) : (
-              <p>No tienes cursos con acceso a foro en este momento.</p>
-            )}
+    {!isEmbedded && (
+      <Header
+        courseId={activeCourse?.courseId || ''}
+        activeCourseId={activeCourse?.courseId || ''}
+        activeCourseCode={activeCourse?.code || ''}
+      />
+    )}
+    <main class:list={["forum-shell", { "is-embedded": isEmbedded }]} style={isEmbedded ? "padding:0; grid-template-columns: 1fr;" : ""}>
+      {!isEmbedded && (
+        <aside class="forum-sidebar">
+          <div class="forum-sidebar-top">
+            <form method="get">
+              <label for="forum-course-select">Curso</label>
+              <select
+                id="forum-course-select"
+                name="course"
+                class="forum-course-select"
+                onchange="this.form.requestSubmit()"
+                disabled={accessibleCourses.length === 0}
+              >
+                {accessibleCourses.length === 0 ? (
+                  <option value="">Sin cursos con acceso</option>
+                ) : (
+                  accessibleCourses.map((course) => (
+                    <option value={course.courseId} selected={activeCourse?.courseId === course.courseId}>
+                      {course.title}
+                    </option>
+                  ))
+                )}
+              </select>
+            </form>
           </div>
-          {activeCourse && <div class="forum-scope-badge">{activeForumLabel}</div>}
-        </div>
-        <div class="forum-panel-help">
-          Verde: total de mensajes por foro. Rojo: mensajes no leídos desde tu última lectura.
-        </div>
+
+          <h3 class="forum-sidebar-title">MAIN</h3>
+          <ul class="forum-nav-list">
+            {mainForumItems.length === 0 ? (
+              <li class="forum-nav-link">
+                <span class="forum-nav-label">No hay foros principales</span>
+              </li>
+            ) : (
+              mainForumItems.map((item) => (
+                <li>
+                  <a
+                    href={item.href}
+                    class:list={['forum-nav-link', { 'is-active': item.isActive }]}
+                    data-forum-scope-key={item.scopeKey}
+                    data-forum-total={item.totalMessages}
+                    data-forum-last-activity={item.lastActivityAt || ''}
+                    aria-current={item.isActive ? 'page' : undefined}
+                  >
+                    <span class="forum-nav-label">{item.title}</span>
+                    <span class="forum-nav-counts">
+                      <span class="forum-count-total" title="mensajes totales">{item.totalMessages}</span>
+                      <span class="forum-count-unread" title="mensajes no leídos">0</span>
+                    </span>
+                  </a>
+                </li>
+              ))
+            )}
+          </ul>
+
+          <hr class="forum-divider" />
+
+          <h3 class="forum-sidebar-title">ON CLASSES</h3>
+          <ul class="forum-nav-list">
+            {classForumItems.length === 0 ? (
+              <li class="forum-nav-link">
+                <span class="forum-nav-label">No hay foros de clase</span>
+              </li>
+            ) : (
+              classForumItems.map((item) => (
+                <li>
+                  <a
+                    href={item.href}
+                    class:list={['forum-nav-link', { 'is-active': item.isActive }]}
+                    data-forum-scope-key={item.scopeKey}
+                    data-forum-total={item.totalMessages}
+                    data-forum-last-activity={item.lastActivityAt || ''}
+                    aria-current={item.isActive ? 'page' : undefined}
+                  >
+                    <span class="forum-nav-label">{item.title}</span>
+                    <span class="forum-nav-counts">
+                      <span class="forum-count-total" title="mensajes totales">{item.totalMessages}</span>
+                      <span class="forum-count-unread" title="mensajes no leídos">0</span>
+                    </span>
+                  </a>
+                </li>
+              ))
+            )}
+          </ul>
+        </aside>
+      )}
+
+      <section class="forum-main" style={isEmbedded ? "border:none; border-radius:0; background:transparent;" : ""}>
+        {!isEmbedded && (
+          <>
+            <div class="forum-main-header">
+              <div>
+                <h1>Foro</h1>
+                {activeCourse ? (
+                  <p>
+                    Lectura dedicada de hilos para <strong>{activeCourse.title}</strong>.
+                  </p>
+                ) : (
+                  <p>No tienes cursos con acceso a foro en este momento.</p>
+                )}
+              </div>
+              {activeCourse && <div class="forum-scope-badge">{activeForumLabel}</div>}
+            </div>
+            <div class="forum-panel-help">
+              Verde: total de mensajes por foro. Rojo: mensajes no leídos desde tu última lectura.
+            </div>
+          </>
+        )}
         {forumListError && <p class="forum-error">{forumListError}</p>}
 
         {activeCourse && (
           <section
             id="forum-reader-root"
+            class:list={[{ "is-embedded": isEmbedded }]}
             data-course-id={activeCourse.courseId}
             data-can-moderate={activeCourseCanModerate ? 'true' : 'false'}
             data-view={activeForumView}

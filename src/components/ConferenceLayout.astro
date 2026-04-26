@@ -1,6 +1,8 @@
 ---
 import InstrumentsSidebar from "./room/core/InstrumentsSidebar.astro";
 import RoomSidebar from "./room/panels/RoomSidebar.astro";
+import SetupModal from "./room/panels/setup/SetupModal.astro";
+import WelcomeModal from "./room/overlays/WelcomeModal.astro";
 import StageFrame from "./room/stage/StageFrame.astro";
 import type { RoomPresentationOption } from "../lib/live/presentation-options";
 
@@ -58,9 +60,9 @@ if (
 }
 ---
 
-<section
-  class="conference-shell"
+<div
   data-conference-root
+  data-has-sidebar={defaultRole === 'teacher' ? 'true' : 'false'}
   data-livekit-url={livekitUrl}
   data-course-id={courseId}
   data-gravity-ball="false"
@@ -75,20 +77,43 @@ if (
   data-invite-mode={inviteMode}
   data-role={defaultRole}
   data-sidebar-collapsed="false"
+  data-show-circle="false"
+>
+<section
+  class="conference-shell"
+  data-has-sidebar={defaultRole === 'teacher' ? 'true' : 'false'}
+  data-livekit-url={livekitUrl}
+  data-course-id={courseId}
+  data-gravity-ball="false"
+  data-gravity-ball-stage-visible="true"
+  data-instruments-open="false"
+  data-instruments-allowed="true"
+  data-recording-guide-suppressed="false"
+  data-recording-guide-visible="false"
+  data-invite-code={inviteCode}
+  data-invite-error={inviteError}
+  data-invite-label={inviteLabel}
+  data-invite-mode={inviteMode}
+  data-role={defaultRole}
+  data-sidebar-collapsed="false"
+  data-show-circle="false"
 >
   <InstrumentsSidebar />
 
-  <StageFrame defaultLayout={defaultLayout} />
+  <StageFrame defaultLayout={defaultLayout} presentationOptions={normalizedPresentationOptions} />
 
-  <RoomSidebar
-    defaultIdentity={defaultIdentity}
-    defaultName={defaultName}
-    defaultRole={defaultRole}
-    defaultRoom={defaultRoom}
-  />
+  {defaultRole === 'teacher' && (
+    <RoomSidebar
+      defaultIdentity={defaultIdentity}
+      defaultName={defaultName}
+      defaultRole={defaultRole}
+      defaultRoom={defaultRoom}
+    />
+  )}
 
   <footer class="conference-bottombar">
-    <div class="conference-bar-group conference-bar-group--session">
+    <!-- FIXED LEFT -->
+    <div class="conference-bar-group conference-bar-group--fixed-left">
       <button
         type="button"
         class="conference-connect-button"
@@ -119,210 +144,16 @@ if (
 
       <button
         type="button"
-        class="conference-layout-button conference-test-button"
-        data-action="test-toggle"
-        aria-label="Test micrófono y cámara"
-        data-tooltip="Test de Mic y Cámara">TEST</button
+        class="conference-layout-button conference-setup-trigger-button"
+        data-action="setup-modal-toggle"
+        aria-label="Ajustes"
+        data-tooltip="Ajustes (Cmd + ,)"
       >
-
-      <div class="conference-count-shell">
-        <button
-          type="button"
-          class="conference-count-button"
-          aria-label="Participantes conectados"
-        >
-          <span
-            class="conference-count"
-            data-participant-count
-            data-compact="true">0</span
-          >
-        </button>
-        <div class="conference-roster-popup">
-          <div class="conference-roster-popup-head">
-            <span class="conference-roster-popup-title">Participantes</span>
-            <button
-              type="button"
-              class="conference-layout-button conference-kick-button"
-              data-action="session-kick-toggle"
-              data-tooltip="Modo expulsar Ctrl + K"
-              aria-label="Expulsar participantes"
-              hidden>K</button
-            >
-          </div>
-          <div class="conference-roster-scroll">
-            <ul class="conference-roster" data-participant-list>
-              <li class="conference-roster-empty">
-                Todavia no hay participantes en la sala.
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="conference-live-activity"
-        data-live-activity-button
-        aria-label="Abrir interacción en vivo"
-        title="Abrir interacción en vivo"
-        hidden
-      >
-        <span class="conference-live-led" aria-hidden="true"></span>
-        <span class="conference-live-timer" data-live-activity-timer>--:--</span
-        >
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L3.34 8.88a.487.487 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47.01.59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/>
+        </svg>
       </button>
 
-      <button
-        type="button"
-        class="conference-layout-button conference-mute-all-button"
-        data-session-mute-all-button
-        data-tooltip="Silenciar todos Ctrl + M"
-        aria-label="Silenciar a todos">M</button
-      >
-    </div>
-
-    <div class="conference-bar-group conference-bar-group--instrument">
-      <button
-        type="button"
-        class="conference-layout-button conference-instruments-button"
-        data-action="instruments-toggle"
-        aria-label="Instruments"
-        data-tooltip="Instruments Ctrl + I"
-      >
-        I
-      </button>
-    </div>
-
-    <div class="conference-bar-group conference-bar-group--layout">
-      <button
-        type="button"
-        class="conference-layout-button"
-        data-layout-choice="teacher"
-        data-tooltip="Full Ctrl + F">F</button
-      >
-      <button
-        type="button"
-        class="conference-layout-button"
-        data-layout-choice="screenshare"
-        data-tooltip="Screenshare Ctrl + S">S</button
-      >
-      <button
-        type="button"
-        class="conference-layout-button"
-        data-layout-choice="presentation"
-        data-tooltip="Presentación Ctrl + P">P</button
-      >
-      <button
-        type="button"
-        class="conference-layout-button"
-        data-layout-choice="grid"
-        data-tooltip="Grid Ctrl + G">G</button
-      >
-      <button
-        type="button"
-        class="conference-layout-button"
-        data-layout-choice="whiteboard"
-        data-tooltip="Pizarra Ctrl + Z">Z</button
-      >
-      <button
-        type="button"
-        class="conference-layout-button"
-        data-layout-choice="lilypond"
-        data-tooltip="LilyPond Live">L</button
-      >
-
-      <div class="conference-concepts-shell" data-concepts-shell hidden>
-        <button
-          type="button"
-          class="conference-layout-button conference-concepts-btn"
-          data-action="concepts-toggle"
-          data-concepts-btn
-          data-tooltip="Conceptos Ctrl + O"
-          aria-label="Conceptos">O</button
-        >
-      </div>
-
-      <button
-        type="button"
-        class="conference-layout-button conference-chat-focus-btn"
-        data-action="chat-focus"
-        data-tooltip="Chat Ctrl + C"
-        >C<span class="conference-chat-unread-dot" data-chat-unread hidden
-        ></span></button
-      >
-
-      <div
-        class="conference-external-media-controls-shell"
-        data-external-media-controls-shell
-        hidden
-      >
-        <button
-          type="button"
-          class="conference-layout-button conference-external-media-btn"
-          data-action="external-media-toggle"
-          data-external-media-btn
-          data-tooltip="Media externa Ctrl + E"
-          aria-label="External Media Session">E</button
-        >
-      </div>
-
-      <div class="conference-break-rooms-shell" data-break-rooms-shell hidden>
-        <button
-          type="button"
-          class="conference-layout-button conference-break-rooms-btn"
-          data-action="break-rooms-toggle"
-          data-break-rooms-btn
-          data-tooltip="Break Rooms Ctrl + B"
-          aria-label="Break Rooms">B</button
-        >
-        <button
-          type="button"
-          class="conference-layout-button conference-break-rooms-end-btn"
-          data-action="break-rooms-end"
-          data-break-rooms-end-btn
-          title="Terminar Break Rooms (con cuenta regresiva)"
-          aria-label="Terminar Break Rooms"
-          hidden>C</button
-        >
-        <button
-          type="button"
-          class="conference-layout-button conference-break-rooms-kill-btn"
-          data-action="break-rooms-kill"
-          data-break-rooms-kill-btn
-          title="Terminar Break Rooms inmediatamente"
-          aria-label="Terminar Break Rooms ahora"
-          hidden>T</button
-        >
-      </div>
-      <select
-        class="conference-sr-only"
-        data-layout-input
-        aria-hidden="true"
-        tabindex="-1"
-      >
-        <option value="teacher" selected={defaultLayout === "teacher"}
-          >Focus</option
-        >
-        <option value="screenshare" selected={defaultLayout === "screenshare"}
-          >Share</option
-        >
-        <option value="presentation" selected={defaultLayout === "presentation"}
-          >Presentation</option
-        >
-        <option value="grid" selected={defaultLayout === "grid"}>Grid</option>
-        <option value="whiteboard" selected={defaultLayout === "whiteboard"}
-          >Whiteboard</option
-        >
-        <option value="lilypond" selected={defaultLayout === "lilypond"}
-          >LilyPond</option
-        >
-        <option value="concept" selected={defaultLayout === "concept"}
-          >Concept</option
-        >
-      </select>
-    </div>
-
-    <div class="conference-bar-group conference-bar-group--controls">
       <div class="conference-device-stack">
         <button
           type="button"
@@ -377,89 +208,301 @@ if (
           </select>
         </div>
       </div>
-
-      <button
-        type="button"
-        class="conference-share-button"
-        data-action="screen-share"
-        title="Compartir pantalla"
-      >
-        SHARE
-      </button>
     </div>
 
-    <div class="conference-bar-group conference-bar-group--presentation">
-      <label class="conference-sr-only" for="conference-presentation-select"
-        >Presentacion</label
-      >
-      <select
-        id="conference-presentation-select"
-        name="presentation"
-        data-presentation-select
-      >
-        <option value="">none</option>
-        {
-          normalizedPresentationOptions.map((option) => (
-            <option
-              value={option.value}
-              data-course-id={option.courseId}
-              data-lesson-id={option.lessonId}
-              selected={option.value === defaultPresentation}
+    <!-- SCROLLABLE CENTER -->
+    <div class="conference-bar-scrollable-wrap">
+      <div class="conference-bar-group conference-bar-group--unified">
+        {defaultRole !== 'admin' && (
+          <button
+            type="button"
+            class="conference-layout-button conference-test-button"
+            data-action="welcome-modal-open"
+            aria-label="Configuración inicial"
+            data-tooltip="Configuración inicial">CONFIG</button
+          >
+        )}
+
+        <div class="conference-count-shell">
+          <button
+            type="button"
+            class="conference-count-button"
+            aria-label="Participantes conectados"
+          >
+            <span
+              class="conference-count"
+              data-participant-count
+              data-compact="true">0</span
             >
-              {option.label}
-            </option>
-          ))
-        }
-      </select>
+          </button>
+          <div class="conference-roster-popup">
+            <div class="conference-roster-popup-head">
+              <span class="conference-roster-popup-title">Participantes</span>
+              <button
+                type="button"
+                class="conference-layout-button conference-kick-button"
+                data-action="session-kick-toggle"
+                data-tooltip="Modo expulsar Ctrl + K"
+                aria-label="Expulsar participantes"
+                hidden>K</button
+              >
+            </div>
+            <div class="conference-roster-scroll">
+              <ul class="conference-roster" data-participant-list>
+                <li class="conference-roster-empty">
+                  Todavia no hay participantes en la sala.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="conference-live-activity"
+          data-live-activity-button
+          aria-label="Abrir interacción en vivo"
+          title="Abrir interacción en vivo"
+          hidden
+        >
+          <span class="conference-live-led" aria-hidden="true"></span>
+          <span class="conference-live-timer" data-live-activity-timer>--:--</span
+          >
+        </button>
+
+        <button
+          type="button"
+          class="conference-layout-button conference-mute-all-button"
+          data-session-mute-all-button
+          data-tooltip="Silenciar todos Ctrl + M"
+          aria-label="Silenciar a todos">M</button
+        >
+
+        <button
+          type="button"
+          class="conference-layout-button conference-instruments-button"
+          data-action="instruments-toggle"
+          aria-label="Instruments"
+          data-tooltip="Instruments Ctrl + I"
+        >
+          I
+        </button>
+
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-layout-choice="teacher"
+          data-tooltip="Full Ctrl + F">F</button
+        >
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-layout-choice="screenshare"
+          data-tooltip="Screenshare Ctrl + S">S</button
+        >
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-layout-choice="presentation"
+          data-tooltip="Presentación Ctrl + P">P</button
+        >
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-layout-choice="clase"
+          data-tooltip="Clase (Markdown) Ctrl + D">C</button
+        >
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-layout-choice="grid"
+          data-tooltip="Grid Ctrl + Shift + G">G</button
+        >
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-layout-choice="graph"
+          data-tooltip="Graph Ctrl + G">G</button
+        >
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-layout-choice="whiteboard"
+          data-tooltip="Pizarra Ctrl + Z">Z</button
+        >
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-layout-choice="lilypond"
+          data-tooltip="LilyPond Live">L</button
+        >
+
+        <div class="conference-concepts-shell" data-concepts-shell hidden>
+          <button
+            type="button"
+            class="conference-layout-button conference-concepts-btn"
+            data-action="concepts-toggle"
+            data-concepts-btn
+            data-tooltip="Conceptos Ctrl + O"
+            aria-label="Conceptos">O</button
+          >
+        </div>
+
+        <button
+          type="button"
+          class="conference-layout-button conference-chat-focus-btn"
+          data-action="chat-focus"
+          data-tooltip="Chat Ctrl + C"
+          >C<span class="conference-chat-unread-dot" data-chat-unread hidden
+          ></span></button
+        >
+
+        <button
+          type="button"
+          class="conference-layout-button conference-forum-btn"
+          data-action="forum-toggle"
+          data-tooltip="Foro Ctrl + Shift + F"
+          >Fr</button
+        >
+
+        <div
+          class="conference-external-media-controls-shell"
+          data-external-media-controls-shell
+          hidden
+        >
+          <button
+            type="button"
+            class="conference-layout-button conference-external-media-btn"
+            data-action="external-media-toggle"
+            data-external-media-btn
+            data-tooltip="Media externa Ctrl + E"
+            aria-label="External Media Session">E</button
+          >
+        </div>
+
+        <div class="conference-break-rooms-shell" data-break-rooms-shell hidden>
+          <button
+            type="button"
+            class="conference-layout-button conference-break-rooms-btn"
+            data-action="break-rooms-toggle"
+            data-break-rooms-btn
+            data-tooltip="Break Rooms Ctrl + B"
+            aria-label="Break Rooms">B</button
+          >
+          <button
+            type="button"
+            class="conference-layout-button conference-break-rooms-end-btn"
+            data-action="break-rooms-end"
+            data-break-rooms-end-btn
+            title="Terminar Break Rooms (con cuenta regresiva)"
+            aria-label="Terminar Break Rooms"
+            hidden>C</button
+          >
+          <button
+            type="button"
+            class="conference-layout-button conference-break-rooms-kill-btn"
+            data-action="break-rooms-kill"
+            data-break-rooms-kill-btn
+            title="Terminar Break Rooms inmediatamente"
+            aria-label="Terminar Break Rooms ahora"
+            hidden>T</button
+          >
+        </div>
+        <select
+          class="conference-sr-only"
+          data-layout-input
+          aria-hidden="true"
+          tabindex="-1"
+        >
+          <option value="teacher" selected={defaultLayout === "teacher"}
+            >Focus</option
+          >
+          <option value="screenshare" selected={defaultLayout === "screenshare"}
+            >Share</option
+          >
+          <option value="presentation" selected={defaultLayout === "presentation"}
+            >Presentation</option
+          >
+          <option value="clase" selected={defaultLayout === "clase"}
+            >Clase</option
+          >
+          <option value="grid" selected={defaultLayout === "grid"}>Grid</option>
+          <option value="graph" selected={defaultLayout === "graph"}>Graph</option>
+          <option value="whiteboard" selected={defaultLayout === "whiteboard"}
+            >Whiteboard</option
+          >
+          <option value="lilypond" selected={defaultLayout === "lilypond"}
+            >LilyPond</option
+          >
+          <option value="concept" selected={defaultLayout === "concept"}
+            >Concept</option
+          >
+        </select>
+
+        <button
+          type="button"
+          class="conference-share-button"
+          data-action="screen-share"
+          title="Compartir pantalla"
+        >
+          SHARE
+        </button>
+        <button
+          type="button"
+          class="conference-record-button"
+          data-action="record"
+          aria-label="Grabar transmision"
+          title="Grabar transmision"
+        >
+          <span class="conference-record-dot" aria-hidden="true"></span>
+        </button>
+        <button
+          type="button"
+          class="conference-icon-button conference-fullscreen-button"
+          data-action="fullscreen"
+          aria-label="Pantalla completa"
+          title="Pantalla completa"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+            <path
+              d="M4 9V4h5v2H6v3H4Zm10-5h6v6h-2V6h-4V4ZM4 20v-6h2v4h4v2H4Zm14-2v-4h2v6h-6v-2h4Z"
+              fill="currentColor"></path>
+          </svg>
+          <span class="conference-sr-only">Fullscreen</span>
+        </button>
+        <button
+          type="button"
+          class="conference-icon-button conference-shortcuts-button"
+          data-action="shortcuts-help"
+          aria-label="Atajos"
+          title="Atajos"
+        >
+          <span aria-hidden="true">?</span>
+          <span class="conference-sr-only">Atajos</span>
+        </button>
+
+        {defaultRole === 'teacher' && (
+          <div class="conference-bar-group conference-bar-group--stats" style="border-right: 0; border-left: 1px solid var(--conference-line); margin-left: 0.5rem; padding-left: 0.5rem;">
+            <span
+              class="conference-stat-indicator"
+              data-stat-cpu
+              title="CPU · uso del hilo principal estimado por RAF"
+              aria-label="CPU usage">--</span
+            >
+            <span
+              class="conference-stat-indicator"
+              data-stat-bw
+              title="Ancho de banda · bytes/s WebRTC"
+              aria-label="Bandwidth">--</span
+            >
+          </div>
+        )}
+        <span class="conference-session-timer" data-session-timer>00:00:00</span>
+      </div>
     </div>
 
-    <div class="conference-bar-group conference-bar-group--exit">
-      <span
-        class="conference-stat-indicator"
-        data-stat-cpu
-        title="CPU · uso del hilo principal estimado por RAF"
-        aria-label="CPU usage">--</span
-      >
-      <span
-        class="conference-stat-indicator"
-        data-stat-bw
-        title="Ancho de banda · bytes/s WebRTC"
-        aria-label="Bandwidth">--</span
-      >
-      <span class="conference-session-timer" data-session-timer>00:00:00</span>
-      <button
-        type="button"
-        class="conference-record-button"
-        data-action="record"
-        aria-label="Grabar transmision"
-        title="Grabar transmision"
-      >
-        <span class="conference-record-dot" aria-hidden="true"></span>
-      </button>
-      <button
-        type="button"
-        class="conference-icon-button conference-fullscreen-button"
-        data-action="fullscreen"
-        aria-label="Pantalla completa"
-        title="Pantalla completa"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
-          <path
-            d="M4 9V4h5v2H6v3H4Zm10-5h6v6h-2V6h-4V4ZM4 20v-6h2v4h4v2H4Zm14-2v-4h2v6h-6v-2h4Z"
-            fill="currentColor"></path>
-        </svg>
-        <span class="conference-sr-only">Fullscreen</span>
-      </button>
-      <button
-        type="button"
-        class="conference-icon-button conference-shortcuts-button"
-        data-action="shortcuts-help"
-        aria-label="Atajos"
-        title="Atajos"
-      >
-        <span aria-hidden="true">?</span>
-        <span class="conference-sr-only">Atajos</span>
-      </button>
+    <!-- FIXED RIGHT -->
+    <div class="conference-bar-group conference-bar-group--fixed-right">
       <a
         href={courseHomeHref}
         class="conference-exit-button"
@@ -484,186 +527,7 @@ if (
     </div>
 
     <!-- Popups Layer (Outside flex groups to avoid deforming the bar) -->
-    <div class="conference-concepts-popup" data-concepts-popup hidden>
-      <div class="conference-break-rooms-panel">
-        <div class="conference-break-rooms-section">
-          <input
-            type="text"
-            class="conference-break-rooms-custom-name"
-            placeholder="Buscar concepto..."
-            data-concept-search
-            inputmode="search"
-            autocomplete="off"
-          />
-          <div class="conference-session-action-row">
-            <button
-              type="button"
-              class="conference-session-action"
-              data-action="concept-launch-split"
-              title="Abrir en Mosaico">M</button
-            >
-            <button
-              type="button"
-              class="conference-session-action"
-              data-action="concept-launch-overlay"
-              title="Abrir en Overlay">F</button
-            >
-          </div>
-          <div
-            class="conference-concept-results"
-            data-concept-results
-            hidden
-          >
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div
-      class="conference-external-media-popup"
-      data-external-media-popup
-      hidden
-    >
-      <div
-        class="conference-break-rooms-panel conference-external-media-panel"
-      >
-        <div class="conference-break-rooms-section">
-          <label
-            class="conference-sr-only"
-            for="conference-external-media-input">Link multimedia</label
-          >
-          <input
-            id="conference-external-media-input"
-            type="text"
-            class="conference-break-rooms-custom-name conference-external-media-input"
-            placeholder="YouTube URL o búsqueda"
-            data-external-media-input
-            inputmode="search"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <div
-            class="conference-session-action-row conference-external-media-actions-row"
-          >
-            <button
-              type="button"
-              class="conference-session-action conference-session-action--compact"
-              data-action="external-media-open"
-              title="Abrir media externa"
-              aria-label="Abrir media externa">O</button
-            >
-            <button
-              type="button"
-              class="conference-session-action conference-session-action--compact"
-              data-action="external-media-stop"
-              title="Cerrar media externa"
-              aria-label="Cerrar media externa">C</button
-            >
-          </div>
-          <div
-            class="conference-external-media-results"
-            data-external-media-results
-            hidden
-          >
-          </div>
-        </div>
-
-        <p
-          class="conference-room-note conference-external-media-note"
-          data-external-media-status
-        >
-          Pega un link o escribe para buscar en YouTube.
-        </p>
-      </div>
-    </div>
-
     <div class="conference-break-rooms-popup" data-break-rooms-popup hidden>
-      <div
-        class="conference-break-rooms-panel conference-break-rooms-popup-setup"
-        data-break-rooms-popup-setup
-        hidden
-      >
-        <div class="conference-break-rooms-section">
-          <div class="conference-session-action-row">
-            <button
-              type="button"
-              class="conference-session-action conference-session-action--compact"
-              data-action="break-rooms-random"
-              title="Random Groups"
-              aria-label="Random Groups">R</button
-            >
-            <input
-              type="number"
-              class="conference-break-rooms-size-input"
-              data-break-rooms-size
-              min="2"
-              max="20"
-              value="3"
-              title="Tamaño del grupo"
-              aria-label="Tamaño del grupo"
-            />
-          </div>
-        </div>
-
-        <div class="conference-break-rooms-section">
-          <div class="conference-session-action-row">
-            <button
-              type="button"
-              class="conference-session-action conference-session-action--compact"
-              data-action="break-rooms-grupos"
-              title="Group Rooms"
-              aria-label="Group Rooms">G</button
-            >
-          </div>
-        </div>
-
-        <div class="conference-break-rooms-section">
-          <div
-            class="conference-break-rooms-custom-inputs"
-            data-break-rooms-custom-inputs
-          >
-            <input
-              type="text"
-              class="conference-break-rooms-custom-name"
-              placeholder="Grupo A"
-            />
-            <input
-              type="text"
-              class="conference-break-rooms-custom-name"
-              placeholder="Grupo B"
-            />
-            <input
-              type="text"
-              class="conference-break-rooms-custom-name"
-              placeholder="Grupo C"
-            />
-          </div>
-          <div class="conference-session-action-row">
-            <button
-              type="button"
-              class="conference-session-action conference-session-action--compact"
-              data-action="break-rooms-add-custom"
-              title="Agregar grupo"
-              aria-label="Agregar grupo">+</button
-            >
-            <button
-              type="button"
-              class="conference-session-action conference-session-action--compact"
-              data-action="break-rooms-custom"
-              title="Create Break Rooms"
-              aria-label="Create Break Rooms">C</button
-            >
-          </div>
-        </div>
-
-        <p class="conference-session-note" data-break-rooms-status></p>
-      </div>
-      <div
-        class="conference-break-rooms-popup-divider"
-        data-break-rooms-popup-divider
-        hidden
-      >
-      </div>
       <ul class="conference-break-rooms-list" data-break-rooms-list></ul>
     </div>
   </footer>
@@ -804,110 +668,133 @@ if (
       aria-modal="true"
       aria-labelledby="conference-invite-title"
     >
-      <div class="conference-invite-brand" aria-hidden="true">
-        <img
-          src="/logo-musiki.png"
-          alt=""
-          class="conference-invite-brand-logo"
-        />
-      </div>
-      <div class="conference-invite-head">
-        <div class="conference-invite-heading">
-          <strong id="conference-invite-title">
-            {
-              inviteMode === "invalid"
-                ? "Invitación no disponible"
-                : "Entrar a la sala"
-            }
-          </strong>
-          <p>
-            {
-              inviteMode === "invalid"
-                ? inviteError || "Esta invitación ya no está disponible."
-                : inviteLabel
-            }
-          </p>
+      <form data-external-invite-form>
+        <div class="conference-invite-brand" aria-hidden="true">
+          <img
+            src="/logo-musiki.png"
+            alt=""
+            class="conference-invite-brand-logo"
+          />
         </div>
-        <button
-          type="button"
-          class="conference-icon-button conference-invite-close"
-          data-external-invite-close
-          aria-label="Cerrar acceso externo"
-          title="Cerrar"
-        >
-          <span aria-hidden="true">×</span>
-        </button>
-      </div>
-
-      {
-        inviteMode === "invalid" ? (
-          <div class="conference-invite-body">
-            <p class="conference-invite-note">
-              {inviteError || "La invitación de esta sala venció o no existe."}
+        <div class="conference-invite-head">
+          <div class="conference-invite-heading">
+            <strong id="conference-invite-title">
+              {
+                inviteMode === "invalid"
+                  ? "Invitación no disponible"
+                  : "Entrar a la sala"
+              }
+            </strong>
+            <p>
+              {
+                inviteMode === "invalid"
+                  ? inviteError || "Esta invitación ya no está disponible."
+                  : inviteLabel
+              }
             </p>
-            <div class="conference-invite-actions">
-              <a href="/" class="conference-session-action">
-                IR AL INICIO
-              </a>
-            </div>
           </div>
-        ) : (
-          <div class="conference-invite-body">
-            <div class="conference-field">
-              <label for="conference-external-invite-name">Nombre</label>
-              <input
-                id="conference-external-invite-name"
-                name="external-invite-name"
-                type="text"
-                value=""
-                autocomplete="name"
-                data-external-invite-name
-              />
-            </div>
+          <button
+            type="button"
+            class="conference-icon-button conference-invite-close"
+            data-external-invite-close
+            aria-label="Cerrar acceso externo"
+            title="Cerrar"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
 
-            <div class="conference-field">
-              <label for="conference-external-invite-email">Mail</label>
-              <input
-                id="conference-external-invite-email"
-                name="external-invite-email"
-                type="email"
-                value=""
-                autocomplete="email"
-                data-external-invite-email
-              />
+        {
+          inviteMode === "invalid" ? (
+            <div class="conference-invite-body">
+              <p class="conference-invite-note">
+                {inviteError || "La invitación de esta sala venció o no existe."}
+              </p>
+              <div class="conference-invite-actions">
+                <a href="/" class="conference-session-action">
+                  IR AL INICIO
+                </a>
+              </div>
             </div>
+          ) : (
+            <div class="conference-invite-body">
+              <div class="conference-field">
+                <label for="conference-external-invite-name">Nombre</label>
+                <input
+                  id="conference-external-invite-name"
+                  name="external-invite-name"
+                  type="text"
+                  value=""
+                  autocomplete="name"
+                  data-external-invite-name
+                />
+              </div>
 
-            <div class="conference-field">
-              <label for="conference-external-invite-password">Password</label>
-              <input
-                id="conference-external-invite-password"
-                name="external-invite-password"
-                type="password"
-                value=""
-                autocomplete="current-password"
-                data-external-invite-password
-              />
+              <div class="conference-field">
+                <label for="conference-external-invite-email">Mail</label>
+                <input
+                  id="conference-external-invite-email"
+                  name="external-invite-email"
+                  type="email"
+                  value=""
+                  autocomplete="email"
+                  data-external-invite-email
+                />
+              </div>
+
+              <div class="conference-field">
+                <label for="conference-external-invite-password">Password</label>
+                <input
+                  id="conference-external-invite-password"
+                  name="external-invite-password"
+                  type="password"
+                  value=""
+                  autocomplete="current-password"
+                  data-external-invite-password
+                />
+              </div>
+
+              <p class="conference-invite-note" data-external-invite-gate-status>
+                Completa tus datos para entrar como invitado externo.
+              </p>
+
+              <div class="conference-invite-actions">
+                <button
+                  type="submit"
+                  class="conference-session-action"
+                  data-action="external-invite-join"
+                >
+                  ENTRAR
+                </button>
+              </div>
             </div>
-
-            <p class="conference-invite-note" data-external-invite-gate-status>
-              Completa tus datos para entrar como invitado externo.
-            </p>
-
-            <div class="conference-invite-actions">
-              <button
-                type="button"
-                class="conference-session-action"
-                data-action="external-invite-join"
-              >
-                ENTRAR
-              </button>
-            </div>
-          </div>
-        )
-      }
+          )
+        }
+      </form>
     </div>
   </div>
 </section>
+
+<p
+  class="conference-statusline conference-status-toast"
+  data-room-status
+  data-visible="false"
+  aria-live="polite"
+  aria-atomic="true"
+></p>
+
+<WelcomeModal 
+  isTeacher={defaultRole === 'teacher'} 
+  isExternal={defaultRole === 'external'}
+/>
+
+<SetupModal
+  defaultIdentity={defaultIdentity}
+  defaultName={defaultName}
+  defaultRole={defaultRole}
+  defaultRoom={defaultRoom}
+/>
+</div>
 
 <script>
   import { mountLiveKitRoom } from "../scripts/room/index.ts";
@@ -925,6 +812,7 @@ if (
 
     try {
       teardown = mountLiveKitRoom(root);
+      window.dispatchEvent(new CustomEvent('musiki:workspace:changed'));
     } catch (error) {
       console.error("Conference room mount failed:", error);
       root.dataset.mounted = "false";
@@ -982,90 +870,6 @@ if (
 
     toggle.addEventListener("change", updateSwitch);
     updateSwitch(); // init state
-  }
-
-  // ── Draggable camera circle preview ──────────────────────────────────
-  function initDraggableCircle() {
-    // The circle preview is the local tile in circle/presentation mode.
-    // We target the wrapper element that has position:absolute inside the stage.
-    const root = document.querySelector("[data-conference-root]");
-    if (!root) return;
-
-    // Observe DOM for the circle element (rendered after connection)
-    const observer = new MutationObserver(() => {
-      const circle =
-        (root.querySelector(".conference-tile--circle") as HTMLElement) ||
-        (root.querySelector("[data-local-circle]") as HTMLElement);
-      if (!circle || circle.dataset.draggableInit) return;
-      circle.dataset.draggableInit = "true";
-      makeDraggable(circle);
-    });
-    observer.observe(root, { childList: true, subtree: true });
-  }
-
-  function makeDraggable(el: HTMLElement) {
-    el.style.cursor = "grab";
-    el.style.userSelect = "none";
-    el.style.position = "absolute";
-
-    let startX = 0,
-      startY = 0,
-      startLeft = 0,
-      startTop = 0;
-
-    const onStart = (clientX: number, clientY: number) => {
-      const computed = window.getComputedStyle(el);
-      startLeft = parseInt(computed.left) || el.offsetLeft;
-      startTop = parseInt(computed.top) || el.offsetTop;
-      startX = clientX;
-      startY = clientY;
-      el.style.cursor = "grabbing";
-      el.style.transition = "none";
-    };
-
-    const onMove = (clientX: number, clientY: number) => {
-      const dx = clientX - startX;
-      const dy = clientY - startY;
-      el.style.left = `${startLeft + dx}px`;
-      el.style.top = `${startTop + dy}px`;
-      el.style.right = "auto";
-      el.style.bottom = "auto";
-    };
-
-    const onEnd = () => {
-      el.style.cursor = "grab";
-    };
-
-    // Mouse
-    el.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      onStart(e.clientX, e.clientY);
-      const move = (ev: MouseEvent) => onMove(ev.clientX, ev.clientY);
-      const up = () => {
-        onEnd();
-        window.removeEventListener("mousemove", move);
-        window.removeEventListener("mouseup", up);
-      };
-      window.addEventListener("mousemove", move);
-      window.addEventListener("mouseup", up);
-    });
-
-    // Touch
-    el.addEventListener("touchstart", (e) => {
-      const t = e.touches[0];
-      onStart(t.clientX, t.clientY);
-      const move = (ev: TouchEvent) => {
-        const tt = ev.touches[0];
-        onMove(tt.clientX, tt.clientY);
-      };
-      const end = () => {
-        onEnd();
-        window.removeEventListener("touchmove", move);
-        window.removeEventListener("touchend", end);
-      };
-      window.addEventListener("touchmove", move, { passive: true });
-      window.addEventListener("touchend", end);
-    });
   }
 
   // ── Session Stats: CPU (RAF) + Bandwidth (WebRTC getStats hook) ─────
@@ -1223,7 +1027,6 @@ if (
 
   const initExtras = () => {
     initInviteSwitch();
-    initDraggableCircle();
     initStats();
     initStatTooltip();
   };
@@ -1321,10 +1124,30 @@ if (
     min-height: 100dvh;
     display: grid;
     grid-template-columns: minmax(0, 1fr) var(--conference-sidebar-size);
+    grid-template-rows: 1fr;
     background: #000;
     color: var(--conference-fg);
     overflow: hidden;
     padding-bottom: var(--conference-bar-stack-height);
+  }
+
+  .conference-shell[data-has-sidebar="false"] {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr !important;
+  }
+
+  .conference-concepts-popup,
+  .conference-external-media-popup,
+  .conference-break-rooms-popup,
+  .conference-invite-gate,
+  .conference-status-toast,
+  .conference-welcome-modal,
+  .conference-setup-modal,
+  .conference-recording-guide,
+  .conference-reactions-layer,
+  .conference-hand-overlay {
+    grid-column: 1 / -1 !important;
+    grid-row: 1 / -1 !important;
   }
 
   /* global.css resets button/input font-size to 1rem; undo that inside the shell */
@@ -3190,7 +3013,7 @@ if (
     padding: 0.65rem 0.8rem;
     border: 1px solid var(--conference-line);
     background: rgba(0, 0, 0, 0.98);
-    z-index: 100;
+    z-index: 16000;
     display: grid;
     gap: 0.45rem;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
@@ -3201,14 +3024,18 @@ if (
   .conference-break-rooms-popup[hidden] {
     display: none;
   }
+.conference-status-toast {
+  position: fixed;
+  bottom: calc(var(--conference-bar-height) + 0.5rem);
+  left: 1rem;
+  z-index: 17000;
+  pointer-events: none;
+  max-width: min(28rem, calc(100vw - 2rem));
+}
 
-  .conference-concept-results {
-    display: grid;
-    gap: 0.25rem;
-    max-height: 250px;
-    overflow-y: auto;
-    margin-top: 0.45rem;
-  }
+.conference-status-toast[data-visible="false"] {
+  display: none;
+}
 
   .conference-external-media-input {
     min-width: 14rem;
@@ -3495,6 +3322,8 @@ if (
   }
 
   .conference-shell[data-instruments-allowed="false"][data-role="student"]
+    .conference-sidebar-section--instrument,
+  .conference-shell[data-instruments-allowed="false"][data-role="external"]
     .conference-sidebar-section--instrument {
     opacity: 0.52;
   }
@@ -3502,10 +3331,20 @@ if (
   .conference-shell[data-instruments-allowed="false"][data-role="student"]
     .conference-sidebar-section--instrument
     .conference-checkbox-row,
+  .conference-shell[data-instruments-allowed="false"][data-role="external"]
+    .conference-sidebar-section--instrument
+    .conference-checkbox-row,
   .conference-shell[data-instruments-allowed="false"][data-role="student"]
     .conference-sidebar-section--instrument
     .conference-ramp-row,
+  .conference-shell[data-instruments-allowed="false"][data-role="external"]
+    .conference-sidebar-section--instrument
+    .conference-ramp-row,
   .conference-shell[data-instruments-allowed="false"][data-role="student"]
+    .conference-sidebar-section--instrument
+    .conference-synth-meter
+    label,
+  .conference-shell[data-instruments-allowed="false"][data-role="external"]
     .conference-sidebar-section--instrument
     .conference-synth-meter
     label {
@@ -3927,22 +3766,62 @@ if (
 
   /* ── Bottom bar: control groups in a horizontal scrollable flex row ── */
   .conference-bottombar {
-    position: fixed;
-    inset: auto 0 0 0;
-    z-index: 80;
-    min-height: var(--conference-bar-height);
-    display: grid;
-    grid-template-columns: auto auto auto auto minmax(180px, 1fr) auto;
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 100 !important;
+    height: var(--conference-bar-height) !important;
+    display: flex;
     align-items: stretch;
     border-top: 1px solid var(--conference-line);
     background: rgba(0, 0, 0, 0.98);
+    overflow: hidden;
   }
 
   .conference-bar-group {
-    min-width: 0;
+    flex: 0 0 auto;
     display: flex;
     align-items: stretch;
     border-right: 1px solid var(--conference-line);
+  }
+
+  .conference-bar-group--unified {
+    border-right: 0;
+  }
+
+  .conference-bar-group--fixed-left,
+  .conference-bar-group--fixed-right {
+    flex: 0 0 auto;
+    z-index: 2;
+    background: inherit;
+  }
+
+  .conference-bar-group--fixed-right {
+    border-right: 0;
+    border-left: 1px solid var(--conference-line);
+    justify-content: flex-end;
+  }
+
+  .conference-bar-scrollable-wrap {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    background: inherit;
+    touch-action: pan-x;
+  }
+
+  .conference-bar-scrollable-wrap::-webkit-scrollbar {
+    display: none;
+  }
+
+  .conference-bar-scrollable-wrap .conference-bar-group:last-child {
+    border-right: 0;
   }
 
   .conference-mute-all-button {
@@ -4487,6 +4366,8 @@ if (
     font-size: 0.72rem;
     letter-spacing: 0.08em;
     font-variant-numeric: tabular-nums;
+    align-self: center;
+    height: 100%;
   }
 
   /* Session stat indicators (CPU, bandwidth) */
@@ -4770,123 +4651,52 @@ if (
 
   @media (max-width: 1000px) {
     .conference-shell {
-      --conference-bar-stack-height: calc(var(--conference-bar-height) * 2);
+      grid-template-columns: 1fr;
+      --conference-sidebar-size: min(36vh, 320px);
+      grid-template-rows: minmax(0, 1fr) var(--conference-sidebar-size);
+    }
+
+    .conference-shell[data-has-sidebar="false"] {
+      grid-template-rows: 1fr !important;
+    }
+
+    .conference-stage-frame {
+      height: calc(
+        100vh - var(--conference-sidebar-size) -
+          var(--conference-bar-stack-height)
+      );
+      height: calc(
+        100dvh - var(--conference-sidebar-size) -
+          var(--conference-bar-stack-height)
+      );
+    }
+
+    .conference-shell[data-has-sidebar="false"] .conference-stage-frame {
+      height: calc(100dvh - var(--conference-bar-stack-height));
     }
 
     .conference-instruments-sidebar {
-      width: min(88vw, var(--conference-instruments-size));
-    }
-
-    .conference-bottombar {
-      grid-template-columns: auto auto minmax(0, 1fr) auto auto;
-      grid-template-rows: repeat(2, minmax(0, var(--conference-bar-height)));
-      min-height: calc(var(--conference-bar-height) * 2);
-    }
-
-    .conference-bar-group {
-      min-height: var(--conference-bar-height);
-      flex-wrap: nowrap;
-      border-top: 1px solid var(--conference-line);
-    }
-
-    .conference-bar-group--session {
-      grid-column: 1;
-      grid-row: 1;
-      border-top: 0;
-    }
-
-    .conference-bar-group--instrument {
-      grid-column: 2;
-      grid-row: 1;
-      border-top: 0;
-    }
-
-    .conference-bar-group--layout {
-      grid-column: 3 / 5;
-      grid-row: 1;
-      border-top: 0;
-    }
-
-    .conference-bar-group--controls {
-      grid-column: 5;
-      grid-row: 1;
-      border-top: 0;
-      border-right: 0;
-    }
-
-    .conference-bar-group--presentation {
-      grid-column: 4;
-      grid-row: 2;
-      padding: 0 0.5rem;
-      justify-self: end;
-    }
-
-    .conference-bar-group--presentation select {
-      min-width: min(100%, 12rem);
-      width: min(12rem, 100%);
-    }
-
-    .conference-bar-group--exit {
-      grid-column: 5;
-      grid-row: 2;
-      border-right: 0;
-      justify-content: flex-end;
-    }
-
-    .conference-connect-button {
-      min-width: 50px;
-      padding: 0 0.72rem;
-    }
-
-    .conference-icon-button,
-    .conference-layout-button,
-    .conference-share-button,
-    .conference-record-button,
-    .conference-exit-button {
-      min-width: 36px;
-      padding: 0 0.52rem;
-    }
-
-    .conference-count-button {
-      min-width: 32px;
-      padding: 0 0.42rem;
-    }
-
-    .conference-layout-button,
-    .conference-share-button,
-    .conference-exit-button,
-    .conference-live-timer,
-    .conference-session-timer {
-      font-size: 0.68rem;
-      letter-spacing: 0.09em;
-    }
-
-    .conference-session-timer {
-      min-width: 4.95rem;
-      padding: 0 0.42rem;
-    }
-
-    .conference-device-panel {
-      right: 0;
-      left: auto;
-      min-width: min(18rem, calc(100vw - 2rem));
+      inset: 0 auto
+        calc(
+          var(--conference-sidebar-size) + var(--conference-bar-stack-height)
+        )
+        0;
+      width: min(82vw, var(--conference-instruments-size));
     }
   }
 
   @media (max-width: 500px) {
     .conference-shell {
-      --conference-bar-height: 36px; /* ~20% reduction from 44px */
+      --conference-bar-height: 36px;
       --conference-bar-stack-height: var(--conference-bar-height);
-      --conference-sidebar-size: clamp(
-        140px,
-        30dvh,
-        220px
-      ); /* Reduced and capped */
+      --conference-sidebar-size: clamp(140px, 30dvh, 220px);
       grid-template-columns: 1fr;
       grid-template-rows: 1fr auto;
       padding-bottom: var(--conference-bar-stack-height);
-      height: 100dvh;
-      overflow: hidden;
+    }
+
+    .conference-shell[data-has-sidebar="false"] {
+      grid-template-rows: 1fr !important;
     }
 
     .conference-stage-frame {
@@ -4894,49 +4704,11 @@ if (
         100dvh - var(--conference-sidebar-size) -
           var(--conference-bar-stack-height)
       );
-      min-height: 180px; /* Leave space for sidebar */
-      background: #000 !important;
-      overflow-y: auto !important;
-      -webkit-overflow-scrolling: touch;
+      min-height: 180px;
     }
 
-    .conference-stage {
-      background: #000 !important;
-      height: auto !important; /* Allow flexible height */
-      min-height: 100%;
-    }
-
-    /* Force Reveal iframe to allow internal scrolling if needed */
-    .conference-presentation,
-    .conference-presentation iframe {
-      height: 100% !important;
-      min-height: 300px;
-      background: #000 !important;
-    }
-
-    .conference-bottombar {
-      position: fixed;
-      inset: auto 0 0 0;
-      display: flex;
-      min-height: var(--conference-bar-height);
-      height: var(--conference-bar-height);
-      grid-template-columns: none;
-      grid-template-rows: none;
-      align-items: stretch;
-      overflow-x: auto;
-      overflow-y: hidden;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      background: #000;
-      z-index: 100;
-      /* Improve touch responsiveness */
-      touch-action: pan-x;
-    }
-
-    .conference-bar-group {
-      flex: 0 0 auto;
-      height: var(--conference-bar-height);
-      border-right: 1px solid var(--conference-line);
+    .conference-shell[data-has-sidebar="false"] .conference-stage-frame {
+      height: calc(100dvh - var(--conference-bar-stack-height));
     }
 
     .conference-icon-button,
@@ -4951,7 +4723,6 @@ if (
       min-width: var(--conference-bar-height) !important;
       min-height: var(--conference-bar-height) !important;
       padding: 0 !important;
-      flex: 0 0 auto;
     }
 
     .conference-icon-button svg {
@@ -4963,7 +4734,6 @@ if (
     .conference-share-button,
     .conference-exit-button {
       font-size: 0.6rem !important;
-      line-height: 1 !important;
     }
   }
 </style>

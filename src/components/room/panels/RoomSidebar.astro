@@ -1,11 +1,7 @@
 ---
 import './room-sidebar.css';
-import ChatPanel from './chat/ChatPanel.astro';
-import ClasePanel from './clase/ClasePanel.astro';
-import CompositorPanel from './compositor/CompositorPanel.astro';
-import GridPanel from './grid/GridPanel.astro';
-import NotesPanel from './notes/NotesPanel.astro';
-import SetupPanel from './setup/SetupPanel.astro';
+import WorkspaceManager from '../workspace/WorkspaceManager.astro';
+import BreakRoomsPanel from './break-rooms/BreakRoomsPanel.astro';
 
 type Props = {
   defaultIdentity?: string;
@@ -25,30 +21,18 @@ const {
 <aside class="conference-sidebar">
   <div class="conference-sidebar-scroll">
     <div class="conference-sidebar-operational-stack">
-      <SetupPanel
-        defaultIdentity={defaultIdentity}
-        defaultName={defaultName}
-        defaultRole={defaultRole}
-        defaultRoom={defaultRoom}
-      />
-      <CompositorPanel />
-    </div>
-
-    <div class="conference-sidebar-information-stack">
-      <ClasePanel />
-      <NotesPanel />
-      <GridPanel />
-      <ChatPanel />
+      <details class="conference-sidebar-section conference-sidebar-panel" data-pods-gallery data-teacher-only open>
+        <summary class="conference-sidebar-heading">PODS</summary>
+        <div class="conference-sidebar-panel-body">
+           <div class="pod-gallery-grid" data-pod-gallery-list>
+              {/* Dynamic pods list will be injected here */}
+           </div>
+        </div>
+      </details>
+      <BreakRoomsPanel />
+      <WorkspaceManager isTeacher={defaultRole === 'teacher'} />
     </div>
   </div>
-
-  <p
-    class="conference-statusline conference-status-toast"
-    data-room-status
-    data-visible="false"
-    aria-live="polite"
-    aria-atomic="true"
-  ></p>
 </aside>
 
 <button

@@ -1,0 +1,296 @@
+---
+// Welcome Modal for Room Setup
+type Props = {
+  isTeacher?: boolean;
+  isExternal?: boolean;
+};
+
+const { isTeacher = false, isExternal = false } = Astro.props;
+---
+
+<div class="conference-welcome-modal" data-welcome-modal hidden>
+  <div class="conference-welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-modal-title">
+    <header class="conference-welcome-header">
+      <img src="/logo-musiki.png" alt="Musiki" class="welcome-logo" />
+      <h2 id="welcome-modal-title">Configuración de Sala</h2>
+    </header>
+
+    <div class="conference-welcome-layout">
+      <div class="welcome-preview-side">
+        <div class="welcome-video-container">
+          <video data-welcome-video-preview autoplay playsinline muted></video>
+          <div class="welcome-video-placeholder">Cámara apagada</div>
+        </div>
+        <div class="welcome-audio-container">
+          <div class="welcome-vumeter-label">Nivel de Audio</div>
+          <div class="welcome-vumeter-track">
+            <div class="welcome-vumeter-fill" data-welcome-vumeter></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="welcome-controls-side">
+        <div class="welcome-field">
+          <label for="welcome-mic-select">Micrófono</label>
+          <select id="welcome-mic-select" data-welcome-mic-select>
+            <option value="">Cargando dispositivos...</option>
+          </select>
+        </div>
+
+        <div class="welcome-field">
+          <label for="welcome-cam-select">Cámara</label>
+          <select id="welcome-cam-select" data-welcome-cam-select>
+            <option value="">Cargando dispositivos...</option>
+          </select>
+        </div>
+
+        <div class="welcome-test-row">
+          <button type="button" class="welcome-test-button" data-welcome-test-toggle>
+            <span class="test-icon">●</span>
+            <span class="test-label">GRABAR TEST</span>
+          </button>
+          <div class="welcome-test-timer" data-welcome-test-timer hidden>0s</div>
+        </div>
+
+        <p class="welcome-hint">
+          Asegúrate de que tu cámara y micrófono funcionen correctamente antes de entrar.
+        </p>
+
+        <footer class="welcome-footer">
+          <button type="button" class="welcome-join-button" data-welcome-join>
+            ENTRAR A LA SALA
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .conference-welcome-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    background: rgba(0, 0, 0, 0.9);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .conference-welcome-modal[hidden] {
+    display: none;
+  }
+
+  .conference-welcome-dialog {
+    background: #111;
+    width: 100%;
+    max-width: 800px;
+    border: 1px solid var(--conference-line, rgba(255,255,255,0.1));
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 32px 64px rgba(0, 0, 0, 0.8);
+  }
+
+  .conference-welcome-header {
+    padding: 1.5rem;
+    text-align: center;
+    border-bottom: 1px solid var(--conference-line, rgba(255,255,255,0.1));
+  }
+
+  .welcome-logo {
+    height: 32px;
+    margin-bottom: 0.75rem;
+  }
+
+  .conference-welcome-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #fff;
+  }
+
+  .conference-welcome-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    padding: 2rem;
+  }
+
+  @media (max-width: 640px) {
+    .conference-welcome-layout {
+      grid-template-columns: 1fr;
+      padding: 1.5rem;
+      gap: 1.5rem;
+    }
+  }
+
+  .welcome-preview-side {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .welcome-video-container {
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .welcome-video-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .welcome-video-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .welcome-audio-container {
+    padding: 0.5rem 0;
+  }
+
+  .welcome-vumeter-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 0.4rem;
+    letter-spacing: 0.05em;
+  }
+
+  .welcome-vumeter-track {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .welcome-vumeter-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--conference-accent, #2a87ff);
+    transition: width 50ms linear;
+    box-shadow: 0 0 8px var(--conference-accent, #2a87ff);
+  }
+
+  .welcome-controls-side {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .welcome-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .welcome-field label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 0.05em;
+  }
+
+  .welcome-field select {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 0.6rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+
+  .welcome-test-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 0.5rem;
+  }
+
+  .welcome-test-button {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    transition: all 0.2s;
+  }
+
+  .welcome-test-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .welcome-test-button[data-active="true"] {
+    border-color: #ff4d4d;
+    color: #ff4d4d;
+    background: rgba(255, 77, 77, 0.05);
+  }
+
+  .test-icon {
+    font-size: 0.8rem;
+  }
+
+  .welcome-test-timer {
+    font-size: 0.8rem;
+    font-family: monospace;
+    color: #ff4d4d;
+  }
+
+  .welcome-hint {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.4);
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .welcome-footer {
+    margin-top: auto;
+    padding-top: 1rem;
+  }
+
+  .welcome-join-button {
+    width: 100%;
+    background: var(--conference-accent, #2a87ff);
+    color: #fff;
+    border: none;
+    padding: 1rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: transform 0.1s, opacity 0.2s;
+  }
+
+  .welcome-join-button:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  .welcome-join-button:active {
+    transform: translateY(0);
+  }
+</style>

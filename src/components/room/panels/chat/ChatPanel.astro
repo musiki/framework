@@ -1,14 +1,4 @@
----
-// ChatPanel.astro
----
-
-<details
-  class="conference-sidebar-section conference-sidebar-panel conference-sidebar-section--chat"
-  data-chat-section
-  open
->
-  <summary class="conference-sidebar-heading">CHAT</summary>
-
+<div class="musiki-pod" data-pod="chat" data-pod-title="CHAT" data-chat-section>
   <div
     class="conference-sidebar-panel-body conference-sidebar-panel-body--chat"
   >
@@ -25,25 +15,41 @@
           data-chat-input></textarea>
       </div>
 
-      <div
-        class="conference-chat-toolbar conference-chat-actions conference-chat-bar"
-      >
+      <div class="musiki-pod-toolbar">
         <button
           type="button"
-          class="conference-hand-button"
-          data-action="raise-hand"
-          aria-label="Levantar la mano"
-          title="Levantar la mano (M)"
+          class="musiki-pod-btn musiki-pod-btn--accent conference-chat-send"
+          data-action="chat-send"
+          aria-label="Enviar"
+          title="Enviar"
+          disabled
+          style="min-width: 1.85rem; height: 1.85rem; margin-right: 0.2rem;"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
             <path
-              d="M8.2 11.2V5.9a1.2 1.2 0 1 1 2.4 0v4.3h.8V4.8a1.2 1.2 0 1 1 2.4 0v5.4h.8V6.1a1.2 1.2 0 1 1 2.4 0v5.3h.8V8.3a1.2 1.2 0 1 1 2.4 0v6.2c0 3.3-2.7 6-6 6h-1.4c-1.8 0-3.5-.8-4.6-2.2L5 14.8a1.5 1.5 0 0 1 2.4-1.8l.8 1.1V11.2Z"
+              d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z"
               fill="currentColor"></path>
           </svg>
-          <span class="conference-sr-only">Raise hand</span>
         </button>
 
-        <div class="conference-reaction-buttons">
+        <button
+          type="button"
+          class="musiki-pod-btn conference-chat-download"
+          data-action="chat-download"
+          aria-label="Descargar chat"
+          title="Descargar chat"
+          disabled
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14">
+            <path
+              d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
+              fill="currentColor"></path>
+          </svg>
+        </button>
+
+        <div style="flex: 1;"></div>
+
+        <div class="conference-reaction-buttons" style="display: flex; gap: 0.3rem; margin-right: 0.3rem;">
           <button
             type="button"
             class="conference-reaction-button"
@@ -67,42 +73,28 @@
           >
         </div>
 
-        <span class="conference-chat-bar-spacer" aria-hidden="true"></span>
-
         <button
           type="button"
-          class="conference-chat-download"
-          data-action="chat-download"
-          aria-label="Descargar chat"
-          title="Descargar chat"
-          disabled
+          class="musiki-pod-btn conference-hand-button"
+          data-action="raise-hand"
+          aria-label="Levantar la mano"
+          title="Levantar la mano (M)"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14">
             <path
-              d="M12 4a1 1 0 0 1 1 1v8.59l2.3-2.29 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4L11 13.59V5a1 1 0 0 1 1-1Zm-6 14h12v2H6v-2Z"
+              d="M8.2 11.2V5.9a1.2 1.2 0 1 1 2.4 0v4.3h.8V4.8a1.2 1.2 0 1 1 2.4 0v5.4h.8V6.1a1.2 1.2 0 1 1 2.4 0v5.3h.8V8.3a1.2 1.2 0 1 1 2.4 0v6.2c0 3.3-2.7 6-6 6h-1.4c-1.8 0-3.5-.8-4.6-2.2L5 14.8a1.5 1.5 0 0 1 2.4-1.8l.8 1.1V11.2Z"
               fill="currentColor"></path>
           </svg>
-          <span class="conference-sr-only">Download chat</span>
-        </button>
-
-        <button
-          type="button"
-          class="conference-chat-send"
-          data-action="chat-send"
-          aria-label="Enviar mensaje"
-          title="Enviar mensaje"
-          disabled
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon">
-            <path
-              d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z"
-              fill="currentColor"></path>
-          </svg>
-          <span class="conference-sr-only">Send</span>
         </button>
       </div>
     </div>
   </div>
-</details>
+</div>
 
-
+<style>
+  .musiki-pod[data-pod="chat"] {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+</style>

@@ -21,6 +21,18 @@ const shouldSyncEvalCatalogForPath = (pathname: string): boolean => {
 export const onRequest = defineMiddleware(async (context, next) => {
   const url = context.url;
   const pathname = url.pathname;
+
+  // Skip header access and session check for known static or prerendered paths (search.json, assets, etc)
+  const isStaticLike = 
+    pathname === "/search.json" || 
+    pathname === "/public-search.json" ||
+    pathname.startsWith("/_") || 
+    pathname.startsWith("/assets/") || 
+    /\.[a-z0-9]+$/i.test(pathname);
+
+  if (isStaticLike) {
+    return next();
+  }
   
   // Get hostname from forwarded headers or request URL
   const forwardedHost = context.request.headers.get("x-forwarded-host") || context.request.headers.get("host") || url.hostname;
@@ -34,13 +46,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     newUrl.protocol = "https:";
     return context.redirect(newUrl.href, 308);
   }
-
-  // Skip session check for known static or prerendered paths (search.json, assets, etc)
-  const isStaticLike = 
-    pathname === "/search.json" || 
-    pathname.startsWith("/_") || 
-    pathname.startsWith("/assets/") || 
-    /\.[a-z0-9]+$/i.test(pathname);
 
   let session = null;
   if (!isStaticLike) {

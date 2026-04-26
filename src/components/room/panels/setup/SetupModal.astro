@@ -1,0 +1,382 @@
+---
+import './setup-modal.css';
+import CompositorPanel from '../compositor/CompositorPanel.astro';
+
+type Props = {
+  defaultIdentity?: string;
+  defaultName?: string;
+  defaultRole?: 'teacher' | 'student';
+  defaultRoom?: string;
+};
+
+const {
+  defaultIdentity = '',
+  defaultName = '',
+  defaultRole = 'student',
+  defaultRoom = 'musiki-stage',
+} = Astro.props as Props;
+
+const isTeacher = defaultRole === 'teacher';
+---
+
+<div class="conference-setup-modal" data-setup-modal hidden>
+  <div class="conference-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-modal-title">
+    <header class="conference-setup-header">
+      <div class="conference-setup-search-shell">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-setup-search-icon">
+          <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="currentColor"/>
+        </svg>
+        <input 
+          type="text" 
+          class="conference-setup-search-input" 
+          placeholder="Buscar ajustes..." 
+          data-setup-search
+          aria-label="Buscar ajustes"
+        />
+      </div>
+      <button type="button" class="conference-setup-close" data-setup-close aria-label="Cerrar ajustes">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="conference-setup-layout">
+      <aside class="conference-setup-sidebar">
+        <div class="conference-setup-role-info">
+          <span class="conference-setup-role-tag">{defaultRole.toUpperCase()}</span>
+        </div>
+        <hr class="conference-setup-divider" />
+        <nav class="conference-setup-toc">
+          <a href="#setup-identity" class="conference-setup-toc-link" data-toc-target="setup-identity">Identity</a>
+          <a href="#setup-devices" class="conference-setup-toc-link" data-toc-target="setup-devices">Devices</a>
+          <a href="#setup-session" class="conference-setup-toc-link" data-toc-target="setup-session">Session</a>
+          {isTeacher && <a href="#setup-students" class="conference-setup-toc-link" data-toc-target="setup-students">Students Control</a>}
+          <a href="#setup-recording" class="conference-setup-toc-link" data-toc-target="setup-recording">Recording</a>
+          {isTeacher && <a href="#setup-streaming" class="conference-setup-toc-link" data-toc-target="setup-streaming">Streaming</a>}
+          {isTeacher && <a href="#setup-invite" class="conference-setup-toc-link" data-toc-target="setup-invite">Invitar</a>}
+          <a href="#setup-compositor" class="conference-setup-toc-link" data-toc-target="setup-compositor">Compositor</a>
+        </nav>
+      </aside>
+
+      <main class="conference-setup-main" data-setup-container>
+        <!-- IDENTITY -->
+        <section id="setup-identity" class="conference-setup-section" data-setup-section="identity" data-session-setup>
+          <h2 class="conference-setup-section-title">Identity</h2>
+          <div class="conference-setup-section-content">
+            <div class="conference-field">
+              <label for="modal-room-input">Sala</label>
+              <input id="modal-room-input" type="text" value={defaultRoom} data-room-input />
+            </div>
+            <div class="conference-field">
+              <label for="modal-identity-input">Identity</label>
+              <input id="modal-identity-input" type="text" value={defaultIdentity} data-identity-input />
+            </div>
+            <div class="conference-field">
+              <label for="modal-name-input">Nombre</label>
+              <div class="conference-name-row" style="display: flex; gap: 0.5rem; align-items: center;">
+                <input id="modal-name-input" type="text" value={defaultName} data-name-input style="flex: 1;" />
+                <span class="conference-role-tag" data-role-label style="font-size: 0.6rem; opacity: 0.7;">{defaultRole}</span>
+              </div>
+              <input type="hidden" name="role" value={defaultRole} data-role-input />
+            </div>
+          </div>
+        </section>
+
+        <!-- DEVICES -->
+        <section id="setup-devices" class="conference-setup-section" data-setup-section="devices">
+          <h2 class="conference-setup-section-title">Devices</h2>
+          <div class="conference-setup-section-content">
+            <div class="conference-field">
+              <label for="modal-mic-select">MIC IN</label>
+              <select id="modal-mic-select" data-audio-input-select data-audio-input-select-sidebar>
+                <option value="">Selecciona un microfono</option>
+              </select>
+            </div>
+            <div class="conference-field">
+              <label for="modal-cam-select">CAM IN</label>
+              <select id="modal-cam-select" data-video-input-select data-video-input-select-sidebar>
+                <option value="">Selecciona una camara</option>
+              </select>
+            </div>
+            <div class="conference-field">
+              <label for="modal-midi-select">MIDI IN</label>
+              <select id="modal-midi-select" data-midi-input-select>
+                <option value="">Selecciona dispositivo MIDI</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <!-- SESSION -->
+        <section id="setup-session" class="conference-setup-section" data-setup-section="session">
+          <h2 class="conference-setup-section-title">Session</h2>
+          <div class="conference-setup-section-content">
+            <div class="conference-field">
+              <div class="conference-field-row">
+                <label for="modal-circle-zoom">Circle Zoom</label>
+                <label class="conference-switch">
+                  <input type="checkbox" checked data-show-circle-input />
+                  <span class="conference-switch-slider"></span>
+                </label>
+              </div>
+              <div class="conference-range-row">
+                <input id="modal-circle-zoom" type="range" min="0.8" max="4" step="0.02" value="2.25" data-preview-zoom-input />
+                <output data-preview-zoom-output>2.25x</output>
+              </div>
+            </div>
+
+            <div class="conference-field">
+              <label for="modal-circle-size">Circle Size</label>
+              <div class="conference-range-row">
+                <input id="modal-circle-size" type="range" min="80" max="400" step="5" value="180" data-circle-size-input />
+                <output data-circle-size-output>180px</output>
+              </div>
+            </div>
+
+            <div class="conference-field">
+              <label>Background</label>
+              <div class="conference-background-action-row">
+                <button class="conference-background-action" type="button" data-action="background-blur-toggle">Blur</button>
+                <button class="conference-background-action" type="button" data-action="background-replace-toggle">Replace</button>
+              </div>
+            </div>
+
+            <div class="conference-field">
+              <div class="conference-field-row">
+                <span>Invert video</span>
+                <label class="conference-switch">
+                  <input type="checkbox" data-preview-invert-input />
+                  <span class="conference-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="conference-field" data-session-leader-field>
+              <label for="modal-leader-select">Delegar sesion</label>
+              <select id="modal-leader-select" data-session-leader-select>
+                <option value="">Sin teachers conectados</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <!-- STUDENTS CONTROL (Teacher only) -->
+        {isTeacher && (
+          <section id="setup-students" class="conference-setup-section" data-setup-section="students control">
+            <h2 class="conference-setup-section-title">Students Control</h2>
+            <div class="conference-setup-section-content">
+              <div class="conference-field">
+              <div class="conference-field-row">
+                <span>Allow instruments</span>
+                <label class="conference-switch">
+                  <input type="checkbox" checked data-session-allow-instruments-input />
+                  <span class="conference-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            </div>
+          </section>
+        )}
+
+        <!-- RECORDING -->
+        <section id="setup-recording" class="conference-setup-section" data-setup-section="recording presets">
+          <h2 class="conference-setup-section-title">Recording Presets</h2>
+          <div class="conference-setup-section-content">
+            <div class="conference-field">
+              <label for="modal-recording-preset">Preset</label>
+              <select id="modal-recording-preset" data-recording-preset-select>
+                <option value="landscape-1080">1080p</option>
+                <option value="instagram-story">Instagram Story</option>
+                <option value="tiktok">TikTok</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <!-- STREAMING (Teacher only) -->
+        {isTeacher && (
+          <section id="setup-streaming" class="conference-setup-section" data-setup-section="streaming">
+            <h2 class="conference-setup-section-title">Streaming</h2>
+            <div class="conference-setup-section-content">
+              <div class="conference-field">
+                <label for="modal-streaming-profile">Quality profile</label>
+                <select id="modal-streaming-profile" data-streaming-profile-select>
+                  <option value="auto">Auto (Adaptive)</option>
+                  <option value="high" selected>High — 1080p · 2.5 Mbps</option>
+                  <option value="medium">Medium — 480p · 800 kbps</option>
+                  <option value="low">Low — 360p · 300 kbps</option>
+                </select>
+              </div>
+              <div class="conference-field">
+                <div class="conference-field-row">
+                  <span>Prioritize speaker</span>
+                  <label class="conference-switch">
+                    <input type="checkbox" checked data-optimize-speaker-input />
+                    <span class="conference-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="conference-field">
+                <div class="conference-field-row">
+                  <span>Limit grid quality</span>
+                  <label class="conference-switch">
+                    <input type="checkbox" checked data-limit-grid-input />
+                    <span class="conference-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <hr style="border: 0; border-top: 1px solid var(--conference-line); margin: 0.5rem 0;" />
+              <div class="conference-field">
+                <div class="conference-field-row">
+                  <span>AEC (Echo Cancellation)</span>
+                  <label class="conference-switch">
+                    <input type="checkbox" checked data-audio-echo-cancellation-input />
+                    <span class="conference-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="conference-field">
+                <div class="conference-field-row">
+                  <span>Noise Suppression</span>
+                  <label class="conference-switch">
+                    <input type="checkbox" checked data-audio-noise-suppression-input />
+                    <span class="conference-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="conference-field">
+                <div class="conference-field-row">
+                  <span>Auto Gain Control</span>
+                  <label class="conference-switch">
+                    <input type="checkbox" checked data-audio-auto-gain-control-input />
+                    <span class="conference-switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <!-- INVITAR (Teacher only) -->
+        {isTeacher && (
+          <section id="setup-invite" class="conference-setup-section" data-setup-section="invitar">
+            <h2 class="conference-setup-section-title">Invitar</h2>
+            <div class="conference-setup-section-content">
+              <div class="conference-invite-simplified">
+                <div class="conference-invite-toggle-row">
+                  <span class={`role-label ${!isTeacher ? 'active' : ''}`} data-role-label-external>Externos</span>
+                  <label class="conference-switch">
+                    <input type="checkbox" data-invite-role-toggle />
+                    <span class="conference-switch-slider"></span>
+                  </label>
+                  <span class={`role-label ${isTeacher ? 'active' : ''}`} data-role-label-student>Estudiantes</span>
+                </div>
+
+                <div class="conference-invite-fields" data-invite-panel="external">
+                   <div class="conference-field">
+                     <label>Password</label>
+                     <input type="password" placeholder="Password opcional" data-external-password-input />
+                   </div>
+                   <div class="conference-invite-action-row">
+                     <select data-external-expiry-select>
+                        <option value="">Vencimiento</option>
+                        <option value="60">1 hora</option>
+                        <option value="1440">24 horas</option>
+                        <option value="10080">7 dias</option>
+                     </select>
+                     <button type="button" class="conference-session-action" data-action="external-invite-create">Crear Link</button>
+                   </div>
+                   <div class="conference-invite-result-row">
+                     <input type="text" readonly data-external-invite-link-output placeholder="Link de invitación" />
+                     <button type="button" data-action="external-invite-copy" title="Copiar">C</button>
+                     <button type="button" data-action="external-invite-revoke" title="Revocar">R</button>
+                   </div>
+                </div>
+
+                <div class="conference-invite-fields conference-room-invite-controls--hidden" data-invite-panel="student">
+                   <div class="conference-invite-action-row">
+                     <select data-student-expiry-select>
+                        <option value="">Vencimiento</option>
+                        <option value="60">1 hora</option>
+                        <option value="1440">24 horas</option>
+                        <option value="10080">7 dias</option>
+                     </select>
+                     <button type="button" class="conference-session-action" data-action="student-invite-create">Crear Link</button>
+                   </div>
+                   <div class="conference-invite-result-row">
+                     <input type="text" readonly data-student-invite-link-output placeholder="Link de invitación" />
+                     <button type="button" data-action="student-invite-copy" title="Copiar">C</button>
+                     <button type="button" data-action="student-invite-revoke" title="Revocar">R</button>
+                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <!-- COMPOSITOR -->
+        <section id="setup-compositor" class="conference-setup-section" data-setup-section="compositor">
+          <h2 class="conference-setup-section-title">Compositor</h2>
+          <div class="conference-setup-section-content">
+             <CompositorPanel />
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</div>
+
+<span class="conference-sr-only" data-room-state>Desconectado</span>
+
+<script>
+  // Setup Modal Logic
+  const modal = document.querySelector('[data-setup-modal]');
+  const searchInput = document.querySelector('[data-setup-search]') as HTMLInputElement;
+  const sections = document.querySelectorAll('[data-setup-section]');
+  const tocLinks = document.querySelectorAll('.conference-setup-toc-link');
+  const container = document.querySelector('[data-setup-container]');
+  
+  const circleSizeInput = document.querySelector('[data-circle-size-input]') as HTMLInputElement;
+  const circleSizeOutput = document.querySelector('[data-circle-size-output]') as HTMLElement;
+
+  circleSizeInput?.addEventListener('input', () => {
+    if (circleSizeOutput) {
+      circleSizeOutput.textContent = `${circleSizeInput.value}px`;
+    }
+  });
+
+  // Search functionality
+  searchInput?.addEventListener('input', () => {
+    const term = searchInput.value.toLowerCase();
+    sections.forEach(section => {
+      const sectionName = (section as HTMLElement).dataset.setupSection || '';
+      const text = section.textContent?.toLowerCase() || '';
+      const isMatch = sectionName.includes(term) || text.includes(term);
+      (section as HTMLElement).hidden = !isMatch;
+    });
+  });
+
+  // TOC highlighting and scrolling
+  tocLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetId = (link as HTMLElement).dataset.tocTarget;
+      const target = document.getElementById(targetId || '');
+      if (target && container) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+        tocLinks.forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+  });
+
+  // Close modal
+  document.querySelector('[data-setup-close]')?.addEventListener('click', () => {
+    (modal as HTMLElement).hidden = true;
+  });
+
+  // Keyboard shortcut for Cmd+, handled in livekit-room.ts, 
+  // but we can also listen here if needed for direct toggle.
+</script>

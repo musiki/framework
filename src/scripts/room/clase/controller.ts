@@ -3,7 +3,7 @@ type ClaseWindow = Window & {
   marked?: { parse?: (markdown: string) => string };
 };
 
-const loadMarked = async (): Promise<((md: string) => string) | null> => {
+export const loadMarked = async (): Promise<((md: string) => string) | null> => {
   const w = window as ClaseWindow;
   if (w.marked?.parse) return w.marked.parse;
   if (w.__claseMarkedPromise) return w.__claseMarkedPromise;
@@ -167,7 +167,7 @@ export const createClaseController = ({
       const ev = e as CustomEvent<{ indexh: number }>;
       const indexh = Number(ev.detail?.indexh ?? 0);
       lastKnownRevealIndex = indexh;
-      // We no longer automatically updateActiveIndex here
+      updateActiveIndex(indexh, true);
     });
   };
 

@@ -304,6 +304,15 @@
       "img": ""
     },
     {
+      "id": "public/conceptos/tropo",
+      "name": "tropo",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "tropo",
+      "img": ""
+    },
+    {
       "id": "public/instrumentos/spectral parrot",
       "name": "spectral parrot",
       "type": "document",

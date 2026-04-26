@@ -1,0 +1,134 @@
+---
+type Props = {
+  isTeacher?: boolean;
+};
+
+const { isTeacher = false } = Astro.props as Props;
+---
+
+<section class="conference-sidebar-section conference-sidebar-panel" data-workspace-manager>
+  <summary class="conference-sidebar-heading">WORKSPACES</summary>
+  
+  <div class="conference-sidebar-panel-body">
+    <div class="workspace-controls">
+      <div class="workspace-list-section">
+        <label class="workspace-list-label">Master</label>
+        <div class="workspace-quick-list" data-workspace-master-list>
+          <button type="button" class="workspace-item" data-workspace-val="presentation">Presentación</button>
+          <button type="button" class="workspace-item" data-workspace-val="grid">Debate (Grid)</button>
+          <button type="button" class="workspace-item" data-workspace-val="full-win-speaker">Full Win Speaker</button>
+          <button type="button" class="workspace-item" data-workspace-val="collab">Colaborativo</button>
+        </div>
+      </div>
+
+      <div class="workspace-list-section" style="margin-top: 0.5rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+          <label class="workspace-list-label" style="margin-bottom: 0;">Custom</label>
+          {isTeacher && (
+            <div class="workspace-teacher-actions">
+              <button type="button" class="workspace-btn" data-workspace-save title="Guardar actual">S</button>
+              <button type="button" class="workspace-btn workspace-btn--danger" data-workspace-delete title="Borrar">D</button>
+            </div>
+          )}
+        </div>
+        <div class="workspace-quick-list" data-workspace-custom-list>
+          <!-- Custom items will be injected here -->
+        </div>
+      </div>
+
+      <select class="workspace-select" data-workspace-select hidden>
+        <option value="full-win-speaker">Full Win Speaker</option>
+        <option value="presentation">Modo Presentación</option>
+        <option value="grid">Modo Debate (Grid)</option>
+        <option value="collab">Modo Colaborativo</option>
+      </select>
+    </div>
+  </div>
+</section>
+
+<style>
+  .workspace-controls {
+    padding: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .workspace-list-label {
+    display: block;
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--conference-muted);
+    margin-bottom: 0.4rem;
+  }
+
+  .workspace-quick-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .workspace-item {
+    width: 100%;
+    background: #000 !important;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: #fff;
+    padding: 0.35rem 0.6rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+
+  .workspace-item:hover {
+    background: #111 !important;
+    border-color: #fff;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+  }
+
+  .workspace-item.active {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #fff;
+    font-weight: 900;
+  }
+  
+  .workspace-teacher-actions {
+    display: flex;
+    gap: 0.3rem;
+  }
+  
+  .workspace-btn {
+    width: 1.6rem !important;
+    height: 1.6rem !important;
+    min-width: 1.6rem !important;
+    min-height: 1.6rem !important;
+    background: var(--conference-accent, #2337ff);
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+  }
+  
+  .workspace-btn--danger {
+    background: #441111;
+    color: #ff4d4d;
+    border: 1px solid #661111;
+  }
+
+  .workspace-btn--danger:hover {
+    background: #ff4d4d;
+    color: #000;
+  }
+</style>

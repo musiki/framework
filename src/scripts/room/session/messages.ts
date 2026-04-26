@@ -1,7 +1,7 @@
 import { normalizeLayoutMode, type LayoutMode } from '../../layout-controller';
 import { normalizePreviewZoom, normalizeText } from '../core/normalize';
 
-export type ParticipantRole = 'teacher' | 'student';
+export type ParticipantRole = 'teacher' | 'student' | 'external' | 'admin';
 export type ReactionKind = 'clap' | 'heart' | 'joy' | 'tada' | 'thumbsup' | 'wow';
 
 export type SlideState = {
@@ -10,6 +10,7 @@ export type SlideState = {
   indexv: number;
   zoom: number;
   pointerMode?: boolean;
+  scrollTop?: number;
 };
 
 export type PresentationPointerKind = 'move' | 'mark' | 'clear';
@@ -51,6 +52,7 @@ export type ConferenceMessage =
       type: 'session-setup';
       previewZoom: number;
       showCircle: boolean;
+      circleSize?: number;
     }
   | {
       type: 'session-leader';
@@ -137,8 +139,23 @@ export type ConferenceMessage =
       pdfUrl?: string;
     }
   | {
+      type: 'lilypond-play';
+      action: 'start' | 'stop';
+      url?: string;
+    }
+  | {
+      type: 'hyperpiano';
+      note: number;
+      velocity: number;
+      action: 'on' | 'off';
+    }
+  | {
       type: 'lilypond-setup';
       allowStudents: boolean;
+    }
+  | {
+      type: 'session-workspace';
+      layout: any;
     }
   | {
       type: 'concept-load';
@@ -158,6 +175,9 @@ export type ConferenceMessage =
       x: number;
       y: number;
       identity: string;
+      zoom?: number;
+      size?: number;
+      show?: boolean;
     }
   | {
       type: 'break-rooms';
@@ -215,8 +235,16 @@ const textDecoder = new TextDecoder();
 const isTeacherRole = (value: unknown): value is ParticipantRole =>
   normalizeText(value).toLowerCase() === 'teacher';
 
-export const normalizeRole = (value: unknown): ParticipantRole =>
-  isTeacherRole(normalizeText(value).toLowerCase()) ? 'teacher' : 'student';
+const isExternalRole = (value: unknown): value is ParticipantRole =>
+  normalizeText(value).toLowerCase() === 'external';
+
+export const normalizeRole = (value: unknown): ParticipantRole => {
+  const val = normalizeText(value).toLowerCase();
+  if (val === 'admin') return 'admin';
+  if (val === 'teacher') return 'teacher';
+  if (val === 'external') return 'external';
+  return 'student';
+};
 
 export const normalizeSlideState = (value: Partial<SlideState> | null | undefined): SlideState | null => {
   if (!value || typeof value !== 'object') return null;
@@ -234,6 +262,7 @@ export const normalizeSlideState = (value: Partial<SlideState> | null | undefine
     indexv: Math.max(0, Math.round(indexv)),
     zoom: Math.min(1.4, Math.max(0.45, Number.isFinite(zoom) ? zoom : 1)),
     pointerMode: Boolean(value.pointerMode),
+    scrollTop: Number.isFinite(value.scrollTop) ? Number(value.scrollTop) : undefined,
   };
 };
 
@@ -286,6 +315,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         type: 'session-setup',
         previewZoom: normalizePreviewZoom((parsed as { previewZoom?: number }).previewZoom, 1),
         showCircle: Boolean((parsed as { showCircle?: boolean }).showCircle),
+        circleSize: Number((parsed as { circleSize?: number }).circleSize) || 180,
       };
     }
 
@@ -454,6 +484,9 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         x: Number((parsed as { x?: number }).x) || 0,
         y: Number((parsed as { y?: number }).y) || 0,
         identity: normalizeText((parsed as { identity?: string }).identity),
+        zoom: (parsed as { zoom?: number }).zoom,
+        size: (parsed as { size?: number }).size,
+        show: (parsed as { show?: boolean }).show,
       };
     }
 
@@ -550,10 +583,36 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       };
     }
 
+    if (parsed.type === 'lilypond-play') {
+      const action = (parsed as { action: string }).action;
+      return {
+        type: 'lilypond-play',
+        action: action === 'start' ? 'start' : 'stop',
+        url: (parsed as { url?: string }).url,
+      };
+    }
+
+    if (parsed.type === 'hyperpiano') {
+      const action = (parsed as { action: string }).action;
+      return {
+        type: 'hyperpiano',
+        note: Number((parsed as { note: number }).note) || 0,
+        velocity: Number((parsed as { velocity: number }).velocity) || 0,
+        action: action === 'on' ? 'on' : 'off',
+      };
+    }
+
     if (parsed.type === 'lilypond-setup') {
       return {
         type: 'lilypond-setup',
         allowStudents: Boolean((parsed as { allowStudents?: boolean }).allowStudents),
+      };
+    }
+
+    if (parsed.type === 'session-workspace') {
+      return {
+        type: 'session-workspace',
+        layout: (parsed as { layout: any }).layout,
       };
     }
 

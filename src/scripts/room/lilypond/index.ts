@@ -43,7 +43,7 @@ const looksLikePlainLilySource = (value: string) => {
 
 type LilyTransportMessage = Extract<
   ConferenceMessage,
-  { type: 'lilypond-live' | 'lilypond-render' | 'lilypond-setup' }
+  { type: 'lilypond-live' | 'lilypond-render' | 'lilypond-setup' | 'lilypond-play' }
 >;
 
 export class LilyPondLiveController {
@@ -240,7 +240,7 @@ export class LilyPondLiveController {
       // Initial setup
       setupEditor();
 
-      // Try to load default.ly and refresh if found
+      // Try to load default.md and refresh if found
       void this.loadDefaultTemplate().then((found) => {
         if (found) setupEditor();
       });
@@ -364,6 +364,27 @@ export class LilyPondLiveController {
     this.initResizer(container);
     this.clearPreview();
     this.updateDownloadButtons();
+
+    // Listen for playback events from LilypondPlayer to broadcast them
+    window.addEventListener('musiki:lilypond:play', (e: any) => {
+      if (!this.canEdit()) return;
+      const { action, url } = e.detail;
+      this.onPublish({
+        type: 'lilypond-play',
+        action: action === 'start' ? 'start' : 'stop',
+        url: url
+      });
+    });
+  }
+
+  public handleIncomingPlayState(message: Extract<ConferenceMessage, { type: 'lilypond-play' }>) {
+    // Forward to LilypondPlayer globally
+    window.dispatchEvent(new CustomEvent('musiki:lilypond:remote-play', {
+        detail: {
+            action: message.action,
+            url: message.url
+        }
+    }));
   }
 
   private updateDownloadButtons() {
@@ -670,11 +691,11 @@ export class LilyPondLiveController {
 
   private async loadDefaultTemplate(): Promise<boolean> {
     try {
-      const response = await fetch('/lily/snippets/default.ly');
+      const response = await fetch('/lily/snippets/default.md');
       if (response.ok) {
         const code = await response.text();
         if (code.trim()) {
-          this.lilypondTemplateOverride = `\`\`\`lily\n${code.trim()}\n\`\`\``;
+          this.lilypondTemplateOverride = code.trim();
           return true;
         }
       }
@@ -706,8 +727,8 @@ export class LilyPondLiveController {
 
       this.reportStatus(`${name} cargado.`);
 
-      if (name === 'default.ly') {
-        this.lilypondTemplateOverride = `\`\`\`lily\n${code.trim()}\n\`\`\``;
+      if (name === 'default.md') {
+        this.lilypondTemplateOverride = code.trim();
       }
     } catch (error: any) {
       this.reportStatus(error?.message || 'Error descargando archivo.');
@@ -748,8 +769,8 @@ export class LilyPondLiveController {
       await this.fetchSnippetsList();
       this.reportStatus(`${savedName} guardado.`);
 
-      if (savedName === 'default.ly') {
-        this.lilypondTemplateOverride = `\`\`\`lily\n${code.trim()}\n\`\`\``;
+      if (savedName === 'default.md') {
+        this.lilypondTemplateOverride = code.trim();
       }
 
       // TRIGGER RENDER AFTER SAVE as requested

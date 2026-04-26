@@ -1,10 +1,33 @@
-<details class="conference-sidebar-section conference-sidebar-panel conference-sidebar-section--grid" open>
-  <summary class="conference-sidebar-heading">GRID</summary>
-  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--grid">
-    <div
-      class="conference-slot conference-slot--sidebar"
-      data-slot="students"
-      data-empty-label=""
-    ></div>
+<div class="musiki-pod" data-pod="grid-videos" data-pod-title="GRID">
+  <div class="conference-stage-panel conference-stage-panel--grid">
+    <div class="conference-slot conference-slot--grid" data-slot="grid" data-empty-label="Participants grid"></div>
   </div>
-</details>
+</div>
+
+<div class="musiki-pod" data-pod="roster" data-pod-title="ROSTER">
+  <div class="conference-sidebar-panel-body">
+    <div class="conference-roster-scroll" style="height: 100%; overflow-y: auto;">
+      <ul class="conference-roster" data-participant-list>
+        <li class="conference-roster-empty">Todavia no hay participantes en la sala.</li>
+      </ul>
+    </div>
+  </div>
+  <!-- Hidden students slot to satisfy legacy selectors if needed -->
+  <div class="conference-slot" data-slot="students" style="display:none !important" aria-hidden="true"></div>
+</div>
+
+<style>
+  .musiki-pod[data-pod="grid-videos"],
+  .musiki-pod[data-pod="roster"] {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+  }
+  
+  .conference-roster {
+    list-style: none;
+    padding: 1rem;
+    margin: 0;
+  }
+</style>

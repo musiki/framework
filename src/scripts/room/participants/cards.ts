@@ -184,7 +184,7 @@ export const renderParticipantRoster = ({
 
       const secondary = document.createElement('span');
       const role = readRole(participant);
-      secondary.textContent = `${role === 'teacher' ? 'Teacher' : 'Student'}${
+      secondary.textContent = `${role === 'teacher' ? 'Teacher' : role === 'external' ? 'EXTERNALS' : 'Student'}${
         isLocalParticipant(room, participant) ? ' · You' : ''
       }`;
 

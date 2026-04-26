@@ -67,7 +67,7 @@ const defaultName =
   normalizeText(Astro.url.searchParams.get('name')) || normalizeText(session?.user?.name);
 const defaultRole =
   inviteMode === 'external'
-    ? 'student'
+    ? 'external'
     : await resolveLiveParticipantRole(session, activeCourseId).catch((err) => {
         console.error('resolveLiveParticipantRole failed:', err);
         return 'student' as const;

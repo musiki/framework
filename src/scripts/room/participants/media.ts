@@ -155,6 +155,9 @@ export const syncParticipantVideo = (
   wrapper.appendChild(element);
   card.media.appendChild(wrapper);
   publication.track.attach(element);
+  if (element instanceof HTMLVideoElement) {
+    void element.play().catch(() => undefined);
+  }
 
   mounts.participantVideoMounts.set(identity, {
     element,
@@ -285,6 +288,8 @@ export const syncScreenVideo = (
     screenCard = { card, media, name };
     screenCards.set(identity, screenCard);
     screenSlot.appendChild(card);
+  } else if (screenCard.card.parentElement !== screenSlot) {
+    screenSlot.appendChild(screenCard.card);
   }
 
   screenCard.name.textContent = readParticipantName(participant);
@@ -304,6 +309,9 @@ export const syncScreenVideo = (
   wrapper.appendChild(element);
   screenCard.media.appendChild(wrapper);
   publication.track.attach(element);
+  if (element instanceof HTMLVideoElement) {
+    void element.play().catch(() => undefined);
+  }
 
   mounts.screenVideoMounts.set(identity, {
     element,

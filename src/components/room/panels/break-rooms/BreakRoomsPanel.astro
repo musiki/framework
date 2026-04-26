@@ -1,0 +1,141 @@
+---
+// Break Rooms Teacher Panel
+---
+<details
+  class="conference-sidebar-section conference-sidebar-panel"
+  data-break-rooms-panel
+  data-teacher-only
+>
+  <summary class="conference-sidebar-heading">BREAK ROOMS</summary>
+  <div class="conference-sidebar-panel-body">
+    <div
+      class="conference-break-rooms-popup-setup"
+      data-break-rooms-popup-setup
+    >
+      <div class="conference-break-rooms-section">
+        <label class="conference-field-label">Random Groups</label>
+        <div class="conference-session-action-row">
+          <button
+            type="button"
+            class="conference-session-action conference-session-action--compact"
+            data-action="break-rooms-random"
+            title="Random Groups"
+            aria-label="Random Groups">RANDOM</button
+          >
+          <input
+            type="number"
+            class="conference-break-rooms-size-input"
+            data-break-rooms-size
+            min="2"
+            max="20"
+            value="3"
+            title="Tamaño del grupo"
+            aria-label="Tamaño del grupo"
+            style="width: 60px;"
+          />
+        </div>
+      </div>
+
+      <div class="conference-break-rooms-section" style="margin-top: 1rem;">
+        <label class="conference-field-label">Group Rooms</label>
+        <div class="conference-session-action-row">
+          <button
+            type="button"
+            class="conference-session-action conference-session-action--compact"
+            data-action="break-rooms-grupos"
+            title="Group Rooms"
+            aria-label="Group Rooms">CREATE BY GROUP</button
+          >
+        </div>
+      </div>
+
+      <div class="conference-break-rooms-section" style="margin-top: 1rem;">
+        <label class="conference-field-label">Custom Groups</label>
+        <div
+          class="conference-break-rooms-custom-inputs"
+          data-break-rooms-custom-inputs
+          style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px;"
+        >
+          <input
+            type="text"
+            class="conference-break-rooms-custom-name"
+            placeholder="Grupo A"
+          />
+          <input
+            type="text"
+            class="conference-break-rooms-custom-name"
+            placeholder="Grupo B"
+          />
+        </div>
+        <div class="conference-session-action-row">
+          <button
+            type="button"
+            class="conference-session-action conference-session-action--compact"
+            data-action="break-rooms-add-custom"
+            title="Agregar grupo"
+            aria-label="Agregar grupo">+</button
+          >
+          <button
+            type="button"
+            class="conference-session-action conference-session-action--compact"
+            data-action="break-rooms-custom"
+            title="Create Break Rooms"
+            aria-label="Create Break Rooms">CREATE CUSTOM</button
+          >
+        </div>
+      </div>
+
+      <p class="conference-session-note" data-break-rooms-status style="margin-top: 0.5rem; font-size: 0.65rem; color: var(--conference-accent);"></p>
+    </div>
+  </div>
+</details>
+
+<style is:global>
+  .conference-session-action[data-action="break-rooms-random"] {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #f59e0b;
+  }
+  .conference-session-action[data-action="break-rooms-random"]:hover {
+    background: #f59e0b;
+    color: #000;
+  }
+  
+  .conference-session-action[data-action="break-rooms-grupos"] {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #10b981;
+  }
+  .conference-session-action[data-action="break-rooms-grupos"]:hover {
+    background: #10b981;
+    color: #000;
+  }
+  
+  .conference-session-action[data-action="break-rooms-custom"] {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #3b82f6;
+  }
+  .conference-session-action[data-action="break-rooms-custom"]:hover {
+    background: #3b82f6;
+    color: #000;
+  }
+
+  .conference-break-rooms-section .conference-field-label {
+    display: block;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--conference-muted);
+    margin-bottom: 0.4rem;
+  }
+  
+  .conference-break-rooms-custom-name {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--conference-line);
+    color: #fff;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border-radius: 3px;
+  }
+</style>

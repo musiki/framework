@@ -31,6 +31,8 @@ export async function GET() {
       || (itemType === 'notes' && 'Note')
       || (itemType === 'public-note' && 'Note')
       || 'Note';
+      
+    const reveal = Boolean(item.data.reveal === true || item.data.reveal === 'true' || item.data.theme || item.data.slideTheme || item.data.revealTheme);
 
     return {
       title,
@@ -38,6 +40,7 @@ export async function GET() {
       content: item.body || '',
       type,
       hasDataview,
+      reveal,
     };
   });
 
@@ -86,6 +89,8 @@ export async function GET() {
       || (itemType === 'notes' && 'Note')
       || (itemType === 'public-note' && 'Note')
       || (isCourseIndex ? 'Course' : 'Lesson');
+      
+    const reveal = Boolean(item.data.reveal === true || item.data.reveal === 'true' || item.data.theme || item.data.slideTheme || item.data.revealTheme);
 
     return {
       title,
@@ -93,6 +98,8 @@ export async function GET() {
       content: item.body || '',
       type,
       hasDataview: false,
+      reveal,
+      courseId,
     };
   });
 

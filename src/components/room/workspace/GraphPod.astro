@@ -1,0 +1,366 @@
+---
+// Graph Pod Component
+---
+
+<div class="musiki-pod" data-pod="graph" data-pod-title="GRAPH">
+  <div id="graph-pod-container" class="graph-pod-container">
+    <div id="graph-pod-canvas"></div>
+    <div class="graph-pod-hud">
+      <div class="graph-pod-legend">
+        <!-- Legend will be dynamic -->
+      </div>
+      <div class="graph-pod-actions">
+        <button id="graph-pod-toggle-filter" title="Todo / Público">público</button>
+        <button id="graph-pod-center" title="Center">⊙</button>
+      </div>
+    </div>
+    <div id="graph-pod-preview" class="graph-pod-preview">
+      <div id="graph-pod-preview-title"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
+
+<style is:global>
+  .graph-pod-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background: #000;
+    overflow: hidden;
+  }
+
+  #graph-pod-canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  .graph-pod-hud {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .graph-pod-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    max-width: 70%;
+    color: #888;
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .graph-pod-legend > div {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .graph-pod-legend span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  .graph-pod-actions {
+    display: flex;
+    gap: 0.4rem;
+    pointer-events: auto;
+  }
+
+  .graph-pod-actions button {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 0.6rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+
+  .graph-pod-actions button:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .graph-pod-preview {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    max-width: 140px;
+    z-index: 20;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+
+  .graph-pod-preview.visible {
+    opacity: 1;
+  }
+
+  #graph-pod-preview-title {
+    color: #fff;
+    font-size: 0.65rem;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+
+<script>
+  // Advanced Graph logic for the Pod
+  (function() {
+    const FOLDER_IDENTITY = {
+      instruments:  { color: '#f59e0b', shape: 'diamond',  label: 'Inst'  },
+      instrumentos: { color: '#f59e0b', shape: 'diamond',  label: 'Inst' },
+      theory:       { color: '#818cf8', shape: 'triangle', label: 'Theory'       },
+      history:      { color: '#fb923c', shape: 'pentagon', label: 'History'      },
+      analysis:     { color: '#22d3ee', shape: 'hexagon',  label: 'Analysis'     },
+      rhythm:       { color: '#f472b6', shape: 'star',     label: 'Rhythm'       },
+      harmony:      { color: '#4ade80', shape: 'square',   label: 'Harmony'      },
+      ear:          { color: '#f87171', shape: 'cross',    label: 'Ear' },
+      counterpoint: { color: '#a78bfa', shape: 'diamond',  label: 'Counter' },
+      form:         { color: '#34d399', shape: 'hexagon',  label: 'Form'         },
+      notation:     { color: '#67e8f9', shape: 'pentagon', label: 'Notation'     },
+      dictionaries: { color: '#fbbf24', shape: 'star',     label: 'Dict' },
+      solfege:      { color: '#86efac', shape: 'triangle', label: 'Solfege'      },
+    };
+
+    const FALLBACK_SHAPES = ['square','diamond','pentagon','hexagon','star','cross','triangle'];
+    const FALLBACK_COLORS = ['#a78bfa','#34d399','#fb923c','#f472b6','#38bdf8','#fbbf24','#4ade80'];
+
+    function getFolderIdentity(folder) {
+      if (!folder) return null;
+      if (FOLDER_IDENTITY[folder]) return FOLDER_IDENTITY[folder];
+      let hash = 0;
+      for (const c of folder) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+      return {
+        color: FALLBACK_COLORS[hash % FALLBACK_COLORS.length],
+        shape: FALLBACK_SHAPES[hash % FALLBACK_SHAPES.length],
+        label: folder.charAt(0).toUpperCase() + folder.slice(0, 3),
+      };
+    }
+
+    function drawShape(ctx, shape, x, y, r) {
+      ctx.beginPath();
+      switch (shape) {
+        case 'diamond': {
+          ctx.moveTo(x, y - r * 1.4); ctx.lineTo(x + r * 1.05, y); ctx.lineTo(x, y + r * 1.4); ctx.lineTo(x - r * 1.05, y);
+          ctx.closePath(); break;
+        }
+        case 'triangle': {
+          ctx.moveTo(x, y - r * 1.25); ctx.lineTo(x + r * 1.1, y + r * 0.85); ctx.lineTo(x - r * 1.1, y + r * 0.85);
+          ctx.closePath(); break;
+        }
+        case 'square': {
+          const s = r * 0.92; ctx.rect(x - s, y - s, s * 2, s * 2); break;
+        }
+        case 'pentagon': {
+          for (let i = 0; i < 5; i++) {
+            const a = (i * 2 * Math.PI / 5) - Math.PI / 2;
+            i === 0 ? ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a)) : ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a));
+          }
+          ctx.closePath(); break;
+        }
+        case 'hexagon': {
+          for (let i = 0; i < 6; i++) {
+            const a = i * Math.PI / 3;
+            i === 0 ? ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a)) : ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a));
+          }
+          ctx.closePath(); break;
+        }
+        case 'star': {
+          for (let i = 0; i < 10; i++) {
+            const a = (i * Math.PI / 5) - Math.PI / 2;
+            const rad = i % 2 === 0 ? r * 1.25 : r * 0.52;
+            i === 0 ? ctx.moveTo(x + rad * Math.cos(a), y + rad * Math.sin(a)) : ctx.lineTo(x + rad * Math.cos(a), y + rad * Math.sin(a));
+          }
+          ctx.closePath(); break;
+        }
+        case 'cross': {
+          const t = r * 0.33, l = r * 1.0;
+          ctx.moveTo(x - t, y - l); ctx.lineTo(x + t, y - l); ctx.lineTo(x + t, y - t); ctx.lineTo(x + l, y - t);
+          ctx.lineTo(x + l, y + t); ctx.lineTo(x + t, y + t); ctx.lineTo(x + t, y + l); ctx.lineTo(x - t, y + l);
+          ctx.lineTo(x - t, y + t); ctx.lineTo(x - l, y + t); ctx.lineTo(x - l, y - t); ctx.lineTo(x - t, y - t);
+          ctx.closePath(); break;
+        }
+        default: ctx.arc(x, y, r, 0, 2 * Math.PI);
+      }
+      ctx.fill();
+    }
+
+    let graphData = null;
+    let graphInstance = null;
+    let showAll = false;
+    let hoverNode = null;
+    const highlightNodes = new Set();
+    const highlightLinks = new Set();
+    
+    const container = document.getElementById('graph-pod-canvas');
+    if (!container) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !graphInstance) {
+        void init();
+      }
+    }, { threshold: 0.1 });
+
+    observer.observe(container);
+
+    async function init() {
+      const response = await fetch('/graph-data.json');
+      graphData = await response.json();
+      render();
+      
+      document.getElementById('graph-pod-center')?.addEventListener('click', () => {
+         graphInstance?.centerAt(0, 0, 1000);
+         graphInstance?.zoom(1.5, 1000);
+      });
+
+      document.getElementById('graph-pod-toggle-filter')?.addEventListener('click', (e) => {
+         showAll = !showAll;
+         (e.target as HTMLElement).textContent = showAll ? 'todo' : 'público';
+         render();
+      });
+
+      window.addEventListener('resize', () => {
+        if (graphInstance) {
+           const parent = container!.parentElement;
+           if (parent) graphInstance.width(parent.clientWidth).height(parent.clientHeight);
+        }
+      });
+      
+      setTimeout(() => {
+        if (graphInstance) {
+           const parent = container!.parentElement;
+           if (parent) graphInstance.width(parent.clientWidth).height(parent.clientHeight);
+        }
+      }, 500);
+    }
+
+    function render() {
+      if (!graphData || !container) return;
+      
+      const data = showAll ? graphData : filterPublic(graphData);
+      const colors = {
+        document: '#4f83ff',
+        tag: '#34d399',
+        link: '#222222',
+        highlight: '#fbbf24',
+        hover: '#f87171',
+        labelColor: '#e0e0e0'
+      };
+
+      // @ts-ignore
+      graphInstance = ForceGraph()(container)
+        .graphData(data)
+        .backgroundColor('#000000')
+        .nodeId('id')
+        .nodeLabel('name')
+        .nodeRelSize(3.5)
+        .linkColor(() => colors.link)
+        .nodeCanvasObjectMode(() => 'replace')
+        .nodeCanvasObject((node: any, ctx, globalScale) => {
+          const isHighlight = highlightNodes.has(node);
+          const isHover = node === hoverNode;
+          const isTag = node.type === 'tag';
+          const r = isTag ? 2.5 : 4.2;
+          const identity = !isTag ? getFolderIdentity(node.publicFolder) : null;
+
+          let fillColor = isTag ? colors.tag : (identity ? identity.color : colors.document);
+          if (isHighlight) fillColor = isHover ? colors.hover : colors.highlight;
+
+          if (isHighlight) {
+            ctx.beginPath(); ctx.arc(node.x, node.y, r * 1.8, 0, 2 * Math.PI);
+            ctx.fillStyle = fillColor + '33'; ctx.fill();
+          }
+
+          ctx.fillStyle = fillColor;
+          drawShape(ctx, identity ? identity.shape : 'circle', node.x, node.y, r);
+
+          if (globalScale > 1.2) {
+            const fontSize = 10 / globalScale;
+            ctx.font = `${fontSize}px Sans-Serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillStyle = colors.labelColor;
+            ctx.fillText(node.name, node.x, node.y + r * 2.2);
+          }
+        })
+        .onNodeHover(node => {
+           highlightNodes.clear(); highlightLinks.clear();
+           if (node) {
+             highlightNodes.add(node);
+             // Neighbor logic can be added here if cross-linking is implemented
+           }
+           hoverNode = node || null;
+           container.style.cursor = node ? 'pointer' : 'default';
+           
+           const preview = document.getElementById('graph-pod-preview');
+           const title = document.getElementById('graph-pod-preview-title');
+           if (node && preview && title) {
+             title.textContent = (node as any).name;
+             preview.classList.add('visible');
+           } else if (preview) {
+             preview.classList.remove('visible');
+           }
+        })
+        .onNodeClick(node => {
+          window.dispatchEvent(new CustomEvent('musiki:graph:node-click', { detail: node }));
+        });
+
+      updateLegend(data);
+    }
+
+    function filterPublic(data: any) {
+      const publicIds = new Set(
+        data.nodes.filter((n: any) => n.type === 'document' && n.group === 'public').map((n: any) => n.id)
+      );
+      const tagIds = new Set();
+      for (const link of data.links) {
+        const s = typeof link.source === 'object' ? link.source.id : link.source;
+        const t = typeof link.target === 'object' ? link.target.id : link.target;
+        if (publicIds.has(s) && String(t).startsWith('tag:')) tagIds.add(t);
+        if (publicIds.has(t) && String(s).startsWith('tag:')) tagIds.add(s);
+      }
+      const allowed = new Set([...publicIds, ...tagIds]);
+      return {
+        nodes: data.nodes.filter((n: any) => allowed.has(n.id)),
+        links: data.links.filter((l: any) => {
+          const s = typeof l.source === 'object' ? l.source.id : l.source;
+          const t = typeof l.target === 'object' ? l.target.id : l.target;
+          return allowed.has(s) && allowed.has(t);
+        }),
+      };
+    }
+
+    function updateLegend(data: any) {
+      const legend = document.querySelector('.graph-pod-legend');
+      if (!legend) return;
+      const folders = [...new Set(data.nodes.map((n: any) => n.publicFolder).filter(Boolean))].sort();
+      let html = `
+        <div><span class="legend-doc" style="background:#4f83ff"></span> Docs</div>
+        <div><span class="legend-tag" style="background:#34d399"></span> Tags</div>
+      `;
+      for (const folder of folders as string[]) {
+        const id = getFolderIdentity(folder);
+        if (id) html += `<div><span style="background:${id.color}"></span> ${id.label}</div>`;
+      }
+      legend.innerHTML = html;
+    }
+  })();
+</script>

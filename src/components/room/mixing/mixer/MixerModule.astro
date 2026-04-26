@@ -322,49 +322,103 @@ import FxModule from '../../processors/audio/fx/FxModule.astro';
         </div>
       </div>
 
-      <div class="conference-mixer-channel conference-mixer-channel--placeholder" aria-hidden="true">
-        <div class="conference-mixer-channel-label">
-          <strong>CH4</strong>
+      <div class="conference-mixer-channel">
+        <div class="conference-mixer-channel-label" data-mixer-reset-scope="hp" title="Double click to reset HP">
+          <strong>HP</strong>
         </div>
         <div class="conference-mixer-send-row">
           <div class="conference-mixer-send">
             <span class="conference-mixer-send-label conference-mixer-send-label--reverb">REV</span>
-            <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb conference-mixer-knob-control--disabled" role="presentation">
+            <div
+              class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-reverb"
+              data-mixer-hp-reverb-send-knob
+              role="slider"
+              tabindex="0"
+              aria-label="CH4 reverb send"
+              aria-valuemin="0"
+              aria-valuemax="1"
+              aria-valuenow="0"
+            >
               <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
             </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="0"
+              class="conference-mixer-pan-input"
+              data-mixer-hp-reverb-send
+            />
           </div>
           <div class="conference-mixer-send">
             <span class="conference-mixer-send-label conference-mixer-send-label--delay">DLY</span>
-            <div class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay conference-mixer-knob-control--disabled" role="presentation">
+            <div
+              class="conference-mixer-knob-control conference-mixer-knob-control--plain conference-mixer-knob-control--send conference-mixer-knob-control--send-delay"
+              data-mixer-hp-delay-send-knob
+              role="slider"
+              tabindex="0"
+              aria-label="CH4 delay send"
+              aria-valuemin="0"
+              aria-valuemax="1"
+              aria-valuenow="0"
+            >
               <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
             </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value="0"
+              class="conference-mixer-pan-input"
+              data-mixer-hp-delay-send
+            />
           </div>
         </div>
         <div class="conference-mixer-fader-shell">
-          <span class="conference-mixer-vumeter conference-mixer-vumeter--placeholder" aria-hidden="true"></span>
+          <span class="conference-mixer-vumeter" data-mixer-meter="hp" aria-hidden="true"></span>
           <input
             type="range"
             min="0"
             max="1"
             step="0.01"
-            value="0"
+            value="1"
             class="conference-mixer-fader"
-            disabled
+            data-mixer-hp-gain
           />
         </div>
         <button
           type="button"
           class="conference-mixer-channel-toggle"
-          aria-label="Reserved channel"
-          title="Reserved channel"
-          disabled
+          data-mixer-hp-mute
+          aria-label="Mute Hyperpiano channel"
+          title="Mute HP"
         >
           <span class="conference-mixer-led conference-mixer-led--mute" aria-hidden="true">M</span>
         </button>
         <div class="conference-mixer-knob-stack conference-mixer-knob-stack--pan">
-          <div class="conference-mixer-knob-control conference-mixer-knob-control--disabled" role="presentation">
+          <div
+            class="conference-mixer-knob-control"
+            data-mixer-hp-pan-knob
+            role="slider"
+            tabindex="0"
+            aria-label="HP pan"
+            aria-valuemin="-1"
+            aria-valuemax="1"
+            aria-valuenow="0"
+          >
             <span class="conference-mixer-knob-indicator" aria-hidden="true"></span>
           </div>
+          <input
+            type="range"
+            min="-1"
+            max="1"
+            step="0.01"
+            value="0"
+            class="conference-mixer-pan-input"
+            data-mixer-hp-pan
+          />
         </div>
       </div>
 

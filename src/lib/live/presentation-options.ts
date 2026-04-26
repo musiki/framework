@@ -107,8 +107,8 @@ export const listRoomPresentationOptions = async ({
       const courseId = normalizeText(entry.id.split('/')[0]);
       if (!courseId) return false;
 
-      // Only show lessons from the active course when one is set
-      if (normalizedActiveCourseId && courseId !== normalizedActiveCourseId) return false;
+      // Relaxed: Show all accessible lessons with a theme, not just active course
+      // if (normalizedActiveCourseId && courseId !== normalizedActiveCourseId) return false;
 
       if (!accessibleCourseIds.has(courseId)) return false;
 
@@ -132,7 +132,7 @@ export const listRoomPresentationOptions = async ({
 
       return {
         courseId,
-        label: `${entry.data.title} (${theme})`,
+        label: `${courseTitle} 〉${entry.data.title} (${theme})`,
         lessonId: entry.id,
         theme,
         value: buildCourseSlideLessonHref(
