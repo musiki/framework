@@ -11,6 +11,7 @@ export class RoomWorkspaceManager {
   private currentWorkspaceKey = 'full-win-speaker';
   public hyperpianoController: HyperpianoController | null = null;
   private podControllers = new Map<string, any>();
+  private dragOverPanelId: string | null = null;
 
   private POD_TYPES = [
     { id: 'presentation', title: 'PRESENTACIÓN', icon: 'Pr', atomic: 1, color: '#6FA8DC', cat: 'structured' },
@@ -188,6 +189,13 @@ export class RoomWorkspaceManager {
     this.container.addEventListener('dragover', (e) => {
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell');
+        if (shellEl && this.dockview) {
+            const match = this.dockview.panels.find(
+                p => p.view.element === shellEl || p.view.element?.contains(shellEl as Node)
+            );
+            this.dragOverPanelId = match?.id ?? null;
+        }
     });
 
     this.container.addEventListener('drop', (e) => {
@@ -216,8 +224,7 @@ export class RoomWorkspaceManager {
             // Internal move of existing panel
             const panel = this.dockview.getPanel(panelId);
             if (panel) {
-                const targetId = (e.target as HTMLElement).closest('[data-pod]')?.getAttribute('data-pod') 
-                               || this.dockview.panels[0]?.id;
+                const targetId = this.dragOverPanelId ?? this.dockview.panels.find(p => p.id !== panelId)?.id ?? null;
                 
                 if (targetId && targetId !== panelId) {
                     this.dockview.moveGroupOrPanel({
@@ -357,21 +364,11 @@ export class RoomWorkspaceManager {
   private createPodHeader(panelId: string, title: string, element: HTMLElement) {
       const header = document.createElement('div');
       header.className = 'pod-diy-header';
-      header.draggable = true;
       
       const id = panelId.split('-')[0];
       const type = this.POD_TYPES.find(t => t.id === id);
       const color = type?.color || '#fff';
       header.style.setProperty('--pod-color', color);
-
-      header.addEventListener('dragstart', (e) => {
-          if (e.dataTransfer) {
-              e.dataTransfer.setData('musiki/panel-id', panelId);
-              e.dataTransfer.effectAllowed = 'move';
-          }
-          header.classList.add('is-dragging');
-      });
-      header.addEventListener('dragend', () => header.classList.remove('is-dragging'));
 
       const arrow = document.createElement('div');
       arrow.className = 'pod-diy-arrow';
@@ -388,6 +385,19 @@ export class RoomWorkspaceManager {
       const handle = document.createElement('div');
       handle.className = 'pod-diy-handle';
       handle.innerHTML = `<div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div>`;
+      handle.draggable = true;
+      handle.addEventListener('dragstart', (e) => {
+          if (e.dataTransfer) {
+              e.dataTransfer.setData('musiki/panel-id', panelId);
+              e.dataTransfer.setData('text/plain', panelId);
+              e.dataTransfer.effectAllowed = 'move';
+          }
+          header.classList.add('is-dragging');
+      });
+      handle.addEventListener('dragend', () => {
+          header.classList.remove('is-dragging');
+          this.dragOverPanelId = null;
+      });
 
       const titleEl = document.createElement('div');
       titleEl.className = 'pod-diy-title';
@@ -603,6 +613,7 @@ style.textContent = `
     font-weight: 900 !important;
   }
 
+  /* DIY Integrated Shell */
   .pod-diy-shell {
     display: flex;
     flex-direction: column;
@@ -625,9 +636,13 @@ style.textContent = `
     gap: 6px;
     border-top: 1px solid var(--pod-color, #444);
     z-index: 100;
+    pointer-events: none;
   }
   .pod-diy-header.is-dragging {
       opacity: 0.5;
+  }
+  .pod-diy-arrow, .pod-diy-handle, .pod-diy-btn {
+    pointer-events: auto;
   }
   .pod-diy-arrow {
     width: 12px;
@@ -638,7 +653,6 @@ style.textContent = `
     cursor: pointer;
     border-radius: 2px;
     background: rgba(255,255,255,0.05);
-    pointer-events: auto;
   }
   .pod-diy-arrow-inner {
     width: 4px;
@@ -657,7 +671,6 @@ style.textContent = `
     opacity: 0.3;
     mix-blend-mode: difference;
     cursor: grab;
-    pointer-events: auto;
   }
   .pod-diy-handle-dot {
     width: 2px;
@@ -694,7 +707,6 @@ style.textContent = `
     justify-content: center;
     border-radius: 2px;
     padding: 0;
-    pointer-events: auto;
   }
   .pod-diy-btn:hover {
     opacity: 1;
@@ -708,11 +720,21 @@ style.textContent = `
     padding-top: 18px; 
   }
 
-  .dv-header, .dv-tab-container, .dv-tab, .dv-separator, .dv-tab-divider, .dv-tab-separator {
+  /* Aggressive Dockview Header Hiding - Kill the Abyss */
+  .dv-header, .dv-tab-container, .dv-tab, .dv-separator, .dv-tab-divider, .dv-tab-separator, .dv-tabs-and-actions-container {
     display: none !important;
     height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
     visibility: hidden !important;
     contain: strict !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 `;
+document.head.appendChild(style);
 document.head.appendChild(style);
