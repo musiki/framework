@@ -7,6 +7,7 @@ export class RoomWorkspaceManager {
   private canLeadSession: () => boolean;
   private onLayoutChange: (layout: any) => void;
   private onHyperpianoInit?: (element: HTMLElement) => HyperpianoController;
+  private onWhiteboardInit?: (element: HTMLElement) => void;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
   public hyperpianoController: HyperpianoController | null = null;
@@ -36,12 +37,14 @@ export class RoomWorkspaceManager {
     container: HTMLElement,
     canLeadSession: () => boolean,
     onLayoutChange: (layout: any) => void,
-    onHyperpianoInit?: (element: HTMLElement) => HyperpianoController
+    onHyperpianoInit?: (element: HTMLElement) => HyperpianoController,
+    onWhiteboardInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
     this.onLayoutChange = onLayoutChange;
     this.onHyperpianoInit = onHyperpianoInit;
+    this.onWhiteboardInit = onWhiteboardInit;
   }
 
   public init() {
@@ -71,6 +74,7 @@ export class RoomWorkspaceManager {
             // Create DIY Shell
             const shell = document.createElement('div');
             shell.className = 'pod-diy-shell';
+            shell.dataset.panelId = options.id;
             
             const type = this.POD_TYPES.find(t => t.id === id);
             const title = type ? type.title : id.toUpperCase();
@@ -99,6 +103,9 @@ export class RoomWorkspaceManager {
                   params.api.onDidFocusChange((focused: boolean) => {
                     this.podControllers.get(options.id)?.setFocused(focused);
                   });
+                }
+                if (id === 'whiteboard' && !isOriginal && element && this.onWhiteboardInit) {
+                  this.onWhiteboardInit(element);
                 }
               },
               update: (params: any) => {},
@@ -189,12 +196,9 @@ export class RoomWorkspaceManager {
     this.container.addEventListener('dragover', (e) => {
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell');
-        if (shellEl && this.dockview) {
-            const match = this.dockview.panels.find(
-                p => p.view.element === shellEl || p.view.element?.contains(shellEl as Node)
-            );
-            this.dragOverPanelId = match?.id ?? null;
+        const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
+        if (shellEl) {
+            this.dragOverPanelId = shellEl.dataset.panelId ?? null;
         }
     });
 

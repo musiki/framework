@@ -7443,6 +7443,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (incomingAudioContext.state !== 'running') {
       await incomingAudioContext.resume().catch(() => undefined);
     }
+    
+    updateActiveHyperpianoAudio();
 
     applyMixerState();
     return incomingAudioContext;
@@ -10472,43 +10474,105 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const whiteboard = new WhiteboardController((msg) => void publishMessage(msg));
+
+  const onWhiteboardInit = (clonedElement: HTMLElement) => {
+    const wb = new WhiteboardController((msg) => void publishMessage(msg));
+    const canvas = clonedElement.querySelector('[data-whiteboard-canvas]') as HTMLCanvasElement | null;
+    const bgCanvas = clonedElement.querySelector('[data-whiteboard-bg-canvas]') as HTMLCanvasElement | null;
+    if (canvas) wb.init(canvas);
+    if (bgCanvas) wb.initBg(bgCanvas);
+
+    clonedElement.querySelector('[data-action="whiteboard-clear"]')
+      ?.addEventListener('click', () => wb.clear(true));
+
+    clonedElement.querySelectorAll('[data-whiteboard-bg-btn]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const bg = (btn as HTMLElement).dataset.whiteboardBgBtn as 'staff' | 'grid';
+        const isActive = (btn as HTMLElement).dataset.active === 'true';
+        const nextBg = isActive ? 'none' : bg;
+        wb.setBackground(nextBg, true);
+        clonedElement.querySelectorAll('[data-whiteboard-bg-btn]')
+          .forEach(b => (b as HTMLElement).dataset.active = 'false');
+        if (nextBg !== 'none') (btn as HTMLElement).dataset.active = 'true';
+      });
+    });
+
+    clonedElement.querySelectorAll('[data-whiteboard-tool]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tool = (btn as HTMLElement).dataset.whiteboardTool as 'draw' | 'text-sm' | 'text-lg';
+        if (tool) {
+          wb.setTool(tool);
+          clonedElement.querySelectorAll('[data-whiteboard-tool]')
+            .forEach(b => (b as HTMLElement).dataset.active = 'false');
+          (btn as HTMLElement).dataset.active = 'true';
+        }
+      });
+    });
+
+    clonedElement.querySelectorAll('[data-whiteboard-color]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const color = (btn as HTMLElement).dataset.whiteboardColor;
+        if (color) {
+          wb.setColor(color);
+          clonedElement.querySelectorAll('[data-whiteboard-color]')
+            .forEach(b => (b as HTMLElement).dataset.active = 'false');
+          (btn as HTMLElement).dataset.active = 'true';
+        }
+      });
+    });
+
+    clonedElement.querySelectorAll('[data-whiteboard-snap-btn]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const isActive = (btn as HTMLElement).dataset.active === 'true';
+        const nextSnap = !isActive;
+        wb.setSnap(nextSnap);
+        (btn as HTMLElement).dataset.active = nextSnap ? 'true' : 'false';
+      });
+    });
+  };
+
   const lilypondLive = new LilyPondLiveController((msg) => void publishMessage(msg));
 
     // Hyperpiano integration
+    const updateActiveHyperpianoAudio = () => {
+        if (!incomingAudioContext || !hpAudioGroupGainNode) return;
+        const pods = workspaceManager.getActivePods();
+        pods.forEach(pod => {
+            if (pod.controller instanceof HyperpianoController) {
+                pod.controller.setAudio(incomingAudioContext!, hpAudioGroupGainNode!);
+                if (!(pod.controller as any).initialized) {
+                    pod.controller.init();
+                    (pod.controller as any).initialized = true;
+                }
+            }
+        });
+    };
+
     const onHyperpianoInit = (container: HTMLElement) => {
       const hp = new HyperpianoController({
-        audioContext: incomingAudioContext!, // Will be ensured on play
+        audioContext: incomingAudioContext, 
         container,
-        outputNode: hpAudioGroupGainNode!,
+        outputNode: hpAudioGroupGainNode,
         getMidiInputId: () => preferredMidiInputId,
         onStatusChange: (status) => setStatus(status),
         onNoteEvent: (note, velocity, action) => {
-          // Transmission logic: Teachers always transmit, students only if allowed
           if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
-            void publishMessage({
-              type: 'hyperpiano',
-              note,
-              velocity,
-              action
-            });
+            void publishMessage({ type: 'hyperpiano', note, velocity, action });
           }
         }
       });
       
-      // Init directly
-      const runInit = () => {
-        if (!(hp as any).initialized) {
-            hp.init();
-            (hp as any).initialized = true;
-        }
-      };
-
-      if (incomingAudioContext) {
-          runInit();
+      if (incomingAudioContext && hpAudioGroupGainNode) {
+          hp.init();
+          (hp as any).initialized = true;
       } else {
         container.addEventListener('mousedown', async () => {
           await ensureIncomingAudioContext();
-          runInit();
+          if (incomingAudioContext && hpAudioGroupGainNode) {
+            hp.setAudio(incomingAudioContext, hpAudioGroupGainNode);
+            hp.init();
+            (hp as any).initialized = true;
+          }
         }, { once: true });
       }
 
@@ -10519,7 +10583,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     root.querySelector('[data-workspace-root]') as HTMLElement,
     canLeadSession,
     (layout) => void publishMessage({ type: 'session-workspace', layout }),
-    onHyperpianoInit
+    onHyperpianoInit,
+    onWhiteboardInit
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
