@@ -30,6 +30,23 @@ Welcome, Agent. This project is a complex LMS/Wiki system built with Astro. Use 
 - [Database Management](docs/db/database-management.md) — Backup and persistence.
 - [Ollama VPS Workflow](docs/ollama-vps-workflow.md) — Local AI integration.
 
+## 🗺️ Current Work (GSD)
+
+Active milestone: **Room Workspace Bug Fixes** — 2 phases, 5 requirements.
+
+- [PROJECT.md](.planning/PROJECT.md) — Project context and goals
+- [ROADMAP.md](.planning/ROADMAP.md) — Phase breakdown (2 phases)
+- [REQUIREMENTS.md](.planning/REQUIREMENTS.md) — 5 requirements (AUDIO-01/02, WSPC-01/02/03)
+- [STATE.md](.planning/STATE.md) — Current project state
+
+**Current priority:** Phase 1 — `src/scripts/room/hyperpiano/HyperpianoController.ts`
+Run `/gsd-plan-phase 1` to start.
+
+---
+
+### 🎥 Room — Pod Layout Docs (current focus)
+- [Pod Layout Architecture](docs/room/pod-layout.md) — Dockview pod system design.
+
 ## 🛠️ AGENT RULES & BEST PRACTICES
 
 1.  **Log All Changes in `MEMORY.md`**: Every significant change, bug fix, or feature addition must be recorded in `MEMORY.md` with the current date, commit hash, and a brief description of the impact.
