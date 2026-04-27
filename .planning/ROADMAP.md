@@ -21,8 +21,8 @@ Two-phase bug-fix milestone targeting 5 critical regressions introduced during t
   3. No console errors related to AudioContext state during Hyperpiano initialization
 **Key files**:
   - `src/scripts/room/hyperpiano/HyperpianoController.ts`
-**Plans**: TBD
-**Status**: Pending
+**Plans**: `01-01-PLAN.md` (Wave 1 — autonomous)
+**Status**: Ready to execute
 
 ### Phase 2: Workspace Layout
 **Goal**: Pods can be dragged and arranged freely via DIY headers, duplicate whiteboards are fully functional, and grid video participants display correctly after any panel move.
