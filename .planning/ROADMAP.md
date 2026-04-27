@@ -6,7 +6,7 @@ Two-phase bug-fix milestone targeting 5 critical regressions introduced during t
 
 ## Phases
 
-- [ ] **Phase 1: Hyperpiano Audio & Keys** - AudioContext suspend bug and black key border rendering fixed
+- [x] **Phase 1: Hyperpiano Audio & Keys** - AudioContext suspend bug and black key border rendering fixed (2026-04-27)
 - [ ] **Phase 2: Workspace Layout** - DIY header drag, whiteboard clone, and grid video remount fixed
 
 ## Phase Details
@@ -22,7 +22,7 @@ Two-phase bug-fix milestone targeting 5 critical regressions introduced during t
 **Key files**:
   - `src/scripts/room/hyperpiano/HyperpianoController.ts`
 **Plans**: `01-01-PLAN.md` (Wave 1 — autonomous)
-**Status**: Ready to execute
+**Status**: Complete (2026-04-27)
 
 ### Phase 2: Workspace Layout
 **Goal**: Pods can be dragged and arranged freely via DIY headers, duplicate whiteboards are fully functional, and grid video participants display correctly after any panel move.
@@ -41,5 +41,5 @@ Two-phase bug-fix milestone targeting 5 critical regressions introduced during t
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Hyperpiano Audio & Keys | 0/TBD | Not started | - |
+| 1. Hyperpiano Audio & Keys | 1/1 | Complete | 2026-04-27 |
 | 2. Workspace Layout | 0/TBD | Not started | - |

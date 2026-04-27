@@ -5,29 +5,29 @@
 See: .planning/PROJECT.md (updated 2026-04-27)
 
 **Core value:** Teachers and students can interact in a fully functional live room — pods arrange freely, Hyperpiano plays, whiteboard draws, and video participants appear correctly.
-**Current focus:** Phase 1 — Hyperpiano Audio & Keys
+**Current focus:** Phase 2 — Workspace Layout
 
 ## Current Position
 
-Phase: 1 of 2 (Hyperpiano Audio & Keys)
-Plan: 1 of 1 in current phase
-Status: Ready to execute
-Last activity: 2026-04-27 — Phase 1 planned (1 plan, verification passed)
+Phase: 2 of 2 (Workspace Layout)
+Plan: 0 of TBD in current phase
+Status: Phase 1 complete — Phase 2 pending planning
+Last activity: 2026-04-27 — Phase 1 executed and verified (1/1 plans, 2/2 requirements)
 
-Progress: [░░░░░░░░░░] 0% (planning complete, execution pending)
+Progress: [█████░░░░░] 50% (Phase 1 complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: -
+- Total plans completed: 1
+- Average duration: 15 min
+- Total execution time: 15 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 1: Hyperpiano Audio & Keys | 1 | 15 min | 15 min |
 
 *Updated after each plan completion*
 
@@ -47,8 +47,8 @@ None yet.
 
 ### Blockers / Open Issues
 
-- AUDIO-01: AudioContext may be suspended on first user interaction (browser autoplay policy) — must resume before `loadRoots` in HyperpianoController.ts
-- AUDIO-02: Black key border `#333` not applied consistently — key separation not visible
+- ~~AUDIO-01: AudioContext may be suspended on first user interaction~~ — RESOLVED (Phase 1)
+- ~~AUDIO-02: Black key border `#333` not applied consistently~~ — RESOLVED (Phase 1)
 - WSPC-01: DIY header drag triggers Dockview split-preview incorrectly — drops land in wrong position
 - WSPC-02: `cloneNode(true)` copies DOM but not canvas context or listeners — cloned whiteboard is broken
 - WSPC-03: `musiki:workspace:changed` handler holds stale `gridSlot` DOM reference after Dockview panel move
