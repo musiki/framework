@@ -1,40 +1,38 @@
 import { createImpulseResponseBuffer } from '../core/helpers';
 
 export type HyperpianoOptions = {
-  audioContext: AudioContext;
+  audioContext: AudioContext | null;
   container: HTMLElement;
-  outputNode: AudioNode;
+  outputNode: AudioNode | null;
   onStatusChange?: (status: string) => void;
   onNoteEvent?: (note: number, velocity: number, action: 'on' | 'off') => void;
   getMidiInputId: () => string | null;
 };
 
 export class HyperpianoController {
-  private audioContext: AudioContext;
+  private audioContext: AudioContext | null = null;
   private container: HTMLElement;
-  private outputNode: AudioNode;
+  private outputNode: AudioNode | null = null;
   private onStatusChange?: (status: string) => void;
   private onNoteEvent?: (note: number, velocity: number, action: 'on' | 'off') => void;
   private getMidiInputId: () => string | null;
 
   private roots: any[] = [];
   private activeNotes = new Map<number, any>();
-  private masterOut: GainNode;
-  private analyserNode: AnalyserNode;
-  private dryGain: GainNode;
-  private wetGain: GainNode;
-  private reverbNode: ConvolverNode;
+  private masterOut: GainNode | null = null;
+  private analyserNode: AnalyserNode | null = null;
+  private dryGain: GainNode | null = null;
+  private wetGain: GainNode | null = null;
+  private reverbNode: ConvolverNode | null = null;
   private wetDryRatio = 0.3;
   private currentOctave = 4;
-  private temporaryOctaveShift = 0;
-  private sustainedOctaveOffset = 0;
   private activeKeys: Record<string, any> = {};
   private rafId: number | null = null;
   private midiAccess: MIDIAccess | null = null;
   private currentMidiInput: MIDIInput | null = null;
-  private isMulticolor = false;
   private octaveColors: string[] = [];
   private isFocused = false;
+  private eventsBound = false;
 
   private SAMPLE_FILES = ['C1.mp3', 'C2.mp3', 'C3.mp3', 'C4.mp3', 'C5.mp3', 'C6.mp3', 'C7.mp3', 'C8.mp3'];
   private BASE_PATH = '/inc/samples-piano/';
@@ -57,47 +55,78 @@ export class HyperpianoController {
   private resizeObserver: ResizeObserver;
 
   constructor(options: HyperpianoOptions) {
-    this.audioContext = options.audioContext;
     this.container = options.container;
-    this.outputNode = options.outputNode;
     this.onStatusChange = options.onStatusChange;
     this.onNoteEvent = options.onNoteEvent;
     this.getMidiInputId = options.getMidiInputId;
 
-    this.masterOut = this.audioContext.createGain();
-    this.analyserNode = this.audioContext.createAnalyser();
-    this.analyserNode.fftSize = 256;
-    this.analyserNode.smoothingTimeConstant = 0.6;
-    this.masterOut.connect(this.analyserNode);
-    this.masterOut.connect(this.outputNode);
-
-    this.dryGain = this.audioContext.createGain();
-    this.wetGain = this.audioContext.createGain();
-    this.reverbNode = this.audioContext.createConvolver();
-    
-    this.dryGain.connect(this.masterOut);
-    this.wetGain.connect(this.masterOut);
-    this.reverbNode.connect(this.wetGain);
+    if (options.audioContext && options.outputNode) {
+        this.setAudio(options.audioContext, options.outputNode);
+    }
 
     this.resizeObserver = new ResizeObserver(() => this.handleResize());
   }
 
-  public async init() {
-    this.updateReverbMix();
-    this.assignRandomColors();
+  public async setAudio(context: AudioContext, output: AudioNode): Promise<void> {
+    if (this.audioContext === context && this.masterOut) return;
     
-    await this.loadRoots();
-    
-    this.reverbNode.buffer = createImpulseResponseBuffer(this.audioContext, 2.5, 2.8);
-    
-    this.handleResize();
-    this.drawVuMeter();
-    this.setupPointerEvents();
-    this.setupMIDI();
-    this.resizeObserver.observe(this.container);
-    this.bindKeyboard();
+    this.audioContext = context;
+    this.outputNode = output;
 
-    this.setStatus(this.roots.length ? '' : 'No samples loaded.');
+    try {
+        this.masterOut = this.audioContext.createGain();
+        this.analyserNode = this.audioContext.createAnalyser();
+        this.analyserNode.fftSize = 256;
+        this.analyserNode.smoothingTimeConstant = 0.6;
+        
+        this.dryGain = this.audioContext.createGain();
+        this.wetGain = this.audioContext.createGain();
+        this.reverbNode = this.audioContext.createConvolver();
+        this.reverbNode.buffer = createImpulseResponseBuffer(this.audioContext, 2.5, 2.8);
+        
+        this.masterOut.connect(this.analyserNode);
+        this.masterOut.connect(this.outputNode!);
+
+        this.dryGain.connect(this.masterOut);
+        this.wetGain.connect(this.masterOut);
+        this.reverbNode.connect(this.wetGain);
+        
+        this.updateReverbMix();
+        this.drawVuMeter();
+
+        if (this.roots.length === 0) {
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+            }
+            this.loadRoots();
+        }
+    } catch (e) {
+        console.error('[Hyperpiano] Audio setup error:', e);
+    }
+  }
+
+  public async init() {
+    this.assignRandomColors();
+    this.handleResize();
+    
+    if (!this.eventsBound) {
+        this.setupPointerEvents();
+        this.setupMIDI();
+        this.resizeObserver.observe(this.container);
+        this.bindKeyboard();
+        this.eventsBound = true;
+    }
+
+    if (this.audioContext && !this.masterOut && this.outputNode) {
+        this.setAudio(this.audioContext, this.outputNode);
+    } else if (this.audioContext && this.roots.length === 0) {
+        if (this.audioContext.state === 'suspended') {
+            await this.audioContext.resume();
+        }
+        await this.loadRoots();
+    }
+    
+    this.setStatus(this.roots.length ? '' : (this.audioContext ? 'Cargando...' : 'Esperando audio...'));
   }
 
   private handleResize() {
@@ -111,7 +140,6 @@ export class HyperpianoController {
       this.buildPiano(upper, [1]);
     } else {
       if (lower) lower.style.display = 'none';
-      // 5 octaves to make keys narrower and fill full width
       this.buildPiano(upper, [-1, 0, 1, 2, 3]);
     }
   }
@@ -132,21 +160,26 @@ export class HyperpianoController {
   }
 
   private async loadRoots() {
+    if (!this.audioContext) return;
+    this.setStatus('Cargando piano...');
     const loads = this.SAMPLE_FILES.map(async (file) => {
       try {
         const res = await fetch(this.BASE_PATH + file);
         if (!res.ok) return;
         const arr = await res.arrayBuffer();
-        const buf = await this.audioContext.decodeAudioData(arr);
+        const buf = await this.audioContext!.decodeAudioData(arr);
         const m = /([A-G](?:#|b)?-?\d+)/.exec(file);
         if (!m) return;
         const midi = this.midiFromName(m[1]);
         if (midi == null) return;
-        this.roots.push({ name: m[1], midi, buffer: buf });
-      } catch (e) { console.warn('Error loading', file, e); }
+        if (!this.roots.find(r => r.midi === midi)) {
+            this.roots.push({ name: m[1], midi, buffer: buf });
+        }
+      } catch (e) { console.warn('[Hyperpiano] Load error:', file, e); }
     });
     await Promise.all(loads);
     this.roots.sort((a, b) => a.midi - b.midi);
+    this.setStatus('');
   }
 
   private midiFromName(s: string) {
@@ -177,7 +210,6 @@ export class HyperpianoController {
     pianoContainer.appendChild(whiteKeysContainer);
 
     const totalWhiteKeys = whiteKeyNotes.length * offsets.length;
-    // Fill full width
     whiteKeysContainer.style.width = '100%';
     whiteKeysContainer.style.margin = '0';
 
@@ -202,22 +234,22 @@ export class HyperpianoController {
         if (keyCharMap[octaveOffset] && keyCharMap[octaveOffset][semi]) {
           keyDiv.dataset.keys = keyCharMap[octaveOffset][semi].join(' ');
         }
-        // Calculate position relative to the 100% width container
         const leftPosition = (octaveIndex * whiteKeyNotes.length + blackKeyPositions[i]) * (100 / totalWhiteKeys);
         keyDiv.style.left = `${leftPosition}%`;
         keyDiv.style.width = `calc(${100 / totalWhiteKeys}% * 0.65)`;
-        
+        keyDiv.style.border = '1px solid #333';
         whiteKeysContainer.appendChild(keyDiv);
       });
     });
   }
 
   private drawVuMeter() {
+    if (!this.analyserNode) return;
     const bufferLength = this.analyserNode.fftSize;
     const dataArray = new Uint8Array(bufferLength);
     const vuMeterFill = this.container.querySelector('#vu-meter .fill') as HTMLElement;
     const draw = () => {
-      if (!this.container.isConnected) return;
+      if (!this.container.isConnected || !this.analyserNode) return;
       this.rafId = requestAnimationFrame(draw);
       this.analyserNode.getByteTimeDomainData(dataArray);
       let sumSquares = 0.0;
@@ -234,7 +266,7 @@ export class HyperpianoController {
 
   private setupPointerEvents() {
     const onPointerDown = (e: PointerEvent) => {
-      if (this.audioContext.state === 'suspended') this.audioContext.resume();
+      if (this.audioContext?.state === 'suspended') this.audioContext.resume();
       const data = this.keyFromEvent(e);
       if (!data) return;
       this.triggerKeyOn(data.keyChar, data.velocity, data.dynamic, data.midiNote);
@@ -277,6 +309,7 @@ export class HyperpianoController {
   }
 
   public triggerKeyOn(k: string | null, velocity = 1.0, dynamic: string | null = null, midiNote: number | null = null, isRemote = false) {
+    if (!this.audioContext || !this.masterOut) return;
     if (this.audioContext.state === 'suspended') this.audioContext.resume();
     let targetMIDI: number;
     let semi: number;
@@ -318,7 +351,7 @@ export class HyperpianoController {
 
     const playback = this.activeNotes.get(midi);
     if (!playback) return;
-    const now = this.audioContext.currentTime;
+    const now = this.audioContext!.currentTime;
     playback.gain.gain.setTargetAtTime(0.0001, now, 0.1);
     this.activeNotes.delete(midi);
 
@@ -350,22 +383,22 @@ export class HyperpianoController {
   private playWithRoot(root: any, targetMIDI: number, velocity = 1.0) {
     const diff = targetMIDI - root.midi;
     const rate = Math.pow(2, diff / 12);
-    const now = this.audioContext.currentTime;
-    const src = this.audioContext.createBufferSource();
+    const now = this.audioContext!.currentTime;
+    const src = this.audioContext!.createBufferSource();
     src.buffer = root.buffer;
     src.playbackRate.value = rate;
-    const g = this.audioContext.createGain();
+    const g = this.audioContext!.createGain();
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(velocity, now + 0.01);
     src.connect(g);
-    g.connect(this.dryGain);
-    g.connect(this.reverbNode);
+    if (this.dryGain) g.connect(this.dryGain);
+    if (this.reverbNode) g.connect(this.reverbNode);
     src.start(now);
     return { source: src, gain: g, adjustedDuration: root.buffer.duration / rate };
   }
 
   private startKeyHighlight(key: string | null, duration: number, semitone: number, velocity: number, midi: number) {
-    const baseRgb = this.isMulticolor ? this.hexToRgb(this.octaveColors[semitone]) : '0, 255, 0';
+    const baseRgb = '0, 255, 0';
     const color = `rgba(${baseRgb}, ${velocity})`;
     const octOff = Math.floor(midi / 12) - 1 - this.currentOctave;
     
@@ -379,12 +412,8 @@ export class HyperpianoController {
     });
   }
 
-  private hexToRgb(hex: string) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '0, 255, 0';
-  }
-
   private updateReverbMix() {
+    if (!this.wetGain || !this.dryGain) return;
     this.wetGain.gain.value = this.wetDryRatio;
     this.dryGain.gain.value = 1.0 - this.wetDryRatio;
     const fill = this.container.querySelector('#reverb-indicator .fill') as HTMLElement;
@@ -397,7 +426,7 @@ export class HyperpianoController {
       this.midiAccess = await navigator.requestMIDIAccess();
       this.midiAccess.onstatechange = () => this.syncMidiInput();
       this.syncMidiInput();
-    } catch (e) { console.warn('MIDI access failed', e); }
+    } catch (e) { console.warn('[Hyperpiano] MIDI error:', e); }
   }
 
   private syncMidiInput() {
@@ -424,7 +453,6 @@ export class HyperpianoController {
 
   private bindKeyboard() {
     const handleDown = (e: KeyboardEvent) => {
-      // Allow shortcuts if this specific container or any child has focus
       const isFocused = this.isFocused || this.container.contains(document.activeElement);
       if (!isFocused) return;
       if (e.repeat) return;
