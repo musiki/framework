@@ -4043,6 +4043,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let presentationCircleZoom = previewZoom;
   let showPresentationCircle = persistedSetup.showCircle === true;
   let presentationCircleSize = Number(persistedSetup.circleSize) || 180;
+  const getShowCircleInputs = () =>
+    Array.from(
+      root.querySelectorAll<HTMLInputElement>('[data-show-circle-input], [data-show-circle-workspace-input]'),
+    ).filter((input) => !input.closest('#musiki-pod-templates'));
 
   const applyCircleSize = (size: number) => {
     presentationCircleSize = size;
@@ -5219,9 +5223,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const applyShowCircleState = () => {
     root.dataset.showCircle = showPresentationCircle ? 'true' : 'false';
-    if (showCircleInput instanceof HTMLInputElement) {
-      showCircleInput.checked = showPresentationCircle;
-    }
+    getShowCircleInputs().forEach((input) => {
+      input.checked = showPresentationCircle;
+    });
     if (floatingCircleWrap instanceof HTMLElement) {
       floatingCircleWrap.hidden = !showPresentationCircle;
     }
@@ -8294,14 +8298,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       : readParticipantHandRaisedFromMetadata(participant);
 
   const syncRaiseHandUi = () => {
-    if (!(raiseHandButton instanceof HTMLButtonElement)) return;
-    raiseHandButton.dataset.active = localHandRaised ? 'true' : 'false';
-    raiseHandButton.setAttribute('aria-pressed', localHandRaised ? 'true' : 'false');
-    raiseHandButton.title = localHandRaised ? 'Bajar la mano (M)' : 'Levantar la mano (M)';
-    raiseHandButton.setAttribute(
-      'aria-label',
-      localHandRaised ? 'Bajar la mano' : 'Levantar la mano',
-    );
+    root.querySelectorAll<HTMLButtonElement>('[data-action="raise-hand"]').forEach((button) => {
+      if (button.closest('#musiki-pod-templates')) return;
+      button.dataset.active = localHandRaised ? 'true' : 'false';
+      button.setAttribute('aria-pressed', localHandRaised ? 'true' : 'false');
+      button.title = localHandRaised ? 'Bajar la mano (M)' : 'Levantar la mano (M)';
+      button.setAttribute(
+        'aria-label',
+        localHandRaised ? 'Bajar la mano' : 'Levantar la mano',
+      );
+    });
   };
 
   const updateLocalParticipantMetadata = async (metadata: string) => {
@@ -10607,6 +10613,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           (node): node is HTMLElement =>
             node instanceof HTMLElement && !node.closest('#musiki-pod-templates'),
         );
+        const status = container.querySelector('[data-external-media-status]');
+        if (status instanceof HTMLElement) {
+          externalMediaStatus = status;
+        }
         input.addEventListener('input', () => {
           queueExternalMediaSearch(input.value);
         });
@@ -10615,6 +10625,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           event.preventDefault();
           void openExternalMediaFromInput(input.value);
         });
+        container.querySelectorAll<HTMLButtonElement>('[data-action="external-media-open"]').forEach((button) => {
+          button.addEventListener('click', () => {
+            void openExternalMediaFromInput(input.value);
+          });
+        });
+        renderExternalMediaSearchResults();
       }
     };
 
@@ -10703,6 +10719,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       syncAllParticipants();
     }, 100);
+  });
+
+  window.addEventListener('musiki:chat:focus-request', () => {
+    window.setTimeout(() => {
+      chatController?.focusComposer();
+    }, 80);
+  });
+
+  window.addEventListener('musiki:workspace:settings', (event) => {
+    const detail = (event as CustomEvent<{ showCircle?: boolean }>).detail;
+    if (typeof detail?.showCircle !== 'boolean') return;
+    showPresentationCircle = detail.showCircle;
+    applyShowCircleState();
+    persistSetupState();
+    syncAllParticipants();
+    if (room.state === ConnectionState.Connected) {
+      void syncLocalParticipantMetadata().catch(() => undefined);
+    }
   });
 
   chatController = createRoomChatController({
@@ -10929,8 +10963,38 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }, nextHref ? 48 : 0);
   };
 
+  const getReactionLayer = () => {
+    const visibleDockViews = Array.from(root.querySelectorAll<HTMLElement>('.dv-view, .pod-diy-body'))
+      .filter((element) => {
+        if (element.closest('#musiki-pod-templates')) return false;
+        const rect = element.getBoundingClientRect();
+        if (rect.width < 80 || rect.height < 80) return false;
+        const style = window.getComputedStyle(element);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      })
+      .sort((left, right) => {
+        const leftRect = left.getBoundingClientRect();
+        const rightRect = right.getBoundingClientRect();
+        return rightRect.width * rightRect.height - leftRect.width * leftRect.height;
+      });
+    const host = visibleDockViews[0];
+    if (host) {
+      let layer = host.querySelector<HTMLElement>(':scope > .conference-reactions-layer');
+      if (!layer) {
+        layer = document.createElement('div');
+        layer.className = 'conference-reactions-layer conference-reactions-layer--dockview';
+        layer.setAttribute('aria-hidden', 'true');
+        host.appendChild(layer);
+      }
+      return layer;
+    }
+
+    return reactionsLayer instanceof HTMLElement ? reactionsLayer : null;
+  };
+
   const appendReactionBurst = (reaction: ReactionKind, name: string) => {
-    if (!(reactionsLayer instanceof HTMLElement)) return;
+    const layer = getReactionLayer();
+    if (!(layer instanceof HTMLElement)) return;
 
     const burstId = crypto.randomUUID();
     const burst = document.createElement('div');
@@ -10950,7 +11014,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       burst.appendChild(label);
     }
 
-    reactionsLayer.appendChild(burst);
+    layer.appendChild(burst);
     const timeoutId = window.setTimeout(() => {
       burst.remove();
       reactionBursts.delete(burstId);
@@ -11095,9 +11159,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     chatController.syncControlState();
     void refreshMidiOptions();
-    if (raiseHandButton instanceof HTMLButtonElement) {
-      raiseHandButton.disabled = !connected;
-    }
+    root.querySelectorAll<HTMLButtonElement>('[data-action="raise-hand"]').forEach((button) => {
+      if (button.closest('#musiki-pod-templates')) return;
+      button.disabled = !connected;
+    });
     syncLocalVideoDisplayFlip();
     applyGravityBallStageVisibilityState();
     if (instrumentsToggleButton instanceof HTMLButtonElement) {
@@ -12695,17 +12760,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  if (showCircleInput instanceof HTMLInputElement) {
-    showCircleInput.addEventListener('change', () => {
-      showPresentationCircle = showCircleInput.checked;
+  const handleShowCircleInputChange = (event: Event) => {
+    const input = event.currentTarget;
+    if (!(input instanceof HTMLInputElement)) return;
+    showPresentationCircle = input.checked;
       applyShowCircleState();
       persistSetupState();
 
       if (canLeadSession()) {
         void publishMessage({
           type: 'circle-move',
-          x: currentX / window.innerWidth,
-          y: currentY / window.innerHeight,
+          x: circleX / window.innerWidth,
+          y: circleY / window.innerHeight,
           identity: 'focus-slot',
           show: showPresentationCircle,
         });
@@ -12715,8 +12781,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (room.state === ConnectionState.Connected) {
         void syncLocalParticipantMetadata().catch(() => undefined);
       }
-    });
-  }
+  };
+
+  getShowCircleInputs().forEach((input) => {
+    input.addEventListener('change', handleShowCircleInputChange);
+  });
 
   if (backgroundBlurToggleButton instanceof HTMLButtonElement) {
     backgroundBlurToggleButton.addEventListener('click', () => {
@@ -13317,6 +13386,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (scope === 'hp') {
+      mixerHpPan = 0;
+      mixerHpGain = 0;
+      mixerHpReverbSend = 0;
+      mixerHpDelaySend = 0;
+      mixerHpMuted = false;
+      applyMixerState();
+      persistSetupState();
+      setStatus('HP reset.');
+      return;
+    }
+
     if (scope === 'video') {
       videoMix = createNeutralVideoMix();
       void handleVideoMixerInput();
@@ -13378,6 +13459,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   bindRangeKnob(mixerSynthPanKnob, mixerSynthPanInput, 0);
   bindRangeKnob(mixerBallPanKnob, mixerBallPanInput, 0);
   bindRangeKnob(mixerIncomingPanKnob, mixerIncomingPanInput, 0);
+  bindRangeKnob(mixerHpPanKnob, mixerHpPanInput, 0);
   bindRangeKnob(mixerMasterPanKnob, mixerMasterPanInput, 0);
   bindRangeKnob(mixerSynthReverbSendKnob, mixerSynthReverbSendInput, 0);
   bindRangeKnob(mixerSynthDelaySendKnob, mixerSynthDelaySendInput, 0);
@@ -13385,6 +13467,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   bindRangeKnob(mixerBallDelaySendKnob, mixerBallDelaySendInput, 0);
   bindRangeKnob(mixerIncomingReverbSendKnob, mixerIncomingReverbSendInput, 0);
   bindRangeKnob(mixerIncomingDelaySendKnob, mixerIncomingDelaySendInput, 0);
+  bindRangeKnob(mixerHpReverbSendKnob, mixerHpReverbSendInput, 0);
+  bindRangeKnob(mixerHpDelaySendKnob, mixerHpDelaySendInput, 0);
   bindRangeKnob(mixerVideoLumaKnob, mixerVideoLumaInput, 0);
   bindRangeKnob(mixerVideoTintKnob, mixerVideoTintInput, 0);
   bindRangeKnob(mixerVideoSaturationKnob, mixerVideoSaturationInput, 0);
@@ -13896,22 +13980,28 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  if (raiseHandButton instanceof HTMLButtonElement) {
-    raiseHandButton.addEventListener('click', () => {
-      void toggleRaisedHand();
-    });
-  }
+  root.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
 
-  for (const btn of root.querySelectorAll<HTMLButtonElement>('[data-reaction]')) {
-    btn.addEventListener('click', () => {
-      const reaction = btn.dataset.reaction as ReactionKind;
-      if (reaction in REACTION_EMOJIS) {
-        void publishReaction(reaction).catch((error) => {
-          setStatus(safeErrorMessage(error));
-        });
-      }
-    });
-  }
+    const handButton = target.closest<HTMLButtonElement>('[data-action="raise-hand"]');
+    if (handButton && root.contains(handButton)) {
+      event.preventDefault();
+      void toggleRaisedHand();
+      return;
+    }
+
+    const reactionButton = target.closest<HTMLButtonElement>('[data-reaction]');
+    if (!reactionButton || !root.contains(reactionButton)) return;
+
+    event.preventDefault();
+    const reaction = reactionButton.dataset.reaction as ReactionKind;
+    if (reaction in REACTION_EMOJIS) {
+      void publishReaction(reaction).catch((error) => {
+        setStatus(safeErrorMessage(error));
+      });
+    }
+  });
 
   // ── NOTAS ────────────────────────────────────────────────────────────────
   const notesController = createRoomNotesController({
@@ -14146,8 +14236,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     if (normalizedCommand === 'toggle-hand') {
-      if (raiseHandButton instanceof HTMLButtonElement && !raiseHandButton.disabled) {
-        raiseHandButton.click();
+      const activeRaiseHandButton = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-action="raise-hand"]'))
+        .find((button) => !button.closest('#musiki-pod-templates') && !button.disabled);
+      if (activeRaiseHandButton) {
+        activeRaiseHandButton.click();
       }
       return;
     }

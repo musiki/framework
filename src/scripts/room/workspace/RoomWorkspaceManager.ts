@@ -127,6 +127,11 @@ export class RoomWorkspaceManager {
               if (id === 'chat' && this.onChatInit) {
                 this.onChatInit(element);
               }
+              if (id === 'graph') {
+                window.setTimeout(() => {
+                  (window as any).MusikiGraphPodInit?.(element);
+                }, 0);
+              }
             }
             
             return {
@@ -345,7 +350,7 @@ export class RoomWorkspaceManager {
     if (oldId.split('-')[0] === newId) return;
 
     const titleObj = this.POD_TYPES.find(t => t.id === newId);
-    const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'chat', 'clase', 'lily-code', 'lily-render'].includes(newId);
+    const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'clase', 'lily-code', 'lily-render'].includes(newId);
     const panelId = canHaveMultiple ? `${newId}-${Date.now()}` : newId;
 
     // ADD NEW PANEL FIRST relative to the old one's position
@@ -373,7 +378,11 @@ export class RoomWorkspaceManager {
         const name = window.prompt('Nombre del Workspace:');
         if (name) {
           const layout = this.dockview?.toJSON();
-          localStorage.setItem(`musiki:workspace:${name}`, JSON.stringify(layout));
+          const showCircle = document.querySelector<HTMLElement>('[data-conference-root]')?.dataset.showCircle === 'true';
+          localStorage.setItem(`musiki:workspace:${name}`, JSON.stringify({
+            dockview: layout,
+            settings: { showCircle },
+          }));
           this.currentWorkspaceKey = name;
           this.renderQuickLists();
         }
@@ -557,6 +566,12 @@ export class RoomWorkspaceManager {
              return;
           }
 
+          if (selector.includes('chat-focus')) {
+             e.preventDefault(); e.stopPropagation();
+             this.focusOrOpenChat();
+             return;
+          }
+
           if (selector.includes('data-action')) {
              e.preventDefault(); e.stopPropagation();
              pods.forEach(id => this.togglePod(id, true));
@@ -570,7 +585,7 @@ export class RoomWorkspaceManager {
   public togglePod(id: string, forceOpen = false, position?: any) {
     if (!this.dockview) return;
     try {
-        const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'chat', 'clase', 'lily-code', 'lily-render'].includes(id); 
+        const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'clase', 'lily-code', 'lily-render'].includes(id); 
         const existing = this.dockview.getPanel(id);
         
         if (existing && !canHaveMultiple) {
@@ -596,6 +611,33 @@ export class RoomWorkspaceManager {
         }
 
     } catch (err) { console.warn(`TogglePod failed for ${id}:`, err); }
+  }
+
+  private findPanelByBaseId(id: string) {
+    return this.dockview?.panels.find((panel) => panel.id === id || panel.id.startsWith(`${id}-`)) ?? null;
+  }
+
+  public focusOrOpenChat() {
+    if (!this.dockview) return;
+    const existing = this.findPanelByBaseId('chat');
+    if (existing) {
+      existing.api.setActive();
+      window.dispatchEvent(new CustomEvent('musiki:chat:focus-request'));
+      return;
+    }
+
+    const referencePanel = this.dockview.panels.find((panel) => panel.id !== 'chat');
+    this.dockview.addPanel({
+      id: 'chat',
+      component: 'chat',
+      title: 'CHAT',
+      position: referencePanel ? { referencePanel: referencePanel.id, direction: 'right' } : undefined,
+      size: 20,
+    } as any);
+    window.setTimeout(() => {
+      this.dockview?.getPanel('chat')?.api.setActive();
+      window.dispatchEvent(new CustomEvent('musiki:chat:focus-request'));
+    }, 80);
   }
 
   private bindForum(root: HTMLElement) {
@@ -686,7 +728,15 @@ export class RoomWorkspaceManager {
     this.isApplyingRemoteLayout = true;
     try {
       if (typeof layout === 'string') this.applyLayoutByKey(layout);
-      else this.dockview.fromJSON(layout);
+      else {
+        const dockviewLayout = layout.dockview ?? layout;
+        this.dockview.fromJSON(dockviewLayout);
+        if (layout.settings) {
+          window.dispatchEvent(new CustomEvent('musiki:workspace:settings', {
+            detail: layout.settings,
+          }));
+        }
+      }
     } catch (e) { console.error('Error applying remote layout:', e); }
     finally { this.isApplyingRemoteLayout = false; }
   }

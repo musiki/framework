@@ -21,6 +21,16 @@ const { isTeacher = false } = Astro.props as Props;
         </div>
       </div>
 
+      <div class="workspace-list-section">
+        <label class="workspace-inline-toggle">
+          <span>
+            <strong>Círculo</strong>
+            <small>Speaker flotante</small>
+          </span>
+          <input type="checkbox" data-show-circle-workspace-input />
+        </label>
+      </div>
+
       <div class="workspace-list-section" style="margin-top: 0.5rem;">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
           <label class="workspace-list-label" style="margin-bottom: 0;">Custom</label>
@@ -96,6 +106,40 @@ const { isTeacher = false } = Astro.props as Props;
     color: #000 !important;
     border-color: #fff;
     font-weight: 900;
+  }
+
+  .workspace-inline-toggle {
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 3px;
+    color: var(--conference-fg, #f5f7fb);
+    cursor: pointer;
+    display: flex;
+    font-size: 0.68rem;
+    justify-content: space-between;
+    padding: 0.45rem 0.6rem;
+    text-transform: uppercase;
+  }
+
+  .workspace-inline-toggle span {
+    display: flex;
+    flex-direction: column;
+    gap: 0.12rem;
+  }
+
+  .workspace-inline-toggle strong {
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+  }
+
+  .workspace-inline-toggle small {
+    color: var(--conference-muted);
+    font-size: 0.54rem;
+    letter-spacing: 0.08em;
+  }
+
+  .workspace-inline-toggle input {
+    accent-color: var(--conference-accent, #76d3ff);
   }
   
   .workspace-teacher-actions {

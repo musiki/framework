@@ -43,13 +43,45 @@ type EvalCatalogSyncState = {
 };
 
 const DEFAULT_TTL_MS = 45_000;
+const NETWORK_FAILURE_BACKOFF_MS = 5 * 60_000;
 
 let syncState: EvalCatalogSyncState | null = null;
 let inFlightSync: Promise<EvalCatalogSyncResult> | null = null;
+let networkFailureBackoffUntilMs = 0;
 
 const cleanString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
 const normalizeSlugPath = (value: string): string => cleanString(value).replace(/^\/+|\/+$/g, '');
+
+const describeError = (error: unknown): string => {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    const causeMessage = cause instanceof Error ? cause.message : cleanString(cause);
+    return [error.message, causeMessage].filter(Boolean).join(' / ');
+  }
+
+  if (error && typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error || 'Unknown error');
+};
+
+const isNetworkFetchError = (error: unknown): boolean => {
+  const message = describeError(error).toLowerCase();
+  return (
+    message.includes('fetch failed') ||
+    message.includes('enotfound') ||
+    message.includes('eai_again') ||
+    message.includes('econnrefused') ||
+    message.includes('etimedout') ||
+    message.includes('networkerror')
+  );
+};
 
 const valuesDiffer = (left: unknown, right: unknown): boolean => {
   const normalize = (value: unknown): unknown => {
@@ -321,13 +353,18 @@ const runEvalCatalogSync = async (
         await updateAssignmentSafe(supabase, entry.evalId, updatePayload);
         result.updated += 1;
       } catch (error: any) {
-        const message = String(error?.message || error || 'Unknown sync error');
+        const message = describeError(error);
+        if (isNetworkFetchError(error)) {
+          result.errors.push({ evalId: '*', message: `Supabase network unavailable: ${message}` });
+          options.logger.warn(`[eval-sync] Supabase network unavailable; backing off: ${message}`);
+          break;
+        }
         result.errors.push({ evalId: entry.evalId, message });
         options.logger.error(`[eval-sync] ${entry.evalId}: ${message}`);
       }
     }
   } catch (error: any) {
-    const message = String(error?.message || error || 'Unable to build eval catalog');
+    const message = describeError(error) || 'Unable to build eval catalog';
     result.errors.push({ evalId: '*', message });
     options.logger.error(`[eval-sync] fatal: ${message}`);
   }
@@ -351,6 +388,10 @@ export async function ensureEvalCatalogSynced(
   const force = Boolean(options.force);
   const now = Date.now();
 
+  if (!force && networkFailureBackoffUntilMs > now && syncState) {
+    return { ...syncState.result, cached: true };
+  }
+
   if (!force && syncState && now - syncState.finishedAtMs < ttlMs) {
     return { ...syncState.result, cached: true };
   }
@@ -367,6 +408,8 @@ export async function ensureEvalCatalogSynced(
         finishedAtMs: Date.now(),
         result,
       };
+      const hasNetworkError = result.errors.some((entry) => isNetworkFetchError(entry.message));
+      networkFailureBackoffUntilMs = hasNetworkError ? Date.now() + NETWORK_FAILURE_BACKOFF_MS : 0;
       return result;
     })
     .finally(() => {

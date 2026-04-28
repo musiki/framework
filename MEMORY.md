@@ -2,6 +2,29 @@
 
 ## Recent Activity (Last 12 Commits)
 
+<2026-04-28 eval-sync-supabase-network-backoff> <br>
+Reduced local-dev noise and request churn when Supabase DNS/network is unavailable.
+- Root cause: middleware launches eval catalog sync on several page routes. If Supabase DNS fails (`getaddrinfo ENOTFOUND ...supabase.co`), the sync tried each eval entry and logged one `[eval-sync] preguntaN: TypeError: fetch failed` per entry/request. This made unrelated room debugging look broken even though the immediate failure was network/DNS.
+- Fix: `src/lib/eval-sync.ts` now normalizes Error/cause/object messages, detects fetch/DNS/network failures, logs one Supabase-network warning, stops the per-entry loop, caches the failed result, and backs off for 5 minutes before retrying.
+- Note: this does not make Supabase-backed pages work offline; it prevents eval-sync middleware from flooding logs and repeatedly hammering failed DNS during room debugging. Direct Supabase render reads still need their own fallback if a page must be usable while offline.
+
+<2026-04-28 dockview-workspace-presence-controls> <br>
+Third Dockview room repair pass for SPEAKER, workspace Circle state, reactions, hand indicators, Graph, Media, and Chat focus.
+- SPEAKER split root cause: presentation routing could send the session leader/presentation-circle identity and the active focused speaker into the same SPEAKER slot. Result: SPEAKER split instead of replacing the single full slot. Solution: in presentation routing, the SPEAKER slot now belongs to the focused participant only; the floating circle uses its own circle slot only when enabled.
+- Workspace Circle state: added a duplicate Circle toggle in the WORKSPACES sidebar and synchronized it with the Setup/Session Circle toggle. Custom workspace saves now store `{ settings: { showCircle } }` alongside Dockview layout JSON, and applying a saved workspace restores the Circle state.
+- Hand/Reactions: cloned Chat pods were not reliable targets for direct listeners. Raise-hand and reaction clicks now use delegated room-root handling, and all visible hand buttons sync active/disabled state. Roster rows now show a hand marker next to users with `handRaised` metadata, while video cards continue to show the hand overlay.
+- Reaction overlay: old reactions depended on the fixed legacy stage overlay. Reactions now create/use a `.conference-reactions-layer` inside the largest visible Dockview view/pod body, so bursts appear above the currently visible workspace area.
+- Graph pod: the graph script previously initialized only the original hidden/global ID nodes, so cloned Graph pods could show controls without the ForceGraph canvas. Graph initialization is now exposed as `window.MusikiGraphPodInit()` and called for each cloned Graph pod with root-scoped selectors.
+- Media search: cloned External Media pods now retarget status/results/input refs and bind their open button during pod init, so YouTube API search results render in the active pod rather than hidden template nodes.
+- Chat shortcut: the bottom-bar Chat action now focuses an existing Chat pod. If no Chat pod exists, it opens one as a right-side column (~20%) instead of replacing the whole workspace.
+
+<2026-04-28 dockview-grid-speaker-routing> <br>
+Focused repair for GRID video routing and SPEAKER active-speaker switching after Dockview.
+- GRID root cause: Dockview workspaces can display a real `grid-videos` pod while the legacy stage layout value remains `presentation` or `teacher`. Participant routing still sent non-focused users to the old `students` slot, which now often lives hidden inside the roster/template area, so cameras were active but cards/videos mounted into invisible DOM.
+- GRID fix: `resolveParticipantTargetSlot()` now checks whether teacher/grid/students/circle slots are real usable runtime elements (connected, not inside `#musiki-pod-templates`, not hidden/display-none). It routes focused users to the visible SPEAKER pod when available and routes secondary participants to the visible GRID pod when the old students slot is hidden or absent.
+- SPEAKER root cause: `chooseFocusParticipantIdentity()` kept the current focused identity if that participant appeared anywhere in LiveKit's `activeSpeakers` array. LiveKit can include multiple active speakers, so a previously focused teacher could remain sticky even when another participant became the top active speaker.
+- SPEAKER fix: focus now only stays immediately when the current participant is the top live speaker. If another camera-enabled participant becomes top speaker, the existing 1.4s hysteresis prevents jitter, then focus switches to the real top speaker.
+
 <2026-04-28 dockview-room-controller-rebinding> <br>
 Second-wave Dockview room repair for participant media, chat, presentation, external media, and whiteboard.
 - Root cause: `selectRoomElements(root)` and several controllers still assumed one stable DOM tree. After Dockview, the room contains hidden pod templates plus runtime cloned pods; plain `querySelector()` could bind to hidden templates or stale elements, while cloned pod elements lacked controller bindings.

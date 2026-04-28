@@ -123,6 +123,7 @@
 </style>
 
 <script>
+  // @ts-nocheck
   // Advanced Graph logic for the Pod
   (function() {
     const FOLDER_IDENTITY = {
@@ -204,54 +205,62 @@
       ctx.fill();
     }
 
-    let graphData = null;
-    let graphInstance = null;
-    let showAll = false;
-    let hoverNode = null;
-    const highlightNodes = new Set();
-    const highlightLinks = new Set();
-    
-    const container = document.getElementById('graph-pod-canvas');
-    if (!container) return;
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !graphInstance) {
-        void init();
+    function initGraphPod(root = document) {
+      if (!root || root.dataset?.graphPodReady === 'true') return;
+      if (!window.ForceGraph) {
+        window.setTimeout(() => initGraphPod(root), 120);
+        return;
       }
-    }, { threshold: 0.1 });
 
-    observer.observe(container);
+      const container = root.querySelector('#graph-pod-canvas');
+      if (!container) return;
+      if (root.dataset) root.dataset.graphPodReady = 'true';
 
-    async function init() {
-      const response = await fetch('/graph-data.json');
-      graphData = await response.json();
-      render();
-      
-      document.getElementById('graph-pod-center')?.addEventListener('click', () => {
-         graphInstance?.centerAt(0, 0, 1000);
-         graphInstance?.zoom(1.5, 1000);
-      });
+      let graphData = null;
+      let graphInstance = null;
+      let showAll = false;
+      let hoverNode = null;
+      const highlightNodes = new Set();
+      const highlightLinks = new Set();
 
-      document.getElementById('graph-pod-toggle-filter')?.addEventListener('click', (e) => {
-         showAll = !showAll;
-         (e.target as HTMLElement).textContent = showAll ? 'todo' : 'público';
-         render();
-      });
-
-      window.addEventListener('resize', () => {
-        if (graphInstance) {
-           const parent = container!.parentElement;
-           if (parent) graphInstance.width(parent.clientWidth).height(parent.clientHeight);
+      const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && !graphInstance) {
+          void init();
         }
-      });
-      
-      setTimeout(() => {
-        if (graphInstance) {
-           const parent = container!.parentElement;
-           if (parent) graphInstance.width(parent.clientWidth).height(parent.clientHeight);
-        }
-      }, 500);
-    }
+      }, { threshold: 0.1 });
+
+      observer.observe(container);
+
+      async function init() {
+        const response = await fetch('/graph-data.json');
+        graphData = await response.json();
+        render();
+        
+        root.querySelector('#graph-pod-center')?.addEventListener('click', () => {
+           graphInstance?.centerAt(0, 0, 1000);
+           graphInstance?.zoom(1.5, 1000);
+        });
+
+        root.querySelector('#graph-pod-toggle-filter')?.addEventListener('click', (e) => {
+           showAll = !showAll;
+           (e.target as HTMLElement).textContent = showAll ? 'todo' : 'público';
+           render();
+        });
+
+        window.addEventListener('resize', () => {
+          if (graphInstance) {
+             const parent = container.parentElement;
+             if (parent) graphInstance.width(parent.clientWidth).height(parent.clientHeight);
+          }
+        });
+        
+        setTimeout(() => {
+          if (graphInstance) {
+             const parent = container.parentElement;
+             if (parent) graphInstance.width(parent.clientWidth).height(parent.clientHeight);
+          }
+        }, 500);
+      }
 
     function render() {
       if (!graphData || !container) return;
@@ -310,8 +319,8 @@
            hoverNode = node || null;
            container.style.cursor = node ? 'pointer' : 'default';
            
-           const preview = document.getElementById('graph-pod-preview');
-           const title = document.getElementById('graph-pod-preview-title');
+           const preview = root.querySelector('#graph-pod-preview');
+           const title = root.querySelector('#graph-pod-preview-title');
            if (node && preview && title) {
              title.textContent = (node as any).name;
              preview.classList.add('visible');
@@ -349,7 +358,7 @@
     }
 
     function updateLegend(data: any) {
-      const legend = document.querySelector('.graph-pod-legend');
+      const legend = root.querySelector('.graph-pod-legend');
       if (!legend) return;
       const folders = [...new Set(data.nodes.map((n: any) => n.publicFolder).filter(Boolean))].sort();
       let html = `
@@ -362,5 +371,10 @@
       }
       legend.innerHTML = html;
     }
+
+    }
+
+    window.MusikiGraphPodInit = initGraphPod;
+    document.querySelectorAll('[data-pod="graph"]').forEach((pod) => initGraphPod(pod));
   })();
 </script>

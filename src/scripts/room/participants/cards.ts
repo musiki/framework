@@ -2,6 +2,7 @@ import { ConnectionState, type Room } from 'livekit-client';
 
 import type { ParticipantRole } from '../session';
 import {
+  readParticipantHandRaisedFromMetadata,
   readParticipantName,
   readParticipantPreviewZoom,
   readParticipantShowCircle,
@@ -103,6 +104,7 @@ export const ensureParticipantCard = ({
   const handRaised = readHandRaised(participant);
 
   card.card.dataset.role = role;
+  card.card.dataset.identity = identity;
   card.card.dataset.showCircle = participantShowCircle ? 'true' : 'false';
   card.card.style.setProperty(
     '--conference-participant-preview-zoom',
@@ -181,6 +183,13 @@ export const renderParticipantRoster = ({
 
       const primary = document.createElement('span');
       primary.textContent = readParticipantName(participant);
+      if (readParticipantHandRaisedFromMetadata(participant)) {
+        const hand = document.createElement('span');
+        hand.className = 'conference-roster-hand';
+        hand.textContent = '✋';
+        hand.title = 'Mano levantada';
+        primary.append(' ', hand);
+      }
 
       const secondary = document.createElement('span');
       const role = readRole(participant);

@@ -21,11 +21,13 @@ export const chooseFocusParticipantIdentity = ({
   readRole: (participant: RoomParticipant) => ParticipantRole;
 }) => {
   const liveSpeakers = activeSpeakers.filter(hasCameraTrack);
-  if (liveSpeakers.some((participant) => participant.identity === focusedParticipantIdentity)) {
+  const topLiveSpeaker = liveSpeakers[0];
+
+  if (topLiveSpeaker?.identity === focusedParticipantIdentity) {
     return focusedParticipantIdentity;
   }
 
-  if (liveSpeakers[0]) {
+  if (topLiveSpeaker) {
     if (
       focusedParticipantIdentity &&
       now - focusChangedAtMs < 1400 &&
@@ -37,7 +39,7 @@ export const chooseFocusParticipantIdentity = ({
     ) {
       return focusedParticipantIdentity;
     }
-    return liveSpeakers[0].identity;
+    return topLiveSpeaker.identity;
   }
 
   const focusedParticipant = participants.find(
@@ -58,6 +60,15 @@ export const chooseFocusParticipantIdentity = ({
 
   const firstParticipantWithCamera = participants.find(hasCameraTrack);
   return firstParticipantWithCamera?.identity || '';
+};
+
+const isUsableSlot = (slot: HTMLElement | null | undefined) => {
+  if (!(slot instanceof HTMLElement)) return false;
+  if (!slot.isConnected || slot.closest('#musiki-pod-templates')) return false;
+  if (slot.hidden || slot.getAttribute('aria-hidden') === 'true') return false;
+
+  const style = window.getComputedStyle(slot);
+  return style.display !== 'none' && style.visibility !== 'hidden';
 };
 
 export const hasActiveScreenShare = (participants: RoomParticipant[]) =>
@@ -119,12 +130,17 @@ export const resolveParticipantTargetSlot = ({
   studentsSlot: HTMLElement;
   teacherSlot: HTMLElement;
 }) => {
+  const usableTeacherSlot = isUsableSlot(teacherSlot) ? teacherSlot : null;
+  const usableGridSlot = isUsableSlot(gridSlot) ? gridSlot : null;
+  const usableStudentsSlot = isUsableSlot(studentsSlot) ? studentsSlot : null;
+  const secondarySlot = usableStudentsSlot ?? usableGridSlot;
+
   if (showPresentationCircle && circleSlot && participant.identity === presentationCircleIdentity) {
-    return circleSlot;
+    return isUsableSlot(circleSlot) ? circleSlot : usableTeacherSlot ?? usableGridSlot ?? secondarySlot;
   }
 
   if (layout === 'grid') {
-    return gridSlot;
+    return usableGridSlot ?? secondarySlot ?? usableTeacherSlot;
   }
 
   const selfHiddenByCircle =
@@ -135,17 +151,17 @@ export const resolveParticipantTargetSlot = ({
 
   if (layout === 'teacher') {
     if (participant.identity === focusedParticipantIdentity) {
-      return teacherSlot;
+      return usableTeacherSlot ?? usableGridSlot ?? secondarySlot;
     }
-    return selfHiddenByCircle ? null : studentsSlot;
+    return selfHiddenByCircle ? null : secondarySlot;
   }
 
   if (layout === 'presentation') {
-    if (participant.identity === presentationCircleIdentity) {
-      return teacherSlot;
+    if (participant.identity === focusedParticipantIdentity) {
+      return usableTeacherSlot ?? usableGridSlot ?? secondarySlot;
     }
-    return selfHiddenByCircle ? null : studentsSlot;
+    return selfHiddenByCircle ? null : secondarySlot;
   }
 
-  return selfHiddenByCircle ? null : studentsSlot;
+  return selfHiddenByCircle ? null : secondarySlot ?? usableTeacherSlot ?? usableGridSlot;
 };
