@@ -295,6 +295,27 @@
       "img": ""
     },
     {
+      "id": "public/conceptos/los cuatro ámbitos morfológicos",
+      "name": "los cuatro ámbitos morfológicos",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "cuatroambitos",
+      "img": ""
+    },
+    {
+      "id": "tag:morfología",
+      "name": "morfología",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:forma",
+      "name": "forma",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
       "id": "public/conceptos/objeto de sonido-movimiento",
       "name": "objeto de sonido-movimiento",
       "type": "document",
@@ -388,6 +409,16 @@
     {
       "source": "cursos/s123/_index",
       "target": "tag:composiciónmusical",
+      "type": "tag"
+    },
+    {
+      "source": "public/conceptos/los cuatro ámbitos morfológicos",
+      "target": "tag:morfología",
+      "type": "tag"
+    },
+    {
+      "source": "public/conceptos/los cuatro ámbitos morfológicos",
+      "target": "tag:forma",
       "type": "tag"
     },
     {

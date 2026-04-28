@@ -7,7 +7,7 @@ Two-phase bug-fix milestone targeting 5 critical regressions introduced during t
 ## Phases
 
 - [x] **Phase 1: Hyperpiano Audio & Keys** - AudioContext suspend bug and black key border rendering fixed (2026-04-27)
-- [ ] **Phase 2: Workspace Layout** - DIY header drag, whiteboard clone, and grid video remount fixed
+- [x] **Phase 2: Workspace Layout** - DIY header drag, whiteboard clone, and grid video remount fixed (2026-04-27)
 
 ## Phase Details
 
@@ -34,12 +34,16 @@ Two-phase bug-fix milestone targeting 5 critical regressions introduced during t
   3. Moving the grid pod via drag-and-drop remounts participant video tracks correctly in all slots — no blank or frozen tiles
 **Key files**:
   - `src/scripts/room/workspace/RoomWorkspaceManager.ts`
-**Plans**: TBD
-**Status**: Pending
+  - `src/scripts/livekit-room.ts`
+**Plans**: 2 plans
+Plans:
+- [x] 02-01-PLAN.md — Fix DIY handle drag (WSPC-01) and wire onWhiteboardInit for cloned whiteboard pods (WSPC-02) (2026-04-27)
+- [x] 02-02-PLAN.md — Verify and commit grid video remount handler (WSPC-03) (2026-04-27)
+**Status**: Complete (2026-04-27)
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Hyperpiano Audio & Keys | 1/1 | Complete | 2026-04-27 |
-| 2. Workspace Layout | 0/TBD | Not started | - |
+| 2. Workspace Layout | 2/2 | Complete | 2026-04-27 |

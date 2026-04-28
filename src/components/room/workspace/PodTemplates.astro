@@ -12,7 +12,7 @@ type Props = {
 const { presentationOptions = [] } = Astro.props;
 ---
 
-<div id="musiki-pod-templates" hidden aria-hidden="true" style="display: none !important;" data-presentation-options={JSON.stringify(presentationOptions)}>
+<div id="musiki-pod-templates" hidden aria-hidden="true" style="display: none;" data-presentation-options={JSON.stringify(presentationOptions)}>
   <!-- Pr: PRESENTACIÓN -->
   <div class="musiki-pod" data-pod="presentation" data-pod-title="PRESENTACIÓN">
     <section class="conference-stage-panel conference-stage-panel--presentation" data-panel="presentation">
@@ -40,19 +40,19 @@ const { presentationOptions = [] } = Astro.props;
   </div>
 
   <!-- Lc: LILYPOND CODE -->
-  <div class="musiki-pod" data-pod="lilypond-editor" data-pod-title="LILY CODE">
-    <section class="conference-stage-panel conference-stage-panel--lilypond" data-panel="lilypond-editor">
+  <div class="musiki-pod" data-pod="lily-code" data-pod-title="LILYCODE">
+    <section class="conference-stage-panel conference-stage-panel--lilypond" data-panel="lily-code">
       <div class="conference-lilypond-editor" style="padding-top: 0; height: 100%;">
-        <form class="conference-lilypond-form" data-lilypond-form autocomplete="off" style="height: 100%;">
-          <textarea class="conference-lilypond-source editor-textarea" data-lilypond-body placeholder="Escribe markdown, ```mermaid o ```lilypond…"></textarea>
-          <div class="musiki-pod-toolbar">
+        <form class="conference-lilypond-form" data-lilypond-form autocomplete="off" style="height: 100%; display: flex; flex-direction: column;">
+          <textarea class="conference-lilypond-source editor-textarea" data-lilypond-body placeholder="Escribe markdown, ```mermaid o ```lilypond…" style="flex: 1; min-height: 0;"></textarea>
+          <div class="musiki-pod-toolbar" data-lilypond-toolbar style="flex-shrink: 0;">
             <div class="conference-lilypond-file-manager">
               <div class="conference-lilypond-combobox" data-lilypond-combobox>
                 <input type="text" class="conference-lilypond-combobox-input" data-lilypond-combobox-input placeholder="Archivo…" autocomplete="off" />
                 <ul class="conference-lilypond-combobox-menu" data-lilypond-combobox-menu hidden></ul>
               </div>
             </div>
-            <div class="conference-lilypond-actions">
+            <div class="conference-lilypond-actions" data-lilypond-actions>
               <button type="button" class="musiki-pod-btn conference-lilypond-action" data-lilypond-new title="Nuevo">N</button>
               <button type="button" class="musiki-pod-btn musiki-pod-btn--accent conference-lilypond-action conference-lilypond-action--accent" data-lilypond-save title="Render">R</button>
               <button type="button" class="musiki-pod-btn conference-lilypond-action" data-lilypond-btn-save title="Guardar">S</button>
@@ -65,11 +65,19 @@ const { presentationOptions = [] } = Astro.props;
   </div>
 
   <!-- Lr: LILYPOND RENDER -->
-  <div class="musiki-pod" data-pod="lilypond-preview" data-pod-title="LILY RENDER">
-    <section class="conference-stage-panel conference-stage-panel--lilypond" data-panel="lilypond-preview">
-      <div class="conference-lilypond-preview" style="height: 100%;">
-        <div class="conference-lilypond-render-target" data-lilypond-preview></div>
+  <div class="musiki-pod" data-pod="lily-render" data-pod-title="LILY-RENDER">
+    <section class="conference-stage-panel conference-stage-panel--lilypond" data-panel="lily-render">
+      <div class="conference-lilypond-preview" style="height: 100%; display: flex; flex-direction: column;">
+        <div class="conference-lilypond-render-target" data-lilypond-preview style="flex: 1; min-height: 0;"></div>
         <div class="conference-empty conference-empty--lilypond" data-lilypond-placeholder aria-hidden="true"></div>
+        <div class="musiki-pod-toolbar" data-lily-render-toolbar style="flex-shrink: 0; justify-content: flex-end; gap: 4px;">
+           <div class="conference-lilypond-zoom-tools" data-lilypond-zoom-tools style="display: flex; gap: 4px;">
+              <button type="button" class="musiki-pod-btn" data-lilypond-zoom-out title="Zoom out">-</button>
+              <button type="button" class="musiki-pod-btn" data-lilypond-zoom-reset title="Reset zoom">1:1</button>
+              <button type="button" class="musiki-pod-btn" data-lilypond-zoom-in title="Zoom in">+</button>
+           </div>
+           <button type="button" class="musiki-pod-btn" data-lilypond-btn-pdf title="Descargar PDF">PDF</button>
+        </div>
       </div>
     </section>
   </div>
@@ -707,9 +715,9 @@ const { presentationOptions = [] } = Astro.props;
     position: absolute;
     top: 0;
     height: 60%;
-    border: 1px solid #fff;
+    border: 1px solid #333;
     background: #000;
-    z-index: 10;
+    z-index: 100;
   }
 
   .musiki-pod .hyperpiano-shell #reverb-indicator, 

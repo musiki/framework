@@ -8,23 +8,27 @@ export class RoomWorkspaceManager {
   private onLayoutChange: (layout: any) => void;
   private onHyperpianoInit?: (element: HTMLElement) => HyperpianoController;
   private onWhiteboardInit?: (element: HTMLElement) => void;
+  private onLilypondInit?: (element: HTMLElement) => void;
+  private onConceptInit?: (element: HTMLElement) => void;
+  private onMediaInit?: (element: HTMLElement) => void;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
   public hyperpianoController: HyperpianoController | null = null;
   private podControllers = new Map<string, any>();
   private dragOverPanelId: string | null = null;
+  private activeDraggingId: string | null = null;
 
   private POD_TYPES = [
     { id: 'presentation', title: 'PRESENTACIÓN', icon: 'Pr', atomic: 1, color: '#6FA8DC', cat: 'structured' },
     { id: 'clase', title: 'CLASE', icon: 'Cl', atomic: 2, color: '#6FA8DC', cat: 'structured' },
-    { id: 'lilypond-editor', title: 'LILY CODE', icon: 'Lc', atomic: 3, color: '#6FA8DC', cat: 'structured' },
-    { id: 'lilypond-preview', title: 'LILY RENDER', icon: 'Lr', atomic: 4, color: '#6FA8DC', cat: 'structured' },
-    { id: 'concept', title: 'CONCEPTOS', icon: 'Co', atomic: 5, color: '#6FA8DC', cat: 'structured' },
+    { id: 'lily-code', title: 'LILYCODE', icon: 'Lc', atomic: 3, color: '#E06666', cat: 'structured' },
+    { id: 'lily-render', title: 'LILY-RENDER', icon: 'Lr', atomic: 4, color: '#F6B26B', cat: 'structured' },
+    { id: 'concept', title: 'CONCEPTOS', icon: 'Co', atomic: 5, color: '#93C47D', cat: 'structured' },
     { id: 'chat', title: 'CHAT', icon: 'Ch', atomic: 6, color: '#93C47D', cat: 'comm' },
     { id: 'notes', title: 'NOTAS', icon: 'Nt', atomic: 7, color: '#93C47D', cat: 'comm' },
-    { id: 'whiteboard', title: 'PIZARRA', icon: 'Pi', atomic: 8, color: '#93C47D', cat: 'comm' },
-    { id: 'grid-videos', title: 'GRID', icon: 'Gr', atomic: 9, color: '#F6B26B', cat: 'presence' },
-    { id: 'roster', title: 'ROSTER', icon: 'Ro', atomic: 10, color: '#F6B26B', cat: 'presence' },
+    { id: 'whiteboard', title: 'PIZARRA', icon: 'Pi', atomic: 8, color: '#76D3FF', cat: 'comm' },
+    { id: 'grid-videos', title: 'GRID', icon: 'Gr', atomic: 9, color: '#B4A7D6', cat: 'presence' },
+    { id: 'roster', title: 'ROSTER', icon: 'Ro', atomic: 10, color: '#B4A7D6', cat: 'presence' },
     { id: 'teacher', title: 'SPEAKER', icon: 'Sp', atomic: 11, color: '#E06666', cat: 'focus' },
     { id: 'screen', title: 'SCREEN', icon: 'Sc', atomic: 12, color: '#E06666', cat: 'focus' },
     { id: 'external-media', title: 'MEDIA', icon: 'Me', atomic: 13, color: '#8E7CC3', cat: 'media' },
@@ -38,17 +42,24 @@ export class RoomWorkspaceManager {
     canLeadSession: () => boolean,
     onLayoutChange: (layout: any) => void,
     onHyperpianoInit?: (element: HTMLElement) => HyperpianoController,
-    onWhiteboardInit?: (element: HTMLElement) => void
+    onWhiteboardInit?: (element: HTMLElement) => void,
+    onLilypondInit?: (element: HTMLElement) => void,
+    onConceptInit?: (element: HTMLElement) => void,
+    onMediaInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
     this.onLayoutChange = onLayoutChange;
     this.onHyperpianoInit = onHyperpianoInit;
     this.onWhiteboardInit = onWhiteboardInit;
+    this.onLilypondInit = onLilypondInit;
+    this.onConceptInit = onConceptInit;
+    this.onMediaInit = onMediaInit;
   }
 
   public init() {
     if (!this.container) return;
+    this.container.classList.add('dockview-container');
     
     setTimeout(() => {
       try {
@@ -58,17 +69,25 @@ export class RoomWorkspaceManager {
           disableProportionalLayout: true,
           hideTabs: true, // Use our DIY headers instead
           createComponent: (options) => {
-            const id = options.id.split('-')[0];
-            const isOriginal = options.id === id;
-            let element = document.querySelector(`[data-pod="${id}"]`) as HTMLElement;
+            const rawId = options.id;
+            // Find which pod type this is by checking if the ID starts with any known POD_TYPE id
+            const podType = this.POD_TYPES.find(t => rawId === t.id || rawId.startsWith(t.id + '-'));
+            let id = podType ? podType.id : rawId.split('-')[0];
+            
+            // Map old IDs to new ones if necessary
+            if (id === 'lilypond-editor') id = 'lily-code';
+            if (id === 'lilypond-preview') id = 'lily-render';
+
+            const templateDiv = document.getElementById('musiki-pod-templates');
+            let element = templateDiv?.querySelector(`[data-pod="${id}"]`) as HTMLElement;
 
             if (element) {
-                if (!isOriginal) {
-                    element = element.cloneNode(true) as HTMLElement;
-                    element.removeAttribute('id');
-                }
+                // ALWAYS CLONE from template storage so we never exhaust the source
+                element = element.cloneNode(true) as HTMLElement;
                 element.removeAttribute('hidden');
                 element.style.display = 'block';
+            } else {
+                console.warn(`[RoomWorkspaceManager] Template for pod "${id}" (resolved from ${rawId}) not found.`);
             }
             
             // Create DIY Shell
@@ -76,8 +95,7 @@ export class RoomWorkspaceManager {
             shell.className = 'pod-diy-shell';
             shell.dataset.panelId = options.id;
             
-            const type = this.POD_TYPES.find(t => t.id === id);
-            const title = type ? type.title : id.toUpperCase();
+            const title = podType ? podType.title : id.toUpperCase().replace(/-/g, '');
             const header = this.createPodHeader(options.id, title, element);
             shell.appendChild(header);
 
@@ -94,6 +112,15 @@ export class RoomWorkspaceManager {
                 const hp = this.onHyperpianoInit(element);
                 this.podControllers.set(options.id, hp);
               }
+              if ((id === 'lily-code' || id === 'lily-render') && this.onLilypondInit) {
+                this.onLilypondInit(element);
+              }
+              if (id === 'concept' && this.onConceptInit) {
+                this.onConceptInit(element);
+              }
+              if (id === 'external-media' && this.onMediaInit) {
+                this.onMediaInit(element);
+              }
             }
             
             return {
@@ -104,21 +131,13 @@ export class RoomWorkspaceManager {
                     this.podControllers.get(options.id)?.setFocused(focused);
                   });
                 }
-                if (id === 'whiteboard' && !isOriginal && element && this.onWhiteboardInit) {
+                if (id === 'whiteboard' && element && this.onWhiteboardInit) {
                   this.onWhiteboardInit(element);
                 }
               },
               update: (params: any) => {},
               dispose: () => {
-                 const hiddenStorage = document.getElementById('musiki-pod-templates');
-                 if (hiddenStorage && element) {
-                   if (isOriginal) {
-                       element.style.display = 'none';
-                       hiddenStorage.appendChild(element);
-                   } else {
-                       element.remove();
-                   }
-                 }
+                 if (element) element.remove();
                  if (id === 'hyperpiano') {
                    this.podControllers.get(options.id)?.dispose();
                  }
@@ -179,10 +198,12 @@ export class RoomWorkspaceManager {
               e.dataTransfer.setData('musiki/pod-id', type.id);
               e.dataTransfer.effectAllowed = 'move';
           }
+          this.activeDraggingId = type.id;
           item.classList.add('is-dragging');
       });
 
       item.addEventListener('dragend', () => {
+          this.activeDraggingId = null;
           item.classList.remove('is-dragging');
       });
 
@@ -196,44 +217,82 @@ export class RoomWorkspaceManager {
     this.container.addEventListener('dragover', (e) => {
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
-        if (shellEl) {
+        
+        let shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
+        if (!shellEl) {
+            const handleEl = (e.target as HTMLElement).closest('.pod-diy-handle');
+            if (handleEl) {
+                shellEl = handleEl.closest('.pod-diy-shell') as HTMLElement;
+            }
+        }
+
+        if (shellEl && shellEl.dataset.panelId !== this.activeDraggingId) {
+            // Calculate direction for preview
+            const rect = shellEl.getBoundingClientRect();
+            const relX = (e.clientX - rect.left) / rect.width;
+            const relY = (e.clientY - rect.top) / rect.height;
+            
+            let direction = 'within';
+            if (relX < 0.2) direction = 'left';
+            else if (relX > 0.8) direction = 'right';
+            else if (relY < 0.2) direction = 'above';
+            else if (relY > 0.8) direction = 'below';
+            
+            // Clear others first to be safe, then set current
+            this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => {
+                if (el !== shellEl) el.classList.remove('is-drag-over');
+            });
+            
+            shellEl.classList.add('is-drag-over');
+            shellEl.setAttribute('data-drag-dir', direction);
             this.dragOverPanelId = shellEl.dataset.panelId ?? null;
+        } else {
+            this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => el.classList.remove('is-drag-over'));
+            this.dragOverPanelId = null;
+        }
+    });
+
+    this.container.addEventListener('dragleave', (e) => {
+        const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
+        if (shellEl && !shellEl.contains(e.relatedTarget as Node)) {
+            shellEl.classList.remove('is-drag-over');
+            shellEl.removeAttribute('data-drag-dir');
         }
     });
 
     this.container.addEventListener('drop', (e) => {
         e.preventDefault();
+        
+        const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
+        const direction = shellEl?.getAttribute('data-drag-dir') || 'right';
+
+        // Clear highlights
+        this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => {
+            el.classList.remove('is-drag-over');
+            el.removeAttribute('data-drag-dir');
+        });
+        
         if (!this.dockview) return;
 
         const podId = e.dataTransfer?.getData('musiki/pod-id');
         const panelId = e.dataTransfer?.getData('musiki/panel-id');
 
-        // Logic to find drop direction based on mouse position relative to container center
-        const rect = this.container.getBoundingClientRect();
-        const relX = (e.clientX - rect.left) / rect.width;
-        const relY = (e.clientY - rect.top) / rect.height;
-        
-        let direction: any = 'right';
-        if (relX < 0.25) direction = 'left';
-        else if (relX > 0.75) direction = 'right';
-        else if (relY < 0.25) direction = 'above';
-        else if (relY > 0.75) direction = 'below';
-        else direction = 'within';
+        this.activeDraggingId = null;
 
         if (podId) {
             // New pod from gallery
-            this.togglePod(podId, true);
+            const position = this.dragOverPanelId ? { referencePanel: this.dragOverPanelId, direction: direction as any } : undefined;
+            this.togglePod(podId, true, position);
         } else if (panelId) {
             // Internal move of existing panel
             const panel = this.dockview.getPanel(panelId);
             if (panel) {
-                const targetId = this.dragOverPanelId ?? this.dockview.panels.find(p => p.id !== panelId)?.id ?? null;
+                const targetId = this.dragOverPanelId;
                 
                 if (targetId && targetId !== panelId) {
                     this.dockview.moveGroupOrPanel({
-                        from: panel,
-                        to: { referencePanel: targetId, direction }
+                        from: panel as any,
+                        to: { referencePanel: targetId, direction: direction as any } as any
                     });
                 }
             }
@@ -274,15 +333,27 @@ export class RoomWorkspaceManager {
 
   private replacePod(oldPanel: any, newId: string) {
     if (!this.dockview) return;
-    const position = { referencePanel: oldPanel.id, direction: 'within' as any };
-    if (oldPanel.api) oldPanel.api.close();
-    const type = this.POD_TYPES.find(t => t.id === newId);
+    const oldId = oldPanel.id;
+    
+    // If it's the same base pod type, do nothing
+    if (oldId.split('-')[0] === newId) return;
+
+    const titleObj = this.POD_TYPES.find(t => t.id === newId);
+    const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'chat', 'clase', 'lily-code', 'lily-render'].includes(newId);
+    const panelId = canHaveMultiple ? `${newId}-${Date.now()}` : newId;
+
+    // ADD NEW PANEL FIRST relative to the old one's position
     this.dockview.addPanel({
-      id: newId,
-      component: newId,
-      title: type ? type.title : newId.toUpperCase(),
-      position
+        id: panelId,
+        component: newId,
+        title: titleObj ? titleObj.title : newId.toUpperCase().replace('-', ' '),
+        position: { referencePanel: oldId, direction: 'within' as any }
     });
+    
+    // NOW CLOSE OLD
+    setTimeout(() => {
+        if (oldPanel.api) oldPanel.api.close();
+    }, 50);
   }
 
   private setupUI() {
@@ -396,25 +467,41 @@ export class RoomWorkspaceManager {
               e.dataTransfer.setData('text/plain', panelId);
               e.dataTransfer.effectAllowed = 'move';
           }
+          this.activeDraggingId = panelId;
           header.classList.add('is-dragging');
       });
       handle.addEventListener('dragend', () => {
+          this.activeDraggingId = null;
           header.classList.remove('is-dragging');
           this.dragOverPanelId = null;
       });
 
       const titleEl = document.createElement('div');
       titleEl.className = 'pod-diy-title';
-      titleEl.textContent = title;
+      titleEl.textContent = title || id.toUpperCase().replace(/-/g, '');
 
       const actions = document.createElement('div');
       actions.className = 'pod-diy-actions';
       
       const closeBtn = document.createElement('button');
       closeBtn.className = 'pod-diy-btn pod-diy-btn--close';
+      closeBtn.type = 'button';
       closeBtn.innerHTML = '×';
-      closeBtn.addEventListener('click', () => {
-          this.dockview?.getPanel(panelId)?.api.close();
+      closeBtn.title = 'Cerrar pod';
+      closeBtn.style.cursor = 'pointer';
+      closeBtn.addEventListener('mousedown', (e) => { e.stopPropagation(); }); 
+      closeBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const panel = this.dockview?.getPanel(panelId);
+          if (panel) {
+              panel.api.close();
+          } else {
+              // Try finding by base ID as fallback
+              const baseId = panelId.split('-')[0];
+              const found = this.dockview?.panels.find(p => p.id === baseId || p.id.startsWith(baseId + '-'));
+              found?.api.close();
+          }
       });
       
       header.appendChild(arrow);
@@ -434,7 +521,8 @@ export class RoomWorkspaceManager {
       { selector: '[data-layout-choice="clase"]', pods: ['clase'] },
       { selector: '[data-layout-choice="grid"]', pods: ['grid-videos'], master: 'debate' },
       { selector: '[data-layout-choice="whiteboard"]', pods: ['whiteboard'] },
-      { selector: '[data-layout-choice="lilypond"]', pods: ['lilypond-editor', 'lilypond-preview'] },
+      { selector: '[data-layout-choice="lilypond"]', pods: ['lily-code', 'lily-render'] },
+
       { selector: '[data-action="chat-focus"]', pods: ['chat'] },
       { selector: '[data-action="forum-toggle"]', pods: ['forum'] },
       { selector: '[data-action="concepts-toggle"]', pods: ['concept'] },
@@ -456,11 +544,13 @@ export class RoomWorkspaceManager {
              const hasOne = pods.some(id => this.dockview?.getPanel(id));
              if (hasOne) pods.forEach(id => this.dockview?.getPanel(id)?.api.close());
              else {
-               this.dockview?.addPanel({ id: 'lilypond-preview', component: 'lilypond-preview', title: 'LILY RENDER' });
-               this.dockview?.addPanel({ id: 'lilypond-editor', component: 'lilypond-editor', title: 'LILY CODE', position: { referencePanel: 'lilypond-preview', direction: 'left' } });
-             }
+                   this.dockview?.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER' });
+                   this.dockview?.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILYCODE', position: { referencePanel: 'lily-render', direction: 'left' } });
+                 }
+
              return;
           }
+
           if (selector.includes('data-action')) {
              e.preventDefault(); e.stopPropagation();
              pods.forEach(id => this.togglePod(id, true));
@@ -471,24 +561,34 @@ export class RoomWorkspaceManager {
     });
   }
 
-  public togglePod(id: string, forceOpen = false) {
+  public togglePod(id: string, forceOpen = false, position?: any) {
     if (!this.dockview) return;
     try {
-        const canHaveMultiple = ['concept', 'whiteboard'].includes(id);
+        const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'chat', 'clase', 'lily-code', 'lily-render'].includes(id); 
         const existing = this.dockview.getPanel(id);
         
         if (existing && !canHaveMultiple) {
-          if (forceOpen) existing.api.setActive();
+          if (forceOpen) {
+              existing.api.setActive();
+              if (position) {
+                  this.dockview.moveGroupOrPanel({
+                      from: existing as any,
+                      to: position as any
+                  });
+              }
+          }
           else existing.api.close();
         } else {
           const titleObj = this.POD_TYPES.find(t => t.id === id);
           const panelId = canHaveMultiple ? `${id}-${Date.now()}` : id;
           this.dockview.addPanel({
-            id: panelId, 
+            id: panelId,
             component: id,
-            title: titleObj ? titleObj.title : id.toUpperCase().replace('-', ' ')
+            title: titleObj ? titleObj.title : id.toUpperCase().replace(/-/g, ''),
+            position: position
           });
         }
+
     } catch (err) { console.warn(`TogglePod failed for ${id}:`, err); }
   }
 
@@ -539,9 +639,9 @@ export class RoomWorkspaceManager {
       this.renderQuickLists();
     } else if (key === 'lilypond') {
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'lilypond-preview', component: 'lilypond-preview', title: 'LILY RENDER', size: 60 });
-      this.dockview.addPanel({ id: 'lilypond-editor', component: 'lilypond-editor', title: 'LILY CODE', position: { referencePanel: 'lilypond-preview', direction: 'left' }, size: 40 });
-      this.dockview.addPanel({ id: 'notes', component: 'notes', title: 'NOTAS', position: { referencePanel: 'lilypond-preview', direction: 'right' }, size: 25 });
+      this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER', size: 60 });
+      this.dockview.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILY-CODE', position: { referencePanel: 'lily-render', direction: 'left' }, size: 40 });
+      this.dockview.addPanel({ id: 'notes', component: 'notes', title: 'NOTAS', position: { referencePanel: 'lily-render', direction: 'right' }, size: 25 });
       this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'notes', direction: 'below' } });
       this.currentWorkspaceKey = 'lilypond';
       this.renderQuickLists();
@@ -554,11 +654,12 @@ export class RoomWorkspaceManager {
     } else if (key === 'collab') {
       this.clearAllPanels();
       this.dockview.addPanel({ id: 'notes', component: 'notes', title: 'NOTAS' });
-      this.dockview.addPanel({ id: 'lilypond-editor', component: 'lilypond-editor', title: 'LILY CODE', position: { referencePanel: 'notes', direction: 'right' } });
-      this.dockview.addPanel({ id: 'lilypond-preview', component: 'lilypond-preview', title: 'LILY RENDER', position: { referencePanel: 'lilypond-editor', direction: 'below' } });
+      this.dockview.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILY-CODE', position: { referencePanel: 'notes', direction: 'right' } });
+      this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER', position: { referencePanel: 'lily-code', direction: 'below' } });
       this.currentWorkspaceKey = 'collab';
       this.renderQuickLists();
-    } else if (key === 'full-win-speaker') {
+    }
+ else if (key === 'full-win-speaker') {
        this.clearAllPanels();
        this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
        this.currentWorkspaceKey = 'full-win-speaker';
@@ -627,6 +728,23 @@ style.textContent = `
     background: #000;
     position: relative;
   }
+  .pod-diy-shell.is-drag-over {
+    outline: 1px solid rgba(255, 255, 255, 0.2) !important;
+  }
+  .pod-diy-shell.is-drag-over::after {
+    content: '';
+    position: absolute;
+    background: var(--conference-accent-hi, #76d3ff);
+    opacity: 0.4;
+    z-index: 1000;
+    pointer-events: none;
+    transition: all 0.1s ease;
+  }
+  .pod-diy-shell.is-drag-over[data-drag-dir="left"]::after { left: 0; top: 0; bottom: 0; width: 30%; }
+  .pod-diy-shell.is-drag-over[data-drag-dir="right"]::after { right: 0; top: 0; bottom: 0; width: 30%; }
+  .pod-diy-shell.is-drag-over[data-drag-dir="above"]::after { left: 0; right: 0; top: 0; height: 30%; }
+  .pod-diy-shell.is-drag-over[data-drag-dir="below"]::after { left: 0; right: 0; bottom: 0; height: 30%; }
+  .pod-diy-shell.is-drag-over[data-drag-dir="within"]::after { inset: 10%; opacity: 0.2; }
   .pod-diy-header {
     position: absolute;
     top: 0;
@@ -646,7 +764,8 @@ style.textContent = `
       opacity: 0.5;
   }
   .pod-diy-arrow, .pod-diy-handle, .pod-diy-btn {
-    pointer-events: auto;
+    pointer-events: auto !important;
+    z-index: 1000 !important;
   }
   .pod-diy-arrow {
     width: 12px;
@@ -712,6 +831,12 @@ style.textContent = `
     border-radius: 2px;
     padding: 0;
   }
+  .pod-diy-btn.pod-diy-btn--close {
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1;
+    z-index: 1001 !important;
+  }
   .pod-diy-btn:hover {
     opacity: 1;
     background: rgba(255,255,255,0.1);
@@ -724,9 +849,13 @@ style.textContent = `
     padding-top: 18px; 
   }
 
-  /* Aggressive Dockview Header Hiding - Kill the Abyss */
-  .dv-header, .dv-tab-container, .dv-tab, .dv-separator, .dv-tab-divider, .dv-tab-separator, .dv-tabs-and-actions-container {
-    display: none !important;
+  /* Aggressive Dockview Header Hiding - Kill the Abyss - Scoped to container */
+  .dockview-container .dv-header, 
+  .dockview-container .dv-tab-container, 
+  .dockview-container .dv-tab, 
+  .dockview-container .dv-tab-divider, 
+  .dockview-container .dv-tab-separator, 
+  .dockview-container .dv-tabs-and-actions-container {
     height: 0 !important;
     min-height: 0 !important;
     max-height: 0 !important;
@@ -734,11 +863,76 @@ style.textContent = `
     margin: 0 !important;
     border: none !important;
     visibility: hidden !important;
-    contain: strict !important;
     overflow: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
   }
+
+  /* Restore separator for splitting functionality */
+  .dockview-container .dv-separator {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .musiki-pod[data-pod="lily-code"] .conference-stage-panel--lilypond,
+  .musiki-pod[data-pod="lily-render"] .conference-stage-panel--lilypond {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: flex !important;
+  }
+
+  .musiki-pod[data-pod="lily-code"] .musiki-pod-toolbar,
+  .musiki-pod[data-pod="lily-render"] .musiki-pod-toolbar {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 500 !important;
+    position: relative !important;
+  }
+
+  .pod-picker-menu {
+    position: fixed;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 4px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    min-width: 140px;
+  }
+  .pod-picker-item {
+    background: none;
+    border: none;
+    color: #ccc;
+    padding: 6px 8px;
+    text-align: left;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+  .pod-picker-item:hover {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+  }
+  .pod-picker-item.active {
+    background: rgba(255,255,255,0.05);
+    color: var(--pod-color);
+  }
+  .pod-picker-icon {
+    font-size: 10px;
+    font-weight: bold;
+    width: 16px;
+    text-align: center;
+  }
 `;
-document.head.appendChild(style);
 document.head.appendChild(style);

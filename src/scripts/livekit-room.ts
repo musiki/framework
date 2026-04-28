@@ -7379,14 +7379,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       hpAudioGroupAnalyser.fftSize = 256;
       hpAudioGroupMeterData = new Uint8Array(hpAudioGroupAnalyser.frequencyBinCount);
 
-      hpAudioGroupGainNode.connect(hpAudioGroupPannerNode);
-      hpAudioGroupPannerNode.connect(incomingAudioMasterGainNode!);
-      hpAudioGroupPannerNode.connect(hpAudioGroupAnalyser);
-      
-      // FX Sends
-      hpAudioGroupGainNode.connect(hpAudioReverbSendNode);
-      hpAudioGroupGainNode.connect(hpAudioDelaySendNode);
-
       incomingAudioReverbConvolverNode = incomingAudioContext.createConvolver();
       incomingAudioReverbConvolverNode.buffer = createImpulseResponseBuffer(
         incomingAudioContext,
@@ -7417,6 +7409,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       incomingAudioMasterAnalyser.fftSize = 256;
       incomingAudioMasterAnalyser.smoothingTimeConstant = 0.88;
       incomingAudioMasterMeterData = new Uint8Array(incomingAudioMasterAnalyser.fftSize);
+
+      hpAudioGroupGainNode.connect(hpAudioGroupPannerNode);
+      hpAudioGroupPannerNode.connect(incomingAudioMasterGainNode);
+      hpAudioGroupPannerNode.connect(hpAudioGroupAnalyser);
+      hpAudioGroupGainNode.connect(hpAudioReverbSendNode);
+      hpAudioGroupGainNode.connect(hpAudioDelaySendNode);
 
       incomingAudioGroupGainNode.connect(incomingAudioGroupPannerNode);
       incomingAudioGroupPannerNode.connect(incomingAudioDryGainNode);
@@ -7512,6 +7510,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     incomingAudioMasterMeterData = null;
     incomingAudioMasterGainNode = null;
     incomingAudioMasterPannerNode = null;
+    hpAudioGroupAnalyser = null;
+    hpAudioGroupGainNode = null;
+    hpAudioGroupMeterData = null;
+    hpAudioGroupPannerNode = null;
+    hpAudioDelaySendNode = null;
+    hpAudioReverbSendNode = null;
     incomingAudioReverbConvolverNode = null;
     incomingAudioReverbReturnGainNode = null;
     incomingAudioReverbSendNode = null;
@@ -10561,17 +10565,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           }
         }
       });
-      
-      if (incomingAudioContext && hpAudioGroupGainNode) {
-          hp.init();
-          (hp as any).initialized = true;
-      } else {
-        container.addEventListener('mousedown', async () => {
+      hp.init();
+      (hp as any).initialized = true;
+
+      if (!incomingAudioContext || !hpAudioGroupGainNode) {
+        container.addEventListener('pointerdown', async () => {
           await ensureIncomingAudioContext();
           if (incomingAudioContext && hpAudioGroupGainNode) {
             hp.setAudio(incomingAudioContext, hpAudioGroupGainNode);
-            hp.init();
-            (hp as any).initialized = true;
           }
         }, { once: true });
       }
@@ -10579,12 +10580,41 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return hp;
     };
 
+    const onLilypondInit = (container: HTMLElement) => {
+      lilypondLive.init(container, localRole === 'teacher', setStatus);
+    };
+
+    const onConceptInit = (container: HTMLElement) => {
+      const input = container.querySelector('[data-concept-search]') as HTMLInputElement;
+      const results = container.querySelector('[data-concept-results]') as HTMLElement;
+      if (input && results) {
+        concepts.bind({ input, results });
+      }
+    };
+
+    const onMediaInit = (container: HTMLElement) => {
+      const input = container.querySelector('[data-external-media-input]') as HTMLInputElement;
+      if (input) {
+        input.addEventListener('input', () => {
+          queueExternalMediaSearch(input.value);
+        });
+        input.addEventListener('keydown', (event) => {
+          if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return;
+          event.preventDefault();
+          void openExternalMediaFromInput(input.value);
+        });
+      }
+    };
+
   const workspaceManager = new RoomWorkspaceManager(
     root.querySelector('[data-workspace-root]') as HTMLElement,
     canLeadSession,
     (layout) => void publishMessage({ type: 'session-workspace', layout }),
     onHyperpianoInit,
-    onWhiteboardInit
+    onWhiteboardInit,
+    onLilypondInit,
+    onConceptInit,
+    onMediaInit
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
@@ -10615,6 +10645,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mounts.participantVideoMounts.clear();
       mounts.screenVideoMounts.forEach((m) => removeMount(m));
       mounts.screenVideoMounts.clear();
+
+      updateActiveHyperpianoAudio();
+
+      lilypondLive.init(root, localRole === 'teacher', setStatus);
 
       syncAllParticipants();
     }, 100);
@@ -10980,7 +11014,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
        if (!navigator.requestMIDIAccess) return;
        try {
          const midi = await navigator.requestMIDIAccess();
-         const inputs = Array.from(midi.inputs.values());
+         const inputs = Array.from((midi.inputs as any).values()) as any[];
+
          midiInputSelects.forEach(select => {
             select.innerHTML = '<option value="">Selecciona dispositivo MIDI</option>';
             inputs.forEach(input => {

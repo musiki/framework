@@ -280,6 +280,16 @@
     "isPublic": true
   },
   {
+    "slug": "public/conceptos/los cuatro ámbitos morfológicos",
+    "title": "los cuatro ámbitos morfológicos",
+    "description": "",
+    "theme": null,
+    "reveal": true,
+    "type": "concept | glossary",
+    "courseId": null,
+    "isPublic": true
+  },
+  {
     "slug": "public/conceptos/objeto de sonido-movimiento",
     "title": "objeto de sonido-movimiento",
     "description": "",

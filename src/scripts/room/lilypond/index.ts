@@ -90,33 +90,50 @@ export class LilyPondLiveController {
   }
 
   public init(container: HTMLElement, isTeacher: boolean, reportStatus: (msg: string) => void) {
-    this.stopEditorSync?.();
-    this.stopEditorSync = null;
     this.isTeacher = isTeacher;
     this.reportStatus = reportStatus;
-    this.bodyInput = container.querySelector('[data-lilypond-body]');
-    this.previewEl = container.querySelector('[data-lilypond-preview]');
-    this.newBtn = container.querySelector('[data-lilypond-new]');
-    this.btnSaveActual = container.querySelector('[data-lilypond-btn-save]');
-    this.btnEraseActual = container.querySelector('[data-lilypond-btn-erase]');
-    this.btnDownloadMidi = container.querySelector('[data-lilypond-btn-midi]');
-    this.btnDownloadPdf = container.querySelector('[data-lilypond-btn-pdf]');
+    
+    const bodyInput = container.querySelector<HTMLTextAreaElement>('[data-lilypond-body]');
+    if (bodyInput) this.bodyInput = bodyInput;
 
-    this.comboboxInput = container.querySelector('[data-lilypond-combobox-input]');
-    this.comboboxMenu = container.querySelector('[data-lilypond-combobox-menu]');
+    const previewEl = container.querySelector<HTMLElement>('[data-lilypond-preview]');
+    if (previewEl) this.previewEl = previewEl;
+
+    const newBtn = container.querySelector<HTMLButtonElement>('[data-lilypond-new]');
+    if (newBtn) this.newBtn = newBtn;
+
+    const btnSaveActual = container.querySelector<HTMLButtonElement>('[data-lilypond-btn-save]');
+    if (btnSaveActual) this.btnSaveActual = btnSaveActual;
+
+    const btnEraseActual = container.querySelector<HTMLButtonElement>('[data-lilypond-btn-erase]');
+    if (btnEraseActual) this.btnEraseActual = btnEraseActual;
+
+    const btnDownloadMidi = container.querySelector<HTMLButtonElement>('[data-lilypond-btn-midi]');
+    if (btnDownloadMidi) this.btnDownloadMidi = btnDownloadMidi;
+
+    const btnDownloadPdf = container.querySelector<HTMLButtonElement>('[data-lilypond-btn-pdf]');
+    if (btnDownloadPdf) this.btnDownloadPdf = btnDownloadPdf;
+
+    const comboboxInput = container.querySelector<HTMLInputElement>('[data-lilypond-combobox-input]');
+    if (comboboxInput) this.comboboxInput = comboboxInput;
+
+    const comboboxMenu = container.querySelector<HTMLElement>('[data-lilypond-combobox-menu]');
+    if (comboboxMenu) this.comboboxMenu = comboboxMenu;
 
     const editorEl = container.querySelector<HTMLElement>('.conference-lilypond-editor');
     const layoutEl = container.querySelector<HTMLElement>('.conference-lilypond-layout');
     const toggleBtn = container.querySelector<HTMLElement>('[data-lilypond-toggle-editor]');
 
-    // Prevent form submission
-    container.querySelector('[data-lilypond-form]')?.addEventListener('submit', (e) => {
-      e.preventDefault();
-    });
+    if (editorEl) {
+        // Prevent form submission only if form exists in this container
+        container.querySelector('[data-lilypond-form]')?.addEventListener('submit', (e) => {
+          e.preventDefault();
+        });
+    }
 
     // Collaboration toggle button for teacher
     const actionsContainer = container.querySelector('[data-lilypond-actions]');
-    if (actionsContainer && this.isTeacher && !container.querySelector('[data-lilypond-collab]')) {
+    if (actionsContainer && this.isTeacher && !actionsContainer.querySelector('[data-lilypond-collab]')) {
       const collabBtn = document.createElement('button');
       collabBtn.type = 'button';
       collabBtn.className = 'conference-lilypond-action';
@@ -171,107 +188,91 @@ export class LilyPondLiveController {
       this.bodyInput.readOnly = !canEdit;
 
       if (this.editorBinding) {
-        this.editorBinding.destroy();
-      }
+        // Just update editability, don't re-enhance if already done
+        this.editorBinding.setEditable(this.canEdit());
+      } else {
+        const setupEditor = () => {
+          if (!this.bodyInput) return;
 
-      const setupEditor = () => {
-        if (!this.bodyInput) return;
+          // Clear dataset to allow re-enhancement if needed
+          delete this.bodyInput.dataset.markdownEditorEnhanced;
+          delete this.bodyInput.dataset.markdownCodeMirrorEnhanced;
+          delete this.bodyInput.dataset.markdownEditorActionsEnhanced;
 
-        // DESTROY existing binding before creating a new one to prevent duplication
-        if (this.editorBinding) {
-          this.editorBinding.destroy();
-          this.editorBinding = null;
-        }
+          this.editorBinding =
+            enhanceMarkdownTextarea(this.bodyInput, {
+              actionsContainer: this.canEdit() ? actionsContainer : null,
+              status: this.reportStatus,
+              buttonClassName: 'conference-lilypond-action conference-lilypond-action--icon',
+              actionSpacerClassName: 'conference-lilypond-action-spacer',
+              dropzoneClassName: 'conference-lilypond-dropzone',
+              dropzoneOverlayClassName: 'conference-lilypond-dropzone-overlay',
+              dropzoneLabelClassName: 'conference-lilypond-dropzone-label',
+              inputClassName: 'conference-lilypond-editor-input',
+              dropLabel: 'Soltar archivo',
+              useCodeMirror: true,
+              templateOverrides: this.lilypondTemplateOverride
+                ? {
+                    lilypond: this.lilypondTemplateOverride,
+                  }
+                : undefined,
+            }) ?? null;
 
-        // Clear action buttons from the toolbar to prevent duplication
-        const actions = container.querySelector<HTMLElement>('[data-lilypond-actions]');
-        if (actions) {
-          // Remove only the injected template/upload buttons, preserving manual ones like RENDER/SAVE
-          actions
-            .querySelectorAll('.conference-lilypond-action--icon, .conference-lilypond-action-spacer')
-            .forEach((el) => el.remove());
-          // Also remove any hidden file inputs created by enhanceMarkdownTextarea
-          actions.querySelectorAll('input[type="file"]').forEach((el) => el.remove());
-        }
+          this.editorBinding?.setEditable(this.canEdit());
 
-        // Clear datasets to allow re-enhancement
-        delete this.bodyInput.dataset.markdownEditorEnhanced;
-        delete this.bodyInput.dataset.markdownCodeMirrorEnhanced;
-        delete this.bodyInput.dataset.markdownEditorActionsEnhanced;
+          const unsubscribe =
+            this.editorBinding?.onChange((snapshot) => {
+              if (this.suppressLivePublish) return;
+              if (!snapshot.docChanged && !snapshot.selectionChanged) return;
+              if (snapshot.docChanged) this.liveSyncNeedsBody = true;
+              this.scheduleLiveSync();
+            }) || (() => {});
 
-        this.editorBinding =
-          enhanceMarkdownTextarea(this.bodyInput, {
-            actionsContainer: this.canEdit() ? actions : null,
-            status: this.reportStatus,
-            buttonClassName: 'conference-lilypond-action conference-lilypond-action--icon',
-            actionSpacerClassName: 'conference-lilypond-action-spacer',
-            dropzoneClassName: 'conference-lilypond-dropzone',
-            dropzoneOverlayClassName: 'conference-lilypond-dropzone-overlay',
-            dropzoneLabelClassName: 'conference-lilypond-dropzone-label',
-            inputClassName: 'conference-lilypond-editor-input',
-            dropLabel: 'Soltar archivo',
-            useCodeMirror: true,
-            templateOverrides: this.lilypondTemplateOverride
-              ? {
-                  lilypond: this.lilypondTemplateOverride,
-                }
-              : undefined,
-          }) ?? null;
-
-        this.editorBinding?.setEditable(this.canEdit());
-
-        const unsubscribe =
-          this.editorBinding?.onChange((snapshot) => {
-            if (this.suppressLivePublish) return;
-            if (!snapshot.docChanged && !snapshot.selectionChanged) return;
-            if (snapshot.docChanged) this.liveSyncNeedsBody = true;
-            this.scheduleLiveSync();
-          }) || (() => {});
-
-        this.stopEditorSync = () => {
-          unsubscribe();
-          if (this.editorBinding) {
-            this.editorBinding.destroy();
-            this.editorBinding = null;
-          }
+          this.stopEditorSync = () => {
+            unsubscribe();
+            if (this.editorBinding) {
+              this.editorBinding.destroy();
+              this.editorBinding = null;
+            }
+          };
         };
-      };
 
-      // Initial setup
-      setupEditor();
+        // Initial setup
+        setupEditor();
 
-      // Try to load default.md and refresh if found
-      void this.loadDefaultTemplate().then((found) => {
-        if (found) setupEditor();
-      });
+        // Try to load default.md and refresh if found
+        void this.loadDefaultTemplate().then((found) => {
+          if (found) setupEditor();
+        });
 
-      this.bodyInput.addEventListener('input', () => {
-        if (this.suppressLivePublish) return;
-        this.liveSyncNeedsBody = true;
-        this.scheduleLiveSync();
-      });
+        this.bodyInput.addEventListener('input', () => {
+          if (this.suppressLivePublish) return;
+          this.liveSyncNeedsBody = true;
+          this.scheduleLiveSync();
+        });
 
-      this.bodyInput.addEventListener('selectionchange', () => {
-        if (this.suppressLivePublish) return;
-        this.scheduleLiveSync();
-      });
+        this.bodyInput.addEventListener('selectionchange', () => {
+          if (this.suppressLivePublish) return;
+          this.scheduleLiveSync();
+        });
 
-      container.querySelector('[data-lilypond-form]')?.addEventListener('keydown', (event) => {
-        if (!(event instanceof KeyboardEvent)) return;
-        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-          event.preventDefault();
-          if (this.isTeacher) {
-            void this.publishRender();
+        container.querySelector('[data-lilypond-form]')?.addEventListener('keydown', (event) => {
+          if (!(event instanceof KeyboardEvent)) return;
+          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+            event.preventDefault();
+            if (this.isTeacher) {
+              void this.publishRender();
+            }
           }
-        }
-      });
+        });
 
-      void this.fetchSnippetsList();
+        void this.fetchSnippetsList();
+      }
     }
 
-    if (this.newBtn) {
-      const newNewBtn = this.newBtn.cloneNode(true) as HTMLButtonElement;
-      this.newBtn.replaceWith(newNewBtn);
+    if (newBtn) {
+      const newNewBtn = this.newBtn!.cloneNode(true) as HTMLButtonElement;
+      this.newBtn!.replaceWith(newNewBtn);
       this.newBtn = newNewBtn;
       this.newBtn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -298,9 +299,9 @@ export class LilyPondLiveController {
       }
     }
 
-    if (this.btnSaveActual) {
-      const newSaveBtn = this.btnSaveActual.cloneNode(true) as HTMLButtonElement;
-      this.btnSaveActual.replaceWith(newSaveBtn);
+    if (btnSaveActual) {
+      const newSaveBtn = this.btnSaveActual!.cloneNode(true) as HTMLButtonElement;
+      this.btnSaveActual!.replaceWith(newSaveBtn);
       this.btnSaveActual = newSaveBtn;
       this.btnSaveActual.addEventListener('click', (e) => {
         e.preventDefault();
@@ -309,9 +310,9 @@ export class LilyPondLiveController {
       });
     }
 
-    if (this.btnEraseActual) {
-      const newEraseBtn = this.btnEraseActual.cloneNode(true) as HTMLButtonElement;
-      this.btnEraseActual.replaceWith(newEraseBtn);
+    if (btnEraseActual) {
+      const newEraseBtn = this.btnEraseActual!.cloneNode(true) as HTMLButtonElement;
+      this.btnEraseActual!.replaceWith(newEraseBtn);
       this.btnEraseActual = newEraseBtn;
       this.btnEraseActual.addEventListener('click', (e) => {
         e.preventDefault();
@@ -320,23 +321,23 @@ export class LilyPondLiveController {
       });
     }
 
-    if (this.btnDownloadMidi) {
-      this.btnDownloadMidi.addEventListener('click', (e) => {
+    if (btnDownloadMidi) {
+      this.btnDownloadMidi!.addEventListener('click', (e) => {
         e.preventDefault();
         this.downloadAsset('midi');
       });
     }
 
-    if (this.btnDownloadPdf) {
-      this.btnDownloadPdf.addEventListener('click', (e) => {
+    if (btnDownloadPdf) {
+      this.btnDownloadPdf!.addEventListener('click', (e) => {
         e.preventDefault();
         this.downloadAsset('pdf');
       });
     }
 
     // Combobox Event Listeners
-    if (this.comboboxInput) {
-      this.comboboxInput.addEventListener('input', () => {
+    if (comboboxInput) {
+      this.comboboxInput!.addEventListener('input', () => {
         this.currentFilename = this.comboboxInput?.value || '';
         this.renderComboboxMenu(this.currentFilename);
       });

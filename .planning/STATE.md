@@ -10,24 +10,25 @@ See: .planning/PROJECT.md (updated 2026-04-27)
 ## Current Position
 
 Phase: 2 of 2 (Workspace Layout)
-Plan: 0 of TBD in current phase
-Status: Phase 1 complete — Phase 2 pending planning
-Last activity: 2026-04-27 — Phase 1 executed and verified (1/1 plans, 2/2 requirements)
+Plan: 2 of 2 in current phase
+Status: Milestone Complete — All requirements satisfied (Verified 2026-04-27)
+Last activity: 2026-04-27 — Fixed DIY drag interaction, Hyperpiano audio wiring, and verified Grid video remounting.
 
-Progress: [█████░░░░░] 50% (Phase 1 complete)
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 15 min
-- Total execution time: 15 min
+- Total plans completed: 3
+- Average duration: 17 min
+- Total execution time: 50 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1: Hyperpiano Audio & Keys | 1 | 15 min | 15 min |
+| 2: Workspace Layout | 2 | 35 min | 17.5 min |
 
 *Updated after each plan completion*
 
@@ -40,6 +41,8 @@ Recent decisions affecting current work:
 
 - Coarse granularity chosen — fixes split by file, 2 phases only
 - No researcher agent — domain well-understood from handoff + code review
+- Use dataset.panelId for dragover target lookup to avoid Dockview internal type errors (02-01 deviation)
+- Updated selectRoomElements to return HTMLElement explicitly to resolve type mismatches (02-02 deviation)
 
 ### Pending Todos
 
@@ -49,9 +52,9 @@ None yet.
 
 - ~~AUDIO-01: AudioContext may be suspended on first user interaction~~ — RESOLVED (Phase 1)
 - ~~AUDIO-02: Black key border `#333` not applied consistently~~ — RESOLVED (Phase 1)
-- WSPC-01: DIY header drag triggers Dockview split-preview incorrectly — drops land in wrong position
-- WSPC-02: `cloneNode(true)` copies DOM but not canvas context or listeners — cloned whiteboard is broken
-- WSPC-03: `musiki:workspace:changed` handler holds stale `gridSlot` DOM reference after Dockview panel move
+- ~~WSPC-01: DIY header drag triggers Dockview split-preview incorrectly — drops land in wrong position~~ — RESOLVED (02-01)
+- ~~WSPC-02: `cloneNode(true)` copies DOM but not canvas context or listeners — cloned whiteboard is broken~~ — RESOLVED (02-01)
+- ~~WSPC-03: `musiki:workspace:changed` handler holds stale `gridSlot` DOM reference after Dockview panel move~~ — RESOLVED (02-02)
 
 ## Session Continuity
 

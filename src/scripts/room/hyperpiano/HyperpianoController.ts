@@ -168,7 +168,7 @@ export class HyperpianoController {
         if (!res.ok) return;
         const arr = await res.arrayBuffer();
         const buf = await this.audioContext!.decodeAudioData(arr);
-        const m = /([A-G](?:#|b)?-?\d+)/.exec(file);
+        const m = /([A-G](?:#|b)?\d+)/.exec(file);
         if (!m) return;
         const midi = this.midiFromName(m[1]);
         if (midi == null) return;
@@ -441,7 +441,7 @@ export class HyperpianoController {
     this.currentMidiInput = input || null;
     if (this.currentMidiInput) {
       this.currentMidiInput.onmidimessage = (msg) => this.onMIDIMessage(msg);
-      this.setStatus(`MIDI: ${this.currentMidiInput.label}`);
+      this.setStatus(`MIDI: ${(this.currentMidiInput as any).label || this.currentMidiInput.name}`);
     }
   }
 

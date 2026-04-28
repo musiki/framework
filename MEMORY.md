@@ -2,6 +2,13 @@
 
 ## Recent Activity (Last 12 Commits)
 
+<2026-04-27 refurbish-workspace-hospital-completed> <br>
+Completed "Workspace Hospital" REFURBISH operation. 
+- Fixed LilyPond multi-pod conflict by refactoring `LilyPondLiveController` to support incremental initialization across split pods (`lily-code` and `lily-render`).
+- Restored visible toolbars for LilyPond and restored Dockview separators to enable workspace splitting (6-dot handle fix).
+- Improved `RoomWorkspaceManager` replacement logic to add new pods before closing old ones, maintaining correct layout order and reference panels.
+- Restored search functionality in `Concepts` and `Media` pods by adding explicit initialization callbacks (`onConceptInit`, `onMediaInit`) to bind events to cloned DOM elements.
+
 <2026-04-22 mosaic-horizontal-split-and-url-fixes> <br>
 Updated `stage-frame.css` to implement a mandatory horizontal split for the "Mosaico" mode (Concept + Presentation), ensuring the **Concept is on top** and the **Presentation (Reveal) is on bottom** to optimize screen real estate. Removed gap (set to 0) and set background to black for a cleaner split. Refined `buildRoomQueryUrl` in `query-state.ts` to properly clean up redundant `presentation` parameters when `slides` is present, avoiding malformed URLs and potential state inconsistencies.
 

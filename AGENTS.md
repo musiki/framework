@@ -32,8 +32,9 @@ Welcome, Agent. This project is a complex LMS/Wiki system built with Astro. Use 
 
 ## 🗺️ Current Work (GSD)
 
-Active milestone: **Room Workspace Bug Fixes** — 2 phases, 5 requirements.
+Active milestone: **REFURBISH: Workspace Hospital** — Fixing workspace regressions (LilyPond, Audio, Dockview, Search).
 
+- [refurbish-workspace.md](.planning/plans/refurbish-workspace.md) — Implementation plan
 - [PROJECT.md](.planning/PROJECT.md) — Project context and goals
 - [ROADMAP.md](.planning/ROADMAP.md) — Phase breakdown (2 phases)
 - [REQUIREMENTS.md](.planning/REQUIREMENTS.md) — 5 requirements (AUDIO-01/02, WSPC-01/02/03)
