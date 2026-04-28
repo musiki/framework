@@ -11,6 +11,7 @@ export class RoomWorkspaceManager {
   private onLilypondInit?: (element: HTMLElement) => void;
   private onConceptInit?: (element: HTMLElement) => void;
   private onMediaInit?: (element: HTMLElement) => void;
+  private onChatInit?: (element: HTMLElement) => void;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
   public hyperpianoController: HyperpianoController | null = null;
@@ -45,7 +46,8 @@ export class RoomWorkspaceManager {
     onWhiteboardInit?: (element: HTMLElement) => void,
     onLilypondInit?: (element: HTMLElement) => void,
     onConceptInit?: (element: HTMLElement) => void,
-    onMediaInit?: (element: HTMLElement) => void
+    onMediaInit?: (element: HTMLElement) => void,
+    onChatInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -55,6 +57,7 @@ export class RoomWorkspaceManager {
     this.onLilypondInit = onLilypondInit;
     this.onConceptInit = onConceptInit;
     this.onMediaInit = onMediaInit;
+    this.onChatInit = onChatInit;
   }
 
   public init() {
@@ -120,6 +123,9 @@ export class RoomWorkspaceManager {
               }
               if (id === 'external-media' && this.onMediaInit) {
                 this.onMediaInit(element);
+              }
+              if (id === 'chat' && this.onChatInit) {
+                this.onChatInit(element);
               }
             }
             

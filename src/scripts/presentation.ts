@@ -4,6 +4,7 @@ const SLIDES_PREFIX = '/cursos/slides/';
 export type PresentationController = {
   clear: () => void;
   getHref: () => string | null;
+  setElements: (next: Partial<PresentationControllerOptions>) => void;
   setHref: (nextValue: string | null | undefined) => string | null;
 };
 
@@ -37,12 +38,14 @@ export const createPresentationController = ({
   placeholder,
 }: PresentationControllerOptions): PresentationController => {
   let currentHref: string | null = null;
+  let currentFrame = frame;
+  let currentPlaceholder = placeholder;
 
   const render = () => {
     const hasPresentation = Boolean(currentHref);
-    frame.hidden = !hasPresentation;
-    placeholder.hidden = hasPresentation;
-    frame.src = hasPresentation ? currentHref ?? '' : 'about:blank';
+    currentFrame.hidden = !hasPresentation;
+    currentPlaceholder.hidden = hasPresentation;
+    currentFrame.src = hasPresentation ? currentHref ?? '' : 'about:blank';
   };
 
   const setHref = (nextValue: string | null | undefined) => {
@@ -61,6 +64,11 @@ export const createPresentationController = ({
   return {
     clear,
     getHref: () => currentHref,
+    setElements: (next) => {
+      currentFrame = next.frame ?? currentFrame;
+      currentPlaceholder = next.placeholder ?? currentPlaceholder;
+      render();
+    },
     setHref,
   };
 };

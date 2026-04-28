@@ -26,6 +26,10 @@ type CreateRoomChatControllerOptions = {
 export type RoomChatController = {
   appendMessage: (message: ChatMessage, isSent?: boolean) => void;
   bind: () => void;
+  bindElements: (elements: Partial<Pick<
+    CreateRoomChatControllerOptions,
+    'chatDownloadButton' | 'chatFocusButton' | 'chatInput' | 'chatList' | 'chatScroller' | 'chatSection' | 'chatSendButton' | 'chatUnreadDot'
+  >>) => void;
   downloadTranscript: () => void;
   focusComposer: () => void;
   resetUnread: () => void;
@@ -195,6 +199,7 @@ export const createRoomChatController = ({
   chatFocusButton,
   chatInput,
   chatList,
+  chatScroller,
   chatSection,
   chatSendButton,
   chatUnreadDot,
@@ -211,22 +216,32 @@ export const createRoomChatController = ({
   const chatMessages: ChatMessage[] = [];
   let chatAttentionFlashTimer = 0;
   let chatUnreadCount = 0;
+  let currentChatDownloadButton = chatDownloadButton;
+  let currentChatFocusButton = chatFocusButton;
+  let currentChatInput = chatInput;
+  let currentChatList = chatList;
+  let currentChatScroller = chatScroller;
+  let currentChatSection = chatSection;
+  let currentChatSendButton = chatSendButton;
+  let currentChatUnreadDot = chatUnreadDot;
+  const boundInputs = new WeakSet<HTMLInputElement | HTMLTextAreaElement>();
+  const boundButtons = new WeakSet<HTMLButtonElement>();
 
   const syncUnreadDot = () => {
-    if (!(chatUnreadDot instanceof HTMLElement)) return;
+    if (!(currentChatUnreadDot instanceof HTMLElement)) return;
     if (chatUnreadCount <= 0) {
-      chatUnreadDot.hidden = true;
-      chatUnreadDot.textContent = '';
+      currentChatUnreadDot.hidden = true;
+      currentChatUnreadDot.textContent = '';
       return;
     }
 
-    chatUnreadDot.hidden = false;
-    chatUnreadDot.textContent = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
+    currentChatUnreadDot.hidden = false;
+    currentChatUnreadDot.textContent = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
   };
 
   const renderChat = () => {
-    chatList.innerHTML = '';
-    chatDownloadButton.disabled = chatMessages.length === 0;
+    currentChatList.innerHTML = '';
+    currentChatDownloadButton.disabled = chatMessages.length === 0;
 
     if (chatMessages.length === 0) return;
 
@@ -261,16 +276,16 @@ export const createRoomChatController = ({
       setConferenceChatBody(body, message.text);
 
       item.append(header, body);
-      chatList.appendChild(item);
+      currentChatList.appendChild(item);
     });
 
     // Use a small timeout to ensure DOM is settled for scroll calculation
     window.setTimeout(() => {
-        const lastItem = chatList.lastElementChild;
+        const lastItem = currentChatList.lastElementChild;
         if (lastItem instanceof HTMLElement) {
           lastItem.scrollIntoView({ behavior: 'smooth', block: 'end' });
         } else {
-          const scroller = chatScroller instanceof HTMLElement ? chatScroller : chatList;
+          const scroller = currentChatScroller instanceof HTMLElement ? currentChatScroller : currentChatList;
           scroller.scrollTop = scroller.scrollHeight;
         }
     }, 100);
@@ -283,26 +298,26 @@ export const createRoomChatController = ({
 
   const focusComposer = () => {
     ensureSidebarOpen();
-    if (chatSection instanceof HTMLDetailsElement) {
-      chatSection.open = true;
+    if (currentChatSection instanceof HTMLDetailsElement) {
+      currentChatSection.open = true;
     }
-    if (chatSection instanceof HTMLElement) {
+    if (currentChatSection instanceof HTMLElement) {
       if (chatAttentionFlashTimer) {
         window.clearTimeout(chatAttentionFlashTimer);
         chatAttentionFlashTimer = 0;
       }
-      chatSection.classList.remove('is-attention-flash');
-      void chatSection.offsetWidth;
-      chatSection.classList.add('is-attention-flash');
+      currentChatSection.classList.remove('is-attention-flash');
+      void currentChatSection.offsetWidth;
+      currentChatSection.classList.add('is-attention-flash');
       chatAttentionFlashTimer = window.setTimeout(() => {
-        chatSection.classList.remove('is-attention-flash');
+        currentChatSection instanceof HTMLElement && currentChatSection.classList.remove('is-attention-flash');
         chatAttentionFlashTimer = 0;
       }, 90);
     }
     resetUnread();
     window.requestAnimationFrame(() => {
-      chatInput.focus();
-      chatInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      currentChatInput.focus();
+      currentChatInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   };
 
@@ -350,15 +365,15 @@ export const createRoomChatController = ({
 
   const syncControlState = () => {
     const connected = isConnected();
-    chatInput.disabled = !connected;
-    chatSendButton.disabled = !connected;
-    chatDownloadButton.disabled = chatMessages.length === 0;
+    currentChatInput.disabled = !connected;
+    currentChatSendButton.disabled = !connected;
+    currentChatDownloadButton.disabled = chatMessages.length === 0;
   };
 
   const sendMessage = async () => {
     if (!isConnected()) return;
 
-    const text = normalizeText(chatInput.value);
+    const text = normalizeText(currentChatInput.value);
     if (!text) return;
 
     const identity = normalizeText(getIdentity());
@@ -373,12 +388,12 @@ export const createRoomChatController = ({
     };
 
     appendMessage(message, true);
-    chatInput.value = '';
+    currentChatInput.value = '';
     
     // Force clear and resize in next tick
     window.requestAnimationFrame(() => {
-        chatInput.value = '';
-        chatInput.dispatchEvent(new Event('input'));
+        currentChatInput.value = '';
+        currentChatInput.dispatchEvent(new Event('input'));
     });
     
     syncControlState();
@@ -391,30 +406,60 @@ export const createRoomChatController = ({
   };
 
   const bind = () => {
-    if (chatFocusButton instanceof HTMLButtonElement) {
-      chatFocusButton.addEventListener('click', () => {
+    if (currentChatFocusButton instanceof HTMLButtonElement && !boundButtons.has(currentChatFocusButton)) {
+      boundButtons.add(currentChatFocusButton);
+      currentChatFocusButton.addEventListener('click', () => {
         focusComposer();
       });
     }
 
-    chatInput.addEventListener('focus', () => {
-      resetUnread();
-    });
+    if (!boundInputs.has(currentChatInput)) {
+      boundInputs.add(currentChatInput);
+      currentChatInput.addEventListener('focus', () => {
+        resetUnread();
+      });
 
-    chatSendButton.addEventListener('click', () => {
-      void sendMessage();
-    });
+      currentChatInput.addEventListener('keydown', (event) => {
+        if (!(event instanceof KeyboardEvent)) return;
+        if (event.key !== 'Enter' || event.shiftKey) return;
+        event.preventDefault();
+        void sendMessage();
+      });
+    }
 
-    chatDownloadButton.addEventListener('click', () => {
-      downloadTranscript();
-    });
+    if (!boundButtons.has(currentChatSendButton)) {
+      boundButtons.add(currentChatSendButton);
+      currentChatSendButton.addEventListener('click', () => {
+        void sendMessage();
+      });
+    }
 
-    chatInput.addEventListener('keydown', (event) => {
-      if (!(event instanceof KeyboardEvent)) return;
-      if (event.key !== 'Enter' || event.shiftKey) return;
-      event.preventDefault();
-      void sendMessage();
-    });
+    if (!boundButtons.has(currentChatDownloadButton)) {
+      boundButtons.add(currentChatDownloadButton);
+      currentChatDownloadButton.addEventListener('click', () => {
+        downloadTranscript();
+      });
+    }
+  };
+
+  const bindElements: RoomChatController['bindElements'] = (elements) => {
+    if (elements.chatDownloadButton instanceof HTMLButtonElement) currentChatDownloadButton = elements.chatDownloadButton;
+    if (elements.chatFocusButton instanceof HTMLButtonElement) currentChatFocusButton = elements.chatFocusButton;
+    if (
+      elements.chatInput instanceof HTMLInputElement ||
+      elements.chatInput instanceof HTMLTextAreaElement
+    ) {
+      currentChatInput = elements.chatInput;
+    }
+    if (elements.chatList instanceof HTMLElement) currentChatList = elements.chatList;
+    if (elements.chatScroller instanceof HTMLElement) currentChatScroller = elements.chatScroller;
+    if (elements.chatSection instanceof Element) currentChatSection = elements.chatSection;
+    if (elements.chatSendButton instanceof HTMLButtonElement) currentChatSendButton = elements.chatSendButton;
+    if (elements.chatUnreadDot instanceof HTMLElement) currentChatUnreadDot = elements.chatUnreadDot;
+    bind();
+    renderChat();
+    syncUnreadDot();
+    syncControlState();
   };
 
   syncControlState();
@@ -422,6 +467,7 @@ export const createRoomChatController = ({
   return {
     appendMessage,
     bind,
+    bindElements,
     downloadTranscript,
     focusComposer,
     resetUnread,

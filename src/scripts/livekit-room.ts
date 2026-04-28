@@ -10478,9 +10478,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const whiteboard = new WhiteboardController((msg) => void publishMessage(msg));
+  const whiteboards = new Set<WhiteboardController>([whiteboard]);
 
   const onWhiteboardInit = (clonedElement: HTMLElement) => {
     const wb = new WhiteboardController((msg) => void publishMessage(msg));
+    whiteboards.add(wb);
     const canvas = clonedElement.querySelector('[data-whiteboard-canvas]') as HTMLCanvasElement | null;
     const bgCanvas = clonedElement.querySelector('[data-whiteboard-bg-canvas]') as HTMLCanvasElement | null;
     if (canvas) wb.init(canvas);
@@ -10536,6 +10538,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const lilypondLive = new LilyPondLiveController((msg) => void publishMessage(msg));
+  let chatController: ReturnType<typeof createRoomChatController> | null = null;
 
     // Hyperpiano integration
     const updateActiveHyperpianoAudio = () => {
@@ -10595,6 +10598,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const onMediaInit = (container: HTMLElement) => {
       const input = container.querySelector('[data-external-media-input]') as HTMLInputElement;
       if (input) {
+        externalMediaInput = input;
+        externalMediaInputs = Array.from(root.querySelectorAll('[data-external-media-input]')).filter(
+          (node): node is HTMLInputElement =>
+            node instanceof HTMLInputElement && !node.closest('#musiki-pod-templates'),
+        );
+        externalMediaResultsEls = Array.from(root.querySelectorAll('[data-external-media-results]')).filter(
+          (node): node is HTMLElement =>
+            node instanceof HTMLElement && !node.closest('#musiki-pod-templates'),
+        );
         input.addEventListener('input', () => {
           queueExternalMediaSearch(input.value);
         });
@@ -10606,6 +10618,21 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
     };
 
+    const onChatInit = (container: HTMLElement) => {
+      chatController?.bindElements({
+        chatDownloadButton: container.querySelector('[data-action="chat-download"]') as HTMLButtonElement | null,
+        chatFocusButton: container.querySelector('[data-action="chat-focus"]') as HTMLButtonElement | null,
+        chatInput: container.querySelector('[data-chat-input]') as HTMLTextAreaElement | null,
+        chatList: container.querySelector('[data-chat-list]') as HTMLElement | null,
+        chatScroller: container.querySelector('[data-chat-scroller]') as HTMLElement | null,
+        chatSection: container.matches('[data-chat-section]')
+          ? container
+          : container.querySelector('[data-chat-section]'),
+        chatSendButton: container.querySelector('[data-action="chat-send"]') as HTMLButtonElement | null,
+        chatUnreadDot: container.querySelector('[data-chat-unread]') as HTMLElement | null,
+      });
+    };
+
   const workspaceManager = new RoomWorkspaceManager(
     root.querySelector('[data-workspace-root]') as HTMLElement,
     canLeadSession,
@@ -10614,7 +10641,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onWhiteboardInit,
     onLilypondInit,
     onConceptInit,
-    onMediaInit
+    onMediaInit,
+    onChatInit
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
@@ -10630,6 +10658,19 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (nextElements.studentsSlot) studentsSlot = nextElements.studentsSlot;
       if (nextElements.screenSlot) screenSlot = nextElements.screenSlot;
       if (nextElements.circleSlot) circleSlot = nextElements.circleSlot;
+      if (nextElements.participantList) participantList = nextElements.participantList;
+      if (nextElements.presentationSelect) presentationSelect = nextElements.presentationSelect;
+      if (nextElements.presentationFrame instanceof HTMLIFrameElement) presentationFrame = nextElements.presentationFrame;
+      if (nextElements.presentationPlaceholder instanceof HTMLElement) presentationPlaceholder = nextElements.presentationPlaceholder;
+      if (
+        nextElements.presentationFrame instanceof HTMLIFrameElement ||
+        nextElements.presentationPlaceholder instanceof HTMLElement
+      ) {
+        presentation.setElements({
+          frame: nextElements.presentationFrame instanceof HTMLIFrameElement ? nextElements.presentationFrame : undefined,
+          placeholder: nextElements.presentationPlaceholder instanceof HTMLElement ? nextElements.presentationPlaceholder : undefined,
+        });
+      }
       
       // Update external media and concept references which might have moved
       if (nextElements.externalMediaInput) externalMediaInput = nextElements.externalMediaInput;
@@ -10638,6 +10679,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (nextElements.conceptSearchInput) conceptSearchInput = nextElements.conceptSearchInput;
       if (nextElements.conceptSearchInputs) conceptSearchInputs = nextElements.conceptSearchInputs;
       if (nextElements.conceptResultsEls) conceptResultsEls = nextElements.conceptResultsEls;
+      if (chatController) {
+        chatController.bindElements({
+          chatDownloadButton: nextElements.chatDownloadButton instanceof HTMLButtonElement ? nextElements.chatDownloadButton : undefined,
+          chatFocusButton: nextElements.chatFocusButton instanceof HTMLButtonElement ? nextElements.chatFocusButton : undefined,
+          chatInput: nextElements.chatInput instanceof HTMLTextAreaElement ? nextElements.chatInput : undefined,
+          chatList: nextElements.chatList instanceof HTMLElement ? nextElements.chatList : undefined,
+          chatScroller: nextElements.chatScroller instanceof HTMLElement ? nextElements.chatScroller : undefined,
+          chatSection: nextElements.chatSection instanceof Element ? nextElements.chatSection : undefined,
+          chatSendButton: nextElements.chatSendButton instanceof HTMLButtonElement ? nextElements.chatSendButton : undefined,
+          chatUnreadDot: nextElements.chatUnreadDot instanceof HTMLElement ? nextElements.chatUnreadDot : undefined,
+        });
+      }
 
       // Force re-attachment by clearing and re-syncing
       // We clear the video mounts specifically to force syncParticipantVideo to rebuild them
@@ -10648,13 +10701,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       updateActiveHyperpianoAudio();
 
-      lilypondLive.init(root, localRole === 'teacher', setStatus);
-
       syncAllParticipants();
     }, 100);
   });
 
-  const chatController = createRoomChatController({
+  chatController = createRoomChatController({
     chatDownloadButton,
     chatFocusButton: chatFocusButton instanceof HTMLButtonElement ? chatFocusButton : null,
     chatInput,
@@ -10683,23 +10734,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   const focusChatComposer = () => {
-    chatController.focusComposer();
+    chatController?.focusComposer();
   };
 
   const resetChatUnread = () => {
-    chatController.resetUnread();
+    chatController?.resetUnread();
   };
 
   const appendChatMessage = (message: Extract<ConferenceMessage, { type: 'chat' }>, isSent = false) => {
-    chatController.appendMessage(message, isSent);
+    chatController?.appendMessage(message, isSent);
   };
 
   const downloadChatTranscript = () => {
-    chatController.downloadTranscript();
+    chatController?.downloadTranscript();
   };
 
   const sendChatMessage = async () => {
-    await chatController.sendMessage();
+    await chatController?.sendMessage();
   };
 
   chatController.bind();
@@ -10786,7 +10837,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const getPresentationSelect = () => {
     if (presentationSelect && root.contains(presentationSelect)) return presentationSelect;
-    const found = root.querySelector<HTMLSelectElement>('[data-presentation-select]');
+    const found = selectRoomElements(root).presentationSelect;
     if (found) presentationSelect = found;
     return presentationSelect;
   };
@@ -11716,21 +11767,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'whiteboard-draw') {
-        whiteboard.handleStroke(message);
+        whiteboards.forEach((controller) => controller.handleStroke(message));
         return;
       }
 
       if (message.type === 'whiteboard-text') {
-        whiteboard.drawText(message);
+        whiteboards.forEach((controller) => controller.drawText(message));
         return;
       }
 
       if (message.type === 'whiteboard-bg') {
-        whiteboard.setBackground(message.bg);
+        whiteboards.forEach((controller) => controller.setBackground(message.bg));
         return;
       }
 
-      if (message.type === 'whiteboard-clear') {        whiteboard.clear();
+      if (message.type === 'whiteboard-clear') {
+        whiteboards.forEach((controller) => controller.clear());
         return;
       }
       if (message.type === 'concept-load') {
@@ -12596,12 +12648,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  if (sidebarToggleButton instanceof HTMLButtonElement) {
-    sidebarToggleButton.addEventListener('click', () => {
+  root.addEventListener('click', (event) => {
+    const toggleButton = event.target instanceof Element
+      ? event.target.closest('[data-action="sidebar-toggle"]')
+      : null;
+    if (toggleButton instanceof HTMLButtonElement) {
+      event.preventDefault();
       toggleSidebarCollapsed();
       if (!sidebarCollapsed) resetChatUnread();
-    });
-  }
+    }
+  });
 
   if (instrumentsToggleButton instanceof HTMLButtonElement) {
     instrumentsToggleButton.addEventListener('click', () => {
@@ -13624,8 +13680,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     whiteboard.init(whiteboardCanvas);
   }
 
-  lilypondLive.init(root, localRole === 'teacher', setRoomStatus);
-
   workspaceManager.init();
 
   if (whiteboardBgCanvas instanceof HTMLCanvasElement) {
@@ -14481,7 +14535,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  presentationFrame.addEventListener('load', handlePresentationLoad);
+  const handlePresentationFrameLoad = (event: Event) => {
+    if (!(event.target instanceof HTMLIFrameElement)) return;
+    if (!event.target.matches('[data-presentation-frame]')) return;
+    handlePresentationLoad();
+  };
+
+  root.addEventListener('load', handlePresentationFrameLoad, true);
 
   window.addEventListener('message', handlePresentationMessage);
   document.addEventListener('fullscreenchange', syncFullscreenButton);
@@ -14619,7 +14679,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     clearPresentationStateRecoveryRequests();
     navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
     window.removeEventListener('resize', handleViewportResize);
-    presentationFrame.removeEventListener('load', handlePresentationLoad);
+    root.removeEventListener('load', handlePresentationFrameLoad, true);
     window.removeEventListener('message', handlePresentationMessage);
     document.removeEventListener('keydown', handleRoomShortcutKeydown);
     document.removeEventListener('keyup', handleRoomShortcutKeyup);

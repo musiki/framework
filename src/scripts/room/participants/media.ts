@@ -127,7 +127,9 @@ export const syncParticipantVideo = (
     existingMount &&
     existingMount.trackSid === trackSid &&
     existingMount.track === publication.track &&
-    shouldRenderBackdrop === hasRenderedBackdrop
+    shouldRenderBackdrop === hasRenderedBackdrop &&
+    existingMount.wrapper.isConnected &&
+    card.media.contains(existingMount.wrapper)
   ) {
     card.placeholder.hidden = true;
     return;
@@ -295,7 +297,13 @@ export const syncScreenVideo = (
   screenCard.name.textContent = readParticipantName(participant);
 
   const trackSid = getTrackSid(publication);
-  if (existingMount && existingMount.trackSid === trackSid && existingMount.track === publication.track) {
+  if (
+    existingMount &&
+    existingMount.trackSid === trackSid &&
+    existingMount.track === publication.track &&
+    existingMount.wrapper.isConnected &&
+    screenCard.media.contains(existingMount.wrapper)
+  ) {
     return;
   }
 

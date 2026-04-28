@@ -77,6 +77,10 @@ export class LilyPondLiveController {
   private suppressLivePublish = false;
   private currentFilename = '';
   private lastLilySource = '';
+  private documentClickBound = false;
+  private editorReady = false;
+  private playbackEventsBound = false;
+  private resizerContainers = new WeakSet<HTMLElement>();
 
   private remoteCursors = new Map<string, RemoteCursorState>();
   private remoteCursorTimeout = new Map<string, number>();
@@ -94,10 +98,19 @@ export class LilyPondLiveController {
     this.reportStatus = reportStatus;
     
     const bodyInput = container.querySelector<HTMLTextAreaElement>('[data-lilypond-body]');
-    if (bodyInput) this.bodyInput = bodyInput;
+    if (bodyInput && this.bodyInput !== bodyInput) {
+      this.stopEditorSync?.();
+      this.bodyInput = bodyInput;
+      this.editorReady = false;
+    }
 
     const previewEl = container.querySelector<HTMLElement>('[data-lilypond-preview]');
-    if (previewEl) this.previewEl = previewEl;
+    if (previewEl && this.previewEl !== previewEl) {
+      this.previewEl = previewEl;
+      if (this.hasRenderedPreviewSnapshot && this.lastRenderedBody.trim()) {
+        void this.renderLocally(this.lastRenderedBody);
+      }
+    }
 
     const newBtn = container.querySelector<HTMLButtonElement>('[data-lilypond-new]');
     if (newBtn) this.newBtn = newBtn;
@@ -193,8 +206,18 @@ export class LilyPondLiveController {
       } else {
         const setupEditor = () => {
           if (!this.bodyInput) return;
+          if (this.editorReady && this.editorBinding) return;
+          this.stopEditorSync?.();
 
-          // Clear dataset to allow re-enhancement if needed
+          this.bodyInput
+            .closest('.conference-lilypond-editor')
+            ?.querySelectorAll('.musiki-codemirror-host')
+            .forEach((node) => node.remove());
+          actionsContainer
+            ?.querySelectorAll(
+              '.conference-lilypond-action--icon, .conference-lilypond-action-spacer, input[type="file"]',
+            )
+            .forEach((node) => node.remove());
           delete this.bodyInput.dataset.markdownEditorEnhanced;
           delete this.bodyInput.dataset.markdownCodeMirrorEnhanced;
           delete this.bodyInput.dataset.markdownEditorActionsEnhanced;
@@ -234,7 +257,9 @@ export class LilyPondLiveController {
               this.editorBinding.destroy();
               this.editorBinding = null;
             }
+            this.editorReady = false;
           };
+          this.editorReady = true;
         };
 
         // Initial setup
@@ -242,7 +267,7 @@ export class LilyPondLiveController {
 
         // Try to load default.md and refresh if found
         void this.loadDefaultTemplate().then((found) => {
-          if (found) setupEditor();
+          if (found && !this.editorReady) setupEditor();
         });
 
         this.bodyInput.addEventListener('input', () => {
@@ -353,29 +378,34 @@ export class LilyPondLiveController {
       });
     }
 
-    document.addEventListener('click', (e) => {
-      if (
-        this.comboboxMenu &&
-        !container.querySelector('[data-lilypond-combobox]')?.contains(e.target as Node)
-      ) {
-        this.comboboxMenu.hidden = true;
-      }
-    });
+    if (!this.documentClickBound) {
+      document.addEventListener('click', (e) => {
+        if (
+          this.comboboxMenu &&
+          !this.comboboxMenu.closest('[data-lilypond-combobox]')?.contains(e.target as Node)
+        ) {
+          this.comboboxMenu.hidden = true;
+        }
+      });
+      this.documentClickBound = true;
+    }
 
     this.initResizer(container);
-    this.clearPreview();
     this.updateDownloadButtons();
 
     // Listen for playback events from LilypondPlayer to broadcast them
-    window.addEventListener('musiki:lilypond:play', (e: any) => {
-      if (!this.canEdit()) return;
-      const { action, url } = e.detail;
-      this.onPublish({
-        type: 'lilypond-play',
-        action: action === 'start' ? 'start' : 'stop',
-        url: url
+    if (!this.playbackEventsBound) {
+      window.addEventListener('musiki:lilypond:play', (e: any) => {
+        if (!this.canEdit()) return;
+        const { action, url } = e.detail;
+        this.onPublish({
+          type: 'lilypond-play',
+          action: action === 'start' ? 'start' : 'stop',
+          url: url
+        });
       });
-    });
+      this.playbackEventsBound = true;
+    }
   }
 
   public handleIncomingPlayState(message: Extract<ConferenceMessage, { type: 'lilypond-play' }>) {
@@ -436,9 +466,11 @@ export class LilyPondLiveController {
   }
 
   private initResizer(container: HTMLElement) {
+    if (this.resizerContainers.has(container)) return;
     const resizer = container.querySelector<HTMLElement>('[data-lilypond-resizer]');
     const layout = container.querySelector<HTMLElement>('.conference-lilypond-layout');
     if (!resizer || !layout) return;
+    this.resizerContainers.add(container);
 
     let isDragging = false;
 

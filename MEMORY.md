@@ -2,6 +2,27 @@
 
 ## Recent Activity (Last 12 Commits)
 
+<2026-04-28 dockview-room-controller-rebinding> <br>
+Second-wave Dockview room repair for participant media, chat, presentation, external media, and whiteboard.
+- Root cause: `selectRoomElements(root)` and several controllers still assumed one stable DOM tree. After Dockview, the room contains hidden pod templates plus runtime cloned pods; plain `querySelector()` could bind to hidden templates or stale elements, while cloned pod elements lacked controller bindings.
+- Selector fix: added template-aware runtime preference in `src/scripts/room/core/elements.ts` for slots and pod controls (`teacher`, `grid`, `screen`, `students`, presentation iframe/select, chat, external media, concepts, whiteboard). Runtime clones are preferred; hidden templates remain only as fallback for early initialization.
+- Speaker/Grid fix: `syncParticipantVideo()` and `syncScreenVideo()` now verify that an existing media wrapper is still connected and inside the current card before skipping reattach. This prevents roster-active/video-blank states after Dockview moves or recreates cards.
+- Chat fix: `RoomChatController` now supports `bindElements()` and can rebind to cloned chat pods while preserving chat history. `RoomWorkspaceManager` calls `onChatInit()` when a chat pod is cloned, and workspace changes retarget chat refs.
+- Presentation fix: `PresentationController` can retarget iframe/placeholder elements via `setElements()`. Presentation iframe load handling is delegated from the room root so newly cloned presentation iframes still trigger slide/session sync.
+- External Media fix: cloned media pod init retargets the active search input/result containers before wiring input/Enter handlers, so pasted YouTube URLs and search share the same active pod state.
+- Whiteboard fix: remote whiteboard messages are now fanned out to all active `WhiteboardController` instances instead of only the original controller, so cloned pizarra pods can receive WebRTC/DataChannel strokes/background/clear events.
+
+<2026-04-28 room-audio-lily-regression-fixes> <br>
+Fixed live room regressions introduced during the Dockview pod migration, with causes documented for future debugging.
+- Hyperpiano no-audio bug: MIDI/WebRTC note events were arriving, samples existed, and `HyperpianoController` could trigger notes, but `ensureIncomingAudioContext()` connected `hpAudioGroupPannerNode` to `incomingAudioMasterGainNode` before the master node was created. Result: HP channel graph was partially wired/invalid, so channel 4 could receive activity without audible output. Solution: create incoming master gain/panner/analyser first, then wire `hpAudioGroupGainNode -> hpAudioGroupPannerNode -> incomingAudioMasterGainNode`, plus HP analyser and FX sends.
+- Hyperpiano reconnect cleanup: `cleanupIncomingAudioContext()` cleared incoming mixer nodes but left HP node refs alive. Result: future pod/audio init could hold stale nodes from a closed `AudioContext`. Solution: null all `hpAudio*` refs during incoming audio cleanup.
+- Lily Code duplicated CodeMirror: `lilypondLive.init(root, ...)` enhanced the hidden `#musiki-pod-templates` source before Dockview cloned it. Every `lily-code` pod then cloned an already-enhanced template and got enhanced again, producing double CodeMirror/editor UI. Solution: remove root-level Lily init and initialize only cloned pod containers via `onLilypondInit`.
+- Lily controller lifecycle: repeated Dockview layout changes and split pod init stacked editor setup, document click listeners, playback listeners, and resizer handlers. Solution: make `LilyPondLiveController.init()` incremental/idempotent with `editorReady`, one-time document/playback listeners, per-container resizer guards, and cleanup of stale CodeMirror/action nodes before a deliberate re-enhance.
+- Lily Render pod clearing/play regression: workspace changes called root-level Lily init and `clearPreview()`, so render content could disappear when the workspace moved or when playback caused room events. Solution: stop clearing preview during init; if a new render pod appears, re-render the last published snapshot into it.
+- Lily miniplayer play button erasing pod: play clicks could bubble/default into surrounding pod/form/workspace UI. Solution: add `preventDefault()` alongside `stopPropagation()` in the miniplayer click handler.
+- Sidebar toggle not toggling: the stored `sidebarToggleButton` reference was fragile after workspace/Dockview DOM churn, and the toggle sat under other layers. Solution: delegate `[data-action="sidebar-toggle"]` clicks from the room root and raise `.conference-sidebar-toggle` z-index.
+- Dockview Lily pod ID lesson: timestamped IDs such as `lily-code-...` must be resolved by matching known pod type prefixes, not by `split('-')[0]`, otherwise hyphenated pod IDs collapse to `lily` and templates/controllers are missed.
+
 <2026-04-27 refurbish-workspace-hospital-completed> <br>
 Completed "Workspace Hospital" REFURBISH operation. 
 - Fixed LilyPond multi-pod conflict by refactoring `LilyPondLiveController` to support incremental initialization across split pods (`lily-code` and `lily-render`).

@@ -1544,6 +1544,7 @@ export async function installLilypondPlayer(container: HTMLElement, midiUrl: str
     });
 
     btn.addEventListener('click', (e) => {
+      e.preventDefault();
       e.stopPropagation();
       const isStarting = !controller.isPlaying();
       

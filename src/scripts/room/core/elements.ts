@@ -3,13 +3,21 @@ import { normalizeText } from './normalize';
 export type RoomElements = ReturnType<typeof selectRoomElements>;
 
 export const selectRoomElements = (root: HTMLElement) => {
-  const audioInputSelects = Array.from(root.querySelectorAll('[data-audio-input-select]')).filter(
+  const isRuntimeElement = (node: Element) => !node.closest('#musiki-pod-templates');
+  const queryAll = <T extends Element = Element>(selector: string) => {
+    const all = Array.from(root.querySelectorAll<T>(selector));
+    const runtime = all.filter(isRuntimeElement);
+    return runtime.length > 0 ? runtime : all;
+  };
+  const query = <T extends Element = Element>(selector: string) => queryAll<T>(selector)[0] || null;
+
+  const audioInputSelects = queryAll<HTMLSelectElement>('[data-audio-input-select]').filter(
     (node): node is HTMLSelectElement => node instanceof HTMLSelectElement,
   );
-  const videoInputSelects = Array.from(root.querySelectorAll('[data-video-input-select]')).filter(
+  const videoInputSelects = queryAll<HTMLSelectElement>('[data-video-input-select]').filter(
     (node): node is HTMLSelectElement => node instanceof HTMLSelectElement,
   );
-  const midiInputSelects = Array.from(root.querySelectorAll('[data-midi-input-select]')).filter(
+  const midiInputSelects = queryAll<HTMLSelectElement>('[data-midi-input-select]').filter(
     (node): node is HTMLSelectElement => node instanceof HTMLSelectElement,
   );
 
@@ -26,7 +34,7 @@ export const selectRoomElements = (root: HTMLElement) => {
     audioInputSelect: audioInputSelects[0] || null,
     videoInputSelect: videoInputSelects[0] || null,
     midiInputSelect: midiInputSelects[0] || null,
-    presentationSelect: root.querySelector('[data-presentation-select]'),
+    presentationSelect: query('[data-presentation-select]'),
     sessionSetupDetails: root.querySelector('[data-session-setup]'),
     previewZoomInput: root.querySelector('[data-preview-zoom-input]'),
     previewZoomOutput: root.querySelector('[data-preview-zoom-output]'),
@@ -67,15 +75,15 @@ export const selectRoomElements = (root: HTMLElement) => {
     layoutChoiceButtons: Array.from(root.querySelectorAll('[data-layout-choice]')),
     audioInputPanel: root.querySelector('[data-audio-input-panel]'),
     videoInputPanel: root.querySelector('[data-video-input-panel]'),
-    teacherSlot: root.querySelector<HTMLElement>('[data-slot="teacher"]'),
-    gridSlot: root.querySelector<HTMLElement>('[data-slot="grid"]'),
-    studentsSlot: root.querySelector<HTMLElement>('[data-slot="students"]'),
-    screenSlot: root.querySelector<HTMLElement>('[data-slot="screen"]'),
-    circleSlot: root.querySelector<HTMLElement>('[data-slot="circle"]'),
+    teacherSlot: query<HTMLElement>('[data-slot="teacher"]'),
+    gridSlot: query<HTMLElement>('[data-slot="grid"]'),
+    studentsSlot: query<HTMLElement>('[data-slot="students"]'),
+    screenSlot: query<HTMLElement>('[data-slot="screen"]'),
+    circleSlot: query<HTMLElement>('[data-slot="circle"]'),
     floatingCircleWrap: root.querySelector('[data-floating-circle]'),
     identityPreviewSlot: root.querySelector('[data-slot="identity-preview"]'),
     teacherPanel: root.querySelector('[data-panel="teacher"]'),
-    participantList: root.querySelector('[data-participant-list]'),
+    participantList: query('[data-participant-list]'),
     stage: root.querySelector('[data-stage]'),
     stageFrameNode: root.querySelector('.conference-stage-frame'),
     gravityBallCanvas: root.querySelector('[data-gravity-ball-canvas]'),
@@ -84,8 +92,8 @@ export const selectRoomElements = (root: HTMLElement) => {
     stageHandOverlay: root.querySelector('[data-stage-hand-overlay]'),
     participantTemplate: root.querySelector('[data-template="participant-card"]'),
     screenTemplate: root.querySelector('[data-template="screen-card"]'),
-    presentationFrame: root.querySelector('[data-presentation-frame]'),
-    presentationPlaceholder: root.querySelector('[data-presentation-placeholder]'),
+    presentationFrame: query('[data-presentation-frame]'),
+    presentationPlaceholder: query('[data-presentation-placeholder]'),
     liveActivityButton: root.querySelector('[data-live-activity-button]'),
     liveActivityTimer: root.querySelector('[data-live-activity-timer]'),
     sessionTimer: root.querySelector('[data-session-timer]'),
@@ -131,14 +139,14 @@ export const selectRoomElements = (root: HTMLElement) => {
     studentInviteCreateButton: root.querySelector('[data-action="student-invite-create"]'),
     studentInviteCopyButton: root.querySelector('[data-action="student-invite-copy"]'),
     studentInviteRevokeButton: root.querySelector('[data-action="student-invite-revoke"]'),
-    chatList: root.querySelector('[data-chat-list]'),
-    chatScroller: root.querySelector('[data-chat-scroller]'),
-    chatInput: root.querySelector('[data-chat-input]'),
-    chatSection: root.querySelector('[data-chat-section]'),
-    chatFocusButton: root.querySelector('[data-action="chat-focus"]'),
-    chatUnreadDot: root.querySelector('[data-chat-unread]'),
-    chatSendButton: root.querySelector('[data-action="chat-send"]'),
-    chatDownloadButton: root.querySelector('[data-action="chat-download"]'),
+    chatList: query('[data-chat-list]'),
+    chatScroller: query('[data-chat-scroller]'),
+    chatInput: query('[data-chat-input]'),
+    chatSection: query('[data-chat-section]'),
+    chatFocusButton: query('[data-action="chat-focus"]'),
+    chatUnreadDot: query('[data-chat-unread]'),
+    chatSendButton: query('[data-action="chat-send"]'),
+    chatDownloadButton: query('[data-action="chat-download"]'),
     raiseHandButton: root.querySelector('[data-action="raise-hand"]'),
     handTrackInput: root.querySelector('[data-hand-track-input]'),
     handTrackToggleButton: root.querySelector('[data-hand-track-toggle]'),
@@ -165,13 +173,13 @@ export const selectRoomElements = (root: HTMLElement) => {
     externalMediaControlsShell: root.querySelector('[data-external-media-controls-shell]'),
     externalMediaBtn: root.querySelector('[data-external-media-btn]'),
     externalMediaPopup: root.querySelector('[data-external-media-popup]'),
-    externalMediaInput: root.querySelector('[data-external-media-input]'),
-    externalMediaInputs: Array.from(root.querySelectorAll('[data-external-media-input]')).filter((n): n is HTMLInputElement => n instanceof HTMLInputElement),
-    externalMediaOpenButton: root.querySelector('[data-action="external-media-open"]'),
-    externalMediaOpenButtons: Array.from(root.querySelectorAll('[data-action="external-media-open"]')),
-    externalMediaResults: root.querySelector('[data-external-media-results]'),
-    externalMediaResultsEls: Array.from(root.querySelectorAll('[data-external-media-results]')).filter((n): n is HTMLElement => n instanceof HTMLElement),
-    externalMediaStatus: root.querySelector('[data-external-media-status]'),
+    externalMediaInput: query('[data-external-media-input]'),
+    externalMediaInputs: queryAll('[data-external-media-input]').filter((n): n is HTMLInputElement => n instanceof HTMLInputElement),
+    externalMediaOpenButton: query('[data-action="external-media-open"]'),
+    externalMediaOpenButtons: queryAll('[data-action="external-media-open"]'),
+    externalMediaResults: query('[data-external-media-results]'),
+    externalMediaResultsEls: queryAll('[data-external-media-results]').filter((n): n is HTMLElement => n instanceof HTMLElement),
+    externalMediaStatus: query('[data-external-media-status]'),
     externalMediaStage: root.querySelector('[data-external-media-stage]'),
     externalMediaPlayerHost: root.querySelector('[data-external-media-player-host]'),
     externalMediaEmpty: root.querySelector('[data-external-media-empty]'),
@@ -186,16 +194,16 @@ export const selectRoomElements = (root: HTMLElement) => {
     conceptsShell: root.querySelector('[data-concepts-shell]'),
     conceptsBtn: root.querySelector('[data-concepts-btn]'),
     conceptsPopup: root.querySelector('[data-concepts-popup]'),
-    conceptSearchInput: root.querySelector('[data-concept-search]'),
-    conceptResults: root.querySelector('[data-concept-results]'),
-    conceptSearchInputs: Array.from(root.querySelectorAll('[data-concept-search]')).filter((n): n is HTMLInputElement => n instanceof HTMLInputElement),
-    conceptResultsEls: Array.from(root.querySelectorAll('[data-concept-results]')).filter((n): n is HTMLElement => n instanceof HTMLElement),
+    conceptSearchInput: query('[data-concept-search]'),
+    conceptResults: query('[data-concept-results]'),
+    conceptSearchInputs: queryAll('[data-concept-search]').filter((n): n is HTMLInputElement => n instanceof HTMLInputElement),
+    conceptResultsEls: queryAll('[data-concept-results]').filter((n): n is HTMLElement => n instanceof HTMLElement),
     conceptFrame: root.querySelector('[data-concept-frame]'),
     conceptPlaceholder: root.querySelector('[data-concept-placeholder]'),
-    whiteboardCanvas: root.querySelector('[data-whiteboard-canvas]'),
-    whiteboardBgCanvas: root.querySelector('[data-whiteboard-bg-canvas]'),
-    whiteboardToolbar: root.querySelector('[data-whiteboard-toolbar]'),
-    whiteboardBgButtons: Array.from(root.querySelectorAll('[data-whiteboard-bg-btn]')),
+    whiteboardCanvas: query('[data-whiteboard-canvas]'),
+    whiteboardBgCanvas: query('[data-whiteboard-bg-canvas]'),
+    whiteboardToolbar: query('[data-whiteboard-toolbar]'),
+    whiteboardBgButtons: queryAll('[data-whiteboard-bg-btn]'),
     panelCloseButtons: Array.from(root.querySelectorAll('[data-action="close-panel"]')),
     brCountdownEl: root.querySelector('[data-br-countdown]'),
     brCountdownText: root.querySelector('[data-br-countdown-text]'),
