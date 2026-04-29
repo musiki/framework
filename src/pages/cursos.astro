@@ -2,7 +2,6 @@
 import { getCollection } from 'astro:content';
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
-import { createClient } from '@supabase/supabase-js';
 import { buildCourseHref } from '../lib/course-routing';
 import { isElevatedGlobalRole } from '../lib/roles';
 
@@ -63,31 +62,31 @@ let userInvites: string[] = [];   // courseIds where user has a pending invite
 let isTeacher = false;
 
 if (currentUser?.email) {
-  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+  const { query } = await import('../lib/db/pool');
   const email = String(currentUser.email).trim().toLowerCase();
 
-  const { data: user } = await supabase
-    .from('User')
-    .select('id, role')
-    .ilike('email', email)
-    .maybeSingle();
+  const { data: users } = await query(
+    `SELECT id, role FROM "User" WHERE "email" ILIKE $1`,
+    [email]
+  );
+  const user = users?.[0];
 
   if (user) {
     isTeacher = isElevatedGlobalRole(user.role);
 
-    const { data: enrollments } = await supabase
-      .from('Enrollment')
-      .select('courseId')
-      .eq('userId', user.id);
+    const { data: enrollments } = await query(
+      `SELECT "courseId" FROM "Enrollment" WHERE "userId" = $1`,
+      [user.id]
+    );
     if (enrollments) {
       userEnrollments = enrollments.map((e: any) => e.courseId);
     }
 
     if (!isTeacher) {
-      const { data: invites } = await supabase
-        .from('CourseInvite')
-        .select('courseId')
-        .ilike('email', email);
+      const { data: invites } = await query(
+        `SELECT "courseId" FROM "CourseInvite" WHERE "email" ILIKE $1`,
+        [email]
+      );
       if (invites) {
         userInvites = invites
           .map((i: any) => i.courseId)

@@ -88,8 +88,6 @@ const presentationOptions = inviteMode === 'external'
       activeCourseId,
       session,
       role: defaultRole,
-      supabaseUrl: import.meta.env.SUPABASE_URL,
-      supabaseKey: import.meta.env.SUPABASE_KEY,
     });
 ---
 
@@ -100,6 +98,7 @@ const presentationOptions = inviteMode === 'external'
       title="Sala Performativa"
       description="LiveKit + Astro sin React para videoconferencia, layouts y escena de presentacion."
     />
+    <script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
   </head>
   <body class="room-page">
     <main>

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
+import { query } from '../../../lib/db/pool';
 import {
-  createSupabaseServerClient,
   ensureDbUserFromSession,
   getForumCourseAccess,
   json,
@@ -31,19 +31,17 @@ import {
 } from '../../../lib/dashboard/agenda';
 
 const ensureMetaAssignment = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   assignmentId: string,
   courseId: string,
   slug: string,
 ) => {
-  const { data: existing, error: existingError } = await supabase
-    .from('Assignment')
-    .select('id')
-    .eq('id', assignmentId)
-    .maybeSingle();
+  const { data: assignments, error: existingError } = await query(
+    'SELECT "id" FROM "Assignment" WHERE "id" = $1',
+    [assignmentId]
+  );
 
   if (existingError) throw existingError;
-  if (existing) return;
+  if (assignments && assignments.length > 0) return;
 
   const baseAssignment = {
     id: assignmentId,
@@ -51,7 +49,10 @@ const ensureMetaAssignment = async (
     slug,
   };
 
-  const withWeight = await supabase.from('Assignment').insert([{ ...baseAssignment, weight: 1 }]);
+  const withWeight = await query(
+    'INSERT INTO "Assignment" ("id", "courseId", "slug", "weight") VALUES ($1, $2, $3, $4) RETURNING "id"',
+    [assignmentId, courseId, slug, 1]
+  );
   if (!withWeight.error) return;
 
   const weightMissing =
@@ -59,7 +60,10 @@ const ensureMetaAssignment = async (
     && withWeight.error.message.toLowerCase().includes('weight');
   if (!weightMissing) throw withWeight.error;
 
-  const withoutWeight = await supabase.from('Assignment').insert([baseAssignment]);
+  const withoutWeight = await query(
+    'INSERT INTO "Assignment" ("id", "courseId", "slug") VALUES ($1, $2, $3) RETURNING "id"',
+    [assignmentId, courseId, slug]
+  );
   if (withoutWeight.error) throw withoutWeight.error;
 };
 
@@ -112,22 +116,18 @@ const normalizeSelectedRange = (body: any) => {
 };
 
 const upsertSubmission = async ({
-  supabase,
   assignmentId,
   userId,
   payload,
 }: {
-  supabase: ReturnType<typeof createSupabaseServerClient>;
   assignmentId: string;
   userId: string;
   payload: Record<string, any>;
 }) => {
-  const { data: existingRows, error: existingError } = await supabase
-    .from('Submission')
-    .select('id, attempts')
-    .eq('assignmentId', assignmentId)
-    .eq('userId', userId)
-    .order('submittedAt', { ascending: false });
+  const { data: existingRows, error: existingError } = await query(
+    'SELECT "id", "attempts" FROM "Submission" WHERE "assignmentId" = $1 AND "userId" = $2 ORDER BY "submittedAt" DESC',
+    [assignmentId, userId]
+  );
 
   if (existingError) throw existingError;
   const existing = existingRows?.[0] ?? null;
@@ -135,71 +135,66 @@ const upsertSubmission = async ({
 
   if (existing?.id) {
     const attempts = Number(existing.attempts || 0);
-    const { error: updateError } = await supabase
-      .from('Submission')
-      .update({
+    const { error: updateError } = await query(
+      'UPDATE "Submission" SET "payload" = $1, "attempts" = $2, "submittedAt" = $3 WHERE "id" = $4',
+      [
         payload,
-        attempts: Number.isFinite(attempts) ? attempts + 1 : 1,
-        submittedAt: now,
-      })
-      .eq('id', existing.id);
+        Number.isFinite(attempts) ? attempts + 1 : 1,
+        now,
+        existing.id
+      ]
+    );
     if (updateError) throw updateError;
     return;
   }
 
-  const { error: insertError } = await supabase
-    .from('Submission')
-    .insert([{
+  const { error: insertError } = await query(
+    'INSERT INTO "Submission" ("userId", "assignmentId", "payload", "attempts", "submittedAt") VALUES ($1, $2, $3, $4, $5)',
+    [
       userId,
       assignmentId,
       payload,
-      attempts: 1,
-      submittedAt: now,
-    }]);
+      1,
+      now
+    ]
+  );
   if (insertError) throw insertError;
 };
 
 const deleteSubmissionIfEmpty = async ({
-  supabase,
   assignmentId,
   userId,
 }: {
-  supabase: ReturnType<typeof createSupabaseServerClient>;
   assignmentId: string;
   userId: string;
 }) => {
-  const { error } = await supabase
-    .from('Submission')
-    .delete()
-    .eq('assignmentId', assignmentId)
-    .eq('userId', userId);
+  const { error } = await query(
+    'DELETE FROM "Submission" WHERE "assignmentId" = $1 AND "userId" = $2',
+    [assignmentId, userId]
+  );
   if (error) throw error;
 };
 
 const loadStudentPayloads = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   assignmentId: string,
 ) => {
-  const { data, error } = await supabase
-    .from('Submission')
-    .select('id, userId, payload, submittedAt')
-    .eq('assignmentId', assignmentId)
-    .order('submittedAt', { ascending: false });
+  const { data, error } = await query(
+    'SELECT "id", "userId", "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+    [assignmentId]
+  );
   if (error) throw error;
   return Array.isArray(data) ? data : [];
 };
 
 const loadEventsPayload = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   assignmentId: string,
   courseId: string,
   year: string,
 ) => {
-  const { data, error } = await supabase
-    .from('Submission')
-    .select('id, userId, payload, submittedAt')
-    .eq('assignmentId', assignmentId)
-    .order('submittedAt', { ascending: false });
+  const { data, error } = await query(
+    'SELECT "id", "userId", "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+    [assignmentId]
+  );
   if (error) throw error;
   const latest = Array.isArray(data) ? data[0] : null;
   return normalizeAgendaEventsPayload(latest?.payload || {}, courseId, year);
@@ -220,13 +215,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return json({ error: 'action and courseId are required' }, 400);
     }
 
-    const supabase = createSupabaseServerClient({ requireServiceRole: true });
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     if (!dbUser?.id) {
       return json({ error: 'User not found' }, 401);
     }
 
-    const courseAccess = await getForumCourseAccess(supabase, dbUser, courseId);
+    const courseAccess = await getForumCourseAccess(dbUser, courseId);
     const manageAccess = await resolveLiveManageAccess(session, courseId);
     const canManage = Boolean(manageAccess.canManage || courseAccess.isTeacher);
     const canParticipate = Boolean(courseAccess.isEnrolled || canManage);
@@ -243,14 +237,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!canManage) return json({ error: 'Solo teachers pueden configurar la agenda' }, 403);
       const nextConfig = normalizeAgendaConfigPayload(body, courseId, year);
       await ensureMetaAssignment(
-        supabase,
         configAssignmentId,
         courseId,
         `${courseId}/__meta__/agenda-config/${year}`,
       );
 
       await upsertSubmission({
-        supabase,
         assignmentId: configAssignmentId,
         userId: manageAccess.userId || dbUser.id,
         payload: {
@@ -278,11 +270,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
       if (!studentIds.length) return json({ error: 'Seleccioná al menos un estudiante' }, 400);
 
-      const { data: enrollments, error: enrollmentError } = await supabase
-        .from('Enrollment')
-        .select('userId, roleInCourse')
-        .eq('courseId', courseId)
-        .in('userId', studentIds);
+      const { data: enrollments, error: enrollmentError } = await query(
+        'SELECT "userId", "roleInCourse" FROM "Enrollment" WHERE "courseId" = $1 AND "userId" = ANY($2)',
+        [courseId, studentIds]
+      );
       if (enrollmentError) throw enrollmentError;
 
       const allowedStudentIds = new Set(
@@ -296,21 +287,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return json({ error: 'Hay estudiantes fuera del curso activo' }, 400);
       }
 
-      const { data: configRows, error: configError } = await supabase
-        .from('Submission')
-        .select('payload, submittedAt')
-        .eq('assignmentId', configAssignmentId)
-        .order('submittedAt', { ascending: false });
+      const { data: configRows, error: configError } = await query(
+        'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+        [configAssignmentId]
+      );
       if (configError) throw configError;
       const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
 
       await ensureMetaAssignment(
-        supabase,
         studentAssignmentId,
         courseId,
         `${courseId}/__meta__/agenda-student/${year}`,
       );
-      const existingRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      const existingRows = await loadStudentPayloads(studentAssignmentId);
       const existingByStudentId = new Map<string, any>();
       existingRows.forEach((row) => {
         const studentId = normalizeText((row as any)?.payload?.studentId || row?.userId);
@@ -361,7 +350,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }
 
         await upsertSubmission({
-          supabase,
           assignmentId: studentAssignmentId,
           userId: studentId,
           payload: {
@@ -395,13 +383,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!text) return json({ error: 'Ingresá un texto para el evento' }, 400);
 
       await ensureMetaAssignment(
-        supabase,
         eventsAssignmentId,
         courseId,
         `${courseId}/__meta__/agenda-events/${year}`,
       );
 
-      const currentEventsPayload = await loadEventsPayload(supabase, eventsAssignmentId, courseId, year);
+      const currentEventsPayload = await loadEventsPayload(eventsAssignmentId, courseId, year);
       const isVirtual = Boolean(body?.virtual);
       const nextEvents = selection.dateKeys.map((dateKey) => ({
         id: createAgendaBlockId(),
@@ -419,7 +406,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
 
       await upsertSubmission({
-        supabase,
         assignmentId: eventsAssignmentId,
         userId: manageAccess.userId || dbUser.id,
         payload: {
@@ -441,7 +427,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!selection) return json({ error: 'Rango inválido' }, 400);
       if (!canManage) return json({ error: 'Solo teachers pueden borrar cualquier rango' }, 403);
 
-      const studentRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      const studentRows = await loadStudentPayloads(studentAssignmentId);
       for (const row of studentRows) {
         const payload = normalizeAgendaStudentPayload(row?.payload || {}, courseId, year, row?.userId || '');
         if (!payload) continue;
@@ -454,14 +440,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         );
         if (nextBlocks.length === 0) {
           await deleteSubmissionIfEmpty({
-            supabase,
             assignmentId: studentAssignmentId,
             userId: normalizeText(row?.userId),
           });
           continue;
         }
         await upsertSubmission({
-          supabase,
           assignmentId: studentAssignmentId,
           userId: normalizeText(row?.userId),
           payload: {
@@ -478,18 +462,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
         });
       }
 
-      const currentEvents = await loadEventsPayload(supabase, eventsAssignmentId, courseId, year);
+      const currentEvents = await loadEventsPayload(eventsAssignmentId, courseId, year);
       const remainingEvents = (currentEvents.events || []).filter(
         (event) => !(selection.dateKeys.includes(event.dateKey) && rangesOverlap(event, selection.startMinute, selection.endMinute)),
       );
       await ensureMetaAssignment(
-        supabase,
         eventsAssignmentId,
         courseId,
         `${courseId}/__meta__/agenda-events/${year}`,
       );
       await upsertSubmission({
-        supabase,
         assignmentId: eventsAssignmentId,
         userId: manageAccess.userId || dbUser.id,
         payload: {
@@ -514,10 +496,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
       // Load student meta to find members of the grupo
       const metaAssignmentId = `__meta__:course-student-profile:${encodeURIComponent(courseId)}:${year}`;
-      const { data: metaRows, error: metaError } = await supabase
-        .from('Submission')
-        .select('userId, payload')
-        .eq('assignmentId', metaAssignmentId);
+      const { data: metaRows, error: metaError } = await query(
+        'SELECT "userId", "payload" FROM "Submission" WHERE "assignmentId" = $1',
+        [metaAssignmentId]
+      );
       if (metaError) throw metaError;
 
       const groupStudentIds = (Array.isArray(metaRows) ? metaRows : [])
@@ -534,16 +516,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return json({ error: 'No pertenecés a este grupo' }, 403);
       }
 
-      const { data: configRows, error: configError } = await supabase
-        .from('Submission')
-        .select('payload, submittedAt')
-        .eq('assignmentId', configAssignmentId)
-        .order('submittedAt', { ascending: false });
+      const { data: configRows, error: configError } = await query(
+        'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+        [configAssignmentId]
+      );
       if (configError) throw configError;
       const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
 
-      await ensureMetaAssignment(supabase, studentAssignmentId, courseId, `${courseId}/__meta__/agenda-student/${year}`);
-      const existingRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      await ensureMetaAssignment(studentAssignmentId, courseId, `${courseId}/__meta__/agenda-student/${year}`);
+      const existingRows = await loadStudentPayloads(studentAssignmentId);
       const existingByStudentId = new Map<string, any>();
       existingRows.forEach((row) => {
         const sid = normalizeText((row as any)?.payload?.studentId || row?.userId);
@@ -579,7 +560,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }
 
         await upsertSubmission({
-          supabase,
           assignmentId: studentAssignmentId,
           userId: studentId,
           payload: {
@@ -604,22 +584,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return json({ error: 'Solo estudiantes inscriptos pueden reservar' }, 403);
       }
 
-      const { data: configRows, error: configError } = await supabase
-        .from('Submission')
-        .select('payload, submittedAt')
-        .eq('assignmentId', configAssignmentId)
-        .order('submittedAt', { ascending: false });
+      const { data: configRows, error: configError } = await query(
+        'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+        [configAssignmentId]
+      );
       if (configError) throw configError;
       const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
 
       await ensureMetaAssignment(
-        supabase,
         studentAssignmentId,
         courseId,
         `${courseId}/__meta__/agenda-student/${year}`,
       );
 
-      const existingRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      const existingRows = await loadStudentPayloads(studentAssignmentId);
       const existingSubmission = existingRows.find((row) => normalizeText(row?.userId) === dbUser.id) || null;
       const existingPayload = normalizeAgendaStudentPayload(existingSubmission?.payload || {}, courseId, year, dbUser.id) || {
         courseId,
@@ -664,7 +642,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
       };
 
       await upsertSubmission({
-        supabase,
         assignmentId: studentAssignmentId,
         userId: dbUser.id,
         payload: updatedPayload,
@@ -676,7 +653,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (action === 'delete-own') {
       const selection = normalizeSelectedRange(body);
       if (!selection) return json({ error: 'Rango inválido' }, 400);
-      const existingRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      const existingRows = await loadStudentPayloads(studentAssignmentId);
       const existingSubmission = existingRows.find((row) => normalizeText(row?.userId) === dbUser.id) || null;
       if (!existingSubmission) return json({ success: true });
       const existingPayload = normalizeAgendaStudentPayload(existingSubmission.payload || {}, courseId, year, dbUser.id);
@@ -690,13 +667,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
       if (nextBlocks.length === 0) {
         await deleteSubmissionIfEmpty({
-          supabase,
           assignmentId: studentAssignmentId,
           userId: dbUser.id,
         });
       } else {
         await upsertSubmission({
-          supabase,
           assignmentId: studentAssignmentId,
           userId: dbUser.id,
           payload: {
@@ -715,76 +690,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return json({ success: true });
     }
 
-    if (action === 'clear-range') {
-      const selection = normalizeSelectedRange(body);
-      if (!selection) return json({ error: 'Rango inválido' }, 400);
-      if (!canManage) return json({ error: 'Solo teachers pueden borrar cualquier rango' }, 403);
-
-      // Clear events
-      const currentEventsPayload = await loadEventsPayload(supabase, eventsAssignmentId, courseId, year);
-      const remainingEvents = (currentEventsPayload.events || []).filter(
-        (event) => !(selection.dateKeys.includes(event.dateKey) && rangesOverlap(event, selection.startMinute, selection.endMinute)),
-      );
-      
-      await upsertSubmission({
-        supabase,
-        assignmentId: eventsAssignmentId,
-        userId: manageAccess.userId || dbUser.id,
-        payload: {
-          ...currentEventsPayload,
-          events: remainingEvents,
-          updatedAt: new Date().toISOString(),
-        },
-      });
-
-      // Clear student blocks
-      const studentRows = await loadStudentPayloads(supabase, studentAssignmentId);
-      const updatedStudents = [];
-      for (const row of studentRows) {
-        const payload = normalizeAgendaStudentPayload(row?.payload || {}, courseId, year, row?.userId || '');
-        if (!payload) continue;
-        const nextBlocks = replaceBlocksInRange(
-          payload.blocks || [],
-          new Set(selection.dateKeys),
-          selection.startMinute,
-          selection.endMinute,
-          [], // empty means remove
-        );
-
-        if (nextBlocks.length !== payload.blocks.length) {
-          const nextPayload = {
-            ...payload,
-            blocks: nextBlocks,
-            updatedAt: new Date().toISOString(),
-          };
-          if (nextBlocks.length === 0) {
-            await deleteSubmissionIfEmpty({ supabase, assignmentId: studentAssignmentId, userId: normalizeText(row?.userId) });
-          } else {
-            await upsertSubmission({
-              supabase,
-              assignmentId: studentAssignmentId,
-              userId: normalizeText(row?.userId),
-              payload: nextPayload,
-            });
-          }
-          updatedStudents.push(nextPayload);
-        }
-      }
-      return json({ success: true, events: remainingEvents, students: updatedStudents });
-    }
-
     if (action === 'delete-block') {
       const blockId = normalizeText(body?.blockId);
       if (!blockId) return json({ error: 'blockId es requerido' }, 400);
 
       // Try events first
-      const currentEvents = await loadEventsPayload(supabase, eventsAssignmentId, courseId, year);
+      const currentEvents = await loadEventsPayload(eventsAssignmentId, courseId, year);
       const eventIndex = currentEvents.events.findIndex((e) => e.id === blockId);
       if (eventIndex !== -1) {
         if (!canManage) return json({ error: 'Solo teachers pueden borrar eventos' }, 403);
         const nextEvents = currentEvents.events.filter((e) => e.id !== blockId);
         await upsertSubmission({
-          supabase,
           assignmentId: eventsAssignmentId,
           userId: manageAccess.userId || dbUser.id,
           payload: {
@@ -799,7 +715,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
 
       // Try student blocks
-      const studentRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      const studentRows = await loadStudentPayloads(studentAssignmentId);
       for (const row of studentRows) {
         const payload = normalizeAgendaStudentPayload(row?.payload || {}, courseId, year, row?.userId || '');
         if (!payload) continue;
@@ -811,10 +727,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
           }
           const nextBlocks = payload.blocks.filter((b) => b.id !== blockId);
           if (nextBlocks.length === 0) {
-            await deleteSubmissionIfEmpty({ supabase, assignmentId: studentAssignmentId, userId: normalizeText(row?.userId) });
+            await deleteSubmissionIfEmpty({ assignmentId: studentAssignmentId, userId: normalizeText(row?.userId) });
           } else {
             await upsertSubmission({
-              supabase,
               assignmentId: studentAssignmentId,
               userId: normalizeText(row?.userId),
               payload: {
@@ -835,7 +750,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!blockId) return json({ error: 'blockId es requerido' }, 400);
 
       // Try events
-      const currentEvents = await loadEventsPayload(supabase, eventsAssignmentId, courseId, year);
+      const currentEvents = await loadEventsPayload(eventsAssignmentId, courseId, year);
       const eventIndex = currentEvents.events.findIndex((e) => e.id === blockId);
       if (eventIndex !== -1) {
         if (!canManage) return json({ error: 'Solo teachers pueden editar eventos' }, 403);
@@ -852,7 +767,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
         const nextEvents = [...currentEvents.events];
         nextEvents[eventIndex] = nextEvent;
         await upsertSubmission({
-          supabase,
           assignmentId: eventsAssignmentId,
           userId: manageAccess.userId || dbUser.id,
           payload: {
@@ -867,7 +781,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
 
       // Try student blocks
-      const studentRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      const studentRows = await loadStudentPayloads(studentAssignmentId);
       for (const row of studentRows) {
         const payload = normalizeAgendaStudentPayload(row?.payload || {}, courseId, year, row?.userId || '');
         if (!payload) continue;
@@ -889,7 +803,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
           const nextBlocks = [...payload.blocks];
           nextBlocks[blockIndex] = nextBlock;
           await upsertSubmission({
-            supabase,
             assignmentId: studentAssignmentId,
             userId: normalizeText(row?.userId),
             payload: {
@@ -909,7 +822,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       const comment = normalizeAgendaComment(body?.comment, 280);
       if (!blockId) return json({ error: 'blockId es requerido' }, 400);
 
-      const existingRows = await loadStudentPayloads(supabase, studentAssignmentId);
+      const existingRows = await loadStudentPayloads(studentAssignmentId);
       const existingSubmission = existingRows.find((row) => normalizeText(row?.userId) === dbUser.id) || null;
       if (!existingSubmission) return json({ error: 'No se encontró tu agenda' }, 404);
       const existingPayload = normalizeAgendaStudentPayload(existingSubmission.payload || {}, courseId, year, dbUser.id);
@@ -928,7 +841,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!found) return json({ error: 'Bloque no encontrado' }, 404);
 
       await upsertSubmission({
-        supabase,
         assignmentId: studentAssignmentId,
         userId: dbUser.id,
         payload: {

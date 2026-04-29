@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { query } from './db/pool';
 import {
   buildEvalCatalog,
   resolveEvalCatalogEntry,
@@ -109,7 +109,11 @@ const valuesDiffer = (left: unknown, right: unknown): boolean => {
 const extractColumnNameFromError = (message: string): string => {
   if (!message) return '';
 
-  const patterns = [/Could not find the '([^']+)' column/i, /column "([^"]+)" of relation/i];
+  const patterns = [
+    /Could not find the '([^']+)' column/i,
+    /column "([^"]+)" of relation/i,
+    /column "([^"]+)" does not exist/i
+  ];
 
   for (const pattern of patterns) {
     const match = message.match(pattern);
@@ -119,107 +123,7 @@ const extractColumnNameFromError = (message: string): string => {
   return '';
 };
 
-type SupportedEnvKey =
-  | 'SUPABASE_URL'
-  | 'PUBLIC_SUPABASE_URL'
-  | 'SUPABASE_KEY'
-  | 'SUPABASE_ANON_KEY';
-
-const runtimeEnv = (key: SupportedEnvKey): string => {
-  // Vite module runner does not allow dynamic import.meta.env[key] access.
-  const viteValue =
-    key === 'SUPABASE_URL'
-      ? import.meta.env.SUPABASE_URL
-      : key === 'PUBLIC_SUPABASE_URL'
-        ? import.meta.env.PUBLIC_SUPABASE_URL
-        : key === 'SUPABASE_KEY'
-          ? import.meta.env.SUPABASE_KEY
-          : import.meta.env.SUPABASE_ANON_KEY;
-
-  if (typeof viteValue === 'string' && viteValue.trim()) return viteValue.trim();
-
-  const processValue = process.env?.[key];
-  if (typeof processValue === 'string' && processValue.trim()) return processValue.trim();
-
-  return '';
-};
-
-const resolveSupabaseClient = (explicit?: SupabaseClient): SupabaseClient | null => {
-  if (explicit) return explicit;
-
-  const supabaseUrl = runtimeEnv('SUPABASE_URL') || runtimeEnv('PUBLIC_SUPABASE_URL');
-  const supabaseKey = runtimeEnv('SUPABASE_KEY') || runtimeEnv('SUPABASE_ANON_KEY');
-
-  if (!supabaseUrl || !supabaseKey) return null;
-  return createClient(supabaseUrl, supabaseKey);
-};
-
-const toAssignmentCandidate = (entry: EvalCatalogEntry): JsonRecord => {
-  const entryId = normalizeSlugPath(entry.entryId);
-  const fallbackCourseId = cleanString(entryId.split('/')[0]);
-  const courseId = cleanString(entry.courseId) || fallbackCourseId || 'sin-curso';
-  const slug = entryId || `${courseId}/assignment/${entry.evalId}`;
-  const title = cleanString(entry.entryTitle) || entry.evalId;
-  const prompt = cleanString(entry.prompt);
-
-  return {
-    id: entry.evalId,
-    courseId,
-    slug,
-    title,
-    description: prompt || slug || title,
-    type: cleanString(entry.evalType) || 'unknown',
-    mode: cleanString(entry.mode) || 'self',
-    prompt,
-    points: Number(entry.points || 0) || 0,
-    lessonId: entryId,
-    sourcePath: cleanString(entry.sourcePath),
-    noteType: cleanString(entry.noteType),
-    noteTypeLabel: cleanString(entry.noteTypeLabel),
-    contentHash: cleanString(entry.contentHash),
-    contentVersion: cleanString(entry.contentVersion),
-    settings: {
-      evalId: entry.evalId,
-      evalType: cleanString(entry.evalType) || 'unknown',
-      mode: cleanString(entry.mode) || 'self',
-      prompt,
-      group: cleanString(entry.group),
-      options: Array.isArray(entry.options) ? entry.options : [],
-      sourceCollection: cleanString(entry.sourceCollection),
-      entryId,
-      entryTitle: title,
-      noteType: cleanString(entry.noteType),
-      noteTypeLabel: cleanString(entry.noteTypeLabel),
-      sourcePath: cleanString(entry.sourcePath),
-      contentHash: cleanString(entry.contentHash),
-      contentVersion: cleanString(entry.contentVersion),
-      evalSnapshot: entry.evalSnapshot || {},
-    },
-    weight: 1,
-    updatedAt: new Date().toISOString(),
-  };
-};
-
-const buildUpdatePayload = (
-  existingAssignment: JsonRecord,
-  candidate: JsonRecord,
-): JsonRecord => {
-  const existingKeys = new Set(Object.keys(existingAssignment || {}));
-  const updatePayload: JsonRecord = {};
-
-  Object.entries(candidate).forEach(([key, value]) => {
-    if (key === 'id') return;
-    if (!existingKeys.has(key)) return;
-    if (valuesDiffer(existingAssignment[key], value)) {
-      updatePayload[key] = value;
-    }
-  });
-
-  return updatePayload;
-};
-
 const updateAssignmentSafe = async (
-  supabase: SupabaseClient,
   assignmentId: string,
   payload: JsonRecord,
 ): Promise<void> => {
@@ -228,10 +132,21 @@ const updateAssignmentSafe = async (
 
   while (Object.keys(draft).length > 0 && attempts < 14) {
     attempts += 1;
-    const { error } = await supabase.from('Assignment').update(draft).eq('id', assignmentId);
+    const cols = Object.keys(draft);
+    const vals = Object.values(draft);
+    const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
+    
+    const { error } = await query(
+      `UPDATE "Assignment" SET ${setSql} WHERE "id" = $${cols.length + 1}`,
+      [...vals, assignmentId]
+    );
+
     if (!error) return;
 
-    const missingColumn = extractColumnNameFromError(String(error.message || ''));
+    // PG error code for undefined_column is 42703
+    const isMissingColumn = error.code === '42703';
+    const missingColumn = isMissingColumn ? extractColumnNameFromError(String(error.message || '')) : '';
+    
     if (missingColumn && Object.prototype.hasOwnProperty.call(draft, missingColumn)) {
       delete draft[missingColumn];
       continue;
@@ -247,7 +162,6 @@ const updateAssignmentSafe = async (
 };
 
 const insertAssignmentSafe = async (
-  supabase: SupabaseClient,
   payload: JsonRecord,
 ): Promise<void> => {
   let draft = { ...payload };
@@ -255,10 +169,21 @@ const insertAssignmentSafe = async (
 
   while (Object.keys(draft).length > 0 && attempts < 14) {
     attempts += 1;
-    const { error } = await supabase.from('Assignment').insert([draft]);
+    const cols = Object.keys(draft);
+    const vals = Object.values(draft);
+    const colSql = cols.map(c => `"${c}"`).join(', ');
+    const placeholderSql = cols.map((_, i) => `$${i + 1}`).join(', ');
+
+    const { error } = await query(
+      `INSERT INTO "Assignment" (${colSql}) VALUES (${placeholderSql})`,
+      vals
+    );
+
     if (!error) return;
 
-    const missingColumn = extractColumnNameFromError(String(error.message || ''));
+    const isMissingColumn = error.code === '42703';
+    const missingColumn = isMissingColumn ? extractColumnNameFromError(String(error.message || '')) : '';
+
     if (missingColumn && Object.prototype.hasOwnProperty.call(draft, missingColumn)) {
       delete draft[missingColumn];
       continue;
@@ -278,9 +203,40 @@ const insertAssignmentSafe = async (
   }
 };
 
+function toAssignmentCandidate(entry: EvalCatalogEntry): JsonRecord {
+  return {
+    id: entry.evalId,
+    type: entry.evalType,
+    mode: entry.mode,
+    points: entry.points,
+    prompt: entry.prompt,
+    group: entry.group,
+    options: entry.options,
+    contentHash: entry.contentHash,
+    contentVersion: entry.contentVersion,
+    settings: entry.evalSnapshot,
+    courseId: entry.courseId,
+    slug: entry.entryId,
+  };
+}
+
+function buildUpdatePayload(existing: JsonRecord, candidate: JsonRecord): JsonRecord {
+  const update: JsonRecord = {};
+  const keys = Object.keys(candidate);
+  
+  for (const key of keys) {
+    if (valuesDiffer(existing[key], candidate[key])) {
+      update[key] = candidate[key];
+    }
+  }
+  
+  return update;
+}
+
+const CONCURRENCY_LIMIT = 1; // Strict serial processing for SSH tunnel stability
+
 const runEvalCatalogSync = async (
-  options: Required<Pick<EvalCatalogSyncOptions, 'reason' | 'logger'>> &
-    Pick<EvalCatalogSyncOptions, 'supabase'>,
+  options: Required<Pick<EvalCatalogSyncOptions, 'reason' | 'logger'>>,
 ): Promise<EvalCatalogSyncResult> => {
   const startedMs = Date.now();
   const startedAt = new Date(startedMs).toISOString();
@@ -299,19 +255,6 @@ const runEvalCatalogSync = async (
     cached: false,
   };
 
-  const supabase = resolveSupabaseClient(options.supabase);
-  if (!supabase) {
-    result.ok = false;
-    result.errors.push({
-      evalId: '*',
-      message: 'SUPABASE_URL/SUPABASE_KEY are not available for eval catalog sync.',
-    });
-    const finishedMs = Date.now();
-    result.finishedAt = new Date(finishedMs).toISOString();
-    result.durationMs = finishedMs - startedMs;
-    return result;
-  }
-
   try {
     const catalog = await buildEvalCatalog();
     const resolvedEntries: EvalCatalogEntry[] = [];
@@ -327,41 +270,53 @@ const runEvalCatalogSync = async (
 
     result.scanned = resolvedEntries.length;
 
-    for (const entry of resolvedEntries) {
-      try {
-        const candidate = toAssignmentCandidate(entry);
-        const { data: existing, error: findError } = await supabase
-          .from('Assignment')
-          .select('*')
-          .eq('id', entry.evalId)
-          .maybeSingle();
+    // Process entries with limited concurrency to respect SSH tunnel bandwidth/sockets
+    const chunks = [];
+    for (let i = 0; i < resolvedEntries.length; i += CONCURRENCY_LIMIT) {
+      chunks.push(resolvedEntries.slice(i, i + CONCURRENCY_LIMIT));
+    }
 
-        if (findError) throw findError;
+    for (const chunk of chunks) {
+      await Promise.all(chunk.map(async (entry) => {
+        try {
+          const candidate = toAssignmentCandidate(entry);
+          const { data: existingRows, error: findError } = await query(
+            'SELECT * FROM "Assignment" WHERE "id" = $1 LIMIT 1',
+            [entry.evalId]
+          );
 
-        if (!existing) {
-          await insertAssignmentSafe(supabase, candidate);
-          result.inserted += 1;
-          continue;
+          if (findError) throw findError;
+          const existing = existingRows?.[0];
+
+          if (!existing) {
+            await insertAssignmentSafe(candidate);
+            result.inserted += 1;
+            return;
+          }
+
+          const updatePayload = buildUpdatePayload(existing as JsonRecord, candidate);
+          if (Object.keys(updatePayload).length === 0) {
+            result.unchanged += 1;
+            return;
+          }
+
+          await updateAssignmentSafe(entry.evalId, updatePayload);
+          result.updated += 1;
+        } catch (error: any) {
+          const message = describeError(error);
+          if (isNetworkFetchError(error)) {
+            result.errors.push({ evalId: '*', message: `Database network unavailable: ${message}` });
+            options.logger.warn(`[eval-sync] Database network unavailable; backing off: ${message}`);
+            // Note: We continue the loop but this error will trigger backoff in the caller
+          } else {
+            result.errors.push({ evalId: entry.evalId, message });
+            options.logger.error(`[eval-sync] ${entry.evalId}: ${message}`);
+          }
         }
+      }));
 
-        const updatePayload = buildUpdatePayload(existing as JsonRecord, candidate);
-        if (Object.keys(updatePayload).length === 0) {
-          result.unchanged += 1;
-          continue;
-        }
-
-        await updateAssignmentSafe(supabase, entry.evalId, updatePayload);
-        result.updated += 1;
-      } catch (error: any) {
-        const message = describeError(error);
-        if (isNetworkFetchError(error)) {
-          result.errors.push({ evalId: '*', message: `Supabase network unavailable: ${message}` });
-          options.logger.warn(`[eval-sync] Supabase network unavailable; backing off: ${message}`);
-          break;
-        }
-        result.errors.push({ evalId: entry.evalId, message });
-        options.logger.error(`[eval-sync] ${entry.evalId}: ${message}`);
-      }
+      // Break if we hit a fatal network error
+      if (result.errors.some(e => e.evalId === '*')) break;
     }
   } catch (error: any) {
     const message = describeError(error) || 'Unable to build eval catalog';
@@ -401,7 +356,6 @@ export async function ensureEvalCatalogSynced(
   inFlightSync = runEvalCatalogSync({
     reason,
     logger,
-    supabase: options.supabase,
   })
     .then((result) => {
       syncState = {

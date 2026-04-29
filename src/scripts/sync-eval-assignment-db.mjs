@@ -2,9 +2,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { createClient } from '@supabase/supabase-js';
+import pg from 'pg';
 import { extractEvalBlocks } from '../lib/eval/extract-eval-blocks.mjs';
 import { parseEvalBlock } from '../lib/eval/parse-eval-block.mjs';
+
+const { Pool } = pg;
 
 const cwd = process.cwd();
 const contentRoot = path.resolve(cwd, 'src/content/cursos');
@@ -80,18 +82,16 @@ const loadDotEnv = () => {
   }
 };
 
-const resolveSupabaseClient = () => {
+const resolvePool = () => {
   loadDotEnv();
 
-  const url = normalizeText(process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL);
-  const key = normalizeText(
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-      || process.env.SUPABASE_KEY
-      || process.env.SUPABASE_ANON_KEY,
-  );
-
-  if (!url || !key) return null;
-  return createClient(url, key);
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) return null;
+  
+  return new Pool({
+    connectionString,
+    max: 5,
+  });
 };
 
 const isSystemMetaAssignmentRef = (value) => {
@@ -208,23 +208,16 @@ const main = async () => {
     return;
   }
 
-  const supabase = resolveSupabaseClient();
-  if (!supabase) {
-    console.log('[eval-db-sync] Missing Supabase env. Skipping.');
+  const pool = resolvePool();
+  if (!pool) {
+    console.log('[eval-db-sync] Missing DATABASE_URL env. Skipping.');
     return;
   }
 
   const liveAssignments = buildLiveAssignments();
   const liveIds = new Set(liveAssignments.keys());
 
-  const { data: existingAssignments, error: assignmentsError } = await supabase
-    .from('Assignment')
-    .select('id,slug,courseId');
-
-  if (assignmentsError) {
-    throw assignmentsError;
-  }
-
+  const { rows: existingAssignments } = await pool.query('SELECT id, slug, "courseId" FROM "Assignment"');
   const existingById = new Map((existingAssignments || []).map((row) => [String(row?.id || ''), row]));
 
   let inserted = 0;
@@ -234,8 +227,10 @@ const main = async () => {
     const existing = existingById.get(liveAssignment.id) || null;
 
     if (!existing) {
-      const { error } = await supabase.from('Assignment').insert([liveAssignment]);
-      if (error) throw error;
+      await pool.query(
+        'INSERT INTO "Assignment" (id, "courseId", slug) VALUES ($1, $2, $3)',
+        [liveAssignment.id, liveAssignment.courseId, liveAssignment.slug]
+      );
       inserted += 1;
       continue;
     }
@@ -247,15 +242,11 @@ const main = async () => {
 
     if (currentSlug === nextSlug && currentCourseId === nextCourseId) continue;
 
-    const { error } = await supabase
-      .from('Assignment')
-      .update({
-        slug: liveAssignment.slug,
-        courseId: liveAssignment.courseId,
-      })
-      .eq('id', liveAssignment.id);
+    await pool.query(
+      'UPDATE "Assignment" SET slug = $1, "courseId" = $2 WHERE id = $3',
+      [liveAssignment.slug, liveAssignment.courseId, liveAssignment.id]
+    );
 
-    if (error) throw error;
     updated += 1;
   }
 
@@ -275,33 +266,30 @@ const main = async () => {
   for (const ids of chunkList(staleIds, 100)) {
     if (ids.length === 0) continue;
 
-    const { data: staleSubmissions, error: staleSubmissionsError } = await supabase
-      .from('Submission')
-      .select('id,assignmentId')
-      .in('assignmentId', ids);
-
-    if (staleSubmissionsError) throw staleSubmissionsError;
+    const { rows: staleSubmissions } = await pool.query(
+      'SELECT id, "assignmentId" FROM "Submission" WHERE "assignmentId" = ANY($1)',
+      [ids]
+    );
 
     const submissionIds = (staleSubmissions || []).map((row) => normalizeText(row?.id)).filter(Boolean);
     deletedSubmissions += submissionIds.length;
 
     for (const submissionIdChunk of chunkList(submissionIds, 100)) {
       if (submissionIdChunk.length === 0) continue;
-      const { error: deleteSubmissionError } = await supabase
-        .from('Submission')
-        .delete()
-        .in('id', submissionIdChunk);
-      if (deleteSubmissionError) throw deleteSubmissionError;
+      await pool.query(
+        'DELETE FROM "Submission" WHERE id = ANY($1)',
+        [submissionIdChunk]
+      );
     }
 
-    const { error: deleteAssignmentError } = await supabase
-      .from('Assignment')
-      .delete()
-      .in('id', ids);
-
-    if (deleteAssignmentError) throw deleteAssignmentError;
+    await pool.query(
+      'DELETE FROM "Assignment" WHERE id = ANY($1)',
+      [ids]
+    );
     deletedAssignments += ids.length;
   }
+
+  await pool.end();
 
   console.log(
     JSON.stringify(
@@ -320,7 +308,7 @@ const main = async () => {
 
 main().catch((error) => {
   if (isSupabaseConnectivityError(error)) {
-    console.warn(`[eval-db-sync] Supabase unreachable. Skipping sync. ${formatErrorMessage(error)}`);
+    console.warn(`[eval-db-sync] DB unreachable. Skipping sync. ${formatErrorMessage(error)}`);
     return;
   }
 

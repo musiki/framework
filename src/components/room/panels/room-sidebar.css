@@ -10,6 +10,8 @@
   border-left: 1px solid var(--conference-line);
   min-width: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 20;
 }
 
 .conference-shell[data-sidebar-collapsed='true'] .conference-sidebar {
@@ -21,7 +23,7 @@
   top: 50%;
   right: calc(var(--conference-sidebar-size) - 11px);
   transform: translateY(-50%);
-  z-index: 40;
+  z-index: 20001;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../../../lib/roles';
 import { resolveUserIdByEmail, registerEmailForUser } from '../../../lib/user-email';
+import { query } from '../../../lib/db/pool';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeRole = (value: unknown) => normalizeText(value).toLowerCase();
@@ -28,14 +28,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const turno = normalizeTurno(rawTurno);
     const year = String(new Date().getFullYear());
-    const supabase = createSupabaseServerClient();
 
     // Verify requester is a teacher
     const requesterEmail = normalizeText(currentUser.email).toLowerCase();
-    const { data: requesterUsers } = await supabase
-      .from('User')
-      .select('id, role')
-      .ilike('email', requesterEmail);
+    const { data: requesterUsers } = await query(
+      `SELECT "id", "role" FROM "User" WHERE "email" ILIKE $1`,
+      [requesterEmail]
+    );
 
     const requesterUser = (requesterUsers || [])[0];
     if (!requesterUser) {
@@ -48,10 +47,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // Check that requester is a teacher in this course
-    const { data: requesterEnrollments } = await supabase
-      .from('Enrollment')
-      .select('courseId, roleInCourse')
-      .eq('userId', requesterUser.id);
+    const { data: requesterEnrollments } = await query(
+      `SELECT "courseId", "roleInCourse" FROM "Enrollment" WHERE "userId" = $1`,
+      [requesterUser.id]
+    );
 
     const isAdmin = isAdminGlobalRole(requesterUser.role);
     const isTeacher =
@@ -79,11 +78,21 @@ export const POST: APIRoute = async ({ request, locals }) => {
     // Ensure the meta assignment exists (shared across all students in this course/year)
     const META_PREFIX = '__meta__:course-student-profile';
     const assignmentId = `${META_PREFIX}:${encodeURIComponent(canonicalCourse)}:${year}`;
-    const { data: existingAssignment } = await supabase.from('Assignment').select('id').eq('id', assignmentId).maybeSingle();
+    const { data: existingAssignmentRows } = await query(
+      `SELECT "id" FROM "Assignment" WHERE "id" = $1`,
+      [assignmentId]
+    );
+    const existingAssignment = existingAssignmentRows?.[0];
+
     if (!existingAssignment) {
       const base = { id: assignmentId, courseId: canonicalCourse, slug: `${canonicalCourse}/__meta__/student-profile/${year}` };
-      const r = await supabase.from('Assignment').insert([{ ...base, weight: 1 }]);
-      if (r.error) await supabase.from('Assignment').insert([base]);
+      const { error: insertError } = await query(
+        `INSERT INTO "Assignment" ("id", "courseId", "slug", "weight") VALUES ($1, $2, $3, $4) ON CONFLICT ("id") DO NOTHING`,
+        [base.id, base.courseId, base.slug, 1]
+      );
+      if (insertError) {
+         // Maybe it was already inserted by a concurrent request, but ON CONFLICT should handle it
+      }
     }
 
     let enrolled = 0;
@@ -96,21 +105,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!email || !email.includes('@')) continue;
 
       // Ensure User record exists (resolve via UserEmail first)
-      const resolvedId = await resolveUserIdByEmail(supabase, email);
+      const resolvedId = await resolveUserIdByEmail(undefined, email);
 
       let userId: string;
 
       if (!resolvedId) {
         const newId = crypto.randomUUID();
-        const { error: userInsertError } = await supabase.from('User').insert([{
-          id: newId,
-          email,
-          name: name || email,
-          emailVerified: false,
-          role: 'student',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }]);
+        const now = new Date();
+        const { error: userInsertError } = await query(
+          `INSERT INTO "User" ("id", "email", "name", "emailVerified", "role", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [newId, email, name || email, false, 'student', now, now]
+        );
         if (userInsertError) {
           console.error('User insert error for', email, userInsertError.message);
           errors++;
@@ -118,26 +123,26 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }
         userId = newId;
         // Register email in UserEmail for multi-email identity
-        await registerEmailForUser(supabase, userId, email, true).catch(() => undefined);
+        await registerEmailForUser(undefined, userId, email, true).catch(() => undefined);
       } else {
         userId = resolvedId;
       }
 
       // Check if already enrolled
-      const { data: existingEnrollment } = await supabase
-        .from('Enrollment')
-        .select('id')
-        .eq('userId', userId)
-        .eq('courseId', canonicalCourse)
-        .maybeSingle();
+      const { data: existingEnrollmentRows } = await query(
+        `SELECT "id" FROM "Enrollment" WHERE "userId" = $1 AND "courseId" = $2`,
+        [userId, canonicalCourse]
+      );
+      const existingEnrollment = existingEnrollmentRows?.[0];
 
       if (existingEnrollment) {
         alreadyEnrolled++;
       } else {
         // Directly enroll the student
-        const { error: enrollError } = await supabase
-          .from('Enrollment')
-          .insert([{ userId, courseId: canonicalCourse, roleInCourse: 'student' }]);
+        const { error: enrollError } = await query(
+          `INSERT INTO "Enrollment" ("userId", "courseId", "roleInCourse") VALUES ($1, $2, $3)`,
+          [userId, canonicalCourse, 'student']
+        );
 
         if (enrollError) {
           console.error('Enrollment insert error for', email, enrollError.message);
@@ -148,12 +153,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       }
 
       // Save turno to student profile submission
-      const { data: existingSub } = await supabase
-        .from('Submission')
-        .select('id, attempts, payload')
-        .eq('userId', userId)
-        .eq('assignmentId', assignmentId)
-        .maybeSingle();
+      const { data: existingSubRows } = await query(
+        `SELECT "id", "attempts", "payload" FROM "Submission" WHERE "userId" = $1 AND "assignmentId" = $2`,
+        [userId, assignmentId]
+      );
+      const existingSub = existingSubRows?.[0];
 
       const existingPayload = (existingSub?.payload && typeof existingSub.payload === 'object')
         ? existingSub.payload as Record<string, any>
@@ -175,19 +179,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
       };
 
       if (existingSub?.id) {
-        await supabase.from('Submission').update({
-          payload: metaPayload,
-          attempts: (Number(existingSub.attempts) || 0) + 1,
-          submittedAt: new Date().toISOString(),
-        }).eq('id', existingSub.id);
+        await query(
+          `UPDATE "Submission" SET "payload" = $1, "attempts" = $2, "submittedAt" = $3 WHERE "id" = $4`,
+          [metaPayload, (Number(existingSub.attempts) || 0) + 1, new Date().toISOString(), existingSub.id]
+        );
       } else {
-        await supabase.from('Submission').insert([{
-          userId,
-          assignmentId,
-          payload: metaPayload,
-          attempts: 1,
-          submittedAt: new Date().toISOString(),
-        }]);
+        await query(
+          `INSERT INTO "Submission" ("userId", "assignmentId", "payload", "attempts", "submittedAt") VALUES ($1, $2, $3, $4, $5)`,
+          [userId, assignmentId, metaPayload, 1, new Date().toISOString()]
+        );
       }
     }
 
@@ -196,3 +196,4 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
 };
+

@@ -135,6 +135,14 @@ const isTeacher = defaultRole === 'teacher';
             </div>
 
             <div class="conference-field">
+              <label for="modal-grid-size">Tamaño de GRID</label>
+              <select id="modal-grid-size" data-grid-size-input>
+                <option value="normal">Normal (Automático)</option>
+                <option value="compact">Compacto (2 por fila)</option>
+              </select>
+            </div>
+
+            <div class="conference-field">
               <label>Background</label>
               <div class="conference-background-action-row">
                 <button class="conference-background-action" type="button" data-action="background-blur-toggle">Blur</button>

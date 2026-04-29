@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
+import { query } from '../../../lib/db/pool';
 import { isElevatedGlobalRole } from '../../../lib/roles';
 
 export const DELETE: APIRoute = async ({ params, locals }) => {
@@ -15,13 +15,11 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     return json({ error: 'Submission id required' }, 400);
   }
 
-  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-
   try {
-    const { data: users, error: userError } = await supabase
-      .from('User')
-      .select('id, role')
-      .ilike('email', currentUser.email);
+    const { data: users, error: userError } = await query(
+      'SELECT "id", "role" FROM "User" WHERE "email" ILIKE $1',
+      [currentUser.email]
+    );
     const user = (users || []).find((row: any) => isElevatedGlobalRole(row?.role)) || users?.[0];
 
     if (userError || !user) {
@@ -29,36 +27,40 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     }
 
     const isTeacher = isElevatedGlobalRole(user.role);
-    let deleteQuery = supabase.from('Submission').delete().eq('id', submissionId);
 
     if (!isTeacher) {
-      const { data: submission, error: submissionError } = await supabase
-        .from('Submission')
-        .select('id')
-        .eq('id', submissionId)
-        .eq('userId', user.id)
-        .maybeSingle();
+      const { data: submissions, error: submissionError } = await query(
+        'SELECT "id" FROM "Submission" WHERE "id" = $1 AND "userId" = $2',
+        [submissionId, user.id]
+      );
 
-      if (submissionError || !submission) {
+      if (submissionError || !submissions?.length) {
         return json({ error: 'Submission not found' }, 404);
       }
 
-      deleteQuery = deleteQuery.eq('userId', user.id);
+      const { error: deleteError } = await query(
+        'DELETE FROM "Submission" WHERE "id" = $1 AND "userId" = $2',
+        [submissionId, user.id]
+      );
+
+      if (deleteError) throw deleteError;
     } else {
-      const { data: submission, error: submissionError } = await supabase
-        .from('Submission')
-        .select('id')
-        .eq('id', submissionId)
-        .maybeSingle();
+      const { data: submissions, error: submissionError } = await query(
+        'SELECT "id" FROM "Submission" WHERE "id" = $1',
+        [submissionId]
+      );
 
-      if (submissionError || !submission) {
+      if (submissionError || !submissions?.length) {
         return json({ error: 'Submission not found' }, 404);
       }
+
+      const { error: deleteError } = await query(
+        'DELETE FROM "Submission" WHERE "id" = $1',
+        [submissionId]
+      );
+
+      if (deleteError) throw deleteError;
     }
-
-    const { error: deleteError } = await deleteQuery;
-
-    if (deleteError) throw deleteError;
 
     return json({ success: true }, 200);
   } catch (error: any) {

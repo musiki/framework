@@ -5,10 +5,10 @@ import { getCollection } from 'astro:content';
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
 import {
-  createSupabaseServerClient,
   ensureDbUserFromSession,
   getForumCourseAccess,
 } from '../lib/forum-server';
+import { query } from '../lib/db/pool';
 import { canonicalizeCourseId, getCourseAliases } from '../lib/course-alias';
 import { getCourseFrontmatterId } from '../lib/course-metadata';
 
@@ -65,8 +65,7 @@ const courses = allCourseEntries
     ),
   })) as CourseMeta[];
 
-const supabase = createSupabaseServerClient({ requireServiceRole: true });
-const dbUser = await ensureDbUserFromSession(supabase, session);
+const dbUser = await ensureDbUserFromSession(session);
 if (!dbUser) {
   return Astro.redirect('/login?redirect=/foro');
 }
@@ -74,7 +73,7 @@ if (!dbUser) {
 const accessibleCourseChecks = await Promise.all(
   courses.map(async (course) => {
     try {
-      const access = await getForumCourseAccess(supabase, dbUser, course.courseId);
+      const access = await getForumCourseAccess(dbUser, course.courseId);
       if (!access.canRead) return null;
       return course;
     } catch {
@@ -108,7 +107,7 @@ let activeCourseCanModerate = false;
 if (activeCourse) {
   const courseId = activeCourse.courseId;
   const courseAliases = await getCourseAliases(courseId);
-  const activeCourseAccess = await getForumCourseAccess(supabase, dbUser, courseId);
+  const activeCourseAccess = await getForumCourseAccess(dbUser, courseId);
   activeCourseCanModerate = Boolean(activeCourseAccess.isTeacher);
   const buildForumHref = (view: 'board' | 'lesson', scope: string) =>
     `/foro?course=${encodeURIComponent(courseId)}&view=${encodeURIComponent(view)}&scope=${encodeURIComponent(scope)}`;
@@ -131,22 +130,22 @@ if (activeCourse) {
   let postsRaw: any[] = [];
 
   try {
-    const { data: boardData, error: boardError } = await supabase
-      .from('ForumBoard')
-      .select('slug, title, isDefault, isArchived')
-      .in('courseId', courseAliases.length > 0 ? courseAliases : [courseId])
-      .eq('isArchived', false)
-      .order('isDefault', { ascending: false })
-      .order('title', { ascending: true });
+    const courseIds = courseAliases.length > 0 ? courseAliases : [courseId];
+    const { data: boardData, error: boardError } = await query(
+      `SELECT slug, title, "isDefault", "isArchived" FROM "ForumBoard" 
+       WHERE "courseId" = ANY($1) AND "isArchived" = false 
+       ORDER BY "isDefault" DESC, title ASC`,
+      [courseIds]
+    );
 
     if (boardError) throw boardError;
     boardsRaw = Array.isArray(boardData) ? boardData : [];
 
-    const { data: threadData, error: threadError } = await supabase
-      .from('ForumThread')
-      .select('id, lessonSlug, createdAt, updatedAt')
-      .in('courseId', courseAliases.length > 0 ? courseAliases : [courseId])
-      .limit(2000);
+    const { data: threadData, error: threadError } = await query(
+      `SELECT id, "lessonSlug", "createdAt", "updatedAt" FROM "ForumThread" 
+       WHERE "courseId" = ANY($1) LIMIT 2000`,
+      [courseIds]
+    );
 
     if (threadError) throw threadError;
     threadsRaw = Array.isArray(threadData) ? threadData : [];
@@ -156,11 +155,11 @@ if (activeCourse) {
       .filter(Boolean);
 
     if (threadIds.length > 0) {
-      const { data: postData, error: postError } = await supabase
-        .from('ForumPost')
-        .select('threadId, createdAt')
-        .in('threadId', threadIds)
-        .or('status.is.null,status.neq.deleted');
+      const { data: postData, error: postError } = await query(
+        `SELECT "threadId", "createdAt" FROM "ForumPost" 
+         WHERE "threadId" = ANY($1) AND (status IS NULL OR status != 'deleted')`,
+        [threadIds]
+      );
 
       if (postError) throw postError;
       postsRaw = Array.isArray(postData) ? postData : [];

@@ -1,5 +1,6 @@
 import type { Session } from '@auth/core/types';
-import { createSupabaseServerClient, ensureDbUserFromSession } from '../forum-server';
+import { query } from '../db/pool';
+import { ensureDbUserFromSession } from '../forum-server';
 import { canonicalizeCourseId } from '../course-alias';
 import { isAdminGlobalRole, isElevatedGlobalRole, normalizeGlobalRole, toParticipantRole } from '../roles';
 
@@ -28,8 +29,7 @@ export async function resolveLiveParticipantRole(
     return 'student';
   }
 
-  const supabase = createSupabaseServerClient();
-  const dbUser = await ensureDbUserFromSession(supabase, session);
+  const dbUser = await ensureDbUserFromSession(session);
   return toParticipantRole(dbUser?.role);
 }
 
@@ -47,7 +47,6 @@ export async function resolveLiveManageAccess(
     };
   }
 
-  const supabase = createSupabaseServerClient();
   const sessionEmail = String(session.user.email || '').trim();
   if (!sessionEmail) {
     return {
@@ -60,10 +59,10 @@ export async function resolveLiveManageAccess(
 
   // Multiple User rows can exist for the same email (legacy/import races).
   // Resolve access from all candidates so teacher permissions are not lost.
-  const { data: candidateUsers, error: candidateUsersError } = await supabase
-    .from('User')
-    .select('id, role')
-    .ilike('email', sessionEmail);
+  const { data: candidateUsers, error: candidateUsersError } = await query(
+    `SELECT id, role FROM "User" WHERE "email" ILIKE $1`,
+    [sessionEmail]
+  );
 
   if (candidateUsersError) {
     throw candidateUsersError;
@@ -71,7 +70,7 @@ export async function resolveLiveManageAccess(
 
   let userCandidates = Array.isArray(candidateUsers) ? candidateUsers : [];
   if (userCandidates.length === 0) {
-    const ensured = await ensureDbUserFromSession(supabase, session);
+    const ensured = await ensureDbUserFromSession(session);
     if (ensured) {
       userCandidates = [{ id: ensured.id, role: ensured.role }];
     }
@@ -104,12 +103,12 @@ export async function resolveLiveManageAccess(
 
   const userIds = Array.from(new Set(normalizedUsers.map((row) => row.id)));
 
-  const { data: enrollmentRows, error: enrollmentError } = await supabase
-    .from('Enrollment')
-    .select('userId, courseId, roleInCourse')
-    .in('userId', userIds);
+  const { data: enrollmentRows, error: enrollmentError } = await query(
+    `SELECT "userId", "courseId", "roleInCourse" FROM "Enrollment" WHERE "userId" = ANY($1)`,
+    [userIds]
+  );
 
-  if (enrollmentError && enrollmentError.code !== 'PGRST116') {
+  if (enrollmentError) {
     throw enrollmentError;
   }
 

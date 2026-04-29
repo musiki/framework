@@ -1,6 +1,12 @@
 # Evaluation MOC
 
-Última actualización: 2026-03-05
+Última actualización: 2026-04-28
+
+Tipologías y gramáticas de evaluación ahora consolidadas en:
+- [Evaluation-realtime](Evaluation-realtime.md)
+
+Esta nota se conserva para compatibilidad de referencias antiguas.
+
 
 ## 1. Propósito del sistema de evaluación
 
@@ -101,7 +107,7 @@ Campos relevantes:
 - beacon global con countdown,
 - resultados agregados en tiempo real.
 
-Ver detalle completo en: [Evaluation.realtimeInClass](Evaluation.realtimeInClass.md)
+Ver detalle completo en: [Evaluation-realtime](Evaluation-realtime.md)
 
 ## 7. Métricas mínimas
 
@@ -141,7 +147,7 @@ Ver detalle completo en: [Evaluation.realtimeInClass](Evaluation.realtimeInClass
 
 ## 10. Notas vinculadas
 
-- [Evaluation.realtimeInClass](Evaluation.realtimeInClass.md)
+- [Evaluation-realtime](Evaluation-realtime.md)
 - [live-events-protocol](live-events-protocol.md)
-- [Evaluation ollama-migration](Evaluation%20ollama-migration.md)
+- [Evaluation-agentic](Evaluation-agentic.md)
 - [phase2-mcq-checklist](phase2-mcq-checklist.md)

@@ -2,7 +2,6 @@
 import HeaderLink from './HeaderLink.astro';
 import Search from './Search.astro';
 import GraphModal from './GraphModal.astro';
-import { createClient } from '@supabase/supabase-js';
 import { getCollection } from 'astro:content';
 import { getCourseFrontmatterId, getCourseLegacyCode } from '../lib/course-metadata';
 import { execSync } from 'node:child_process';
@@ -80,14 +79,18 @@ let headerDbUserImage = '';
 
 if (user?.email) {
 	try {
-		const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+		const { query } = await import('../lib/db/pool');
 		const sessionEmail = String(user.email || '').trim();
 		const normalizedEmail = sessionEmail.toLowerCase();
 		const { resolveUserIdByEmail } = await import('../lib/user-email');
-		const resolvedUserId = await resolveUserIdByEmail(supabase, normalizedEmail).catch(() => null);
-		const { data: dbUser } = resolvedUserId
-			? await supabase.from('User').select('id, role, name, image').eq('id', resolvedUserId).maybeSingle()
-			: await supabase.from('User').select('id, role, name, image').ilike('email', normalizedEmail).maybeSingle();
+		// We pass null for supabase because resolveUserIdByEmail has been updated to use query internally
+		const resolvedUserId = await resolveUserIdByEmail(null, normalizedEmail).catch(() => null);
+		
+		const { data: dbUserRows } = resolvedUserId
+			? await query(`SELECT id, role, name, image FROM "User" WHERE "id" = $1`, [resolvedUserId])
+			: await query(`SELECT id, role, name, image FROM "User" WHERE "email" ILIKE $1`, [normalizedEmail]);
+		
+		const dbUser = dbUserRows?.[0];
 
 		const userId = String(dbUser?.id || '').trim();
 		headerDbUserId = userId;
@@ -95,10 +98,10 @@ if (user?.email) {
 		headerDbUserName = String(dbUser?.name || user.name || user.email || '').trim();
 		headerDbUserImage = String(dbUser?.image || user.image || '').trim();
 		if (userId) {
-			const { data: enrollments } = await supabase
-				.from('Enrollment')
-				.select('courseId')
-				.eq('userId', userId);
+			const { data: enrollments } = await query(
+				`SELECT "courseId" FROM "Enrollment" WHERE "userId" = $1`,
+				[userId]
+			);
 
 			const enrolledCourseIds = Array.from(
 				new Set(
@@ -905,8 +908,6 @@ const withActiveCourse = (href: string) => {
 	document.addEventListener('astro:page-load', setupHeaderActivityIndicators);
 </script>
 <script>
-	import { createClient } from '@supabase/supabase-js';
-
 	type PresenceUser = {
 		userId: string;
 		name: string;

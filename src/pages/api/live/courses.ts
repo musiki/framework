@@ -1,5 +1,4 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
 import { getCollection } from 'astro:content';
 import { getCourseFrontmatterId, getCourseLegacyCode } from '../../../lib/course-metadata';
 
@@ -41,26 +40,25 @@ export const GET: APIRoute = async ({ locals }) => {
   if (!email) return json({ courseIds: [] });
 
   try {
-    const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+    const { query } = await import('../../../lib/db/pool');
 
-    const { data: dbUser, error: userError } = await supabase
-      .from('User')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
+    const { data: dbUserRows, error: userError } = await query(
+      `SELECT id FROM "User" WHERE "email" = $1`,
+      [email]
+    );
 
     if (userError) {
       console.error('live/courses user lookup error:', userError);
       return json({ courseIds: [] });
     }
 
-    const userId = String(dbUser?.id || '').trim();
+    const userId = String(dbUserRows?.[0]?.id || '').trim();
     if (!userId) return json({ courseIds: [] });
 
-    const { data: enrollments, error: enrollmentsError } = await supabase
-      .from('Enrollment')
-      .select('courseId')
-      .eq('userId', userId);
+    const { data: enrollments, error: enrollmentsError } = await query(
+      `SELECT "courseId" FROM "Enrollment" WHERE "userId" = $1`,
+      [userId]
+    );
 
     if (enrollmentsError) {
       console.error('live/courses enrollment lookup error:', enrollmentsError);

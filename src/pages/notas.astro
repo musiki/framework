@@ -1,7 +1,8 @@
 ---
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
-import { createSupabaseServerClient, ensureDbUserFromSession } from '../lib/forum-server';
+import { ensureDbUserFromSession } from '../lib/forum-server';
+import { query } from '../lib/db/pool';
 import '../styles/theme.css';
 
 export const prerender = false;
@@ -9,20 +10,18 @@ export const prerender = false;
 const session = (Astro.locals as any).session;
 if (!session?.user) return Astro.redirect('/login?redirect=/notas');
 
-const supabase = createSupabaseServerClient();
-const user = await ensureDbUserFromSession(supabase, session);
+const user = await ensureDbUserFromSession(session);
 if (!user) return Astro.redirect('/login?redirect=/notas');
 
 const url = new URL(Astro.request.url);
 const activeId = url.searchParams.get('id') || null;
 
-const { data: notes } = await supabase
-  .from('LiveClassNote')
-  .select('id, title, body, renderedHtml, noteDate, courseId, roomName, createdAt, updatedAt')
-  .eq('userId', user.id)
-  .order('noteDate', { ascending: false })
-  .order('updatedAt', { ascending: false })
-  .limit(200);
+const { data: notes } = await query(
+  `SELECT id, title, body, "renderedHtml", "noteDate", "courseId", "roomName", "createdAt", "updatedAt" 
+   FROM "LiveClassNote" WHERE "userId" = $1 
+   ORDER BY "noteDate" DESC, "updatedAt" DESC LIMIT 200`,
+  [user.id]
+);
 
 const allNotes = notes ?? [];
 const activeNote = activeId

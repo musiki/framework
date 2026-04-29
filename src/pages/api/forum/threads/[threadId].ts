@@ -1,11 +1,11 @@
 import type { APIRoute } from 'astro';
 import {
   cleanString,
-  createSupabaseServerClient,
   ensureDbUserFromSession,
   getForumCourseAccess,
   json,
 } from '../../../../lib/forum-server';
+import { query } from '../../../../lib/db/pool';
 
 const THREAD_TITLE_MAX = 140;
 
@@ -22,31 +22,23 @@ type ThreadRow = {
 
 function resolveForumErrorMessage(error: any, fallback: string): string {
   const message = typeof error?.message === 'string' ? error.message : '';
-  if (message.includes('SUPABASE_SERVICE_ROLE_KEY_REQUIRED_FOR_FORUM') || message.includes('SUPABASE_SERVER_KEY_MISSING')) {
-    return 'Forum requires server service credentials. Set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_KEY=service-role key) and restart dev server.';
-  }
-  if (message.toLowerCase().includes('row-level security')) {
-    return 'RLS blocked forum write. Set SUPABASE_SERVICE_ROLE_KEY in server env and restart dev server.';
-  }
-  if (message.includes('ForumThread') || message.includes('ForumPost')) {
-    return 'Forum schema missing or outdated. Re-run docs/sql/forum-schema.sql in Supabase.';
+  if (message.includes('ForumBoard') || message.includes('ForumThread') || message.includes('ForumPost') || message.includes('ForumPostVote')) {
+    return 'Forum schema missing or outdated. Please verify the database state on the VPS.';
   }
   return fallback;
 }
 
 async function getThreadOrNull(
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   threadId: string,
 ): Promise<ThreadRow | null> {
-  const { data: threadRaw, error: threadError } = await supabase
-    .from('ForumThread')
-    .select('id, courseId, title, createdByUserId, isPinned, isLocked, createdAt, updatedAt')
-    .eq('id', threadId)
-    .maybeSingle();
+  const { data, error } = await query(
+    `SELECT id, "courseId", title, "createdByUserId", "isPinned", "isLocked", "createdAt", "updatedAt" 
+     FROM "ForumThread" WHERE id = $1`,
+    [threadId]
+  );
 
-  if (threadError) throw threadError;
-  if (!threadRaw) return null;
-  return threadRaw as ThreadRow;
+  if (error) throw error;
+  return data?.[0] || null;
 }
 
 export const PATCH: APIRoute = async ({ request, params, locals }) => {
@@ -79,16 +71,14 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
     return json({ error: 'Title must be at least 3 characters' }, 400);
   }
 
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
-
   try {
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     if (!dbUser) return json({ error: 'Not authenticated' }, 401);
 
-    const thread = await getThreadOrNull(supabase, threadId);
+    const thread = await getThreadOrNull(threadId);
     if (!thread) return json({ error: 'Thread not found' }, 404);
 
-    const access = await getForumCourseAccess(supabase, dbUser, thread.courseId);
+    const access = await getForumCourseAccess(dbUser, thread.courseId);
     if (!access.canRead) {
       return json({ error: 'Forbidden' }, 403);
     }
@@ -110,12 +100,15 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
     if (hasTitleUpdate) updateData.title = title;
     if (hasPinnedUpdate) updateData.isPinned = isPinned;
 
-    const { data: updatedRaw, error: updateError } = await supabase
-      .from('ForumThread')
-      .update(updateData)
-      .eq('id', threadId)
-      .select('id, courseId, title, createdByUserId, isPinned, isLocked, createdAt, updatedAt')
-      .single();
+    const cols = Object.keys(updateData);
+    const vals = Object.values(updateData);
+    const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
+    
+    const { data: updatedRaw, error: updateError } = await query(
+      `UPDATE "ForumThread" SET ${setSql} WHERE id = $${cols.length + 1} 
+       RETURNING id, "courseId", title, "createdByUserId", "isPinned", "isLocked", "createdAt", "updatedAt"`,
+      [...vals, threadId]
+    );
 
     if (updateError) throw updateError;
 
@@ -123,7 +116,7 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
       {
         success: true,
         thread: {
-          ...(updatedRaw as ThreadRow),
+          ...(updatedRaw?.[0] as ThreadRow),
           canEdit: canEditThread,
           canDelete: canEditThread,
           canPin: canPinThread,
@@ -148,16 +141,14 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     return json({ error: 'threadId is required' }, 400);
   }
 
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
-
   try {
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     if (!dbUser) return json({ error: 'Not authenticated' }, 401);
 
-    const thread = await getThreadOrNull(supabase, threadId);
+    const thread = await getThreadOrNull(threadId);
     if (!thread) return json({ error: 'Thread not found' }, 404);
 
-    const access = await getForumCourseAccess(supabase, dbUser, thread.courseId);
+    const access = await getForumCourseAccess(dbUser, thread.courseId);
     if (!access.canRead) {
       return json({ error: 'Forbidden' }, 403);
     }
@@ -168,10 +159,10 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
       return json({ error: 'Only the thread author or a teacher can delete this thread' }, 403);
     }
 
-    const { error: deleteError } = await supabase
-      .from('ForumThread')
-      .delete()
-      .eq('id', threadId);
+    const { error: deleteError } = await query(
+      `DELETE FROM "ForumThread" WHERE id = $1`,
+      [threadId]
+    );
 
     if (deleteError) throw deleteError;
 

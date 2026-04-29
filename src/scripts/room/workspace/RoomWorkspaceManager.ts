@@ -531,17 +531,18 @@ export class RoomWorkspaceManager {
   private bindBottomBarButtons() {
     const mappings = [
       { selector: '[data-layout-choice="teacher"]', pods: ['teacher'], master: 'full-win-speaker' },
-      { selector: '[data-layout-choice="screenshare"]', pods: ['screen'] },
+      { selector: '[data-layout-choice="screenshare"]', pods: ['screen'], master: 'screenshare' },
       { selector: '[data-layout-choice="presentation"]', pods: ['presentation'], master: 'presentation' },
+      { selector: '[data-layout-choice="grid"]', pods: ['grid-videos'], master: 'grid' },
+      { selector: '[data-action="external-media-toggle"]', pods: ['external-media'], master: 'external-media' },
+      
       { selector: '[data-layout-choice="clase"]', pods: ['clase'] },
-      { selector: '[data-layout-choice="grid"]', pods: ['grid-videos'], master: 'debate' },
       { selector: '[data-layout-choice="whiteboard"]', pods: ['whiteboard'] },
       { selector: '[data-layout-choice="lilypond"]', pods: ['lily-code', 'lily-render'] },
 
       { selector: '[data-action="chat-focus"]', pods: ['chat'] },
       { selector: '[data-action="forum-toggle"]', pods: ['forum'] },
       { selector: '[data-action="concepts-toggle"]', pods: ['concept'] },
-      { selector: '[data-action="external-media-toggle"]', pods: ['external-media'] },
       { selector: '[data-layout-choice="graph"]', pods: ['graph'] },
     ];
     mappings.forEach((mapping) => {
@@ -662,6 +663,16 @@ export class RoomWorkspaceManager {
 
   public applyLayoutByKey(key: string) {
     if (!this.dockview) return;
+
+    // Check if there's a saved override for this master key
+    const custom = localStorage.getItem(`musiki:workspace:${key}`);
+    if (custom) {
+      this.applyLayout(JSON.parse(custom));
+      this.currentWorkspaceKey = key;
+      this.renderQuickLists();
+      return;
+    }
+
     if (key === 'presentation') {
       this.clearAllPanels();
       this.dockview.addPanel({ id: 'presentation', component: 'presentation', title: 'PRESENTACIÓN', size: 80 });
@@ -669,6 +680,22 @@ export class RoomWorkspaceManager {
       this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'below' }, size: 40 });
       this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'grid-videos', direction: 'below' }, size: 40 });
       this.currentWorkspaceKey = 'presentation';
+      this.renderQuickLists();
+    } else if (key === 'screenshare') {
+      this.clearAllPanels();
+      this.dockview.addPanel({ id: 'screen', component: 'screen', title: 'SCREEN', size: 80 });
+      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER', position: { referencePanel: 'screen', direction: 'right' }, size: 20 });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'below' }, size: 40 });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'grid-videos', direction: 'below' }, size: 40 });
+      this.currentWorkspaceKey = 'screenshare';
+      this.renderQuickLists();
+    } else if (key === 'external-media') {
+      this.clearAllPanels();
+      this.dockview.addPanel({ id: 'external-media', component: 'external-media', title: 'MEDIA', size: 80 });
+      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER', position: { referencePanel: 'external-media', direction: 'right' }, size: 20 });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'below' }, size: 40 });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'grid-videos', direction: 'below' }, size: 40 });
+      this.currentWorkspaceKey = 'external-media';
       this.renderQuickLists();
     } else if (key === 'clase') {
       this.clearAllPanels();
@@ -678,12 +705,11 @@ export class RoomWorkspaceManager {
       this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'grid-videos', direction: 'below' }, size: 40 });
       this.currentWorkspaceKey = 'clase';
       this.renderQuickLists();
-    } else if (key === 'debate') {
+    } else if (key === 'debate' || key === 'grid') {
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', size: 80 });
-      this.dockview.addPanel({ id: 'external-media', component: 'external-media', title: 'MEDIA', position: { referencePanel: 'grid-videos', direction: 'right' }, size: 20 });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'external-media', direction: 'below' }, size: 50 });
-      this.currentWorkspaceKey = 'debate';
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID' });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'right' }, size: 20 });
+      this.currentWorkspaceKey = key;
       this.renderQuickLists();
     } else if (key === 'lilypond') {
       this.clearAllPanels();
@@ -693,12 +719,6 @@ export class RoomWorkspaceManager {
       this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'notes', direction: 'below' } });
       this.currentWorkspaceKey = 'lilypond';
       this.renderQuickLists();
-    } else if (key === 'grid') {
-      this.clearAllPanels();
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID' });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'right' }, size: 20 });
-      this.currentWorkspaceKey = 'grid';
-      this.renderQuickLists();
     } else if (key === 'collab') {
       this.clearAllPanels();
       this.dockview.addPanel({ id: 'notes', component: 'notes', title: 'NOTAS' });
@@ -706,15 +726,11 @@ export class RoomWorkspaceManager {
       this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER', position: { referencePanel: 'lily-code', direction: 'below' } });
       this.currentWorkspaceKey = 'collab';
       this.renderQuickLists();
-    }
- else if (key === 'full-win-speaker') {
-       this.clearAllPanels();
-       this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
-       this.currentWorkspaceKey = 'full-win-speaker';
-       this.renderQuickLists();
-    } else {
-      const custom = localStorage.getItem(`musiki:workspace:${key}`);
-      if (custom) this.applyLayout(JSON.parse(custom));
+    } else if (key === 'full-win-speaker') {
+      this.clearAllPanels();
+      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
+      this.currentWorkspaceKey = 'full-win-speaker';
+      this.renderQuickLists();
     }
   }
 

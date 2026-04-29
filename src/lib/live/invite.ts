@@ -1,8 +1,9 @@
 import type { Session } from '@auth/core/types';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { canonicalizeCourseId } from '../course-alias';
-import { createSupabaseServerClient, ensureDbUserFromSession } from '../forum-server';
+import { ensureDbUserFromSession } from '../forum-server';
 import { resolveLiveParticipantRole } from './access';
+import { query } from '../db/pool';
 
 export type LiveRoomInviteType = 'external' | 'student';
 
@@ -106,10 +107,8 @@ const verifyInvitePassword = (password: string, storedHash: string | null | unde
   }
 };
 
-const createInviteClient = () => createSupabaseServerClient({ requireServiceRole: true });
-
 const selectInviteColumns =
-  'id, code, room, inviteType, courseId, pageSlug, presentationHref, displayName, requiresPassword, passwordHash, createdByUserId, expiresAt, isActive, metadata, createdAt, updatedAt';
+  '"id", "code", "room", "inviteType", "courseId", "pageSlug", "presentationHref", "displayName", "requiresPassword", "passwordHash", "createdByUserId", "expiresAt", "isActive", "metadata", "createdAt", "updatedAt"';
 
 const getLatestLiveRoomInviteRow = async ({
   inviteType,
@@ -121,15 +120,12 @@ const getLatestLiveRoomInviteRow = async ({
   const normalizedRoom = normalizeText(room);
   if (!normalizedRoom) return null;
 
-  const supabase = createInviteClient();
-  const { data, error } = await supabase
-    .from('LiveRoomInvite')
-    .select(selectInviteColumns)
-    .eq('room', normalizedRoom)
-    .eq('inviteType', normalizeLiveRoomInviteType(inviteType))
-    .eq('isActive', true)
-    .order('updatedAt', { ascending: false })
-    .limit(5);
+  const { data, error } = await query(
+    `SELECT ${selectInviteColumns} FROM "LiveRoomInvite"
+     WHERE "room" = $1 AND "inviteType" = $2 AND "isActive" = true
+     ORDER BY "updatedAt" DESC LIMIT 5`,
+    [normalizedRoom, normalizeLiveRoomInviteType(inviteType)]
+  );
 
   if (error) throw error;
 
@@ -161,16 +157,14 @@ export const getLiveRoomInviteByCode = async (
   const code = normalizeText(codeInput).toLowerCase();
   if (!code) return null;
 
-  const supabase = createInviteClient();
-  const { data, error } = await supabase
-    .from('LiveRoomInvite')
-    .select(selectInviteColumns)
-    .eq('code', code)
-    .maybeSingle();
+  const { data: rows, error } = await query(
+    `SELECT ${selectInviteColumns} FROM "LiveRoomInvite" WHERE "code" = $1 LIMIT 1`,
+    [code]
+  );
 
   if (error) throw error;
 
-  const invite = normalizeInviteRow(data);
+  const invite = normalizeInviteRow(rows?.[0]);
   if (!invite || !invite.isActive || isInviteExpired(invite.expiresAt)) {
     return null;
   }
@@ -245,9 +239,8 @@ export const upsertLiveRoomInvite = async ({
     throw new Error('password is required for external invites');
   }
   const requiresPassword = normalizedInviteType === 'external';
-  const supabase = createInviteClient();
 
-  const payload = {
+  const payload: Record<string, any> = {
     code: existingInvite?.code || createInviteCode(),
     courseId: normalizedCourseId || null,
     createdByUserId: normalizedCreatedByUserId,
@@ -261,22 +254,38 @@ export const upsertLiveRoomInvite = async ({
     presentationHref: normalizedPresentationHref,
     requiresPassword,
     room: normalizedRoom,
+    updatedAt: new Date().toISOString(),
   };
 
-  const query = existingInvite
-    ? supabase
-        .from('LiveRoomInvite')
-        .update(payload)
-        .eq('id', existingInvite.id)
-    : supabase.from('LiveRoomInvite').insert([payload]);
+  let rows: any[] | undefined;
+  let error: any;
 
-  const { data, error } = await query
-    .select(selectInviteColumns)
-    .single();
+  if (existingInvite) {
+    const cols = Object.keys(payload);
+    const vals = Object.values(payload);
+    const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
+    const result = await query(
+      `UPDATE "LiveRoomInvite" SET ${setSql} WHERE "id" = $${cols.length + 1} RETURNING ${selectInviteColumns}`,
+      [...vals, existingInvite.id]
+    );
+    rows = result.data;
+    error = result.error;
+  } else {
+    const cols = Object.keys(payload);
+    const vals = Object.values(payload);
+    const colSql = cols.map(c => `"${c}"`).join(', ');
+    const placeholderSql = cols.map((_, i) => `$${i + 1}`).join(', ');
+    const result = await query(
+      `INSERT INTO "LiveRoomInvite" (${colSql}) VALUES (${placeholderSql}) RETURNING ${selectInviteColumns}`,
+      vals
+    );
+    rows = result.data;
+    error = result.error;
+  }
 
   if (error) throw error;
 
-  const invite = normalizeInviteRow(data);
+  const invite = normalizeInviteRow(rows?.[0]);
   if (!invite) {
     throw new Error('could not persist invite');
   }
@@ -319,19 +328,14 @@ export const revokeLiveRoomInvite = async ({
     return null;
   }
 
-  const supabase = createInviteClient();
-  const { data, error } = await supabase
-    .from('LiveRoomInvite')
-    .update({
-      isActive: false,
-    })
-    .eq('id', inviteRow.id)
-    .select(selectInviteColumns)
-    .single();
+  const { data: rows, error } = await query(
+    `UPDATE "LiveRoomInvite" SET "isActive" = false, "updatedAt" = $1 WHERE "id" = $2 RETURNING ${selectInviteColumns}`,
+    [new Date().toISOString(), inviteRow.id]
+  );
 
   if (error) throw error;
 
-  const invite = normalizeInviteRow(data);
+  const invite = normalizeInviteRow(rows?.[0]);
   return invite ? redactInvite(invite) : null;
 };
 
@@ -372,8 +376,7 @@ export const resolveLiveInviteTeacherAccess = async (
 
   let userId = '';
   try {
-    const supabase = createSupabaseServerClient();
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     userId = normalizeText(dbUser?.id);
   } catch (error) {
     console.error('Live invite teacher resolution failed:', error);

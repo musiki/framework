@@ -1,8 +1,8 @@
 import type { Session } from '@auth/core/types';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getEntry } from 'astro:content';
 import { canonicalizeCourseId, getCourseAliases } from './course-alias';
 import { isElevatedGlobalRole } from './roles';
+import { query } from './db/pool';
 
 export type ForumDbUser = {
   id: string;
@@ -19,14 +19,27 @@ export type ForumCourseAccess = {
   isTeacher: boolean;
 };
 
-type ServerClientOptions = {
-  requireServiceRole?: boolean;
-};
-
 function clampLength(value: string, maxLength: number): string {
   if (maxLength <= 0) return value;
   if (value.length <= maxLength) return value;
   return value.slice(0, maxLength);
+}
+
+export function cleanString(value: unknown, maxLength = 0): string {
+  const s = typeof value === 'string' ? value.trim() : '';
+  return maxLength > 0 ? clampLength(s, maxLength) : s;
+}
+
+export function cleanBody(value: unknown, maxLength = 0): string {
+  const s = typeof value === 'string' ? value : '';
+  return maxLength > 0 ? clampLength(s, maxLength) : s;
+}
+
+export function json(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 function normalizeDbUser(row: any): ForumDbUser {
@@ -38,96 +51,83 @@ function normalizeDbUser(row: any): ForumDbUser {
   };
 }
 
-function isClearlyPublishableSupabaseKey(key: string): boolean {
-  return key.startsWith('sb_publishable_');
-}
-
-export function createSupabaseServerClient(options: ServerClientOptions = {}): SupabaseClient {
-  const serviceRoleKey = import.meta.env.SUPABASE_SERVICE_ROLE_KEY || import.meta.env.SUPABASE_SERVICE_KEY;
-  const fallbackKey = import.meta.env.SUPABASE_KEY;
-  const apiKey = serviceRoleKey || fallbackKey;
-  if (!apiKey) {
-    throw new Error('SUPABASE_SERVER_KEY_MISSING');
-  }
-  if (options.requireServiceRole && isClearlyPublishableSupabaseKey(apiKey)) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY_REQUIRED_FOR_FORUM');
-  }
-
-  return createClient(import.meta.env.SUPABASE_URL, apiKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-}
-
-export function json(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-}
-
-export function cleanString(value: unknown, maxLength = 240): string {
-  const raw = typeof value === 'string' ? value.trim() : '';
-  return clampLength(raw, maxLength);
-}
-
-export function cleanBody(value: unknown, maxLength = 4000): string {
-  const raw = typeof value === 'string' ? value : '';
-  const normalized = raw.replace(/\r\n?/g, '\n').trim();
-  return clampLength(normalized, maxLength);
-}
-
 export async function ensureDbUserFromSession(
-  supabase: SupabaseClient,
   session: Session | null | undefined,
 ): Promise<ForumDbUser | null> {
   const email = cleanString(session?.user?.email ?? '', 320);
-  if (!email) return null;
+  if (!email) {
+    if (session) {
+      console.warn('[DB] Session exists but no email found. User object:', JSON.stringify(session.user));
+    }
+    return null;
+  }
 
-  // Resolve via UserEmail table (multi-email identity), fallback to User.email
   const normalizedEmail = email.toLowerCase().trim();
-  const { resolveUserIdByEmail, registerEmailForUser } = await import('./user-email');
-  const resolvedUserId = await resolveUserIdByEmail(supabase, normalizedEmail);
+  console.log(`[DB] Resolving user for email: ${normalizedEmail}`);
+  let resolvedUserId: string | null = null;
 
-  const { data: existing, error: existingError } = resolvedUserId
-    ? await supabase
-        .from('User')
-        .select('id, email, name, role, image')
-        .eq('id', resolvedUserId)
-        .maybeSingle()
-    : await supabase
-        .from('User')
-        .select('id, email, name, role, image')
-        .ilike('email', normalizedEmail)
-        .maybeSingle();
+  try {
+    const { resolveUserIdByEmail } = await import('./user-email');
+    resolvedUserId = await resolveUserIdByEmail(normalizedEmail).catch((err) => {
+      // If UserEmail table is missing, log warning but don't crash
+      if (err.code === '42P01') {
+        console.warn('[DB] UserEmail table not found. Falling back to direct email lookup.');
+        return null;
+      }
+      
+      // If it's a connection error, RE-THROW so the caller knows the DB is down
+      const isConnectionError = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', '08006'].includes(err.code) 
+        || String(err.message).includes('ECONNRESET');
 
-  if (existingError) throw new Error(existingError.message || 'Supabase lookup error');
+      if (isConnectionError) {
+        console.error('[DB] Connection error during user resolution:', err.message);
+        throw err;
+      }
+
+      console.error('[DB] User resolution error:', err.message);
+      return null;
+    });
+  } catch (err: any) {
+    if (err.code === 'ECONNRESET' || String(err.message).includes('ECONNRESET')) {
+      throw err; // Propagate the connection failure
+    }
+    console.error('[DB] Failed to load user-email module or unexpected error:', err);
+  }
+
+  const { data: existingRows, error: existingError } = resolvedUserId
+    ? await query(`SELECT * FROM "User" WHERE "id" = $1 LIMIT 1`, [resolvedUserId])
+    : await query(`SELECT * FROM "User" WHERE "email" ILIKE $1 ORDER BY "updatedAt" DESC LIMIT 1`, [normalizedEmail]);
+
+  if (existingError) {
+    console.error('[DB] existingError', existingError.message);
+    throw new Error(existingError.message || 'Database lookup error');
+  }
+
+  const existing = existingRows?.[0];
+
   if (existing) {
     const sessionName = cleanString(session?.user?.name ?? '', 160);
     const sessionImage = cleanString(session?.user?.image ?? '', 1024);
 
-    const nextName = sessionName || cleanString(existing.name ?? email, 160) || email;
+    const nextName = sessionName || cleanString(existing.name || email, 160) || email;
     const nextImage = sessionImage || existing.image || null;
 
     const shouldUpdateName = Boolean(sessionName) && nextName !== (existing.name ?? '');
     const shouldUpdateImage = Boolean(sessionImage) && nextImage !== (existing.image ?? null);
 
     if (shouldUpdateName || shouldUpdateImage) {
-      const { error: updateError } = await supabase
-        .from('User')
-        .update({
-          name: shouldUpdateName ? nextName : existing.name,
-          image: shouldUpdateImage ? nextImage : existing.image,
-          updatedAt: new Date().toISOString(),
-        })
-        .eq('id', existing.id);
+      const { error: updateError } = await query(
+        `UPDATE "User" SET "name" = $1, "image" = $2, "updatedAt" = $3 WHERE "id" = $4`,
+        [
+          shouldUpdateName ? nextName : existing.name,
+          shouldUpdateImage ? nextImage : existing.image,
+          new Date().toISOString(),
+          existing.id
+        ]
+      );
 
       if (updateError) {
-        console.error('Failed to update session profile fields in User table:', updateError);
+        console.error('[DB] Failed to update profile:', updateError.message);
       } else {
         if (shouldUpdateName) existing.name = nextName;
         if (shouldUpdateImage) existing.image = nextImage;
@@ -137,11 +137,14 @@ export async function ensureDbUserFromSession(
     return normalizeDbUser(existing);
   }
 
+  // Create new user if not found
+  console.log('[DB] Creating new user for', normalizedEmail);
   const now = new Date().toISOString();
+  const newUserId = crypto.randomUUID();
   const insertPayload = {
-    id: crypto.randomUUID(),
-    email,
-    name: cleanString(session?.user?.name ?? email, 160),
+    id: newUserId,
+    email: normalizedEmail,
+    name: cleanString(session?.user?.name ?? normalizedEmail, 160) || normalizedEmail,
     emailVerified: true,
     image: session?.user?.image ?? null,
     role: 'student',
@@ -149,31 +152,43 @@ export async function ensureDbUserFromSession(
     updatedAt: now,
   };
 
-  const { data: inserted, error: insertError } = await supabase
-    .from('User')
-    .insert([insertPayload])
-    .select('id, email, name, role')
-    .single();
+  const { data: insertedRows, error: insertError } = await query(
+    `INSERT INTO "User" ("id", "email", "name", "emailVerified", "image", "role", "createdAt", "updatedAt") 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, email, name, role`,
+    [
+      insertPayload.id,
+      insertPayload.email,
+      insertPayload.name,
+      insertPayload.emailVerified,
+      insertPayload.image,
+      insertPayload.role,
+      insertPayload.createdAt,
+      insertPayload.updatedAt
+    ]
+  );
 
-  if (!insertError && inserted) {
-    // Register the email in UserEmail table for multi-email identity
-    await registerEmailForUser(supabase, inserted.id, normalizedEmail, true).catch(() => undefined);
+  if (insertError) {
+    if (insertError.code === '23505') {
+       // Collision race: refetch
+       const { data: refetchedRows } = await query(
+        `SELECT id, email, name, role FROM "User" WHERE "email" ILIKE $1 LIMIT 1`,
+        [normalizedEmail]
+      );
+      if (refetchedRows?.[0]) return normalizeDbUser(refetchedRows[0]);
+    }
+    throw new Error(insertError.message || 'Database insert error');
+  }
+
+  const inserted = insertedRows?.[0];
+  if (inserted) {
+    try {
+      const { registerEmailForUser } = await import('./user-email');
+      await registerEmailForUser(inserted.id, normalizedEmail, true).catch(() => undefined);
+    } catch {}
     return normalizeDbUser(inserted);
   }
 
-  if (insertError && insertError.code !== '23505') {
-    throw new Error(insertError.message || 'Supabase insert error');
-  }
-
-  // Concurrent first-login writes can trigger a duplicate key race.
-  const { data: refetched, error: refetchError } = await supabase
-    .from('User')
-    .select('id, email, name, role')
-    .ilike('email', normalizedEmail)
-    .single();
-
-  if (refetchError) throw new Error(refetchError.message || 'Supabase refetch error');
-  return normalizeDbUser(refetched);
+  return null;
 }
 
 async function isPublicCourse(courseId: string): Promise<boolean> {
@@ -189,7 +204,6 @@ async function isPublicCourse(courseId: string): Promise<boolean> {
 }
 
 export async function getForumCourseAccess(
-  supabase: SupabaseClient,
   user: ForumDbUser,
   courseId: string,
 ): Promise<ForumCourseAccess> {
@@ -198,11 +212,10 @@ export async function getForumCourseAccess(
   const normalizedGlobalRole = String(user.role || '').trim().toLowerCase();
   const isPublic = await isPublicCourse(normalizedCourseId);
 
-  const { data: enrollments, error: enrollmentError } = await supabase
-    .from('Enrollment')
-    .select('id, roleInCourse, courseId')
-    .eq('userId', user.id)
-    .in('courseId', courseAliases.length > 0 ? courseAliases : [normalizedCourseId || courseId]);
+  const { data: enrollments, error: enrollmentError } = await query(
+    `SELECT "id", "roleInCourse", "courseId" FROM "Enrollment" WHERE "userId" = $1 AND "courseId" = ANY($2)`,
+    [user.id, courseAliases.length > 0 ? courseAliases : [normalizedCourseId || courseId]]
+  );
 
   if (enrollmentError) throw enrollmentError;
 

@@ -1,6 +1,5 @@
 import type { Session } from '@auth/core/types';
 import { getCollection } from 'astro:content';
-import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId } from '../course-alias';
 import { buildCourseLessonPathIndex, buildCourseSlideLessonHref } from '../course-routing';
 
@@ -49,24 +48,23 @@ export const listRoomPresentationOptions = async ({
     if (meta.public) accessibleCourseIds.add(courseId);
   });
 
-  if (session?.user?.email && supabaseUrl && supabaseKey) {
+  if (session?.user?.email) {
     try {
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const { query } = await import('../db/pool');
       const email = normalizeText(session.user.email);
 
       if (email) {
-        const { data: resolvedUser } = await supabase
-          .from('User')
-          .select('id')
-          .eq('email', email)
-          .maybeSingle();
+        const { data: dbUserRows } = await query(
+          `SELECT id FROM "User" WHERE "email" = $1`,
+          [email]
+        );
 
-        const userId = normalizeText(resolvedUser?.id);
+        const userId = normalizeText(dbUserRows?.[0]?.id);
         if (userId) {
-          const { data: enrollments } = await supabase
-            .from('Enrollment')
-            .select('courseId')
-            .eq('userId', userId);
+          const { data: enrollments } = await query(
+            `SELECT "courseId" FROM "Enrollment" WHERE "userId" = $1`,
+            [userId]
+          );
 
           for (const enrollment of Array.isArray(enrollments) ? enrollments : []) {
             const courseId = await canonicalizeCourseId(

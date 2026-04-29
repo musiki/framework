@@ -1,14 +1,13 @@
 import type { APIRoute } from 'astro';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   cleanBody,
   cleanString,
-  createSupabaseServerClient,
   ensureDbUserFromSession,
   getForumCourseAccess,
   json,
 } from '../../../lib/forum-server';
 import { canonicalizeCourseId, getCourseAliases } from '../../../lib/course-alias';
+import { query } from '../../../lib/db/pool';
 
 const THREAD_TITLE_MAX = 140;
 const THREAD_BODY_MAX = 4000;
@@ -57,14 +56,8 @@ function pickNewestTimestamp(current: string | null, candidate: string | null): 
 
 function resolveForumErrorMessage(error: any, fallback: string): string {
   const message = typeof error?.message === 'string' ? error.message : '';
-  if (message.includes('SUPABASE_SERVICE_ROLE_KEY_REQUIRED_FOR_FORUM') || message.includes('SUPABASE_SERVER_KEY_MISSING')) {
-    return 'Forum requires server service credentials. Set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_KEY=service-role key) and restart dev server.';
-  }
-  if (message.toLowerCase().includes('row-level security')) {
-    return 'RLS blocked forum write. Set SUPABASE_SERVICE_ROLE_KEY in server env and restart dev server.';
-  }
   if (message.includes('ForumBoard') || message.includes('ForumThread') || message.includes('ForumPost') || message.includes('ForumPostVote')) {
-    return 'Forum schema missing. Run docs/sql/forum-schema.sql in Supabase.';
+    return 'Forum schema missing or outdated. Please verify the database state on the VPS.';
   }
   return fallback;
 }
@@ -80,7 +73,6 @@ function resolveForumScopeKey(params: { lessonSlug: string; boardSlug: string })
 }
 
 async function ensureBoardExists(
-  supabase: SupabaseClient,
   courseId: string,
   courseAliases: string[],
   boardSlug: string,
@@ -88,25 +80,26 @@ async function ensureBoardExists(
   const normalized = normalizeBoardSlug(boardSlug);
   if (!normalized) return false;
 
-  const { data: board, error: boardError } = await supabase
-    .from('ForumBoard')
-    .select('id')
-    .in('courseId', courseAliases.length > 0 ? courseAliases : [courseId])
-    .eq('slug', normalized)
-    .eq('isArchived', false)
-    .maybeSingle();
+  const { data: board, error: boardError } = await query(
+    `SELECT "id" FROM "ForumBoard" 
+     WHERE "courseId" = ANY($1) 
+     AND "slug" = $2 
+     AND "isArchived" = false 
+     LIMIT 1`,
+    [courseAliases.length > 0 ? courseAliases : [courseId], normalized]
+  );
 
   if (boardError) throw boardError;
-  return Boolean(board);
+  return Boolean(board?.[0]);
 }
 
-async function loadAuthorMap(supabase: SupabaseClient, authorIds: string[]): Promise<Map<string, AuthorRow>> {
+async function loadAuthorMap(authorIds: string[]): Promise<Map<string, AuthorRow>> {
   if (authorIds.length === 0) return new Map();
 
-  const { data: authors, error: authorsError } = await supabase
-    .from('User')
-    .select('id, name, email, image')
-    .in('id', authorIds);
+  const { data: authors, error: authorsError } = await query(
+    `SELECT "id", "name", "email", "image" FROM "User" WHERE "id" = ANY($1)`,
+    [authorIds]
+  );
 
   if (authorsError) throw authorsError;
 
@@ -136,32 +129,31 @@ export const GET: APIRoute = async ({ request, locals }) => {
     return json({ error: 'Provide either lessonSlug or boardSlug, not both' }, 400);
   }
 
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
-
   try {
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     if (!dbUser) return json({ error: 'Not authenticated' }, 401);
 
-    const access = await getForumCourseAccess(supabase, dbUser, courseId);
+    const access = await getForumCourseAccess(dbUser, courseId);
     if (!access.canRead) {
       return json({ error: 'Forbidden' }, 403);
     }
 
     if (boardSlug) {
-      const exists = await ensureBoardExists(supabase, courseId, courseAliases, boardSlug);
+      const exists = await ensureBoardExists(courseId, courseAliases, boardSlug);
       if (!exists) return json({ error: 'Board not found' }, 404);
     }
 
     const forumScopeKey = resolveForumScopeKey({ lessonSlug, boardSlug });
 
-    const { data: threadsRaw, error: threadsError } = await supabase
-      .from('ForumThread')
-      .select('id, title, createdByUserId, createdAt, updatedAt, isPinned, isLocked')
-      .in('courseId', courseAliases.length > 0 ? courseAliases : [courseId])
-      .eq('lessonSlug', forumScopeKey)
-      .order('isPinned', { ascending: false })
-      .order('updatedAt', { ascending: false })
-      .limit(THREAD_LIMIT);
+    const { data: threadsRaw, error: threadsError } = await query(
+      `SELECT "id", "title", "createdByUserId", "createdAt", "updatedAt", "isPinned", "isLocked" 
+       FROM "ForumThread" 
+       WHERE "courseId" = ANY($1) 
+       AND "lessonSlug" = $2 
+       ORDER BY "isPinned" DESC, "updatedAt" DESC 
+       LIMIT $3`,
+      [courseAliases.length > 0 ? courseAliases : [courseId], forumScopeKey, THREAD_LIMIT]
+    );
 
     if (threadsError) throw threadsError;
 
@@ -169,7 +161,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
     const threadIds = threads.map((thread) => thread.id);
     const authorIds = Array.from(new Set(threads.map((thread) => thread.createdByUserId).filter(Boolean)));
 
-    const authorById = await loadAuthorMap(supabase, authorIds);
+    const authorById = await loadAuthorMap(authorIds);
     const activityByThread = new Map(
       threads.map((thread) => [
         thread.id,
@@ -183,11 +175,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
     );
 
     if (threadIds.length > 0) {
-      const { data: posts, error: postsError } = await supabase
-        .from('ForumPost')
-        .select('threadId, createdAt, parentPostId')
-        .in('threadId', threadIds)
-        .or('status.is.null,status.neq.deleted');
+      const { data: posts, error: postsError } = await query(
+        `SELECT "threadId", "createdAt", "parentPostId" 
+         FROM "ForumPost" 
+         WHERE "threadId" = ANY($1) 
+         AND ("status" IS NULL OR "status" <> 'deleted')`,
+        [threadIds]
+      );
 
       if (postsError) throw postsError;
 
@@ -289,19 +283,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: 'Post body is required' }, 400);
   }
 
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
-
   try {
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     if (!dbUser) return json({ error: 'Not authenticated' }, 401);
 
-    const access = await getForumCourseAccess(supabase, dbUser, courseId);
+    const access = await getForumCourseAccess(dbUser, courseId);
     if (!access.canWrite) {
       return json({ error: 'You must be enrolled in this course to post' }, 403);
     }
 
     if (boardSlug) {
-      const exists = await ensureBoardExists(supabase, courseId, courseAliases, boardSlug);
+      const exists = await ensureBoardExists(courseId, courseAliases, boardSlug);
       if (!exists) return json({ error: 'Board not found' }, 404);
     }
 
@@ -309,41 +301,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const now = new Date().toISOString();
     const threadId = crypto.randomUUID();
 
-    const { error: threadInsertError } = await supabase.from('ForumThread').insert([
-      {
-        id: threadId,
-        courseId,
-        lessonSlug: forumScopeKey,
-        title,
-        createdByUserId: dbUser.id,
-        isPinned: false,
-        isLocked: false,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
+    const { error: threadInsertError } = await query(
+      `INSERT INTO "ForumThread" ("id", "courseId", "lessonSlug", "title", "createdByUserId", "isPinned", "isLocked", "createdAt", "updatedAt") 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [threadId, courseId, forumScopeKey, title, dbUser.id, false, false, now, now]
+    );
 
     if (threadInsertError) throw threadInsertError;
 
-    const { data: firstPost, error: firstPostError } = await supabase
-      .from('ForumPost')
-      .insert([
-        {
-          id: crypto.randomUUID(),
-          threadId,
-          authorUserId: dbUser.id,
-          parentPostId: null,
-          body: firstPostBody,
-          status: 'published',
-          createdAt: now,
-          updatedAt: now,
-        },
-      ])
-      .select('id, createdAt')
-      .single();
+    const { data: firstPostRows, error: firstPostError } = await query(
+      `INSERT INTO "ForumPost" ("id", "threadId", "authorUserId", "parentPostId", "body", "status", "createdAt", "updatedAt") 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING "id", "createdAt"`,
+      [crypto.randomUUID(), threadId, dbUser.id, null, firstPostBody, 'published', now, now]
+    );
+    const firstPost = firstPostRows?.[0];
 
     if (firstPostError) {
-      await supabase.from('ForumThread').delete().eq('id', threadId);
+      await query(`DELETE FROM "ForumThread" WHERE "id" = $1`, [threadId]);
       throw firstPostError;
     }
 
@@ -374,3 +348,4 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: resolveForumErrorMessage(error, 'Failed to create forum thread') }, 500);
   }
 };
+

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
+import { query } from '../../../lib/db/pool';
 import { buildEvalCatalog, type EvalCatalogEntry } from '../../../lib/eval-catalog';
 import { canonicalizeCourseId, canonicalizeCourseSlugPath } from '../../../lib/course-alias';
 import { isElevatedGlobalRole } from '../../../lib/roles';
@@ -141,7 +141,6 @@ function extractColumnNameFromError(message: string): string {
 }
 
 async function updateAssignmentSafe(
-  supabase: any,
   assignmentId: string,
   payload: Record<string, unknown>,
 ) {
@@ -150,7 +149,14 @@ async function updateAssignmentSafe(
 
   while (Object.keys(draft).length > 0 && attempts < 12) {
     attempts += 1;
-    const { error } = await supabase.from('Assignment').update(draft).eq('id', assignmentId);
+    
+    const keys = Object.keys(draft);
+    const setClause = keys.map((key, i) => `"${key}" = $${i + 1}`).join(', ');
+    const { error } = await query(
+      `UPDATE "Assignment" SET ${setClause} WHERE "id" = $${keys.length + 1}`,
+      [...keys.map(k => draft[k]), assignmentId]
+    );
+    
     if (!error) return;
 
     const missingColumn = extractColumnNameFromError(String(error.message || ''));
@@ -283,8 +289,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: 'Not authenticated' }, 401);
   }
 
-  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-
   try {
     const body = await request.json();
 
@@ -314,34 +318,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // 1) Requester user (create on first login)
-    let { data: requesterUser, error: requesterError } = await supabase
-      .from('User')
-      .select('id, role, email, name, image')
-      .eq('email', currentUser.email)
-      .maybeSingle();
+    let { data: requesterUsers, error: requesterError } = await query(
+      'SELECT "id", "role", "email", "name", "image" FROM "User" WHERE "email" = $1',
+      [currentUser.email]
+    );
 
     if (requesterError) throw requesterError;
+    let requesterUser = requesterUsers?.[0];
 
     if (!requesterUser) {
-      const { data: newUser, error: createError } = await supabase
-        .from('User')
-        .insert([
-          {
-            id: crypto.randomUUID(),
-            email: currentUser.email,
-            name: currentUser.name || currentUser.email,
-            emailVerified: true,
-            image: currentUser.image || null,
-            role: 'student',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        ])
-        .select('id, role, email, name, image')
-        .single();
+      const newUserUUID = crypto.randomUUID();
+      const { data: newUsers, error: createError } = await query(
+        `INSERT INTO "User" ("id", "email", "name", "emailVerified", "image", "role", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING "id", "role", "email", "name", "image"`,
+        [
+          newUserUUID,
+          currentUser.email,
+          currentUser.name || currentUser.email,
+          true,
+          currentUser.image || null,
+          'student',
+          new Date(),
+          new Date(),
+        ]
+      );
 
       if (createError) throw createError;
-      requesterUser = newUser;
+      requesterUser = newUsers?.[0];
     }
 
     // 2) Decide target student user (teacher can submit on behalf of a student)
@@ -352,34 +356,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return json({ error: 'Only teachers can submit for another student' }, 403);
       }
 
-      let { data: studentUser, error: studentFindError } = await supabase
-        .from('User')
-        .select('id, role, email, name, image')
-        .eq('email', targetStudentEmail)
-        .maybeSingle();
+      let { data: studentUsers, error: studentFindError } = await query(
+        'SELECT "id", "role", "email", "name", "image" FROM "User" WHERE "email" = $1',
+        [targetStudentEmail]
+      );
 
       if (studentFindError) throw studentFindError;
+      let studentUser = studentUsers?.[0];
 
       if (!studentUser) {
-        const { data: createdStudent, error: studentCreateError } = await supabase
-          .from('User')
-          .insert([
-            {
-              id: crypto.randomUUID(),
-              email: targetStudentEmail,
-              name: targetStudentName || targetStudentEmail,
-              emailVerified: true,
-              image: null,
-              role: 'student',
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-          ])
-          .select('id, role, email, name, image')
-          .single();
+        const newStudentUUID = crypto.randomUUID();
+        const { data: createdStudents, error: studentCreateError } = await query(
+          `INSERT INTO "User" ("id", "email", "name", "emailVerified", "image", "role", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING "id", "role", "email", "name", "image"`,
+          [
+            newStudentUUID,
+            targetStudentEmail,
+            targetStudentName || targetStudentEmail,
+            true,
+            null,
+            'student',
+            new Date(),
+            new Date(),
+          ]
+        );
 
         if (studentCreateError) throw studentCreateError;
-        studentUser = createdStudent;
+        studentUser = createdStudents?.[0];
       }
 
       targetUser = studentUser;
@@ -396,13 +400,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
       requestedPageSlug,
     );
 
-    const { data: assignment, error: assignmentFindError } = await supabase
-      .from('Assignment')
-      .select('*')
-      .eq('id', evalId)
-      .maybeSingle();
+    const { data: assignments, error: assignmentFindError } = await query(
+      'SELECT * FROM "Assignment" WHERE "id" = $1',
+      [evalId]
+    );
 
     if (assignmentFindError) throw assignmentFindError;
+    const assignment = assignments?.[0];
 
     const assignmentCourseId = await canonicalizeCourseId(assignment?.courseId || '');
     const finalCourseId =
@@ -436,10 +440,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         if (shouldUpdateCourse) updatePayload.courseId = finalCourseId;
 
         if (Object.keys(updatePayload).length > 0) {
-          const { error: assignmentUpdateError } = await supabase
-            .from('Assignment')
-            .update(updatePayload)
-            .eq('id', evalId);
+          const keys = Object.keys(updatePayload);
+          const setClause = keys.map((key, i) => `"${key}" = $${i + 1}`).join(', ');
+          const { error: assignmentUpdateError } = await query(
+            `UPDATE "Assignment" SET ${setClause} WHERE "id" = $${keys.length + 1}`,
+            [...keys.map(k => updatePayload[k]), evalId]
+          );
 
           if (assignmentUpdateError) throw assignmentUpdateError;
           assignmentRow = { ...assignmentRow, ...updatePayload };
@@ -454,12 +460,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
         slug: finalSlug,
       };
 
-      const withWeight = await supabase.from('Assignment').insert([
-        {
-          ...assignmentBase,
-          weight: 1,
-        },
-      ]);
+      const withWeight = await query(
+        'INSERT INTO "Assignment" ("id", "courseId", "slug", "weight") VALUES ($1, $2, $3, $4) RETURNING *',
+        [evalId, finalCourseId, finalSlug, 1]
+      );
 
       if (withWeight.error) {
         const weightMissing =
@@ -467,21 +471,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
           withWeight.error.message.toLowerCase().includes('weight');
 
         if (weightMissing) {
-          const withoutWeight = await supabase.from('Assignment').insert([assignmentBase]);
+          const withoutWeight = await query(
+            'INSERT INTO "Assignment" ("id", "courseId", "slug") VALUES ($1, $2, $3) RETURNING *',
+            [evalId, finalCourseId, finalSlug]
+          );
           if (withoutWeight.error) throw withoutWeight.error;
+          assignmentRow = withoutWeight.data?.[0] || assignmentBase;
         } else {
           throw withWeight.error;
         }
+      } else {
+        assignmentRow = withWeight.data?.[0] || assignmentBase;
       }
-
-      const { data: createdAssignment, error: createdAssignmentError } = await supabase
-        .from('Assignment')
-        .select('*')
-        .eq('id', evalId)
-        .maybeSingle();
-
-      if (createdAssignmentError) throw createdAssignmentError;
-      assignmentRow = createdAssignment || assignmentBase;
     }
 
     const metadataUpdate = buildAssignmentMetadataPayload(
@@ -493,7 +494,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
 
     if (Object.keys(metadataUpdate).length > 0) {
-      await updateAssignmentSafe(supabase, evalId, metadataUpdate);
+      await updateAssignmentSafe(evalId, metadataUpdate);
       assignmentRow = {
         ...(assignmentRow || {}),
         ...metadataUpdate,
@@ -502,25 +503,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     let enrolledInCourse = false;
     if (ensureEnrollment && finalCourseId) {
-      const { data: existingEnrollment, error: enrollmentFindError } = await supabase
-        .from('Enrollment')
-        .select('id')
-        .eq('userId', targetUser.id)
-        .eq('courseId', finalCourseId)
-        .maybeSingle();
+      const { data: existingEnrollments, error: enrollmentFindError } = await query(
+        'SELECT "id" FROM "Enrollment" WHERE "userId" = $1 AND "courseId" = $2',
+        [targetUser.id, finalCourseId]
+      );
 
       if (enrollmentFindError) throw enrollmentFindError;
 
-      if (existingEnrollment) {
+      if (existingEnrollments && existingEnrollments.length > 0) {
         enrolledInCourse = true;
       } else {
-        const { error: enrollmentInsertError } = await supabase.from('Enrollment').insert([
-          {
-            userId: targetUser.id,
-            courseId: finalCourseId,
-            roleInCourse: 'student',
-          },
-        ]);
+        const { error: enrollmentInsertError } = await query(
+          'INSERT INTO "Enrollment" ("userId", "courseId", "roleInCourse") VALUES ($1, $2, $3)',
+          [targetUser.id, finalCourseId, 'student']
+        );
 
         if (enrollmentInsertError) throw enrollmentInsertError;
         enrolledInCourse = true;
@@ -528,14 +524,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // 4) Upsert submission
-    const { data: existing, error: existingError } = await supabase
-      .from('Submission')
-      .select('*')
-      .eq('userId', targetUser.id)
-      .eq('assignmentId', evalId)
-      .maybeSingle();
+    const { data: existingSubmissions, error: existingError } = await query(
+      'SELECT * FROM "Submission" WHERE "userId" = $1 AND "assignmentId" = $2',
+      [targetUser.id, evalId]
+    );
 
     if (existingError) throw existingError;
+    const existing = existingSubmissions?.[0];
 
     const fallbackBinaryScore = typeof isCorrect === 'boolean' ? (isCorrect ? 1 : 0) : null;
     const finalScore = score !== null ? score : fallbackBinaryScore;
@@ -561,10 +556,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     let submissionId = '';
 
     if (existing) {
-      const { error: updateError } = await supabase
-        .from('Submission')
-        .update(baseUpdate)
-        .eq('id', existing.id);
+      const keys = Object.keys(baseUpdate);
+      const setClause = keys.map((key, i) => `"${key}" = $${i + 1}`).join(', ');
+      const { error: updateError } = await query(
+        `UPDATE "Submission" SET ${setClause} WHERE "id" = $${keys.length + 1}`,
+        [...keys.map(k => baseUpdate[k]), existing.id]
+      );
 
       if (updateError) throw updateError;
       submissionId = existing.id;
@@ -581,14 +578,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (feedback) insertPayload.feedback = feedback;
       if (markAsGraded || finalScore !== null) insertPayload.gradedAt = new Date();
 
-      const { data: createdSubmission, error: insertError } = await supabase
-        .from('Submission')
-        .insert([insertPayload])
-        .select('id')
-        .single();
+      const keys = Object.keys(insertPayload);
+      const cols = keys.map(k => `"${k}"`).join(', ');
+      const vals = keys.map((_, i) => `$${i + 1}`).join(', ');
+      const { data: createdSubmissions, error: insertError } = await query(
+        `INSERT INTO "Submission" (${cols}) VALUES (${vals}) RETURNING "id"`,
+        keys.map(k => insertPayload[k])
+      );
 
       if (insertError) throw insertError;
-      submissionId = createdSubmission.id;
+      submissionId = createdSubmissions?.[0]?.id;
     }
 
     return json(

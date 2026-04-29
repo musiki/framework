@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../../../lib/live/access';
 import { isElevatedGlobalRole, normalizeGlobalRole } from '../../../../lib/roles';
 import { resolveUserIdByEmail } from '../../../../lib/user-email';
+import { query } from '../../../../lib/db/pool';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -38,8 +38,6 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     return json({ error: 'Nothing to update' }, 400);
   }
 
-  const supabase = createSupabaseServerClient();
-
   try {
     // Use enrollment-based access check (same as course-student-meta) when courseId is provided,
     // otherwise fall back to global role check with case-insensitive email lookup.
@@ -51,10 +49,11 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       requesterId = access.userId;
     } else {
       const normalizedEmail = String(currentUser.email || '').toLowerCase().trim();
-      const resolvedId = await resolveUserIdByEmail(supabase, normalizedEmail).catch(() => null);
-      const { data: requesterUser } = resolvedId
-        ? await supabase.from('User').select('id, role').eq('id', resolvedId).maybeSingle()
-        : await supabase.from('User').select('id, role').ilike('email', normalizedEmail).maybeSingle();
+      const resolvedId = await resolveUserIdByEmail(undefined, normalizedEmail).catch(() => null);
+      const { data: requesterUserRows } = resolvedId
+        ? await query(`SELECT "id", "role" FROM "User" WHERE "id" = $1`, [resolvedId])
+        : await query(`SELECT "id", "role" FROM "User" WHERE "email" ILIKE $1`, [normalizedEmail]);
+      const requesterUser = requesterUserRows?.[0];
       canEdit = Boolean(requesterUser && isElevatedGlobalRole(requesterUser.role));
       requesterId = String(requesterUser?.id || '');
     }
@@ -63,13 +62,13 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       return json({ error: 'Only teachers or admins can update user data' }, 403);
     }
 
-    const { data: targetUser, error: targetUserError } = await supabase
-      .from('User')
-      .select('id, role, name, email')
-      .eq('id', targetUserId)
-      .maybeSingle();
+    const { data: targetUserRows, error: targetUserError } = await query(
+      `SELECT "id", "role", "name", "email" FROM "User" WHERE "id" = $1`,
+      [targetUserId]
+    );
 
     if (targetUserError) throw targetUserError;
+    const targetUser = targetUserRows?.[0];
     if (!targetUser) return json({ error: 'User not found' }, 404);
 
     const updateFields: Record<string, unknown> = { updatedAt: new Date().toISOString() };
@@ -86,12 +85,11 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       }
       // Check uniqueness (skip if same as current)
       if (nextEmail !== String(targetUser.email || '').toLowerCase()) {
-        const { data: existingEmail } = await supabase
-          .from('User')
-          .select('id')
-          .ilike('email', nextEmail)
-          .neq('id', targetUserId)
-          .maybeSingle();
+        const { data: existingEmailRows } = await query(
+          `SELECT "id" FROM "User" WHERE "email" ILIKE $1 AND "id" <> $2`,
+          [nextEmail, targetUserId]
+        );
+        const existingEmail = existingEmailRows?.[0];
         if (existingEmail) {
           return json({ error: 'Email already in use' }, 409);
         }
@@ -111,10 +109,10 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       }
 
       if (isElevatedGlobalRole(currentRole) && nextRole === 'student') {
-        const { data: elevatedUsers, error: elevatedUsersError } = await supabase
-          .from('User')
-          .select('id, role')
-          .neq('id', targetUserId);
+        const { data: elevatedUsers, error: elevatedUsersError } = await query(
+          `SELECT "id", "role" FROM "User" WHERE "id" <> $1`,
+          [targetUserId]
+        );
 
         if (elevatedUsersError) throw elevatedUsersError;
         const otherElevatedCount = (elevatedUsers || []).filter((row: any) => isElevatedGlobalRole(row?.role)).length;
@@ -125,12 +123,14 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       updateFields.role = nextRole;
     }
 
-    const { data: updatedUser, error: updateError } = await supabase
-      .from('User')
-      .update(updateFields)
-      .eq('id', targetUserId)
-      .select('id, name, email, role')
-      .single();
+    const cols = Object.keys(updateFields);
+    const vals = Object.values(updateFields);
+    const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
+    const { data: updatedUserRows, error: updateError } = await query(
+      `UPDATE "User" SET ${setSql} WHERE "id" = $${cols.length + 1} RETURNING "id", "name", "email", "role"`,
+      [...vals, targetUserId]
+    );
+    const updatedUser = updatedUserRows?.[0];
 
     if (updateError) throw updateError;
 
@@ -156,20 +156,18 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
     return json({ error: 'User id required' }, 400);
   }
 
-  const supabase = createSupabaseServerClient();
   const requestUrl = new URL(request.url);
   const activeCourseId = String(requestUrl.searchParams.get('courseId') || '').trim();
 
   try {
     const normalizedRequesterEmail = String(currentUser.email || '').toLowerCase().trim();
-    const resolvedRequesterId = await resolveUserIdByEmail(supabase, normalizedRequesterEmail).catch(() => null);
-    const { data: requesterSingle, error: requesterError } = resolvedRequesterId
-      ? await supabase.from('User').select('id, role').eq('id', resolvedRequesterId).maybeSingle()
-      : await supabase.from('User').select('id, role').ilike('email', normalizedRequesterEmail).maybeSingle();
-    const requesterRows = requesterSingle ? [requesterSingle] : [];
-    const requester = requesterRows.find((row: any) => isElevatedGlobalRole(row?.role)) || requesterRows[0];
+    const resolvedRequesterId = await resolveUserIdByEmail(undefined, normalizedRequesterEmail).catch(() => null);
+    const { data: requesterRows } = resolvedRequesterId
+      ? await query(`SELECT "id", "role" FROM "User" WHERE "id" = $1`, [resolvedRequesterId])
+      : await query(`SELECT "id", "role" FROM "User" WHERE "email" ILIKE $1`, [normalizedRequesterEmail]);
+    
+    const requester = (requesterRows || []).find((row: any) => isElevatedGlobalRole(row?.role)) || (requesterRows || [])[0];
 
-    if (requesterError) throw requesterError;
     if (!requester) return json({ error: 'Requester user not found' }, 404);
 
     const requesterRole = normalizeRole(requester.role);
@@ -182,22 +180,22 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
       return json({ error: 'Cannot delete current elevated account' }, 400);
     }
 
-    const { data: targetUser, error: targetUserError } = await supabase
-      .from('User')
-      .select('id, role, name, email')
-      .eq('id', targetUserId)
-      .maybeSingle();
+    const { data: targetUserRows, error: targetUserError } = await query(
+      `SELECT "id", "role", "name", "email" FROM "User" WHERE "id" = $1`,
+      [targetUserId]
+    );
 
     if (targetUserError) throw targetUserError;
+    const targetUser = targetUserRows?.[0];
     if (!targetUser) return json({ error: 'User not found' }, 404);
 
     const targetRole = normalizeRole(targetUser.role);
 
     if (isElevatedGlobalRole(targetRole)) {
-      const { data: otherElevatedUsers, error: elevatedUsersError } = await supabase
-        .from('User')
-        .select('id, role')
-        .neq('id', targetUserId);
+      const { data: otherElevatedUsers, error: elevatedUsersError } = await query(
+        `SELECT "id", "role" FROM "User" WHERE "id" <> $1`,
+        [targetUserId]
+      );
 
       if (elevatedUsersError) throw elevatedUsersError;
       const otherElevatedCount = (otherElevatedUsers || []).filter((row: any) => isElevatedGlobalRole(row?.role)).length;
@@ -207,22 +205,19 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
     }
 
     if (activeCourseId) {
-      const { data: targetCourseEnrollment, error: targetEnrollmentError } = await supabase
-        .from('Enrollment')
-        .select('id, roleInCourse')
-        .eq('courseId', activeCourseId)
-        .eq('userId', targetUserId)
-        .maybeSingle();
+      const { data: targetCourseEnrollmentRows, error: targetEnrollmentError } = await query(
+        `SELECT "id", "roleInCourse" FROM "Enrollment" WHERE "courseId" = $1 AND "userId" = $2`,
+        [activeCourseId, targetUserId]
+      );
+      const targetCourseEnrollment = targetCourseEnrollmentRows?.[0];
 
       if (targetEnrollmentError) throw targetEnrollmentError;
 
       if (!requesterIsAdmin && normalizeRole(targetCourseEnrollment?.roleInCourse) === 'teacher') {
-        const { count: otherCourseTeachersCount, error: otherCourseTeachersError } = await supabase
-          .from('Enrollment')
-          .select('id', { count: 'exact', head: true })
-          .eq('courseId', activeCourseId)
-          .eq('roleInCourse', 'teacher')
-          .neq('userId', targetUserId);
+        const { count: otherCourseTeachersCount, error: otherCourseTeachersError } = await query(
+          `SELECT COUNT(*) as count FROM "Enrollment" WHERE "courseId" = $1 AND "roleInCourse" = $2 AND "userId" <> $3`,
+          [activeCourseId, 'teacher', targetUserId]
+        );
 
         if (otherCourseTeachersError) throw otherCourseTeachersError;
         if (!Number(otherCourseTeachersCount || 0)) {
@@ -231,22 +226,22 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
       }
     }
 
-    const { error: submissionsDeleteError } = await supabase
-      .from('Submission')
-      .delete()
-      .eq('userId', targetUserId);
+    const { error: submissionsDeleteError } = await query(
+      `DELETE FROM "Submission" WHERE "userId" = $1`,
+      [targetUserId]
+    );
     if (submissionsDeleteError) throw submissionsDeleteError;
 
-    const { error: enrollmentsDeleteError } = await supabase
-      .from('Enrollment')
-      .delete()
-      .eq('userId', targetUserId);
+    const { error: enrollmentsDeleteError } = await query(
+      `DELETE FROM "Enrollment" WHERE "userId" = $1`,
+      [targetUserId]
+    );
     if (enrollmentsDeleteError) throw enrollmentsDeleteError;
 
-    const { error: userDeleteError } = await supabase
-      .from('User')
-      .delete()
-      .eq('id', targetUserId);
+    const { error: userDeleteError } = await query(
+      `DELETE FROM "User" WHERE "id" = $1`,
+      [targetUserId]
+    );
     if (userDeleteError) throw userDeleteError;
 
     return json({ success: true }, 200);
@@ -255,3 +250,4 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
     return json({ error: error?.message || 'Failed to delete user' }, 500);
   }
 };
+

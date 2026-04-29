@@ -3473,8 +3473,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     sessionSetupDetails,
     previewZoomInput,
     previewZoomOutput,
+    previewZoomSidebarInput,
+    previewZoomSidebarOutput,
     circleSizeInput,
     circleSizeOutput,
+    gridSizeInput,
     backgroundBlurToggleButton,
     backgroundReplaceToggleButton,
     backgroundReplacePopup,
@@ -4043,10 +4046,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let presentationCircleZoom = previewZoom;
   let showPresentationCircle = persistedSetup.showCircle === true;
   let presentationCircleSize = Number(persistedSetup.circleSize) || 180;
+  let gridSize: 'normal' | 'compact' = persistedSetup.gridSize === 'compact' ? 'compact' : 'normal';
+
+  const applyGridSize = (size: 'normal' | 'compact') => {
+    gridSize = size;
+    if (gridSlot instanceof HTMLElement) {
+      gridSlot.classList.toggle('conference-slot--grid-compact', size === 'compact');
+    }
+    if (gridSizeInput instanceof HTMLSelectElement) {
+      gridSizeInput.value = size;
+    }
+  };
+
   const getShowCircleInputs = () =>
     Array.from(
       root.querySelectorAll<HTMLInputElement>('[data-show-circle-input], [data-show-circle-workspace-input]'),
     ).filter((input) => !input.closest('#musiki-pod-templates'));
+
+  applyGridSize(gridSize);
 
   const applyCircleSize = (size: number) => {
     presentationCircleSize = size;
@@ -5206,6 +5223,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     if (previewZoomOutput instanceof HTMLOutputElement || previewZoomOutput instanceof HTMLElement) {
       previewZoomOutput.textContent = `${previewZoom.toFixed(2)}x`;
+    }
+    if (previewZoomSidebarInput instanceof HTMLInputElement) {
+      previewZoomSidebarInput.value = presentationCircleZoom.toFixed(2);
+    }
+    if (previewZoomSidebarOutput instanceof HTMLElement) {
+      previewZoomSidebarOutput.textContent = `${presentationCircleZoom.toFixed(2)}x`;
     }
 
     if (canLeadSession()) {
@@ -7972,6 +7995,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       previewBlur,
       previewInvert,
       previewZoom,
+      circleSize: presentationCircleSize,
+      gridSize,
       recordingPreset,
       showCircle: showPresentationCircle,
       mixerIncomingGain,
@@ -12144,14 +12169,29 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const onPointerMove = (e: PointerEvent) => {
       if (!isDragging) return;
       if (e.cancelable) e.preventDefault();
-      circleX = e.clientX - startX;
-      circleY = e.clientY - startY;
-      const rect = el.getBoundingClientRect();
-      const nextX = Math.max(-rect.left, Math.min(circleX, window.innerWidth - rect.right + circleX));
-      const nextY = Math.max(-rect.top, Math.min(circleY, window.innerHeight - rect.bottom + circleY));
-      circleX = nextX;
-      circleY = nextY;
-      el.style.transform = `translate(${circleX}px, ${circleY}px)`;
+
+      if (e.shiftKey) {
+        // Resize mode
+        const deltaX = (e.clientX - startX) - circleX;
+        const deltaY = (e.clientY - startY) - circleY;
+        const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+        const newSize = Math.max(80, Math.min(600, presentationCircleSize + delta));
+        applyCircleSize(newSize);
+        // Reset start positions to avoid jumping
+        startX = e.clientX - circleX;
+        startY = e.clientY - circleY;
+      } else {
+        // Move mode
+        circleX = e.clientX - startX;
+        circleY = e.clientY - startY;
+        const rect = el.getBoundingClientRect();
+        const nextX = Math.max(-rect.left, Math.min(circleX, window.innerWidth - rect.right + circleX));
+        const nextY = Math.max(-rect.top, Math.min(circleY, window.innerHeight - rect.bottom + circleY));
+        circleX = nextX;
+        circleY = nextY;
+        el.style.transform = `translate(${circleX}px, ${circleY}px)`;
+      }
+
       if (canLeadSession()) {
         const pctX = circleX / window.innerWidth;
         const pctY = circleY / window.innerHeight;
@@ -12731,6 +12771,27 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   deviceController.bind();
+
+  if (gridSizeInput instanceof HTMLSelectElement) {
+    gridSizeInput.value = gridSize;
+    gridSizeInput.addEventListener('change', () => {
+      applyGridSize(gridSizeInput.value as any);
+      persistSetupState();
+    });
+  }
+
+  if (previewZoomSidebarInput instanceof HTMLInputElement) {
+    previewZoomSidebarInput.value = presentationCircleZoom.toFixed(2);
+    previewZoomSidebarInput.addEventListener('input', () => {
+      presentationCircleZoom = normalizePreviewZoom(previewZoomSidebarInput.value, presentationCircleZoom);
+      previewZoom = presentationCircleZoom;
+      applyPreviewZoomState();
+      persistSetupState();
+      if (room.state === ConnectionState.Connected) {
+        void syncLocalParticipantMetadata().catch(() => undefined);
+      }
+    });
+  }
 
   if (circleSizeInput instanceof HTMLInputElement) {
     circleSizeInput.addEventListener('input', () => {

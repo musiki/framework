@@ -2,13 +2,13 @@ import type { APIRoute } from 'astro';
 import {
   cleanBody,
   cleanString,
-  createSupabaseServerClient,
   ensureDbUserFromSession,
   getForumCourseAccess,
   json,
 } from '../../../../lib/forum-server';
 import { renderForumMarkdown } from '../../../../lib/forum-markdown';
 import { broadcastForumEvent } from '../../../../lib/forum-broadcast';
+import { query } from '../../../../lib/db/pool';
 
 const POST_BODY_MAX = 4000;
 
@@ -41,45 +41,37 @@ function escapeHtml(value: string): string {
 
 function resolveForumErrorMessage(error: any, fallback: string): string {
   const message = typeof error?.message === 'string' ? error.message : '';
-  if (message.includes('SUPABASE_SERVICE_ROLE_KEY_REQUIRED_FOR_FORUM') || message.includes('SUPABASE_SERVER_KEY_MISSING')) {
-    return 'Forum requires server service credentials. Set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_KEY=service-role key) and restart dev server.';
-  }
-  if (message.toLowerCase().includes('row-level security')) {
-    return 'RLS blocked forum write. Set SUPABASE_SERVICE_ROLE_KEY in server env and restart dev server.';
-  }
-  if (message.includes('ForumPost') || message.includes('ForumThread')) {
-    return 'Forum schema missing or outdated. Re-run docs/sql/forum-schema.sql in Supabase.';
+  if (message.includes('ForumBoard') || message.includes('ForumThread') || message.includes('ForumPost') || message.includes('ForumPostVote')) {
+    return 'Forum schema missing or outdated. Please verify the database state on the VPS.';
   }
   return fallback;
 }
 
 async function getPostContext(
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   postId: string,
 ): Promise<{ post: PostRow; thread: ThreadRow } | null> {
-  const { data: postRaw, error: postError } = await supabase
-    .from('ForumPost')
-    .select('id, threadId, parentPostId, authorUserId, body, status, createdAt, updatedAt')
-    .eq('id', postId)
-    .maybeSingle();
+  const { data: postRows, error: postError } = await query(
+    `SELECT id, "threadId", "parentPostId", "authorUserId", body, status, "createdAt", "updatedAt" 
+     FROM "ForumPost" WHERE id = $1`,
+    [postId]
+  );
 
   if (postError) throw postError;
-  if (!postRaw) return null;
+  const post = postRows?.[0] as PostRow | undefined;
+  if (!post) return null;
 
-  const post = postRaw as PostRow;
-
-  const { data: threadRaw, error: threadError } = await supabase
-    .from('ForumThread')
-    .select('id, courseId, createdByUserId, isLocked')
-    .eq('id', post.threadId)
-    .maybeSingle();
+  const { data: threadRows, error: threadError } = await query(
+    `SELECT id, "courseId", "createdByUserId", "isLocked" FROM "ForumThread" WHERE id = $1`,
+    [post.threadId]
+  );
 
   if (threadError) throw threadError;
-  if (!threadRaw) return null;
+  const thread = threadRows?.[0] as ThreadRow | undefined;
+  if (!thread) return null;
 
   return {
     post,
-    thread: threadRaw as ThreadRow,
+    thread,
   };
 }
 
@@ -108,16 +100,14 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
     return json({ error: 'Post body is required' }, 400);
   }
 
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
-
   try {
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     if (!dbUser) return json({ error: 'Not authenticated' }, 401);
 
-    const context = await getPostContext(supabase, postId);
+    const context = await getPostContext(postId);
     if (!context) return json({ error: 'Post not found' }, 404);
 
-    const access = await getForumCourseAccess(supabase, dbUser, context.thread.courseId);
+    const access = await getForumCourseAccess(dbUser, context.thread.courseId);
     if (!access.canRead) {
       return json({ error: 'Forbidden' }, 403);
     }
@@ -132,16 +122,15 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
       return json({ error: 'Thread is locked' }, 403);
     }
 
-    const { data: updatedRaw, error: updateError } = await supabase
-      .from('ForumPost')
-      .update({ body, status: 'published' })
-      .eq('id', postId)
-      .select('id, threadId, parentPostId, authorUserId, body, status, createdAt, updatedAt')
-      .single();
+    const { data: updatedRaw, error: updateError } = await query(
+      `UPDATE "ForumPost" SET body = $1, status = $2, "updatedAt" = $3 WHERE id = $4 
+       RETURNING id, "threadId", "parentPostId", "authorUserId", body, status, "createdAt", "updatedAt"`,
+      [body, 'published', new Date().toISOString(), postId]
+    );
 
     if (updateError) throw updateError;
 
-    const updatedPost = updatedRaw as PostRow;
+    const updatedPost = updatedRaw?.[0] as PostRow;
     let bodyHtml = '';
     try {
       bodyHtml = await renderForumMarkdown(updatedPost.body || '', {
@@ -186,16 +175,14 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     return json({ error: 'postId is required' }, 400);
   }
 
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
-
   try {
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     if (!dbUser) return json({ error: 'Not authenticated' }, 401);
 
-    const context = await getPostContext(supabase, postId);
+    const context = await getPostContext(postId);
     if (!context) return json({ error: 'Post not found' }, 404);
 
-    const access = await getForumCourseAccess(supabase, dbUser, context.thread.courseId);
+    const access = await getForumCourseAccess(dbUser, context.thread.courseId);
     if (!access.canRead) {
       return json({ error: 'Forbidden' }, 403);
     }
@@ -212,30 +199,29 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
 
     const now = new Date().toISOString();
 
-    const { data: updatedRaw, error: updateError } = await supabase
-      .from('ForumPost')
-      .update({ body: '', status: 'deleted' })
-      .eq('id', postId)
-      .select('id, threadId, parentPostId, authorUserId, body, status, createdAt, updatedAt')
-      .single();
+    const { data: updatedRaw, error: updateError } = await query(
+      `UPDATE "ForumPost" SET body = $1, status = $2, "updatedAt" = $3 WHERE id = $4 
+       RETURNING id, "threadId", "parentPostId", "authorUserId", body, status, "createdAt", "updatedAt"`,
+      ['', 'deleted', now, postId]
+    );
 
     if (updateError) throw updateError;
 
-    const { error: threadUpdateError } = await supabase
-      .from('ForumThread')
-      .update({ updatedAt: now })
-      .eq('id', context.thread.id);
+    const { error: threadUpdateError } = await query(
+      `UPDATE "ForumThread" SET "updatedAt" = $1 WHERE id = $2`,
+      [now, context.thread.id]
+    );
 
     if (threadUpdateError) throw threadUpdateError;
 
     void broadcastForumEvent(
-      (updatedRaw as PostRow).threadId,
+      (updatedRaw?.[0] as PostRow).threadId,
       'forum_post_deleted',
       { postId },
     );
 
     return json(
-      { success: true, post: { ...(updatedRaw as PostRow), bodyHtml: '', canEdit: false, canDelete: false } },
+      { success: true, post: { ...(updatedRaw?.[0] as PostRow), bodyHtml: '', canEdit: false, canDelete: false } },
       200,
     );
   } catch (error: any) {

@@ -2,20 +2,57 @@ import Google from "@auth/core/providers/google";
 import { defineConfig } from "auth-astro";
 import { resolveAuthRedirectUrl } from "./src/lib/auth-origin";
 
-const AUTH_ORIGIN = (process.env.AUTH_URL || 'https://musiki.org.ar').replace(/\/$/, '');
+// Astro/Vite will inject these, but we fallback to process.env for Node contexts
+const getEnv = (key: string) => {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) return import.meta.env[key];
+  return process.env[key];
+};
+
+const AUTH_URL = getEnv('AUTH_URL') || getEnv('SITE_URL') || 'https://musiki.org.ar';
+const AUTH_ORIGIN = AUTH_URL.replace(/\/$/, '');
+const isDev = getEnv('NODE_ENV') !== "production";
+
+console.log(`[AUTH-CONFIG] Mode: ${isDev ? 'DEV' : 'PROD'}, Origin: ${AUTH_ORIGIN}`);
 
 export default defineConfig({
+  debug: isDev,
   trustHost: true,
-  redirectProxyUrl: `${AUTH_ORIGIN}/api/auth`,
+  // Only use redirectProxyUrl in production to handle domain normalization
+  redirectProxyUrl: isDev ? undefined : `${AUTH_ORIGIN}/api/auth`,
+  cookies: {
+    sessionToken: {
+      name: `musiki26.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: !isDev,
+      },
+    },
+  },
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID || import.meta.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || import.meta.env.GOOGLE_CLIENT_SECRET,
+      clientId: getEnv('GOOGLE_CLIENT_ID'),
+      clientSecret: getEnv('GOOGLE_CLIENT_SECRET'),
+      allowDangerousEmailAccountLinking: true,
     }),
+    {
+      id: "authentik",
+      name: "Authentik",
+      type: "oidc",
+      issuer: getEnv('OIDC_ISSUER_URL') || "https://auth.musiki.org.ar/application/o/musiki26/",
+      clientId: getEnv('OIDC_CLIENT_ID'),
+      clientSecret: getEnv('OIDC_CLIENT_SECRET'),
+      allowDangerousEmailAccountLinking: true,
+      authorization: { params: { scope: "openid profile email" } },
+    },
   ],
-  secret: process.env.AUTH_SECRET || import.meta.env.AUTH_SECRET,
+  secret: getEnv('AUTH_SECRET') || "fallback-musiki26-secret-must-change",
   callbacks: {
     async jwt({ token, user, profile }) {
+      if (user || profile) {
+        console.log(`[AUTH-JWT] Provider: ${token.sub ? 'Existing' : 'New'}, Email: ${user?.email || profile?.email || token.email}`);
+      }
       const userImage = typeof user?.image === "string" ? user.image.trim() : "";
       const profileImage = typeof (profile as any)?.picture === "string" ? String((profile as any).picture).trim() : "";
       if (userImage) token.picture = userImage;

@@ -28,7 +28,17 @@ const handleAuth = async (context: APIContext) => {
 
   // Use the request directly. Auth.js should handle forwarded headers 
   // correctly if trustHost is true and trustProxy is set in Astro.
-  const response = await Auth(request, authConfig);
+  console.log(`[AUTH-DEBUG] Action: ${action}, URL: ${request.url}`);
+  
+  let response: Response;
+  try {
+    response = await Auth(request, authConfig);
+  } catch (err: any) {
+    console.error(`[AUTH-DEBUG] Auth core threw:`, err);
+    return new Response(err?.message || "Internal Auth Error", { status: 500 });
+  }
+
+  console.log(`[AUTH-DEBUG] Response Status: ${response.status}`);
 
   if (["callback", "signin", "signout"].includes(action)) {
     const setCookies = response.headers.getSetCookie();

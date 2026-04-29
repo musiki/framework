@@ -63,10 +63,10 @@ if (session?.user?.email) {
         .provider-login {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 1.5rem;
             margin-top: 2rem;
         }
-        .provider-login a, .provider-login button {
+        .provider-login button {
             display: block;
             width: 100%;
             padding: 0.75rem;
@@ -78,9 +78,25 @@ if (session?.user?.email) {
             color: var(--c-fg);
             cursor: pointer;
             font-size: 1rem;
+            transition: all 0.2s ease;
         }
-         .provider-login a:hover, .provider-login button:hover {
+        .provider-login button:hover {
             background-color: var(--c-bg-mute);
+            transform: translateY(-1px);
+        }
+        .btn-authentik {
+            border-color: #fd4b2d !important;
+            font-weight: 600;
+        }
+        .btn-google {
+            opacity: 0.7;
+            font-size: 0.9rem !important;
+        }
+        .divider {
+            height: 1px;
+            background: var(--c-border);
+            margin: 0.5rem 0;
+            position: relative;
         }
     </style>
 </head>
@@ -89,8 +105,14 @@ if (session?.user?.email) {
     <main class="wrap">
         <h1>Iniciar Sesión</h1>
         <div class="provider-login">
+            <SignIn provider="authentik" options={{ callbackUrl }} authParams={{ csrfToken }}>
+                <span class="btn-authentik">Entrar a Musiki</span>
+            </SignIn>
+
+            <div class="divider"></div>
+
             <SignIn provider="google" options={{ callbackUrl }} authParams={{ csrfToken }}>
-                Continuar con Google
+                <span class="btn-google">Acceder con Google</span>
             </SignIn>
         </div>
     </main>

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
+import { query } from '../../../lib/db/pool';
 
 export const GET: APIRoute = async ({ locals }) => {
   const session = (locals as any).session;
@@ -9,24 +9,25 @@ export const GET: APIRoute = async ({ locals }) => {
     return json({ error: 'Not authenticated' }, 401);
   }
 
-  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-
   try {
-    const { data: user, error: userError } = await supabase
-      .from('User')
-      .select('id')
-      .eq('email', currentUser.email)
-      .single();
+    const { data: userRows, error: userError } = await query(
+      'SELECT "id" FROM "User" WHERE "email" = $1 LIMIT 1',
+      [currentUser.email]
+    );
 
-    if (userError || !user) {
+    if (userError || !userRows?.[0]) {
       return json({ submissions: {} }, 200);
     }
 
-    const { data: submissions, error: submissionsError } = await supabase
-      .from('Submission')
-      .select('id, assignmentId, payload, score, feedback, attempts, submittedAt, gradedAt')
-      .eq('userId', user.id)
-      .order('submittedAt', { ascending: false });
+    const user = userRows[0];
+
+    const { data: submissions, error: submissionsError } = await query(
+      `SELECT "id", "assignmentId", "payload", "score", "feedback", "attempts", "submittedAt", "gradedAt"
+       FROM "Submission"
+       WHERE "userId" = $1
+       ORDER BY "submittedAt" DESC`,
+      [user.id]
+    );
 
     if (submissionsError) throw submissionsError;
 

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/forum-server';
+import { query } from '../../../lib/db/pool';
 import { resolveLiveManageAccess } from '../../../lib/live/access';
 
 const META_KIND = 'course_attendance_manual';
@@ -36,19 +36,17 @@ const normalizeDateOnly = (value: unknown) => {
 };
 
 async function ensureMetaAssignment(
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   assignmentId: string,
   courseId: string,
   year: string,
 ) {
-  const { data: existing, error: existingError } = await supabase
-    .from('Assignment')
-    .select('id')
-    .eq('id', assignmentId)
-    .maybeSingle();
+  const { data: assignments, error: existingError } = await query(
+    'SELECT "id" FROM "Assignment" WHERE "id" = $1',
+    [assignmentId]
+  );
 
   if (existingError) throw existingError;
-  if (existing) return;
+  if (assignments && assignments.length > 0) return;
 
   const assignmentBase = {
     id: assignmentId,
@@ -56,12 +54,10 @@ async function ensureMetaAssignment(
     slug: `${courseId}/__meta__/attendance-manual/${year}`,
   };
 
-  const withWeight = await supabase.from('Assignment').insert([
-    {
-      ...assignmentBase,
-      weight: 1,
-    },
-  ]);
+  const withWeight = await query(
+    'INSERT INTO "Assignment" ("id", "courseId", "slug", "weight") VALUES ($1, $2, $3, $4) RETURNING "id"',
+    [assignmentId, courseId, assignmentBase.slug, 1]
+  );
 
   if (!withWeight.error) return;
 
@@ -71,7 +67,10 @@ async function ensureMetaAssignment(
 
   if (!weightMissing) throw withWeight.error;
 
-  const withoutWeight = await supabase.from('Assignment').insert([assignmentBase]);
+  const withoutWeight = await query(
+    'INSERT INTO "Assignment" ("id", "courseId", "slug") VALUES ($1, $2, $3) RETURNING "id"',
+    [assignmentId, courseId, assignmentBase.slug]
+  );
   if (withoutWeight.error) throw withoutWeight.error;
 }
 
@@ -143,16 +142,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return json({ error: 'Only teachers can update manual attendance' }, 403);
     }
 
-    const supabase = createSupabaseServerClient();
     const assignmentId = `${META_ASSIGNMENT_PREFIX}:${encodeURIComponent(courseId)}:${year}`;
-    await ensureMetaAssignment(supabase, assignmentId, courseId, year);
+    await ensureMetaAssignment(assignmentId, courseId, year);
 
-    const { data: existingRows, error: existingError } = await supabase
-      .from('Submission')
-      .select('id, attempts, payload')
-      .eq('userId', studentId)
-      .eq('assignmentId', assignmentId)
-      .order('submittedAt', { ascending: false });
+    const { data: existingRows, error: existingError } = await query(
+      'SELECT "id", "attempts", "payload" FROM "Submission" WHERE "userId" = $1 AND "assignmentId" = $2 ORDER BY "submittedAt" DESC',
+      [studentId, assignmentId]
+    );
     if (existingError) throw existingError;
     const existingSubmission = existingRows?.[0] ?? null;
     const duplicateSubmissionIds = (existingRows || [])
@@ -188,35 +184,35 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (existingSubmission?.id) {
       const attempts = Number(existingSubmission.attempts || 0);
-      const { error: updateError } = await supabase
-        .from('Submission')
-        .update({
-          payload: metaPayload,
-          attempts: Number.isFinite(attempts) ? attempts + 1 : 1,
-          submittedAt: new Date().toISOString(),
-        })
-        .eq('id', existingSubmission.id);
+      const { error: updateError } = await query(
+        'UPDATE "Submission" SET "payload" = $1, "attempts" = $2, "submittedAt" = $3 WHERE "id" = $4',
+        [
+          metaPayload,
+          Number.isFinite(attempts) ? attempts + 1 : 1,
+          new Date().toISOString(),
+          existingSubmission.id
+        ]
+      );
       if (updateError) throw updateError;
     } else {
-      const { error: insertError } = await supabase
-        .from('Submission')
-        .insert([
-          {
-            userId: studentId,
-            assignmentId,
-            payload: metaPayload,
-            attempts: 1,
-            submittedAt: new Date().toISOString(),
-          },
-        ]);
+      const { error: insertError } = await query(
+        'INSERT INTO "Submission" ("userId", "assignmentId", "payload", "attempts", "submittedAt") VALUES ($1, $2, $3, $4, $5)',
+        [
+          studentId,
+          assignmentId,
+          metaPayload,
+          1,
+          new Date().toISOString()
+        ]
+      );
       if (insertError) throw insertError;
     }
 
     if (duplicateSubmissionIds.length > 0) {
-      const { error: dedupeError } = await supabase
-        .from('Submission')
-        .delete()
-        .in('id', duplicateSubmissionIds);
+      const { error: dedupeError } = await query(
+        'DELETE FROM "Submission" WHERE "id" = ANY($1)',
+        [duplicateSubmissionIds]
+      );
       if (dedupeError) {
         console.error('Error deduplicating manual attendance submissions:', dedupeError);
       }

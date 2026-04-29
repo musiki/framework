@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { query } from '../db/pool';
 import {
   normalizeDashboardAnnotationColor,
   normalizeDashboardAnnotationComment,
@@ -53,7 +53,7 @@ export const mapDashboardAnnotationRow = (row: any): DashboardAnnotationRecord =
 });
 
 export async function listDashboardAnnotations(
-  supabase: SupabaseClient,
+  _unused_supabase: any,
   {
     courseId,
     year,
@@ -62,38 +62,37 @@ export async function listDashboardAnnotations(
     year?: string;
   },
 ) {
-  let query = supabase
-    .from('GradebookAnnotation')
-    .select('*')
-    .eq('courseId', cleanString(courseId))
-    .order('updatedAt', { ascending: false });
-
+  const params: any[] = [cleanString(courseId)];
+  let sql = `SELECT * FROM "GradebookAnnotation" WHERE "courseId" = $1`;
+  
   const normalizedYear = cleanString(year, 8);
   if (normalizedYear) {
-    query = query.eq('year', normalizedYear);
+    params.push(normalizedYear);
+    sql += ` AND "year" = $${params.length}`;
   }
+  
+  sql += ` ORDER BY "updatedAt" DESC`;
 
-  const { data, error } = await query;
+  const { data, error } = await query(sql, params);
   if (error) throw error;
   return (Array.isArray(data) ? data : []).map(mapDashboardAnnotationRow);
 }
 
 export async function getDashboardAnnotationById(
-  supabase: SupabaseClient,
+  _unused_supabase: any,
   annotationId: string,
 ) {
-  const { data, error } = await supabase
-    .from('GradebookAnnotation')
-    .select('*')
-    .eq('id', cleanString(annotationId))
-    .maybeSingle();
+  const { data, error } = await query(
+    `SELECT * FROM "GradebookAnnotation" WHERE "id" = $1`,
+    [cleanString(annotationId)]
+  );
 
   if (error) throw error;
-  return data ? mapDashboardAnnotationRow(data) : null;
+  return data?.[0] ? mapDashboardAnnotationRow(data[0]) : null;
 }
 
 export async function upsertDashboardAnnotation(
-  supabase: SupabaseClient,
+  _unused_supabase: any,
   input: AnnotationStoreInput,
 ) {
   const scopeType = normalizeDashboardAnnotationScopeType(input.scopeType);
@@ -105,120 +104,117 @@ export async function upsertDashboardAnnotation(
     throw new Error('ANNOTATION_INPUT_INVALID');
   }
 
-  const nextColor = normalizeDashboardAnnotationColor(input.color);
-  const nextComment = normalizeDashboardAnnotationComment(input.comment);
-  const nextVisibility = normalizeDashboardAnnotationVisibility(input.visibility);
   const payload = {
     courseId,
     year,
     subjectUserId: cleanString(input.subjectUserId),
     field: cleanString(input.field),
-    tab: cleanString(input.tab, 80),
+    tab: cleanString(input.tab),
     scopeType,
     scopeRef,
-    color: nextColor || null,
-    comment: nextComment,
-    visibility: nextVisibility,
+    color: normalizeDashboardAnnotationColor(input.color),
+    comment: normalizeDashboardAnnotationComment(input.comment),
+    visibility: normalizeDashboardAnnotationVisibility(input.visibility),
     authorUserId,
     authorName: cleanString(input.authorName, 320),
     authorEmail: cleanString(input.authorEmail, 320),
-    metadata: asMetadataObject(input.metadata),
+    updatedAt: new Date().toISOString(),
+    metadata: input.metadata || {},
   };
 
-  const { data: existing, error: existingError } = await supabase
-    .from('GradebookAnnotation')
-    .select('*')
-    .eq('authorUserId', authorUserId)
-    .eq('courseId', courseId)
-    .eq('year', year)
-    .eq('scopeType', scopeType)
-    .eq('scopeRef', scopeRef)
-    .maybeSingle();
-  if (existingError) throw existingError;
+  const { data: existingRows } = await query(
+    `SELECT id FROM "GradebookAnnotation" 
+     WHERE "courseId" = $1 AND "year" = $2 AND "scopeType" = $3 AND "scopeRef" = $4 AND "authorUserId" = $5`,
+    [courseId, year, scopeType, scopeRef, authorUserId]
+  );
 
-  if (!nextColor && !nextComment) {
-    if (existing?.id) {
-      const { error: deleteError } = await supabase
-        .from('GradebookAnnotation')
-        .delete()
-        .eq('id', existing.id);
-      if (deleteError) throw deleteError;
-    }
-    return null;
+  const existing = existingRows?.[0];
+
+  if (existing) {
+    const cols = Object.keys(payload);
+    const vals = Object.values(payload);
+    const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
+    const { data, error } = await query(
+      `UPDATE "GradebookAnnotation" SET ${setSql} WHERE id = $${cols.length + 1} RETURNING *`,
+      [...vals, existing.id]
+    );
+    if (error) throw error;
+    return data?.[0] ? mapDashboardAnnotationRow(data[0]) : null;
+  } else {
+    const finalPayload = { ...payload, createdAt: payload.updatedAt };
+    const cols = Object.keys(finalPayload);
+    const vals = Object.values(finalPayload);
+    const colSql = cols.map(c => `"${c}"`).join(', ');
+    const valSql = cols.map((_, i) => `$${i + 1}`).join(', ');
+    const { data, error } = await query(
+      `INSERT INTO "GradebookAnnotation" (${colSql}) VALUES (${valSql}) RETURNING *`,
+      vals
+    );
+    if (error) throw error;
+    return data?.[0] ? mapDashboardAnnotationRow(data[0]) : null;
   }
-
-  if (existing?.id) {
-    const { data: updated, error: updateError } = await supabase
-      .from('GradebookAnnotation')
-      .update({
-        ...payload,
-        updatedAt: new Date().toISOString(),
-      })
-      .eq('id', existing.id)
-      .select('*')
-      .single();
-    if (updateError) throw updateError;
-    return mapDashboardAnnotationRow(updated);
-  }
-
-  const { data: inserted, error: insertError } = await supabase
-    .from('GradebookAnnotation')
-    .insert([
-      {
-        ...payload,
-      },
-    ])
-    .select('*')
-    .single();
-  if (insertError) throw insertError;
-  return mapDashboardAnnotationRow(inserted);
 }
 
 export async function updateDashboardAnnotation(
-  supabase: SupabaseClient,
+  _unused_supabase: any,
   annotationId: string,
   authorUserId: string,
-  patch: Partial<AnnotationStoreInput>,
+  input: Partial<AnnotationStoreInput>
 ) {
-  const existing = await getDashboardAnnotationById(supabase, annotationId);
-  if (!existing) return null;
-  if (cleanString(existing.authorUserId) !== cleanString(authorUserId)) {
+  const { data: existingRows } = await query(
+    `SELECT * FROM "GradebookAnnotation" WHERE "id" = $1`,
+    [cleanString(annotationId)]
+  );
+  const existing = existingRows?.[0];
+  if (!existing) throw new Error('ANNOTATION_NOT_FOUND');
+
+  // Authorization check: only author can edit
+  if (existing.authorUserId !== authorUserId) {
     throw new Error('ANNOTATION_FORBIDDEN');
   }
 
-  return upsertDashboardAnnotation(supabase, {
-    courseId: existing.courseId,
-    year: existing.year,
-    subjectUserId: patch.subjectUserId ?? existing.subjectUserId,
-    field: patch.field ?? existing.field,
-    tab: patch.tab ?? existing.tab,
-    scopeType: patch.scopeType ?? existing.scopeType,
-    scopeRef: patch.scopeRef ?? existing.scopeRef,
-    color: patch.color ?? existing.color,
-    comment: patch.comment ?? existing.comment,
-    visibility: patch.visibility ?? existing.visibility,
-    authorUserId,
-    authorName: patch.authorName ?? existing.authorName,
-    authorEmail: patch.authorEmail ?? existing.authorEmail,
-    metadata: patch.metadata ?? existing.metadata,
-  });
+  const payload: any = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (input.color !== undefined) payload.color = normalizeDashboardAnnotationColor(input.color);
+  if (input.comment !== undefined) payload.comment = normalizeDashboardAnnotationComment(input.comment);
+  if (input.visibility !== undefined) payload.visibility = normalizeDashboardAnnotationVisibility(input.visibility);
+  if (input.metadata !== undefined) payload.metadata = input.metadata;
+  if (input.authorName !== undefined) payload.authorName = cleanString(input.authorName, 320);
+  if (input.authorEmail !== undefined) payload.authorEmail = cleanString(input.authorEmail, 320);
+
+  const cols = Object.keys(payload);
+  const vals = Object.values(payload);
+  const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
+
+  const { data, error } = await query(
+    `UPDATE "GradebookAnnotation" SET ${setSql} WHERE id = $${cols.length + 1} RETURNING *`,
+    [...vals, existing.id]
+  );
+
+  if (error) throw error;
+  return data?.[0] ? mapDashboardAnnotationRow(data[0]) : null;
 }
 
 export async function deleteDashboardAnnotation(
-  supabase: SupabaseClient,
+  _unused_supabase: any,
   annotationId: string,
   authorUserId: string,
 ) {
-  const existing = await getDashboardAnnotationById(supabase, annotationId);
-  if (!existing) return false;
-  if (cleanString(existing.authorUserId) !== cleanString(authorUserId)) {
+  const { data: existingRows } = await query(
+    `SELECT id, "authorUserId" FROM "GradebookAnnotation" WHERE "id" = $1`,
+    [cleanString(annotationId)]
+  );
+  const existing = existingRows?.[0];
+  if (!existing) return; // Already deleted or doesn't exist
+
+  if (existing.authorUserId !== authorUserId) {
     throw new Error('ANNOTATION_FORBIDDEN');
   }
 
-  const { error } = await supabase
-    .from('GradebookAnnotation')
-    .delete()
-    .eq('id', existing.id);
+  const { error } = await query(
+    `DELETE FROM "GradebookAnnotation" WHERE id = $1`,
+    [cleanString(annotationId)]
+  );
   if (error) throw error;
-  return true;
 }

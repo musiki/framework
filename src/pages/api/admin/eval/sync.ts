@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
 import { forceEvalCatalogSync } from '../../../../lib/eval-sync';
 import { isElevatedGlobalRole } from '../../../../lib/roles';
+import { query } from '../../../../lib/db/pool';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -12,11 +12,10 @@ const json = (payload: unknown, status = 200) =>
   });
 
 const resolveRequesterRole = async (email: string): Promise<string> => {
-  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-  const { data, error } = await supabase
-    .from('User')
-    .select('role')
-    .ilike('email', String(email || '').trim());
+  const { data, error } = await query(
+    `SELECT "role" FROM "User" WHERE "email" ILIKE $1`,
+    [String(email || '').trim()]
+  );
 
   if (error) throw error;
   const rows = Array.isArray(data) ? data : [];
@@ -57,3 +56,4 @@ const runForcedSync: APIRoute = async ({ locals }) => {
 
 export const GET = runForcedSync;
 export const POST = runForcedSync;
+

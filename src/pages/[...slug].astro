@@ -9,7 +9,6 @@ import {
   getPublicContentStaticPaths,
   type PublicContentRouteProps,
 } from '../lib/public-content-routes';
-import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId, getCourseAliases } from '../lib/course-alias';
 import {
   buildDefaultCreatePath,
@@ -19,7 +18,6 @@ import {
   sanitizeRepoMarkdownPath,
   sourcePathFromFrameworkFilePath,
 } from '../lib/content-admin';
-import { createSupabaseServerClient } from '../lib/forum-server';
 import { getRepoFile, isGitHubAppConfigured } from '../lib/github-app';
 import { getCourseWelcomeFields } from '../lib/dashboard/welcome-fields';
 import { resolveLiveManageAccess } from '../lib/live/access';
@@ -45,6 +43,11 @@ Astro.response.headers.set('Expires', '0');
 
 const rawSlug = Astro.params.slug;
 if (!rawSlug) return Astro.redirect('/cursos');
+
+// Exit early for requests with file extensions (e.g., favicon.ico, .map, etc.)
+if (/\.[a-z0-9]+$/i.test(rawSlug)) {
+  return new Response(null, { status: 404 });
+}
 
 const slug = rawSlug
   .split('/')
@@ -204,7 +207,6 @@ const isPublicCourse = Boolean(courseIndex?.data?.public || isPublicWikiPage);
 if (!session && !isPublicCourse) return Astro.redirect(`/login?redirect=${encodeURIComponent(loginRedirectTarget)}`);
 
 
-const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 const normalizeRole = (value: unknown) => String(value || '').trim().toLowerCase();
 const normalizeForumBoardSlug = (value: unknown) => String(value || '').trim().toLowerCase() || 'general';
 const courseIdAliases = await getCourseAliases(canonicalCourseIdToUse || requestedCoursePathSegment);
@@ -252,19 +254,20 @@ if (isStudentEnrolled && !isRequestingWelcomePage) {
       ? frontmatterEvalIds
       : derivedWelcomeFields.map((field) => String(field.evalId || '')).filter(Boolean);
     if (welcomeEvalIds.length > 0) {
+      const { query } = await import('../lib/db/pool');
       const sessionEmail = String(session?.user?.email || '').trim().toLowerCase();
       if (sessionEmail) {
-        const { data: dbUserForWelcome } = await supabase
-          .from('User')
-          .select('id')
-          .ilike('email', sessionEmail)
-          .maybeSingle();
+        const { data: dbUserRows } = await query(
+          `SELECT id FROM "User" WHERE "email" ILIKE $1`,
+          [sessionEmail]
+        );
+        const dbUserForWelcome = dbUserRows?.[0];
         if (dbUserForWelcome) {
-          const { data: welcomeSubs } = await supabase
-            .from('Submission')
-            .select('assignmentId')
-            .eq('userId', dbUserForWelcome.id)
-            .in('assignmentId', welcomeEvalIds);
+          const { data: welcomeSubs } = await query(
+            `SELECT "assignmentId" FROM "Submission" 
+             WHERE "userId" = $1 AND "assignmentId" = ANY($2)`,
+            [dbUserForWelcome.id, welcomeEvalIds]
+          );
           const submittedIds = new Set((welcomeSubs || []).map((s: any) => String(s.assignmentId)));
           const allCompleted = welcomeEvalIds.every((id) => submittedIds.has(id));
           if (!allCompleted) {
@@ -579,14 +582,14 @@ let initialCourseForumBoards: Array<{ slug: string; title: string; description: 
 
 if (hasSessionUser && (canonicalCourseId || courseSlug)) {
   try {
-    const forumSupabase = createSupabaseServerClient({ requireServiceRole: true });
-    const { data: rawBoards, error: rawBoardsError } = await forumSupabase
-      .from('ForumBoard')
-      .select('slug, title, description, isDefault, isArchived')
-      .in('courseId', courseIdAliases.length > 0 ? courseIdAliases : [canonicalCourseId || courseSlug])
-      .eq('isArchived', false)
-      .order('isDefault', { ascending: false })
-      .order('title', { ascending: true });
+    const { query } = await import('../lib/db/pool');
+    const courseIds = courseIdAliases.length > 0 ? courseIdAliases : [canonicalCourseId || courseSlug];
+    const { data: rawBoards, error: rawBoardsError } = await query(
+      `SELECT slug, title, description, "isDefault", "isArchived" FROM "ForumBoard" 
+       WHERE "courseId" = ANY($1) AND "isArchived" = false 
+       ORDER BY "isDefault" DESC, title ASC`,
+      [courseIds]
+    );
 
     if (rawBoardsError) throw rawBoardsError;
 

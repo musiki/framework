@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/forum-server';
+import { query } from '../../../lib/db/pool';
 import { resolveLiveManageAccess } from '../../../lib/live/access';
 
 const META_KIND = 'course_attendance_config';
@@ -36,19 +36,17 @@ const normalizeDateOnly = (value: unknown) => {
 };
 
 async function ensureMetaAssignment(
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   assignmentId: string,
   courseId: string,
   year: string,
 ) {
-  const { data: existing, error: existingError } = await supabase
-    .from('Assignment')
-    .select('id')
-    .eq('id', assignmentId)
-    .maybeSingle();
+  const { data: assignments, error: existingError } = await query(
+    'SELECT "id" FROM "Assignment" WHERE "id" = $1',
+    [assignmentId]
+  );
 
   if (existingError) throw existingError;
-  if (existing) return;
+  if (assignments && assignments.length > 0) return;
 
   const assignmentBase = {
     id: assignmentId,
@@ -56,12 +54,10 @@ async function ensureMetaAssignment(
     slug: `${courseId}/__meta__/attendance-config/${year}`,
   };
 
-  const withWeight = await supabase.from('Assignment').insert([
-    {
-      ...assignmentBase,
-      weight: 1,
-    },
-  ]);
+  const withWeight = await query(
+    'INSERT INTO "Assignment" ("id", "courseId", "slug", "weight") VALUES ($1, $2, $3, $4) RETURNING "id"',
+    [assignmentId, courseId, assignmentBase.slug, 1]
+  );
 
   if (!withWeight.error) return;
 
@@ -71,7 +67,10 @@ async function ensureMetaAssignment(
 
   if (!weightMissing) throw withWeight.error;
 
-  const withoutWeight = await supabase.from('Assignment').insert([assignmentBase]);
+  const withoutWeight = await query(
+    'INSERT INTO "Assignment" ("id", "courseId", "slug") VALUES ($1, $2, $3) RETURNING "id"',
+    [assignmentId, courseId, assignmentBase.slug]
+  );
   if (withoutWeight.error) throw withoutWeight.error;
 }
 
@@ -97,9 +96,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return json({ error: 'Only teachers can update attendance configuration' }, 403);
     }
 
-    const supabase = createSupabaseServerClient();
     const assignmentId = `${META_ASSIGNMENT_PREFIX}:${encodeURIComponent(courseId)}:${year}`;
-    await ensureMetaAssignment(supabase, assignmentId, courseId, year);
+    await ensureMetaAssignment(assignmentId, courseId, year);
 
     const metaPayload = {
       __metaKind: META_KIND,
@@ -112,11 +110,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       updatedByEmail: cleanString(session?.user?.email),
     };
 
-    const { data: existingRows, error: existingError } = await supabase
-      .from('Submission')
-      .select('id, userId, attempts, submittedAt, payload')
-      .eq('assignmentId', assignmentId)
-      .order('submittedAt', { ascending: false });
+    const { data: existingRows, error: existingError } = await query(
+      'SELECT "id", "userId", "attempts", "submittedAt", "payload" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+      [assignmentId]
+    );
     if (existingError) throw existingError;
 
     const teacherSubmission = (existingRows || []).find(
@@ -125,27 +122,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (teacherSubmission?.id) {
       const attempts = Number(teacherSubmission.attempts || 0);
-      const { error: updateError } = await supabase
-        .from('Submission')
-        .update({
-          payload: metaPayload,
-          attempts: Number.isFinite(attempts) ? attempts + 1 : 1,
-          submittedAt: new Date().toISOString(),
-        })
-        .eq('id', teacherSubmission.id);
+      const { error: updateError } = await query(
+        'UPDATE "Submission" SET "payload" = $1, "attempts" = $2, "submittedAt" = $3 WHERE "id" = $4',
+        [
+          metaPayload,
+          Number.isFinite(attempts) ? attempts + 1 : 1,
+          new Date().toISOString(),
+          teacherSubmission.id
+        ]
+      );
       if (updateError) throw updateError;
     } else {
-      const { error: insertError } = await supabase
-        .from('Submission')
-        .insert([
-          {
-            userId: access.userId,
-            assignmentId,
-            payload: metaPayload,
-            attempts: 1,
-            submittedAt: new Date().toISOString(),
-          },
-        ]);
+      const { error: insertError } = await query(
+        'INSERT INTO "Submission" ("userId", "assignmentId", "payload", "attempts", "submittedAt") VALUES ($1, $2, $3, $4, $5)',
+        [
+          access.userId,
+          assignmentId,
+          metaPayload,
+          1,
+          new Date().toISOString()
+        ]
+      );
       if (insertError) throw insertError;
     }
 

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient, json } from '../../../../lib/forum-server';
+import { json } from '../../../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../../../lib/live/access';
 import {
   deleteDashboardAnnotation,
@@ -17,10 +17,9 @@ const isMissingRelationError = (error: any) =>
 
 const resolveAccess = async (
   session: any,
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   annotationId: string,
 ) => {
-  const existing = await getDashboardAnnotationById(supabase, annotationId);
+  const existing = await getDashboardAnnotationById(null, annotationId);
   if (!existing) {
     return { access: null, annotation: null };
   }
@@ -41,8 +40,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   }
 
   try {
-    const supabase = createSupabaseServerClient({ requireServiceRole: true });
-    const { access, annotation } = await resolveAccess(session, supabase, annotationId);
+    const { access, annotation } = await resolveAccess(session, annotationId);
     if (!annotation) {
       return json({ error: 'Annotation not found' }, 404);
     }
@@ -51,7 +49,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     }
 
     const body = await request.json().catch(() => ({}));
-    const updated = await updateDashboardAnnotation(supabase, annotationId, cleanString(access.userId), {
+    const updated = await updateDashboardAnnotation(null, annotationId, cleanString(access.userId), {
       color: body?.color,
       comment: body?.comment,
       visibility: normalizeDashboardAnnotationVisibility(body?.visibility),
@@ -87,8 +85,7 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   }
 
   try {
-    const supabase = createSupabaseServerClient({ requireServiceRole: true });
-    const { access, annotation } = await resolveAccess(session, supabase, annotationId);
+    const { access, annotation } = await resolveAccess(session, annotationId);
     if (!annotation) {
       return json({ error: 'Annotation not found' }, 404);
     }
@@ -96,7 +93,7 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
       return json({ error: 'Only teachers can delete dashboard annotations' }, 403);
     }
 
-    await deleteDashboardAnnotation(supabase, annotationId, cleanString(access.userId));
+    await deleteDashboardAnnotation(null, annotationId, cleanString(access.userId));
     return json({ success: true });
   } catch (error: any) {
     if (String(error?.message || '') === 'ANNOTATION_FORBIDDEN') {

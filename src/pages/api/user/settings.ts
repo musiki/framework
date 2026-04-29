@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getSession } from 'auth-astro/server';
-import { createSupabaseServerClient } from '../../../lib/forum-server';
+import { query } from '../../../lib/db/pool';
 import { resolveUserIdByEmail } from '../../../lib/user-email';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -15,44 +15,44 @@ export const POST: APIRoute = async ({ request }) => {
     const body = await request.json();
     const nextSettings = body?.settings || {};
 
-    const supabase = createSupabaseServerClient();
     const normalizedEmail = String(user.email).toLowerCase().trim();
     
     // Resolve user ID using existing multi-email logic
-    const userId = await resolveUserIdByEmail(supabase, normalizedEmail).catch(() => null);
+    // Passing null for supabase as resolveUserIdByEmail has been updated
+    const userId = await resolveUserIdByEmail(normalizedEmail).catch(() => null);
     
     if (!userId) {
       // Fallback to direct email lookup if not in UserEmail table yet
-      const { data: directUser } = await supabase
-        .from('User')
-        .select('id, settings')
-        .ilike('email', normalizedEmail)
-        .maybeSingle();
+      const { data: userRows } = await query(
+        `SELECT id, settings FROM "User" WHERE "email" ILIKE $1 LIMIT 1`,
+        [normalizedEmail]
+      );
+      const directUser = userRows?.[0];
       
       if (!directUser) {
         return new Response(JSON.stringify({ error: 'User not found in DB' }), { status: 404 });
       }
 
       const mergedSettings = { ...(directUser.settings || {}), ...nextSettings };
-      const { error: updateError } = await supabase
-        .from('User')
-        .update({ settings: mergedSettings, updatedAt: new Date() })
-        .eq('id', directUser.id);
+      const { error: updateError } = await query(
+        `UPDATE "User" SET settings = $1, "updatedAt" = $2 WHERE id = $3`,
+        [mergedSettings, new Date().toISOString(), directUser.id]
+      );
       
       if (updateError) throw updateError;
     } else {
       // Fetch current settings to merge
-      const { data: currentUser } = await supabase
-        .from('User')
-        .select('settings')
-        .eq('id', userId)
-        .single();
+      const { data: userRows } = await query(
+        `SELECT settings FROM "User" WHERE id = $1 LIMIT 1`,
+        [userId]
+      );
+      const currentUser = userRows?.[0];
 
       const mergedSettings = { ...(currentUser?.settings || {}), ...nextSettings };
-      const { error: updateError } = await supabase
-        .from('User')
-        .update({ settings: mergedSettings, updatedAt: new Date() })
-        .eq('id', userId);
+      const { error: updateError } = await query(
+        `UPDATE "User" SET settings = $1, "updatedAt" = $2 WHERE id = $3`,
+        [mergedSettings, new Date().toISOString(), userId]
+      );
       
       if (updateError) throw updateError;
     }

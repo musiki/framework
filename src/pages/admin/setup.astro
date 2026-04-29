@@ -1,8 +1,8 @@
 ---
 import BaseHead from '../../components/BaseHead.astro';
 import Header from '../../components/Header.astro';
-import { createClient } from '@supabase/supabase-js';
 import { isElevatedGlobalRole, normalizeGlobalRole } from '../../lib/roles';
+import { query } from '../../lib/db/pool';
 
 // Check authentication
 const session = Astro.locals.session as any;
@@ -12,11 +12,10 @@ if (!currentUser?.email) {
   return Astro.redirect('/login?redirect=/admin/setup');
 }
 
-// Initialize Supabase
-const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
+const email = String(currentUser.email).toLowerCase().trim();
 
-// Get user from Supabase
-const { data: users } = await supabase.from('User').select('*').ilike('email', currentUser.email);
+// Get user from DB
+const { data: users } = await query(`SELECT * FROM "User" WHERE "email" ILIKE $1`, [email]);
 const dbUser = (users || []).find((user: any) => isElevatedGlobalRole(user?.role)) || users?.[0];
 
 if (!dbUser) {
@@ -32,9 +31,11 @@ if (Astro.request.method === 'POST') {
       requestedRole === 'admin' && isElevatedGlobalRole(dbUser.role)
         ? 'admin'
         : 'teacher';
-    const { error } = await supabase.from('User')
-      .update({ role: nextRole, updatedAt: new Date() })
-      .eq('id', dbUser.id);
+    
+    const { error } = await query(
+      `UPDATE "User" SET "role" = $1, "updatedAt" = $2 WHERE "id" = $3`,
+      [nextRole, new Date().toISOString(), dbUser.id]
+    );
     
     if (error) throw error;
     return Astro.redirect('/dashboard');
@@ -42,6 +43,7 @@ if (Astro.request.method === 'POST') {
     console.error('Error promoting user:', error);
   }
 }
+
 
 const normalizedSetupRole = normalizeGlobalRole(dbUser.role);
 const isAlreadyTeacher = isElevatedGlobalRole(dbUser.role);

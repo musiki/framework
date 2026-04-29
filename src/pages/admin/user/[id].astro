@@ -1,36 +1,36 @@
 ---
 import BaseHead from '../../../components/BaseHead.astro';
 import Header from '../../../components/Header.astro';
-import { createClient } from '@supabase/supabase-js';
-import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { getRoleBadgeLabel } from '../../../lib/dashboard-role';
 import { isElevatedGlobalRole, normalizeGlobalRole } from '../../../lib/roles';
 import { getResultIcon, getSubmissionAnswerText, getSubmissionResultState } from '../../../lib/submission-table';
 import { getEvalOptionMap } from '../../../lib/eval-option-map';
-import { listEmailsForUser } from '../../../lib/user-email';
+import { listEmailsForUser, resolveUserIdByEmail } from '../../../lib/user-email';
+import { query } from '../../../lib/db/pool';
 import '../../../styles/theme.css';
 
 const { id } = Astro.params;
 
 // --- AUTHENTICATION & DATA FETCHING ---
-const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
 const session = Astro.locals.session as any;
 const currentUser = session?.user;
 
 if (!currentUser) return Astro.redirect('/login');
 
+const email = String(currentUser.email || '').toLowerCase().trim();
+
 // Check if viewer is teacher/admin — resolve via UserEmail
-const { resolveUserIdByEmail } = await import('../../../lib/user-email');
-const viewerUserId = await resolveUserIdByEmail(supabase, String(currentUser.email || '').toLowerCase().trim()).catch(() => null);
+const viewerUserId = await resolveUserIdByEmail(email).catch(() => null);
 const { data: viewerRows, error: viewerRowsError } = viewerUserId
-  ? await supabase.from('User').select('id, role').eq('id', viewerUserId)
-  : await supabase.from('User').select('id, role').ilike('email', currentUser.email);
+  ? await query(`SELECT "id", "role" FROM "User" WHERE "id" = $1`, [viewerUserId])
+  : await query(`SELECT "id", "role" FROM "User" WHERE "email" ILIKE $1`, [email]);
 if (viewerRowsError || !(viewerRows || []).some((row: any) => isElevatedGlobalRole(row?.role))) {
   return Astro.redirect('/dashboard');
 }
 
 // Fetch Target User
-const { data: user, error: userError } = await supabase.from('User').select('*').eq('id', id).single();
+const { data: userRows, error: userError } = await query(`SELECT * FROM "User" WHERE "id" = $1 LIMIT 1`, [id]);
+const user = userRows?.[0];
 
 if (userError || !user) {
   return Astro.redirect('/dashboard');
@@ -39,7 +39,7 @@ if (userError || !user) {
 const userShortName = String(user.name || user.email || user.id).trim().split(/\s+/).filter(Boolean)[0] || 'usuario';
 
 // Fetch Enrollments
-const { data: enrollments } = await supabase.from('Enrollment').select('*').eq('userId', id);
+const { data: enrollments } = await query(`SELECT * FROM "Enrollment" WHERE "userId" = $1`, [id]);
 const globalUserRole = normalizeGlobalRole(user.role);
 const hasTeacherCourseEnrollment = Array.isArray(enrollments)
   && enrollments.some((enrollment: any) => String(enrollment?.roleInCourse || '').trim().toLowerCase() === 'teacher');
@@ -47,10 +47,10 @@ const hasTeacherCourseEnrollment = Array.isArray(enrollments)
 const normalizedUserRole = globalUserRole;
 
 // Fetch Submissions
-const { data: submissions } = await supabase.from('Submission').select('*').eq('userId', id).order('submittedAt', { ascending: false });
+const { data: submissions } = await query(`SELECT * FROM "Submission" WHERE "userId" = $1 ORDER BY "submittedAt" DESC`, [id]);
 
 // Fetch Assignments to map IDs to names
-const { data: assignments } = await supabase.from('Assignment').select('*');
+const { data: assignments } = await query(`SELECT * FROM "Assignment"`);
 const evalOptionMap = await getEvalOptionMap();
 const assignmentById = new Map<string, any>(
   (assignments || []).map((assignment: any) => {
@@ -66,7 +66,7 @@ for (const [evalId, options] of evalOptionMap.entries()) {
 
 // Helper to get assignment info
 const getAssignmentInfo = (aid: string) => {
-  const a = assignments?.find(x => x.id === aid);
+  const a = (assignments || []).find((x: any) => x.id === aid);
   return a ? { slug: a.slug, courseId: a.courseId } : { slug: aid, courseId: 'Unknown' };
 };
 
@@ -159,12 +159,10 @@ let userAttendance: any[] = [];
 let userLiveSessions: any[] = [];
 
 try {
-  const attendanceSupabase = createSupabaseServerClient({ requireServiceRole: true });
-  const { data: attendanceRows, error: attendanceError } = await attendanceSupabase
-    .from('LiveClassAttendance')
-    .select('*')
-    .eq('userId', id)
-    .order('lastEventAt', { ascending: false });
+  const { data: attendanceRows, error: attendanceError } = await query(
+    `SELECT * FROM "LiveClassAttendance" WHERE "userId" = $1 ORDER BY "lastEventAt" DESC`,
+    [id]
+  );
 
   if (attendanceError) {
     console.error('Error loading user attendance rows:', attendanceError);
@@ -174,11 +172,10 @@ try {
 
   const sessionIds = Array.from(new Set(userAttendance.map((row: any) => String(row?.sessionId || '').trim()).filter(Boolean)));
   if (sessionIds.length > 0) {
-    const { data: sessionRows, error: sessionError } = await attendanceSupabase
-      .from('LiveClassSession')
-      .select('*')
-      .in('id', sessionIds)
-      .order('startedAt', { ascending: false });
+    const { data: sessionRows, error: sessionError } = await query(
+      `SELECT * FROM "LiveClassSession" WHERE "id" = ANY($1) ORDER BY "startedAt" DESC`,
+      [sessionIds]
+    );
 
     if (sessionError) {
       console.error('Error loading user live sessions:', sessionError);
@@ -227,22 +224,24 @@ const totalJoinCount = attendanceLogRows.reduce((sum: number, row: any) => sum +
 const averageConnectedMs = uniqueAttendanceSessionIds.size > 0 ? totalConnectedMs / uniqueAttendanceSessionIds.size : 0;
 
 // Fetch linked emails and name-based duplicate candidates
-const linkedEmails = await listEmailsForUser(supabase, id).catch(() => []);
+const linkedEmails = await listEmailsForUser(id).catch(() => []);
 
 // Find other users with the same name (potential duplicates)
 const nameParts = String(user.name || '').trim().split(/\s+/).filter(Boolean);
 let duplicateCandidates: any[] = [];
 if (nameParts.length >= 2) {
-  const { data: nameMatches } = await supabase
-    .from('User')
-    .select('id, name, email, role, updatedAt')
-    .ilike('name', `%${nameParts[0]}%`)
-    .neq('id', id)
-    .limit(20);
+  const { data: nameMatches } = await query(
+    `SELECT "id", "name", "email", "role", "updatedAt" 
+     FROM "User" 
+     WHERE "name" ILIKE $1 
+     AND "id" <> $2 
+     LIMIT 20`,
+    [`%${nameParts[0]}%`, id]
+  );
   // Match if: all viewed user's parts appear in candidate, OR all candidate's parts appear in viewed user's name.
   // This handles middle names: "Pablo Eguia" ↔ "Pablo Javier Eguia" — the shorter name's parts
   // are all contained in the longer name even though not vice-versa.
-  const lowerName = user.name.toLowerCase();
+  const lowerName = String(user.name || '').toLowerCase();
   duplicateCandidates = (nameMatches || []).filter((row: any) => {
     const rowName = String(row?.name || '').toLowerCase();
     const rowParts = rowName.split(/\s+/).filter(Boolean);
@@ -250,6 +249,7 @@ if (nameParts.length >= 2) {
       || rowParts.every((part) => lowerName.includes(part));
   });
 }
+
 
 const attendanceDayGroups = (() => {
   const groups = new Map<string, any>();

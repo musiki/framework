@@ -58,11 +58,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.session = session;
 
   if (shouldSyncEvalCatalogForPath(context.url.pathname)) {
-    void ensureEvalCatalogSynced({
-      reason: `middleware:${context.url.pathname}`,
-    }).catch((error) => {
-      console.error("Eval catalog sync failed in middleware:", error);
-    });
+    // Skip eval sync in development if the tunnel is unstable
+    if (import.meta.env.DEV) {
+      console.log(`[DEV] Skipping eval sync for ${context.url.pathname} to save tunnel bandwidth`);
+    } else {
+      void ensureEvalCatalogSynced({
+        reason: `middleware:${context.url.pathname}`,
+      }).catch((error) => {
+        console.error("Eval catalog sync failed in middleware:", error);
+      });
+    }
   }
 
   // Protect dashboard routes

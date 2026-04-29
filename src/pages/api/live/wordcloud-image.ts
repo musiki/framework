@@ -1,8 +1,16 @@
 import type { APIRoute } from 'astro';
 import sharp from 'sharp';
-import { createSupabaseServerClient, json } from '../../../lib/forum-server';
+import { createClient } from '@supabase/supabase-js';
+import { json } from '../../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../../lib/live/access';
 import { canonicalizeCourseId, canonicalizeCourseSlugPath } from '../../../lib/course-alias';
+
+const getSupabaseStorageClient = () => {
+  const url = import.meta.env.SUPABASE_URL;
+  const key = import.meta.env.SUPABASE_SERVICE_ROLE_KEY || import.meta.env.SUPABASE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+};
 
 const BUCKET_NAME = 'live-wordclouds';
 const IMAGE_WIDTH = 1600;
@@ -124,9 +132,9 @@ const buildWordcloudSvg = ({
 </svg>`;
 };
 
-const ensureBucket = async (supabase: ReturnType<typeof createSupabaseServerClient>) => {
+const ensureBucket = async (supabase: any) => {
   const { data: buckets } = await supabase.storage.listBuckets();
-  if (Array.isArray(buckets) && buckets.some((bucket) => bucket.name === BUCKET_NAME)) {
+  if (Array.isArray(buckets) && buckets.some((bucket: any) => bucket.name === BUCKET_NAME)) {
     return;
   }
 
@@ -178,7 +186,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   });
 
   const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
+  const supabase = getSupabaseStorageClient();
+  if (!supabase) return json({ error: 'Storage client initialization failed' }, 500);
+  
   await ensureBucket(supabase);
 
   const lessonPath = pageSlug

@@ -2,8 +2,6 @@
 // src/pages/dashboard.astro
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
-import { createClient } from '@supabase/supabase-js';
-import { createSupabaseServerClient } from '../lib/forum-server';
 import {
   getResultIcon,
   getSubmissionAnswerText,
@@ -49,6 +47,8 @@ import { getCourseWelcomeFields, getWelcomeSubmissionAnswerText } from '../lib/d
 import { toDashboardProjectionJson } from '../lib/dashboard/shared';
 import { getRoleBadgeLabel } from '../lib/dashboard-role';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../lib/roles';
+import { ensureDbUserFromSession } from '../lib/forum-server';
+import { query } from '../lib/db/pool';
 import 'tabulator-tables/dist/css/tabulator.min.css';
 import '../styles/theme.css';
 
@@ -66,88 +66,25 @@ const requestedYearParam = String(dashboardUrl.searchParams.get('year') || '').t
 const requestedTabParam = String(dashboardUrl.searchParams.get('tab') || '').trim().toLowerCase();
 const requestedUserParam = String(dashboardUrl.searchParams.get('user') || '').trim();
 
-// Initialize Supabase
-const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-
 const sessionEmail = String(currentUser.email || '').trim();
 const normalizedSessionEmail = sessionEmail.toLowerCase();
 
 const normalizeRole = (value) => String(value || '').trim().toLowerCase();
 
-async function resolveDashboardUserByEmail(email, normalizedEmail) {
-  // First try UserEmail table for multi-email identity resolution
-  const { resolveUserIdByEmail } = await import('../lib/user-email');
-  const resolvedUserId = await resolveUserIdByEmail(supabase, normalizedEmail).catch(() => null);
-
-  if (resolvedUserId) {
-    const { data, error } = await supabase
-      .from('User')
-      .select('*, settings')
-      .eq('id', resolvedUserId)
-      .maybeSingle();
-    if (error) throw new Error(error.message || 'Supabase error');
-    if (data) return { user: data, rows: [data] };
-  }
-
-  // Fallback: direct User.email lookup (handles pre-migration rows)
-  const { data, error } = await supabase
-    .from('User')
-    .select('*, settings')
-    .ilike('email', normalizedEmail)
-    .order('updatedAt', { ascending: false })
-    .order('createdAt', { ascending: false });
-
-  if (error) throw new Error(error.message || 'Supabase error');
-
-  const rows = Array.isArray(data) ? data : [];
-  if (rows.length === 0) return { user: null, rows: [] };
-  if (rows.length === 1) return { user: rows[0], rows };
-
-  // Multiple rows — prefer exact-case email match, then normalized, then most recent
-  const exactCaseRows = rows.filter((row) => String(row?.email || '').trim() === email);
-  if (exactCaseRows.length > 0) return { user: exactCaseRows[0], rows };
-
-  const normalizedRows = rows.filter(
-    (row) => String(row?.email || '').trim().toLowerCase() === normalizedEmail
-  );
-  if (normalizedRows.length > 0) return { user: normalizedRows[0], rows };
-
-  return { user: rows[0], rows };
-}
-
 let dbUser = null;
 let matchedUsers = [];
 try {
-  const resolved = await resolveDashboardUserByEmail(sessionEmail, normalizedSessionEmail);
-  dbUser = resolved.user;
-  matchedUsers = resolved.rows;
+  // ensureDbUserFromSession now handles resolution, creation, and profile updates via retrying query pool
+  dbUser = await ensureDbUserFromSession(session);
 } catch (userResolveError) {
   console.error('Error resolving dashboard user:', userResolveError);
 }
 
-// If user doesn't exist in DB, create them (first login)
 if (!dbUser) {
-  const { data: newUsers, error } = await supabase.from('User').insert([{
-    id: crypto.randomUUID(),
-    email: normalizedSessionEmail,
-    name: currentUser.name || normalizedSessionEmail,
-    emailVerified: true,
-    image: currentUser.image || null,
-    role: 'student', // Default role
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }]).select();
-  
-  if (error) console.error('Error creating user:', error);
-  // Fetch the newly created user
-  dbUser = newUsers?.[0];
-  
-  if (!dbUser) {
-    return Astro.redirect('/login?redirect=/dashboard');
-  }
-
-  matchedUsers = [dbUser];
+  return Astro.redirect('/login?redirect=/dashboard');
 }
+matchedUsers = [dbUser];
+
 
 const viewerMatchedUsers = matchedUsers.length > 0 ? matchedUsers : [dbUser];
 const viewerUserIds = Array.from(
@@ -160,11 +97,10 @@ const viewerUserIds = Array.from(
 
 let viewerHasTeacherEnrollment = false;
 if (viewerUserIds.length > 0) {
-  const { data: teacherEnrollments, error: teacherEnrollmentError } = await supabase
-    .from('Enrollment')
-    .select('userId, roleInCourse')
-    .in('userId', viewerUserIds)
-    .limit(50);
+  const { data: teacherEnrollments, error: teacherEnrollmentError } = await query(
+    `SELECT "userId", "roleInCourse" FROM "Enrollment" WHERE "userId" = ANY($1) LIMIT 50`,
+    [viewerUserIds]
+  );
 
   if (teacherEnrollmentError) {
     console.error('Error resolving teacher enrollment for dashboard viewer:', teacherEnrollmentError);
@@ -182,11 +118,11 @@ const viewerIsTeacher = viewerHasTeacherRole || viewerHasTeacherEnrollment;
 
 if (requestedUserParam && viewerIsTeacher && requestedUserParam !== String(dbUser?.id || '')) {
   try {
-    const { data: requestedUser, error: requestedUserError } = await supabase
-      .from('User')
-      .select('*')
-      .eq('id', requestedUserParam)
-      .maybeSingle();
+    const { data: requestedUserRows, error: requestedUserError } = await query(
+      `SELECT * FROM "User" WHERE "id" = $1 LIMIT 1`,
+      [requestedUserParam]
+    );
+    const requestedUser = requestedUserRows?.[0];
 
     if (requestedUserError) {
       console.error('Error resolving requested dashboard user:', requestedUserError);
@@ -209,11 +145,10 @@ const dashboardUserIds = Array.from(
 
 let hasTeacherEnrollment = false;
 if (dashboardUserIds.length > 0) {
-  const { data: teacherEnrollments, error: teacherEnrollmentError } = await supabase
-    .from('Enrollment')
-    .select('userId, roleInCourse')
-    .in('userId', dashboardUserIds)
-    .limit(50);
+  const { data: teacherEnrollments, error: teacherEnrollmentError } = await query(
+    `SELECT "userId", "roleInCourse" FROM "Enrollment" WHERE "userId" = ANY($1) LIMIT 50`,
+    [dashboardUserIds]
+  );
 
   if (teacherEnrollmentError) {
     console.error('Error resolving teacher enrollment for dashboard user:', teacherEnrollmentError);
@@ -255,27 +190,24 @@ let allLiveClassAttendance: any[] = [];
 
 if (isTeacher) {
   // Query all data for teacher view
-  const dashboardSupabase = createSupabaseServerClient({ requireServiceRole: true });
-  const { data: u } = await dashboardSupabase.from('User').select('*'); allUsers = u || [];
-  const { data: e } = await dashboardSupabase.from('Enrollment').select('*'); allEnrollments = e || [];
-  const { data: s } = await dashboardSupabase.from('Submission').select('*').order('submittedAt', { ascending: false }); allSubmissions = s || [];
-  const { data: a } = await dashboardSupabase.from('Assignment').select('*'); allAssignments = a || [];
+  const { data: u } = await query(`SELECT * FROM "User"`); allUsers = u || [];
+  const { data: e } = await query(`SELECT * FROM "Enrollment"`); allEnrollments = e || [];
+  const { data: s } = await query(`SELECT * FROM "Submission" ORDER BY "submittedAt" DESC`); allSubmissions = s || [];
+  const { data: a } = await query(`SELECT * FROM "Assignment"`); allAssignments = a || [];
 
   try {
-    const { data: liveSessions, error: liveSessionsError } = await dashboardSupabase
-      .from('LiveClassSession')
-      .select('*')
-      .order('startedAt', { ascending: false });
+    const { data: liveSessions, error: liveSessionsError } = await query(
+      `SELECT * FROM "LiveClassSession" ORDER BY "startedAt" DESC`
+    );
     if (liveSessionsError) {
       console.error('Error loading LiveClassSession rows:', liveSessionsError);
     } else {
       allLiveClassSessions = liveSessions || [];
     }
 
-    const { data: liveAttendance, error: liveAttendanceError } = await dashboardSupabase
-      .from('LiveClassAttendance')
-      .select('*')
-      .order('lastEventAt', { ascending: false });
+    const { data: liveAttendance, error: liveAttendanceError } = await query(
+      `SELECT * FROM "LiveClassAttendance" ORDER BY "lastEventAt" DESC`
+    );
     if (liveAttendanceError) {
       console.error('Error loading LiveClassAttendance rows:', liveAttendanceError);
     } else {
@@ -290,53 +222,33 @@ if (isTeacher) {
 let studentAssignments: any[] = [];
 let studentSubmissions: any[] = [];
 
-let enrollmentQuery = supabase.from('Enrollment').select('courseId');
-if (dashboardUserIds.length > 1) {
-  enrollmentQuery = enrollmentQuery.in('userId', dashboardUserIds);
-} else {
-  enrollmentQuery = enrollmentQuery.eq('userId', dbUser.id);
-}
-const { data: userEnrollmentsData } = await enrollmentQuery;
+const { data: userEnrollmentsData } = dashboardUserIds.length > 1
+  ? await query(`SELECT "courseId" FROM "Enrollment" WHERE "userId" = ANY($1)`, [dashboardUserIds])
+  : await query(`SELECT "courseId" FROM "Enrollment" WHERE "userId" = $1`, [dbUser.id]);
 
 const userEnrollments = userEnrollmentsData || [];
 const enrolledCourseIds = userEnrollments.map((e: any) => e.courseId);
 
 if (!isTeacher) {
   if (enrolledCourseIds.length > 0) {
-    const { data: a } = await supabase
-      .from('Assignment')
-      .select('id, courseId, slug')
-      .in('courseId', enrolledCourseIds);
+    const { data: a } = await query(
+      `SELECT "id", "courseId", "slug" FROM "Assignment" WHERE "courseId" = ANY($1)`,
+      [enrolledCourseIds]
+    );
     studentAssignments = a || [];
   }
 
-  let studentSubmissionQuery = supabase
-    .from('Submission')
-    .select('*')
-    .order('submittedAt', { ascending: false });
-  if (dashboardUserIds.length > 1) {
-    studentSubmissionQuery = studentSubmissionQuery.in('userId', dashboardUserIds);
-  } else {
-    studentSubmissionQuery = studentSubmissionQuery.eq('userId', dbUser.id);
-  }
-
-  const { data: s } = await studentSubmissionQuery;
+  const { data: s } = dashboardUserIds.length > 1
+    ? await query(`SELECT * FROM "Submission" WHERE "userId" = ANY($1) ORDER BY "submittedAt" DESC`, [dashboardUserIds])
+    : await query(`SELECT * FROM "Submission" WHERE "userId" = $1 ORDER BY "submittedAt" DESC`, [dbUser.id]);
+    
   studentSubmissions = s || [];
 
   try {
-    const attendanceSupabase = createSupabaseServerClient({ requireServiceRole: true });
-    let liveAttendanceQuery = attendanceSupabase
-      .from('LiveClassAttendance')
-      .select('*')
-      .order('lastEventAt', { ascending: false });
+    const { data: liveAttendance, error: liveAttendanceError } = dashboardUserIds.length > 1
+      ? await query(`SELECT * FROM "LiveClassAttendance" WHERE "userId" = ANY($1) ORDER BY "lastEventAt" DESC`, [dashboardUserIds])
+      : await query(`SELECT * FROM "LiveClassAttendance" WHERE "userId" = $1 ORDER BY "lastEventAt" DESC`, [dbUser.id]);
 
-    if (dashboardUserIds.length > 1) {
-      liveAttendanceQuery = liveAttendanceQuery.in('userId', dashboardUserIds);
-    } else {
-      liveAttendanceQuery = liveAttendanceQuery.eq('userId', dbUser.id);
-    }
-
-    const { data: liveAttendance, error: liveAttendanceError } = await liveAttendanceQuery;
     if (liveAttendanceError) {
       console.error('Error loading student LiveClassAttendance rows:', liveAttendanceError);
     } else {
@@ -352,11 +264,10 @@ if (!isTeacher) {
     );
 
     if (sessionIds.length > 0) {
-      const { data: liveSessions, error: liveSessionsError } = await attendanceSupabase
-        .from('LiveClassSession')
-        .select('*')
-        .in('id', sessionIds)
-        .order('startedAt', { ascending: false });
+      const { data: liveSessions, error: liveSessionsError } = await query(
+        `SELECT * FROM "LiveClassSession" WHERE "id" = ANY($1) ORDER BY "startedAt" DESC`,
+        [sessionIds]
+      );
 
       if (liveSessionsError) {
         console.error('Error loading student LiveClassSession rows:', liveSessionsError);
@@ -368,6 +279,7 @@ if (!isTeacher) {
     console.error('Error initializing student attendance dashboard queries:', error);
   }
 }
+
 
 const studentAssignmentById = new Map<string, any>(
   (studentAssignments || []).map((assignment: any) => [assignment.id, assignment]),
@@ -1202,12 +1114,13 @@ const studentAttendanceConfigYears = new Set<string>();
 
 if (!isTeacher && activeCourseId) {
   try {
-    const dashboardMetaSupabase = createSupabaseServerClient({ requireServiceRole: true });
-    const { data: attendanceConfigRows, error: attendanceConfigError } = await dashboardMetaSupabase
-      .from('Submission')
-      .select('assignmentId, payload, submittedAt')
-      .like('assignmentId', `${COURSE_ATTENDANCE_CONFIG_ASSIGNMENT_PREFIX}:%`)
-      .order('submittedAt', { ascending: false });
+    const { query } = await import('../lib/db/pool');
+    const { data: attendanceConfigRows, error: attendanceConfigError } = await query(
+      `SELECT "assignmentId", payload, "submittedAt" FROM "Submission" 
+       WHERE "assignmentId" LIKE $1 
+       ORDER BY "submittedAt" DESC`,
+      [`${COURSE_ATTENDANCE_CONFIG_ASSIGNMENT_PREFIX}:%`]
+    );
 
     if (attendanceConfigError) {
       console.error('Error loading attendance config rows for student dashboard:', attendanceConfigError);
@@ -2248,11 +2161,11 @@ if (activeCourseId && activeYear) {
     agendaSourceUsersById = allUsersById;
   } else {
     try {
-      const agendaSupabase = createSupabaseServerClient({ requireServiceRole: true });
-      const { data: rosterEnrollments, error: rosterEnrollmentError } = await agendaSupabase
-        .from('Enrollment')
-        .select('*')
-        .eq('courseId', activeCourseId);
+      const { query } = await import('../lib/db/pool');
+      const { data: rosterEnrollments, error: rosterEnrollmentError } = await query(
+        `SELECT * FROM "Enrollment" WHERE "courseId" = $1`,
+        [activeCourseId]
+      );
       if (rosterEnrollmentError) {
         console.error('Error loading agenda enrollments:', rosterEnrollmentError);
       } else {
@@ -2270,10 +2183,10 @@ if (activeCourseId && activeYear) {
         ),
       );
       if (agendaUserIds.length > 0) {
-        const { data: rosterUsers, error: rosterUsersError } = await agendaSupabase
-          .from('User')
-          .select('*')
-          .in('id', agendaUserIds);
+        const { data: rosterUsers, error: rosterUsersError } = await query(
+          `SELECT * FROM "User" WHERE "id" = ANY($1)`,
+          [agendaUserIds]
+        );
         if (rosterUsersError) {
           console.error('Error loading agenda roster users:', rosterUsersError);
         } else {
@@ -2283,11 +2196,12 @@ if (activeCourseId && activeYear) {
         }
       }
 
-      const { data: agendaRows, error: agendaRowsError } = await agendaSupabase
-        .from('Submission')
-        .select('*')
-        .like('assignmentId', `${COURSE_AGENDA_META_ASSIGNMENT_PREFIX}%`)
-        .order('submittedAt', { ascending: false });
+      const { data: agendaRows, error: agendaRowsError } = await query(
+        `SELECT * FROM "Submission" 
+         WHERE "assignmentId" LIKE $1 
+         ORDER BY "submittedAt" DESC`,
+        [`${COURSE_AGENDA_META_ASSIGNMENT_PREFIX}%`]
+      );
       if (agendaRowsError) {
         console.error('Error loading agenda submissions:', agendaRowsError);
       } else {
@@ -2862,8 +2776,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
 let teacherDashboardAnnotations = [] as any[];
 if (isTeacher && activeCourseId) {
   try {
-    const annotationSupabase = createSupabaseServerClient({ requireServiceRole: true });
-    const loadedAnnotations = await listDashboardAnnotations(annotationSupabase, {
+    const loadedAnnotations = await listDashboardAnnotations(null, {
       courseId: activeCourseId,
       year: activeYear,
     });

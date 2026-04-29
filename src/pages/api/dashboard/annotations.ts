@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient, json } from '../../../lib/forum-server';
+import { json } from '../../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../../lib/live/access';
 import {
   listDashboardAnnotations,
@@ -33,8 +33,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
       return json({ error: 'Only teachers can read dashboard annotations' }, 403);
     }
 
-    const supabase = createSupabaseServerClient({ requireServiceRole: true });
-    const allAnnotations = await listDashboardAnnotations(supabase, { courseId, year });
+    const allAnnotations = await listDashboardAnnotations(null, { courseId, year });
     const visibleAnnotations = allAnnotations.filter((annotation) => {
       return annotation.visibility === 'teachers'
         || annotation.authorUserId === String(access.userId || '').trim();
@@ -69,8 +68,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return json({ error: 'Only teachers can create dashboard annotations' }, 403);
     }
 
-    const supabase = createSupabaseServerClient({ requireServiceRole: true });
-    const annotation = await upsertDashboardAnnotation(supabase, {
+    const annotation = await upsertDashboardAnnotation(null, {
       courseId,
       year,
       subjectUserId: cleanString(body?.subjectUserId),

@@ -4,6 +4,7 @@ import RoomSidebar from "./room/panels/RoomSidebar.astro";
 import SetupModal from "./room/panels/setup/SetupModal.astro";
 import WelcomeModal from "./room/overlays/WelcomeModal.astro";
 import StageFrame from "./room/stage/StageFrame.astro";
+import StageOverlays from "./room/overlays/StageOverlays.astro";
 import type { RoomPresentationOption } from "../lib/live/presentation-options";
 
 type Props = {
@@ -110,6 +111,8 @@ if (
       defaultRoom={defaultRoom}
     />
   )}
+
+  <StageOverlays />
 
   <footer class="conference-bottombar">
     <!-- FIXED LEFT -->
@@ -292,13 +295,13 @@ if (
           type="button"
           class="conference-layout-button"
           data-layout-choice="teacher"
-          data-tooltip="Full Ctrl + F">F</button
+          data-tooltip="Full Speaker Ctrl + F">F</button
         >
         <button
           type="button"
           class="conference-layout-button"
           data-layout-choice="screenshare"
-          data-tooltip="Screenshare Ctrl + S">S</button
+          data-tooltip="Share Screen Ctrl + S">S</button
         >
         <button
           type="button"
@@ -309,14 +312,29 @@ if (
         <button
           type="button"
           class="conference-layout-button"
-          data-layout-choice="clase"
-          data-tooltip="Clase (Markdown) Ctrl + D">C</button
+          data-layout-choice="grid"
+          data-tooltip="Grid Ctrl + Shift + G">G</button
         >
+        <div
+          class="conference-external-media-controls-shell"
+          data-external-media-controls-shell
+          style="display: contents;"
+        >
+          <button
+            type="button"
+            class="conference-layout-button conference-external-media-btn"
+            data-action="external-media-toggle"
+            data-external-media-btn
+            data-tooltip="Media externa Ctrl + E"
+            aria-label="External Media Session">E</button
+          >
+        </div>
+
         <button
           type="button"
           class="conference-layout-button"
-          data-layout-choice="grid"
-          data-tooltip="Grid Ctrl + Shift + G">G</button
+          data-layout-choice="clase"
+          data-tooltip="Clase (Markdown) Ctrl + D">C</button
         >
         <button
           type="button"
@@ -364,21 +382,6 @@ if (
           data-tooltip="Foro Ctrl + Shift + F"
           >Fr</button
         >
-
-        <div
-          class="conference-external-media-controls-shell"
-          data-external-media-controls-shell
-          hidden
-        >
-          <button
-            type="button"
-            class="conference-layout-button conference-external-media-btn"
-            data-action="external-media-toggle"
-            data-external-media-btn
-            data-tooltip="Media externa Ctrl + E"
-            aria-label="External Media Session">E</button
-          >
-        </div>
 
         <div class="conference-break-rooms-shell" data-break-rooms-shell hidden>
           <button
@@ -1669,6 +1672,15 @@ if (
     gap: 0.8rem;
     align-content: start;
     overflow: auto;
+  }
+
+  .conference-slot--grid-compact {
+    grid-template-columns: repeat(2, 1fr) !important;
+    grid-auto-rows: auto !important;
+  }
+
+  .conference-slot--grid-compact .conference-tile {
+    aspect-ratio: 16 / 9;
   }
 
   .conference-presentation iframe {
@@ -4904,7 +4916,8 @@ if (
   }
 
   /* Force black background for presentation iframe containers */
-  .conference-presentation {
+  .conference-presentation,
+  .conference-forum-shell {
     background: #000 !important;
   }
 

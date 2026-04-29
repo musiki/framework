@@ -14,10 +14,11 @@ const { isTeacher = false } = Astro.props as Props;
       <div class="workspace-list-section">
         <label class="workspace-list-label">Master</label>
         <div class="workspace-quick-list" data-workspace-master-list>
-          <button type="button" class="workspace-item" data-workspace-val="presentation">Presentación</button>
-          <button type="button" class="workspace-item" data-workspace-val="grid">Debate (Grid)</button>
-          <button type="button" class="workspace-item" data-workspace-val="full-win-speaker">Full Win Speaker</button>
-          <button type="button" class="workspace-item" data-workspace-val="collab">Colaborativo</button>
+          <button type="button" class="workspace-item" data-workspace-val="full-win-speaker">F - FULL SPEAKER</button>
+          <button type="button" class="workspace-item" data-workspace-val="screenshare">S - SHARE SCREEN</button>
+          <button type="button" class="workspace-item" data-workspace-val="presentation">P - PRESENTACIÓN</button>
+          <button type="button" class="workspace-item" data-workspace-val="grid">G - GRID</button>
+          <button type="button" class="workspace-item" data-workspace-val="external-media">E - EXTERNAL MEDIA</button>
         </div>
       </div>
 
@@ -29,6 +30,12 @@ const { isTeacher = false } = Astro.props as Props;
           </span>
           <input type="checkbox" data-show-circle-workspace-input />
         </label>
+        <div class="workspace-circle-controls" style="padding: 0.5rem 0.2rem 0;">
+           <div class="conference-range-row">
+             <input type="range" min="0.8" max="4" step="0.02" value="2.25" data-preview-zoom-sidebar-input />
+             <output style="font-size: 0.6rem; opacity: 0.6;" data-preview-zoom-sidebar-output>2.25x</output>
+           </div>
+        </div>
       </div>
 
       <div class="workspace-list-section" style="margin-top: 0.5rem;">

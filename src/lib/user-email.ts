@@ -8,7 +8,7 @@
  * directly and auto-migrate on hit (lazy seeding).
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { query } from './db/pool';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -36,34 +36,40 @@ export type MergeResult =
  * Returns null if no user owns this email.
  */
 export async function resolveUserIdByEmail(
-  supabase: SupabaseClient,
   rawEmail: string,
 ): Promise<string | null> {
   const email = rawEmail.toLowerCase().trim();
   if (!email) return null;
 
   // 1. UserEmail table
-  const { data: ueRow } = await supabase
-    .from('UserEmail')
-    .select('userId')
-    .eq('email', email)
-    .maybeSingle();
+  const { data: ueRows, error: ueError } = await query(`SELECT "userId" FROM "UserEmail" WHERE "email" = $1`, [email]);
+  if (ueError) {
+    console.warn(`[DB-EMAIL] UserEmail lookup error for ${email}:`, ueError.message);
+  }
+  const ueRow = ueRows?.[0];
 
-  if (ueRow?.userId) return ueRow.userId;
+  if (ueRow?.userId) {
+    console.log(`[DB-EMAIL] Found userId ${ueRow.userId} in UserEmail table for ${email}`);
+    return ueRow.userId;
+  }
 
   // 2. Fallback: User.email (handles pre-migration rows)
-  const { data: userRow } = await supabase
-    .from('User')
-    .select('id')
-    .ilike('email', email)
-    .maybeSingle();
+  const { data: userRows, error: userError } = await query(`SELECT "id" FROM "User" WHERE "email" ILIKE $1`, [email]);
+  if (userError) {
+    console.warn(`[DB-EMAIL] User table lookup error for ${email}:`, userError.message);
+  }
+  const userRow = userRows?.[0];
 
-  if (!userRow?.id) return null;
+  if (!userRow?.id) {
+    console.log(`[DB-EMAIL] No user found for ${email} in User or UserEmail table`);
+    return null;
+  }
 
+  console.log(`[DB-EMAIL] Found userId ${userRow.id} in User table (fallback) for ${email}. Migrating to UserEmail...`);
   // Lazy migration — insert UserEmail row so future lookups hit path #1
-  await supabase.from('UserEmail').upsert(
-    [{ userId: userRow.id, email, isPrimary: true }],
-    { onConflict: 'email', ignoreDuplicates: true },
+  await query(
+    `INSERT INTO "UserEmail" ("userId", "email", "isPrimary") VALUES ($1, $2, $3) ON CONFLICT ("email") DO NOTHING`,
+    [userRow.id, email, true]
   );
 
   return userRow.id;
@@ -77,20 +83,23 @@ export async function resolveUserIdByEmail(
  * Returns false if the email is already owned by a different user.
  */
 export async function registerEmailForUser(
-  supabase: SupabaseClient,
   userId: string,
   rawEmail: string,
   isPrimary = false,
 ): Promise<{ ok: boolean; conflict?: string }> {
   const email = rawEmail.toLowerCase().trim();
 
-  const existingOwnerId = await resolveUserIdByEmail(supabase, email);
+  const existingOwnerId = await resolveUserIdByEmail(email);
   if (existingOwnerId) {
     if (existingOwnerId === userId) return { ok: true }; // already registered
     return { ok: false, conflict: existingOwnerId };
   }
 
-  const { error } = await supabase.from('UserEmail').insert([{ userId, email, isPrimary }]);
+  const { error } = await query(
+    `INSERT INTO "UserEmail" ("userId", "email", "isPrimary") VALUES ($1, $2, $3)`,
+    [userId, email, isPrimary]
+  );
+  
   if (error && error.code !== '23505') {
     throw new Error(error.message || 'Failed to register email');
   }
@@ -112,109 +121,86 @@ export async function registerEmailForUser(
  * 4. Delete the mergeId User record
  */
 export async function mergeUsers(
-  supabase: SupabaseClient,
   keepId: string,
   mergeId: string,
 ): Promise<MergeResult> {
   if (keepId === mergeId) return { ok: false, error: 'keepId and mergeId are the same' };
 
   // Verify both users exist
-  const { data: users } = await supabase
-    .from('User')
-    .select('id')
-    .in('id', [keepId, mergeId]);
+  const { data: users } = await query(`SELECT "id" FROM "User" WHERE "id" = ANY($1)`, [[keepId, mergeId]]);
 
   const foundIds = new Set((users || []).map((u: any) => u.id));
   if (!foundIds.has(keepId)) return { ok: false, error: `User ${keepId} not found` };
   if (!foundIds.has(mergeId)) return { ok: false, error: `User ${mergeId} not found` };
 
   // 1. Transfer UserEmail rows
-  const { data: mergeEmails } = await supabase
-    .from('UserEmail')
-    .select('id, email, isPrimary')
-    .eq('userId', mergeId);
+  const { data: mergeEmails } = await query(`SELECT "id", "email", "isPrimary" FROM "UserEmail" WHERE "userId" = $1`, [mergeId]);
 
   let transferredEmails = 0;
   for (const row of (mergeEmails || []) as UserEmailRow[]) {
     // Check if email already registered under keepId
-    const { data: existing } = await supabase
-      .from('UserEmail')
-      .select('id')
-      .eq('email', row.email)
-      .eq('userId', keepId)
-      .maybeSingle();
+    const { data: existingRows } = await query(
+      `SELECT "id" FROM "UserEmail" WHERE "email" = $1 AND "userId" = $2`,
+      [row.email, keepId]
+    );
+    const existing = existingRows?.[0];
 
     if (existing) {
       // Just remove the duplicate row
-      await supabase.from('UserEmail').delete().eq('id', row.id);
+      await query(`DELETE FROM "UserEmail" WHERE "id" = $1`, [row.id]);
     } else {
-      await supabase
-        .from('UserEmail')
-        .update({ userId: keepId, isPrimary: false })
-        .eq('id', row.id);
+      await query(
+        `UPDATE "UserEmail" SET "userId" = $1, "isPrimary" = $2 WHERE "id" = $3`,
+        [keepId, false, row.id]
+      );
       transferredEmails++;
     }
   }
 
   // Also ensure the mergeId's User.email is registered under keepId
-  const { data: mergeUser } = await supabase
-    .from('User')
-    .select('email')
-    .eq('id', mergeId)
-    .maybeSingle();
+  const { data: mergeUserRows } = await query(`SELECT "email" FROM "User" WHERE "id" = $1`, [mergeId]);
+  const mergeUser = mergeUserRows?.[0];
 
   if (mergeUser?.email) {
-    await registerEmailForUser(supabase, keepId, mergeUser.email, false).catch(() => undefined);
+    await registerEmailForUser(keepId, mergeUser.email, false).catch(() => undefined);
   }
 
   // 2. Transfer Enrollments (skip if keepId already enrolled in same course)
-  const { data: keepEnrollments } = await supabase
-    .from('Enrollment')
-    .select('courseId')
-    .eq('userId', keepId);
+  const { data: keepEnrollments } = await query(`SELECT "courseId" FROM "Enrollment" WHERE "userId" = $1`, [keepId]);
 
   const keepCourseIds = new Set((keepEnrollments || []).map((e: any) => e.courseId));
 
-  const { data: mergeEnrollments } = await supabase
-    .from('Enrollment')
-    .select('id, courseId')
-    .eq('userId', mergeId);
+  const { data: mergeEnrollments } = await query(`SELECT "id", "courseId" FROM "Enrollment" WHERE "userId" = $1`, [mergeId]);
 
   let transferredEnrollments = 0;
   for (const e of (mergeEnrollments || []) as any[]) {
     if (keepCourseIds.has(e.courseId)) {
-      await supabase.from('Enrollment').delete().eq('id', e.id);
+      await query(`DELETE FROM "Enrollment" WHERE "id" = $1`, [e.id]);
     } else {
-      await supabase.from('Enrollment').update({ userId: keepId }).eq('id', e.id);
+      await query(`UPDATE "Enrollment" SET "userId" = $1 WHERE "id" = $2`, [keepId, e.id]);
       transferredEnrollments++;
     }
   }
 
   // 3. Transfer Submissions (skip if keepId already has submission for same assignment)
-  const { data: keepSubmissions } = await supabase
-    .from('Submission')
-    .select('assignmentId')
-    .eq('userId', keepId);
+  const { data: keepSubmissions } = await query(`SELECT "assignmentId" FROM "Submission" WHERE "userId" = $1`, [keepId]);
 
   const keepAssignmentIds = new Set((keepSubmissions || []).map((s: any) => s.assignmentId));
 
-  const { data: mergeSubmissions } = await supabase
-    .from('Submission')
-    .select('id, assignmentId')
-    .eq('userId', mergeId);
+  const { data: mergeSubmissions } = await query(`SELECT "id", "assignmentId" FROM "Submission" WHERE "userId" = $1`, [mergeId]);
 
   let transferredSubmissions = 0;
   for (const s of (mergeSubmissions || []) as any[]) {
     if (keepAssignmentIds.has(s.assignmentId)) {
-      await supabase.from('Submission').delete().eq('id', s.id);
+      await query(`DELETE FROM "Submission" WHERE "id" = $1`, [s.id]);
     } else {
-      await supabase.from('Submission').update({ userId: keepId }).eq('id', s.id);
+      await query(`UPDATE "Submission" SET "userId" = $1 WHERE "id" = $2`, [keepId, s.id]);
       transferredSubmissions++;
     }
   }
 
   // 4. Delete the merged user
-  const { error: deleteError } = await supabase.from('User').delete().eq('id', mergeId);
+  const { error: deleteError } = await query(`DELETE FROM "User" WHERE "id" = $1`, [mergeId]);
   if (deleteError) return { ok: false, error: deleteError.message };
 
   return { ok: true, transferredEmails, transferredEnrollments, transferredSubmissions };
@@ -223,15 +209,14 @@ export async function mergeUsers(
 // ── List emails for a user ─────────────────────────────────────────────────────
 
 export async function listEmailsForUser(
-  supabase: SupabaseClient,
   userId: string,
 ): Promise<UserEmailRow[]> {
-  const { data } = await supabase
-    .from('UserEmail')
-    .select('id, userId, email, isPrimary, createdAt')
-    .eq('userId', userId)
-    .order('isPrimary', { ascending: false })
-    .order('createdAt', { ascending: true });
+  const { data } = await query(
+    `SELECT "id", "userId", "email", "isPrimary", "createdAt" FROM "UserEmail" WHERE "userId" = $1 ORDER BY "isPrimary" DESC, "createdAt" ASC`,
+    [userId]
+  );
 
   return (data || []) as UserEmailRow[];
 }
+
+

@@ -22,7 +22,11 @@ export async function broadcastForumEvent(
   event: ForumBroadcastEvent,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  if (!SUPABASE_URL || !SERVICE_KEY || !threadId) return;
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    // Realtime disabled after Supabase migration, pending LiveKit implementation
+    return;
+  }
+  if (!threadId) return;
 
   const url = `${SUPABASE_URL}/realtime/v1/api/broadcast`;
   try {

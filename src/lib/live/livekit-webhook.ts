@@ -1,5 +1,5 @@
 import { WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
-import { createSupabaseServerClient } from '../forum-server';
+import { query } from '../db/pool';
 
 const normalizeText = (value: unknown) => String(value ?? '').trim();
 const normalizeRole = (value: unknown) =>
@@ -90,63 +90,59 @@ const getWebhookContext = (event: WebhookEvent): WebhookContext => {
   };
 };
 
-const eventLogAlreadyStored = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>,
-  eventId: string,
-) => {
+const eventLogAlreadyStored = async (eventId: string) => {
   if (!eventId) return false;
-  const { data, error } = await supabase
-    .from('LiveKitWebhookEvent')
-    .select('eventId')
-    .eq('eventId', eventId)
-    .maybeSingle();
+  const { data, error } = await query(
+    `SELECT "eventId" FROM "LiveKitWebhookEvent" WHERE "eventId" = $1`,
+    [eventId]
+  );
 
   if (error) throw error;
-  return Boolean(data?.eventId);
+  return Boolean(data?.[0]?.eventId);
 };
 
 const storeEventLog = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>,
-  event: WebhookEvent,
   context: WebhookContext,
   rawPayload: Record<string, unknown>,
 ) => {
-  const { error } = await supabase.from('LiveKitWebhookEvent').insert([
-    {
-      eventId: context.eventId,
-      eventName: context.eventName,
-      roomSid: context.roomSid || null,
-      roomName: context.roomName || null,
-      courseId: context.courseId || null,
-      pageSlug: context.pageSlug || null,
-      participantSid: context.participantSid || null,
-      participantIdentity: context.participantIdentity || null,
-      participantName: context.participantName || null,
-      userId: context.userId || null,
-      role: context.role,
-      trackSid: context.trackSid || null,
-      trackName: context.trackName || null,
-      createdAt: context.eventAt,
-      payload: rawPayload,
-    },
-  ]);
+  const { error } = await query(
+    `INSERT INTO "LiveKitWebhookEvent" (
+      "eventId", "eventName", "roomSid", "roomName", "courseId", "pageSlug", 
+      "participantSid", "participantIdentity", "participantName", "userId", 
+      "role", "trackSid", "trackName", "createdAt", "payload"
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+    [
+      context.eventId,
+      context.eventName,
+      context.roomSid || null,
+      context.roomName || null,
+      context.courseId || null,
+      context.pageSlug || null,
+      context.participantSid || null,
+      context.participantIdentity || null,
+      context.participantName || null,
+      context.userId || null,
+      context.role,
+      context.trackSid || null,
+      context.trackName || null,
+      context.eventAt,
+      rawPayload,
+    ]
+  );
 
   if (error) throw error;
 };
 
-const ensureLiveClassSession = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>,
-  context: WebhookContext,
-) => {
+const ensureLiveClassSession = async (context: WebhookContext) => {
   if (!context.roomSid || !context.roomName) return null;
 
-  const { data: existing, error: existingError } = await supabase
-    .from('LiveClassSession')
-    .select('id, courseId, pageSlug, teacherUserId, finishedAt')
-    .eq('livekitRoomSid', context.roomSid)
-    .maybeSingle();
+  const { data: existingRows, error: existingError } = await query(
+    `SELECT id, "courseId", "pageSlug", "teacherUserId", "finishedAt" FROM "LiveClassSession" WHERE "livekitRoomSid" = $1`,
+    [context.roomSid]
+  );
 
   if (existingError) throw existingError;
+  const existing = existingRows?.[0];
 
   const nextTeacherUserId =
     context.role === 'teacher' && context.userId
@@ -154,105 +150,107 @@ const ensureLiveClassSession = async (
       : normalizeUuid(existing?.teacherUserId);
 
   if (!existing) {
-    const { data: created, error: createError } = await supabase
-      .from('LiveClassSession')
-      .insert([
-        {
-          livekitRoomSid: context.roomSid,
-          roomName: context.roomName,
-          courseId: context.courseId || null,
-          pageSlug: context.pageSlug || null,
-          teacherUserId: nextTeacherUserId || null,
-          startedAt: context.eventAt,
-          lastEventAt: context.eventAt,
-          finishedAt: context.eventName === 'room_finished' ? context.eventAt : null,
-          metadata: {
-            source: 'livekit-webhook',
-          },
-        },
-      ])
-      .select('id')
-      .single();
+    const { data: createdRows, error: createError } = await query(
+      `INSERT INTO "LiveClassSession" (
+        "livekitRoomSid", "roomName", "courseId", "pageSlug", 
+        "teacherUserId", "startedAt", "lastEventAt", "finishedAt", "metadata"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [
+        context.roomSid,
+        context.roomName,
+        context.courseId || null,
+        context.pageSlug || null,
+        nextTeacherUserId || null,
+        context.eventAt,
+        context.eventAt,
+        context.eventName === 'room_finished' ? context.eventAt : null,
+        { source: 'livekit-webhook' },
+      ]
+    );
 
     if (createError) throw createError;
-    return normalizeText(created?.id);
+    return normalizeText(createdRows?.[0]?.id);
   }
 
-  const updatePayload: Record<string, unknown> = {
-    lastEventAt: context.eventAt,
-  };
+  const updateFields: string[] = ['"lastEventAt" = $1'];
+  const params: any[] = [context.eventAt];
 
   if (!normalizeText(existing.courseId) && context.courseId) {
-    updatePayload.courseId = context.courseId;
+    params.push(context.courseId);
+    updateFields.push(`"courseId" = $${params.length}`);
   }
 
   if (!normalizeText(existing.pageSlug) && context.pageSlug) {
-    updatePayload.pageSlug = context.pageSlug;
+    params.push(context.pageSlug);
+    updateFields.push(`"pageSlug" = $${params.length}`);
   }
 
   if (!normalizeUuid(existing.teacherUserId) && nextTeacherUserId) {
-    updatePayload.teacherUserId = nextTeacherUserId;
+    params.push(nextTeacherUserId);
+    updateFields.push(`"teacherUserId" = $${params.length}`);
   }
 
   if (context.eventName === 'room_finished') {
-    updatePayload.finishedAt = context.eventAt;
+    params.push(context.eventAt);
+    updateFields.push(`"finishedAt" = $${params.length}`);
   }
 
-  const { error: updateError } = await supabase
-    .from('LiveClassSession')
-    .update(updatePayload)
-    .eq('id', existing.id);
+  params.push(existing.id);
+  const { error: updateError } = await query(
+    `UPDATE "LiveClassSession" SET ${updateFields.join(', ')} WHERE id = $${params.length}`,
+    params
+  );
 
   if (updateError) throw updateError;
   return normalizeText(existing.id);
 };
 
 const upsertAttendance = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   sessionId: string,
   context: WebhookContext,
 ) => {
   if (!sessionId || !context.participantIdentity) return;
 
-  const { data: existing, error: existingError } = await supabase
-    .from('LiveClassAttendance')
-    .select(
-      'id, joinCount, leaveCount, abortedCount, firstJoinedAt, lastJoinedAt, lastLeftAt, lastStatus',
-    )
-    .eq('sessionId', sessionId)
-    .eq('identity', context.participantIdentity)
-    .maybeSingle();
+  const { data: existingRows, error: existingError } = await query(
+    `SELECT id, "joinCount", "leaveCount", "abortedCount", "firstJoinedAt", "lastJoinedAt", "lastLeftAt", "lastStatus" 
+     FROM "LiveClassAttendance" WHERE "sessionId" = $1 AND "identity" = $2`,
+    [sessionId, context.participantIdentity]
+  );
 
   if (existingError) throw existingError;
+  const existing = existingRows?.[0];
 
   const isJoin = context.eventName === 'participant_joined';
   const isLeft = context.eventName === 'participant_left';
   const isAborted = context.eventName === 'participant_connection_aborted';
 
   if (!existing) {
-    const { error: insertError } = await supabase.from('LiveClassAttendance').insert([
-      {
+    const { error: insertError } = await query(
+      `INSERT INTO "LiveClassAttendance" (
+        "sessionId", "userId", identity, "participantSid", name, role, 
+        "courseId", "pageSlug", "firstJoinedAt", "lastJoinedAt", "lastLeftAt", 
+        "joinCount", "leaveCount", "abortedCount", "lastStatus", "lastEventAt", metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+      [
         sessionId,
-        userId: context.userId || null,
-        identity: context.participantIdentity,
-        participantSid: context.participantSid || null,
-        name: context.participantName || null,
-        role: context.role,
-        courseId: context.courseId || null,
-        pageSlug: context.pageSlug || null,
-        firstJoinedAt: isJoin ? context.eventAt : null,
-        lastJoinedAt: isJoin ? context.eventAt : null,
-        lastLeftAt: isLeft || isAborted ? context.eventAt : null,
-        joinCount: isJoin ? 1 : 0,
-        leaveCount: isLeft ? 1 : 0,
-        abortedCount: isAborted ? 1 : 0,
-        lastStatus: isAborted ? 'aborted' : isLeft ? 'left' : isJoin ? 'joined' : 'pending',
-        lastEventAt: context.eventAt,
-        metadata: {
-          source: 'livekit-webhook',
-        },
-      },
-    ]);
+        context.userId || null,
+        context.participantIdentity,
+        context.participantSid || null,
+        context.participantName || null,
+        context.role,
+        context.courseId || null,
+        context.pageSlug || null,
+        isJoin ? context.eventAt : null,
+        isJoin ? context.eventAt : null,
+        isLeft || isAborted ? context.eventAt : null,
+        isJoin ? 1 : 0,
+        isLeft ? 1 : 0,
+        isAborted ? 1 : 0,
+        isAborted ? 'aborted' : isLeft ? 'left' : isJoin ? 'joined' : 'pending',
+        context.eventAt,
+        { source: 'livekit-webhook' },
+      ]
+    );
 
     if (insertError) throw insertError;
     return;
@@ -262,45 +260,45 @@ const upsertAttendance = async (
   const nextLeaveCount = Number(existing.leaveCount || 0) + (isLeft ? 1 : 0);
   const nextAbortedCount = Number(existing.abortedCount || 0) + (isAborted ? 1 : 0);
 
-  const { error: updateError } = await supabase
-    .from('LiveClassAttendance')
-    .update({
-      userId: context.userId || null,
-      participantSid: context.participantSid || null,
-      name: context.participantName || null,
-      role: context.role,
-      courseId: context.courseId || null,
-      pageSlug: context.pageSlug || null,
-      firstJoinedAt: normalizeText(existing.firstJoinedAt) || (isJoin ? context.eventAt : null),
-      lastJoinedAt: isJoin ? context.eventAt : existing.lastJoinedAt,
-      lastLeftAt: isLeft || isAborted ? context.eventAt : existing.lastLeftAt,
-      joinCount: nextJoinCount,
-      leaveCount: nextLeaveCount,
-      abortedCount: nextAbortedCount,
-      lastStatus: isAborted ? 'aborted' : isLeft ? 'left' : isJoin ? 'joined' : existing.lastStatus,
-      lastEventAt: context.eventAt,
-    })
-    .eq('id', existing.id);
+  const { error: updateError } = await query(
+    `UPDATE "LiveClassAttendance" SET 
+      "userId" = $1, "participantSid" = $2, name = $3, role = $4, "courseId" = $5, "pageSlug" = $6, 
+      "firstJoinedAt" = $7, "lastJoinedAt" = $8, "lastLeftAt" = $9, "joinCount" = $10, 
+      "leaveCount" = $11, "abortedCount" = $12, "lastStatus" = $13, "lastEventAt" = $14
+    WHERE id = $15`,
+    [
+      context.userId || null,
+      context.participantSid || null,
+      context.participantName || null,
+      context.role,
+      context.courseId || null,
+      context.pageSlug || null,
+      normalizeText(existing.firstJoinedAt) || (isJoin ? context.eventAt : null),
+      isJoin ? context.eventAt : existing.lastJoinedAt,
+      isLeft || isAborted ? context.eventAt : existing.lastLeftAt,
+      nextJoinCount,
+      nextLeaveCount,
+      nextAbortedCount,
+      isAborted ? 'aborted' : isLeft ? 'left' : isJoin ? 'joined' : existing.lastStatus,
+      context.eventAt,
+      existing.id
+    ]
+  );
 
   if (updateError) throw updateError;
 };
 
 const finalizeOpenAttendanceRows = async (
-  supabase: ReturnType<typeof createSupabaseServerClient>,
   sessionId: string,
   eventAt: string,
 ) => {
   if (!sessionId) return;
 
-  const { error } = await supabase
-    .from('LiveClassAttendance')
-    .update({
-      lastLeftAt: eventAt,
-      lastEventAt: eventAt,
-      lastStatus: 'room_finished',
-    })
-    .eq('sessionId', sessionId)
-    .is('lastLeftAt', null);
+  const { error } = await query(
+    `UPDATE "LiveClassAttendance" SET "lastLeftAt" = $1, "lastEventAt" = $2, "lastStatus" = $3 
+     WHERE "sessionId" = $4 AND "lastLeftAt" IS NULL`,
+    [eventAt, eventAt, 'room_finished', sessionId]
+  );
 
   if (error) throw error;
 };
@@ -311,11 +309,10 @@ export const receiveLiveKitWebhook = async (rawBody: string, authHeader = '') =>
 };
 
 export const persistLiveKitWebhook = async (event: WebhookEvent, rawBody: string) => {
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
   const context = getWebhookContext(event);
   const rawPayload = parsePayload(rawBody) as Record<string, unknown>;
 
-  if (await eventLogAlreadyStored(supabase, context.eventId)) {
+  if (await eventLogAlreadyStored(context.eventId)) {
     return {
       duplicate: true,
       eventId: context.eventId,
@@ -324,20 +321,20 @@ export const persistLiveKitWebhook = async (event: WebhookEvent, rawBody: string
     };
   }
 
-  await storeEventLog(supabase, event, context, rawPayload);
+  await storeEventLog(context, rawPayload);
 
-  const sessionId = await ensureLiveClassSession(supabase, context);
+  const sessionId = await ensureLiveClassSession(context);
   if (
     sessionId &&
     (context.eventName === 'participant_joined' ||
       context.eventName === 'participant_left' ||
       context.eventName === 'participant_connection_aborted')
   ) {
-    await upsertAttendance(supabase, sessionId, context);
+    await upsertAttendance(sessionId, context);
   }
 
   if (sessionId && context.eventName === 'room_finished') {
-    await finalizeOpenAttendanceRows(supabase, sessionId, context.eventAt);
+    await finalizeOpenAttendanceRows(sessionId, context.eventAt);
   }
 
   return {

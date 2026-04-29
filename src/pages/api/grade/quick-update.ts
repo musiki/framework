@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
+import { query } from '../../../lib/db/pool';
 import { isElevatedGlobalRole } from '../../../lib/roles';
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -13,10 +13,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const supabase = createClient(import.meta.env.SUPABASE_URL, import.meta.env.SUPABASE_KEY);
-
   // Verify user is a teacher/admin across possible duplicate rows
-  const { data: users } = await supabase.from('User').select('role').ilike('email', currentUser.email);
+  const { data: users } = await query('SELECT "role" FROM "User" WHERE "email" ILIKE $1', [currentUser.email]);
   const user = (users || []).find((row: any) => isElevatedGlobalRole(row?.role)) || users?.[0];
   
   if (!user || !isElevatedGlobalRole(user.role)) {
@@ -71,9 +69,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // Update submission fields in one call
-    const { error } = await supabase.from('Submission')
-      .update(updatePayload)
-      .eq('id', submissionId);
+    const keys = Object.keys(updatePayload);
+    const setClause = keys.map((key, i) => `"${key}" = $${i + 1}`).join(', ');
+    const { error } = await query(
+      `UPDATE "Submission" SET ${setClause} WHERE "id" = $${keys.length + 1}`,
+      [...keys.map(k => updatePayload[k]), submissionId]
+    );
 
     if (error) throw error;
 

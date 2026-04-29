@@ -1,13 +1,12 @@
 import type { APIRoute } from 'astro';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   cleanString,
-  createSupabaseServerClient,
   ensureDbUserFromSession,
   getForumCourseAccess,
   json,
 } from '../../../../../lib/forum-server';
 import { broadcastForumEvent } from '../../../../../lib/forum-broadcast';
+import { query } from '../../../../../lib/db/pool';
 
 type PostRow = {
   id: string;
@@ -38,17 +37,8 @@ type ReactionSnapshot = {
 
 function resolveForumErrorMessage(error: any, fallback: string): string {
   const message = typeof error?.message === 'string' ? error.message : '';
-  if (message.includes('SUPABASE_SERVICE_ROLE_KEY_REQUIRED_FOR_FORUM') || message.includes('SUPABASE_SERVER_KEY_MISSING')) {
-    return 'Forum requires server service credentials. Set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_KEY=service-role key) and restart dev server.';
-  }
-  if (message.includes('ForumPostVote_value_check') || message.toLowerCase().includes('check constraint')) {
-    return 'Forum reaction schema outdated. Re-run docs/sql/forum-schema.sql in Supabase and restart dev server.';
-  }
-  if (message.toLowerCase().includes('row-level security')) {
-    return 'RLS blocked forum write. Set SUPABASE_SERVICE_ROLE_KEY in server env and restart dev server.';
-  }
-  if (message.includes('ForumPostVote') || message.includes('ForumPost') || message.includes('ForumThread')) {
-    return 'Forum schema missing or outdated. Re-run docs/sql/forum-schema.sql in Supabase.';
+  if (message.includes('ForumBoard') || message.includes('ForumThread') || message.includes('ForumPost') || message.includes('ForumPostVote')) {
+    return 'Forum schema missing or outdated. Please verify the database state on the VPS.';
   }
   return fallback;
 }
@@ -61,23 +51,22 @@ function parseVoteValue(value: unknown): number | null {
 }
 
 async function getPostContext(
-  supabase: SupabaseClient,
   postId: string,
 ): Promise<{ post: PostRow; thread: ThreadRow } | null> {
-  const { data: post, error: postError } = await supabase
-    .from('ForumPost')
-    .select('id, threadId')
-    .eq('id', postId)
-    .maybeSingle();
+  const { data: postRows, error: postError } = await query(
+    `SELECT "id", "threadId" FROM "ForumPost" WHERE "id" = $1 LIMIT 1`,
+    [postId]
+  );
+  const post = postRows?.[0];
 
   if (postError) throw postError;
   if (!post) return null;
 
-  const { data: thread, error: threadError } = await supabase
-    .from('ForumThread')
-    .select('id, courseId')
-    .eq('id', post.threadId)
-    .maybeSingle();
+  const { data: threadRows, error: threadError } = await query(
+    `SELECT "id", "courseId" FROM "ForumThread" WHERE "id" = $1 LIMIT 1`,
+    [post.threadId]
+  );
+  const thread = threadRows?.[0];
 
   if (threadError) throw threadError;
   if (!thread) return null;
@@ -89,14 +78,13 @@ async function getPostContext(
 }
 
 async function getVoteSnapshot(
-  supabase: SupabaseClient,
   postId: string,
   currentUserId: string,
 ): Promise<ReactionSnapshot> {
-  const { data: votes, error: votesError } = await supabase
-    .from('ForumPostVote')
-    .select('userId, value')
-    .eq('postId', postId);
+  const { data: votes, error: votesError } = await query(
+    `SELECT "userId", "value" FROM "ForumPostVote" WHERE "postId" = $1`,
+    [postId]
+  );
 
   if (votesError) throw votesError;
 
@@ -147,46 +135,37 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     return json({ error: 'value must be 0, 1, 2, or 3' }, 400);
   }
 
-  const supabase = createSupabaseServerClient({ requireServiceRole: true });
-
   try {
-    const dbUser = await ensureDbUserFromSession(supabase, session);
+    const dbUser = await ensureDbUserFromSession(session);
     if (!dbUser) return json({ error: 'Not authenticated' }, 401);
 
-    const context = await getPostContext(supabase, postId);
+    const context = await getPostContext(postId);
     if (!context) return json({ error: 'Post not found' }, 404);
 
-    const access = await getForumCourseAccess(supabase, dbUser, context.thread.courseId);
+    const access = await getForumCourseAccess(dbUser, context.thread.courseId);
     if (!access.canWrite) {
       return json({ error: 'You must be enrolled in this course to react' }, 403);
     }
 
     if (voteValue === 0) {
-      const { error: deleteError } = await supabase
-        .from('ForumPostVote')
-        .delete()
-        .eq('postId', postId)
-        .eq('userId', dbUser.id);
+      const { error: deleteError } = await query(
+        `DELETE FROM "ForumPostVote" WHERE "postId" = $1 AND "userId" = $2`,
+        [postId, dbUser.id]
+      );
 
       if (deleteError) throw deleteError;
     } else {
-      const { error: upsertError } = await supabase.from('ForumPostVote').upsert(
-        [
-          {
-            postId,
-            userId: dbUser.id,
-            value: voteValue,
-          },
-        ],
-        {
-          onConflict: 'postId,userId',
-        },
+      const { error: upsertError } = await query(
+        `INSERT INTO "ForumPostVote" ("postId", "userId", "value") 
+         VALUES ($1, $2, $3) 
+         ON CONFLICT ("postId", "userId") DO UPDATE SET "value" = $3`,
+        [postId, dbUser.id, voteValue]
       );
 
       if (upsertError) throw upsertError;
     }
 
-    const snapshot = await getVoteSnapshot(supabase, postId, dbUser.id);
+    const snapshot = await getVoteSnapshot(postId, dbUser.id);
 
     // Broadcast updated counts to all clients (excluding myReaction — private per user)
     void broadcastForumEvent(context.post.threadId, 'forum_reaction_updated', {
@@ -212,3 +191,4 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     return json({ error: resolveForumErrorMessage(error, 'Failed to update reaction') }, 500);
   }
 };
+

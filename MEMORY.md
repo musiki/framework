@@ -2,6 +2,24 @@
 
 ## Recent Activity (Last 12 Commits)
 
+<2026-04-28 supabase-to-postgres-migration> <br>
+Major architectural migration from managed Supabase to self-hosted PostgreSQL on Hetzner VPS.
+- Database: Created `musiki26` database on VPS (`46.225.154.68`). Successfully migrated all schema and data from Supabase using `pg_dump` and `psql` restore.
+- Infrastructure: Configured project-specific database to isolate from dev environment (`musiki-dev`). Connection string updated to use `DATABASE_URL` in `.env`.
+- Codebase Refactor: Systematic removal of `@supabase/supabase-js`. Migrated over 50 files (API routes, libraries, components) to use a new connection pool in `src/lib/db/pool.ts` with parameterized raw SQL queries.
+- Compatibility: Implemented a `query` wrapper that preserves the `{ data, error }` pattern to minimize disruption during migration.
+- Header/Dashboard: Updated complex `.astro` files to remove all remaining Supabase client dependencies. Header presence (real-time) is currently disabled pending a future LiveKit-based implementation.
+- Scripts: Updated `src/scripts/sync-eval-assignment-db.mjs` to work with the new PostgreSQL backend.
+- Documentation: Detailed migration log created at `docs/migrations/001-supabase-to-postgres.md`.
+
+<2026-04-28 local-dev-ssh-tunnel-and-authentik-setup> <br>
+Enabled local development via SSH tunnel and migrated authentication to Authentik OIDC.
+- Local Dev: Added `scripts/db-tunnel.sh` (Bash) and `scripts/db-tunnel.fish` (Fish) to securely tunnel PostgreSQL traffic.
+- Automation: Added `scripts/musiki-dev.fish` for Fish users, providing a single command to open the DB tunnel, run `npm run dev`, and cleanup the tunnel on exit.
+- Environment: Updated `.env` and `.env.example` with instructions for local database connection and new Authentik OIDC variables.
+- Auth: Integrated Authentik as the primary OIDC provider in `auth.config.ts`. Maintained direct Google OAuth as a secondary option for now.
+- Integration: Aligned auth flow with `musiki-dev` patterns while maintaining project isolation via separate Authentik applications and PostgreSQL databases (`musiki26`).
+
 <2026-04-28 eval-sync-supabase-network-backoff> <br>
 Reduced local-dev noise and request churn when Supabase DNS/network is unavailable.
 - Root cause: middleware launches eval catalog sync on several page routes. If Supabase DNS fails (`getaddrinfo ENOTFOUND ...supabase.co`), the sync tried each eval entry and logged one `[eval-sync] preguntaN: TypeError: fetch failed` per entry/request. This made unrelated room debugging look broken even though the immediate failure was network/DNS.

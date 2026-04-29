@@ -13,7 +13,26 @@ export const GET: APIRoute = async ({ request }) => {
   // Collection 'content' is based in src/content
   const cleanSlug = slug.startsWith('/') ? slug.slice(1) : slug;
   
-  const note = await getEntry('content', cleanSlug as any);
+  let note = await getEntry('content', cleanSlug as any);
+
+  if (!note) {
+    // Try finding by canonical slug in content collection
+    const { getCollection } = await import('astro:content');
+    const { getContentCanonicalSlug } = await import('../../lib/content-slug');
+    const content = await getCollection('content');
+    note = content.find(item => getContentCanonicalSlug(item) === cleanSlug);
+  }
+
+  if (!note) {
+    // Try cursos collection as well
+    const { getCollection } = await import('astro:content');
+    const { getContentCanonicalSlug } = await import('../../lib/content-slug');
+    const cursos = await getCollection('cursos');
+    note = cursos.find(item => {
+        const canonical = getContentCanonicalSlug(item);
+        return canonical === cleanSlug;
+    });
+  }
 
   if (!note) {
     return new Response('Note not found', { status: 404 });

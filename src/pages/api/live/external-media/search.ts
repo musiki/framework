@@ -45,10 +45,6 @@ export const GET: APIRoute = async ({ locals, url }) => {
   requestUrl.searchParams.set('videoEmbeddable', 'true');
   requestUrl.searchParams.set('safeSearch', 'moderate');
   requestUrl.searchParams.set('maxResults', String(SEARCH_LIMIT));
-  requestUrl.searchParams.set(
-    'fields',
-    'items(id/videoId,snippet/title,snippet/channelTitle,snippet/publishedAt,snippet/thumbnails/default/url,snippet/thumbnails/medium/url)',
-  );
   requestUrl.searchParams.set('q', q);
 
   try {

@@ -2,7 +2,6 @@ import type { APIRoute } from 'astro';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  createSupabaseServerClient,
   ensureDbUserFromSession,
   json,
 } from '../../../lib/forum-server';
@@ -32,8 +31,7 @@ export const GET: APIRoute = async () => {
 // POST /api/lily/snippets
 export const POST: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
-  const supabase = createSupabaseServerClient();
-  const user = await ensureDbUserFromSession(supabase, session);
+  const user = await ensureDbUserFromSession(session);
   if (!user) return json({ error: 'Not authenticated' }, 401);
 
   try {
@@ -66,8 +64,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 // DELETE /api/lily/snippets?name=...
 export const DELETE: APIRoute = async ({ url, locals }) => {
   const session = (locals as any).session;
-  const supabase = createSupabaseServerClient();
-  const user = await ensureDbUserFromSession(supabase, session);
+  const user = await ensureDbUserFromSession(session);
   if (!user) return json({ error: 'Not authenticated' }, 401);
 
   try {

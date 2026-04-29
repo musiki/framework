@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { createSupabaseServerClient } from '../../../lib/forum-server';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../../../lib/roles';
+import { query } from '../../../lib/db/pool';
 
 const clean = (v: unknown) => String(v || '').trim();
 const cleanLower = (v: unknown) => clean(v).toLowerCase();
@@ -54,13 +54,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ error: 'userId or valid email is required' }), { status: 400 });
   }
 
-  const supabase = createSupabaseServerClient();
-
   // Verify requester is a teacher and owns the course.
-  const { data: actingUsers } = await supabase
-    .from('User')
-    .select('id, role')
-    .ilike('email', cleanLower(currentUser.email));
+  const { data: actingUsers } = await query(
+    `SELECT "id", "role" FROM "User" WHERE "email" ILIKE $1`,
+    [cleanLower(currentUser.email)]
+  );
   const requester = (actingUsers || [])[0];
   if (!requester || !Array.isArray(actingUsers) || actingUsers.length === 0) {
     return new Response(JSON.stringify({ error: 'Requester not found' }), { status: 404 });
@@ -70,10 +68,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .map((user: any) => clean(user?.id))
     .filter(Boolean);
 
-  const { data: requesterEnrollments } = await supabase
-    .from('Enrollment')
-    .select('courseId, roleInCourse, userId')
-    .in('userId', actingUserIds);
+  const { data: requesterEnrollments } = await query(
+    `SELECT "courseId", "roleInCourse", "userId" FROM "Enrollment" WHERE "userId" = ANY($1)`,
+    [actingUserIds]
+  );
   const isAdmin =
     (actingUsers || []).some((user: any) => isAdminGlobalRole(user?.role));
   const isTeacher =
@@ -100,11 +98,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   let resolvedEmail = email;
 
   if (requestedUserId) {
-    const { data: existingUserById, error: existingUserByIdError } = await supabase
-      .from('User')
-      .select('id, email')
-      .eq('id', requestedUserId)
-      .maybeSingle();
+    const { data: existingUserByIdRows, error: existingUserByIdError } = await query(
+      `SELECT "id", "email" FROM "User" WHERE "id" = $1`,
+      [requestedUserId]
+    );
+    const existingUserById = existingUserByIdRows?.[0];
     if (existingUserByIdError) {
       return new Response(JSON.stringify({ error: existingUserByIdError.message }), { status: 500 });
     }
@@ -114,41 +112,43 @@ export const POST: APIRoute = async ({ request, locals }) => {
     userId = existingUserById.id;
     resolvedEmail = cleanLower(existingUserById.email);
   } else {
-    const { data: existingUsers } = await supabase.from('User').select('id, email').ilike('email', email);
+    const { data: existingUsers } = await query(
+      `SELECT "id", "email" FROM "User" WHERE "email" ILIKE $1`,
+      [email]
+    );
     if (existingUsers && existingUsers.length > 0) {
       userId = existingUsers[0].id;
       resolvedEmail = cleanLower(existingUsers[0].email);
     } else {
       const name = [lastName, firstName].filter(Boolean).join(', ') || email;
       const newId = crypto.randomUUID();
-      const { error: insertErr } = await supabase.from('User').insert([{
-        id: newId, email, name,
-        emailVerified: false, role: 'student',
-        createdAt: new Date(), updatedAt: new Date(),
-      }]);
+      const now = new Date();
+      const { error: insertErr } = await query(
+        `INSERT INTO "User" ("id", "email", "name", "emailVerified", "role", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [newId, email, name, false, 'student', now, now]
+      );
       if (insertErr) return new Response(JSON.stringify({ error: insertErr.message }), { status: 500 });
       userId = newId;
     }
   }
 
   // Check existing enrollment
-  const { data: existingEnrollment } = await supabase
-    .from('Enrollment')
-    .select('id, userId, courseId, roleInCourse')
-    .eq('userId', userId)
-    .eq('courseId', canonicalCourse)
-    .maybeSingle();
+  const { data: existingEnrollmentRows } = await query(
+    `SELECT "id", "userId", "courseId", "roleInCourse" FROM "Enrollment" WHERE "userId" = $1 AND "courseId" = $2`,
+    [userId, canonicalCourse]
+  );
+  const existingEnrollment = existingEnrollmentRows?.[0];
   let status: string;
   let enrollmentRecord = existingEnrollment || null;
 
   if (existingEnrollment) {
     status = 'already_enrolled';
   } else {
-    const { data: insertedEnrollment, error: enrollErr } = await supabase
-      .from('Enrollment')
-      .insert([{ userId, courseId: canonicalCourse, roleInCourse: 'student' }])
-      .select('id, userId, courseId, roleInCourse')
-      .single();
+    const { data: insertedEnrollmentRows, error: enrollErr } = await query(
+      `INSERT INTO "Enrollment" ("userId", "courseId", "roleInCourse") VALUES ($1, $2, $3) RETURNING "id", "userId", "courseId", "roleInCourse"`,
+      [userId, canonicalCourse, 'student']
+    );
+    const insertedEnrollment = insertedEnrollmentRows?.[0];
     if (enrollErr) return new Response(JSON.stringify({ error: enrollErr.message }), { status: 500 });
     enrollmentRecord = insertedEnrollment || null;
     status = 'enrolled';
@@ -160,14 +160,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const assignmentId = `${META_PREFIX}:${encodeURIComponent(canonicalCourse)}:${year}`;
 
     // Ensure meta assignment exists
-    const { data: existingAssignment } = await supabase.from('Assignment').select('id').eq('id', assignmentId).maybeSingle();
+    const { data: existingAssignmentRows } = await query(
+      `SELECT "id" FROM "Assignment" WHERE "id" = $1`,
+      [assignmentId]
+    );
+    const existingAssignment = existingAssignmentRows?.[0];
+
     if (!existingAssignment) {
       const base = { id: assignmentId, courseId: canonicalCourse, slug: `${canonicalCourse}/__meta__/student-profile/${year}` };
-      const r = await supabase.from('Assignment').insert([{ ...base, weight: 1 }]);
-      if (r.error) await supabase.from('Assignment').insert([base]);
+      const { error: insertError } = await query(
+        `INSERT INTO "Assignment" ("id", "courseId", "slug", "weight") VALUES ($1, $2, $3, $4) ON CONFLICT ("id") DO NOTHING`,
+        [base.id, base.courseId, base.slug, 1]
+      );
     }
 
-    const { data: existingSub } = await supabase.from('Submission').select('id, attempts, payload').eq('userId', userId).eq('assignmentId', assignmentId).maybeSingle();
+    const { data: existingSubRows } = await query(
+      `SELECT "id", "attempts", "payload" FROM "Submission" WHERE "userId" = $1 AND "assignmentId" = $2`,
+      [userId, assignmentId]
+    );
+    const existingSub = existingSubRows?.[0];
     const existingPayload = (existingSub?.payload && typeof existingSub.payload === 'object') ? existingSub.payload as Record<string, any> : {};
 
     const metaPayload = {
@@ -184,9 +195,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     };
 
     if (existingSub?.id) {
-      await supabase.from('Submission').update({ payload: metaPayload, attempts: (Number(existingSub.attempts) || 0) + 1, submittedAt: new Date().toISOString() }).eq('id', existingSub.id);
+      await query(
+        `UPDATE "Submission" SET "payload" = $1, "attempts" = $2, "submittedAt" = $3 WHERE "id" = $4`,
+        [metaPayload, (Number(existingSub.attempts) || 0) + 1, new Date().toISOString(), existingSub.id]
+      );
     } else {
-      await supabase.from('Submission').insert([{ userId, assignmentId, payload: metaPayload, attempts: 1, submittedAt: new Date().toISOString() }]);
+      await query(
+        `INSERT INTO "Submission" ("userId", "assignmentId", "payload", "attempts", "submittedAt") VALUES ($1, $2, $3, $4, $5)`,
+        [userId, assignmentId, metaPayload, 1, new Date().toISOString()]
+      );
     }
   }
 
@@ -198,3 +215,4 @@ export const POST: APIRoute = async ({ request, locals }) => {
     enrollment: enrollmentRecord,
   }), { status: 200 });
 };
+

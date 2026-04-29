@@ -1,10 +1,10 @@
 import type { APIRoute } from 'astro';
 import { getEntry } from 'astro:content';
-import { createClient } from '@supabase/supabase-js';
 import { canonicalizeCourseId } from '../../lib/course-alias';
-import { createSupabaseServerClient, ensureDbUserFromSession } from '../../lib/forum-server';
+import { ensureDbUserFromSession } from '../../lib/forum-server';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../../lib/roles';
 import { promoteUserToTeacherIfNeeded } from '../../lib/user-role-sync';
+import { query } from '../../lib/db/pool';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const normalizeRole = (value: unknown) => normalizeText(value).toLowerCase();
@@ -26,14 +26,14 @@ type SessionUserRow = {
   email?: string | null;
 };
 
-const resolveSessionUsers = async (supabase: any, email: string): Promise<SessionUserRow[]> => {
+const resolveSessionUsers = async (email: string): Promise<SessionUserRow[]> => {
   const normalizedEmail = normalizeText(email).toLowerCase();
   if (!normalizedEmail) return [];
 
-  const { data, error } = await supabase
-    .from('User')
-    .select('id, role, email')
-    .ilike('email', normalizedEmail);
+  const { data, error } = await query(
+    `SELECT "id", "role", "email" FROM "User" WHERE "email" ILIKE $1`,
+    [normalizedEmail]
+  );
 
   if (error) throw error;
   return Array.isArray(data) ? (data as SessionUserRow[]) : [];
@@ -54,19 +54,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Missing courseId' }), { status: 400 });
     }
 
-    const supabase = createSupabaseServerClient();
-    const user = await ensureDbUserFromSession(supabase, session);
+    const user = await ensureDbUserFromSession(session);
     if (!user) return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
 
     // Teachers can always enroll; students need a CourseInvite
     if (!isElevatedGlobalRole(user.role)) {
       const email = String(currentUser?.email || '').trim().toLowerCase();
-      const { data: invite } = await supabase
-        .from('CourseInvite')
-        .select('id')
-        .eq('courseId', normalizedCourseId)
-        .ilike('email', email)
-        .maybeSingle();
+      const { data: inviteRows } = await query(
+        `SELECT "id" FROM "CourseInvite" WHERE "courseId" = $1 AND "email" ILIKE $2`,
+        [normalizedCourseId, email]
+      );
+      const invite = inviteRows?.[0];
 
       if (!invite) {
         return new Response(
@@ -77,13 +75,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // Check existing enrollment
-    const { data: existing, error: existingError } = await supabase
-      .from('Enrollment')
-      .select('id')
-      .eq('userId', user.id)
-      .eq('courseId', normalizedCourseId)
-      .maybeSingle();
+    const { data: existingRows, error: existingError } = await query(
+      `SELECT "id" FROM "Enrollment" WHERE "userId" = $1 AND "courseId" = $2`,
+      [user.id, normalizedCourseId]
+    );
     if (existingError) throw existingError;
+    const existing = existingRows?.[0];
 
     if (existing) {
       return new Response(JSON.stringify({ message: 'Already enrolled' }), { status: 200 });
@@ -93,16 +90,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const roleInCourse = isElevatedGlobalRole(user.role) ? 'teacher' : 'student';
 
     // Insert Enrollment
-    const { error } = await supabase.from('Enrollment').insert([{
-      userId: user.id,
-      courseId: normalizedCourseId,
-      roleInCourse: roleInCourse
-    }]);
+    const { error } = await query(
+      `INSERT INTO "Enrollment" ("userId", "courseId", "roleInCourse") VALUES ($1, $2, $3)`,
+      [user.id, normalizedCourseId, roleInCourse]
+    );
 
     if (error) throw error;
 
     if (roleInCourse === 'teacher') {
-      await promoteUserToTeacherIfNeeded(supabase, user.id);
+      await promoteUserToTeacherIfNeeded(undefined, user.id);
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });
@@ -126,32 +122,30 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Missing enrollmentId' }), { status: 400 });
     }
 
-    const supabase = createSupabaseServerClient();
-
-    const users = await resolveSessionUsers(supabase, currentUser.email);
+    const users = await resolveSessionUsers(currentUser.email);
     const actingUserIds = Array.from(new Set(users.map((user) => normalizeText(user?.id)).filter(Boolean)));
     const actingIsAdmin = users.some((user) => isAdminGlobalRole(user?.role));
     if (actingUserIds.length === 0) {
       return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
     }
 
-    const { data: targetEnrollment, error: targetEnrollmentError } = await supabase
-      .from('Enrollment')
-      .select('id, userId, courseId, roleInCourse')
-      .eq('id', normalizedEnrollmentId)
-      .single();
+    const { data: targetEnrollmentRows, error: targetEnrollmentError } = await query(
+      `SELECT "id", "userId", "courseId", "roleInCourse" FROM "Enrollment" WHERE "id" = $1`,
+      [normalizedEnrollmentId]
+    );
 
     if (targetEnrollmentError) throw targetEnrollmentError;
+    const targetEnrollment = targetEnrollmentRows?.[0];
     if (!targetEnrollment) {
       return new Response(JSON.stringify({ error: 'Enrollment not found' }), { status: 404 });
     }
 
     const targetRole = normalizeRole(targetEnrollment.roleInCourse);
     const targetCourseId = await canonicalizeCourseId(targetEnrollment.courseId);
-    const { data: teacherEnrollments, error: teacherEnrollmentsError } = await supabase
-      .from('Enrollment')
-      .select('courseId, roleInCourse, userId')
-      .in('userId', actingUserIds);
+    const { data: teacherEnrollments, error: teacherEnrollmentsError } = await query(
+      `SELECT "courseId", "roleInCourse", "userId" FROM "Enrollment" WHERE "userId" = ANY($1)`,
+      [actingUserIds]
+    );
 
     if (teacherEnrollmentsError) throw teacherEnrollmentsError;
 
@@ -174,9 +168,10 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
 
       const targetCourseExists = await courseExistsInContent(targetCourseId);
       if (!actingIsAdmin && targetCourseExists) {
-        const { data: courseEnrollments, error: courseEnrollmentsError } = await supabase
-          .from('Enrollment')
-          .select('id, courseId, roleInCourse');
+        const { data: courseEnrollments, error: courseEnrollmentsError } = await query(
+          `SELECT "id", "courseId", "roleInCourse" FROM "Enrollment" WHERE "courseId" = $1`,
+          [targetCourseId]
+        );
 
         if (courseEnrollmentsError) throw courseEnrollmentsError;
 
@@ -197,10 +192,10 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Unsupported enrollment role' }), { status: 403 });
     }
 
-    const { error: deleteError } = await supabase
-      .from('Enrollment')
-      .delete()
-      .eq('id', normalizedEnrollmentId);
+    const { error: deleteError } = await query(
+      `DELETE FROM "Enrollment" WHERE "id" = $1`,
+      [normalizedEnrollmentId]
+    );
 
     if (deleteError) throw deleteError;
 
@@ -229,21 +224,20 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Unsupported roleInCourse' }), { status: 400 });
     }
 
-    const supabase = createSupabaseServerClient();
-    const users = await resolveSessionUsers(supabase, currentUser.email);
+    const users = await resolveSessionUsers(currentUser.email);
     const actingUserIds = Array.from(new Set(users.map((user) => normalizeText(user?.id)).filter(Boolean)));
     const actingIsAdmin = users.some((user) => isAdminGlobalRole(user?.role));
     if (actingUserIds.length === 0) {
       return new Response(JSON.stringify({ error: 'User not found' }), { status: 404 });
     }
 
-    const { data: targetEnrollment, error: targetEnrollmentError } = await supabase
-      .from('Enrollment')
-      .select('id, userId, courseId, roleInCourse')
-      .eq('id', normalizedEnrollmentId)
-      .single();
+    const { data: targetEnrollmentRows, error: targetEnrollmentError } = await query(
+      `SELECT "id", "userId", "courseId", "roleInCourse" FROM "Enrollment" WHERE "id" = $1`,
+      [normalizedEnrollmentId]
+    );
 
     if (targetEnrollmentError) throw targetEnrollmentError;
+    const targetEnrollment = targetEnrollmentRows?.[0];
     if (!targetEnrollment) {
       return new Response(JSON.stringify({ error: 'Enrollment not found' }), { status: 404 });
     }
@@ -254,10 +248,10 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Course not found for enrollment' }), { status: 404 });
     }
 
-    const { data: actingEnrollments, error: actingEnrollmentsError } = await supabase
-      .from('Enrollment')
-      .select('courseId, roleInCourse, userId')
-      .in('userId', actingUserIds);
+    const { data: actingEnrollments, error: actingEnrollmentsError } = await query(
+      `SELECT "courseId", "roleInCourse", "userId" FROM "Enrollment" WHERE "userId" = ANY($1)`,
+      [actingUserIds]
+    );
 
     if (actingEnrollmentsError) throw actingEnrollmentsError;
 
@@ -279,9 +273,10 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     if (!actingIsAdmin && currentRole === 'teacher' && normalizedNextRole === 'student') {
       const targetCourseExists = await courseExistsInContent(targetCourseId);
       if (targetCourseExists) {
-        const { data: courseEnrollments, error: courseEnrollmentsError } = await supabase
-          .from('Enrollment')
-          .select('id, courseId, roleInCourse');
+        const { data: courseEnrollments, error: courseEnrollmentsError } = await query(
+          `SELECT "id", "courseId", "roleInCourse" FROM "Enrollment" WHERE "courseId" = $1`,
+          [targetCourseId]
+        );
 
         if (courseEnrollmentsError) throw courseEnrollmentsError;
 
@@ -300,17 +295,16 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       }
     }
 
-    const { data: updatedEnrollment, error: updateError } = await supabase
-      .from('Enrollment')
-      .update({ roleInCourse: normalizedNextRole })
-      .eq('id', normalizedEnrollmentId)
-      .select('id, userId, courseId, roleInCourse')
-      .single();
+    const { data: updatedEnrollmentRows, error: updateError } = await query(
+      `UPDATE "Enrollment" SET "roleInCourse" = $1 WHERE "id" = $2 RETURNING "id", "userId", "courseId", "roleInCourse"`,
+      [normalizedNextRole, normalizedEnrollmentId]
+    );
+    const updatedEnrollment = updatedEnrollmentRows?.[0];
 
     if (updateError) throw updateError;
 
     if (normalizedNextRole === 'teacher') {
-      await promoteUserToTeacherIfNeeded(supabase, normalizeText(updatedEnrollment?.userId || targetEnrollment.userId));
+      await promoteUserToTeacherIfNeeded(undefined, normalizeText(updatedEnrollment?.userId || targetEnrollment.userId));
     }
 
     return new Response(JSON.stringify({ success: true, enrollment: updatedEnrollment }), { status: 200 });
@@ -318,3 +312,4 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
 };
+
