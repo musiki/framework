@@ -6,7 +6,7 @@ type Props = {
 const { isTeacher = false } = Astro.props as Props;
 ---
 
-<section class="conference-sidebar-section conference-sidebar-panel" data-workspace-manager>
+<details class="conference-sidebar-section conference-sidebar-panel" data-workspace-manager open>
   <summary class="conference-sidebar-heading">WORKSPACES</summary>
   
   <div class="conference-sidebar-panel-body">
@@ -61,7 +61,7 @@ const { isTeacher = false } = Astro.props as Props;
       </select>
     </div>
   </div>
-</section>
+</details>
 
 <style>
   .workspace-controls {

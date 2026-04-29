@@ -32,7 +32,7 @@
 .conference-external-media-shell {
   position: absolute;
   inset: 0;
-  z-index: 12;
+  z-index: 25000;
   display: grid;
   grid-template-rows: auto 1fr;
   background: rgba(0, 0, 0, 0.96);

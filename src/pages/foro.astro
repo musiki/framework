@@ -1228,6 +1228,88 @@ if (activeCourse) {
         flex-wrap: wrap;
       }
 
+      #forum-reader-root .forum-action-btn {
+        width: 1.55rem;
+        height: 1.55rem;
+        min-width: 1.55rem;
+        border: 1px solid var(--forum-border-strong);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--forum-bg-panel) 84%, var(--forum-bg-subtle) 16%);
+        color: var(--forum-text-primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        font: inherit;
+        font-size: 0.78rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      #forum-reader-root .forum-action-btn:hover,
+      #forum-reader-root .forum-action-btn:focus-visible,
+      #forum-reader-root .forum-action-btn.is-active {
+        border-color: color-mix(in srgb, var(--forum-accent) 52%, var(--forum-border-strong));
+        background: color-mix(in srgb, var(--forum-accent) 14%, var(--forum-bg-panel));
+        outline: none;
+      }
+
+      #forum-reader-root .forum-action-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.48;
+      }
+
+      #forum-reader-root .forum-post-quick-actions {
+        position: relative;
+        min-height: 1.75rem;
+        margin-top: 0.5rem;
+      }
+
+      #forum-reader-root .forum-post-quick-tray {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+        transition: opacity 140ms ease, transform 140ms ease;
+      }
+
+      #forum-reader-root .forum-post:hover .forum-post-quick-tray,
+      #forum-reader-root .forum-post:focus-within .forum-post-quick-tray,
+      #forum-reader-root .forum-post.is-quick-open .forum-post-quick-tray {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+
+      #forum-reader-root .forum-post-reactions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+
+      #forum-reader-root .forum-post-reactions[hidden],
+      #forum-reader-root .forum-post-reaction-item[hidden] {
+        display: none;
+      }
+
+      #forum-reader-root .forum-post-reaction-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.18rem;
+      }
+
+      #forum-reader-root .forum-post-reaction-count {
+        color: var(--forum-text-secondary);
+        font-size: 0.68rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #forum-reader-root .forum-post-reaction-btn {
+        font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+      }
+
       #forum-reader-root .forum-edit-form {
         margin-top: 0.55rem;
       }

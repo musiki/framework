@@ -20,7 +20,10 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
+<script>
+  import ForceGraph from 'force-graph';
+  (window as any).ForceGraph = (window as any).ForceGraph || ForceGraph;
+</script>
 
 <style is:global>
   .graph-pod-container {
@@ -207,7 +210,8 @@
 
     function initGraphPod(root = document) {
       if (!root || root.dataset?.graphPodReady === 'true') return;
-      if (!window.ForceGraph) {
+      const ForceGraphCtor = window.ForceGraph;
+      if (!ForceGraphCtor) {
         window.setTimeout(() => initGraphPod(root), 120);
         return;
       }
@@ -223,17 +227,27 @@
       const highlightNodes = new Set();
       const highlightLinks = new Set();
 
-      const observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && !graphInstance) {
+      const observer = 'IntersectionObserver' in window
+        ? new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && !graphInstance) {
+              void init();
+            }
+          }, { threshold: 0.01 })
+        : null;
+
+      if (observer) observer.observe(container);
+      window.setTimeout(() => {
+        if (!graphInstance && container.isConnected && container.offsetParent !== null) {
           void init();
         }
-      }, { threshold: 0.1 });
-
-      observer.observe(container);
+      }, 180);
 
       async function init() {
+        if (graphInstance) return;
         const response = await fetch('/graph-data.json');
+        if (!response.ok) throw new Error('Could not load graph-data.json');
         graphData = await response.json();
+        observer?.disconnect();
         render();
         
         root.querySelector('#graph-pod-center')?.addEventListener('click', () => {
@@ -275,8 +289,10 @@
         labelColor: '#e0e0e0'
       };
 
-      // @ts-ignore
-      graphInstance = ForceGraph()(container)
+      const ForceGraphCtor = window.ForceGraph;
+      if (!ForceGraphCtor) return;
+
+      graphInstance = ForceGraphCtor()(container)
         .graphData(data)
         .backgroundColor('#000000')
         .nodeId('id')

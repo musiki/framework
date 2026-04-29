@@ -4044,7 +4044,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     normalizeRecordingPreset(persistedSetup.recordingPreset, 'landscape-1080'),
   );
   let presentationCircleZoom = previewZoom;
-  let showPresentationCircle = persistedSetup.showCircle === true;
+  let showPresentationCircle = persistedSetup.showCircle !== false;
   let presentationCircleSize = Number(persistedSetup.circleSize) || 180;
   let gridSize: 'normal' | 'compact' = persistedSetup.gridSize === 'compact' ? 'compact' : 'normal';
 
@@ -10642,6 +10642,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         if (status instanceof HTMLElement) {
           externalMediaStatus = status;
         }
+        const openButton = container.querySelector('[data-action="external-media-open"]');
+        if (openButton instanceof HTMLButtonElement) {
+          externalMediaOpenButton = openButton;
+        }
+        externalMediaPlayToggleButtons = Array.from(
+          root.querySelectorAll('[data-action="external-media-play-toggle"]'),
+        );
+        externalMediaCloseButtons = Array.from(
+          root.querySelectorAll('[data-action="external-media-close"], [data-action="external-media-stop"]'),
+        );
         input.addEventListener('input', () => {
           queueExternalMediaSearch(input.value);
         });
@@ -10655,8 +10665,35 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             void openExternalMediaFromInput(input.value);
           });
         });
+        container.querySelectorAll<HTMLButtonElement>('[data-action="external-media-stop"]').forEach((button) => {
+          button.addEventListener('click', () => {
+            void applyExternalMediaSession(null, 'local');
+          });
+        });
         renderExternalMediaSearchResults();
+        syncExternalMediaShell();
       }
+    };
+
+    const onClaseInit = (container: HTMLElement) => {
+      const controller = createClaseController({
+        contentEl: container.querySelector<HTMLElement>('[data-clase-content]'),
+        focusBtnEl: container.querySelector<HTMLElement>('[data-clase-focus-btn]'),
+        placeholderEl: container.querySelector<HTMLElement>('[data-clase-placeholder]'),
+        sectionEl: container.matches('[data-clase-section]')
+          ? container
+          : container.querySelector<HTMLElement>('[data-clase-section]'),
+      });
+      controller.bind();
+
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('musiki:clase-presentation-changed', {
+          detail: { lessonId: resolvePresentationPageSlug(presentation.getHref()) || null },
+        }));
+        window.dispatchEvent(new CustomEvent('musiki:clase-slide-changed', {
+          detail: { indexh: currentSlideState?.indexh ?? 0 },
+        }));
+      }, 0);
     };
 
     const onChatInit = (container: HTMLElement) => {
@@ -10683,6 +10720,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onLilypondInit,
     onConceptInit,
     onMediaInit,
+    onClaseInit,
     onChatInit
   );
 
@@ -12764,6 +12802,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   });
 
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented) return;
+    const toggleButton = event.target instanceof Element
+      ? event.target.closest('[data-action="sidebar-toggle"]')
+      : null;
+    if (toggleButton instanceof HTMLButtonElement && root.contains(toggleButton)) {
+      event.preventDefault();
+      toggleSidebarCollapsed();
+      if (!sidebarCollapsed) resetChatUnread();
+    }
+  });
+
   if (instrumentsToggleButton instanceof HTMLButtonElement) {
     instrumentsToggleButton.addEventListener('click', () => {
       toggleInstrumentsOpen();
@@ -14441,17 +14491,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const isPrimaryShortcutModifier = event.ctrlKey && !event.metaKey;
     const isMetaShortcutModifier = event.metaKey && !event.ctrlKey;
 
-    if ((isPrimaryShortcutModifier || isMetaShortcutModifier) && event.key === ',') {
+    if (
+      (isPrimaryShortcutModifier || isMetaShortcutModifier) &&
+      (event.key === ',' || event.code === 'Comma')
+    ) {
       event.preventDefault();
       executeRoomShortcutCommand('setup-modal-toggle');
       return;
     }
 
     const isRightSidebarShortcut =
-      isPrimaryShortcutModifier &&
+      (isPrimaryShortcutModifier || isMetaShortcutModifier) &&
       event.shiftKey &&
       !event.altKey &&
-      (event.code === 'Backslash' || event.key === '?' || event.key === '/');
+      (event.code === 'Backslash' || event.key === '\\' || event.key === '|' || event.key === '?' || event.key === '/');
 
     if (isRightSidebarShortcut) {
       event.preventDefault();
@@ -14460,10 +14513,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     const isLeftSidebarShortcut =
-      isPrimaryShortcutModifier &&
+      (isPrimaryShortcutModifier || isMetaShortcutModifier) &&
       !event.shiftKey &&
       !event.altKey &&
-      event.code === 'Backslash';
+      (event.code === 'Backslash' || event.key === '\\' || event.key === '|');
 
     if (isLeftSidebarShortcut) {
       event.preventDefault();

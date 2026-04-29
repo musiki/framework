@@ -11,6 +11,7 @@ export class RoomWorkspaceManager {
   private onLilypondInit?: (element: HTMLElement) => void;
   private onConceptInit?: (element: HTMLElement) => void;
   private onMediaInit?: (element: HTMLElement) => void;
+  private onClaseInit?: (element: HTMLElement) => void;
   private onChatInit?: (element: HTMLElement) => void;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
@@ -47,6 +48,7 @@ export class RoomWorkspaceManager {
     onLilypondInit?: (element: HTMLElement) => void,
     onConceptInit?: (element: HTMLElement) => void,
     onMediaInit?: (element: HTMLElement) => void,
+    onClaseInit?: (element: HTMLElement) => void,
     onChatInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
@@ -57,6 +59,7 @@ export class RoomWorkspaceManager {
     this.onLilypondInit = onLilypondInit;
     this.onConceptInit = onConceptInit;
     this.onMediaInit = onMediaInit;
+    this.onClaseInit = onClaseInit;
     this.onChatInit = onChatInit;
   }
 
@@ -123,6 +126,9 @@ export class RoomWorkspaceManager {
               }
               if (id === 'external-media' && this.onMediaInit) {
                 this.onMediaInit(element);
+              }
+              if (id === 'clase' && this.onClaseInit) {
+                this.onClaseInit(element);
               }
               if (id === 'chat' && this.onChatInit) {
                 this.onChatInit(element);
