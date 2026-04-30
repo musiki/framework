@@ -5688,17 +5688,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         (room.state === ConnectionState.Connected && !canLeadSession());
     }
 
-    if (kickToggleButton instanceof HTMLButtonElement) {
-      const canKick = localRole === 'teacher';
-      kickToggleButton.hidden = !canKick;
-      kickToggleButton.disabled = !canKick || room.state !== ConnectionState.Connected || !canLeadSession();
-      kickToggleButton.dataset.active = kickModeActive ? 'true' : 'false';
-      
-      // Force hide via style if still visible (extra safety for students)
-      if (!canKick) {
-        kickToggleButton.style.display = 'none';
-      }
-    }
+    syncKickToggleButtons();
 
     if (sessionMuteAllButton instanceof HTMLButtonElement) {
       sessionMuteAllButton.disabled =
@@ -11381,6 +11371,38 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   let kickModeActive = false;
+  const getParticipantLists = () =>
+    Array.from(root.querySelectorAll<HTMLElement>('[data-participant-list]')).filter(
+      (node): node is HTMLElement =>
+        node instanceof HTMLElement && !node.closest('#musiki-pod-templates'),
+    );
+
+  const getKickToggleButtons = () =>
+    Array.from(root.querySelectorAll<HTMLButtonElement>('[data-action="session-kick-toggle"]')).filter(
+      (button): button is HTMLButtonElement =>
+        button instanceof HTMLButtonElement && !button.closest('#musiki-pod-templates'),
+    );
+
+  const syncRosterPopupPosition = () => {
+    const shell = root.querySelector<HTMLElement>('.conference-count-shell');
+    if (!(shell instanceof HTMLElement)) return;
+    const rect = shell.getBoundingClientRect();
+    const popupWidth = 360;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupWidth - 8));
+    root.style.setProperty('--conference-roster-popup-left', `${Math.round(left)}px`);
+  };
+
+  const syncKickToggleButtons = () => {
+    const canKick = localRole === 'teacher';
+    getKickToggleButtons().forEach((button) => {
+      button.hidden = !canKick;
+      button.disabled = !canKick || room.state !== ConnectionState.Connected || !canLeadSession();
+      button.dataset.active = kickModeActive ? 'true' : 'false';
+      button.setAttribute('aria-pressed', kickModeActive ? 'true' : 'false');
+      button.style.display = canKick ? '' : 'none';
+    });
+  };
+
   const redirectToRoomHomepage = () => {
     window.location.assign('/');
   };
@@ -11401,52 +11423,56 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const renderParticipantList = () => {
-    renderParticipantRoster({
-      participantList,
-      participants: allParticipants(),
-      readRole: (participant) => readParticipantRole(room, participant, localRole),
-      room,
+    const sortedParticipants = allParticipants().sort((left, right) => {
+      const leftRole = readParticipantRole(room, left, localRole);
+      const rightRole = readParticipantRole(room, right, localRole);
+      if (leftRole !== rightRole) return leftRole === 'teacher' ? -1 : 1;
+      return readParticipantName(left).localeCompare(readParticipantName(right), 'es');
     });
 
-    if (canLeadSession()) {
-      const items = participantList.querySelectorAll('.conference-roster-item');
-      items.forEach((item, index) => {
-        const participant = allParticipants().sort((left, right) => {
-          const leftRole = readParticipantRole(room, left, localRole);
-          const rightRole = readParticipantRole(room, right, localRole);
-          if (leftRole !== rightRole) return leftRole === 'teacher' ? -1 : 1;
-          return readParticipantName(left).localeCompare(readParticipantName(right), 'es');
-        })[index];
+    getParticipantLists().forEach((list) => {
+      renderParticipantRoster({
+        participantList: list,
+        participants: sortedParticipants,
+        readRole: (participant) => readParticipantRole(room, participant, localRole),
+        room,
+      });
 
+      if (!canLeadSession() || !kickModeActive) return;
+
+      const items = list.querySelectorAll<HTMLElement>('.conference-roster-item');
+      items.forEach((item, index) => {
+        const participant = sortedParticipants[index];
         if (!participant || isLocalParticipant(room, participant)) return;
 
-        if (kickModeActive) {
-          const kickBtn = document.createElement('button');
-          kickBtn.className = 'conference-roster-kick-btn';
-          kickBtn.textContent = '×';
-          kickBtn.title = 'Expulsar';
-          kickBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            void kickParticipant(participant.identity);
-          });
-          
-          // Wrap content in a container for better flex layout
-          const content = document.createElement('div');
-          content.style.flex = '1';
-          content.style.minWidth = '0';
-          content.style.display = 'flex';
-          content.style.alignItems = 'baseline';
-          content.style.gap = '0.4rem';
-          
-          while (item.firstChild) {
-            content.appendChild(item.firstChild);
-          }
-          
-          item.append(content, kickBtn);
-          item.classList.add('is-kickable');
+        const role = readParticipantRole(room, participant, localRole);
+        if (role === 'teacher' || role === 'admin') return;
+
+        const kickBtn = document.createElement('button');
+        kickBtn.className = 'conference-roster-kick-btn';
+        kickBtn.type = 'button';
+        kickBtn.textContent = '×';
+        kickBtn.title = 'Expulsar';
+        kickBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          void kickParticipant(participant.identity);
+        });
+
+        const content = document.createElement('div');
+        content.style.flex = '1';
+        content.style.minWidth = '0';
+        content.style.display = 'flex';
+        content.style.alignItems = 'baseline';
+        content.style.gap = '0.4rem';
+
+        while (item.firstChild) {
+          content.appendChild(item.firstChild);
         }
+
+        item.append(content, kickBtn);
+        item.classList.add('is-kickable');
       });
-    }
+    });
   };
 
   const syncAllParticipants = () => {
@@ -12813,12 +12839,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   }
 
-  if (kickToggleButton instanceof HTMLButtonElement) {
-    kickToggleButton.addEventListener('click', () => {
+  getKickToggleButtons().forEach((button) => {
+    button.addEventListener('click', () => {
+      if (button.disabled || localRole !== 'teacher') return;
       kickModeActive = !kickModeActive;
-      kickToggleButton.dataset.active = kickModeActive ? 'true' : 'false';
+      syncKickToggleButtons();
       renderParticipantList();
     });
+  });
+
+  const countShell = root.querySelector<HTMLElement>('.conference-count-shell');
+  if (countShell instanceof HTMLElement) {
+    ['mouseenter', 'focusin', 'click'].forEach((eventName) => {
+      countShell.addEventListener(eventName, syncRosterPopupPosition);
+    });
+    window.addEventListener('resize', syncRosterPopupPosition);
+    window.addEventListener('scroll', syncRosterPopupPosition, true);
+    syncRosterPopupPosition();
   }
 
   if (shortcutsCloseButton instanceof HTMLButtonElement) {
@@ -14405,9 +14442,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     if (normalizedCommand === 'session-kick-toggle') {
-      if (localRole === 'teacher' && kickToggleButton instanceof HTMLButtonElement && !kickToggleButton.disabled) {
-        kickToggleButton.click();
-      }
+      const button = getKickToggleButtons().find((node) => !node.disabled);
+      if (localRole === 'teacher' && button instanceof HTMLButtonElement) button.click();
       return;
     }
 

@@ -6,6 +6,16 @@
 
 <div class="musiki-pod" data-pod="roster" data-pod-title="ROSTER">
   <div class="conference-sidebar-panel-body">
+    <div class="conference-roster-popup-head conference-roster-pod-head">
+      <span class="conference-roster-popup-title">Participantes</span>
+      <button
+        type="button"
+        class="conference-layout-button conference-kick-button"
+        data-action="session-kick-toggle"
+        data-tooltip="Modo expulsar Ctrl + K"
+        aria-label="Expulsar participantes"
+        hidden>K</button>
+    </div>
     <div class="conference-roster-scroll" style="height: 100%; overflow-y: auto;">
       <ul class="conference-roster" data-participant-list>
         <li class="conference-roster-empty">Todavia no hay participantes en la sala.</li>
@@ -29,5 +39,10 @@
     list-style: none;
     padding: 1rem;
     margin: 0;
+  }
+
+  .conference-roster-pod-head {
+    padding: 0.65rem 0.75rem 0.35rem;
+    border-bottom: 1px solid var(--conference-line-soft);
   }
 </style>

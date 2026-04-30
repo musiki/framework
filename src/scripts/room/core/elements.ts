@@ -87,6 +87,9 @@ export const selectRoomElements = (root: HTMLElement) => {
     identityPreviewSlot: root.querySelector('[data-slot="identity-preview"]'),
     teacherPanel: root.querySelector('[data-panel="teacher"]'),
     participantList: query('[data-participant-list]'),
+    participantLists: queryAll<HTMLElement>('[data-participant-list]').filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    ),
     stage: root.querySelector('[data-stage]'),
     stageFrameNode: root.querySelector('.conference-stage-frame'),
     gravityBallCanvas: root.querySelector('[data-gravity-ball-canvas]'),
