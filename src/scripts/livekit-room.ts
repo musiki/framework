@@ -10744,10 +10744,28 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       });
     };
 
+  const getWorkspaceSettingsSnapshot = () => ({
+    gridSize,
+    showCircle: showPresentationCircle,
+  });
+
+  const publishWorkspaceLayoutState = async (layoutOverride?: any) => {
+    if (!canLeadSession()) return;
+    const dockviewLayout = layoutOverride ?? workspaceManager.getLayout();
+    if (!dockviewLayout) return;
+    await publishMessage({
+      type: 'session-workspace',
+      layout: {
+        dockview: dockviewLayout,
+        settings: getWorkspaceSettingsSnapshot(),
+      },
+    });
+  };
+
   const workspaceManager = new RoomWorkspaceManager(
     root.querySelector('[data-workspace-root]') as HTMLElement,
     canLeadSession,
-    (layout) => void publishMessage({ type: 'session-workspace', layout }),
+    (layout) => void publishWorkspaceLayoutState(layout),
     onHyperpianoInit,
     onWhiteboardInit,
     onLilypondInit,
@@ -10956,7 +10974,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (currentLayout) {
       await publishMessage({
         type: 'session-workspace',
-        layout: currentLayout,
+        layout: {
+          dockview: currentLayout,
+          settings: getWorkspaceSettingsSnapshot(),
+        },
       });
     }
 
@@ -12870,6 +12891,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     input.addEventListener('change', () => {
       applyGridSize(input.value as any);
       persistSetupState();
+      void publishWorkspaceLayoutState().catch(() => undefined);
     });
   });
 
