@@ -208,20 +208,23 @@ const { presentationOptions = [] } = Astro.props;
     <section class="conference-stage-panel" data-panel="external-media">
        <div class="conference-external-media-body" style="height: 100%;">
           <div class="conference-external-media-player" data-external-media-player-host></div>
-          <div class="conference-external-media-empty" data-external-media-empty>
-             Pega un link de YouTube o busca contenido.
-          </div>
           <div class="musiki-pod-toolbar">
             <input
-              type="text"
+              type="search"
+              name="external-media-query"
               class="musiki-pod-input"
               placeholder="YouTube URL o búsqueda"
               data-external-media-input
               autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              inputmode="search"
+              enterkeyhint="search"
             />
             <button type="button" class="musiki-pod-btn" data-action="external-media-open">O</button>
             <button type="button" class="musiki-pod-btn musiki-pod-btn--danger" data-action="external-media-stop">C</button>
             <div class="musiki-pod-results" data-external-media-results hidden></div>
+            <div class="musiki-pod-status" data-external-media-status role="status" aria-live="polite"></div>
           </div>
        </div>
     </section>
@@ -275,13 +278,6 @@ const { presentationOptions = [] } = Astro.props;
     min-height: 0 !important;
     width: 100% !important;
     height: auto !important;
-  }
-
-  .musiki-pod .conference-external-media-empty {
-    position: relative !important;
-    inset: unset !important;
-    flex: 1 !important;
-    min-height: 0 !important;
   }
 
   .musiki-pod .conference-slot {
