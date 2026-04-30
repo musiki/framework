@@ -112,7 +112,8 @@ export async function ensureDbUserFromSession(
     const nextName = sessionName || cleanString(existing.name || email, 160) || email;
     const nextImage = sessionImage || existing.image || null;
 
-    const shouldUpdateName = Boolean(sessionName) && nextName !== (existing.name ?? '');
+    // Trigger update if we have a new name from session OR if the DB name is currently missing
+    const shouldUpdateName = (Boolean(sessionName) && nextName !== (existing.name ?? '')) || !existing.name;
     const shouldUpdateImage = Boolean(sessionImage) && nextImage !== (existing.image ?? null);
 
     if (shouldUpdateName || shouldUpdateImage) {

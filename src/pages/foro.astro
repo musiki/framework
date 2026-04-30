@@ -3401,12 +3401,9 @@ a[node] -->|edge| b[hub]
                   deleteButton.setAttribute('aria-label', 'Borrar');
                   deleteButton.addEventListener('click', async () => {
                     setQuickMenuOpen(false);
-                    if (!confirm('¿Seguro que quieres borrar este mensaje?')) return;
-
-                    if (deleteButton) deleteButton.disabled = true;
+                    deleteButton.disabled = true;
                     if (editButton) editButton.disabled = true;
                     if (replyButton) replyButton.disabled = true;
-
                     try {
                       const response = await fetch(`/api/forum/posts/${encodeURIComponent(post.id)}`, {
                         method: 'DELETE',
@@ -3415,14 +3412,12 @@ a[node] -->|edge| b[hub]
                       if (!response.ok) {
                         throw new Error(payload?.error || 'No se pudo borrar el mensaje.');
                       }
-
                       setForumStatus('Mensaje borrado.', 'info');
                       await loadThreads({ preserveSelection: true });
                     } catch (error) {
                       console.error('Forum post delete error:', error);
                       setForumStatus(error?.message || 'No se pudo borrar el mensaje.', 'error');
-                    } finally {
-                      if (deleteButton) deleteButton.disabled = false;
+                      deleteButton.disabled = false;
                       if (editButton) editButton.disabled = false;
                       if (replyButton) replyButton.disabled = false;
                     }
@@ -3717,9 +3712,6 @@ a[node] -->|edge| b[hub]
                 event.preventDefault();
                 event.stopPropagation();
                 setThreadMenuOpen(false);
-
-                if (!confirm('¿Seguro que quieres borrar este hilo completo?')) return;
-
                 setThreadActionState(true);
                 try {
                   const response = await fetch(`/api/forum/threads/${encodeURIComponent(thread.id)}`, {
@@ -3729,7 +3721,6 @@ a[node] -->|edge| b[hub]
                   if (!response.ok) {
                     throw new Error(payload?.error || 'No se pudo borrar el hilo.');
                   }
-
                   clearReplyTarget();
                   setForumStatus('Hilo borrado.', 'info');
                   await loadThreads({ preserveSelection: true });

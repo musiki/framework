@@ -40,7 +40,7 @@ type ThreadPostRow = {
 function toDisplayName(author?: AuthorRow): string {
   if (!author) return 'Usuario';
   if (author.name?.trim()) return author.name.trim();
-  if (author.email?.trim()) return author.email.trim();
+  if (author.email?.trim()) return author.email.trim().split('@')[0];
   return 'Usuario';
 }
 

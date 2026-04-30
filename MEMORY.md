@@ -1,5 +1,11 @@
 # MEMORY.md — Project Activity Log
 
+<2026-04-30 forum-delete-ux-improvement> <br>
+Improved UX and fixed stability in the forum.
+- UX: Removed `confirm()` calls in `src/pages/foro.astro` for faster message and thread deletion.
+- Fix: Resolved a 500 error in `src/pages/api/forum/threads/[threadId]/posts.ts` caused by a missing `useRemoteLilypond` variable and incorrect options passed to `renderForumMarkdown`.
+- Stability: Added detailed logging and non-critical error handling for broadcast events during post creation.
+
 <2026-04-29 post-merge-stabilization-and-perf-optimization> <br>
 Stabilized the system after the feature/pod-layout-room merge, addressing performance and connection issues.
 - Infrastructure: Fixed `DATABASE_URL` in `.env` to use the correct internal Docker IP (`172.18.0.2:5432`) for the VPS environment.

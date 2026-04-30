@@ -64,27 +64,37 @@ export const GET: APIRoute = async ({ params, locals, request }) => {
     }
 
     const { data: postsRaw, error: postsError } = await query(
-      `SELECT * FROM "ForumPost" WHERE "threadId" = $1 ORDER BY "createdAt" ASC LIMIT $2`,
+      `SELECT p.*, u.name as "authorName", u.email as "authorEmail", u.image as "authorImage", u.role as "authorRole"
+       FROM "ForumPost" p
+       LEFT JOIN "User" u ON p."authorUserId" = u.id
+       WHERE p."threadId" = $1 
+       ORDER BY p."createdAt" ASC 
+       LIMIT $2`,
       [threadId, POSTS_LIMIT]
     );
 
     if (postsError) throw postsError;
 
     const posts = await Promise.all(
-      (postsRaw || []).map(async (post: any) => ({
-        id: post.id,
-        bodyHtml: await renderForumMarkdown(post.body || '', {
-          courseId: thread.courseId,
-          lessonSlug: thread.lessonSlug,
-          useRemoteLilypond,
-        }),
-        authorUserId: post.authorUserId,
-        authorName: post.authorName,
-        authorImage: post.authorImage,
-        createdAt: post.createdAt,
-        updatedAt: post.updatedAt,
-        parentPostId: post.parentPostId,
-      })),
+      (postsRaw || []).map(async (post: any) => {
+        const fallbackName = post.authorEmail ? post.authorEmail.split('@')[0] : 'Usuario';
+        return {
+          id: post.id,
+          bodyHtml: await renderForumMarkdown(post.body || '', {
+            remoteLilypond: useRemoteLilypond,
+          }),
+          authorUserId: post.authorUserId,
+          authorName: post.authorName || fallbackName,
+          authorImage: post.authorImage,
+          authorRole: post.authorRole,
+          createdAt: post.createdAt,
+          updatedAt: post.updatedAt,
+          parentPostId: post.parentPostId,
+          status: post.status,
+          canEdit: post.authorUserId === dbUser.id || access.isTeacher,
+          canDelete: post.authorUserId === dbUser.id || access.isTeacher,
+        };
+      }),
     );
 
     return json({ 
@@ -108,6 +118,9 @@ export const POST: APIRoute = async ({ params, locals, request }) => {
   if (!threadId) {
     return json({ error: 'threadId is required' }, 400);
   }
+
+  const requestUrl = new URL(request.url);
+  const useRemoteLilypond = cleanString(requestUrl.searchParams.get('renderContext'), 40) === 'course';
 
   let payload: any;
   try {
@@ -155,24 +168,34 @@ export const POST: APIRoute = async ({ params, locals, request }) => {
       ]
     );
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error('Forum post insert error:', insertError);
+      throw insertError;
+    }
     const postRaw = inserted?.[0];
 
+    if (!postRaw) {
+      console.error('Forum post insert returned no data');
+      throw new Error('Failed to create post record');
+    }
+
     // Broadcast new post to other clients
-    await broadcastForumEvent(threadId, 'forum_post_created', {
-      postId: postRaw.id,
-      authorUserId: dbUser.id,
-    });
+    try {
+      await broadcastForumEvent(threadId, 'forum_post_created', {
+        postId: postRaw.id,
+        authorUserId: dbUser.id,
+      });
+    } catch (broadcastError) {
+      console.warn('Forum post broadcast failed (non-critical):', broadcastError);
+    }
 
     const post = {
       ...postRaw,
-      authorName: dbUser.name || 'Usuario',
+      authorName: dbUser.name || (dbUser.email ? dbUser.email.split('@')[0] : 'Usuario'),
       authorImage: dbUser.image || (session.user as any)?.image || '',
       authorRole: dbUser.role,
       bodyHtml: await renderForumMarkdown(postRaw.body || '', {
-        courseId: thread.courseId,
-        lessonSlug: thread.lessonSlug,
-        useRemoteLilypond,
+        remoteLilypond: useRemoteLilypond,
       }),
       canEdit: true,
       canDelete: true,

@@ -5211,6 +5211,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const applySidebarCollapsedState = () => {
     root.dataset.sidebarCollapsed = sidebarCollapsed ? 'true' : 'false';
+    const shell = root.querySelector('.conference-shell');
+    if (shell instanceof HTMLElement) {
+      shell.dataset.sidebarCollapsed = sidebarCollapsed ? 'true' : 'false';
+    }
     if (sidebarToggleButton instanceof HTMLButtonElement) {
       sidebarToggleButton.dataset.collapsed = sidebarCollapsed ? 'true' : 'false';
       sidebarToggleButton.title = sidebarCollapsed
@@ -6212,8 +6216,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       externalMediaOpenButton.disabled = !canControl;
     }
 
+    // Hide the fullscreen overlay when the player is mounted inside a pod
+    const playerInPod = externalMediaPlayerHost instanceof HTMLElement &&
+      !(externalMediaStage instanceof HTMLElement && externalMediaStage.contains(externalMediaPlayerHost));
     if (externalMediaStage instanceof HTMLElement) {
-      externalMediaStage.hidden = !isActive;
+      externalMediaStage.hidden = !isActive || playerInPod;
       externalMediaStage.dataset.playbackState = playbackState;
     }
 
@@ -10662,6 +10669,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         externalMediaCloseButtons = Array.from(
           root.querySelectorAll('[data-action="external-media-close"], [data-action="external-media-stop"]'),
         );
+
+        // Point player and empty-state to the pod's elements so video renders inside the pod
+        const podPlayerHost = container.querySelector('[data-external-media-player-host]');
+        if (podPlayerHost instanceof HTMLElement) {
+          externalMediaPlayerHost = podPlayerHost;
+          // Re-mount an active player into the pod
+          if (externalMediaSession) {
+            clearExternalMediaPlayer();
+            void ensureExternalMediaPlayer(externalMediaSession);
+          }
+        }
+        const podEmpty = container.querySelector('[data-external-media-empty]');
+        if (podEmpty instanceof HTMLElement) {
+          externalMediaEmpty = podEmpty;
+        }
+
         input.addEventListener('input', () => {
           queueExternalMediaSearch(input.value);
         });
