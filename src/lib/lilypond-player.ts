@@ -348,6 +348,7 @@ export class MiniSampler {
   private fetching: Map<number, Promise<void>> = new Map();
   private activeVoices: Map<number, Set<{ source: AudioBufferSourceNode; gain: GainNode }>> =
     new Map();
+  private readonly maxPianoKeys = 88;
   public initialized = false;
 
   async init() {
@@ -359,8 +360,10 @@ export class MiniSampler {
       }
       this.ctx = new AudioCtx();
     }
-    if (this.ctx.state === 'suspended') {
-      await this.ctx.resume();
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
     }
     this.initialized = true;
   }
@@ -464,6 +467,7 @@ export class MiniSampler {
       this.activeVoices.set(midiNote, new Set());
     }
     this.activeVoices.get(midiNote)!.add(voice);
+    this.pruneFinishedVoiceBuckets();
 
     source.onended = () => {
       this.activeVoices.get(midiNote)?.delete(voice);
@@ -495,6 +499,13 @@ export class MiniSampler {
     }
   }
 
+  private pruneFinishedVoiceBuckets() {
+    if (this.activeVoices.size <= this.maxPianoKeys) return;
+    for (const [note, voices] of this.activeVoices) {
+      if (voices.size === 0) this.activeVoices.delete(note);
+    }
+  }
+
   destroy() {
     this.stopAll();
     if (this.ctx) {
@@ -515,6 +526,9 @@ export class WebMidiPlaybackController {
   private finishTimer: number | null = null;
   private playing = false;
   private lastProgressRatio = 0;
+  private depressedNoteCounts = new Map<number, number>();
+  private sustainedNotes = new Set<number>();
+  private sustainPedalDown = false;
   private static readonly START_SCHEDULING_LEAD_MS = 28;
 
   constructor(
@@ -559,10 +573,12 @@ export class WebMidiPlaybackController {
           const ratio =
             this.sequence.durationMs === 0 ? 0 : Math.min(event.timeMs / this.sequence.durationMs, 1);
           this.emitProgress(ratio);
-          this.sampler.playNote(note, velocity);
+          this.noteOn(note, velocity);
         } else if (status === 0x80) {
           const note = event.message[1];
-          this.sampler.stopNote(note);
+          this.noteOff(note);
+        } else if (status === 0xb0 && event.message[1] === 64) {
+          this.setSustainPedal((event.message[2] ?? 0) >= 64);
         }
       }, Math.max(event.timeMs + schedulingLeadMs, 0));
 
@@ -606,6 +622,7 @@ export class WebMidiPlaybackController {
     }
 
     this.sampler.stopAll();
+    this.resetPedalState();
     this.playing = false;
     this.callbacks.onStateChange(false);
 
@@ -636,6 +653,7 @@ export class WebMidiPlaybackController {
     }
 
     this.sampler.stopAll();
+    this.resetPedalState();
     this.playing = false;
     this.lastProgressRatio = 1;
     this.emitProgress(1, true);
@@ -647,6 +665,47 @@ export class WebMidiPlaybackController {
     const nextRatio = allowBackward ? clampedRatio : Math.max(this.lastProgressRatio, clampedRatio);
     this.lastProgressRatio = nextRatio;
     this.callbacks.onProgress(nextRatio);
+  }
+
+  private noteOn(note: number, velocity: number) {
+    this.depressedNoteCounts.set(note, (this.depressedNoteCounts.get(note) || 0) + 1);
+    this.sustainedNotes.delete(note);
+    this.sampler.playNote(note, velocity);
+  }
+
+  private noteOff(note: number) {
+    const nextCount = Math.max((this.depressedNoteCounts.get(note) || 0) - 1, 0);
+    if (nextCount > 0) {
+      this.depressedNoteCounts.set(note, nextCount);
+      return;
+    }
+
+    this.depressedNoteCounts.delete(note);
+    if (this.sustainPedalDown) {
+      this.sustainedNotes.add(note);
+      return;
+    }
+    this.sampler.stopNote(note);
+  }
+
+  private setSustainPedal(isDown: boolean) {
+    if (this.sustainPedalDown === isDown) return;
+    this.sustainPedalDown = isDown;
+
+    if (isDown) return;
+
+    for (const note of this.sustainedNotes) {
+      if (!this.depressedNoteCounts.has(note)) {
+        this.sampler.stopNote(note);
+      }
+    }
+    this.sustainedNotes.clear();
+  }
+
+  private resetPedalState() {
+    this.depressedNoteCounts.clear();
+    this.sustainedNotes.clear();
+    this.sustainPedalDown = false;
   }
 }
 

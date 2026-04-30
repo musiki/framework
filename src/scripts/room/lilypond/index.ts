@@ -79,8 +79,11 @@ export class LilyPondLiveController {
   private lastLilySource = '';
   private documentClickBound = false;
   private editorReady = false;
+  private keyboardContainers = new WeakSet<HTMLElement>();
   private playbackEventsBound = false;
   private resizerContainers = new WeakSet<HTMLElement>();
+  private zoomLevel = 1;
+  private zoomContainers = new WeakSet<HTMLElement>();
 
   private remoteCursors = new Map<string, RemoteCursorState>();
   private remoteCursorTimeout = new Map<string, number>();
@@ -107,6 +110,7 @@ export class LilyPondLiveController {
     const previewEl = container.querySelector<HTMLElement>('[data-lilypond-preview]');
     if (previewEl && this.previewEl !== previewEl) {
       this.previewEl = previewEl;
+      this.applyPreviewZoom();
       if (this.hasRenderedPreviewSnapshot && this.lastRenderedBody.trim()) {
         void this.renderLocally(this.lastRenderedBody);
       }
@@ -145,7 +149,7 @@ export class LilyPondLiveController {
     }
 
     // Collaboration toggle button for teacher
-    const actionsContainer = container.querySelector('[data-lilypond-actions]');
+    const actionsContainer = container.querySelector<HTMLElement>('[data-lilypond-actions]');
     if (actionsContainer && this.isTeacher && !actionsContainer.querySelector('[data-lilypond-collab]')) {
       const collabBtn = document.createElement('button');
       collabBtn.type = 'button';
@@ -242,6 +246,7 @@ export class LilyPondLiveController {
             }) ?? null;
 
           this.editorBinding?.setEditable(this.canEdit());
+          this.bindKeyboardShortcuts(container);
 
           const unsubscribe =
             this.editorBinding?.onChange((snapshot) => {
@@ -281,15 +286,7 @@ export class LilyPondLiveController {
           this.scheduleLiveSync();
         });
 
-        container.querySelector('[data-lilypond-form]')?.addEventListener('keydown', (event) => {
-          if (!(event instanceof KeyboardEvent)) return;
-          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-            event.preventDefault();
-            if (this.isTeacher) {
-              void this.publishRender();
-            }
-          }
-        });
+        this.bindKeyboardShortcuts(container);
 
         void this.fetchSnippetsList();
       }
@@ -354,7 +351,10 @@ export class LilyPondLiveController {
     }
 
     if (btnDownloadPdf) {
-      this.btnDownloadPdf!.addEventListener('click', (e) => {
+      const newPdfBtn = this.btnDownloadPdf!.cloneNode(true) as HTMLButtonElement;
+      this.btnDownloadPdf!.replaceWith(newPdfBtn);
+      this.btnDownloadPdf = newPdfBtn;
+      this.btnDownloadPdf.addEventListener('click', (e) => {
         e.preventDefault();
         this.downloadAsset('pdf');
       });
@@ -362,15 +362,16 @@ export class LilyPondLiveController {
 
     // Combobox Event Listeners
     if (comboboxInput) {
-      this.comboboxInput!.addEventListener('input', () => {
+      const boundComboboxInput = this.comboboxInput;
+      boundComboboxInput?.addEventListener('input', () => {
         this.currentFilename = this.comboboxInput?.value || '';
         this.renderComboboxMenu(this.currentFilename);
       });
-      this.comboboxInput.addEventListener('focus', () => {
+      boundComboboxInput?.addEventListener('focus', () => {
         this.renderComboboxMenu(this.comboboxInput?.value || '');
       });
       // Handle Enter in combobox to prevent page reset
-      this.comboboxInput.addEventListener('keydown', (e) => {
+      boundComboboxInput?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           if (this.comboboxMenu) this.comboboxMenu.hidden = true;
@@ -391,6 +392,7 @@ export class LilyPondLiveController {
     }
 
     this.initResizer(container);
+    this.initZoomControls(container);
     this.updateDownloadButtons();
 
     // Listen for playback events from LilypondPlayer to broadcast them
@@ -430,6 +432,61 @@ export class LilyPondLiveController {
     }
   }
 
+  private bindKeyboardShortcuts(container: HTMLElement) {
+    if (this.keyboardContainers.has(container)) return;
+    const form = container.querySelector<HTMLElement>('[data-lilypond-form]');
+    const surface = this.editorBinding?.getInteractionSurface?.();
+    const targets = [form, surface].filter((node): node is HTMLElement => node instanceof HTMLElement);
+    if (targets.length === 0) return;
+
+    const onKeydown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key !== 'Enter') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (this.isTeacher) {
+        void this.publishRender();
+      }
+    };
+
+    for (const target of targets) {
+      target.addEventListener('keydown', onKeydown, { capture: true });
+    }
+    this.keyboardContainers.add(container);
+  }
+
+  private initZoomControls(container: HTMLElement) {
+    if (this.zoomContainers.has(container)) return;
+    const zoomIn = container.querySelector<HTMLButtonElement>('[data-lilypond-zoom-in]');
+    const zoomOut = container.querySelector<HTMLButtonElement>('[data-lilypond-zoom-out]');
+    const zoomReset = container.querySelector<HTMLButtonElement>('[data-lilypond-zoom-reset]');
+    if (!zoomIn && !zoomOut && !zoomReset) return;
+
+    const bind = (button: HTMLButtonElement | null, nextZoom: () => number) => {
+      if (!button) return;
+      const clone = button.cloneNode(true) as HTMLButtonElement;
+      button.replaceWith(clone);
+      clone.addEventListener('click', (event) => {
+        event.preventDefault();
+        this.zoomLevel = Math.max(0.35, Math.min(3, nextZoom()));
+        this.applyPreviewZoom();
+      });
+    };
+
+    bind(zoomOut, () => this.zoomLevel - 0.15);
+    bind(zoomReset, () => 1);
+    bind(zoomIn, () => this.zoomLevel + 0.15);
+    this.zoomContainers.add(container);
+    this.applyPreviewZoom();
+  }
+
+  private applyPreviewZoom() {
+    if (!(this.previewEl instanceof HTMLElement)) return;
+    const zoom = Number.isFinite(this.zoomLevel) ? this.zoomLevel : 1;
+    this.previewEl.style.setProperty('--lily-render-zoom', String(zoom));
+    (this.previewEl.style as CSSStyleDeclaration & { zoom?: string }).zoom = String(zoom);
+    this.previewEl.dataset.zoom = zoom.toFixed(2);
+  }
+
   private async downloadAsset(kind: 'midi' | 'pdf') {
     let url = kind === 'midi' ? this.lastRenderResult?.midiUrl : this.lastRenderResult?.pdfUrl;
     
@@ -443,7 +500,7 @@ export class LilyPondLiveController {
         });
         const payload = await response.json().catch(() => ({}));
         if (response.ok && payload.url) {
-          url = payload.url;
+          url = String(payload.url);
           if (this.lastRenderResult) this.lastRenderResult.pdfUrl = url;
           this.reportStatus('PDF generado.');
         } else {
@@ -724,13 +781,10 @@ export class LilyPondLiveController {
 
   private async loadDefaultTemplate(): Promise<boolean> {
     try {
-      const response = await fetch('/lily/snippets/default.md');
-      if (response.ok) {
-        const code = await response.text();
-        if (code.trim()) {
-          this.lilypondTemplateOverride = code.trim();
-          return true;
-        }
+      const code = await this.fetchSnippetCode('default.md');
+      if (code.trim()) {
+        this.lilypondTemplateOverride = code.trim();
+        return true;
       }
     } catch (e) {
       // Ignore errors
@@ -743,13 +797,7 @@ export class LilyPondLiveController {
 
     this.reportStatus(`Cargando ${name}...`);
     try {
-      const response = await fetch(`/lily/snippets/${encodeURIComponent(name)}`);
-      if (!response.ok) {
-        this.reportStatus('No se pudo descargar el archivo.');
-        return;
-      }
-
-      const code = await response.text();
+      const code = await this.fetchSnippetCode(name);
       this.setBodyValue(code);
       this.currentFilename = name;
       if (this.comboboxInput) this.comboboxInput.value = name;
@@ -766,6 +814,20 @@ export class LilyPondLiveController {
     } catch (error: any) {
       this.reportStatus(error?.message || 'Error descargando archivo.');
     }
+  }
+
+  private async fetchSnippetCode(name: string) {
+    const apiResponse = await fetch(`/api/lily/snippets?name=${encodeURIComponent(name)}`);
+    if (apiResponse.ok) {
+      const payload = await apiResponse.json().catch(() => null);
+      return String(payload?.code || '');
+    }
+
+    const staticResponse = await fetch(`/lily/snippets/${encodeURIComponent(name)}`);
+    if (!staticResponse.ok) {
+      throw new Error('No se pudo descargar el archivo.');
+    }
+    return staticResponse.text();
   }
 
   private async saveCurrentSnippetLocally() {
@@ -791,7 +853,10 @@ export class LilyPondLiveController {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        this.reportStatus(String(payload?.error || 'Error guardando.'));
+        const fallback = response.status === 401
+          ? 'Necesitas iniciar sesión para guardar archivos LilyPond.'
+          : 'Error guardando.';
+        this.reportStatus(String(payload?.error || fallback));
         return;
       }
 

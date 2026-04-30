@@ -14,10 +14,35 @@ function ensureSnippetsDir() {
   }
 }
 
+function sanitizeSnippetName(value: unknown) {
+  const rawName = String(value || '').trim();
+  if (!rawName) return '';
+
+  const ext = path.extname(rawName).toLowerCase();
+  const base = path.basename(rawName, ext).replace(/[^a-zA-Z0-9_.-]/g, '-');
+  const safeExt = ext === '.md' || ext === '.ly' || ext === '.txt' ? ext : '.md';
+  return base ? `${base}${safeExt}` : '';
+}
+
 // GET /api/lily/snippets
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ url }) => {
   try {
     ensureSnippetsDir();
+    const requestedName = sanitizeSnippetName(url.searchParams.get('name'));
+    if (requestedName) {
+      const filePath = path.join(SNIPPETS_DIR, requestedName);
+      if (!filePath.startsWith(SNIPPETS_DIR)) {
+        return json({ error: 'Invalid path' }, 400);
+      }
+      if (!fs.existsSync(filePath)) {
+        return json({ error: 'Snippet not found' }, 404);
+      }
+      return json({
+        name: requestedName,
+        code: fs.readFileSync(filePath, 'utf8'),
+      });
+    }
+
     const files = fs.readdirSync(SNIPPETS_DIR);
     const snippets = files
       .filter((file) => file.endsWith('.ly') || file.endsWith('.txt') || file.endsWith('.md'))
@@ -41,15 +66,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (!name) return json({ error: 'Name is required' }, 400);
 
-    // Sanitize filename but preserve dots for extensions
-    const ext = path.extname(name).toLowerCase();
-    const base = path.basename(name, ext).replace(/[^a-zA-Z0-9_.-]/g, '-');
-    
-    if (ext === '.md' || ext === '.ly' || ext === '.txt') {
-      name = base + ext;
-    } else {
-      name = base + '.md';
-    }
+    name = sanitizeSnippetName(name);
+    if (!name) return json({ error: 'Invalid name' }, 400);
 
     ensureSnippetsDir();
     const filePath = path.join(SNIPPETS_DIR, name);
@@ -71,8 +89,7 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
     const name = url.searchParams.get('name');
     if (!name) return json({ error: 'Name is required' }, 400);
 
-    // Sanitize
-    const safeName = name.replace(/[^a-zA-Z0-9_.-]/g, '');
+    const safeName = sanitizeSnippetName(name);
     if (!safeName) return json({ error: 'Invalid name' }, 400);
 
     const filePath = path.join(SNIPPETS_DIR, safeName);
