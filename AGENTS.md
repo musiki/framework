@@ -30,7 +30,28 @@ Welcome, Agent. This project is a complex LMS/Wiki system built with Astro. Use 
 - [Database Management](docs/db/database-management.md) — Backup and persistence.
 - [Ollama VPS Workflow](docs/ollama-vps-workflow.md) — Local AI integration.
 
+## 🛡️ Plan de Estabilización Post-Merge (Abril 2026)
+
+**Objetivo:** Resolver la lentitud crítica y las inestabilidades introducidas por la migración a Postgres local y el nuevo layout de Dockview.
+
+### 📋 Acciones Inmediatas
+
+#### Fase 1: Optimización de Infraestructura & DB
+- [x] **Corrección de Conexión**: Corregido `DATABASE_URL` en `.env` para usar la IP interna del contenedor (`172.18.0.2:5432`) en lugar de `localhost:5433`.
+- [x] **Pool de Conexiones**: Aumentado `max` en `src/lib/db/pool.ts` de 3 a 20.
+- [ ] **Monitoreo**: Refinar el logging de `DB-POOL` para detectar saturación en tiempo real.
+- [ ] **Limpieza**: Remover `@supabase/supabase-js` de `[...slug].astro` y APIs de storage.
+
+#### Fase 2: Rendimiento SSR (Astro)
+- [ ] **Optimizar `listRoomPresentationOptions`**: Cambiar iteración $O(N^2)$ por agrupamiento $O(N)$ y cachear resultados.
+- [ ] **Middleware**: Revisar que `eval-sync` no bloquee el renderizado principal si hay fallos de red.
+
+#### Fase 3: Estabilidad de UI (Dockview)
+- [ ] **Idempotencia**: Asegurar que `bindElements` y la hidratación de pods pesados (LilyPond, Whiteboard) sean idempotentes.
+- [ ] **Persistence**: Validar que el estado del `WorkspaceManager` se guarde correctamente en la nueva DB Postgres.
+
 ## 🗺️ Current Work (GSD)
+
 
 Active milestone: **REFURBISH: Workspace Hospital** — Fixing workspace regressions (LilyPond, Audio, Dockview, Search).
 

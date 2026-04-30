@@ -233,7 +233,7 @@ function buildUpdatePayload(existing: JsonRecord, candidate: JsonRecord): JsonRe
   return update;
 }
 
-const CONCURRENCY_LIMIT = 1; // Strict serial processing for SSH tunnel stability
+const CONCURRENCY_LIMIT = 5; // Moderate concurrency for production
 
 const runEvalCatalogSync = async (
   options: Required<Pick<EvalCatalogSyncOptions, 'reason' | 'logger'>>,
@@ -344,6 +344,7 @@ export async function ensureEvalCatalogSynced(
   const now = Date.now();
 
   if (!force && networkFailureBackoffUntilMs > now && syncState) {
+    if (now % 10 === 0) logger.info(`[eval-sync] Skipping sync due to network backoff (active until ${new Date(networkFailureBackoffUntilMs).toISOString()})`);
     return { ...syncState.result, cached: true };
   }
 

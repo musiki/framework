@@ -18,21 +18,51 @@ const actions: AuthAction[] = [
 
 const handleAuth = async (context: APIContext) => {
   const { cookies, request } = context;
-  const url = new URL(request.url);
-  const prefix = authConfig.prefix || "/api/auth";
-  const action = url.pathname.slice(prefix.length + 1).split("/")[0] as AuthAction;
+  
+  // FIX: Force the request URL to use the correct origin for Auth.js internal logic
+  const authOrigin = resolveRequestAuthOrigin(request);
+  const externalOrigin = new URL(authOrigin);
+  
+  // Safety check: if resolveRequestAuthOrigin still returned localhost/4321, 
+  // we must force the canonical domain here to stop the redirect loop.
+  if (externalOrigin.port === '4321' || externalOrigin.hostname === 'localhost' || externalOrigin.hostname === '127.0.0.1') {
+    externalOrigin.protocol = 'https:';
+    externalOrigin.host = 'musiki.org.ar';
+    externalOrigin.port = '';
+  }
 
-  if (!actions.includes(action) || !url.pathname.startsWith(`${prefix}/`)) {
+  const targetUrl = new URL(request.url);
+  
+  targetUrl.protocol = externalOrigin.protocol;
+  targetUrl.host = externalOrigin.host;
+  targetUrl.port = externalOrigin.port;
+
+  // Clone headers and ensure 'host' matches external origin
+  const headers = new Headers(request.headers);
+  headers.set("host", externalOrigin.host);
+  headers.set("x-forwarded-host", externalOrigin.host);
+  headers.set("x-forwarded-proto", externalOrigin.protocol.slice(0, -1));
+
+  // Reconstruct request with external URL
+  const rewrittenRequest = new Request(targetUrl.toString(), {
+    method: request.method,
+    headers: headers,
+    body: request.method === 'POST' ? await request.clone().blob() : null,
+    duplex: 'half',
+  } as any);
+
+  const prefix = authConfig.prefix || "/api/auth";
+  const action = targetUrl.pathname.slice(prefix.length + 1).split("/")[0] as AuthAction;
+
+  if (!actions.includes(action) || !targetUrl.pathname.startsWith(`${prefix}/`)) {
     return new Response("Not found", { status: 404 });
   }
 
-  // Use the request directly. Auth.js should handle forwarded headers 
-  // correctly if trustHost is true and trustProxy is set in Astro.
-  console.log(`[AUTH-DEBUG] Action: ${action}, URL: ${request.url}`);
+  console.log(`[AUTH-DEBUG] Action: ${action}, External: ${externalOrigin.toString()}, Target: ${targetUrl.toString()}`);
   
   let response: Response;
   try {
-    response = await Auth(request, authConfig);
+    response = await Auth(rewrittenRequest, authConfig);
   } catch (err: any) {
     console.error(`[AUTH-DEBUG] Auth core threw:`, err);
     return new Response(err?.message || "Internal Auth Error", { status: 500 });
@@ -45,10 +75,9 @@ const handleAuth = async (context: APIContext) => {
     if (setCookies.length > 0) {
       setCookies.forEach((cookie) => {
         const { name, value, ...options } = parseString(cookie);
-        // Sync with Astro cookies
+        // Sync with Astro cookies to ensure they persist across the adapter boundary
         cookies.set(name, value, options as Parameters<typeof cookies.set>[2]);
       });
-      // DO NOT delete from response, let them pass through to the browser
     }
   }
 

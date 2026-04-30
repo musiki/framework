@@ -7,13 +7,11 @@ const connectionString = process.env.DATABASE_URL || import.meta.env.DATABASE_UR
 
 export const pool = new Pool({
   connectionString,
-  // Low concurrency is better for SSH tunnels
-  max: 3,
-  idleTimeoutMillis: 5000,      // Even more aggressive cleanup
-  connectionTimeoutMillis: 15000, // Wait longer for the initial tunnel handshake
-  // Keep-alive is crucial for SSH tunnels
+  // High concurrency for production VPS
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000, // Reasonable timeout for internal network
   keepAlive: true,
-  keepAliveInitialDelayMillis: 1000, // Faster keepalive
   application_name: 'musiki-framework'
 });
 
@@ -37,7 +35,7 @@ pool.on('error', (err) => {
 /**
  * Standard query helper with aggressive retry logic for SSH tunnels.
  */
-export async function query<T = any>(text: string, params?: any[], retries = 10) {
+export async function query<T = any>(text: string, params?: any[], retries = 3) {
   const start = Date.now();
   let attempt = 0;
 

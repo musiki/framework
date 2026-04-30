@@ -3,19 +3,19 @@
 ---
 
 <div class="musiki-pod" data-pod="graph" data-pod-title="GRAPH">
-  <div id="graph-pod-container" class="graph-pod-container">
-    <div id="graph-pod-canvas"></div>
+  <div class="graph-pod-container">
+    <div class="graph-pod-canvas"></div>
     <div class="graph-pod-hud">
       <div class="graph-pod-legend">
         <!-- Legend will be dynamic -->
       </div>
       <div class="graph-pod-actions">
-        <button id="graph-pod-toggle-filter" title="Todo / Público">público</button>
-        <button id="graph-pod-center" title="Center">⊙</button>
+        <button class="graph-pod-toggle-filter" title="Todo / Público">público</button>
+        <button class="graph-pod-center" title="Center">⊙</button>
       </div>
     </div>
-    <div id="graph-pod-preview" class="graph-pod-preview">
-      <div id="graph-pod-preview-title"></div>
+    <div class="graph-pod-preview">
+      <div class="graph-pod-preview-title"></div>
     </div>
   </div>
 </div>
@@ -34,7 +34,7 @@
     overflow: hidden;
   }
 
-  #graph-pod-canvas {
+  .graph-pod-canvas {
     width: 100%;
     height: 100%;
   }
@@ -115,7 +115,7 @@
     opacity: 1;
   }
 
-  #graph-pod-preview-title {
+  .graph-pod-preview-title {
     color: #fff;
     font-size: 0.65rem;
     text-align: right;
@@ -392,5 +392,8 @@
 
     window.MusikiGraphPodInit = initGraphPod;
     document.querySelectorAll('[data-pod="graph"]').forEach((pod) => initGraphPod(pod));
+  })();
+</script>
+itGraphPod(pod));
   })();
 </script>

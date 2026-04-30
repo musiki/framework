@@ -1872,11 +1872,11 @@ details[open]>summary.conference-sidebar-heading::before {
 
 @media (max-width: 760px) {
   .conference-sidebar {
-    display: none;
+    display: none !important;
   }
 
   .conference-sidebar-toggle {
-    display: none;
+    display: none !important;
   }
 
   .conference-status-toast {
@@ -1885,13 +1885,6 @@ details[open]>summary.conference-sidebar-heading::before {
 }
 
 @media (max-width: 500px) {
-  .conference-sidebar {
-    display: block;
-    height: var(--conference-sidebar-size);
-    border-left: 0;
-    border-top: 1px solid var(--conference-line);
-  }
-
   .conference-meta-top {
     grid-template-columns: minmax(0, 1fr) 82px;
     gap: 0.5rem;
@@ -1907,12 +1900,6 @@ details[open]>summary.conference-sidebar-heading::before {
     max-height: none;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.45rem;
-  }
-
-  .conference-status-toast {
-    bottom: calc(var(--conference-bar-height) + var(--conference-sidebar-size) + 0.45rem);
-    max-width: calc(100vw - 1rem);
-    padding-inline: 0.62rem;
   }
 }
 

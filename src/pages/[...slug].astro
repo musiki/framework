@@ -4265,7 +4265,6 @@ order:
       import { enhanceCourseNotesContent } from '../scripts/course/notes/index.ts';
       import { enhanceMarkdownTextarea } from '../scripts/markdown-editor-tools.ts';
       import { setupConceptLinks } from '../scripts/concept-linker';
-      import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
       const courseLayoutRoot = document.querySelector('[data-course-layout-root]');
       const canManageLiveInteractions =
@@ -10915,6 +10914,7 @@ a[node] -->|edge| b[hub]
 
         /** @param {string} threadId */
         function subscribeForumRealtime(threadId) {
+          return;
           unsubscribeForumRealtime();
           if (!threadId) return;
           if (!(forumRoot instanceof HTMLElement)) return;

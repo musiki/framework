@@ -146,7 +146,7 @@ export type PersistedRoomSetup = {
   reverbTime?: number;
   showCircle?: boolean;
   circleSize?: number;
-  gridSize?: 'normal' | 'compact';
+  gridSize?: 'normal' | 'compact' | 'avatar' | 'small' | 'usable' | 'comfortable' | 'speaker';
   compressorAttack?: number;
   compressorEnabled?: boolean;
   compressorKnee?: number;

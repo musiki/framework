@@ -131,8 +131,8 @@ export class HyperpianoController {
 
   private handleResize() {
     const width = this.container.offsetWidth;
-    const lower = this.container.querySelector('#lower-octave') as HTMLElement;
-    const upper = this.container.querySelector('#upper-octave') as HTMLElement;
+    const lower = this.container.querySelector('.piano--lower') as HTMLElement;
+    const upper = this.container.querySelector('.piano--upper') as HTMLElement;
 
     if (width < 500) {
       if (lower) lower.style.display = 'block';
@@ -146,7 +146,7 @@ export class HyperpianoController {
 
   private setStatus(s: string) {
     if (this.onStatusChange) this.onStatusChange(s);
-    const el = this.container.querySelector('#status');
+    const el = this.container.querySelector('.hyperpiano-status');
     if (el) el.textContent = s;
   }
 
@@ -247,7 +247,7 @@ export class HyperpianoController {
     if (!this.analyserNode) return;
     const bufferLength = this.analyserNode.fftSize;
     const dataArray = new Uint8Array(bufferLength);
-    const vuMeterFill = this.container.querySelector('#vu-meter .fill') as HTMLElement;
+    const vuMeterFill = this.container.querySelector('.hyperpiano-vu-meter .fill') as HTMLElement;
     const draw = () => {
       if (!this.container.isConnected || !this.analyserNode) return;
       this.rafId = requestAnimationFrame(draw);
@@ -416,7 +416,7 @@ export class HyperpianoController {
     if (!this.wetGain || !this.dryGain) return;
     this.wetGain.gain.value = this.wetDryRatio;
     this.dryGain.gain.value = 1.0 - this.wetDryRatio;
-    const fill = this.container.querySelector('#reverb-indicator .fill') as HTMLElement;
+    const fill = this.container.querySelector('.hyperpiano-reverb-indicator .fill') as HTMLElement;
     if (fill) fill.style.transform = `scaleY(${this.wetDryRatio})`;
   }
 

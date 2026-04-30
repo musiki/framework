@@ -384,10 +384,14 @@ export class RoomWorkspaceManager {
         const name = window.prompt('Nombre del Workspace:');
         if (name) {
           const layout = this.dockview?.toJSON();
-          const showCircle = document.querySelector<HTMLElement>('[data-conference-root]')?.dataset.showCircle === 'true';
+          const root = document.querySelector<HTMLElement>('[data-conference-root]');
+          const showCircle = root?.dataset.showCircle === 'true';
+          const gridSlot = root?.querySelector<HTMLElement>('[data-slot="grid-videos"]');
+          const gridSize = gridSlot?.dataset.gridSize || 'normal';
+          
           localStorage.setItem(`musiki:workspace:${name}`, JSON.stringify({
             dockview: layout,
-            settings: { showCircle },
+            settings: { showCircle, gridSize },
           }));
           this.currentWorkspaceKey = name;
           this.renderQuickLists();

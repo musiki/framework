@@ -87,7 +87,11 @@ export const GET: APIRoute = async ({ params, locals, request }) => {
       })),
     );
 
-    return json({ posts });
+    return json({ 
+      posts,
+      canReply: access.canWrite,
+      canVote: access.canRead,
+    });
   } catch (error: any) {
     console.error('Error loading forum posts:', error);
     return json({ error: resolveForumErrorMessage(error, 'Failed to load posts') }, 500);
@@ -139,13 +143,11 @@ export const POST: APIRoute = async ({ params, locals, request }) => {
     const now = new Date().toISOString();
     const { data: inserted, error: insertError } = await query(
       `INSERT INTO "ForumPost" (
-        "threadId", "authorUserId", "authorName", "authorImage", "body", "parentPostId", "createdAt", "updatedAt"
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        "threadId", "authorUserId", "body", "parentPostId", "createdAt", "updatedAt"
+      ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [
         threadId,
         dbUser.id,
-        dbUser.name || 'Anonymous',
-        (session.user as any)?.image || '',
         body,
         parentPostId || null,
         now,
@@ -154,13 +156,27 @@ export const POST: APIRoute = async ({ params, locals, request }) => {
     );
 
     if (insertError) throw insertError;
-    const post = inserted?.[0];
+    const postRaw = inserted?.[0];
 
     // Broadcast new post to other clients
     await broadcastForumEvent(threadId, 'forum_post_created', {
-      postId: post.id,
+      postId: postRaw.id,
       authorUserId: dbUser.id,
     });
+
+    const post = {
+      ...postRaw,
+      authorName: dbUser.name || 'Usuario',
+      authorImage: dbUser.image || (session.user as any)?.image || '',
+      authorRole: dbUser.role,
+      bodyHtml: await renderForumMarkdown(postRaw.body || '', {
+        courseId: thread.courseId,
+        lessonSlug: thread.lessonSlug,
+        useRemoteLilypond,
+      }),
+      canEdit: true,
+      canDelete: true,
+    };
 
     return json({ post });
   } catch (error: any) {

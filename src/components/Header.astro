@@ -5,6 +5,8 @@ import GraphModal from './GraphModal.astro';
 import { getCollection } from 'astro:content';
 import { getCourseFrontmatterId, getCourseLegacyCode } from '../lib/course-metadata';
 import { execSync } from 'node:child_process';
+import { SignOut } from 'auth-astro/components';
+import { getSession } from 'auth-astro/server';
 
 const buildCommit = (() => {
   try {
@@ -416,7 +418,7 @@ const withActiveCourse = (href: string) => {
 						<div class="user-dropdown" id="user-dropdown">
 							<a href={withActiveCourse('/dashboard')}>Dashboard</a>
 							<a href="/notas">Notas</a>
-							<a href="/logout">Cerrar Sesión</a>
+							<SignOut class="logout-button">Cerrar Sesión</SignOut>
 						</div>
 					</div>
 				) : (
@@ -916,10 +918,6 @@ const withActiveCourse = (href: string) => {
 		lastActiveAt: number; // ms timestamp
 	};
 
-	const PRESENCE_CHANNEL = 'musiki:presence:online';
-	const ACTIVE_MS = 60_000;          // considered "active" if within 60s
-	const RETRACK_INTERVAL_MS = 30_000; // re-track at most every 30s on activity
-
 	const escHtml = (s: string) =>
 		s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -1020,71 +1018,10 @@ const withActiveCourse = (href: string) => {
 	};
 
 	// Module-level state (survives Astro view transitions within the same bundle load)
-	let _activeChannel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null;
-	let _lastTracked = 0;
 	let _selfId = '';
 
 	const setupOnlinePresence = () => {
-		const bar = document.querySelector<HTMLElement>('[data-online-users-bar]');
-		if (!bar) return;
-
-		const supabaseUrl    = bar.dataset.supabaseUrl    || '';
-		const supabaseAnonKey = bar.dataset.supabaseAnonKey || '';
-		const userId   = bar.dataset.userId   || '';
-		const userName  = bar.dataset.userName  || '';
-		const userImage = bar.dataset.userImage || '';
-		const userRole  = bar.dataset.userRole  || '';
-
-		if (!supabaseUrl || !supabaseAnonKey || !userId) return;
-
-		// If same user navigates within the session, reuse the existing channel
-		if (_activeChannel && _selfId === userId) {
-			// Just re-render with current state (bar was reset by navigation)
-			render(bar, _activeChannel.presenceState<PresenceUser>(), userId);
-			return;
-		}
-
-		// Tear down previous channel (different user or first run)
-		if (_activeChannel) {
-			void _activeChannel.unsubscribe();
-			_activeChannel = null;
-		}
-		_selfId = userId;
-
-		const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-			auth: { persistSession: false, autoRefreshToken: false },
-		});
-
-		const channel = supabase.channel(PRESENCE_CHANNEL, {
-			config: { presence: { key: userId } },
-		});
-		_activeChannel = channel;
-
-		const doRender = () => render(bar, channel.presenceState<PresenceUser>(), userId);
-
-		const doTrack = async (now = Date.now()) => {
-			_lastTracked = now;
-			await channel.track({ userId, name: userName, image: userImage, role: userRole, lastActiveAt: now });
-		};
-
-		// Re-track on user activity (throttled to RETRACK_INTERVAL_MS)
-		const onActivity = () => {
-			const now = Date.now();
-			if (now - _lastTracked >= RETRACK_INTERVAL_MS) void doTrack(now);
-		};
-		['mousemove', 'keydown', 'pointerdown', 'scroll'].forEach(ev =>
-			window.addEventListener(ev, onActivity, { passive: true }),
-		);
-
-		channel
-			.on('presence', { event: 'sync' }, doRender)
-			.on('presence', { event: 'join' }, doRender)
-			.on('presence', { event: 'leave' }, doRender)
-			.subscribe(async (status) => {
-				if (status === 'SUBSCRIBED') await doTrack();
-			});
-
-		window.addEventListener('beforeunload', () => { void channel.untrack(); }, { once: true });
+		// Realtime presence disabled (previously Supabase)
 	};
 
 	if (document.readyState === 'loading') {
@@ -1740,6 +1677,26 @@ const withActiveCourse = (href: string) => {
 	}
 	.user-dropdown a:last-child {
 		border-radius: 0 0 6px 6px;
+	}
+	.logout-form {
+		margin: 0;
+		padding: 0;
+	}
+	.logout-button {
+		display: block;
+		width: 100%;
+		padding: 0.75rem 1rem;
+		color: var(--c-fg);
+		text-decoration: none;
+		border: none;
+		background: transparent;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		border-radius: 0 0 6px 6px;
+	}
+	.logout-button:hover {
+		background-color: var(--c-bg-mute);
 	}
 
 	@media (max-width: 1000px) {

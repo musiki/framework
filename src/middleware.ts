@@ -44,6 +44,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const newUrl = new URL(url.href);
     newUrl.hostname = "musiki.org.ar";
     newUrl.protocol = "https:";
+    newUrl.port = ""; // Ensure we strip the internal port if it was present
     return context.redirect(newUrl.href, 308);
   }
 

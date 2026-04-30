@@ -23,19 +23,35 @@ const { isTeacher = false } = Astro.props as Props;
       </div>
 
       <div class="workspace-list-section">
-        <label class="workspace-inline-toggle">
+        <label class="workspace-inline-toggle" style="margin-bottom: 0.35rem;">
           <span>
             <strong>Círculo</strong>
             <small>Speaker flotante</small>
           </span>
           <input type="checkbox" data-show-circle-workspace-input />
         </label>
-        <div class="workspace-circle-controls" style="padding: 0.5rem 0.2rem 0;">
+        
+        <div class="workspace-circle-controls" style="padding: 0 0.2rem 0.5rem;">
            <div class="conference-range-row">
              <input type="range" min="0.8" max="4" step="0.02" value="2.25" data-preview-zoom-sidebar-input />
              <output style="font-size: 0.6rem; opacity: 0.6;" data-preview-zoom-sidebar-output>2.25x</output>
            </div>
         </div>
+
+        {isTeacher && (
+          <>
+            <label class="workspace-list-label" style="margin-bottom: 0.25rem;">Grid Size</label>
+            <select class="workspace-select" data-grid-size-workspace-input>
+              <option value="normal">Normal (Automático)</option>
+              <option value="compact">Compacto (2 por fila)</option>
+              <option value="avatar">Avatar (120x90)</option>
+              <option value="small">Pequeño (160x120)</option>
+              <option value="usable">Usable (200x150)</option>
+              <option value="comfortable">Cómodo (240x180)</option>
+              <option value="speaker">Speaker (320x240)</option>
+            </select>
+          </>
+        )}
       </div>
 
       <div class="workspace-list-section" style="margin-top: 0.5rem;">
@@ -181,5 +197,34 @@ const { isTeacher = false } = Astro.props as Props;
   .workspace-btn--danger:hover {
     background: #ff4d4d;
     color: #000;
+  }
+
+  .workspace-select {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    color: var(--conference-fg, #fff);
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    padding-right: 1.8rem;
+  }
+
+  .workspace-select:hover {
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .workspace-select:focus {
+    border-color: var(--conference-accent, #2a87ff) !important;
+    box-shadow: 0 0 0 1px var(--conference-accent, #2a87ff);
   }
 </style>

@@ -8,7 +8,12 @@ export const normalizeOriginCandidate = (value: unknown): string => {
   if (!text) return '';
 
   try {
-    return new URL(ensureProtocol(text)).origin;
+    const url = new URL(ensureProtocol(text));
+    // Strip internal port 4321 if it's not a loopback host (production behind proxy)
+    if (url.port === '4321' && !LOOPBACK_HOST_RE.test(url.hostname)) {
+      url.port = '';
+    }
+    return url.origin;
   } catch {
     return '';
   }
@@ -42,15 +47,24 @@ export const resolveAuthBaseOrigin = (baseUrl?: string): string => {
 
   const configuredOrigin = resolveConfiguredAuthOrigin();
   const detectedBaseOrigin = normalizeOriginCandidate(baseUrl);
+  
+  // Prioritize configured origin if it's not a loopback
   const configuredNonLoopbackOrigin =
     configuredOrigin && !isLoopbackOrigin(configuredOrigin) ? configuredOrigin : '';
+  
+  // Prioritize detected origin if it's not a loopback
   const detectedNonLoopbackOrigin =
     detectedBaseOrigin && !isLoopbackOrigin(detectedBaseOrigin) ? detectedBaseOrigin : '';
 
-  if (detectedNonLoopbackOrigin) return detectedNonLoopbackOrigin;
   if (configuredNonLoopbackOrigin) return configuredNonLoopbackOrigin;
+  if (detectedNonLoopbackOrigin) return detectedNonLoopbackOrigin;
+  
+  // If we are on a VPS but NODE_ENV is not set, we might still have a non-loopback detected origin
+  // but if we reach here, both are either empty or loopback.
+  
   if (detectedBaseOrigin) return detectedBaseOrigin;
   if (configuredOrigin) return configuredOrigin;
+  
   if (isDev) return 'http://localhost:4321';
 
   return 'https://musiki.org.ar';

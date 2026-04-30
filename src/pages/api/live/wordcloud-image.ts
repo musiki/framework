@@ -1,18 +1,12 @@
 import type { APIRoute } from 'astro';
 import sharp from 'sharp';
-import { createClient } from '@supabase/supabase-js';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { getR2Client, getR2BucketName, getR2PublicObjectUrl } from '../../../lib/r2';
 import { json } from '../../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../../lib/live/access';
 import { canonicalizeCourseId, canonicalizeCourseSlugPath } from '../../../lib/course-alias';
 
-const getSupabaseStorageClient = () => {
-  const url = import.meta.env.SUPABASE_URL;
-  const key = import.meta.env.SUPABASE_SERVICE_ROLE_KEY || import.meta.env.SUPABASE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key);
-};
-
-const BUCKET_NAME = 'live-wordclouds';
+const BUCKET_NAME = getR2BucketName();
 const IMAGE_WIDTH = 1600;
 const IMAGE_HEIGHT = 900;
 const WORD_LIMIT = 120;
@@ -132,22 +126,6 @@ const buildWordcloudSvg = ({
 </svg>`;
 };
 
-const ensureBucket = async (supabase: any) => {
-  const { data: buckets } = await supabase.storage.listBuckets();
-  if (Array.isArray(buckets) && buckets.some((bucket: any) => bucket.name === BUCKET_NAME)) {
-    return;
-  }
-
-  const { error } = await supabase.storage.createBucket(BUCKET_NAME, {
-    public: true,
-    fileSizeLimit: '5MB',
-  });
-
-  if (error && !/already exists/i.test(String(error.message || ''))) {
-    throw error;
-  }
-};
-
 export const POST: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
   if (!session?.user?.email) {
@@ -186,11 +164,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   });
 
   const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
-  const supabase = getSupabaseStorageClient();
-  if (!supabase) return json({ error: 'Storage client initialization failed' }, 500);
   
-  await ensureBucket(supabase);
-
   const lessonPath = pageSlug
     ? pageSlug
         .split('/')
@@ -200,26 +174,29 @@ export const POST: APIRoute = async ({ request, locals }) => {
         .join('/')
     : 'sin-leccion';
   const fileName = `${slugifySegment(interactionId)}-${slugifySegment(sessionId || Date.now())}.png`;
-  const storagePath = `${slugifySegment(effectiveCourseId)}/${lessonPath}/${fileName}`;
+  const storagePath = `live-wordclouds/${slugifySegment(effectiveCourseId)}/${lessonPath}/${fileName}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET_NAME)
-    .upload(storagePath, pngBuffer, {
-      cacheControl: '3600',
-      contentType: 'image/png',
-      upsert: true,
+  try {
+    const r2 = getR2Client();
+    await r2.send(
+      new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: storagePath,
+        Body: pngBuffer,
+        ContentType: 'image/png',
+      })
+    );
+
+    const publicUrl = getR2PublicObjectUrl(storagePath);
+
+    return json({
+      ok: true,
+      bucket: BUCKET_NAME,
+      path: storagePath,
+      publicUrl,
     });
-
-  if (uploadError) {
-    return json({ error: uploadError.message || 'Could not upload PNG' }, 500);
+  } catch (error: any) {
+    console.error('Wordcloud R2 upload failed:', error);
+    return json({ error: error.message || 'Could not upload PNG to R2' }, 500);
   }
-
-  const { data: publicUrlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
-
-  return json({
-    ok: true,
-    bucket: BUCKET_NAME,
-    path: storagePath,
-    publicUrl: publicUrlData.publicUrl,
-  });
 };

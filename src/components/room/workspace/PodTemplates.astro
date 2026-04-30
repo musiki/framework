@@ -103,12 +103,12 @@ const { presentationOptions = [] } = Astro.props;
   <!-- Hp: HYPERPIANO -->
   <div class="musiki-pod" data-pod="hyperpiano" data-pod-title="HYPERPIANO">
     <section class="conference-stage-panel conference-stage-panel--hyperpiano" data-panel="hyperpiano">
-      <div id="hyperpiano-container" class="hyperpiano-shell">
-        <div id="upper-octave" class="piano"></div>
-        <div id="lower-octave" class="piano"></div>
-        <div id="reverb-indicator"><div class="fill"></div></div>
-        <div id="vu-meter"><div class="fill"></div></div>
-        <div id="status">Initializing...</div>
+      <div class="hyperpiano-shell">
+        <div class="piano piano--upper"></div>
+        <div class="piano piano--lower"></div>
+        <div class="hyperpiano-reverb-indicator"><div class="fill"></div></div>
+        <div class="hyperpiano-vu-meter"><div class="fill"></div></div>
+        <div class="hyperpiano-status">Initializing...</div>
       </div>
     </section>
   </div>

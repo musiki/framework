@@ -1139,6 +1139,20 @@ if (
     grid-template-rows: 1fr !important;
   }
 
+  @media (max-width: 1080px) {
+    .conference-shell {
+      grid-template-columns: 1fr !important;
+      grid-template-rows: 1fr var(--conference-sidebar-size) !important;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .conference-shell {
+      grid-template-columns: 1fr !important;
+      grid-template-rows: 1fr !important;
+    }
+  }
+
   .conference-concepts-popup,
   .conference-external-media-popup,
   .conference-break-rooms-popup,
@@ -1177,6 +1191,10 @@ if (
 
   .conference-shell[data-sidebar-collapsed="true"] {
     --conference-sidebar-size: 0px;
+  }
+
+  .conference-shell[data-sidebar-collapsed="true"] .conference-sidebar {
+    display: none !important;
   }
 
   .conference-shell[data-immersive="true"] {
@@ -1681,6 +1699,38 @@ if (
 
   .conference-slot--grid-compact .conference-tile {
     aspect-ratio: 16 / 9;
+  }
+
+  .conference-slot--grid[data-grid-size="avatar"] {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
+    grid-auto-rows: 90px !important;
+  }
+  .conference-slot--grid[data-grid-size="small"] {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
+    grid-auto-rows: 120px !important;
+  }
+  .conference-slot--grid[data-grid-size="usable"] {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+    grid-auto-rows: 150px !important;
+  }
+  .conference-slot--grid[data-grid-size="comfortable"] {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+    grid-auto-rows: 180px !important;
+  }
+  .conference-slot--grid[data-grid-size="speaker"] {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+    grid-auto-rows: 240px !important;
+  }
+
+  .conference-slot--grid[data-grid-size="avatar"] .conference-tile,
+  .conference-slot--grid[data-grid-size="small"] .conference-tile,
+  .conference-slot--grid[data-grid-size="usable"] .conference-tile,
+  .conference-slot--grid[data-grid-size="comfortable"] .conference-tile,
+  .conference-slot--grid[data-grid-size="speaker"] .conference-tile {
+    aspect-ratio: 4 / 3 !important;
+    height: 100% !important;
+    width: auto !important;
+    min-height: 0 !important;
   }
 
   .conference-presentation iframe {

@@ -1,6 +1,15 @@
 # MEMORY.md — Project Activity Log
 
+<2026-04-29 post-merge-stabilization-and-perf-optimization> <br>
+Stabilized the system after the feature/pod-layout-room merge, addressing performance and connection issues.
+- Infrastructure: Fixed `DATABASE_URL` in `.env` to use the correct internal Docker IP (`172.18.0.2:5432`) for the VPS environment.
+- DB Pool: Increased connection pool size from 3 to 20 in `src/lib/db/pool.ts` to handle production load.
+- SSR Optimization: Refactored `src/lib/live/presentation-options.ts` to group content entries by course, reducing complexity from $O(N^2)$ to $O(N)$ during room initialization.
+- Cleanup: Migrated wordcloud image storage from Supabase to Cloudflare R2 in `src/pages/api/live/wordcloud-image.ts`.
+- Realtime: Removed Supabase Realtime dependencies from `Header.astro` and `[...slug].astro` as part of the transition to a LiveKit-based presence system.
+
 ## Recent Activity (Last 12 Commits)
+
 
 <2026-04-28 supabase-to-postgres-migration> <br>
 Major architectural migration from managed Supabase to self-hosted PostgreSQL on Hetzner VPS.

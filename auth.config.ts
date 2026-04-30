@@ -8,9 +8,16 @@ const getEnv = (key: string) => {
   return process.env[key];
 };
 
-const AUTH_URL = getEnv('AUTH_URL') || getEnv('SITE_URL') || 'https://musiki.org.ar';
-const AUTH_ORIGIN = AUTH_URL.replace(/\/$/, '');
+const SITE_URL = getEnv('SITE_URL') || 'https://musiki.org.ar';
+const AUTH_ORIGIN = SITE_URL.replace(/\/$/, '');
 const isDev = getEnv('NODE_ENV') !== "production";
+
+// Hard-override these for Auth.js internal base calculation
+if (typeof process !== 'undefined') {
+  process.env.AUTH_URL = `${AUTH_ORIGIN}/api/auth`;
+  process.env.NEXTAUTH_URL = `${AUTH_ORIGIN}/api/auth`;
+  process.env.AUTH_TRUST_HOST = "true";
+}
 
 console.log(`[AUTH-CONFIG] Mode: ${isDev ? 'DEV' : 'PROD'}, Origin: ${AUTH_ORIGIN}`);
 
@@ -19,9 +26,19 @@ export default defineConfig({
   trustHost: true,
   // Only use redirectProxyUrl in production to handle domain normalization
   redirectProxyUrl: isDev ? undefined : `${AUTH_ORIGIN}/api/auth`,
+  basePath: "/api/auth",
   cookies: {
     sessionToken: {
-      name: `musiki26.session-token`,
+      name: isDev ? `musiki.session-token` : `__Secure-musiki.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: !isDev,
+      },
+    },
+    csrfToken: {
+      name: isDev ? `musiki.csrf-token` : `__Host-musiki.csrf-token`,
       options: {
         httpOnly: true,
         sameSite: "lax",

@@ -53,7 +53,14 @@ const rawCourseId =
     ? ''
     : normalizeText(liveInvite && 'courseId' in liveInvite ? liveInvite.courseId : '') ||
       normalizeText(Astro.url.searchParams.get('course'));
-const activeCourseId = await canonicalizeCourseId(rawCourseId);
+const [activeCourseId, defaultRole] = await Promise.all([
+  canonicalizeCourseId(rawCourseId),
+  resolveLiveParticipantRole(session, rawCourseId).catch((err) => {
+    console.error('resolveLiveParticipantRole failed:', err);
+    return 'student' as const;
+  })
+]);
+
 const defaultRoom =
   normalizeText(liveInvite && 'room' in liveInvite ? liveInvite.room : '') ||
   normalizeText(Astro.url.searchParams.get('room')) ||
@@ -65,13 +72,7 @@ const defaultIdentity =
   normalizeText(session?.user?.name);
 const defaultName =
   normalizeText(Astro.url.searchParams.get('name')) || normalizeText(session?.user?.name);
-const defaultRole =
-  inviteMode === 'external'
-    ? 'external'
-    : await resolveLiveParticipantRole(session, activeCourseId).catch((err) => {
-        console.error('resolveLiveParticipantRole failed:', err);
-        return 'student' as const;
-      });
+
 const defaultPresentation =
   (inviteMode === 'external'
     ? ''
@@ -82,6 +83,7 @@ const livekitUrl = normalizeText(import.meta.env.LIVEKIT_URL);
 const courseHomeHref = inviteMode === 'external'
   ? '/'
   : activeCourseId ? buildCourseHref(activeCourseId, {}) : '/cursos';
+
 const presentationOptions = inviteMode === 'external'
   ? []
   : await listRoomPresentationOptions({

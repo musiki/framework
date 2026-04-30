@@ -286,51 +286,12 @@
       "group": "tags"
     },
     {
-      "id": "public/conceptos/estructura",
-      "name": "estructura",
-      "type": "document",
-      "group": "public",
-      "publicFolder": "conceptos",
-      "canonicalSlug": "estructura",
-      "img": ""
-    },
-    {
-      "id": "public/conceptos/los cuatro ámbitos morfológicos",
-      "name": "los cuatro ámbitos morfológicos",
-      "type": "document",
-      "group": "public",
-      "publicFolder": "conceptos",
-      "canonicalSlug": "cuatroambitos",
-      "img": ""
-    },
-    {
-      "id": "tag:morfología",
-      "name": "morfología",
-      "type": "tag",
-      "group": "tags"
-    },
-    {
-      "id": "tag:forma",
-      "name": "forma",
-      "type": "tag",
-      "group": "tags"
-    },
-    {
       "id": "public/conceptos/objeto de sonido-movimiento",
       "name": "objeto de sonido-movimiento",
       "type": "document",
       "group": "public",
       "publicFolder": "conceptos",
       "canonicalSlug": "objetodesonidomovimiento",
-      "img": ""
-    },
-    {
-      "id": "public/conceptos/tropo",
-      "name": "tropo",
-      "type": "document",
-      "group": "public",
-      "publicFolder": "conceptos",
-      "canonicalSlug": "tropo",
       "img": ""
     },
     {
@@ -349,8 +310,8 @@
       "group": "tags"
     },
     {
-      "id": "tag:feedback",
-      "name": "feedback",
+      "id": "tag:dss/feedback",
+      "name": "dss/feedback",
       "type": "tag",
       "group": "tags"
     }
@@ -412,23 +373,13 @@
       "type": "tag"
     },
     {
-      "source": "public/conceptos/los cuatro ámbitos morfológicos",
-      "target": "tag:morfología",
-      "type": "tag"
-    },
-    {
-      "source": "public/conceptos/los cuatro ámbitos morfológicos",
-      "target": "tag:forma",
-      "type": "tag"
-    },
-    {
       "source": "public/instrumentos/spectral parrot",
       "target": "tag:AI-based",
       "type": "tag"
     },
     {
       "source": "public/instrumentos/spectral parrot",
-      "target": "tag:feedback",
+      "target": "tag:dss/feedback",
       "type": "tag"
     }
   ]

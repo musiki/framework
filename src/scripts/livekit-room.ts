@@ -4046,16 +4046,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let presentationCircleZoom = previewZoom;
   let showPresentationCircle = persistedSetup.showCircle !== false;
   let presentationCircleSize = Number(persistedSetup.circleSize) || 180;
-  let gridSize: 'normal' | 'compact' = persistedSetup.gridSize === 'compact' ? 'compact' : 'normal';
+  let gridSize: PersistedRoomSetup['gridSize'] = persistedSetup.gridSize || 'normal';
 
-  const applyGridSize = (size: 'normal' | 'compact') => {
-    gridSize = size;
-    if (gridSlot instanceof HTMLElement) {
-      gridSlot.classList.toggle('conference-slot--grid-compact', size === 'compact');
-    }
-    if (gridSizeInput instanceof HTMLSelectElement) {
-      gridSizeInput.value = size;
-    }
+  const getGridSizeInputs = () =>
+    Array.from(
+      root.querySelectorAll<HTMLSelectElement>('[data-grid-size-input], [data-grid-size-workspace-input]'),
+    ).filter((input) => !input.closest('#musiki-pod-templates'));
+
+  const applyGridSize = (size: PersistedRoomSetup['gridSize']) => {
+    gridSize = size || 'normal';
+    
+    // Update all matching grid slots in the entire DOM (static StagePanels and dynamic Dockview pods)
+    const allGridSlots = root.querySelectorAll<HTMLElement>('[data-slot="grid"]');
+    allGridSlots.forEach((slot) => {
+      slot.classList.toggle('conference-slot--grid-compact', gridSize === 'compact');
+      slot.dataset.gridSize = gridSize;
+    });
+
+    getGridSizeInputs().forEach((input) => {
+      input.value = gridSize || 'normal';
+    });
   };
 
   const getShowCircleInputs = () =>
@@ -10733,7 +10743,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       // Re-select slots because Dockview moved them in the DOM
       const nextElements = selectRoomElements(root);
       if (nextElements.teacherSlot) teacherSlot = nextElements.teacherSlot;
-      if (nextElements.gridSlot) gridSlot = nextElements.gridSlot;
+      if (nextElements.gridSlot) {
+        gridSlot = nextElements.gridSlot;
+        applyGridSize(gridSize);
+      }
       if (nextElements.studentsSlot) studentsSlot = nextElements.studentsSlot;
       if (nextElements.screenSlot) screenSlot = nextElements.screenSlot;
       if (nextElements.circleSlot) circleSlot = nextElements.circleSlot;
@@ -10791,10 +10804,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   window.addEventListener('musiki:workspace:settings', (event) => {
-    const detail = (event as CustomEvent<{ showCircle?: boolean }>).detail;
-    if (typeof detail?.showCircle !== 'boolean') return;
-    showPresentationCircle = detail.showCircle;
-    applyShowCircleState();
+    const detail = (event as CustomEvent<PersistedRoomSetup>).detail;
+    
+    if (typeof detail?.showCircle === 'boolean') {
+      showPresentationCircle = detail.showCircle;
+      applyShowCircleState();
+    }
+
+    if (detail?.gridSize) {
+      applyGridSize(detail.gridSize);
+    }
+
     persistSetupState();
     syncAllParticipants();
     if (room.state === ConnectionState.Connected) {
@@ -12822,13 +12842,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   deviceController.bind();
 
-  if (gridSizeInput instanceof HTMLSelectElement) {
-    gridSizeInput.value = gridSize;
-    gridSizeInput.addEventListener('change', () => {
-      applyGridSize(gridSizeInput.value as any);
+  getGridSizeInputs().forEach((input) => {
+    input.value = gridSize || 'normal';
+    input.addEventListener('change', () => {
+      applyGridSize(input.value as any);
       persistSetupState();
     });
-  }
+  });
 
   if (previewZoomSidebarInput instanceof HTMLInputElement) {
     previewZoomSidebarInput.value = presentationCircleZoom.toFixed(2);
@@ -14778,6 +14798,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   syncPresentationSelection(normalizeText(presentationSelect.value) || null);
   void refreshDeviceOptions(false);
   syncLiveActivityTransport();
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented) return;
+    const isEditable = event.target instanceof HTMLElement && (event.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName));
+    const code = String(event.code || '').toLowerCase();
+
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey) {
+      if (code === 'backslash' && !isEditable) {
+        event.preventDefault();
+        sidebarCollapsed = !sidebarCollapsed;
+        applySidebarCollapsedState();
+        localStorage.setItem('musiki:room:sidebar-collapsed', sidebarCollapsed ? 'true' : 'false');
+      }
+    }
+  });
 
   syncInviteLinkOutput('external', '', '');
   syncInviteLinkOutput('student', '', '');

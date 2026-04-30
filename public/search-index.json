@@ -270,41 +270,11 @@
     "isPublic": false
   },
   {
-    "slug": "public/conceptos/estructura",
-    "title": "estructura",
-    "description": "",
-    "theme": null,
-    "reveal": false,
-    "type": "concept",
-    "courseId": null,
-    "isPublic": true
-  },
-  {
-    "slug": "public/conceptos/los cuatro ámbitos morfológicos",
-    "title": "los cuatro ámbitos morfológicos",
-    "description": "",
-    "theme": null,
-    "reveal": true,
-    "type": "concept | glossary",
-    "courseId": null,
-    "isPublic": true
-  },
-  {
     "slug": "public/conceptos/objeto de sonido-movimiento",
     "title": "objeto de sonido-movimiento",
     "description": "",
     "theme": null,
     "reveal": true,
-    "type": "concept",
-    "courseId": null,
-    "isPublic": true
-  },
-  {
-    "slug": "public/conceptos/tropo",
-    "title": "tropo",
-    "description": "",
-    "theme": null,
-    "reveal": false,
     "type": "concept",
     "courseId": null,
     "isPublic": true
