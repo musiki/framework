@@ -22,6 +22,11 @@ src/content/.obsidian/
 # Environment variables
 .env
 .env*.local
+.env.*
+*.env
+*.env.*
+.env copy
+.env*.copy
 
 # Editor directories and files
 .history/
