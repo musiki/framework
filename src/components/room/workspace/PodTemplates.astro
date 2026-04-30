@@ -211,12 +211,18 @@ const { presentationOptions = [] } = Astro.props;
           <div class="musiki-pod-toolbar">
             <input
               type="search"
-              name="external-media-query"
+              name="musiki-external-media-search"
               class="musiki-pod-input"
               placeholder="YouTube URL o búsqueda"
               data-external-media-input
               autocomplete="off"
+              aria-autocomplete="none"
               autocapitalize="none"
+              autocorrect="off"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-form-type="other"
+              data-lpignore="true"
               spellcheck="false"
               inputmode="search"
               enterkeyhint="search"

@@ -835,7 +835,9 @@ style.textContent = `
     height: 18px;
     display: flex;
     align-items: center;
-    background: transparent;
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #fff;
     padding: 0 4px;
     gap: 6px;
     border-top: 1px solid var(--pod-color, #444);
@@ -857,13 +859,15 @@ style.textContent = `
     justify-content: center;
     cursor: pointer;
     border-radius: 2px;
-    background: rgba(255,255,255,0.05);
+    background: transparent !important;
+    color: #fff;
+    mix-blend-mode: difference;
   }
   .pod-diy-arrow-inner {
     width: 4px;
     height: 4px;
-    border-right: 1px solid var(--pod-color, #fff);
-    border-bottom: 1px solid var(--pod-color, #fff);
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
     transform: rotate(45deg);
     margin-top: -2px;
   }
@@ -888,8 +892,9 @@ style.textContent = `
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: #fff;
-    mix-blend-mode: difference;
+    color: #fff !important;
+    mix-blend-mode: difference !important;
+    isolation: auto;
     opacity: 0.5;
     white-space: nowrap;
     overflow: hidden;
@@ -898,10 +903,10 @@ style.textContent = `
     flex: 1;
   }
   .pod-diy-btn {
-    background: none;
+    background: transparent !important;
     border: none;
-    color: #fff;
-    mix-blend-mode: difference;
+    color: #fff !important;
+    mix-blend-mode: difference !important;
     opacity: 0.5;
     cursor: pointer;
     font-size: 14px;

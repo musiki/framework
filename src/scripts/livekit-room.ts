@@ -4143,6 +4143,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let externalMediaSearchLoading = false;
   let externalMediaSearchQuery = '';
   let externalMediaSearchResultsState: ExternalMediaSearchResult[] = [];
+  const externalMediaBoundInputs = new WeakSet<HTMLInputElement>();
+  const externalMediaBoundButtons = new WeakSet<HTMLButtonElement>();
   let handTrackingAnimationId = 0;
   let handTrackingGeneration = 0;
   let handTrackingLandmarker: VisionHandLandmarker | null = null;
@@ -5874,9 +5876,47 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
+  const getExternalMediaScope = (node: Element | null) =>
+    node?.closest('.musiki-pod[data-pod="external-media"], .conference-external-media-popup') ?? null;
+
+  const getExternalMediaScopeInput = (scope: Element | null) => {
+    const scopedInput = scope?.querySelector('[data-external-media-input]');
+    return scopedInput instanceof HTMLInputElement ? scopedInput : null;
+  };
+
+  const activateExternalMediaScope = (scope: Element | null) => {
+    const activeScope = scope ?? root.querySelector('.musiki-pod[data-pod="external-media"]:not(#musiki-pod-templates *)');
+    if (!(activeScope instanceof Element)) return;
+
+    const scopedInput = activeScope.querySelector('[data-external-media-input]');
+    if (scopedInput instanceof HTMLInputElement) externalMediaInput = scopedInput;
+
+    const scopedStatus = activeScope.querySelector('[data-external-media-status]');
+    if (scopedStatus instanceof HTMLElement) externalMediaStatus = scopedStatus;
+
+    const scopedHost = activeScope.querySelector('[data-external-media-player-host]');
+    if (scopedHost instanceof HTMLElement && externalMediaPlayerHost !== scopedHost) {
+      const currentSession = externalMediaSession;
+      clearExternalMediaPlayer();
+      externalMediaPlayerHost = scopedHost;
+      if (currentSession) {
+        void ensureExternalMediaPlayer(currentSession);
+      }
+    }
+  };
+
+  const preferExternalMediaPodHost = () => {
+    const pod = root.querySelector('.musiki-pod[data-pod="external-media"]:not(#musiki-pod-templates *)');
+    if (pod instanceof Element) {
+      activateExternalMediaScope(pod);
+    }
+  };
+
   const renderExternalMediaSearchResults = () => {
     externalMediaResultsEls.forEach((resEl) => {
-      const inputValue = normalizeText(externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
+      const scope = getExternalMediaScope(resEl);
+      const scopedInput = getExternalMediaScopeInput(scope);
+      const inputValue = normalizeText(scopedInput?.value ?? (externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : ''));
       const isUrlInput = Boolean(normalizeYouTubeMediaUrl(inputValue));
       const shouldShowResults =
         !isUrlInput &&
@@ -5933,8 +5973,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         meta.append(title, subtitle);
         button.append(thumb, meta);
         button.addEventListener('click', () => {
+          activateExternalMediaScope(scope);
           void applyExternalMediaSession(
             {
+              capturedAt: Date.now(),
               currentTime: 0,
               mediaId: result.mediaId,
               playbackState: 'playing',
@@ -6445,6 +6487,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       playbackState: nextSession.playbackState,
       title: normalizeText(nextSession.title) || 'YouTube',
     };
+    preferExternalMediaPodHost();
     syncExternalMediaShell();
 
     try {
@@ -6479,6 +6522,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const openExternalMediaFromInput = async (valueOverride?: string) => {
     const inputValue = valueOverride ?? (externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
     if (!inputValue) return;
+    if (externalMediaInput instanceof HTMLInputElement) {
+      activateExternalMediaScope(getExternalMediaScope(externalMediaInput));
+    }
     if (!getExternalMediaAuthority()) {
       syncExternalMediaShell();
       return;
@@ -6494,6 +6540,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     setExternalMediaStatus('Cargando YouTube...');
     await applyExternalMediaSession(
       {
+        capturedAt: Date.now(),
         currentTime: 0,
         mediaId: parsedMedia.mediaId,
         playbackState: 'playing',
@@ -10636,7 +10683,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const onMediaInit = (container: HTMLElement) => {
       const input = container.querySelector('[data-external-media-input]') as HTMLInputElement;
       if (input) {
-        externalMediaInput = input;
+        activateExternalMediaScope(container);
         externalMediaInputs = Array.from(root.querySelectorAll('[data-external-media-input]')).filter(
           (node): node is HTMLInputElement =>
             node instanceof HTMLInputElement && !node.closest('#musiki-pod-templates'),
@@ -10646,9 +10693,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             node instanceof HTMLElement && !node.closest('#musiki-pod-templates'),
         );
         const status = container.querySelector('[data-external-media-status]');
-        if (status instanceof HTMLElement) {
-          externalMediaStatus = status;
-        }
+        if (status instanceof HTMLElement) externalMediaStatus = status;
         const openButton = container.querySelector('[data-action="external-media-open"]');
         if (openButton instanceof HTMLButtonElement) {
           externalMediaOpenButton = openButton;
@@ -10660,36 +10705,40 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           root.querySelectorAll('[data-action="external-media-close"], [data-action="external-media-stop"]'),
         );
 
-        // Point player and empty-state to the pod's elements so video renders inside the pod
-        const podPlayerHost = container.querySelector('[data-external-media-player-host]');
-        if (podPlayerHost instanceof HTMLElement) {
-          externalMediaPlayerHost = podPlayerHost;
-          // Re-mount an active player into the pod
-          if (externalMediaSession) {
-            clearExternalMediaPlayer();
-            void ensureExternalMediaPlayer(externalMediaSession);
-          }
-        }
         const podEmpty = container.querySelector('[data-external-media-empty]');
         if (podEmpty instanceof HTMLElement) {
           externalMediaEmpty = podEmpty;
         }
 
-        input.addEventListener('input', () => {
-          queueExternalMediaSearch(input.value);
-        });
-        input.addEventListener('keydown', (event) => {
-          if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return;
-          event.preventDefault();
-          void openExternalMediaFromInput(input.value);
-        });
+        if (!externalMediaBoundInputs.has(input)) {
+          externalMediaBoundInputs.add(input);
+          input.addEventListener('focus', () => {
+            activateExternalMediaScope(container);
+          });
+          input.addEventListener('input', () => {
+            activateExternalMediaScope(container);
+            queueExternalMediaSearch(input.value);
+          });
+          input.addEventListener('keydown', (event) => {
+            if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return;
+            event.preventDefault();
+            activateExternalMediaScope(container);
+            void openExternalMediaFromInput(input.value);
+          });
+        }
         container.querySelectorAll<HTMLButtonElement>('[data-action="external-media-open"]').forEach((button) => {
+          if (externalMediaBoundButtons.has(button)) return;
+          externalMediaBoundButtons.add(button);
           button.addEventListener('click', () => {
+            activateExternalMediaScope(container);
             void openExternalMediaFromInput(input.value);
           });
         });
         container.querySelectorAll<HTMLButtonElement>('[data-action="external-media-stop"]').forEach((button) => {
+          if (externalMediaBoundButtons.has(button)) return;
+          externalMediaBoundButtons.add(button);
           button.addEventListener('click', () => {
+            activateExternalMediaScope(container);
             void applyExternalMediaSession(null, 'local');
           });
         });
@@ -10796,9 +10845,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
       
       // Update external media and concept references which might have moved
-      if (nextElements.externalMediaInput) externalMediaInput = nextElements.externalMediaInput;
+      if (nextElements.externalMediaInput && !root.querySelector('.musiki-pod[data-pod="external-media"] [data-external-media-input]')) {
+        externalMediaInput = nextElements.externalMediaInput;
+      }
       if (nextElements.externalMediaInputs) externalMediaInputs = nextElements.externalMediaInputs;
       if (nextElements.externalMediaResultsEls) externalMediaResultsEls = nextElements.externalMediaResultsEls;
+      preferExternalMediaPodHost();
       if (nextElements.conceptSearchInput) conceptSearchInput = nextElements.conceptSearchInput;
       if (nextElements.conceptSearchInputs) conceptSearchInputs = nextElements.conceptSearchInputs;
       if (nextElements.conceptResultsEls) conceptResultsEls = nextElements.conceptResultsEls;
@@ -14090,22 +14142,32 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   externalMediaOpenButtons.forEach((btn) => {
+    if (!(btn instanceof HTMLButtonElement) || externalMediaBoundButtons.has(btn)) return;
+    externalMediaBoundButtons.add(btn);
     btn.addEventListener('click', () => {
       // Find the associated input if possible, or use the global one
       const container = btn.closest('.musiki-pod-toolbar, .conference-external-media-popup');
       const input = container?.querySelector('[data-external-media-input]');
+      activateExternalMediaScope(getExternalMediaScope(btn));
       const value = (input instanceof HTMLInputElement) ? input.value : undefined;
       void openExternalMediaFromInput(value);
     });
   });
 
   externalMediaInputs.forEach((input) => {
+    if (!(input instanceof HTMLInputElement) || externalMediaBoundInputs.has(input)) return;
+    externalMediaBoundInputs.add(input);
+    input.addEventListener('focus', () => {
+      activateExternalMediaScope(getExternalMediaScope(input));
+    });
     input.addEventListener('input', () => {
+      activateExternalMediaScope(getExternalMediaScope(input));
       queueExternalMediaSearch(input.value);
     });
     input.addEventListener('keydown', (event) => {
       if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return;
       event.preventDefault();
+      activateExternalMediaScope(getExternalMediaScope(input));
       void openExternalMediaFromInput(input.value);
     });
   });
@@ -14118,8 +14180,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   externalMediaCloseButtons.forEach((button) => {
-    if (!(button instanceof HTMLButtonElement)) return;
+    if (!(button instanceof HTMLButtonElement) || externalMediaBoundButtons.has(button)) return;
+    externalMediaBoundButtons.add(button);
     button.addEventListener('click', () => {
+      activateExternalMediaScope(getExternalMediaScope(button));
       void applyExternalMediaSession(null, 'local');
     });
   });
