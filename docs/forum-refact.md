@@ -1,13 +1,13 @@
 # estado de foro 
 
-  ## Opción A — Actualizaciones optimistas (mejor UX): 
+## Opción A — Actualizaciones optimistas (mejor UX): 
   al hacer una acción, mutás forumState en memoria inmediatamente (ej: filtrás el post borrado del array, actualizás el texto editado, agregás el reply nuevo) y llamás solo renderPosts() o renderThreadList() localmente, sin fetch. La llamada al servidor va en paralelo. Si falla, revertís el estado y mostrás el error. Resultado: cero latencia perceptible.
 
-  ## Opción B — Re-fetch selectivo (más seguro, menos cambio): 
+## Opción B — Re-fetch selectivo (más seguro, menos cambio): 
   en vez de siempre llamar loadThreads() (que recarga todo), usás una función reloadCurrentThread() que solo hace el GET de los posts del hilo activo.
   Solo acciones que afectan la lista de hilos (crear/borrar hilo) llaman  loadThreads(). Reduce el problema ~80% con poco riesgo.
   
-  ## Opción C — Edición in-place sin re-render:
+## Opción C — Edición in-place sin re-render:
 para ediciones de texto y borrado de posts, ni siquiera re-renderizás — encontrás el nodo DOM del
 post afectado por data-post-id y lo mutás o removés directamente.
 
@@ -62,7 +62,7 @@ post afectado por data-post-id y lo mutás o removés directamente.
 
   Dos opciones reales:
 
-  Iframe (<iframe src="/foro">) — más simple, funciona hoy, auth por
+  Iframe `(<iframe src="/foro">)` — más simple, funciona hoy, auth por
   cookies, zero código duplicado. La contra: si querés que el room
   reaccione a eventos del foro (ej: mostrar notificación de mensaje nuevo
   en la barra del room), necesitás postMessage. Aceptable.
@@ -74,8 +74,9 @@ post afectado por data-post-id y lo mutás o removés directamente.
   actualizaciones optimistas). Es el camino correcto si el foro va a estar
   vivo en el room, no solo visible.
 
-  ---
-###   Mi sugerencia de secuencia
+
+  
+### Mi sugerencia de secuencia
 
   1. Refactorizar el foro para que la lógica viva en un módulo exportable
   (no un script inline gigante en foro.astro) — esto desbloquea tanto las
@@ -83,23 +84,23 @@ post afectado por data-post-id y lo mutás o removés directamente.
   2. Implementar las tres mutaciones in-place (append, remove, update)
   3. Montar el módulo en el pod
 
- ## Arquitectura de la extracción
+## Arquitectura de la extracción
 
-###   Archivos nuevos:
+### Archivos nuevos:
   - src/scripts/forum-reader.ts — toda la lógica JS del foro exportada como
    mountForumReader(root, config). Retorna un controller con destroy().
   - src/styles/forum-reader.css — CSS del foro con selector raíz cambiado
   de #forum-reader-root a [data-forum-root] (permite múltiples instancias).
 
-###   Cambios en foro.astro:
+### Cambios en foro.astro:
   - HTML: reemplazar los 22 id="forum-xxx" por data-forum-xxx (los IDs
   únicos rompen múltiples instancias)
-  - CSS <style>: borrar y reemplazar por import al nuevo archivo CSS
-  - <script is:inline>: borrar, reemplazar por <script>import {
-  mountForumReader } from '../scripts/forum-reader.ts'</script>
+  - CSS` <style>:` borrar y reemplazar por import al nuevo archivo CSS
+  - `<script is:inline>:` borrar, reemplazar por `<script>import {
+  mountForumReader } from `'../scripts/forum-reader.ts'</script>
   - La página queda como wrapper thin (~400 líneas en vez de 4100)
 
-###   Mutaciones in-place (dentro del módulo):
+###  Mutaciones in-place (dentro del módulo):
   - removePostOptimistic(postId) → filtra forumState.posts, hace .remove()
   en el DOM
   - appendPostOptimistic(post) → agrega a state, construye el card
@@ -113,14 +114,14 @@ post afectado por data-post-id y lo mutás o removés directamente.
 
 ###  Pod en room:
   únicos rompen múltiples instancias)
-  - CSS <style>: borrar y reemplazar por import al nuevo archivo CSS
-  - <script is:inline>: borrar, reemplazar por <script>import {
-  mountForumReader } from '../scripts/forum-reader.ts'</script>
+  - CSS `<style>`: borrar y reemplazar por import al nuevo archivo CSS
+  - `<script is:inline>`: borrar, reemplazar por `<script>import {
+  mountForumReader } from ../scripts/forum-reader.ts`</script>`
   - La página queda como wrapper thin (~400 líneas en vez de 4100)
 
 ###  Mutaciones in-place (dentro del módulo):
-  - removePostOptimistic(postId) → filtra forumState.posts, hace
-  .remove() en el DOM   
+  - `removePostOptimistic(postId)` → filtra forumState.posts, hace
+`  .remove() `en el DOM   
   - appendPostOptimistic(post) → agrega a state, construye el card
   (reutilizando la función de render existente para un nodo), inserta al   final
   - updatePostOptimistic(postId, newBody, newRendered) → actualiza state
@@ -128,20 +129,20 @@ post afectado por data-post-id y lo mutás o removés directamente.
   - removeThreadOptimistic(threadId) → igual para hilos
   - Todos con rollback: si el fetch falla, revierten el cambio de estado y re-renderizan solo lo afectado
 
- ### Pod en room:
+### Pod en room:
   - Nuevo pod template [data-pod-template="forum"] en PodTemplates.astro
   - HTML idéntico al de foro.astro pero con root data-forum-root
-  - CSS override en <style is:global>: [data-pod-template="forum"]
+  - CSS override en `<style is:global>`: [data-pod-template="forum"]
   [data-forum-root] → fondo negro, texto más grande, scroll contenido    
    - En livekit-room.ts: onForumInit(container) → llama
   mountForumReader(container.querySelector('[data-forum-root]'), config)
   - config viene del room state (courseId, canModerate, etc.)
 
- ### Media modal: 
+### Media modal: 
  se crea dinámicamente en JS (.appendChild to
   document.body), se limpia en destroy(). Esto es imprescindible para
   que el pod no tenga un modal flotante permanente en el DOM.
 
-  ---
+---
   Es trabajo importante pero bien delimitado. La extracción a módulo y
   el CSS son independientes entre sí y los puedo hacer en paralelo.
