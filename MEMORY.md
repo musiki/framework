@@ -2,6 +2,7 @@
 
 <2026-05-01 stabilization-and-graph-fixes> <br>
 Resolved critical auth crashes, fixed Graph pod rendering, and completed Supabase cleanup.
+- IS/VexFlow: Fixed "Instant Score" pod CSS regression and visual bugs. Forced all VexFlow elements to white and set container background to transparent. Resolved "half white half black" rendering issue by using both JS inkColor overrides and aggressive CSS SVG selectors.
 - Auth: Fixed `resolveUserIdByEmail` signature mismatch causing 500 errors in Header and admin APIs. Enabled local dev login by disabling origin forcing on localhost.
 - Graph: Fixed ForceGraph initialization and resizing for Dockview. Added node search with auto-zoom/center. Expanded default filter to show course nodes.
 - Media: Restored External Media search results by refactoring pod layout to flex-column (anchoring toolbar to bottom) and resolving CSS conflicts that hid thumbnails.

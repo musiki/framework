@@ -46,10 +46,8 @@ export class InstantScoreController {
     this.renderer.resize(width, height);
     this.context = this.renderer.getContext();
 
-    // Determine colors
-    const isDark = document.documentElement.classList.contains('dark') || 
-                   document.querySelector('[data-conference-root]')?.classList.contains('dark');
-    const inkColor = isDark ? '#fff' : '#000';
+    // Force white ink for the score pod (on dark background)
+    const inkColor = '#fff';
     
     // Reactive scale
     const scale = Math.min(width / 250, height / 180, 3.5); 

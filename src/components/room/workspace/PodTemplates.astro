@@ -288,11 +288,23 @@ const { presentationOptions = [] } = Astro.props;
   .instant-score-container {
     width: 100%;
     height: 100%;
-    background: #eed;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
+  }
+  .instant-score-container svg {
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.1));
+  }
+  .instant-score-container svg * {
+    fill: #fff !important;
+  }
+  .instant-score-container svg [stroke]:not([stroke="none"]),
+  .instant-score-container svg line,
+  .instant-score-container svg rect,
+  .instant-score-container svg circle {
+    stroke: #fff !important;
   }
   .musiki-pod {
     height: 100%;
