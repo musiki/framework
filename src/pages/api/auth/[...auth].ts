@@ -25,7 +25,9 @@ const handleAuth = async (context: APIContext) => {
   
   // Safety check: if resolveRequestAuthOrigin still returned localhost/4321, 
   // we must force the canonical domain here to stop the redirect loop.
-  if (externalOrigin.port === '4321' || externalOrigin.hostname === 'localhost' || externalOrigin.hostname === '127.0.0.1') {
+  // IMPORTANT: Only do this in production. In development, we must allow localhost.
+  const isDev = import.meta.env.DEV;
+  if (!isDev && (externalOrigin.port === '4321' || externalOrigin.hostname === 'localhost' || externalOrigin.hostname === '127.0.0.1')) {
     externalOrigin.protocol = 'https:';
     externalOrigin.host = 'musiki.org.ar';
     externalOrigin.port = '';

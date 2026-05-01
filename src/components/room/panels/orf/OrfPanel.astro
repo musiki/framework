@@ -1,0 +1,128 @@
+<div class="musiki-pod" data-pod="orf" data-pod-title="ORF" data-orf-section>
+  <div class="conference-sidebar-panel-body conference-sidebar-panel-body--chat conference-orf-panel">
+    <div class="conference-chat" data-orf-scroller>
+      <ul class="conference-chat-list conference-orf-list" data-orf-list>
+        <li class="conference-chat-item conference-orf-empty" data-orf-empty>
+          <div class="conference-chat-header">
+            <span class="conference-chat-author">Orf</span>
+            <span class="conference-chat-header-separator">·</span>
+            <span class="conference-chat-stamp">local</span>
+          </div>
+          <div class="conference-chat-text">
+            Preguntame algo de la clase. Puedo preparar una propuesta para LILY-CODE, NOTAS, chat o HYPERPIANO.
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <div class="conference-chat-compose-anchor">
+      <div class="conference-orf-contextbar">
+        <select class="musiki-pod-input conference-orf-model" data-orf-model aria-label="Modelo Orf">
+          <option value="">modelo por defecto</option>
+          <option value="llama3.2">llama3.2</option>
+          <option value="qwen2.5-coder:latest">qwen2.5-coder</option>
+        </select>
+        <span class="conference-orf-scope" data-orf-scope>contexto: clase</span>
+      </div>
+
+      <div class="conference-chat-compose">
+        <textarea
+          rows="3"
+          name="orf"
+          placeholder="Preguntale a Orf"
+          data-orf-input></textarea>
+      </div>
+
+      <div class="musiki-pod-toolbar">
+        <button
+          type="button"
+          class="musiki-pod-btn musiki-pod-btn--accent conference-chat-send"
+          data-action="orf-send"
+          aria-label="Preguntar a Orf"
+          title="Preguntar a Orf"
+          disabled
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
+            <path
+              d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z"
+              fill="currentColor"></path>
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="musiki-pod-btn conference-orf-clear"
+          data-action="orf-clear"
+          aria-label="Limpiar Orf"
+          title="Limpiar"
+          disabled
+        >C</button>
+
+        <div style="flex: 1;"></div>
+
+        <div class="musiki-pod-status conference-orf-status" data-orf-status role="status" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .musiki-pod[data-pod="orf"] {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .conference-orf-panel {
+    min-height: 0;
+  }
+
+  .conference-orf-empty .conference-chat-author {
+    color: var(--conference-accent, #76d3ff);
+  }
+
+  .conference-orf-contextbar {
+    align-items: center;
+    display: flex;
+    gap: 0.4rem;
+    padding: 0 0 0.35rem;
+  }
+
+  .conference-orf-model {
+    min-width: 0;
+    width: 9.5rem;
+  }
+
+  .conference-orf-scope {
+    color: var(--conference-muted);
+    font-size: 0.58rem;
+    letter-spacing: 0.07em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  :global(.conference-orf-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.45rem;
+  }
+
+  :global(.conference-orf-action) {
+    border-radius: 3px;
+    font-size: 0.58rem;
+    height: 1.55rem;
+    letter-spacing: 0.06em;
+    padding: 0 0.45rem;
+    text-transform: uppercase;
+  }
+
+  .conference-orf-status {
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+</style>

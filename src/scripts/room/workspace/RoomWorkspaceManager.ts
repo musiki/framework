@@ -13,6 +13,7 @@ export class RoomWorkspaceManager {
   private onMediaInit?: (element: HTMLElement) => void;
   private onClaseInit?: (element: HTMLElement) => void;
   private onChatInit?: (element: HTMLElement) => void;
+  private onOrfInit?: (element: HTMLElement) => void;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
   public hyperpianoController: HyperpianoController | null = null;
@@ -27,16 +28,17 @@ export class RoomWorkspaceManager {
     { id: 'lily-render', title: 'LILY-RENDER', icon: 'Lr', atomic: 4, color: '#F6B26B', cat: 'structured' },
     { id: 'concept', title: 'CONCEPTOS', icon: 'Co', atomic: 5, color: '#93C47D', cat: 'structured' },
     { id: 'chat', title: 'CHAT', icon: 'Ch', atomic: 6, color: '#93C47D', cat: 'comm' },
-    { id: 'notes', title: 'NOTAS', icon: 'Nt', atomic: 7, color: '#93C47D', cat: 'comm' },
-    { id: 'whiteboard', title: 'PIZARRA', icon: 'Pi', atomic: 8, color: '#76D3FF', cat: 'comm' },
-    { id: 'grid-videos', title: 'GRID', icon: 'Gr', atomic: 9, color: '#B4A7D6', cat: 'presence' },
-    { id: 'roster', title: 'ROSTER', icon: 'Ro', atomic: 10, color: '#B4A7D6', cat: 'presence' },
-    { id: 'teacher', title: 'SPEAKER', icon: 'Sp', atomic: 11, color: '#E06666', cat: 'focus' },
-    { id: 'screen', title: 'SCREEN', icon: 'Sc', atomic: 12, color: '#E06666', cat: 'focus' },
-    { id: 'external-media', title: 'MEDIA', icon: 'Me', atomic: 13, color: '#8E7CC3', cat: 'media' },
-    { id: 'graph', title: 'GRAPH', icon: 'Gr', atomic: 14, color: '#93C47D', cat: 'tools' },
-    { id: 'forum', title: 'FORO', icon: 'Fo', atomic: 15, color: '#93C47D', cat: 'comm' },
-    { id: 'hyperpiano', title: 'HYPERPIANO', icon: 'Hp', atomic: 16, color: '#FFD966', cat: 'tools' }
+    { id: 'orf', title: 'ORF', icon: 'Or', atomic: 7, color: '#76D3FF', cat: 'comm' },
+    { id: 'notes', title: 'NOTAS', icon: 'Nt', atomic: 8, color: '#93C47D', cat: 'comm' },
+    { id: 'whiteboard', title: 'PIZARRA', icon: 'Pi', atomic: 9, color: '#76D3FF', cat: 'comm' },
+    { id: 'grid-videos', title: 'GRID', icon: 'Gr', atomic: 10, color: '#B4A7D6', cat: 'presence' },
+    { id: 'roster', title: 'ROSTER', icon: 'Ro', atomic: 11, color: '#B4A7D6', cat: 'presence' },
+    { id: 'teacher', title: 'SPEAKER', icon: 'Sp', atomic: 12, color: '#E06666', cat: 'focus' },
+    { id: 'screen', title: 'SCREEN', icon: 'Sc', atomic: 13, color: '#E06666', cat: 'focus' },
+    { id: 'external-media', title: 'MEDIA', icon: 'Me', atomic: 14, color: '#8E7CC3', cat: 'media' },
+    { id: 'graph', title: 'GRAPH', icon: 'Gr', atomic: 15, color: '#93C47D', cat: 'tools' },
+    { id: 'forum', title: 'FORO', icon: 'Fo', atomic: 16, color: '#93C47D', cat: 'comm' },
+    { id: 'hyperpiano', title: 'HYPERPIANO', icon: 'Hp', atomic: 17, color: '#FFD966', cat: 'tools' }
   ];
 
   constructor(
@@ -49,7 +51,8 @@ export class RoomWorkspaceManager {
     onConceptInit?: (element: HTMLElement) => void,
     onMediaInit?: (element: HTMLElement) => void,
     onClaseInit?: (element: HTMLElement) => void,
-    onChatInit?: (element: HTMLElement) => void
+    onChatInit?: (element: HTMLElement) => void,
+    onOrfInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -61,6 +64,7 @@ export class RoomWorkspaceManager {
     this.onMediaInit = onMediaInit;
     this.onClaseInit = onClaseInit;
     this.onChatInit = onChatInit;
+    this.onOrfInit = onOrfInit;
   }
 
   public init() {
@@ -132,6 +136,9 @@ export class RoomWorkspaceManager {
               }
               if (id === 'chat' && this.onChatInit) {
                 this.onChatInit(element);
+              }
+              if (id === 'orf' && this.onOrfInit) {
+                this.onOrfInit(element);
               }
               if (id === 'graph') {
                 window.setTimeout(() => {

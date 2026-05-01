@@ -14,9 +14,23 @@ EVAL_SYNC_COMMAND="${VPS_EVAL_SYNC_COMMAND-npm run eval:sync:db}"
 ASTRO_BUILD_COMMAND="${VPS_ASTRO_BUILD_COMMAND-npx astro build --remote --outDir dist_tmp}"
 RELOAD_COMMAND="${VPS_RELOAD_COMMAND-pm2 reload ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs --update-env}"
 SAVE_PM2_STATE="${VPS_SAVE_PM2_STATE-1}"
+DEPLOY_LOCK_FILE="${VPS_DEPLOY_LOCK_FILE:-/tmp/musiki-framework-deploy.lock}"
+DEPLOY_LOCK_TIMEOUT="${VPS_DEPLOY_LOCK_TIMEOUT:-900}"
 
 printf '\n[framework] Deploying in %s\n' "$FRAMEWORK_DIR"
 printf '[framework] Content source strategy: %s\n' "$CONTENT_SOURCE_STRATEGY"
+
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$DEPLOY_LOCK_FILE"
+  printf '[framework] Waiting for deploy lock: %s\n' "$DEPLOY_LOCK_FILE"
+  if ! flock -w "$DEPLOY_LOCK_TIMEOUT" 9; then
+    printf '[framework] Could not acquire deploy lock within %ss\n' "$DEPLOY_LOCK_TIMEOUT" >&2
+    exit 75
+  fi
+  printf '[framework] Deploy lock acquired\n'
+else
+  printf '[framework] flock not available; continuing without deploy lock\n' >&2
+fi
 
 export CONTENT_SOURCE_STRATEGY
 # Ensure targeted sync variables are exported if they were passed by Content Bus

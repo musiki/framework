@@ -62,6 +62,16 @@ export default defineConfig({
       clientSecret: getEnv('OIDC_CLIENT_SECRET'),
       allowDangerousEmailAccountLinking: true,
       authorization: { params: { scope: "openid profile email" } },
+      // Add a bit more logging for discovery
+      onProfile(profile) {
+        console.log(`[AUTH-AUTHENTIK] Profile received for: ${profile.email}`);
+        return {
+          id: profile.sub,
+          name: profile.name ?? profile.preferred_username,
+          email: profile.email,
+          image: profile.picture,
+        };
+      },
     },
   ],
   secret: getEnv('AUTH_SECRET') || "fallback-musiki26-secret-must-change",

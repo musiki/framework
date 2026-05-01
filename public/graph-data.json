@@ -349,10 +349,52 @@
       "group": "tags"
     },
     {
-      "id": "tag:dss/feedback",
-      "name": "dss/feedback",
+      "id": "tag:feedback",
+      "name": "feedback",
       "type": "tag",
       "group": "tags"
+    },
+    {
+      "id": "public/lilypond/03-clarinet/cl-multiphonic-basic.md",
+      "name": "¿Cómo se escribe un multifónico de clarinete?",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "lilypond",
+      "canonicalSlug": "cl-multiphonic-basic-md",
+      "img": ""
+    },
+    {
+      "id": "tag:lilypond",
+      "name": "lilypond",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:clarinet",
+      "name": "clarinet",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:multiphonic",
+      "name": "multiphonic",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:contemporary-notation",
+      "name": "contemporary-notation",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "public/lilypond/lilypond MOC",
+      "name": "lilypond MOC",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "lilypond",
+      "canonicalSlug": "lilypond-moc",
+      "img": ""
     }
   ],
   "links": [
@@ -428,7 +470,27 @@
     },
     {
       "source": "public/instrumentos/spectral parrot",
-      "target": "tag:dss/feedback",
+      "target": "tag:feedback",
+      "type": "tag"
+    },
+    {
+      "source": "public/lilypond/03-clarinet/cl-multiphonic-basic.md",
+      "target": "tag:lilypond",
+      "type": "tag"
+    },
+    {
+      "source": "public/lilypond/03-clarinet/cl-multiphonic-basic.md",
+      "target": "tag:clarinet",
+      "type": "tag"
+    },
+    {
+      "source": "public/lilypond/03-clarinet/cl-multiphonic-basic.md",
+      "target": "tag:multiphonic",
+      "type": "tag"
+    },
+    {
+      "source": "public/lilypond/03-clarinet/cl-multiphonic-basic.md",
+      "target": "tag:contemporary-notation",
       "type": "tag"
     }
   ]

@@ -318,5 +318,25 @@
     "type": null,
     "courseId": null,
     "isPublic": true
+  },
+  {
+    "slug": "public/lilypond/03-clarinet/cl-multiphonic-basic.md",
+    "title": "¿Cómo se escribe un multifónico de clarinete?",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": "lilypond_recipe",
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/lilypond/lilypond MOC",
+    "title": "lilypond MOC",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": "service",
+    "courseId": null,
+    "isPublic": true
   }
 ]

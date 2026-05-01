@@ -186,6 +186,106 @@ app.post('/api/correct', {
   }
 });
 
+app.post('/api/run', {
+  schema: {
+    body: {
+      type: 'object',
+      properties: {
+        task: { type: 'string' },
+        prompt: { type: 'string' },
+        model: { type: 'string' },
+        options: {
+          type: 'object',
+          properties: {
+            temperature: { type: 'number' },
+            num_predict: { type: 'number' },
+          },
+          additionalProperties: true,
+        },
+      },
+      required: ['prompt'],
+      additionalProperties: false,
+    },
+  },
+}, async (request, reply) => {
+  const task = typeof request.body?.task === 'string' ? request.body.task.trim() : 'chat';
+  const prompt = typeof request.body?.prompt === 'string' ? request.body.prompt.trim() : '';
+  const model = typeof request.body?.model === 'string' ? request.body.model.trim() : '';
+  const bodyOptions = request.body?.options && typeof request.body.options === 'object'
+    ? request.body.options
+    : {};
+
+  if (!prompt) {
+    return reply.code(400).send({
+      ok: false,
+      error: 'prompt is required',
+    });
+  }
+
+  if (prompt.length > config.maxPromptChars) {
+    return reply.code(413).send({
+      ok: false,
+      error: `Prompt demasiado largo. Máximo ${config.maxPromptChars} caracteres.`,
+    });
+  }
+
+  const selectedModel = model || config.ollamaModel;
+
+  try {
+    const ollamaResponse = await fetch(`${config.ollamaBaseUrl}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(config.ollamaTimeoutMs),
+      body: JSON.stringify({
+        model: selectedModel,
+        prompt,
+        stream: false,
+        options: {
+          temperature: typeof bodyOptions.temperature === 'number' ? bodyOptions.temperature : config.temperature,
+          num_predict: typeof bodyOptions.num_predict === 'number' ? bodyOptions.num_predict : config.numPredict,
+        },
+      }),
+    });
+
+    if (!ollamaResponse.ok) {
+      const responseText = await ollamaResponse.text();
+      requestLogError(app, responseText, 'Ollama /api/generate returned non-200');
+      return reply.code(502).send({
+        ok: false,
+        error: 'Error from Ollama generate endpoint',
+      });
+    }
+
+    const raw = await ollamaResponse.json();
+
+    return {
+      ok: true,
+      task,
+      model: raw.model || selectedModel,
+      created_at: raw.created_at || null,
+      output: raw.response || '',
+      timing_ms: {
+        total: nanosecondsToMs(raw.total_duration),
+        load: nanosecondsToMs(raw.load_duration),
+        prompt_eval: nanosecondsToMs(raw.prompt_eval_duration),
+        eval: nanosecondsToMs(raw.eval_duration),
+      },
+      token_usage: {
+        prompt_eval_count: raw.prompt_eval_count ?? null,
+        eval_count: raw.eval_count ?? null,
+      },
+    };
+  } catch (error) {
+    requestLogError(app, error, 'AI run flow failed');
+    return reply.code(502).send({
+      ok: false,
+      error: 'No se pudo procesar la solicitud con Ollama',
+    });
+  }
+});
+
 app.setErrorHandler((error, _request, reply) => {
   app.log.error(error);
   if (error.validation) {

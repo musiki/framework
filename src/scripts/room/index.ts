@@ -5,6 +5,7 @@ export { normalizePreviewZoom, normalizeText } from './core/normalize';
 export { createRoomDeviceSelectController, createRoomMicMeterController } from './devices';
 export { buildRoomQueryUrl } from './layout';
 export { createRoomNotesController } from './notes';
+export { createRoomOrfController } from './orf';
 export {
   chooseFocusParticipantIdentity,
   cloneTemplate,
@@ -49,6 +50,7 @@ export type {
 export type { RoomChatController } from './chat';
 export type { DevicePanelKind, RoomDeviceSelectController, RoomMicMeterController } from './devices';
 export type { RoomNotesController } from './notes';
+export type { RoomOrfController } from './orf';
 export type {
   MediaMount,
   MountCollection,

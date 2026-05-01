@@ -16,6 +16,7 @@ import { formatCountdown, getRemainingMs } from '../lib/live/countdown.mjs';
 import { normalizeLayoutMode, setLayout, setSplitLayout, setOverlayLayout, type LayoutMode } from './layout-controller';
 import { createPresentationController } from './presentation';
 import { createRoomChatController } from './room/chat';
+import { createRoomOrfController, type RoomOrfController } from './room/orf';
 import { createClaseController } from './room/clase/controller';
 import { ConceptsController } from './room/concepts';
 import { createRoomDeviceSelectController, createRoomMicMeterController } from './room/devices';
@@ -10624,6 +10625,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const lilypondLive = new LilyPondLiveController((msg) => void publishMessage(msg));
   let chatController: ReturnType<typeof createRoomChatController> | null = null;
+  let orfController: RoomOrfController | null = null;
 
     // Hyperpiano integration
     const updateActiveHyperpianoAudio = () => {
@@ -10783,6 +10785,53 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       });
     };
 
+    const onOrfInit = (container: HTMLElement) => {
+      const input = container.querySelector('[data-orf-input]') as HTMLTextAreaElement | null;
+      const list = container.querySelector('[data-orf-list]') as HTMLElement | null;
+      const sendButton = container.querySelector('[data-action="orf-send"]') as HTMLButtonElement | null;
+      if (!input || !list || !sendButton) return;
+
+      const elements = {
+        clearButton: container.querySelector('[data-action="orf-clear"]') as HTMLButtonElement | null,
+        input,
+        list,
+        modelSelect: container.querySelector('[data-orf-model]') as HTMLSelectElement | null,
+        scopeLabel: container.querySelector('[data-orf-scope]') as HTMLElement | null,
+        scroller: container.querySelector('[data-orf-scroller]') as HTMLElement | null,
+        sendButton,
+        status: container.querySelector('[data-orf-status]') as HTMLElement | null,
+      };
+
+      if (!orfController) {
+        orfController = createRoomOrfController({
+          ...elements,
+          formatError: safeErrorMessage,
+          getCourseId: () => getEffectiveCourseId(),
+          getIdentity: () => normalizeText(identityInput.value),
+          getName: () => normalizeText(nameInput.value),
+          getRole: () => localRole,
+          getRoomName: () => normalizeText(roomInput.value),
+          getSessionId: () => normalizeText(activeLiveSnapshot?.sessionId),
+          isConnected: () => room.state === ConnectionState.Connected,
+          publishChatMessage: async (message) => {
+            chatController?.appendMessage(message, true);
+            await publishMessage(message);
+          },
+          publishMidiNote: async (note) => {
+            if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
+              await publishMessage({ type: 'hyperpiano', ...note });
+            }
+          },
+          reportStatus: (message) => setStatus(message),
+        });
+      } else {
+        orfController.bindElements(elements);
+        return;
+      }
+
+      orfController.bind();
+    };
+
   const getWorkspaceSettingsSnapshot = () => ({
     gridSize,
     showCircle: showPresentationCircle,
@@ -10811,7 +10860,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onConceptInit,
     onMediaInit,
     onClaseInit,
-    onChatInit
+    onChatInit,
+    onOrfInit
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));

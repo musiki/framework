@@ -3,6 +3,7 @@ import ChatPanel from '../panels/chat/ChatPanel.astro';
 import ClasePanel from '../panels/clase/ClasePanel.astro';
 import GridPanel from '../panels/grid/GridPanel.astro';
 import NotesPanel from '../panels/notes/NotesPanel.astro';
+import OrfPanel from '../panels/orf/OrfPanel.astro';
 import GraphPod from './GraphPod.astro';
 
 type Props = {
@@ -239,6 +240,7 @@ const { presentationOptions = [] } = Astro.props;
   <!-- Sidebar Components as Pods -->
   <ClasePanel />
   <NotesPanel />
+  <OrfPanel />
   <GridPanel />
   <ChatPanel />
   <GraphPod />

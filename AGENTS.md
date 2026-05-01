@@ -20,6 +20,12 @@ Welcome, Agent. This project is a complex LMS/Wiki system built with Astro. Use 
 - [Evaluation Ollama Migration](docs/evaluation/Evaluation%20ollama-migration.md) — AI-assisted evaluation.
 - [MCQ Checklist](docs/evaluation/phase2-mcq-checklist.md) — Multi-choice question status.
 
+### 🤖 Agentic / Orf Pod
+- [Agentic Docs Index](docs/agentic/README.md) — New branch for Orf planning, `/api/ai/run` contracts, Ollama services, RAG, LilyPond assistance, and guided microevaluations.
+- [Orf Pod](docs/agentic/local-ai-pod.md) — Product/architecture vision for the transversal assistant in conference room and notes.
+- [AI Service Contracts](docs/agentic/ai-service-contracts.md) — Proposed backend contracts for chat, RAG, LilyPond, micro-eval, and eval correction.
+- [Local AI Roadmap](docs/agentic/local-ai-roadmap.md) — Phased implementation plan.
+
 ### 🎥 Live Events & Room
 - [Live Events Protocol](docs/live-events-protocol.md) — Real-time event communication.
 - [Room Mermaid Diagram](docs/room/roomMermaid.md) — Component relationship in the room stage.

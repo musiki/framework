@@ -1,5 +1,15 @@
 # MEMORY.md — Project Activity Log
 
+<2026-05-01 orf-pod-agentic-docs-and-mvp> <br>
+Indexed the new `docs/agentic` planning branch and started the Orf pod MVP.
+- Docs: Added `docs/agentic/README.md`, `local-ai-pod.md`, `ai-service-contracts.md`, and `local-ai-roadmap.md` as the planning set for a transversal Ollama-based assistant.
+- Scope: Captures conference room + notes integration, `/api/ai/run` contracts, RAG over controlled vault notes, LilyPond assistance, and guided microevaluations.
+- Update: Refined the MVP toward contextual room chat without RAG, with confirmable output proposals for `LILY-CODE`, notes, room chat publication as `Orf-<modelName>`, and MIDI notes for HYPERPIANO.
+- Implementation: Added `orf` as a Dockview room pod, reusing chat UI classes, with `/api/ai/run` in Astro and `/api/run` in the Ollama Fastify service.
+- Guardrail: Added `docs/agentic/orf-next-steps.md`, blocked vault/RAG claims until retrieval exists, added deterministic LilyPond template output, and hardened JSON parsing so invalid model JSON is not shown raw.
+- Naming: Confirmed canonical public corpus path as `public/lilypond`; no `llily` paths were found outside temporary documentation wording.
+- Navigation: Added the branch to `AGENTS.md` for future agent orientation.
+
 <2026-04-30 forum-delete-ux-improvement> <br>
 Improved UX and fixed stability in the forum.
 - UX: Removed `confirm()` calls in `src/pages/foro.astro` for faster message and thread deletion.
