@@ -141,9 +141,10 @@ export class RoomWorkspaceManager {
                 this.onOrfInit(element);
               }
               if (id === 'graph') {
+                delete element.dataset.graphPodReady;
                 window.setTimeout(() => {
                   (window as any).MusikiGraphPodInit?.(element);
-                }, 0);
+                }, 100);
               }
             }
             

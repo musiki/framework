@@ -396,6 +396,7 @@ const { presentationOptions = [] } = Astro.props;
     backdrop-filter: blur(16px);
     z-index: 500;
     min-height: 2.4rem;
+    position: relative;
   }
 
   .musiki-pod-toolbar--floating {
@@ -469,6 +470,10 @@ const { presentationOptions = [] } = Astro.props;
     display: flex;
     flex-direction: column;
     padding: 0.35rem;
+  }
+
+  .musiki-pod-results[hidden] {
+    display: none !important;
   }
 
   .musiki-pod-results button,
