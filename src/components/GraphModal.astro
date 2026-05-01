@@ -15,6 +15,10 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       <div><span class="legend-current"></span> Current</div>
     </div>
     <div class="graph-hud-right">
+      <div class="graph-search">
+        <input type="text" id="graph-search-input" placeholder="BUSCAR..." />
+        <div id="graph-search-results" class="graph-search-results hidden"></div>
+      </div>
       <div id="node-preview" class="node-preview">
         <img id="preview-img" src="" alt="" />
         <div id="preview-title"></div>
@@ -167,20 +171,20 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     });
   }
 
-  // Return only public-folder nodes + tag nodes connected to them
-  function filterPublicData(data) {
-    // group === 'public' means the file is directly inside public/ (first path segment)
-    const publicIds = new Set(
-      data.nodes.filter(n => n.type === 'document' && n.group === 'public').map(n => n.id)
+  // Return visible nodes (public + courses) + tag nodes connected to them
+  function filterVisibleData(data) {
+    // Allow 'public' group OR 'cursos' group nodes by default
+    const allowedIds = new Set(
+      data.nodes.filter(n => n.type === 'document' && (n.group === 'public' || n.group === 'cursos')).map(n => n.id)
     );
     const tagIds = new Set();
     for (const link of data.links) {
       const s = typeof link.source === 'object' ? link.source.id : link.source;
       const t = typeof link.target === 'object' ? link.target.id : link.target;
-      if (publicIds.has(s) && String(t).startsWith('tag:')) tagIds.add(t);
-      if (publicIds.has(t) && String(s).startsWith('tag:')) tagIds.add(s);
+      if (allowedIds.has(s) && String(t).startsWith('tag:')) tagIds.add(t);
+      if (allowedIds.has(t) && String(s).startsWith('tag:')) tagIds.add(s);
     }
-    const allowed = new Set([...publicIds, ...tagIds]);
+    const allowed = new Set([...allowedIds, ...tagIds]);
     return {
       nodes: data.nodes.filter(n => allowed.has(n.id)),
       links: data.links.filter(l => {
@@ -227,6 +231,11 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     modal.classList.toggle('hidden', !open);
     modal.dataset.open = open ? 'true' : 'false';
 
+    if (open && graphInstance) {
+      // Force immediate resize to avoid blank canvas in some scenarios
+      graphInstance.width(window.innerWidth).height(window.innerHeight);
+    }
+
     window.dispatchEvent(new CustomEvent('graph:statechange', {
       detail: { open, source },
     }));
@@ -267,9 +276,55 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   // Render the graph
   async function renderGraph() {
     const raw = await initGraph();
-    const data = showAll ? raw : filterPublicData(raw);
+    const data = showAll ? raw : filterVisibleData(raw);
     crossLinkNodes(data);
     const container = document.getElementById('graph-canvas');
+
+    // Search logic
+    const input = document.getElementById('graph-search-input');
+    const results = document.getElementById('graph-search-results');
+    
+    if (input && results) {
+      input.addEventListener('input', (e) => {
+        const val = e.target.value.toLowerCase().trim();
+        if (!val) {
+          results.classList.add('hidden');
+          return;
+        }
+
+        const matches = data.nodes
+          .filter(n => n.name.toLowerCase().includes(val))
+          .slice(0, 15);
+
+        if (matches.length > 0) {
+          results.innerHTML = matches.map(n => `<div class="graph-search-item" data-id="${n.id}">${n.name}</div>`).join('');
+          results.classList.remove('hidden');
+        } else {
+          results.classList.add('hidden');
+        }
+      });
+
+      results.addEventListener('click', (e) => {
+        const item = e.target.closest('.graph-search-item');
+        if (!item) return;
+        const id = item.dataset.id;
+        const node = data.nodes.find(n => n.id === id);
+        if (node && graphInstance) {
+          graphInstance.centerAt(node.x, node.y, 1000);
+          graphInstance.zoom(8, 1000);
+          highlightNodes.clear();
+          highlightNodes.add(node);
+          input.value = '';
+          results.classList.add('hidden');
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !results.contains(e.target)) {
+          results.classList.add('hidden');
+        }
+      });
+    }
 
     // Clear container
     container.innerHTML = '';
@@ -278,8 +333,16 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
 
     const NODE_R = 3.2;
 
-    graphInstance = ForceGraph()(container)
+    const ForceGraphCtor = (window).ForceGraph || (window).default;
+    if (typeof ForceGraphCtor !== 'function') {
+      console.error('ForceGraph not loaded');
+      return;
+    }
+
+    graphInstance = ForceGraphCtor()(container)
       .graphData(data)
+      .width(window.innerWidth)
+      .height(window.innerHeight)
       .backgroundColor(colors.background)
       .nodeId('id')
       .nodeLabel('name')
@@ -461,7 +524,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   // Toggle public/all filter while graph is open
   function applyGraphFilter() {
     if (!graphInstance || !graphData) return;
-    const data = showAll ? graphData : filterPublicData(graphData);
+    const data = showAll ? graphData : filterVisibleData(graphData);
     crossLinkNodes(data);
     highlightNodes.clear();
     highlightLinks.clear();
@@ -600,6 +663,63 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     display: flex;
     align-items: flex-end;
     gap: 1rem;
+  }
+
+  .graph-search {
+    position: relative;
+    pointer-events: auto;
+  }
+
+  #graph-search-input {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 4px;
+    width: 120px;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  #graph-search-input:focus {
+    width: 240px;
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .graph-search-results {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 8px;
+    background: rgba(15, 15, 15, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    max-height: 300px;
+    width: 280px;
+    overflow-y: auto;
+    z-index: 10000;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+    backdrop-filter: blur(8px);
+  }
+
+  .graph-search-results.hidden { display: none; }
+
+  .graph-search-item {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    color: #ccc;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .graph-search-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
   }
 
   .node-preview {
