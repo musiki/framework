@@ -85,8 +85,8 @@ if (user?.email) {
 		const sessionEmail = String(user.email || '').trim();
 		const normalizedEmail = sessionEmail.toLowerCase();
 		const { resolveUserIdByEmail } = await import('../lib/user-email');
-		// We pass null for supabase because resolveUserIdByEmail has been updated to use query internally
-		const resolvedUserId = await resolveUserIdByEmail(null, normalizedEmail).catch(() => null);
+		// We use query internally in resolveUserIdByEmail
+		const resolvedUserId = await resolveUserIdByEmail(normalizedEmail).catch(() => null);
 		
 		const { data: dbUserRows } = resolvedUserId
 			? await query(`SELECT id, role, name, image FROM "User" WHERE "id" = $1`, [resolvedUserId])
@@ -197,15 +197,6 @@ const activeCourseHref = resolvedActiveCourse
 const showHeaderClassControls = Boolean(user && (resolvedActiveCourseId || hasPerformativeRoomLink));
 const normalizedTeacherCreateHref = typeof teacherCreateHref === 'string' ? teacherCreateHref.trim() : '';
 const normalizedTeacherEditHref = typeof teacherEditHref === 'string' ? teacherEditHref.trim() : '';
-
-const headerPresenceConfig = headerDbUserId ? {
-	supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || import.meta.env.SUPABASE_URL || '',
-	supabaseAnonKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '',
-	userId: headerDbUserId,
-	userName: headerDbUserName,
-	userImage: headerDbUserImage,
-	userRole: headerDbUserRole,
-} : null;
 
 const withActiveCourse = (href: string) => {
 	if (!resolvedActiveCourseId) return href;
@@ -355,12 +346,6 @@ const withActiveCourse = (href: string) => {
 			<div
 				class="online-users-bar"
 				data-online-users-bar
-				data-supabase-url={headerPresenceConfig?.supabaseUrl || ''}
-				data-supabase-anon-key={headerPresenceConfig?.supabaseAnonKey || ''}
-				data-user-id={headerPresenceConfig?.userId || ''}
-				data-user-name={headerPresenceConfig?.userName || ''}
-				data-user-image={headerPresenceConfig?.userImage || ''}
-				data-user-role={headerPresenceConfig?.userRole || ''}
 				aria-label="Usuarios online"
 			></div>
 			       <button id="graph-toggle" class="graph-toggle-btn" title="Mostrar grafo de conocimiento ⌘G">

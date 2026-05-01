@@ -10,6 +10,10 @@
         <!-- Legend will be dynamic -->
       </div>
       <div class="graph-pod-actions">
+        <div class="graph-pod-search">
+          <input type="text" class="graph-pod-search-input" placeholder="BUSCAR..." />
+          <div class="graph-pod-search-results hidden"></div>
+        </div>
         <button class="graph-pod-toggle-filter" title="Todo / Público">público</button>
         <button class="graph-pod-center" title="Center">⊙</button>
       </div>
@@ -22,7 +26,9 @@
 
 <script>
   import ForceGraph from 'force-graph';
-  (window as any).ForceGraph = (window as any).ForceGraph || ForceGraph;
+  // Handle ES module default export vs global function
+  const ForceGraphCtor = (ForceGraph as any).default || ForceGraph;
+  (window as any).ForceGraph = ForceGraphCtor;
 </script>
 
 <style is:global>
@@ -55,7 +61,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    max-width: 70%;
+    max-width: 50%;
     color: #888;
     font-size: 0.55rem;
     text-transform: uppercase;
@@ -78,6 +84,60 @@
     display: flex;
     gap: 0.4rem;
     pointer-events: auto;
+    align-items: center;
+  }
+
+  .graph-pod-search {
+    position: relative;
+  }
+
+  .graph-pod-search-input {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 0.6rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+    width: 80px;
+    transition: width 0.2s;
+  }
+
+  .graph-pod-search-input:focus {
+    width: 120px;
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  .graph-pod-search-results {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 4px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 4px;
+    max-height: 200px;
+    width: 150px;
+    overflow-y: auto;
+    z-index: 100;
+  }
+
+  .graph-pod-search-results.hidden { display: none; }
+
+  .graph-pod-search-item {
+    padding: 4px 8px;
+    font-size: 0.65rem;
+    color: #ccc;
+    cursor: pointer;
+    border-bottom: 1px solid #222;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .graph-pod-search-item:hover {
+    background: #222;
+    color: #fff;
   }
 
   .graph-pod-actions button {
@@ -216,7 +276,7 @@
         return;
       }
 
-      const container = root.querySelector('#graph-pod-canvas');
+      const container = root.querySelector('.graph-pod-canvas');
       if (!container) return;
       if (root.dataset) root.dataset.graphPodReady = 'true';
 
@@ -236,50 +296,124 @@
         : null;
 
       if (observer) observer.observe(container);
-      window.setTimeout(() => {
-        if (!graphInstance && container.isConnected && container.offsetParent !== null) {
-          void init();
-        }
-      }, 180);
 
       async function init() {
         if (graphInstance) return;
-        const response = await fetch('/graph-data.json');
-        if (!response.ok) throw new Error('Could not load graph-data.json');
-        graphData = await response.json();
-        observer?.disconnect();
-        render();
-        
-        root.querySelector('#graph-pod-center')?.addEventListener('click', () => {
-           graphInstance?.centerAt(0, 0, 1000);
-           graphInstance?.zoom(1.5, 1000);
-        });
+        try {
+          const response = await fetch('/graph-data.json');
+          if (!response.ok) throw new Error('Could not load graph-data.json');
+          graphData = await response.json();
+          observer?.disconnect();
+          render();
+          initSearch();
+          
+          root.querySelector('.graph-pod-center')?.addEventListener('click', () => {
+             graphInstance?.centerAt(0, 0, 1000);
+             graphInstance?.zoom(1.5, 1000);
+          });
 
-        root.querySelector('#graph-pod-toggle-filter')?.addEventListener('click', (e) => {
-           showAll = !showAll;
-           (e.target as HTMLElement).textContent = showAll ? 'todo' : 'público';
-           render();
-        });
+          root.querySelector('.graph-pod-toggle-filter')?.addEventListener('click', (e) => {
+             showAll = !showAll;
+             (e.target as HTMLElement).textContent = showAll ? 'todo' : 'público';
+             render();
+          });
 
-        window.addEventListener('resize', () => {
-          if (graphInstance) {
-             const parent = container.parentElement;
-             if (parent) graphInstance.width(parent.clientWidth).height(parent.clientHeight);
-          }
-        });
-        
-        setTimeout(() => {
-          if (graphInstance) {
-             const parent = container.parentElement;
-             if (parent) graphInstance.width(parent.clientWidth).height(parent.clientHeight);
-          }
-        }, 500);
+          window.addEventListener('resize', () => {
+            if (graphInstance) {
+               const parent = container.parentElement;
+               if (parent && parent.clientWidth > 0) {
+                 graphInstance.width(parent.clientWidth).height(parent.clientHeight);
+               }
+            }
+          });
+
+          // Final render kick
+          render();
+
+          // Ensure size is correct after a small delay for Dockview layout
+          setTimeout(() => {
+            if (graphInstance) {
+               const parent = container.parentElement;
+               if (parent && parent.clientWidth > 0) {
+                 graphInstance.width(parent.clientWidth).height(parent.clientHeight);
+               }
+            }
+          }, 500);
+        } catch (e) {
+          console.error('[GraphPod] Initialization failed:', e);
+        }
       }
+
+    function initSearch() {
+      const input = root.querySelector('.graph-pod-search-input');
+      const results = root.querySelector('.graph-pod-search-results');
+      if (!input || !results) return;
+
+      input.addEventListener('input', (e) => {
+        const val = e.target.value.toLowerCase().trim();
+        if (!val) {
+          results.classList.add('hidden');
+          return;
+        }
+
+        const data = showAll ? graphData : filterPublic(graphData);
+        const matches = data.nodes
+          .filter(n => n.name.toLowerCase().includes(val))
+          .slice(0, 10);
+
+        if (matches.length > 0) {
+          results.innerHTML = matches.map(n => `<div class="graph-pod-search-item" data-id="${n.id}">${n.name}</div>`).join('');
+          results.classList.remove('hidden');
+        } else {
+          results.classList.add('hidden');
+        }
+      });
+
+      results.addEventListener('click', (e) => {
+        const item = e.target.closest('.graph-pod-search-item');
+        if (!item) return;
+        const id = item.dataset.id;
+        const data = showAll ? graphData : filterPublic(graphData);
+        const node = data.nodes.find(n => n.id === id);
+        if (node && graphInstance) {
+          graphInstance.centerAt(node.x, node.y, 1000);
+          graphInstance.zoom(6, 1000);
+          highlightNodes.clear();
+          highlightNodes.add(node);
+          input.value = '';
+          results.classList.add('hidden');
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !results.contains(e.target)) {
+          results.classList.add('hidden');
+        }
+      });
+    }
+
+    function crossLinkNodes(data) {
+      data.links.forEach(link => {
+        const a = data.nodes.find(n => n.id === (typeof link.source === 'object' ? link.source.id : link.source));
+        const b = data.nodes.find(n => n.id === (typeof link.target === 'object' ? link.target.id : link.target));
+        if (!a || !b) return;
+        !a.neighbors && (a.neighbors = []);
+        !b.neighbors && (b.neighbors = []);
+        a.neighbors.push(b);
+        b.neighbors.push(a);
+        !a.links && (a.links = []);
+        !b.links && (b.links = []);
+        a.links.push(link);
+        b.links.push(link);
+      });
+    }
 
     function render() {
       if (!graphData || !container) return;
       
-      const data = showAll ? graphData : filterPublic(graphData);
+      const data = showAll ? JSON.parse(JSON.stringify(graphData)) : filterVisible(graphData);
+      crossLinkNodes(data);
+
       const colors = {
         document: '#4f83ff',
         tag: '#34d399',
@@ -289,16 +423,20 @@
         labelColor: '#e0e0e0'
       };
 
-      const ForceGraphCtor = window.ForceGraph;
-      if (!ForceGraphCtor) return;
+      const parent = container.parentElement;
+      const ForceGraphCtor = (window as any).ForceGraph;
+      if (!ForceGraphCtor || !parent) return;
 
       graphInstance = ForceGraphCtor()(container)
         .graphData(data)
+        .width(parent.clientWidth || 400)
+        .height(parent.clientHeight || 400)
         .backgroundColor('#000000')
         .nodeId('id')
         .nodeLabel('name')
         .nodeRelSize(3.5)
-        .linkColor(() => colors.link)
+        .linkColor(link => highlightLinks.has(link) ? '#fbbf24' : colors.link)
+        .linkWidth(link => highlightLinks.has(link) ? 2 : 1)
         .nodeCanvasObjectMode(() => 'replace')
         .nodeCanvasObject((node: any, ctx, globalScale) => {
           const isHighlight = highlightNodes.has(node);
@@ -318,11 +456,11 @@
           ctx.fillStyle = fillColor;
           drawShape(ctx, identity ? identity.shape : 'circle', node.x, node.y, r);
 
-          if (globalScale > 1.2) {
-            const fontSize = 10 / globalScale;
-            ctx.font = `${fontSize}px Sans-Serif`;
+          if (globalScale > 1.5 || isHighlight) {
+            const fontSize = isHighlight ? 12 / globalScale : 10 / globalScale;
+            ctx.font = `${isHighlight ? 'bold ' : ''}${fontSize}px Sans-Serif`;
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillStyle = colors.labelColor;
+            ctx.fillStyle = isHighlight ? '#fff' : colors.labelColor;
             ctx.fillText(node.name, node.x, node.y + r * 2.2);
           }
         })
@@ -330,13 +468,14 @@
            highlightNodes.clear(); highlightLinks.clear();
            if (node) {
              highlightNodes.add(node);
-             // Neighbor logic can be added here if cross-linking is implemented
+             (node as any).neighbors?.forEach(neighbor => highlightNodes.add(neighbor));
+             (node as any).links?.forEach(link => highlightLinks.add(link));
            }
            hoverNode = node || null;
            container.style.cursor = node ? 'pointer' : 'default';
            
-           const preview = root.querySelector('#graph-pod-preview');
-           const title = root.querySelector('#graph-pod-preview-title');
+           const preview = root.querySelector('.graph-pod-preview');
+           const title = root.querySelector('.graph-pod-preview-title');
            if (node && preview && title) {
              title.textContent = (node as any).name;
              preview.classList.add('visible');
@@ -351,25 +490,30 @@
       updateLegend(data);
     }
 
-    function filterPublic(data: any) {
-      const publicIds = new Set(
-        data.nodes.filter((n: any) => n.type === 'document' && n.group === 'public').map((n: any) => n.id)
+    function filterVisible(data: any) {
+      // Allow 'public' group OR 'cursos' group nodes by default
+      const allowedIds = new Set(
+        data.nodes.filter((n: any) => 
+          n.type === 'document' && (n.group === 'public' || n.group === 'cursos')
+        ).map((n: any) => n.id)
       );
+      
       const tagIds = new Set();
       for (const link of data.links) {
         const s = typeof link.source === 'object' ? link.source.id : link.source;
         const t = typeof link.target === 'object' ? link.target.id : link.target;
-        if (publicIds.has(s) && String(t).startsWith('tag:')) tagIds.add(t);
-        if (publicIds.has(t) && String(s).startsWith('tag:')) tagIds.add(s);
+        if (allowedIds.has(s) && String(t).startsWith('tag:')) tagIds.add(t);
+        if (allowedIds.has(t) && String(s).startsWith('tag:')) tagIds.add(s);
       }
-      const allowed = new Set([...publicIds, ...tagIds]);
+      
+      const allAllowed = new Set([...allowedIds, ...tagIds]);
       return {
-        nodes: data.nodes.filter((n: any) => allowed.has(n.id)),
-        links: data.links.filter((l: any) => {
+        nodes: JSON.parse(JSON.stringify(data.nodes.filter((n: any) => allAllowed.has(n.id)))),
+        links: JSON.parse(JSON.stringify(data.links.filter((l: any) => {
           const s = typeof l.source === 'object' ? l.source.id : l.source;
           const t = typeof l.target === 'object' ? l.target.id : l.target;
-          return allowed.has(s) && allowed.has(t);
-        }),
+          return allAllowed.has(s) && allAllowed.has(t);
+        }))),
       };
     }
 
@@ -378,8 +522,8 @@
       if (!legend) return;
       const folders = [...new Set(data.nodes.map((n: any) => n.publicFolder).filter(Boolean))].sort();
       let html = `
-        <div><span class="legend-doc" style="background:#4f83ff"></span> Docs</div>
-        <div><span class="legend-tag" style="background:#34d399"></span> Tags</div>
+        <div><span style="background:#4f83ff"></span> Docs</div>
+        <div><span style="background:#34d399"></span> Tags</div>
       `;
       for (const folder of folders as string[]) {
         const id = getFolderIdentity(folder);
@@ -394,6 +538,4 @@
     document.querySelectorAll('[data-pod="graph"]').forEach((pod) => initGraphPod(pod));
   })();
 </script>
-itGraphPod(pod));
-  })();
-</script>
+

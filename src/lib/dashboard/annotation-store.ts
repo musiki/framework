@@ -53,7 +53,6 @@ export const mapDashboardAnnotationRow = (row: any): DashboardAnnotationRecord =
 });
 
 export async function listDashboardAnnotations(
-  _unused_supabase: any,
   {
     courseId,
     year,
@@ -79,7 +78,6 @@ export async function listDashboardAnnotations(
 }
 
 export async function getDashboardAnnotationById(
-  _unused_supabase: any,
   annotationId: string,
 ) {
   const { data, error } = await query(
@@ -92,7 +90,6 @@ export async function getDashboardAnnotationById(
 }
 
 export async function upsertDashboardAnnotation(
-  _unused_supabase: any,
   input: AnnotationStoreInput,
 ) {
   const scopeType = normalizeDashboardAnnotationScopeType(input.scopeType);
@@ -156,7 +153,6 @@ export async function upsertDashboardAnnotation(
 }
 
 export async function updateDashboardAnnotation(
-  _unused_supabase: any,
   annotationId: string,
   authorUserId: string,
   input: Partial<AnnotationStoreInput>
@@ -197,7 +193,6 @@ export async function updateDashboardAnnotation(
 }
 
 export async function deleteDashboardAnnotation(
-  _unused_supabase: any,
   annotationId: string,
   authorUserId: string,
 ) {

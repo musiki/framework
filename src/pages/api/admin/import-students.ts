@@ -105,7 +105,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!email || !email.includes('@')) continue;
 
       // Ensure User record exists (resolve via UserEmail first)
-      const resolvedId = await resolveUserIdByEmail(undefined, email);
+      const resolvedId = await resolveUserIdByEmail(email);
 
       let userId: string;
 

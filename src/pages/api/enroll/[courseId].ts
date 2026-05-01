@@ -75,7 +75,7 @@ export const POST: APIRoute = async ({ params, locals }) => {
     if (insertError) throw insertError;
 
     if (isElevatedGlobalRole(user.role)) {
-      await promoteUserToTeacherIfNeeded(undefined, user.id);
+      await promoteUserToTeacherIfNeeded(user.id);
     }
 
     return new Response(JSON.stringify({ success: true, message: 'Enrolled successfully' }), {

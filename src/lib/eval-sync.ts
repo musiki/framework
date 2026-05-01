@@ -34,7 +34,6 @@ export type EvalCatalogSyncOptions = {
   reason?: string;
   ttlMs?: number;
   logger?: LoggerLike;
-  supabase?: SupabaseClient;
 };
 
 type EvalCatalogSyncState = {

@@ -3722,8 +3722,7 @@ order:
             data-forum-mode={initialSidebarForumMode}
             data-initial-board-slug={initialSidebarBoardSlug}
             data-has-session={hasSessionUser ? 'true' : 'false'}
-            data-supabase-url={import.meta.env.SUPABASE_URL}
-            data-supabase-anon-key={import.meta.env.SUPABASE_ANON_KEY}
+            data-r2-public-url={import.meta.env.R2_PUBLIC_URL || import.meta.env.PUBLIC_R2_URL || ''}
           >
             <div id="forum-new-board-panel" class="forum-board-create-panel" hidden>
               <form id="forum-new-board-form" class="forum-form forum-board-create-form">
@@ -4765,18 +4764,18 @@ order:
           .replace(/^-+|-+$/g, '') || 'item';
       }
 
-      function getWordcloudSupabaseUrl() {
+      function getR2PublicUrl() {
         const forumRoot = document.getElementById('lesson-forum');
         if (!(forumRoot instanceof HTMLElement)) return '';
-        return String(forumRoot.dataset.supabaseUrl || '').trim().replace(/\/+$/g, '');
+        return String(forumRoot.dataset.r2PublicUrl || '').trim().replace(/\/+$/g, '');
       }
 
       function buildWordcloudImageUrl({ courseId, pageSlug, interactionId, sessionId }) {
-        const supabaseUrl = getWordcloudSupabaseUrl();
+        const publicUrl = getR2PublicUrl();
         const safeCourseId = slugifyWordcloudSegment(courseId);
         const safeInteractionId = slugifyWordcloudSegment(interactionId);
         const safeSessionId = slugifyWordcloudSegment(sessionId);
-        if (!supabaseUrl || !safeCourseId || !safeInteractionId || !safeSessionId) return '';
+        if (!publicUrl || !safeCourseId || !safeInteractionId || !safeSessionId) return '';
 
         const lessonPath = String(pageSlug || '')
           .split('/')
@@ -4785,7 +4784,7 @@ order:
           .map((segment) => slugifyWordcloudSegment(segment))
           .join('/') || 'sin-leccion';
         const fileName = `${safeInteractionId}-${safeSessionId}.png`;
-        return `${supabaseUrl}/storage/v1/object/public/${WORDCLOUD_IMAGE_BUCKET}/${safeCourseId}/${lessonPath}/${fileName}`;
+        return `${publicUrl}/${WORDCLOUD_IMAGE_BUCKET}/${safeCourseId}/${lessonPath}/${fileName}`;
       }
 
       function getPersistedWordcloudResults(payload) {
@@ -10914,53 +10913,8 @@ a[node] -->|edge| b[hub]
 
         /** @param {string} threadId */
         function subscribeForumRealtime(threadId) {
+          // Realtime disabled (previously Supabase)
           return;
-          unsubscribeForumRealtime();
-          if (!threadId) return;
-          if (!(forumRoot instanceof HTMLElement)) return;
-
-          const supabaseUrl     = forumRoot.dataset.supabaseUrl     || '';
-          const supabaseAnonKey = forumRoot.dataset.supabaseAnonKey || '';
-          if (!supabaseUrl || !supabaseAnonKey) return;
-
-          _forumRtClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
-            realtime: { log_level: 'error' },
-          });
-
-          _forumRtChannel = _forumRtClient.channel(`forum-thread:${threadId}`);
-
-          // New post → invalidate cache + soft-refetch if this thread is still active
-          _forumRtChannel.on('broadcast', { event: 'forum_post_created' }, () => {
-            if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
-            invalidateForumPostsCache(threadId);
-            void loadPosts(threadId);
-          });
-
-          // Edited post → same: just re-fetch to get fresh bodyHtml
-          _forumRtChannel.on('broadcast', { event: 'forum_post_updated' }, () => {
-            if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
-            invalidateForumPostsCache(threadId);
-            void loadPosts(threadId);
-          });
-
-          // Deleted post → same
-          _forumRtChannel.on('broadcast', { event: 'forum_post_deleted' }, () => {
-            if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
-            invalidateForumPostsCache(threadId);
-            void loadPosts(threadId);
-          });
-
-          // Reaction update → patch only the affected post to avoid full-thread flicker.
-          _forumRtChannel.on('broadcast', { event: 'forum_reaction_updated' }, ({ payload }) => {
-            if (String(forumState.selectedThreadId || '').trim() !== String(threadId || '').trim()) return;
-            const postId = String(payload?.postId || '').trim();
-            const counts = payload?.reactionCounts;
-            if (!postId || !counts || typeof counts !== 'object') return;
-            invalidateForumPostsCache(threadId);
-            patchForumPostReactionSummary(postId, counts);
-          });
-
-          _forumRtChannel.subscribe();
         }
 
         // ─────────────────────────────────────────────────────────────────────────

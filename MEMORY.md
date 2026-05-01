@@ -1,5 +1,11 @@
 # MEMORY.md — Project Activity Log
 
+<2026-05-01 stabilization-and-graph-fixes> <br>
+Resolved critical auth crashes, fixed Graph pod rendering, and completed Supabase cleanup.
+- Auth: Fixed `resolveUserIdByEmail` signature mismatch causing 500 errors in Header and admin APIs. Enabled local dev login by disabling origin forcing on localhost.
+- Graph: Fixed ForceGraph initialization and resizing for Dockview. Added node search with auto-zoom/center. Expanded default filter to show course nodes.
+- Cleanup: Removed all remaining Supabase client remnants from `Header.astro` and `[...slug].astro`. Migrated wordcloud image generation to Cloudflare R2 public URLs. Simplified library APIs by removing legacy Supabase parameters.
+
 <2026-05-01 orf-pod-agentic-docs-and-mvp> <br>
 Indexed the new `docs/agentic` planning branch and started the Orf pod MVP.
 - Docs: Added `docs/agentic/README.md`, `local-ai-pod.md`, `ai-service-contracts.md`, and `local-ai-roadmap.md` as the planning set for a transversal Ollama-based assistant.

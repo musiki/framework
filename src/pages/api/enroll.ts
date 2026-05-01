@@ -98,7 +98,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (error) throw error;
 
     if (roleInCourse === 'teacher') {
-      await promoteUserToTeacherIfNeeded(undefined, user.id);
+      await promoteUserToTeacherIfNeeded(user.id);
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });
@@ -304,7 +304,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     if (updateError) throw updateError;
 
     if (normalizedNextRole === 'teacher') {
-      await promoteUserToTeacherIfNeeded(undefined, normalizeText(updatedEnrollment?.userId || targetEnrollment.userId));
+      await promoteUserToTeacherIfNeeded(normalizeText(updatedEnrollment?.userId || targetEnrollment.userId));
     }
 
     return new Response(JSON.stringify({ success: true, enrollment: updatedEnrollment }), { status: 200 });

@@ -36,8 +36,14 @@ export type MergeResult =
  * Returns null if no user owns this email.
  */
 export async function resolveUserIdByEmail(
-  rawEmail: string,
+  emailOrLegacySupabase: any,
+  maybeEmail?: string,
 ): Promise<string | null> {
+  // Pattern matching: 
+  // - resolveUserIdByEmail(email) 
+  // - resolveUserIdByEmail(legacyValue, email)
+  const rawEmail = typeof maybeEmail === 'string' ? maybeEmail : (typeof emailOrLegacySupabase === 'string' ? emailOrLegacySupabase : '');
+  
   const email = rawEmail.toLowerCase().trim();
   if (!email) return null;
 

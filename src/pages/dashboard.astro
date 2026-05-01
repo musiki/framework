@@ -2776,7 +2776,7 @@ const dashboardLogDataJson = JSON.stringify(dashboardLogData).replaceAll('<', '\
 let teacherDashboardAnnotations = [] as any[];
 if (isTeacher && activeCourseId) {
   try {
-    const loadedAnnotations = await listDashboardAnnotations(null, {
+    const loadedAnnotations = await listDashboardAnnotations({
       courseId: activeCourseId,
       year: activeYear,
     });

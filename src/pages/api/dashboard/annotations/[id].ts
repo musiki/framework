@@ -19,7 +19,7 @@ const resolveAccess = async (
   session: any,
   annotationId: string,
 ) => {
-  const existing = await getDashboardAnnotationById(null, annotationId);
+  const existing = await getDashboardAnnotationById(annotationId);
   if (!existing) {
     return { access: null, annotation: null };
   }
@@ -49,7 +49,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     }
 
     const body = await request.json().catch(() => ({}));
-    const updated = await updateDashboardAnnotation(null, annotationId, cleanString(access.userId), {
+    const updated = await updateDashboardAnnotation(annotationId, cleanString(access.userId), {
       color: body?.color,
       comment: body?.comment,
       visibility: normalizeDashboardAnnotationVisibility(body?.visibility),
@@ -93,7 +93,7 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
       return json({ error: 'Only teachers can delete dashboard annotations' }, 403);
     }
 
-    await deleteDashboardAnnotation(null, annotationId, cleanString(access.userId));
+    await deleteDashboardAnnotation(annotationId, cleanString(access.userId));
     return json({ success: true });
   } catch (error: any) {
     if (String(error?.message || '') === 'ANNOTATION_FORBIDDEN') {

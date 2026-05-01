@@ -18,7 +18,6 @@ export const POST: APIRoute = async ({ request }) => {
     const normalizedEmail = String(user.email).toLowerCase().trim();
     
     // Resolve user ID using existing multi-email logic
-    // Passing null for supabase as resolveUserIdByEmail has been updated
     const userId = await resolveUserIdByEmail(normalizedEmail).catch(() => null);
     
     if (!userId) {

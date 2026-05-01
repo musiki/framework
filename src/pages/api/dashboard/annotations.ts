@@ -33,7 +33,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
       return json({ error: 'Only teachers can read dashboard annotations' }, 403);
     }
 
-    const allAnnotations = await listDashboardAnnotations(null, { courseId, year });
+    const allAnnotations = await listDashboardAnnotations({ courseId, year });
     const visibleAnnotations = allAnnotations.filter((annotation) => {
       return annotation.visibility === 'teachers'
         || annotation.authorUserId === String(access.userId || '').trim();
@@ -68,7 +68,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return json({ error: 'Only teachers can create dashboard annotations' }, 403);
     }
 
-    const annotation = await upsertDashboardAnnotation(null, {
+    const annotation = await upsertDashboardAnnotation({
       courseId,
       year,
       subjectUserId: cleanString(body?.subjectUserId),

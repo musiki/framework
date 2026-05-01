@@ -1,7 +1,7 @@
 import { isElevatedGlobalRole } from './roles';
 import { query } from './db/pool';
 
-export const hasTeacherEnrollment = async (_supabase: any, userId: string): Promise<boolean> => {
+export const hasTeacherEnrollment = async (userId: string): Promise<boolean> => {
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId) return false;
 
@@ -14,11 +14,11 @@ export const hasTeacherEnrollment = async (_supabase: any, userId: string): Prom
   return Array.isArray(data) && data.length > 0;
 };
 
-export const promoteUserToTeacherIfNeeded = async (_supabase: any, userId: string): Promise<boolean> => {
+export const promoteUserToTeacherIfNeeded = async (userId: string): Promise<boolean> => {
   const normalizedUserId = String(userId || '').trim();
   if (!normalizedUserId) return false;
 
-  const teacherByEnrollment = await hasTeacherEnrollment(_supabase, normalizedUserId);
+  const teacherByEnrollment = await hasTeacherEnrollment(normalizedUserId);
   if (!teacherByEnrollment) return false;
 
   const { data: userRows, error: userError } = await query(

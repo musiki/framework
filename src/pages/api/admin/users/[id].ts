@@ -49,8 +49,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
       requesterId = access.userId;
     } else {
       const normalizedEmail = String(currentUser.email || '').toLowerCase().trim();
-      const resolvedId = await resolveUserIdByEmail(undefined, normalizedEmail).catch(() => null);
-      const { data: requesterUserRows } = resolvedId
+      const resolvedId = await resolveUserIdByEmail(normalizedEmail).catch(() => null);      const { data: requesterUserRows } = resolvedId
         ? await query(`SELECT "id", "role" FROM "User" WHERE "id" = $1`, [resolvedId])
         : await query(`SELECT "id", "role" FROM "User" WHERE "email" ILIKE $1`, [normalizedEmail]);
       const requesterUser = requesterUserRows?.[0];
@@ -161,7 +160,7 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
 
   try {
     const normalizedRequesterEmail = String(currentUser.email || '').toLowerCase().trim();
-    const resolvedRequesterId = await resolveUserIdByEmail(undefined, normalizedRequesterEmail).catch(() => null);
+    const resolvedRequesterId = await resolveUserIdByEmail(normalizedRequesterEmail).catch(() => null);
     const { data: requesterRows } = resolvedRequesterId
       ? await query(`SELECT "id", "role" FROM "User" WHERE "id" = $1`, [resolvedRequesterId])
       : await query(`SELECT "id", "role" FROM "User" WHERE "email" ILIKE $1`, [normalizedRequesterEmail]);
