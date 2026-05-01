@@ -92,9 +92,9 @@
   }
 
   .graph-pod-search-input {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #fff;
+    background: rgba(128, 128, 128, 0.1);
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    color: var(--conference-fg, #fff);
     font-size: 0.6rem;
     padding: 2px 6px;
     border-radius: 3px;
@@ -102,10 +102,16 @@
     transition: width 0.2s;
   }
 
+  .graph-pod-search-input::placeholder {
+    color: var(--conference-fg-dim, #888);
+    opacity: 0.7;
+  }
+
   .graph-pod-search-input:focus {
     width: 120px;
     outline: none;
-    border-color: rgba(255, 255, 255, 0.4);
+    border-color: var(--conference-accent, #2a87ff);
+    background: rgba(128, 128, 128, 0.15);
   }
 
   .graph-pod-search-results {
@@ -113,31 +119,32 @@
     bottom: 100%;
     right: 0;
     margin-bottom: 4px;
-    background: #111;
-    border: 1px solid #333;
+    background: var(--conference-bg, #111);
+    border: 1px solid var(--conference-border, #333);
     border-radius: 4px;
     max-height: 200px;
     width: 150px;
     overflow-y: auto;
     z-index: 100;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
   }
 
   .graph-pod-search-results.hidden { display: none; }
 
   .graph-pod-search-item {
-    padding: 4px 8px;
+    padding: 6px 10px;
     font-size: 0.65rem;
-    color: #ccc;
+    color: var(--conference-fg, #ccc);
     cursor: pointer;
-    border-bottom: 1px solid #222;
+    border-bottom: 1px solid var(--conference-border, #222);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .graph-pod-search-item:hover {
-    background: #222;
-    color: #fff;
+    background: var(--conference-accent, #2a87ff);
+    color: #fff !important;
   }
 
   .graph-pod-actions button {
@@ -356,24 +363,25 @@
           return;
         }
 
-        const data = showAll ? graphData : filterPublic(graphData);
+        const data = showAll ? graphData : filterVisible(graphData);
         const matches = data.nodes
-          .filter(n => n.name.toLowerCase().includes(val))
-          .slice(0, 10);
+          .filter(n => n.name && n.name.toLowerCase().includes(val))
+          .slice(0, 12);
 
         if (matches.length > 0) {
           results.innerHTML = matches.map(n => `<div class="graph-pod-search-item" data-id="${n.id}">${n.name}</div>`).join('');
           results.classList.remove('hidden');
         } else {
+          results.innerHTML = '';
           results.classList.add('hidden');
         }
       });
 
       results.addEventListener('click', (e) => {
-        const item = e.target.closest('.graph-pod-search-item');
+        const item = (e.target as HTMLElement).closest('.graph-pod-search-item') as HTMLElement;
         if (!item) return;
         const id = item.dataset.id;
-        const data = showAll ? graphData : filterPublic(graphData);
+        const data = showAll ? graphData : filterVisible(graphData);
         const node = data.nodes.find(n => n.id === id);
         if (node && graphInstance) {
           graphInstance.centerAt(node.x, node.y, 1000);

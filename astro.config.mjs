@@ -71,9 +71,9 @@ export default defineConfig({
   vite: {
     server: viteServerConfig,
     optimizeDeps: {
+      exclude: ['force-graph', 'three'],
       include: [
-        '@supabase/supabase-js',
-        '@mediapipe/tasks-vision',
+        '@auth/core',
         'reveal.js',
         'reveal.js/plugin/notes/notes.esm.js',
         'reveal.js/plugin/highlight/highlight.esm.js',
@@ -88,7 +88,7 @@ export default defineConfig({
         '@codemirror/lang-markdown',
         '@codemirror/language',
         'dockview-core',
-        'force-graph',
+        'vexflow',
       ],
     },
   },
@@ -111,6 +111,7 @@ export default defineConfig({
         'dataviewjs': 'javascript',
         'ref': 'text',
         'run-python': 'python',
+        'ActivityHistory': 'text',
         'lily': 'scheme',
         'lilypond': 'scheme',
         'ly': 'scheme',

@@ -21,6 +21,7 @@ type CreateRoomChatControllerOptions = {
   getRoomName: () => string;
   isConnected: () => boolean;
   onOrfMention?: (text: string) => Promise<void>;
+  onOrfAction?: (action: any) => Promise<void>;
   publishMessage: (message: ChatMessage) => Promise<void>;
   reportStatus: (message: string) => void;
 };
@@ -163,9 +164,46 @@ const appendConferenceUrlNode = (container: HTMLElement, rawUrl: string) => {
   container.appendChild(anchor);
 };
 
-const setConferenceChatBody = (container: HTMLElement, text: string) => {
+const setConferenceChatBody = (container: HTMLElement, text: string, onAction?: (a: any) => void) => {
   container.replaceChildren();
-  const normalizedBody = String(text || '');
+  const normalizedBody = String(text || '').trim();
+
+  // 1. Try to parse as Orf JSON response
+  if (normalizedBody.startsWith('{') && normalizedBody.endsWith('}')) {
+    try {
+      // Loose parse for triple quotes or common model errors
+      const cleaned = normalizedBody.replace(/"""/g, '"');
+      const parsed = JSON.parse(cleaned);
+      if (parsed.message) {
+        const msgEl = document.createElement('div');
+        msgEl.className = 'conference-chat-text-inner';
+        setConferenceChatBody(msgEl, parsed.message);
+        container.appendChild(msgEl);
+
+        if (Array.isArray(parsed.actions) && parsed.actions.length > 0 && onAction) {
+          const toolbar = document.createElement('div');
+          toolbar.className = 'musiki-chat-actions-toolbar';
+          parsed.actions.forEach((action: any) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'musiki-chat-action-btn';
+            btn.textContent = action.label || action.kind.replace(/_/g, ' ').toUpperCase();
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onAction(action);
+            });
+            toolbar.appendChild(btn);
+          });
+          container.appendChild(toolbar);
+        }
+        return;
+      }
+    } catch (e) {
+      // Not valid JSON or failed to parse, continue to normal rendering
+    }
+  }
+
   const lines = normalizedBody.split(/\n/g);
 
   lines.forEach((line, lineIndex) => {
@@ -291,9 +329,11 @@ export const createRoomChatController = ({
 
       const body = document.createElement('div');
       body.className = 'conference-chat-text';
-      setConferenceChatBody(body, message.text);
+      setConferenceChatBody(body, message.text, onOrfAction);
 
       item.append(header, body);
+
+
       currentChatList.appendChild(item);
     });
 

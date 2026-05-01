@@ -278,9 +278,22 @@ const { presentationOptions = [] } = Astro.props;
       </div>
     </section>
   </div>
+  <!-- IS: INSTANT SCORE -->
+  <div class="musiki-pod" data-pod="instant-score" data-pod-title="SCORE">
+    <div class="instant-score-container" data-instant-score-content></div>
+  </div>
 </div>
 
 <style is:global>
+  .instant-score-container {
+    width: 100%;
+    height: 100%;
+    background: #eed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
   .musiki-pod {
     height: 100%;
     width: 100%;
@@ -728,6 +741,10 @@ const { presentationOptions = [] } = Astro.props;
     --dv-inactivegroup-visiblepane-tab-background-color: #020202 !important;
   }
 
+  .pod-diy-shell:has([data-pod="hyperpiano"]) .pod-diy-body {
+    padding-top: 0;
+  }
+
   .musiki-pod .hyperpiano-shell {
     position: relative;
     width: 100%;
@@ -746,26 +763,42 @@ const { presentationOptions = [] } = Astro.props;
     flex: 1;
     position: relative;
     width: 100%;
-    border-top: 1px solid #222;
+    overflow: hidden;
+  }
+
+  .musiki-pod .hyperpiano-shell .white-keys {
+    display: flex;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
   }
 
   .musiki-pod .hyperpiano-shell .key {
     box-sizing: border-box;
-    background-color: transparent;
+    background: transparent;
   }
 
   .musiki-pod .hyperpiano-shell .key.is-white {
     flex: 1;
-    border-left: 1px solid #333;
+    height: 100%;
+    border-left: 1px solid rgba(255,255,255,0.25);
+    z-index: 1;
+  }
+
+  .musiki-pod .hyperpiano-shell .key.is-white:last-child {
+    border-right: 1px solid rgba(255,255,255,0.25);
   }
 
   .musiki-pod .hyperpiano-shell .key.is-black {
     position: absolute;
     top: 0;
-    height: 60%;
-    border: 1px solid #333;
+    height: 55%;
     background: #000;
-    z-index: 100;
+    border-left: 1px solid rgba(255,255,255,0.5);
+    border-right: 1px solid rgba(255,255,255,0.5);
+    border-bottom: 1px solid rgba(255,255,255,0.5);
+    z-index: 2;
   }
 
   .musiki-pod .hyperpiano-shell #reverb-indicator, 
@@ -792,14 +825,17 @@ const { presentationOptions = [] } = Astro.props;
   .musiki-pod .hyperpiano-shell #vu-meter { right: 0; }
   .musiki-pod .hyperpiano-shell #vu-meter .fill { background-color: #0f0; }
 
-  .musiki-pod .hyperpiano-shell #status {
+  .musiki-pod .hyperpiano-shell #status,
+  .musiki-pod .hyperpiano-shell .hyperpiano-status {
     position: absolute;
     bottom: 4px;
     left: 4px;
-    opacity: 0.4;
-    font-size: 10px;
+    font-size: 9px;
     pointer-events: none;
     z-index: 20;
+    color: #fff;
+    mix-blend-mode: difference;
+    opacity: 0.25;
   }
 
   .musiki-pod .hyperpiano-shell.is-focused {

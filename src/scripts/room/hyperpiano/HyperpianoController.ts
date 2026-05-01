@@ -336,6 +336,9 @@ export class HyperpianoController {
       this.onNoteEvent(targetMIDI, velocity, 'on');
     }
     
+    // Emit global event for local visualizers
+    window.dispatchEvent(new CustomEvent('musiki:note:on', { detail: { note: targetMIDI, velocity } }));
+    
     this.updateStatusDisplay(targetMIDI);
   }
 
@@ -358,6 +361,9 @@ export class HyperpianoController {
     if (!isRemote && this.onNoteEvent) {
       this.onNoteEvent(midi, 0, 'off');
     }
+
+    // Emit global event for local visualizers
+    window.dispatchEvent(new CustomEvent('musiki:note:off', { detail: { note: midi } }));
   }
 
   private updateStatusDisplay(midi: number) {

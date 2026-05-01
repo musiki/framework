@@ -7,10 +7,10 @@ const connectionString = process.env.DATABASE_URL || import.meta.env.DATABASE_UR
 
 export const pool = new Pool({
   connectionString,
-  // High concurrency for production VPS
-  max: 20,
+  // Reduced concurrency for local tunnel stability
+  max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000, // Reasonable timeout for internal network
+  connectionTimeoutMillis: 10000, // Increased to 10s for SSH tunnel
   keepAlive: true,
   application_name: 'musiki-framework'
 });

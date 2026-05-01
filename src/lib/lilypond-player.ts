@@ -469,10 +469,17 @@ export class MiniSampler {
     this.activeVoices.get(midiNote)!.add(voice);
     this.pruneFinishedVoiceBuckets();
 
+    // Emit global event for visualizers (like Instant Score)
+    window.dispatchEvent(new CustomEvent('musiki:note:on', { detail: { note: midiNote, velocity } }));
+
     source.onended = () => {
       this.activeVoices.get(midiNote)?.delete(voice);
       source.disconnect();
       gain.disconnect();
+      // Only emit off if no more voices for this note
+      if (!this.activeVoices.has(midiNote) || this.activeVoices.get(midiNote)!.size === 0) {
+          window.dispatchEvent(new CustomEvent('musiki:note:off', { detail: { note: midiNote } }));
+      }
     };
   }
 

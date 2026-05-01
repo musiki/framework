@@ -107,4 +107,37 @@
     color: var(--conference-accent, #76d3ff);
     pointer-events: none;
   }
+
+  .musiki-chat-actions-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  }
+
+  .musiki-chat-action-btn {
+    background: var(--conference-accent, #2a87ff);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .musiki-chat-action-btn:hover {
+    filter: brightness(1.2);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+  }
+
+  .musiki-chat-action-btn:active {
+    transform: translateY(0);
+  }
 </style>

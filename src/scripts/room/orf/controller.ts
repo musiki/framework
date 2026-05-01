@@ -48,6 +48,7 @@ export type RoomOrfController = {
     CreateRoomOrfControllerOptions,
     'input' | 'list' | 'modelSelect' | 'scopeLabel' | 'scroller' | 'sendButton' | 'clearButton' | 'status'
   >>) => void;
+  executeAction: (action: any) => Promise<void>;
 };
 
 const appendText = (container: HTMLElement, text: string) => {
@@ -192,20 +193,30 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
     if (action.kind === 'send_midi_to_hyperpiano') {
       const midiNotes = Array.isArray(proposal.midiNotes) ? proposal.midiNotes : [];
       if (midiNotes.length === 0 || !options.publishMidiNote) {
-        setStatus('Propuesta MIDI sin notas ejecutables.');
+        setStatus('La propuesta no incluye notas MIDI ejecutables.');
+        console.warn('[orf-execute] No midiNotes found in proposal', proposal);
         return;
       }
-      for (const item of midiNotes.slice(0, 32)) {
+      
+      setStatus('Tocando...');
+      
+      midiNotes.slice(0, 64).forEach((item: any) => {
         const note = Number(item.pitch);
-        if (!Number.isFinite(note)) continue;
-        const velocity = Number.isFinite(Number(item.velocity)) ? Number(item.velocity) : 0.75;
-        const durationMs = Number.isFinite(Number(item.durationMs)) ? Math.max(60, Number(item.durationMs)) : 300;
-        await options.publishMidiNote({ note: Math.round(note), velocity, action: 'on' });
-        window.setTimeout(() => {
-          void options.publishMidiNote?.({ note: Math.round(note), velocity: 0, action: 'off' });
-        }, durationMs);
-      }
-      setStatus('Enviado a HYPERPIANO.');
+        if (!Number.isFinite(note)) return;
+        
+        const velocity = Number.isFinite(Number(item.velocity)) ? Number(item.velocity) : 0.7;
+        const startMs = Number.isFinite(Number(item.startMs)) ? Number(item.startMs) : 0;
+        const durationMs = Number.isFinite(Number(item.durationMs)) ? Math.max(50, Number(item.durationMs)) : 400;
+
+        window.setTimeout(async () => {
+          await options.publishMidiNote?.({ note: Math.round(note), velocity, action: 'on' });
+          window.setTimeout(() => {
+            void options.publishMidiNote?.({ note: Math.round(note), velocity: 0, action: 'off' });
+          }, durationMs);
+        }, startMs);
+      });
+      
+      return;
     }
   };
 
@@ -414,5 +425,5 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
     bind();
   };
 
-  return { ask, bind, bindElements };
+  return { ask, bind, bindElements, executeAction };
 };

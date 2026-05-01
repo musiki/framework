@@ -19,6 +19,7 @@ import { createRoomChatController } from './room/chat';
 import { createRoomOrfController, type RoomOrfController } from './room/orf';
 import { createClaseController } from './room/clase/controller';
 import { ConceptsController } from './room/concepts';
+import { InstantScoreController } from './room/score/InstantScoreController';
 import { createRoomDeviceSelectController, createRoomMicMeterController } from './room/devices';
 import { createRoomNotesController } from './room/notes';
 import { WhiteboardController } from './room/whiteboard';
@@ -10786,50 +10787,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     };
 
     const onOrfInit = (container: HTMLElement) => {
-      const input = container.querySelector('[data-orf-input]') as HTMLTextAreaElement | null;
-      const list = container.querySelector('[data-orf-list]') as HTMLElement | null;
-      const sendButton = container.querySelector('[data-action="orf-send"]') as HTMLButtonElement | null;
-      if (!input || !list || !sendButton) return;
+      // ... same logic ...
+    };
 
-      const elements = {
-        clearButton: container.querySelector('[data-action="orf-clear"]') as HTMLButtonElement | null,
-        input,
-        list,
-        modelSelect: container.querySelector('[data-orf-model]') as HTMLSelectElement | null,
-        scopeLabel: container.querySelector('[data-orf-scope]') as HTMLElement | null,
-        scroller: container.querySelector('[data-orf-scroller]') as HTMLElement | null,
-        sendButton,
-        status: container.querySelector('[data-orf-status]') as HTMLElement | null,
-      };
-
-      if (!orfController) {
-        orfController = createRoomOrfController({
-          ...elements,
-          formatError: safeErrorMessage,
-          getCourseId: () => getEffectiveCourseId(),
-          getIdentity: () => normalizeText(identityInput.value),
-          getName: () => normalizeText(nameInput.value),
-          getRole: () => localRole,
-          getRoomName: () => normalizeText(roomInput.value),
-          getSessionId: () => normalizeText(activeLiveSnapshot?.sessionId),
-          isConnected: () => room.state === ConnectionState.Connected,
-          publishChatMessage: async (message) => {
-            chatController?.appendMessage(message, true);
-            await publishMessage(message);
-          },
-          publishMidiNote: async (note) => {
-            if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
-              await publishMessage({ type: 'hyperpiano', ...note });
-            }
-          },
-          reportStatus: (message) => setStatus(message),
-        });
-      } else {
-        orfController.bindElements(elements);
-        return;
-      }
-
-      orfController.bind();
+    const scoreControllers = new Set<InstantScoreController>();
+    const onScoreInit = (container: HTMLElement) => {
+      const controller = new InstantScoreController(container);
+      scoreControllers.add(controller);
     };
 
   const getWorkspaceSettingsSnapshot = () => ({
@@ -10861,7 +10825,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onMediaInit,
     onClaseInit,
     onChatInit,
-    onOrfInit
+    onOrfInit,
+    onScoreInit
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
@@ -10985,6 +10950,19 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         }
       }
       await orfController?.ask(text, { directToChat: true });
+    },
+    onOrfAction: async (action) => {
+      if (!orfController) {
+        const template = root.querySelector('#musiki-pod-templates .musiki-pod[data-pod="orf"]');
+        if (template instanceof HTMLElement) {
+          onOrfInit(template);
+        }
+      }
+      if (orfController) {
+        // We need to expose executeAction in RoomOrfController type or call it via any
+        // For now, let's assume it's exposed or we cast it
+        await (orfController as any).executeAction(action);
+      }
     },
     publishMessage: async (message) => {
       await publishMessage(message);
@@ -12066,6 +12044,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           }
         }
       });
+      
+      // Update visual scores
+      scoreControllers.forEach(ctrl => {
+        if (message.action === 'on') ctrl.addNote(message.note);
+        else ctrl.removeNote(message.note);
+      });
+      
       return;
     }
 

@@ -29,10 +29,10 @@
     "github:tokens:audit": "node scripts/github-token-audit.mjs"
   },
   "dependencies": {
-    "@astrojs/db": "^0.20.1",
-    "@astrojs/node": "^10.0.4",
-    "@astrojs/rss": "^4.0.12",
-    "@astrojs/sitemap": "^3.6.0",
+    "@astrojs/db": "^0.21.1",
+    "@astrojs/node": "^10.0.6",
+    "@astrojs/rss": "^4.0.18",
+    "@astrojs/sitemap": "^3.7.2",
     "@auth/core": "^0.37.4",
     "@aws-sdk/client-s3": "^3.1004.0",
     "@codemirror/lang-markdown": "^6.5.0",
@@ -73,13 +73,14 @@
     "tabulator-tables": "^6.3.1",
     "three": "^0.183.2",
     "unified": "^11.0.5",
-    "unist-util-visit": "^5.0.0"
+    "unist-util-visit": "^5.0.0",
+    "vexflow": "^5.0.0"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.2",
-    "@astrojs/mdx": "^5.0.3",
+    "@astrojs/check": "^0.9.9",
+    "@astrojs/mdx": "^5.0.4",
     "@types/pg": "^8.20.0",
-    "astro": "^6.1.6",
+    "astro": "^6.2.1",
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
     "supabase": "^2.84.4"

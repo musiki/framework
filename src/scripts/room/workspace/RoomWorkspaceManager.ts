@@ -38,7 +38,8 @@ export class RoomWorkspaceManager {
     { id: 'external-media', title: 'MEDIA', icon: 'Me', atomic: 14, color: '#8E7CC3', cat: 'media' },
     { id: 'graph', title: 'GRAPH', icon: 'Gr', atomic: 15, color: '#93C47D', cat: 'tools' },
     { id: 'forum', title: 'FORO', icon: 'Fo', atomic: 16, color: '#93C47D', cat: 'comm' },
-    { id: 'hyperpiano', title: 'HYPERPIANO', icon: 'Hp', atomic: 17, color: '#FFD966', cat: 'tools' }
+    { id: 'hyperpiano', title: 'HYPERPIANO', icon: 'Hp', atomic: 17, color: '#FFD966', cat: 'tools' },
+    { id: 'instant-score', title: 'SCORE', icon: 'Is', atomic: 18, color: '#F1C232', cat: 'tools' }
   ];
 
   constructor(
@@ -52,7 +53,8 @@ export class RoomWorkspaceManager {
     onMediaInit?: (element: HTMLElement) => void,
     onClaseInit?: (element: HTMLElement) => void,
     onChatInit?: (element: HTMLElement) => void,
-    onOrfInit?: (element: HTMLElement) => void
+    onOrfInit?: (element: HTMLElement) => void,
+    onScoreInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -65,6 +67,7 @@ export class RoomWorkspaceManager {
     this.onClaseInit = onClaseInit;
     this.onChatInit = onChatInit;
     this.onOrfInit = onOrfInit;
+    this.onScoreInit = onScoreInit;
   }
 
   public init() {
@@ -142,6 +145,9 @@ export class RoomWorkspaceManager {
               }
               if (id === 'orf' && this.onOrfInit) {
                 this.onOrfInit(element);
+              }
+              if (id === 'instant-score' && this.onScoreInit) {
+                this.onScoreInit(element);
               }
               if (id === 'graph') {
                 delete element.dataset.graphPodReady;
@@ -307,22 +313,23 @@ export class RoomWorkspaceManager {
 
         this.activeDraggingId = null;
 
+        const resolvedTargetId = this.dragOverPanelId;
+        this.dragOverPanelId = null;
+
         if (podId) {
-            // New pod from gallery
-            const position = this.dragOverPanelId ? { referencePanel: this.dragOverPanelId, direction: direction as any } : undefined;
+            const position = resolvedTargetId ? { referencePanel: resolvedTargetId, direction: direction as any } : undefined;
             this.togglePod(podId, true, position);
         } else if (panelId) {
-            // Internal move of existing panel
-            const panel = this.dockview.getPanel(panelId);
-            if (panel) {
-                const targetId = this.dragOverPanelId;
-                
-                if (targetId && targetId !== panelId) {
-                    this.dockview.moveGroupOrPanel({
-                        from: panel as any,
-                        to: { referencePanel: targetId, direction: direction as any } as any
-                    });
-                }
+            const movingPanel = this.dockview.getPanel(panelId);
+            const targetPanel = resolvedTargetId ? this.dockview.getPanel(resolvedTargetId) : null;
+            if (movingPanel && targetPanel && resolvedTargetId !== panelId) {
+                const dirMap: Record<string, string> = {
+                    left: 'left', right: 'right', above: 'top', below: 'bottom', within: 'center'
+                };
+                this.dockview.moveGroupOrPanel({
+                    from: { groupId: (movingPanel as any).group.id, panelId: movingPanel.id },
+                    to: { group: (targetPanel as any).group, position: (dirMap[direction] ?? 'right') as any }
+                });
             }
         }
     });
@@ -679,7 +686,7 @@ export class RoomWorkspaceManager {
   }
 
   private setupDefaultLayout() {
-    this.applyLayoutByKey('presentation');
+    this.applyLayoutByKey(window.innerWidth <= 500 ? 'mobile' : 'presentation');
   }
 
   public applyLayoutByKey(key: string) {
@@ -751,6 +758,12 @@ export class RoomWorkspaceManager {
       this.clearAllPanels();
       this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
       this.currentWorkspaceKey = 'full-win-speaker';
+      this.renderQuickLists();
+    } else if (key === 'mobile') {
+      this.clearAllPanels();
+      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'teacher', direction: 'below' }, size: 35 });
+      this.currentWorkspaceKey = 'mobile';
       this.renderQuickLists();
     }
   }
@@ -902,8 +915,7 @@ style.textContent = `
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: #fff !important;
-    isolation: auto;
-    opacity: 0.8;
+    opacity: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -914,7 +926,7 @@ style.textContent = `
     background: transparent !important;
     border: none;
     color: #fff !important;
-    opacity: 0.8;
+    opacity: 0.7;
     cursor: pointer;
     font-size: 14px;
     width: 14px;
@@ -1027,6 +1039,15 @@ style.textContent = `
     font-weight: bold;
     width: 16px;
     text-align: center;
+  }
+
+  @media (max-width: 500px) {
+    .pod-diy-shell { touch-action: none; }
+    .pod-diy-handle { display: none; }
+    .pod-diy-arrow { display: none; }
+    .dockview-container .dv-view-container { flex-direction: column !important; }
+    .dockview-container .dv-view { width: 100% !important; flex: 1 1 auto !important; }
+    .dockview-container .dv-separator-handle-container { display: none !important; }
   }
 `;
 document.head.appendChild(style);

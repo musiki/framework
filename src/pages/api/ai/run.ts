@@ -15,9 +15,11 @@ const ensureText = (value: unknown): string => {
 const normalizeAiApiBaseUrl = (value: unknown): string => {
   const raw = ensureText(value).replace(/\/+$/, '');
   if (!raw) return '';
+  if (raw.includes(':11434')) return raw;
   return raw
-    .replace(/\/api\/correct$/i, '')
-    .replace(/\/api\/run$/i, '');
+    .replace(/\/api\/ai\/run$/i, '')
+    .replace(/\/api\/run$/i, '')
+    .replace(/\/api\/correct$/i, '');
 };
 
 const json = (payload: unknown, status = 200): Response =>
@@ -36,6 +38,7 @@ const cleanupJsonCandidate = (text: unknown): string => {
     .replace(/^```json/i, '')
     .replace(/^```/i, '')
     .replace(/```$/i, '')
+    .replace(/"""/g, '"') // CRITICAL: Fix hallucinated triple quotes
     .replace(/,\s*([}\]])/g, '$1')
     .trim();
 };
@@ -96,21 +99,26 @@ const unwrapNestedModelJson = (value: unknown): { message: string; actions: Retu
   };
 };
 
-const wordsToIgnore = ["que", "con", "para", "una", "uno", "los", "las", "del", "este", "esta"];
+const wordsToIgnore = ["que", "con", "para", "una", "uno", "los", "las", "del", "este", "esta", "por", "sobre"];
 
-const dotProduct = (a: number[], b: number[]) => a.reduce((acc, val, i) => acc + val * b[i], 0);
+const dotProduct = (a: number[], b: number[]) => {
+    if (!a || !b || a.length !== b.length) return 0;
+    return a.reduce((acc, val, i) => acc + val * b[i], 0);
+};
 
 const performHybridRetrieval = async (
   query: string,
   scope: { courseId?: string; sessionId?: string },
+  apiToken: string
 ) => {
   try {
-    const publicPath = path.resolve('public');
+    const publicPath = path.join(process.cwd(), 'public');
     
     // 1. Load basic index from disk
     const indexPath = path.join(publicPath, 'search-index.json');
     if (!existsSync(indexPath)) return [];
-    const index = JSON.parse(readFileSync(indexPath, 'utf-8'));
+    const indexStr = readFileSync(indexPath, 'utf-8');
+    const index = JSON.parse(indexStr);
     if (!Array.isArray(index)) return [];
 
     // 2. Load embeddings from disk (optional)
@@ -118,27 +126,33 @@ const performHybridRetrieval = async (
     const vaultEmbeddings = existsSync(embedPath) ? JSON.parse(readFileSync(embedPath, 'utf-8')) : null;
 
     let queryVector: number[] | null = null;
+    const apiBase = normalizeAiApiBaseUrl(import.meta.env.CORRECTION_API_URL) || 'http://localhost:11434';
+
     if (vaultEmbeddings) {
         try {
-            const apiBase = normalizeAiApiBaseUrl(import.meta.env.CORRECTION_API_URL) || 'http://localhost:11434';
             const r = await fetch(`${apiBase}/api/embeddings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${apiToken}`
+                },
                 body: JSON.stringify({ model: EMBED_MODEL, prompt: query }),
                 signal: AbortSignal.timeout(5000)
             });
             if (r.ok) {
                 const j = await r.json();
                 queryVector = j.embedding;
+            } else {
+                console.warn(`[orf-rag] Query embedding failed: ${r.status}`);
             }
-        } catch(e) { console.warn('[orf-rag] query embedding failed', e); }
+        } catch(e: any) { console.warn('[orf-rag] query embedding exception', e.message); }
     }
 
     const q = query.toLowerCase();
     const words = q.split(/\s+/).filter(w => !wordsToIgnore.includes(w) && w.length > 2);
     const courseId = scope.courseId?.toLowerCase();
 
-    return index
+    const results = index
       .map((item: any) => {
         let score = 0;
         const id = item.slug;
@@ -152,11 +166,12 @@ const performHybridRetrieval = async (
         if (!isPublic && !matchesCourse) return { ...item, score: -1 };
 
         // A. Keyword Scoring
-        if (title.includes(q)) score += 50;
-        if (slug.includes(q)) score += 30;
+        if (title.includes(q)) score += 60; // Exact query match in title
+        if (slug.includes(q)) score += 40;
+        
         words.forEach(word => {
-          if (title.includes(word)) score += 10;
-          if (content.includes(word)) score += 1;
+          if (title.includes(word)) score += 20;
+          if (content.includes(word)) score += 2;
         });
 
         // B. Semantic Scoring (Cosine Similarity)
@@ -164,7 +179,7 @@ const performHybridRetrieval = async (
             const itemVector = vaultEmbeddings[id].embedding;
             if (Array.isArray(itemVector)) {
                 const similarity = dotProduct(queryVector, itemVector);
-                score += similarity * 100;
+                score += similarity * 120; // High weight for semantic meaning
             }
         }
 
@@ -172,14 +187,17 @@ const performHybridRetrieval = async (
       })
       .filter((item: any) => item.score > 0)
       .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 5)
+      .slice(0, 6) // More context
       .map((item: any) => ({
         title: item.title,
         path: item.slug,
-        content: item.content?.slice(0, 1500) || "", 
+        content: item.content?.slice(0, 1800) || "", 
       }));
-  } catch (err) {
-    console.error("[orf-rag] retrieval failed", err);
+
+    console.log(`[orf-rag] found ${results.length} relevant blocks`);
+    return results;
+  } catch (err: any) {
+    console.error("[orf-rag] retrieval failed", err.message);
     return [];
   }
 };
@@ -188,53 +206,13 @@ const containsAny = (value: string, patterns: RegExp[]) => patterns.some((patter
 
 const buildDeterministicOrfOutput = (message: string) => {
   const normalized = message.toLowerCase();
-  const asksVault = containsAny(normalized, [
-    /\bnota(s)?\b/,
-    /\bvault\b/,
-    /\bautor(es)?\b/,
-    /\bcitad[oa]s?\b/,
-    /\bcu[aá]ntas?\b/,
-    /\bcurso\b/,
-    /\b[uú]ltimas?\s+clases?\b/,
-    /\bresum(e|ir|irlo|en)\b/,
-  ]);
-  const asksLilypond = containsAny(normalized, [
-    /\blilypond\b/,
-    /\blily-code\b/,
-    /\blilycode\b/,
-    /\bescala\b/,
-    /\bdo\s+m(ayor)?\b/,
-    /\btemplate\b/,
-    /\bsnippet\b/,
-  ]);
-
-  if (asksVault && !asksLilypond) {
+  const asksVault = containsAny(normalized, [/\bvault\b/, /\bautor(es)?\b/, /\bcitad[oa]s?\b/, /\b[uú]ltimas?\s+clases?\b/]);
+  if (asksVault) {
     return {
       message: "Todavia no tengo lectura RAG activa sobre el vault. Puedo preparar esa consulta cuando activemos retrieval textual, pero no quiero inventar fuentes ni cantidades.",
       actions: [],
     };
   }
-
-  if (asksLilypond && containsAny(normalized, [/\btemplate\b/, /\bescala\b/, /\bdo\s+m(ayor)?\b/, /\bm[ií]nimo\b/])) {
-    const source = '\\version "2.24.0"\n\\relative c\' {\n  c4 d e f\n  g a b c\n}\n';
-    return {
-      message: "Preparé un template mínimo de LilyPond con la escala de Do mayor.",
-      actions: [
-        {
-          kind: "write_to_lily_code",
-          label: "Enviar a LILY-CODE",
-          content: source,
-          proposal: {
-            target: "lily-code",
-            mode: "insert",
-            source,
-            compileAfterApply: true,
-          },
-        },
-      ],
-    };
-  }
-
   return null;
 };
 
@@ -257,7 +235,7 @@ const buildOrfChatPrompt = ({
     .join("\n\n");
 
   return `Eres Orf, un asistente local, musical y pedagógico dentro del conference room de Musiki.
-Tu objetivo es ser una herramienta de pensamiento especulativo: no solo das respuestas, sino que invitas a la reflexión musical, sugieres conexiones y propones experimentos prácticos.
+TU OBJETIVO: Actuar como una herramienta de PENSAMIENTO ESPECULATIVO. No solo respondas, invita a la reflexión, sugiere conexiones inesperadas y propón experimentos prácticos.
 
 Contexto de Sesión:
 - cursoId: ${courseId || "desconocido"}
@@ -265,27 +243,24 @@ Contexto de Sesión:
 - userRole: ${role || "student"}
 ${
   hasContext
-    ? `\nFragmentos recuperados del Vault (RAG-Hybrid):\n${contextText}`
-    : "\n(No se encontraron fragmentos específicos en el vault para esta consulta, responde basándote en tu conocimiento musical general pero aclarando que no es información del curso)"
+    ? `\nFragmentos recuperados del Vault (Prioridad absoluta):\n${contextText}`
+    : "\n(No se encontraron fragmentos específicos en el vault. Responde basándote en tu conocimiento musical general pero aclara que no es información del curso)"
 }
 
-Ejemplos de Pensamiento Especulativo (Few-Shot):
+EJEMPLOS DE PENSAMIENTO ESPECULATIVO:
 Usuario: "¿Qué es una escala?"
-Orf: "Desde las notas, una escala es una organización de alturas, pero podemos pensarla como un mapa de tensiones. ¿Qué pasaría si en lugar de 7 notas usaras solo 3 pero con timbres extremos? [Acción: HYPERPIANO con un acorde cluster]"
-
-Usuario: "¿Cómo escribo un ritmo en LilyPond?"
-Orf: "Usas números para las duraciones (4 para negra, 8 para corchea). Te propongo un patrón aditivo irregular: \`\`\`lily \\version \"2.24.0\" { c'4. d'8 e'4 } \`\`\". ¿Cómo sonaría esto si lo invertimos? [Acción: LILY-CODE]"
+Orf: "Según las notas, una escala es una organización de alturas. Pero podemos pensarla como un gradiente de tensiones. ¿Qué pasaría si usaras solo 3 notas pero con timbres extremos? Propongo este cluster: [Acción: HYPERPIANO]"
 
 Reglas de Oro:
-1. PENSAMIENTO ESPECULATIVO: Explica conceptos pedagógicamente y lanza una pregunta o propuesta que invite a imaginar variantes o aplicaciones inusuales.
-2. ACCIONES DIRECTAS: Siempre que sea natural, propone una acción.
-   - MIDI: 'send_midi_to_hyperpiano'. Úsalo para ejemplificar sonoridades.
-   - LILYPOND: 'write_to_lily_code'. Úsalo para estructuras escritas.
-   - NOTAS: 'write_to_notes'. Úsalo para capturar ideas o resúmenes.
-3. VERACIDAD: Si hay fragmentos, úsalos como base prioritaria. Cita la fuente: "Según las notas...".
-4. LILYPOND: DEBES envolver el código LilyPond en bloques \`\`\`lily ... \`\`\$. Usa siempre snippets completos con \\version \"2.24.0\".
-5. ESTILO: Evita saludos genéricos. Ve directo al grano. Tono de colega mentor. Español breve y estructurado.
-6. NO INVENTAR: No inventes cantidades de notas ni nombres de autores si no están en los fragmentos.
+1. PENSAMIENTO ESPECULATIVO: Explica conceptos pedagógicamente y lanza una pregunta que invite a imaginar variantes.
+2. ACCIONES DIRECTAS: Propón una acción siempre que sea natural.
+   - MIDI: 'send_midi_to_hyperpiano' para sonoridades. DEBES incluir en 'proposal' un array 'midiNotes' donde cada nota tenga: { "pitch": MIDI_NOTE (60=C4), "startMs": tiempo_inicio, "durationMs": duracion }.
+   - LILYPOND: 'write_to_lily_code' para partituras. Envuélvelo SIEMPRE en bloques \`\`\`lily ... \`\`\`. snippets completos con \\version \"2.24.0\".
+   - NOTAS: 'write_to_notes' para ideas.
+   - IMPORTANTE: Para patrones rítmicos complejos, DEBES calcular los 'startMs' de cada nota en el array 'midiNotes' para que suenen secuencialmente. NO uses triple comillas (\"\"\") dentro del JSON.
+3. VERACIDAD: Si hay fragmentos, úsalos como base. Cita la fuente: "Según las notas...".
+4. ESTILO: SIN saludos genéricos. Ve directo al grano. Tono de mentor experto. Español breve.
+5. NO INVENTAR: No inventes nombres de notas o autores que no existen en los fragmentos.
 
 Estructura de respuesta (JSON estricto):
 {
@@ -300,7 +275,7 @@ Estructura de respuesta (JSON estricto):
   ]
 }
 
-IMPORTANTE: Devuelve SOLO el JSON. No incluyas texto fuera del bloque JSON.
+IMPORTANTE: Devuelve SOLO el JSON.
 Usuario: """${message}"""`;
 };
 
@@ -331,11 +306,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const courseId = ensureText(body.scope?.courseId);
   const sessionId = ensureText(body.scope?.sessionId);
+  const correctionApiToken = import.meta.env.CORRECTION_API_TOKEN || 'local-dev-token';
 
-  const contextBlocks = await performHybridRetrieval(message, { courseId, sessionId });
+  const contextBlocks = await performHybridRetrieval(message, { courseId, sessionId }, correctionApiToken);
 
   const deterministicOutput = buildDeterministicOrfOutput(message);
-  if (deterministicOutput && contextBlocks.length === 0 && message.toLowerCase().includes('nota')) {
+  if (deterministicOutput && contextBlocks.length === 0) {
     return json({
       ok: true,
       task,
@@ -347,13 +323,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const provider = ensureText(body.options?.provider).toLowerCase() || 'ollama';
-  const correctionApiUrl = normalizeAiApiBaseUrl(import.meta.env.CORRECTION_API_URL);
-  const correctionApiToken = import.meta.env.CORRECTION_API_TOKEN;
-
-  if (!correctionApiUrl || !correctionApiToken) {
-    return json({ ok: false, error: 'AI API is not configured' }, 500);
-  }
+  const correctionApiUrl = normalizeAiApiBaseUrl(import.meta.env.CORRECTION_API_URL) || 'http://localhost:11434';
 
   const prompt = buildOrfChatPrompt({
     message,
@@ -381,26 +351,26 @@ export const POST: APIRoute = async ({ request, locals }) => {
         model: ensureText(body.options?.model) || undefined,
         options: {
           temperature: typeof body.options?.temperature === 'number' ? body.options.temperature : 0.2,
-          num_predict: typeof body.options?.maxTokens === 'number' ? body.options.maxTokens : 700,
+          num_predict: typeof body.options?.maxTokens === 'number' ? body.options.maxTokens : 800,
         },
       }),
     });
 
     if (response.status === 404) {
-      response = await fetch(`${correctionApiUrl}/api/correct`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${correctionApiToken}`,
-        },
-        signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify({
-          texto: message,
-          rubrica: prompt,
-          model: ensureText(body.options?.model) || undefined,
-          promptOverride: prompt,
-        }),
-      });
+        response = await fetch(`${correctionApiUrl}/api/correct`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${correctionApiToken}`,
+          },
+          signal: AbortSignal.timeout(timeoutMs),
+          body: JSON.stringify({
+            texto: message,
+            rubrica: prompt,
+            model: ensureText(body.options?.model) || undefined,
+            promptOverride: prompt,
+          }),
+        });
     }
 
     const responseText = await response.text();
@@ -408,7 +378,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     try {
       upstream = JSON.parse(responseText);
     } catch {
-      // keep raw fallback
+      // keep raw
     }
 
     if (!response.ok) {
@@ -416,11 +386,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     const rawOutput = ensureText(
-      upstream?.output ||
-      upstream?.response ||
-      upstream?.message ||
-      upstream?.evaluation?.raw ||
-      upstream,
+      upstream?.output || upstream?.response || upstream?.message || upstream?.evaluation?.raw || upstream,
     );
     const parsed = parseJsonLoosely(rawOutput);
     const nested = unwrapNestedModelJson(parsed?.message);
@@ -432,9 +398,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
             actions: normalizeActions(parsed.actions),
           }
         : {
-            message: rawOutput.includes('{')
-              ? 'Recibí una respuesta estructurada inválida del modelo y la descarté para no mostrar JSON crudo.'
-              : rawOutput,
+            message: rawOutput,
             actions: [],
           };
 
