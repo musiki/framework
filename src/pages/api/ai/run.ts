@@ -1,8 +1,9 @@
 import type { APIRoute } from 'astro';
+import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
 
 const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 65000);
 const maxPromptChars = Number(import.meta.env.CORRECTION_API_MAX_PROMPT_CHARS || 50000);
-const OLLAMA_URL = import.meta.env.CORRECTION_API_URL || 'http://localhost:11434';
 const EMBED_MODEL = 'nomic-embed-text';
 
 const ensureText = (value: unknown): string => {
@@ -104,24 +105,27 @@ const performHybridRetrieval = async (
   scope: { courseId?: string; sessionId?: string },
 ) => {
   try {
-    const baseUrl = process.env.NODE_ENV === "production" ? "http://localhost:4321" : "http://localhost:4321";
+    const publicPath = path.resolve('public');
     
-    // 1. Load basic index
-    const indexResp = await fetch(`${baseUrl}/search.json`);
-    if (!indexResp.ok) return [];
-    const index = await indexResp.json();
+    // 1. Load basic index from disk
+    const indexPath = path.join(publicPath, 'search-index.json');
+    if (!existsSync(indexPath)) return [];
+    const index = JSON.parse(readFileSync(indexPath, 'utf-8'));
     if (!Array.isArray(index)) return [];
 
-    // 2. Load embeddings (optional)
-    const embedResp = await fetch(`${baseUrl}/vault-embeddings.json`).catch(() => null);
-    const vaultEmbeddings = embedResp?.ok ? await embedResp.json() : null;
+    // 2. Load embeddings from disk (optional)
+    const embedPath = path.join(publicPath, 'vault-embeddings.json');
+    const vaultEmbeddings = existsSync(embedPath) ? JSON.parse(readFileSync(embedPath, 'utf-8')) : null;
 
     let queryVector: number[] | null = null;
     if (vaultEmbeddings) {
         try {
-            const r = await fetch(`${OLLAMA_URL}/api/embeddings`, {
+            const apiBase = normalizeAiApiBaseUrl(import.meta.env.CORRECTION_API_URL) || 'http://localhost:11434';
+            const r = await fetch(`${apiBase}/api/embeddings`, {
                 method: 'POST',
-                body: JSON.stringify({ model: EMBED_MODEL, prompt: query })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: EMBED_MODEL, prompt: query }),
+                signal: AbortSignal.timeout(5000)
             });
             if (r.ok) {
                 const j = await r.json();
@@ -135,7 +139,7 @@ const performHybridRetrieval = async (
     const courseId = scope.courseId?.toLowerCase();
 
     return index
-      .map((item) => {
+      .map((item: any) => {
         let score = 0;
         const id = item.slug;
         const title = (item.title || "").toLowerCase();
@@ -160,7 +164,6 @@ const performHybridRetrieval = async (
             const itemVector = vaultEmbeddings[id].embedding;
             if (Array.isArray(itemVector)) {
                 const similarity = dotProduct(queryVector, itemVector);
-                // Similarity usually 0-1 for nomic, weight it high
                 score += similarity * 100;
             }
         }
@@ -280,7 +283,7 @@ Reglas de Oro:
    - LILYPOND: 'write_to_lily_code'. Úsalo para estructuras escritas.
    - NOTAS: 'write_to_notes'. Úsalo para capturar ideas o resúmenes.
 3. VERACIDAD: Si hay fragmentos, úsalos como base prioritaria. Cita la fuente: "Según las notas...".
-4. LILYPOND: DEBES envolver el código LilyPond en bloques \`\`\`lily ... \`\`\`. Usa siempre snippets completos con \\version \"2.24.0\".
+4. LILYPOND: DEBES envolver el código LilyPond en bloques \`\`\`lily ... \`\`\$. Usa siempre snippets completos con \\version \"2.24.0\".
 5. ESTILO: Evita saludos genéricos. Ve directo al grano. Tono de colega mentor. Español breve y estructurado.
 6. NO INVENTAR: No inventes cantidades de notas ni nombres de autores si no están en los fragmentos.
 

@@ -346,13 +346,26 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
 
       setStatus('');
     } catch (error) {
+      const errorText = options.formatError(error);
       messages.push({
         id: `orf-error-${crypto.randomUUID()}`,
         role: 'system',
-        text: options.formatError(error),
+        text: errorText,
         ts: new Date().toISOString(),
       });
       setStatus('Error de Orf.');
+
+      if (isDirect) {
+        await options.publishChatMessage({
+          type: 'chat',
+          id: `orf-error-${crypto.randomUUID()}`,
+          identity: 'system',
+          name: 'Orf (Error)',
+          role: 'external',
+          sentAt: new Date().toISOString(),
+          text: `⚠️ No pude responder: ${errorText}`,
+        });
+      }
     } finally {
       render();
       syncControls(false);
