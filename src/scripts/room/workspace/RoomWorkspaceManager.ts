@@ -851,11 +851,19 @@ style.textContent = `
   .pod-diy-shell.is-drag-over[data-drag-dir="above"]::after { left: 0; right: 0; top: 0; height: 30%; }
   .pod-diy-shell.is-drag-over[data-drag-dir="below"]::after { left: 0; right: 0; bottom: 0; height: 30%; }
   .pod-diy-shell.is-drag-over[data-drag-dir="within"]::after { inset: 10%; opacity: 0.2; }
+  .pod-diy-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+  }
   .pod-diy-header {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+    position: relative;
+    width: 100%;
     height: 18px;
     display: flex;
     align-items: center;
@@ -865,8 +873,8 @@ style.textContent = `
     gap: 6px;
     border-top: 1px solid var(--pod-color, #444);
     z-index: 100;
-    pointer-events: none;
     mix-blend-mode: difference !important;
+    flex-shrink: 0;
   }
   .pod-diy-header.is-dragging {
       opacity: 0.5;
@@ -951,8 +959,13 @@ style.textContent = `
     flex: 1;
     min-height: 0;
     position: relative;
-    height: 100%;
-    padding-top: 18px; 
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .pod-diy-body > * {
+    flex: 1;
+    height: 100% !important;
   }
 
   /* Aggressive Dockview Header Hiding - Kill the Abyss - Scoped to container */
