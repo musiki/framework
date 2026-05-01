@@ -36,12 +36,14 @@ export const listRoomPresentationOptions = async ({
   const courseMetaById = new Map<string, { public: boolean; title: string }>();
   const courseDataById = new Map<string, Record<string, unknown>>();
   const lessonsByCourseId = new Map<string, any[]>();
-  const validLessons: any[] = [];
 
+  // Single pass to group and meta
   for (const entry of entries) {
-    const isIndex = entry.id.endsWith('/_index') || entry.id.endsWith('_index');
-    const courseId = normalizeText(entry.id.split('/')[0]);
+    const segments = entry.id.split('/');
+    const courseId = normalizeText(segments[0]);
     if (!courseId) continue;
+
+    const isIndex = entry.id.endsWith('/_index') || entry.id.endsWith('_index');
 
     if (isIndex) {
       courseMetaById.set(courseId, {
@@ -52,11 +54,8 @@ export const listRoomPresentationOptions = async ({
     } else {
       const data = entry.data as Record<string, unknown>;
       if (normalizeText(data.theme)) {
-        if (!lessonsByCourseId.has(courseId)) {
-          lessonsByCourseId.set(courseId, []);
-        }
+        if (!lessonsByCourseId.has(courseId)) lessonsByCourseId.set(courseId, []);
         lessonsByCourseId.get(courseId)!.push(entry);
-        validLessons.push(entry);
       }
     }
   }
@@ -97,53 +96,42 @@ export const listRoomPresentationOptions = async ({
     }
   }
 
-  const lessonPathIndexByCourseId = new Map<string, ReturnType<typeof buildCourseLessonPathIndex>>();
   const isTeacher = role === 'teacher';
+  const result: RoomPresentationOption[] = [];
 
-  return validLessons
-    .filter((entry) => {
-      const courseId = normalizeText(entry.id.split('/')[0]);
-      if (!accessibleCourseIds.has(courseId)) return false;
+  // Grouped iteration is O(N) total across all courses
+  for (const [courseId, lessons] of lessonsByCourseId.entries()) {
+    if (!accessibleCourseIds.has(courseId)) continue;
 
+    const courseData = courseDataById.get(courseId) || {};
+    const courseTitle = courseMetaById.get(courseId)?.title || courseId;
+
+    // Pre-sort lessons for this course once
+    const sortedLessons = [...lessons].sort((a, b) => (Number(a.data?.order || 0) - Number(b.data?.order || 0)));
+    const pathIndex = buildCourseLessonPathIndex(courseId, courseData, sortedLessons);
+
+    for (const entry of sortedLessons) {
       const data = entry.data as Record<string, unknown>;
+      
+      // Visibility checks
       if (!session) {
         const visibility = normalizeText(data.visibility).toLowerCase();
-        if (visibility === 'enrolled-only') return false;
+        if (visibility === 'enrolled-only') continue;
       }
-
       if (!isTeacher) {
         const status = normalizeText(data.status).toLowerCase();
-        if (status === 'draft' || status === 'private') return false;
+        if (status === 'draft' || status === 'private') continue;
       }
 
-      return true;
-    })
-    .map((entry) => {
-      const courseId = normalizeText(entry.id.split('/')[0]);
-      const theme = normalizeText((entry.data as Record<string, unknown>).theme);
-      const courseTitle = courseMetaById.get(courseId)?.title || courseId;
-      
-      if (!lessonPathIndexByCourseId.has(courseId)) {
-        const lessons = (lessonsByCourseId.get(courseId) || [])
-          .sort((a, b) => (Number(a.data?.order || 0) - Number(b.data?.order || 0)));
-        lessonPathIndexByCourseId.set(
-          courseId,
-          buildCourseLessonPathIndex(courseId, courseDataById.get(courseId) || {}, lessons),
-        );
-      }
-
-      return {
+      result.push({
         courseId,
-        label: `${courseTitle} 〉${entry.data.title} (${theme})`,
+        label: `${courseTitle} 〉${entry.data.title} (${normalizeText(data.theme)})`,
         lessonId: entry.id,
-        theme,
-        value: buildCourseSlideLessonHref(
-          courseId,
-          courseDataById.get(courseId) || {},
-          entry,
-          lessonPathIndexByCourseId.get(courseId),
-        ),
-      } satisfies RoomPresentationOption;
-    })
-    .sort((left, right) => left.label.localeCompare(right.label, 'es'));
+        theme: normalizeText(data.theme),
+        value: buildCourseSlideLessonHref(courseId, courseData, entry, pathIndex),
+      });
+    }
+  }
+
+  return result.sort((left, right) => left.label.localeCompare(right.label, 'es'));
 };

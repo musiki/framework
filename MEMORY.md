@@ -4,6 +4,7 @@
 Resolved critical auth crashes, fixed Graph pod rendering, and completed Supabase cleanup.
 - Auth: Fixed `resolveUserIdByEmail` signature mismatch causing 500 errors in Header and admin APIs. Enabled local dev login by disabling origin forcing on localhost.
 - Graph: Fixed ForceGraph initialization and resizing for Dockview. Added node search with auto-zoom/center. Expanded default filter to show course nodes.
+- Media: Restored External Media search results by refactoring pod layout to flex-column (anchoring toolbar to bottom) and resolving CSS conflicts that hid thumbnails.
 - Cleanup: Removed all remaining Supabase client remnants from `Header.astro` and `[...slug].astro`. Migrated wordcloud image generation to Cloudflare R2 public URLs. Simplified library APIs by removing legacy Supabase parameters.
 
 <2026-05-01 orf-pod-agentic-docs-and-mvp> <br>

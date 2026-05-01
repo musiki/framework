@@ -410,17 +410,18 @@
 
     function render() {
       if (!graphData || !container) return;
-      
+
       const data = showAll ? JSON.parse(JSON.stringify(graphData)) : filterVisible(graphData);
       crossLinkNodes(data);
 
       const colors = {
         document: '#4f83ff',
         tag: '#34d399',
-        link: '#222222',
+        tagLink: '#059669',
+        link: '#4b5563',
         highlight: '#fbbf24',
         hover: '#f87171',
-        labelColor: '#e0e0e0'
+        labelColor: '#d1d5db'
       };
 
       const parent = container.parentElement;
@@ -433,10 +434,16 @@
         .height(parent.clientHeight || 400)
         .backgroundColor('#000000')
         .nodeId('id')
-        .nodeLabel('name')
+        .nodeLabel('')
         .nodeRelSize(3.5)
-        .linkColor(link => highlightLinks.has(link) ? '#fbbf24' : colors.link)
+        .d3AlphaDecay(0.02)
+        .d3VelocityDecay(0.3)
+        .autoPauseRedraw(false)
+        .linkColor(link => highlightLinks.has(link) ? colors.highlight : (link as any).type === 'tag' ? colors.tagLink : colors.link)
         .linkWidth(link => highlightLinks.has(link) ? 2 : 1)
+        .linkDirectionalParticles(link => highlightLinks.has(link) ? 4 : 0)
+        .linkDirectionalParticleWidth(link => highlightLinks.has(link) ? 3 : 0)
+        .linkLineDash(link => (link as any).type === 'tag' && [4, 6])
         .nodeCanvasObjectMode(() => 'replace')
         .nodeCanvasObject((node: any, ctx, globalScale) => {
           const isHighlight = highlightNodes.has(node);
@@ -456,7 +463,7 @@
           ctx.fillStyle = fillColor;
           drawShape(ctx, identity ? identity.shape : 'circle', node.x, node.y, r);
 
-          if (globalScale > 1.5 || isHighlight) {
+          if (globalScale > 1.0 || isHighlight) {
             const fontSize = isHighlight ? 12 / globalScale : 10 / globalScale;
             ctx.font = `${isHighlight ? 'bold ' : ''}${fontSize}px Sans-Serif`;
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -473,7 +480,7 @@
            }
            hoverNode = node || null;
            container.style.cursor = node ? 'pointer' : 'default';
-           
+
            const preview = root.querySelector('.graph-pod-preview');
            const title = root.querySelector('.graph-pod-preview-title');
            if (node && preview && title) {
@@ -488,6 +495,19 @@
         });
 
       updateLegend(data);
+
+      // Animate dashed tag links
+      const dashLen = 4, gapLen = 6, dashCycle = 800;
+      const st = +new Date();
+      (function animateDashes() {
+        if (!graphInstance) return;
+        const t = ((+new Date() - st) % dashCycle) / dashCycle;
+        const dash = t < 0.5
+          ? [0, gapLen * t * 2, dashLen, gapLen * (1 - t * 2)]
+          : [dashLen * (t - 0.5) * 2, gapLen, dashLen * (1 - (t - 0.5) * 2), 0];
+        graphInstance.linkLineDash((link: any) => link.type === 'tag' && dash);
+        requestAnimationFrame(animateDashes);
+      })();
     }
 
     function filterVisible(data: any) {

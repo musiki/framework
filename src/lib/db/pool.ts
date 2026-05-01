@@ -22,6 +22,13 @@ pool.on('connect', (client) => {
   }
 });
 
+// Monitor pool saturation
+pool.on('acquire', (client) => {
+  if (pool.waitingCount > 5) {
+    console.warn(`[DB-POOL] HIGH SATURATION: ${pool.waitingCount} queries waiting. Active: ${pool.totalCount - pool.idleCount}/${pool.max}`);
+  }
+});
+
 // Handle pool errors globally to prevent process crashes
 pool.on('error', (err) => {
   // ECONNRESET is common on tunnels, we log but don't crash

@@ -1,10 +1,9 @@
 ---
-import ChatPanel from '../panels/chat/ChatPanel.astro';
-import ClasePanel from '../panels/clase/ClasePanel.astro';
-import GridPanel from '../panels/grid/GridPanel.astro';
-import NotesPanel from '../panels/notes/NotesPanel.astro';
-import OrfPanel from '../panels/orf/OrfPanel.astro';
 import GraphPod from './GraphPod.astro';
+import ChatPanel from '../panels/chat/ChatPanel.astro';
+import OrfPanel from '../panels/orf/OrfPanel.astro';
+import NotesPanel from '../panels/notes/NotesPanel.astro';
+import ClasePanel from '../panels/clase/ClasePanel.astro';
 
 type Props = {
   presentationOptions?: any[];
@@ -13,7 +12,41 @@ type Props = {
 const { presentationOptions = [] } = Astro.props;
 ---
 
-<div id="musiki-pod-templates" hidden aria-hidden="true" style="display: none;" data-presentation-options={JSON.stringify(presentationOptions)}>
+<div id="musiki-pod-templates" hidden aria-hidden="true" style="display: none;">
+  <!-- Data storage to avoid breaking the main div tag with huge attributes -->
+  <script id="musiki-presentation-data" type="application/json" set:html={JSON.stringify(presentationOptions)}></script>
+
+  <!-- CLASE -->
+  <ClasePanel />
+
+  <!-- NOTAS -->
+  <NotesPanel />
+
+  <!-- ORF -->
+  <OrfPanel />
+
+  <!-- GRID -->
+  <div class="musiki-pod" data-pod="grid-videos" data-pod-title="GRID">
+    <section class="conference-stage-panel conference-stage-panel--grid" data-panel="grid">
+      <div class="conference-slot conference-slot--grid" data-slot="grid" data-empty-label="Participants grid"></div>
+    </section>
+  </div>
+
+  <!-- ROSTER -->
+  <div class="musiki-pod" data-pod="roster" data-pod-title="ROSTER">
+    <div class="conference-sidebar-panel-body">
+      <div class="conference-roster-scroll" style="height: 100%; overflow-y: auto;">
+        <ul class="conference-roster" data-participant-list></ul>
+      </div>
+    </div>
+    <div class="conference-slot" data-slot="students" style="display:none !important" aria-hidden="true"></div>
+  </div>
+
+  <!-- CHAT -->
+  <ChatPanel />
+
+  <GraphPod />
+
   <!-- Pr: PRESENTACIÓN -->
   <div class="musiki-pod" data-pod="presentation" data-pod-title="PRESENTACIÓN">
     <section class="conference-stage-panel conference-stage-panel--presentation" data-panel="presentation">
@@ -85,8 +118,6 @@ const { presentationOptions = [] } = Astro.props;
 
   <!-- Sp: SPEAKER -->
   <div class="musiki-pod" data-pod="teacher" data-pod-title="SPEAKER">
-
-
     <section class="conference-stage-panel conference-stage-panel--focus" data-panel="teacher">
       <div class="conference-slot conference-slot--focus" data-slot="teacher" data-empty-label="Speaker camera"></div>
       <div class="conference-test-vumeter" data-test-vumeter hidden></div>
@@ -113,6 +144,8 @@ const { presentationOptions = [] } = Astro.props;
       </div>
     </section>
   </div>
+
+  <!-- Fo: FORO -->
   <div class="musiki-pod" data-pod="forum" data-pod-title="FORO">
     <section class="conference-stage-panel" data-panel="forum">
        <div class="conference-forum-shell" style="position: relative; height: 100%; display: flex; flex-direction: column;">
@@ -132,10 +165,12 @@ const { presentationOptions = [] } = Astro.props;
        </div>
     </section>
   </div>
+
+  <!-- Pi: PIZARRA -->
   <div class="musiki-pod" data-pod="whiteboard" data-pod-title="PIZARRA">
     <section class="conference-stage-panel conference-stage-panel--whiteboard" data-panel="whiteboard">
       <div class="conference-whiteboard-container">
-        <div class="musiki-pod-toolbar musiki-pod-toolbar--top">
+        <div class="musiki-pod-toolbar musiki-pod-toolbar--top" data-whiteboard-toolbar>
            <div class="whiteboard-group">
              <button type="button" class="musiki-pod-btn" data-whiteboard-bg-btn="none" title="Blanco">◻</button>
              <button type="button" class="musiki-pod-btn" data-whiteboard-bg-btn="staff" title="Pentagrama">≣</button>
@@ -195,7 +230,7 @@ const { presentationOptions = [] } = Astro.props;
                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                </button>
                <button type="button" class="musiki-pod-btn" data-concept-action="toggle-reveal" title="Vista presentación" hidden>
-                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                </button>
             </div>
             <div class="musiki-pod-results" data-concept-results hidden></div>
@@ -206,44 +241,40 @@ const { presentationOptions = [] } = Astro.props;
 
   <!-- Me: MEDIA -->
   <div class="musiki-pod" data-pod="external-media" data-pod-title="MEDIA">
-    <section class="conference-stage-panel" data-panel="external-media">
-       <div class="conference-external-media-body" style="height: 100%;">
-          <div class="conference-external-media-player" data-external-media-player-host></div>
-          <div class="musiki-pod-toolbar">
-            <input
-              type="search"
-              name="musiki-external-media-search"
-              class="musiki-pod-input"
-              placeholder="YouTube URL o búsqueda"
-              data-external-media-input
-              autocomplete="off"
-              aria-autocomplete="none"
-              autocapitalize="none"
-              autocorrect="off"
-              data-1p-ignore="true"
-              data-bwignore="true"
-              data-form-type="other"
-              data-lpignore="true"
-              spellcheck="false"
-              inputmode="search"
-              enterkeyhint="search"
-            />
-            <button type="button" class="musiki-pod-btn" data-action="external-media-open">O</button>
-            <button type="button" class="musiki-pod-btn musiki-pod-btn--danger" data-action="external-media-stop">C</button>
-            <div class="musiki-pod-results" data-external-media-results hidden></div>
-            <div class="musiki-pod-status" data-external-media-status role="status" aria-live="polite"></div>
-          </div>
-       </div>
+    <section class="conference-stage-panel" data-panel="external-media" style="display: flex; flex-direction: column; height: 100%;">
+      <div class="conference-external-media-body" style="flex: 1; position: relative; overflow: hidden;">
+        <div class="conference-external-media-player" data-external-media-player-host></div>
+        <div class="conference-external-media-empty" data-external-media-empty>
+          <p style="color: var(--conference-dim); font-size: 0.7rem; text-align: center; margin-top: 2rem;">SIN CONTENIDO</p>
+        </div>
+      </div>
+      <div class="musiki-pod-toolbar">
+        <input
+          type="search"
+          name="musiki-external-media-search"
+          class="musiki-pod-input"
+          placeholder="YouTube URL o búsqueda"
+          data-external-media-input
+          autocomplete="off"
+          aria-autocomplete="none"
+          autocapitalize="none"
+          autocorrect="off"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          data-lpignore="true"
+          spellcheck="false"
+          inputmode="search"
+          enterkeyhint="search"
+          style="flex: 1; min-width: 0;"
+        />
+        <button type="button" class="musiki-pod-btn" data-action="external-media-open">O</button>
+        <button type="button" class="musiki-pod-btn musiki-pod-btn--danger" data-action="external-media-stop">C</button>
+        <div class="musiki-pod-results" data-external-media-results hidden></div>
+        <div class="musiki-pod-status" data-external-media-status role="status" aria-live="polite"></div>
+      </div>
     </section>
   </div>
-
-  <!-- Sidebar Components as Pods -->
-  <ClasePanel />
-  <NotesPanel />
-  <OrfPanel />
-  <GridPanel />
-  <ChatPanel />
-  <GraphPod />
 </div>
 
 <style is:global>
@@ -257,6 +288,7 @@ const { presentationOptions = [] } = Astro.props;
     display: flex;
     flex-direction: column;
   }
+  
   .musiki-pod > section,
   .musiki-pod > div,
   .musiki-pod .conference-stage-panel,
@@ -288,27 +320,6 @@ const { presentationOptions = [] } = Astro.props;
     height: auto !important;
   }
 
-  .musiki-pod .conference-slot {
-    height: 100% !important;
-    width: 100% !important;
-    position: relative !important;
-    background: transparent !important;
-    min-height: 0;
-    min-width: 0;
-    flex: 1;
-  }
-
-
-  .musiki-pod .conference-slot {
-    height: 100% !important;
-    width: 100% !important;
-    position: relative !important;
-    background: transparent !important;
-    min-height: 0;
-    min-width: 0;
-    flex: 1;
-  }
-
   .musiki-pod video {
     display: block !important;
     opacity: 1 !important;
@@ -316,6 +327,16 @@ const { presentationOptions = [] } = Astro.props;
     width: 100% !important;
     height: 100% !important;
     object-fit: cover !important;
+  }
+
+  .musiki-pod .conference-slot {
+    height: 100% !important;
+    width: 100% !important;
+    position: relative !important;
+    background: transparent !important;
+    min-height: 0;
+    min-width: 0;
+    flex: 1;
   }
 
   .conference-whiteboard-container {
@@ -476,7 +497,7 @@ const { presentationOptions = [] } = Astro.props;
     display: none !important;
   }
 
-  .musiki-pod-results button,
+  .musiki-pod-results button:not(.conference-external-media-result),
   .musiki-pod-result-item,
   .conference-break-rooms-item {
     width: 100%;
@@ -500,6 +521,13 @@ const { presentationOptions = [] } = Astro.props;
   .conference-break-rooms-item:hover {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
+  }
+
+  /* Specific override for external media results to ensure grid works */
+  .musiki-pod-results .conference-external-media-result {
+    padding: 0.25rem;
+    margin-bottom: 2px;
+    border-radius: 0.25rem;
   }
 
   /* Mendeleev Aesthetics - Periodic Table Style */
@@ -539,7 +567,7 @@ const { presentationOptions = [] } = Astro.props;
 
   .pod-gallery-item-icon {
     font-size: 2.2rem; 
-    font-weight: 700; /* Bold Helvetica */
+    font-weight: 700;
     color: #fff;
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
     line-height: 0.9;
@@ -552,8 +580,8 @@ const { presentationOptions = [] } = Astro.props;
   .pod-gallery-item-title {
     position: absolute;
     bottom: 0.25rem;
-    font-size: 0.4rem; /* label rem 0.4 */
-    font-weight: 400; /* Not bold */
+    font-size: 0.4rem;
+    font-weight: 400;
     text-transform: uppercase;
     color: #fff;
     opacity: 0.7;
@@ -567,7 +595,7 @@ const { presentationOptions = [] } = Astro.props;
     position: absolute;
     top: 0.3rem;
     left: 0.4rem; 
-    font-size: 1.1rem; /* Big atomic x2 */
+    font-size: 1.1rem;
     font-weight: 900;
     color: #fff;
     opacity: 0.45;
@@ -600,10 +628,6 @@ const { presentationOptions = [] } = Astro.props;
 
   .pod-power-corner:hover {
     color: #fff !important;
-  }
-
-  .pod-arrow {
-    display: none !important;
   }
 
   .pod-picker-menu {
@@ -699,6 +723,7 @@ const { presentationOptions = [] } = Astro.props;
     --dv-activegroup-visiblepane-tab-background-color: #050505 !important;
     --dv-inactivegroup-visiblepane-tab-background-color: #020202 !important;
   }
+
   .musiki-pod .hyperpiano-shell {
     position: relative;
     width: 100%;
@@ -718,12 +743,6 @@ const { presentationOptions = [] } = Astro.props;
     position: relative;
     width: 100%;
     border-top: 1px solid #222;
-  }
-
-  .musiki-pod .hyperpiano-shell .white-keys {
-    display: flex;
-    height: 100%;
-    width: 100%;
   }
 
   .musiki-pod .hyperpiano-shell .key {
@@ -781,5 +800,73 @@ const { presentationOptions = [] } = Astro.props;
 
   .musiki-pod .hyperpiano-shell.is-focused {
     box-shadow: inset 0 0 0 1px var(--c-neon, #39FF14);
+  }
+
+  /* Panel-specific adjustments */
+  .conference-sidebar-panel-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .conference-chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+  }
+
+  .conference-chat-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .conference-chat-compose-anchor {
+    padding: 0.5rem;
+    background: rgba(10, 10, 15, 0.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .conference-chat-compose textarea {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.4rem;
+    color: #fff;
+    padding: 0.5rem;
+    font-size: 0.8rem;
+    resize: none;
+  }
+
+  .conference-notes-source {
+    flex: 1;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #fff;
+    padding: 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    resize: none;
+  }
+
+  .conference-notes-form {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .clase-content {
+    padding: 1.5rem;
+    color: var(--conference-fg);
+  }
+
+  .clase-header-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
   }
 </style>

@@ -14,7 +14,7 @@ export class ConceptsController {
     if (this.searchIndex || this.isLoading) return;
     this.isLoading = true;
     try {
-      const response = await fetch('/search.json');
+      const response = await fetch('/search-index.json');
       if (response.ok) {
         this.searchIndex = await response.json();
       }
@@ -32,11 +32,20 @@ export class ConceptsController {
     const normalizedQuery = query.toLowerCase().trim();
     if (!normalizedQuery) return [];
 
-    return this.searchIndex.filter((item: any) => 
-      (item.type === 'Concept' || item.type === 'Glossary' || item.type === 'Note' || item.type === 'Contenido') &&
-      (item.title?.toLowerCase().includes(normalizedQuery) || 
-       item.slug?.toLowerCase().includes(normalizedQuery))
-    ).slice(0, 10);
+    return this.searchIndex.filter((item: any) => {
+      const type = String(item.type || '').toLowerCase();
+      const isMatch = type.includes('concept') || 
+                      type.includes('glossary') || 
+                      type.includes('lesson') || 
+                      type.includes('note') || 
+                      type.includes('contenido');
+      
+      if (!isMatch) return false;
+
+      const q = normalizedQuery;
+      return (item.title?.toLowerCase().includes(q) || 
+              item.slug?.toLowerCase().includes(q));
+    }).slice(0, 15);
   }
 
   async load(href: string, broadcast = false) {

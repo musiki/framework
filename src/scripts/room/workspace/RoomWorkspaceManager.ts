@@ -89,6 +89,9 @@ export class RoomWorkspaceManager {
             if (id === 'lilypond-preview') id = 'lily-render';
 
             const templateDiv = document.getElementById('musiki-pod-templates');
+            const dataScript = document.getElementById('musiki-presentation-data');
+            const presentationOptions = dataScript ? JSON.parse(dataScript.textContent || '[]') : [];
+            
             let element = templateDiv?.querySelector(`[data-pod="${id}"]`) as HTMLElement;
 
             if (element) {

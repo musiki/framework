@@ -31,6 +31,7 @@ export class WhiteboardController {
   constructor(private publish: (msg: ConferenceMessage) => void) {}
 
   init(canvas: HTMLCanvasElement) {
+    if (this.canvas === canvas) return;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: true });
     this.setupListeners();
@@ -38,6 +39,7 @@ export class WhiteboardController {
   }
 
   initBg(canvas: HTMLCanvasElement) {
+    if (this.bgCanvas === canvas) return;
     this.bgCanvas = canvas;
     this.bgCtx = canvas.getContext('2d', { alpha: true });
     this.setupResizeObserver();
