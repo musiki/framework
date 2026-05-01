@@ -252,6 +252,7 @@ export const createRoomChatController = ({
   getRoomName,
   isConnected,
   onOrfMention,
+  onOrfAction,
   publishMessage,
   reportStatus,
 }: CreateRoomChatControllerOptions): RoomChatController => {

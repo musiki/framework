@@ -221,6 +221,7 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
   };
 
   const render = () => {
+    if (!currentList) return;
     currentList.innerHTML = '';
     if (messages.length === 0) {
       const item = document.createElement('li');
@@ -289,7 +290,7 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
   };
 
   const ask = async (externalText?: string, askOptions?: { directToChat?: boolean }) => {
-    const text = normalizeText(externalText ?? currentInput.value);
+    const text = normalizeText(externalText ?? currentInput?.value);
     if (!text) return;
     const model = normalizeText(currentModelSelect?.value);
     const isDirect = askOptions?.directToChat === true;
@@ -301,8 +302,10 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
         text,
         ts: new Date().toISOString(),
       });
-      currentInput.value = '';
-      currentInput.dispatchEvent(new Event('input'));
+      if (currentInput) {
+        currentInput.value = '';
+        currentInput.dispatchEvent(new Event('input'));
+      }
       render();
     }
 

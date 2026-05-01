@@ -3782,14 +3782,13 @@ const installGlobalSearch = (
     if (!filterState.query) return true;
     return String(data?.__search || '').includes(filterState.query);
   };
-  const filterWrapper = (data: any) => filterFn(data);
 
   const applyTableFilter = (table: Tabulator) => {
     if (!filterState.query && !(filterState.hideAbandoned && filterState.hideAbandonedActive)) {
       table.clearFilter(true);
       return;
     }
-    table.setFilter(filterWrapper);
+    table.setFilter(filterFn);
   };
 
   const initializeTableFilter = (table: Tabulator) => {
