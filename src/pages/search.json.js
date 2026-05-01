@@ -41,6 +41,7 @@ export async function GET() {
       type,
       hasDataview,
       reveal,
+      isPublic: true,
     };
   });
 
@@ -91,6 +92,7 @@ export async function GET() {
       || (isCourseIndex ? 'Course' : 'Lesson');
       
     const reveal = Boolean(item.data.reveal === true || item.data.reveal === 'true' || item.data.theme || item.data.slideTheme || item.data.revealTheme);
+    const isPublic = itemType === 'public-note' || !courseId;
 
     return {
       title,
@@ -100,6 +102,7 @@ export async function GET() {
       hasDataview: false,
       reveal,
       courseId,
+      isPublic,
     };
   });
 

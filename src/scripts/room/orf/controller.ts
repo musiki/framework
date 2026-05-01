@@ -42,6 +42,7 @@ type CreateRoomOrfControllerOptions = {
 };
 
 export type RoomOrfController = {
+  ask: (text?: string, options?: { directToChat?: boolean }) => Promise<void>;
   bind: () => void;
   bindElements: (elements: Partial<Pick<
     CreateRoomOrfControllerOptions,
@@ -147,26 +148,24 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
     );
 
     if (action.kind === 'write_to_lily_code') {
-      if (!window.confirm('Quieres transcribirlo en LILY-CODE?')) return;
       const textarea = findWritableTextarea('[data-lilypond-body]');
       if (!textarea) {
         setStatus('Abrí un pod LILY-CODE primero.');
         return;
       }
       appendToTextarea(textarea, content);
-      setStatus('Propuesta enviada a LILY-CODE.');
+      setStatus('Enviado a LILY-CODE.');
       return;
     }
 
     if (action.kind === 'write_to_notes') {
-      if (!window.confirm('Quieres pasarlo a nota?')) return;
       const textarea = findWritableTextarea('[data-notes-body]');
       if (!textarea) {
         setStatus('Abrí un pod NOTAS primero.');
         return;
       }
       appendToTextarea(textarea, content);
-      setStatus('Propuesta enviada a NOTAS.');
+      setStatus('Enviado a NOTAS.');
       return;
     }
 
@@ -176,7 +175,6 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
         return;
       }
       const model = normalizeText(message.model || currentModelSelect?.value) || 'local';
-      if (!window.confirm(`Quieres enviarlo al chat como Orf-${model}?`)) return;
       const chatMessage: Extract<ConferenceMessage, { type: 'chat' }> = {
         type: 'chat',
         id: `orf-chat-${crypto.randomUUID()}`,
@@ -187,17 +185,16 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
         text: content,
       };
       await options.publishChatMessage(chatMessage);
-      setStatus('Orf publicó en el chat.');
+      setStatus('Publicado en el chat.');
       return;
     }
 
     if (action.kind === 'send_midi_to_hyperpiano') {
       const midiNotes = Array.isArray(proposal.midiNotes) ? proposal.midiNotes : [];
       if (midiNotes.length === 0 || !options.publishMidiNote) {
-        setStatus('Propuesta MIDI preparada, sin notas ejecutables todavía.');
+        setStatus('Propuesta MIDI sin notas ejecutables.');
         return;
       }
-      if (!window.confirm('Quieres probarlo como notas MIDI en HYPERPIANO?')) return;
       for (const item of midiNotes.slice(0, 32)) {
         const note = Number(item.pitch);
         if (!Number.isFinite(note)) continue;
@@ -208,7 +205,7 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
           void options.publishMidiNote?.({ note: Math.round(note), velocity: 0, action: 'off' });
         }, durationMs);
       }
-      setStatus('MIDI enviado a HYPERPIANO.');
+      setStatus('Enviado a HYPERPIANO.');
     }
   };
 
@@ -280,19 +277,24 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
     scrollToEnd();
   };
 
-  const ask = async () => {
-    const text = normalizeText(currentInput.value);
+  const ask = async (externalText?: string, askOptions?: { directToChat?: boolean }) => {
+    const text = normalizeText(externalText ?? currentInput.value);
     if (!text) return;
     const model = normalizeText(currentModelSelect?.value);
-    messages.push({
-      id: `orf-user-${crypto.randomUUID()}`,
-      role: 'user',
-      text,
-      ts: new Date().toISOString(),
-    });
-    currentInput.value = '';
-    currentInput.dispatchEvent(new Event('input'));
-    render();
+    const isDirect = askOptions?.directToChat === true;
+
+    if (!externalText) {
+      messages.push({
+        id: `orf-user-${crypto.randomUUID()}`,
+        role: 'user',
+        text,
+        ts: new Date().toISOString(),
+      });
+      currentInput.value = '';
+      currentInput.dispatchEvent(new Event('input'));
+      render();
+    }
+
     syncControls(true);
     setStatus('Orf está pensando...');
 
@@ -318,14 +320,30 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
       }
       const output = payload?.output || {};
       const answer = normalizeText(output.message) || 'No tengo una respuesta útil todavía.';
+      const orfModel = normalizeText(payload.model || model) || 'local';
+      
       messages.push({
         actions: normalizeActions(output.actions),
         id: `orf-${crypto.randomUUID()}`,
-        model: normalizeText(payload.model || model),
+        model: orfModel,
         role: 'orf',
         text: answer,
         ts: new Date().toISOString(),
       });
+
+      if (isDirect) {
+        const chatMessage: Extract<ConferenceMessage, { type: 'chat' }> = {
+          type: 'chat',
+          id: `orf-chat-${crypto.randomUUID()}`,
+          identity: `orf:${orfModel}`,
+          name: `Orf-${orfModel}`,
+          role: 'external',
+          sentAt: new Date().toISOString(),
+          text: answer,
+        };
+        await options.publishChatMessage(chatMessage);
+      }
+
       setStatus('');
     } catch (error) {
       messages.push({
@@ -383,5 +401,5 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
     bind();
   };
 
-  return { bind, bindElements };
+  return { ask, bind, bindElements };
 };

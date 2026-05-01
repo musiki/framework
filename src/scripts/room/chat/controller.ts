@@ -11,6 +11,7 @@ type CreateRoomChatControllerOptions = {
   chatScroller?: HTMLElement | null;
   chatSection?: Element | null;
   chatSendButton: HTMLButtonElement;
+  chatStatus?: HTMLElement | null;
   chatUnreadDot?: HTMLElement | null;
   ensureSidebarOpen: () => void;
   formatError: (error: unknown) => string;
@@ -19,6 +20,7 @@ type CreateRoomChatControllerOptions = {
   getRole: () => ParticipantRole;
   getRoomName: () => string;
   isConnected: () => boolean;
+  onOrfMention?: (text: string) => Promise<void>;
   publishMessage: (message: ChatMessage) => Promise<void>;
   reportStatus: (message: string) => void;
 };
@@ -28,7 +30,7 @@ export type RoomChatController = {
   bind: () => void;
   bindElements: (elements: Partial<Pick<
     CreateRoomChatControllerOptions,
-    'chatDownloadButton' | 'chatFocusButton' | 'chatInput' | 'chatList' | 'chatScroller' | 'chatSection' | 'chatSendButton' | 'chatUnreadDot'
+    'chatDownloadButton' | 'chatFocusButton' | 'chatInput' | 'chatList' | 'chatScroller' | 'chatSection' | 'chatSendButton' | 'chatStatus' | 'chatUnreadDot'
   >>) => void;
   downloadTranscript: () => void;
   focusComposer: () => void;
@@ -202,6 +204,7 @@ export const createRoomChatController = ({
   chatScroller,
   chatSection,
   chatSendButton,
+  chatStatus,
   chatUnreadDot,
   ensureSidebarOpen,
   formatError,
@@ -210,6 +213,7 @@ export const createRoomChatController = ({
   getRole,
   getRoomName,
   isConnected,
+  onOrfMention,
   publishMessage,
   reportStatus,
 }: CreateRoomChatControllerOptions): RoomChatController => {
@@ -223,6 +227,7 @@ export const createRoomChatController = ({
   let currentChatScroller = chatScroller;
   let currentChatSection = chatSection;
   let currentChatSendButton = chatSendButton;
+  let currentChatStatus = chatStatus;
   let currentChatUnreadDot = chatUnreadDot;
   const boundInputs = new WeakSet<HTMLInputElement | HTMLTextAreaElement>();
   const boundButtons = new WeakSet<HTMLButtonElement>();
@@ -237,6 +242,19 @@ export const createRoomChatController = ({
 
     currentChatUnreadDot.hidden = false;
     currentChatUnreadDot.textContent = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
+  };
+
+  const scrollToEnd = () => {
+    // Use a small timeout to ensure DOM is settled for scroll calculation
+    window.setTimeout(() => {
+        const lastItem = currentChatList.lastElementChild;
+        if (lastItem instanceof HTMLElement) {
+          lastItem.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        } else {
+          const scroller = currentChatScroller instanceof HTMLElement ? currentChatScroller : currentChatList;
+          scroller.scrollTop = scroller.scrollHeight;
+        }
+    }, 100);
   };
 
   const renderChat = () => {
@@ -279,16 +297,7 @@ export const createRoomChatController = ({
       currentChatList.appendChild(item);
     });
 
-    // Use a small timeout to ensure DOM is settled for scroll calculation
-    window.setTimeout(() => {
-        const lastItem = currentChatList.lastElementChild;
-        if (lastItem instanceof HTMLElement) {
-          lastItem.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        } else {
-          const scroller = currentChatScroller instanceof HTMLElement ? currentChatScroller : currentChatList;
-          scroller.scrollTop = scroller.scrollHeight;
-        }
-    }, 100);
+    scrollToEnd();
   };
 
   const resetUnread = () => {
@@ -389,6 +398,23 @@ export const createRoomChatController = ({
 
     appendMessage(message, true);
     currentChatInput.value = '';
+
+    if (text.toLowerCase().startsWith('@orf') && onOrfMention) {
+      const prompt = text.slice(4).trim();
+      if (prompt) {
+        if (currentChatStatus) {
+          currentChatStatus.textContent = 'Orf está pensando...';
+          currentChatStatus.hidden = false;
+          scrollToEnd();
+        }
+        void onOrfMention(prompt).finally(() => {
+          if (currentChatStatus) {
+            currentChatStatus.hidden = true;
+            currentChatStatus.textContent = '';
+          }
+        });
+      }
+    }
     
     // Force clear and resize in next tick
     window.requestAnimationFrame(() => {
@@ -455,6 +481,7 @@ export const createRoomChatController = ({
     if (elements.chatScroller instanceof HTMLElement) currentChatScroller = elements.chatScroller;
     if (elements.chatSection instanceof Element) currentChatSection = elements.chatSection;
     if (elements.chatSendButton instanceof HTMLButtonElement) currentChatSendButton = elements.chatSendButton;
+    if (elements.chatStatus instanceof HTMLElement) currentChatStatus = elements.chatStatus;
     if (elements.chatUnreadDot instanceof HTMLElement) currentChatUnreadDot = elements.chatUnreadDot;
     bind();
     renderChat();

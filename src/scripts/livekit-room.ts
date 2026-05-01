@@ -3580,6 +3580,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     chatFocusButton,
     chatUnreadDot,
     chatSendButton,
+    chatStatus,
     chatDownloadButton,
     raiseHandButton,
     handTrackInput,
@@ -3777,6 +3778,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     !(chatScroller instanceof HTMLElement) ||
     !(chatInput instanceof HTMLTextAreaElement) ||
     !(chatSendButton instanceof HTMLButtonElement) ||
+    !(chatStatus instanceof HTMLElement) ||
     !(chatDownloadButton instanceof HTMLButtonElement)
   ) {
     const missingDomNodes: string[] = [];
@@ -3814,6 +3816,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (!(chatScroller instanceof HTMLElement)) missingDomNodes.push('chat scroller');
     if (!(chatInput instanceof HTMLTextAreaElement)) missingDomNodes.push('chat input');
     if (!(chatSendButton instanceof HTMLButtonElement)) missingDomNodes.push('chat send button');
+    if (!(chatStatus instanceof HTMLElement)) missingDomNodes.push('chat status indicator');
     if (!(chatDownloadButton instanceof HTMLButtonElement)) missingDomNodes.push('chat download button');
 
     console.error(`Conference room DOM is incomplete: ${missingDomNodes.join(', ')}`);
@@ -10675,11 +10678,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     };
 
     const onConceptInit = (container: HTMLElement) => {
-      const input = container.querySelector('[data-concept-search]') as HTMLInputElement;
-      const results = container.querySelector('[data-concept-results]') as HTMLElement;
-      if (input && results) {
-        concepts.bind({ input, results });
-      }
+      concepts.bindElements(container);
     };
 
     const onMediaInit = (container: HTMLElement) => {
@@ -10781,6 +10780,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           ? container
           : container.querySelector('[data-chat-section]'),
         chatSendButton: container.querySelector('[data-action="chat-send"]') as HTMLButtonElement | null,
+        chatStatus: container.querySelector('[data-chat-status]') as HTMLElement | null,
         chatUnreadDot: container.querySelector('[data-chat-unread]') as HTMLElement | null,
       });
     };
@@ -10865,7 +10865,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
-  concepts.bindToolbar();
 
   window.addEventListener('musiki:workspace:changed', () => {
     // Small delay to ensure Dockview has finished moving elements
@@ -10913,6 +10912,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           chatScroller: nextElements.chatScroller instanceof HTMLElement ? nextElements.chatScroller : undefined,
           chatSection: nextElements.chatSection instanceof Element ? nextElements.chatSection : undefined,
           chatSendButton: nextElements.chatSendButton instanceof HTMLButtonElement ? nextElements.chatSendButton : undefined,
+          chatStatus: nextElements.chatStatus instanceof HTMLElement ? nextElements.chatStatus : undefined,
           chatUnreadDot: nextElements.chatUnreadDot instanceof HTMLElement ? nextElements.chatUnreadDot : undefined,
         });
       }
@@ -10963,6 +10963,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     chatScroller,
     chatSection,
     chatSendButton,
+    chatStatus,
     chatUnreadDot: chatUnreadDot instanceof HTMLElement ? chatUnreadDot : null,
     ensureSidebarOpen: () => {
       if (!sidebarCollapsed) return;
@@ -10975,6 +10976,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     getRole: () => localRole,
     getRoomName: () => roomInput.value,
     isConnected: () => room.state === ConnectionState.Connected,
+    onOrfMention: async (text) => {
+      if (!orfController) {
+        // Find the template if not initialized yet
+        const template = root.querySelector('#musiki-pod-templates .musiki-pod[data-pod="orf"]');
+        if (template instanceof HTMLElement) {
+          onOrfInit(template);
+        }
+      }
+      await orfController?.ask(text, { directToChat: true });
+    },
     publishMessage: async (message) => {
       await publishMessage(message);
     },
@@ -12105,8 +12116,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         whiteboards.forEach((controller) => controller.clear());
         return;
       }
-      if (message.type === 'concept-load') {
-        concepts.load(message.href || '');
+      if (message.type.startsWith('concept-')) {
+        concepts.handleMessage(message as any);
         return;
       }
 

@@ -7,6 +7,12 @@ export class ConceptsController {
   private currentSlug: string | null = null;
   private currentFontSize = 100; // percent
   private isRevealMode = false;
+  
+  // Track bound elements for the active instance
+  private currentContentEl: HTMLElement | null = null;
+  private currentRevealFrame: HTMLIFrameElement | null = null;
+  private currentToggleRevealBtn: HTMLElement | null = null;
+  private currentPlaceholder: HTMLElement | null = null;
 
   constructor(private publish: (msg: ConferenceMessage) => void) {}
 
@@ -34,7 +40,9 @@ export class ConceptsController {
 
     return this.searchIndex.filter((item: any) => {
       const type = String(item.type || '').toLowerCase();
-      const isMatch = type.includes('concept') || 
+      const isPublic = item.isPublic === true;
+      const isMatch = isPublic ||
+                      type.includes('concept') || 
                       type.includes('glossary') || 
                       type.includes('lesson') || 
                       type.includes('note') || 
@@ -48,30 +56,59 @@ export class ConceptsController {
     }).slice(0, 15);
   }
 
-  async load(href: string, broadcast = false) {
-    const contentEl = document.querySelector<HTMLElement>('[data-concept-content]');
-    const placeholder = document.querySelector<HTMLElement>('[data-concept-placeholder]');
-    const revealFrame = document.querySelector<HTMLIFrameElement>('[data-concept-presentation-frame]');
-    const toggleRevealBtn = document.querySelector<HTMLElement>('[data-concept-action="toggle-reveal"]');
+  bindElements(container: HTMLElement) {
+    this.currentContentEl = container.querySelector<HTMLElement>('[data-concept-content]');
+    this.currentPlaceholder = container.querySelector<HTMLElement>('[data-concept-placeholder]');
+    this.currentRevealFrame = container.querySelector<HTMLIFrameElement>('[data-concept-presentation-frame]');
+    this.currentToggleRevealBtn = container.querySelector<HTMLElement>('[data-concept-action="toggle-reveal"]');
+
+    const input = container.querySelector('[data-concept-search]') as HTMLInputElement;
+    const results = container.querySelector('[data-concept-results]') as HTMLElement;
     
-    if (!contentEl) return;
+    if (input && results) {
+      this.bind({ input, results });
+    }
+
+    this.bindToolbar(container);
+    this.bindScroll(container);
+    
+    // If we have a current slug, re-render it in the new content element
+    if (this.currentSlug) {
+        void this.load('/' + this.currentSlug, false);
+    }
+  }
+
+  handleMessage(msg: ConferenceMessage) {
+    if (msg.type === 'concept-load') {
+      void this.load(msg.href, false);
+    } else if (msg.type === 'concept-zoom') {
+      this.currentFontSize = msg.level;
+      this.applyZoom(false);
+    } else if (msg.type === 'concept-reveal') {
+      this.setRevealMode(msg.active, false);
+    } else if (msg.type === 'concept-scroll') {
+      this.applyScroll(msg.top, msg.left, false);
+    }
+  }
+
+  async load(href: string, broadcast = false) {
+    if (!this.currentContentEl) return;
 
     // Extract slug from href
-    let slug = href.split('?')[0];
+    let slug = decodeURIComponent(href.split('?')[0]);
     if (slug.startsWith('/')) slug = slug.slice(1);
     
-    if (this.currentSlug === slug) return;
     this.currentSlug = slug;
 
-    if (placeholder) placeholder.hidden = true;
-    contentEl.innerHTML = `<p class="clase-placeholder">Cargando ${slug}…</p>`;
+    if (this.currentPlaceholder) this.currentPlaceholder.hidden = true;
+    this.currentContentEl.innerHTML = `<p class="clase-placeholder">Cargando ${slug}…</p>`;
     
     // Reset view mode to markdown on new load
     this.isRevealMode = false;
-    if (contentEl) contentEl.hidden = false;
-    if (revealFrame) {
-      revealFrame.hidden = true;
-      revealFrame.src = '';
+    if (this.currentContentEl) this.currentContentEl.hidden = false;
+    if (this.currentRevealFrame) {
+      this.currentRevealFrame.hidden = true;
+      this.currentRevealFrame.src = '';
     }
 
     try {
@@ -82,21 +119,26 @@ export class ConceptsController {
       const parse = await loadMarked();
       const html = parse ? (parse(data.body) as string) : `<pre>${data.body}</pre>`;
       
-      contentEl.innerHTML = html;
-      contentEl.scrollTop = 0;
+      if (this.currentContentEl) {
+        this.currentContentEl.innerHTML = html;
+        this.currentContentEl.scrollTop = 0;
+        this.applyZoom();
+      }
 
       // Update reveal button visibility
-      if (toggleRevealBtn) {
-        toggleRevealBtn.hidden = !data.reveal;
+      if (this.currentToggleRevealBtn) {
+        this.currentToggleRevealBtn.hidden = !data.reveal;
         // Also prepare the iframe source if reveal is true
-        if (data.reveal && revealFrame) {
-          revealFrame.dataset.revealUrl = href.includes('/slides/') ? href : `/slides/${slug}`;
+        if (data.reveal && this.currentRevealFrame) {
+          this.currentRevealFrame.dataset.revealUrl = href.includes('/slides/') ? href : `/slides/${slug}`;
         }
       }
 
     } catch (err) {
       console.error('[concepts] load error', err);
-      contentEl.innerHTML = `<p class="clase-placeholder">Error al cargar concepto: ${slug}</p>`;
+      if (this.currentContentEl) {
+        this.currentContentEl.innerHTML = `<p class="clase-placeholder">Error al cargar concepto: ${slug}</p>`;
+      }
     }
 
     if (broadcast) {
@@ -105,6 +147,53 @@ export class ConceptsController {
         href
       });
     }
+  }
+
+  private applyZoom(broadcast = true) {
+    if (this.currentContentEl) {
+      this.currentContentEl.style.fontSize = `${this.currentFontSize / 100}rem`;
+      this.currentContentEl.style.lineHeight = '1.6';
+    }
+    if (broadcast) {
+      this.publish({ type: 'concept-zoom', level: this.currentFontSize });
+    }
+  }
+
+  private setRevealMode(active: boolean, broadcast = true) {
+    this.isRevealMode = active;
+    if (this.currentContentEl) this.currentContentEl.hidden = this.isRevealMode;
+    if (this.currentRevealFrame) {
+      this.currentRevealFrame.hidden = !this.isRevealMode;
+      if (this.isRevealMode && !this.currentRevealFrame.src && this.currentRevealFrame.dataset.revealUrl) {
+        this.currentRevealFrame.src = this.currentRevealFrame.dataset.revealUrl;
+      }
+    }
+    if (broadcast) {
+      this.publish({ type: 'concept-reveal', active: this.isRevealMode });
+    }
+  }
+
+  private applyScroll(top: number, left: number, broadcast = true) {
+    if (this.currentContentEl) {
+      this.currentContentEl.scrollTop = top;
+      this.currentContentEl.scrollLeft = left;
+    }
+    if (broadcast) {
+      this.publish({ type: 'concept-scroll', top, left });
+    }
+  }
+
+  private bindScroll(container: HTMLElement) {
+    const content = container.querySelector<HTMLElement>('[data-concept-content]');
+    if (!content) return;
+
+    let scrollTimeout: number;
+    content.addEventListener('scroll', () => {
+      window.clearTimeout(scrollTimeout);
+      scrollTimeout = window.setTimeout(() => {
+        this.applyScroll(content.scrollTop, content.scrollLeft, true);
+      }, 150);
+    }, { passive: true });
   }
 
   launch(href: string, mode: 'split' | 'overlay') {
@@ -161,32 +250,29 @@ export class ConceptsController {
     });
   }
 
-  bindToolbar() {
-    const zoomInBtn = document.querySelector('[data-concept-action="zoom-in"]');
-    const zoomOutBtn = document.querySelector('[data-concept-action="zoom-out"]');
-    const toggleRevealBtn = document.querySelector('[data-concept-action="toggle-reveal"]');
-    const contentEl = document.querySelector<HTMLElement>('[data-concept-content]');
-    const revealFrame = document.querySelector<HTMLIFrameElement>('[data-concept-presentation-frame]');
+  private bindToolbar(container: HTMLElement) {
+    const zoomInBtn = container.querySelector('[data-concept-action="zoom-in"]');
+    const zoomOutBtn = container.querySelector('[data-concept-action="zoom-out"]');
+    const zoomResetBtn = container.querySelector('[data-concept-action="zoom-reset"]');
+    const toggleRevealBtn = container.querySelector('[data-concept-action="toggle-reveal"]');
 
     zoomInBtn?.addEventListener('click', () => {
       this.currentFontSize += 10;
-      if (contentEl) contentEl.style.fontSize = `${this.currentFontSize}%`;
+      this.applyZoom();
     });
 
     zoomOutBtn?.addEventListener('click', () => {
       this.currentFontSize = Math.max(50, this.currentFontSize - 10);
-      if (contentEl) contentEl.style.fontSize = `${this.currentFontSize}%`;
+      this.applyZoom();
+    });
+
+    zoomResetBtn?.addEventListener('click', () => {
+      this.currentFontSize = 100;
+      this.applyZoom();
     });
 
     toggleRevealBtn?.addEventListener('click', () => {
-      this.isRevealMode = !this.isRevealMode;
-      if (contentEl) contentEl.hidden = this.isRevealMode;
-      if (revealFrame) {
-        revealFrame.hidden = !this.isRevealMode;
-        if (this.isRevealMode && !revealFrame.src && revealFrame.dataset.revealUrl) {
-          revealFrame.src = revealFrame.dataset.revealUrl;
-        }
-      }
+      this.setRevealMode(!this.isRevealMode, true);
     });
   }
 }

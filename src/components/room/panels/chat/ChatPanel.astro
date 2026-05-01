@@ -4,6 +4,7 @@
   >
     <div class="conference-chat" data-chat-scroller>
       <ul class="conference-chat-list" data-chat-list></ul>
+      <div class="conference-chat-status" data-chat-status hidden></div>
     </div>
 
     <div class="conference-chat-compose-anchor">
@@ -96,5 +97,14 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+  }
+
+  .conference-chat-status {
+    font-size: 0.75rem;
+    font-style: italic;
+    opacity: 0.5;
+    padding: 0.5rem 1rem;
+    color: var(--conference-accent, #76d3ff);
+    pointer-events: none;
   }
 </style>

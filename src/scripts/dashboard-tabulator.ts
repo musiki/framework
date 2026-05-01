@@ -937,10 +937,10 @@ const applyRangeClipboardPaste = (
       if (failureMessages.length > 0) {
         if (successCount === 0) {
           setDashboardSaveStatus('error', failureMessages[0]);
-          alert(failureMessages[0]);
+          console.warn(failureMessages[0]);
         } else {
           setDashboardSaveStatus('error', `Pegado parcial: ${successCount} guardadas, ${failureMessages.length} fallaron.`);
-          alert(`Se pegaron ${successCount} celdas, pero ${failureMessages.length} no se pudieron guardar.`);
+          console.warn(`Se pegaron ${successCount} celdas, pero ${failureMessages.length} no se pudieron guardar.`);
         }
       } else {
         setDashboardSaveStatus('saved', `Pegado guardado en ${successCount} celdas.`);
@@ -2318,7 +2318,7 @@ const deleteAdminUsers = async (
       triggerButton.disabled = false;
       triggerButton.dataset.state = 'error';
     }
-    alert(error?.message || 'No se pudo borrar el usuario');
+    console.warn(error?.message || 'No se pudo borrar el usuario');
     return false;
   }
 };
@@ -2467,9 +2467,9 @@ const saveCourseRoleSelectionFromCell = async (
 
   if (failureMessages.length > 0) {
     if (successCount === 0) {
-      alert(failureMessages[0]);
+      console.warn(failureMessages[0]);
     } else {
-      alert(`Se guardaron ${successCount} celdas, pero ${failureMessages.length} fallaron.`);
+      console.warn(`Se guardaron ${successCount} celdas, pero ${failureMessages.length} fallaron.`);
     }
   }
 };
@@ -2501,7 +2501,7 @@ const saveCourseStudentMetaSelectionFromCell = async (
 
   if (!validation.valid) {
     await restoreCellValue(cell, previousValue);
-    alert(validation.message);
+    console.warn(validation.message);
     return;
   }
 
@@ -2567,9 +2567,9 @@ const saveCourseStudentMetaSelectionFromCell = async (
 
   if (failureMessages.length > 0) {
     if (successCount === 0) {
-      alert(failureMessages[0]);
+      console.warn(failureMessages[0]);
     } else {
-      alert(`Se guardaron ${successCount} celdas, pero ${failureMessages.length} fallaron.`);
+      console.warn(`Se guardaron ${successCount} celdas, pero ${failureMessages.length} fallaron.`);
     }
   }
 };
@@ -2639,7 +2639,7 @@ const bindNativeCellPersistence = (
       } catch {
         // ignore restore races
       }
-      alert(error?.message || 'No se pudo guardar la celda');
+      console.warn(error?.message || 'No se pudo guardar la celda');
     } finally {
       try {
         delete (cell as any).__musikiPreviousValue;
@@ -4221,7 +4221,7 @@ const bindImportClipboardButton = (root: HTMLElement, meta: DashboardMeta) => {
       try {
         const text = await navigator.clipboard.readText();
         if (!text.trim()) {
-          alert('El portapapeles está vacío.');
+          console.warn('El portapapeles está vacío.');
           return;
         }
         const students = parseClipboardStudentList(text);
@@ -4345,7 +4345,7 @@ const bindFillEmptyPresentButton = (root: HTMLElement, registry: Map<string, Tab
       )];
 
       if (attendanceFields.length === 0) {
-        alert('Seleccioná una celda o rango en una columna de asistencia primero.');
+        console.warn('Seleccioná una celda o rango en una columna de asistencia primero.');
         return;
       }
 
@@ -4371,7 +4371,7 @@ const bindFillEmptyPresentButton = (root: HTMLElement, registry: Map<string, Tab
       }
 
       if (failures.length > 0) {
-        alert(`Se completaron las celdas vacías, pero fallaron ${failures.length}.`);
+        console.warn(`Se completaron las celdas vacías, pero fallaron ${failures.length}.`);
       }
     });
   });
@@ -4794,7 +4794,7 @@ const createAnnotationModal = (
       close();
     } catch (error: any) {
       console.error('Error saving dashboard annotation:', error);
-      alert(error?.message || 'No se pudo guardar la anotación');
+      console.warn(error?.message || 'No se pudo guardar la anotación');
     } finally {
       saveButton.disabled = false;
     }
@@ -4820,7 +4820,7 @@ const createAnnotationModal = (
       close();
     } catch (error: any) {
       console.error('Error deleting dashboard annotation:', error);
-      alert(error?.message || 'No se pudo borrar la anotación');
+      console.warn(error?.message || 'No se pudo borrar la anotación');
     } finally {
       deleteButton.disabled = false;
     }
@@ -5299,7 +5299,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     const normalized = normalizeAttendanceInput(cell.getValue());
     if (!normalized.valid) {
       cell.restoreOldValue();
-      alert('Usa solo / o 1, -, ~ o 0.5, x o 0, o deja vacío.');
+      console.warn('Usa solo / o 1, -, ~ o 0.5, x o 0, o deja vacío.');
       return;
     }
 
@@ -5506,7 +5506,7 @@ const bindAttendanceManualEditing = (table: Tabulator, meta: DashboardMeta) => {
     }
 
     if (failures.length > 0) {
-      alert(`Se completó la columna, pero fallaron ${failures.length} celdas.`);
+      console.warn(`Se completó la columna, pero fallaron ${failures.length} celdas.`);
     }
   };
 
@@ -5590,13 +5590,13 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
       const trigger = menuWrap?.querySelector<HTMLButtonElement>('[data-dashboard-enrollment-trigger]') || null;
       closeEnrollmentMenus();
       if (!courseId) {
-        alert(`Elegí un curso para inscribir a ${userName}.`);
+        console.warn(`Elegí un curso para inscribir a ${userName}.`);
         trigger?.focus();
         return;
       }
 
       if (!userId && (!userEmail || !userEmail.includes('@'))) {
-        alert('No se encontró un usuario válido para inscribir.');
+        console.warn('No se encontró un usuario válido para inscribir.');
         return;
       }
 
@@ -5645,7 +5645,7 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
           showToast(`${userName} fue inscripto en ${courseId}.`, 'success', 2800);
         }
       } catch (err: any) {
-        alert(err?.message || 'No se pudo inscribir');
+        console.warn(err?.message || 'No se pudo inscribir');
         addEnrollmentButton.disabled = false;
         if (trigger) trigger.disabled = false;
       }
@@ -5685,7 +5685,7 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
         }
       } catch (err: any) {
         unenrollButton.disabled = false;
-        alert(err?.message || 'No se pudo desinscribir');
+        console.warn(err?.message || 'No se pudo desinscribir');
       }
       return;
     }

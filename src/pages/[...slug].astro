@@ -5689,7 +5689,7 @@ order:
 
           const selectedInputs = Array.from(form.querySelectorAll('input:checked'));
           if (selectedInputs.length === 0) {
-            alert(allowsMultiple ? 'Selecciona al menos una opción.' : 'Por favor selecciona una opción');
+            console.warn(allowsMultiple ? 'Selecciona al menos una opción.' : 'Por favor selecciona una opción');
             return;
           }
 
@@ -5724,7 +5724,7 @@ order:
           });
 
           if (!saved) {
-            alert('No se pudo guardar tu respuesta. Intenta nuevamente.');
+            console.warn('No se pudo guardar tu respuesta. Intenta nuevamente.');
             return;
           }
 
@@ -5811,7 +5811,7 @@ order:
           });
 
           if (!saved) {
-            alert('No se pudo guardar el estado de completado. Intenta nuevamente.');
+            console.warn('No se pudo guardar el estado de completado. Intenta nuevamente.');
             return;
           }
 
@@ -6035,7 +6035,7 @@ order:
 
           const studentText = ensureEvalText(textarea.value);
           if (!studentText) {
-            alert('Escribe una respuesta antes de evaluar.');
+            console.warn('Escribe una respuesta antes de evaluar.');
             return;
           }
 
@@ -6043,7 +6043,7 @@ order:
             ? Math.max(0, Math.round(Number(data.minChars)))
             : 0;
           if (minChars > 0 && studentText.length < minChars) {
-            alert(`La respuesta debe tener al menos ${minChars} caracteres.`);
+            console.warn(`La respuesta debe tener al menos ${minChars} caracteres.`);
             return;
           }
 
@@ -6126,7 +6126,7 @@ order:
             });
 
             if (!saved) {
-              alert('La evaluación salió bien, pero no se pudo guardar la entrega.');
+              console.warn('La evaluación salió bien, pero no se pudo guardar la entrega.');
               submitButton.disabled = false;
               submitButton.textContent = allowEdit
                 ? 'Reevaluar respuesta'
@@ -6366,7 +6366,7 @@ order:
 
           const studentPatch = ensureEvalText(textarea.value);
           if (!studentPatch) {
-            alert('Pega el patch del alumno antes de evaluar.');
+            console.warn('Pega el patch del alumno antes de evaluar.');
             return;
           }
 
@@ -6374,7 +6374,7 @@ order:
             ? Math.max(0, Math.round(Number(data.minChars)))
             : 0;
           if (minChars > 0 && studentPatch.length < minChars) {
-            alert(`El patch debe tener al menos ${minChars} caracteres.`);
+            console.warn(`El patch debe tener al menos ${minChars} caracteres.`);
             return;
           }
 
@@ -6459,7 +6459,7 @@ order:
             });
 
             if (!saved) {
-              alert('La evaluación salió bien, pero no se pudo guardar la entrega.');
+              console.warn('La evaluación salió bien, pero no se pudo guardar la entrega.');
               submitButton.disabled = false;
               submitButton.textContent = allowEdit
                 ? 'Reevaluar patch'

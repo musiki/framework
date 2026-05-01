@@ -16,21 +16,45 @@ export const GET: APIRoute = async ({ request }) => {
   let note = await getEntry('content', cleanSlug as any);
 
   if (!note) {
-    // Try finding by canonical slug in content collection
+    // Try finding by canonical slug or path match in content collection
     const { getCollection } = await import('astro:content');
-    const { getContentCanonicalSlug } = await import('../../lib/content-slug');
+    const { getContentCanonicalSlug, normalizeContentSlug } = await import('../../lib/content-slug');
     const content = await getCollection('content');
-    note = content.find(item => getContentCanonicalSlug(item) === cleanSlug);
+    const normalizedTarget = normalizeContentSlug(cleanSlug.split('/').pop());
+    
+    note = content.find(item => {
+        // Direct ID match (case insensitive or path match)
+        if (item.id.toLowerCase() === cleanSlug.toLowerCase()) return true;
+        if (item.id.toLowerCase() === (cleanSlug + '.md').toLowerCase()) return true;
+        
+        // Canonical slug match
+        const canonical = getContentCanonicalSlug(item);
+        if (canonical === cleanSlug) return true;
+        
+        // Normalized filename match (handles spaces -> dashes)
+        const filenameNormalized = normalizeContentSlug(item.id.split('/').pop()?.replace(/\.md$/, ''));
+        if (filenameNormalized === normalizedTarget && item.id.startsWith(cleanSlug.split('/')[0])) return true;
+
+        return false;
+    });
   }
 
   if (!note) {
     // Try cursos collection as well
     const { getCollection } = await import('astro:content');
-    const { getContentCanonicalSlug } = await import('../../lib/content-slug');
+    const { getContentCanonicalSlug, normalizeContentSlug } = await import('../../lib/content-slug');
     const cursos = await getCollection('cursos');
+    const normalizedTarget = normalizeContentSlug(cleanSlug.split('/').pop());
+
     note = cursos.find(item => {
         const canonical = getContentCanonicalSlug(item);
-        return canonical === cleanSlug;
+        if (canonical === cleanSlug) return true;
+        
+        // Try matching by normalized tail of the slug
+        const canonicalTail = canonical.split('/').pop();
+        if (canonicalTail === normalizedTarget) return true;
+
+        return false;
     });
   }
 

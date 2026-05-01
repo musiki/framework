@@ -337,7 +337,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     } catch (e: any) {
       // Rollback: rerender with the original snapshot.
       if (rerender) rerender(snapshot);
-      window.alert(e.message || 'Error');
+      window.console.warn(e.message || 'Error');
     }
   };
 

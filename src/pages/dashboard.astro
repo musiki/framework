@@ -7401,12 +7401,12 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 return;
               }
 
-              alert('Error al inscribirse. Intente nuevamente.');
+              console.warn('Error al inscribirse. Intente nuevamente.');
               target.textContent = 'Inscribirme';
               target.disabled = false;
             } catch (err) {
               console.error(err);
-              alert('Error de conexión');
+              console.warn('Error de conexión');
               target.textContent = 'Inscribirme';
               target.disabled = false;
             }
@@ -7449,7 +7449,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
           window.location.reload();
         } catch (error) {
           console.error('Error removing enrollment:', error);
-          alert(
+          console.warn(
             error?.message
             || (isTeacherEnrollment
               ? 'No se pudo quitar la inscripción docente'

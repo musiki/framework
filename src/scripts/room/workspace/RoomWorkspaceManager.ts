@@ -847,13 +847,13 @@ style.textContent = `
     display: flex;
     align-items: center;
     background: transparent !important;
-    background-color: transparent !important;
     color: #fff;
     padding: 0 4px;
     gap: 6px;
     border-top: 1px solid var(--pod-color, #444);
     z-index: 100;
     pointer-events: none;
+    mix-blend-mode: difference !important;
   }
   .pod-diy-header.is-dragging {
       opacity: 0.5;
@@ -872,7 +872,6 @@ style.textContent = `
     border-radius: 2px;
     background: transparent !important;
     color: #fff;
-    mix-blend-mode: difference;
   }
   .pod-diy-arrow-inner {
     width: 4px;
@@ -888,8 +887,7 @@ style.textContent = `
     grid-template-rows: repeat(3, 2px);
     gap: 1.5px;
     padding: 2px;
-    opacity: 0.3;
-    mix-blend-mode: difference;
+    opacity: 0.8;
     cursor: grab;
   }
   .pod-diy-handle-dot {
@@ -904,9 +902,8 @@ style.textContent = `
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: #fff !important;
-    mix-blend-mode: difference !important;
     isolation: auto;
-    opacity: 0.5;
+    opacity: 0.8;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -917,8 +914,7 @@ style.textContent = `
     background: transparent !important;
     border: none;
     color: #fff !important;
-    mix-blend-mode: difference !important;
-    opacity: 0.5;
+    opacity: 0.8;
     cursor: pointer;
     font-size: 14px;
     width: 14px;

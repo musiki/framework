@@ -151,6 +151,7 @@ export const selectRoomElements = (root: HTMLElement) => {
     chatSection: query('[data-chat-section]'),
     chatFocusButton: query('[data-action="chat-focus"]'),
     chatUnreadDot: query('[data-chat-unread]'),
+    chatStatus: query('[data-chat-status]'),
     chatSendButton: query('[data-action="chat-send"]'),
     chatDownloadButton: query('[data-action="chat-download"]'),
     raiseHandButton: root.querySelector('[data-action="raise-hand"]'),
