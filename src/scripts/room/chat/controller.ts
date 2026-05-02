@@ -164,6 +164,48 @@ const appendConferenceUrlNode = (container: HTMLElement, rawUrl: string) => {
   container.appendChild(anchor);
 };
 
+/**
+ * Attempt to repair common AI-generated JSON errors:
+ * 1. Unescaped backticks (```) or markdown blocks inside values.
+ * 2. Structural errors like "], { ... } ] }" (misplaced array closers).
+ * 3. Loose commas and trailing punctuation.
+ */
+const salvageHallucinatedJson = (raw: string): any => {
+  let text = raw.trim();
+  
+  // 1. Strip markdown wrappers if the model put the whole JSON in a block
+  text = text.replace(/^```json/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();
+
+  // 2. Handle unescaped backticks inside JSON (very common in Llama)
+  // We look for "content": ```lilypond ... ``` and try to stringify the middle part
+  text = text.replace(/"content":\s*```([a-z]*)\n?([\s\S]*?)```/gi, (_, lang, code) => {
+    const escaped = JSON.stringify(code.trim()).slice(1, -1);
+    return `"content": "${escaped}"`;
+  });
+
+  // 3. Fix misplaced array closers in "actions" (like "], { ... } ] }")
+  // We find the "actions": [ ... ] block and if there's a dangling object after it, we merge it.
+  // This is a bit specific to the user's report but very common.
+  if (text.includes('"actions"')) {
+    // If we have "], {", it's almost certainly a mistake. Replace with ", {"
+    text = text.replace(/\],(\s*)\{/g, ',$1{');
+    // If we have "} ] } ] }", clean up double closers
+    text = text.replace(/\](\s*)\]/g, ']$1');
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // Second attempt: replace triple quotes and loose backslashes
+    try {
+      const cleaned = text.replace(/"""/g, '"').replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+      return JSON.parse(cleaned);
+    } catch (e2) {
+      return null;
+    }
+  }
+};
+
 const setConferenceChatBody = (container: HTMLElement, text: string, onAction?: (a: any) => void) => {
   container.replaceChildren();
   const normalizedBody = String(text || '').trim();
@@ -172,38 +214,34 @@ const setConferenceChatBody = (container: HTMLElement, text: string, onAction?: 
   // We use a more robust check: does it contain a JSON object with "message"?
   const jsonMatch = normalizedBody.match(/\{[\s\S]*"message"[\s\S]*\}/);
   if (jsonMatch) {
-    try {
-      const candidate = jsonMatch[0];
-      // Loose parse for triple quotes or common model errors
-      const cleaned = candidate.replace(/"""/g, '"');
-      const parsed = JSON.parse(cleaned);
+    const parsed = salvageHallucinatedJson(jsonMatch[0]);
+    if (parsed && (parsed.message || parsed.actions)) {
       if (parsed.message) {
         const msgEl = document.createElement('div');
         msgEl.className = 'conference-chat-text-inner';
         setConferenceChatBody(msgEl, parsed.message);
         container.appendChild(msgEl);
-
-        if (Array.isArray(parsed.actions) && parsed.actions.length > 0 && onAction) {
-          const toolbar = document.createElement('div');
-          toolbar.className = 'musiki-chat-actions-toolbar';
-          parsed.actions.forEach((action: any) => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'musiki-chat-action-btn';
-            btn.textContent = action.label || (action.kind || '').replace(/_/g, ' ').toUpperCase();
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onAction(action);
-            });
-            toolbar.appendChild(btn);
-          });
-          container.appendChild(toolbar);
-        }
-        return;
       }
-    } catch (e) {
-      // Not valid JSON or failed to parse, continue to normal rendering
+
+      if (Array.isArray(parsed.actions) && parsed.actions.length > 0 && onAction) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'musiki-chat-actions-toolbar';
+        parsed.actions.forEach((action: any) => {
+          if (!action || typeof action !== 'object') return;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'musiki-chat-action-btn';
+          btn.textContent = action.label || (action.kind || '').replace(/_/g, ' ').toUpperCase();
+          btn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onAction(action);
+          });
+          toolbar.appendChild(btn);
+        });
+        container.appendChild(toolbar);
+      }
+      return;
     }
   }
 
