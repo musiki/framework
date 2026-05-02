@@ -11590,39 +11590,35 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         room,
       });
 
-      if (!canLeadSession() || !kickModeActive) return;
+      if (!canLeadSession()) return;
 
       const items = list.querySelectorAll<HTMLElement>('.conference-roster-item');
-      items.forEach((item, index) => {
-        const participant = sortedParticipants[index];
+      items.forEach((item) => {
+        const identity = item.dataset.identity;
+        if (!identity) return;
+        const participant = sortedParticipants.find(p => p.identity === identity);
         if (!participant || isLocalParticipant(room, participant)) return;
 
         const role = readParticipantRole(room, participant, localRole);
         if (role === 'teacher' || role === 'admin') return;
 
+        const actionRow = item.querySelector('.conference-roster-item-actions');
+        if (!actionRow) return;
+
         const kickBtn = document.createElement('button');
         kickBtn.className = 'conference-roster-kick-btn';
         kickBtn.type = 'button';
-        kickBtn.textContent = '×';
-        kickBtn.title = 'Expulsar';
+        kickBtn.innerHTML = '<span>×</span> KICK';
+        kickBtn.title = 'Expulsar participante';
+        kickBtn.hidden = !kickModeActive;
         kickBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          void kickParticipant(participant.identity);
+          if (confirm(`¿Estás seguro de expulsar a ${readParticipantName(participant)}?`)) {
+            void kickParticipant(participant.identity);
+          }
         });
 
-        const content = document.createElement('div');
-        content.style.flex = '1';
-        content.style.minWidth = '0';
-        content.style.display = 'flex';
-        content.style.alignItems = 'baseline';
-        content.style.gap = '0.4rem';
-
-        while (item.firstChild) {
-          content.appendChild(item.firstChild);
-        }
-
-        item.append(content, kickBtn);
-        item.classList.add('is-kickable');
+        actionRow.appendChild(kickBtn);
       });
     });
   };

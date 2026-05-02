@@ -177,30 +177,36 @@ const salvageHallucinatedJson = (raw: string): any => {
   text = text.replace(/^```json/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();
 
   // 2. Handle unescaped backticks inside JSON (very common in Llama)
-  // We look for "content": ```lilypond ... ``` and try to stringify the middle part
-  text = text.replace(/"content":\s*```([a-z]*)\n?([\s\S]*?)```/gi, (_, lang, code) => {
-    const escaped = JSON.stringify(code.trim()).slice(1, -1);
-    return `"content": "${escaped}"`;
+  // We iteratively find "content": ``` ... ``` pattern even if it has text in between
+  // This version is more aggressive: it tries to capture everything between the first ``` and the LAST ``` 
+  // following a key like "content" or "source".
+  text = text.replace(/"(content|source|markdown)":\s*```([a-z]*)\n?([\s\S]*?)```(?=[,\s\}])/gi, (_, key, lang, code) => {
+    return `"${key}": ${JSON.stringify(code.trim())}`;
   });
 
   // 3. Fix misplaced array closers in "actions" (like "], { ... } ] }")
-  // We find the "actions": [ ... ] block and if there's a dangling object after it, we merge it.
-  // This is a bit specific to the user's report but very common.
   if (text.includes('"actions"')) {
-    // If we have "], {", it's almost certainly a mistake. Replace with ", {"
+    // Replace "], {" with ", {" to merge split action objects
     text = text.replace(/\],(\s*)\{/g, ',$1{');
-    // If we have "} ] } ] }", clean up double closers
-    text = text.replace(/\](\s*)\]/g, ']$1');
+    // Replace "} ] }" with "} ]" if it looks like a double-close mistake
+    // This is safe if it's at the very end of the string
+    text = text.replace(/\}\s*\]\s*\}\s*\]/g, '} ]');
+    text = text.replace(/\}\s*\]\s*\}\s*$/g, '} ] }');
   }
 
   try {
     return JSON.parse(text);
   } catch (e) {
-    // Second attempt: replace triple quotes and loose backslashes
+    // Last ditch: try to fix escaping issues by stringifying potential problematic areas
     try {
-      const cleaned = text.replace(/"""/g, '"').replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
-      return JSON.parse(cleaned);
+      const semiCleaned = text.replace(/"""/g, '"').replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+      return JSON.parse(semiCleaned);
     } catch (e2) {
+      // Regex extraction fallback: just get the message if nothing else works
+      const msgMatch = text.match(/"message":\s*"([\s\S]*?)"(?=[,\s\}])/);
+      if (msgMatch) {
+        return { message: msgMatch[1], actions: [] };
+      }
       return null;
     }
   }

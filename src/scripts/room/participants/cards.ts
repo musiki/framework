@@ -180,24 +180,63 @@ export const renderParticipantRoster = ({
     .forEach((participant) => {
       const item = document.createElement('li');
       item.className = 'conference-roster-item';
+      const role = readRole(participant);
+      const isLocal = isLocalParticipant(room, participant);
+      const isHandRaised = readParticipantHandRaisedFromMetadata(participant);
+      const isSpeaking = room.activeSpeakers.some((s) => s.identity === participant.identity);
+
+      item.dataset.identity = participant.identity;
+      item.dataset.role = role;
+      if (isSpeaking) item.dataset.speaking = 'true';
+      if (isHandRaised) item.dataset.handRaised = 'true';
+
+      const mainRow = document.createElement('div');
+      mainRow.className = 'conference-roster-item-main';
+
+      const info = document.createElement('div');
+      info.className = 'conference-roster-item-info';
 
       const primary = document.createElement('span');
+      primary.className = 'conference-roster-name';
       primary.textContent = readParticipantName(participant);
-      if (readParticipantHandRaisedFromMetadata(participant)) {
+      
+      const indicators = document.createElement('span');
+      indicators.className = 'conference-roster-indicators';
+      
+      if (isHandRaised) {
         const hand = document.createElement('span');
         hand.className = 'conference-roster-hand';
         hand.textContent = '✋';
         hand.title = 'Mano levantada';
-        primary.append(' ', hand);
+        indicators.appendChild(hand);
       }
 
+      if (isSpeaking) {
+        const speaker = document.createElement('span');
+        speaker.className = 'conference-roster-speaker-icon';
+        speaker.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/><path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/><path d="M8.707 11.182A4.486 4.483 0 0 0 10.025 8a4.486 4.483 0 0 0-1.318-3.182L8 5.525A3.489 3.483 0 0 1 9.025 8a3.489 3.483 0 0 1-1.025 2.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/></svg>';
+        speaker.title = 'Hablando';
+        indicators.appendChild(speaker);
+      }
+
+      info.append(primary, indicators);
+
       const secondary = document.createElement('span');
-      const role = readRole(participant);
+      secondary.className = 'conference-roster-role';
       secondary.textContent = `${role === 'teacher' ? 'Teacher' : role === 'external' ? 'EXTERNALS' : 'Student'}${
-        isLocalParticipant(room, participant) ? ' · You' : ''
+        isLocal ? ' · You' : ''
       }`;
 
-      item.append(primary, secondary);
+      mainRow.append(info, secondary);
+      item.appendChild(mainRow);
+
+      // Dedicated action row for kick button (if teacher and not local)
+      if (!isLocal && (role !== 'teacher' && role !== 'admin')) {
+        const actionRow = document.createElement('div');
+        actionRow.className = 'conference-roster-item-actions';
+        item.appendChild(actionRow);
+      }
+
       participantList.appendChild(item);
     });
 };
