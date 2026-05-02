@@ -224,8 +224,8 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     const MONITOR_SVG = `<svg class="agenda-event-virtual-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-label="evento virtual" title="evento virtual"><path d="M3 4.75A1.75 1.75 0 0 1 4.75 3h14.5A1.75 1.75 0 0 1 21 4.75v10.5A1.75 1.75 0 0 1 19.25 17h-5.5l1.2 3h1.8a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5h1.8l1.2-3h-6.5A1.75 1.75 0 0 1 3 15.25V4.75Zm1.5 0v10.5c0 .14.11.25.25.25h14.5a.25.25 0 0 0 .25-.25V4.75a.25.25 0 0 0-.25-.25H4.75a.25.25 0 0 0-.25.25Zm6.36 15.25h2.28l-1-2.5h-.28l-1 2.5Z"/></svg>`;
     const slotDur = slot.endMinute - slot.startMinute;
     const eventMarkup = (isFirstSlotOfEvent && isFirstColOfEvent) ? `<span class="agenda-event-label" style="height: ${((primaryEvent.endMinute - primaryEvent.startMinute) / slotDur) * 100}%">${escapeHtml(primaryEvent.text)}${primaryEvent.virtual ? MONITOR_SVG : ''}</span>` : '';
-    const studentMarkup = studentStarts.map(({ student, block }) => {
-      const isOwn = student.studentId === viewerId;
+  const studentMarkup = studentStarts.map(({ student, block }) => {
+      const isOwn = String(student.studentId || '').toLowerCase() === viewerId.toLowerCase();
       const fullName = formatStudentName(student.name);
       const nameParts = fullName.trim().split(/\s+/);
       const nameHtml = nameParts.length > 1
@@ -341,6 +341,22 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     }
   };
 
+  const openBlockModal = (selection: SelectionRect, blockId?: string) => {
+    if (!modal) return;
+    const student = data.students.find(s => s.blocks.some(b => b.id === blockId));
+    const block = student?.blocks.find(b => b.id === blockId);
+    if (!block) return;
+    
+    modal.hidden = false;
+    modal.innerHTML = `<div class="agenda-modal__backdrop" data-close></div><div class="agenda-modal__dialog"><h3>Editar Reserva</h3><p style="margin-bottom:1rem; opacity:.7">${escapeHtml(student?.name)}</p><label class="agenda-modal__label">Comentario</label><textarea class="agenda-modal__input" data-comment style="min-height:80px" placeholder="Alguna nota...">${escapeHtml(block.comment || '')}</textarea><div class="agenda-modal__actions"><button type="button" class="dashboard-grid-btn" data-close>Cancelar</button><button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-save>Guardar</button></div></div>`;
+    modal.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => modal.hidden = true));
+    modal.querySelector('[data-save]')?.addEventListener('click', async () => {
+      const comment = modal.querySelector<HTMLTextAreaElement>('[data-comment]')?.value || '';
+      modal.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = true; });
+      await reloadAfterAction({ action: 'update-block', courseId: data.courseId, year: data.year, blockId, comment });
+    });
+  };
+
   const openEventModal = (selection: SelectionRect, eventId?: string) => {
     if (!modal) return;
     const existing = eventId ? data.events.find(e => e.id === eventId) : null;
@@ -394,7 +410,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
 
   const openSelectionActions = (selection: SelectionRect, options: { pos?: { x: number; y: number }, targetBlockId?: string, targetEventId?: string } = {}) => {
     if (!popover) return;
-    const ownBlocks = (data.students.find(s => s.studentId === viewerId)?.blocks || [])
+    const ownBlocks = (data.students.find(s => String(s.studentId || '').toLowerCase() === viewerId.toLowerCase())?.blocks || [])
       .filter(b => selection.dateKeys.includes(b.dateKey) && blockOverlapsSlot(b, selection.startMinute, selection.endMinute));
     const firstOwnBlockId = options.targetBlockId || ownBlocks[0]?.id;
     const ev = options.targetEventId ? data.events.find(e => e.id === options.targetEventId) : data.events.find(ev => selection.dateKeys.includes(ev.dateKey) && ev.startMinute < selection.endMinute && ev.endMinute > selection.startMinute);
@@ -420,8 +436,9 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
         html += `<button type="button" class="dashboard-grid-btn" data-act="reserve-group" data-grupo="${escapeHtml(viewerGrupo)}">Grupo ${escapeHtml(viewerGrupo)}</button>`;
       }
       if (firstOwnBlockId) {
-        const isOwn = (data.students.find(s => s.studentId === viewerId)?.blocks || []).some(b => b.id === firstOwnBlockId);
+        const isOwn = (data.students.find(s => String(s.studentId || '').toLowerCase() === viewerId.toLowerCase())?.blocks || []).some(b => b.id === firstOwnBlockId);
         if (isOwn) {
+          html += `<button type="button" class="dashboard-grid-btn" data-act="edit-block" data-block-id="${escapeHtml(firstOwnBlockId)}">Editar</button>`;
           html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="delete-block" data-block-id="${escapeHtml(firstOwnBlockId)}">Eliminar Reserva</button>`;
         }
       }
@@ -441,6 +458,10 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     popover.querySelector('[data-act="grupos"]')?.addEventListener('click', (e) => { stopUiEvent(e); openGrupoAssignmentModal(selection, allGrupos); });
     popover.querySelector('[data-act="event"]')?.addEventListener('click', (e) => { stopUiEvent(e); openEventModal(selection); });
     popover.querySelector('[data-act="edit"]')?.addEventListener('click', (e) => { stopUiEvent(e); openEventModal(selection, ev?.id); });
+    popover.querySelector('[data-act="edit-block"]')?.addEventListener('click', (e) => {
+      const bid = (e.currentTarget as HTMLElement).dataset.blockId;
+      stopUiEvent(e); openBlockModal(selection, bid);
+    });
     popover.querySelector('[data-act="clear"]')?.addEventListener('click', (e) => { stopUiEvent(e); reloadAfterAction({ action: 'clear-range', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute }); });
     popover.querySelector('[data-act="reserve"]')?.addEventListener('click', (e) => { stopUiEvent(e); reloadAfterAction({ action: 'reserve-self', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute }); });
     popover.querySelector('[data-act="reserve-group"]')?.addEventListener('click', (e) => {

@@ -721,21 +721,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
         if (!payload) continue;
         const blockIndex = payload.blocks.findIndex((b) => b.id === blockId);
         if (blockIndex !== -1) {
-          const isOwnBlock = normalizeText(row?.userId) === dbUser.id;
+          const rowUserId = normalizeText(row?.userId);
+          const isOwnBlock = rowUserId.toLowerCase() === dbUser.id.toLowerCase();
           if (!canManage && !isOwnBlock) {
             return json({ error: 'No tenés permiso para borrar este bloque' }, 403);
           }
           const nextBlocks = payload.blocks.filter((b) => b.id !== blockId);
           if (nextBlocks.length === 0) {
-            await deleteSubmissionIfEmpty({ assignmentId: studentAssignmentId, userId: normalizeText(row?.userId) });
+            await deleteSubmissionIfEmpty({ assignmentId: studentAssignmentId, userId: rowUserId });
           } else {
             await upsertSubmission({
               assignmentId: studentAssignmentId,
-              userId: normalizeText(row?.userId),
+              userId: rowUserId,
               payload: {
+                __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
                 ...payload,
                 blocks: nextBlocks,
                 updatedAt: new Date().toISOString(),
+                updatedBy: dbUser.id,
+                updatedByEmail: normalizeText(session?.user?.email),
               },
             });
           }
@@ -787,7 +791,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
         if (!payload) continue;
         const blockIndex = payload.blocks.findIndex((b) => b.id === blockId);
         if (blockIndex !== -1) {
-          const isOwnBlock = normalizeText(row?.userId) === dbUser.id;
+          const rowUserId = normalizeText(row?.userId);
+          const isOwnBlock = rowUserId.toLowerCase() === dbUser.id.toLowerCase();
           if (!canManage && !isOwnBlock) {
             return json({ error: 'No tenés permiso para editar este bloque' }, 403);
           }
@@ -804,11 +809,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
           nextBlocks[blockIndex] = nextBlock;
           await upsertSubmission({
             assignmentId: studentAssignmentId,
-            userId: normalizeText(row?.userId),
+            userId: rowUserId,
             payload: {
+              __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
               ...payload,
               blocks: nextBlocks,
               updatedAt: new Date().toISOString(),
+              updatedBy: dbUser.id,
+              updatedByEmail: normalizeText(session?.user?.email),
             },
           });
           return json({ success: true });
