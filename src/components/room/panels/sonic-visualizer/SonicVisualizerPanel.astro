@@ -1,0 +1,31 @@
+---
+import './sonic-visualizer.css';
+---
+<div class="musiki-pod" data-pod="sonic-visualizer" data-pod-title="SV">
+  <div class="sv-pod">
+
+    <div class="musiki-pod-toolbar sv-toolbar">
+      <span class="sv-label">sV</span>
+      <span class="sv-status" data-sv-status>waiting for sA…</span>
+      <div style="flex:1;"></div>
+      <div class="sv-vtabs" data-sv-vtabs>
+        <button type="button" class="musiki-pod-btn sv-vtab" data-sv-vtab="mel" data-active="true">MEL</button>
+        <button type="button" class="musiki-pod-btn sv-vtab" data-sv-vtab="chr">CHR</button>
+        <button type="button" class="musiki-pod-btn sv-vtab" data-sv-vtab="pch">PCH</button>
+      </div>
+    </div>
+
+    <div class="sv-main" data-sv-main>
+      <div class="sv-radar-wrap">
+        <canvas class="sv-radar" data-sv-radar></canvas>
+      </div>
+      <canvas class="sv-heatmap" data-sv-heatmap></canvas>
+    </div>
+
+    <div class="sv-waveform-wrap" data-sv-waveform-container hidden>
+      <button type="button" class="sv-play-btn" data-sv-play hidden title="Play / Pause">▶</button>
+      <canvas class="sv-waveform" data-sv-waveform></canvas>
+    </div>
+
+  </div>
+</div>

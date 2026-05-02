@@ -16,12 +16,15 @@ export class RoomWorkspaceManager {
   private onOrfInit?: (element: HTMLElement) => void;
   private onScoreInit?: (element: HTMLElement) => void;
   private onSonicAnalyzerInit?: (element: HTMLElement) => void;
+  private onSonicVisualizerInit?: (element: HTMLElement) => void;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
   public hyperpianoController: HyperpianoController | null = null;
   private podControllers = new Map<string, any>();
   private dragOverPanelId: string | null = null;
   private activeDraggingId: string | null = null;
+  private savedDragTarget: string | null = null;
+  private savedDragDir = 'right';
 
   private POD_TYPES = [
     { id: 'presentation', title: 'PRESENTACIÓN', icon: 'Pr', atomic: 1, color: '#6FA8DC', cat: 'structured' },
@@ -42,7 +45,8 @@ export class RoomWorkspaceManager {
     { id: 'forum', title: 'FORO', icon: 'Fo', atomic: 16, color: '#93C47D', cat: 'comm' },
     { id: 'hyperpiano', title: 'HYPERPIANO', icon: 'Hp', atomic: 17, color: '#FFD966', cat: 'tools' },
     { id: 'instant-score', title: 'SCORE', icon: 'Is', atomic: 18, color: '#F1C232', cat: 'tools' },
-    { id: 'sonic-analyzer', title: 'SA', icon: 'Sa', atomic: 19, color: '#45D384', cat: 'tools' }
+    { id: 'sonic-analyzer',   title: 'SA', icon: 'Sa', atomic: 19, color: '#45D384', cat: 'tools' },
+    { id: 'sonic-visualizer', title: 'SV', icon: 'Sv', atomic: 20, color: '#45D384', cat: 'tools' }
   ];
 
   constructor(
@@ -58,7 +62,8 @@ export class RoomWorkspaceManager {
     onChatInit?: (element: HTMLElement) => void,
     onOrfInit?: (element: HTMLElement) => void,
     onScoreInit?: (element: HTMLElement) => void,
-    onSonicAnalyzerInit?: (element: HTMLElement) => void
+    onSonicAnalyzerInit?: (element: HTMLElement) => void,
+    onSonicVisualizerInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -72,7 +77,8 @@ export class RoomWorkspaceManager {
     this.onChatInit = onChatInit;
     this.onOrfInit = onOrfInit;
     this.onScoreInit = onScoreInit;
-    this.onSonicAnalyzerInit = onSonicAnalyzerInit;
+    this.onSonicAnalyzerInit   = onSonicAnalyzerInit;
+    this.onSonicVisualizerInit = onSonicVisualizerInit;
   }
 
   public init() {
@@ -156,6 +162,9 @@ export class RoomWorkspaceManager {
               }
               if (id === 'sonic-analyzer' && this.onSonicAnalyzerInit) {
                 this.onSonicAnalyzerInit(element);
+              }
+              if (id === 'sonic-visualizer' && this.onSonicVisualizerInit) {
+                this.onSonicVisualizerInit(element);
               }
               if (id === 'graph') {
                 delete element.dataset.graphPodReady;
@@ -288,9 +297,12 @@ export class RoomWorkspaceManager {
             shellEl.classList.add('is-drag-over');
             shellEl.setAttribute('data-drag-dir', direction);
             this.dragOverPanelId = shellEl.dataset.panelId ?? null;
+            this.savedDragTarget = this.dragOverPanelId;
+            this.savedDragDir = direction;
         } else {
             this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => el.classList.remove('is-drag-over'));
             this.dragOverPanelId = null;
+            // savedDragTarget intentionally NOT cleared here — preserved for dragend
         }
     });
 
@@ -317,29 +329,19 @@ export class RoomWorkspaceManager {
         if (!this.dockview) return;
 
         const podId = e.dataTransfer?.getData('musiki/pod-id');
-        const panelId = e.dataTransfer?.getData('musiki/panel-id');
 
-        this.activeDraggingId = null;
-
-        const resolvedTargetId = this.dragOverPanelId;
         this.dragOverPanelId = null;
 
         if (podId) {
-            const position = resolvedTargetId ? { referencePanel: resolvedTargetId, direction: direction as any } : undefined;
+            // Gallery pod drop: place relative to last valid hover target
+            const position = this.savedDragTarget
+                ? { referencePanel: this.savedDragTarget, direction: this.savedDragDir as any }
+                : undefined;
             this.togglePod(podId, true, position);
-        } else if (panelId) {
-            const movingPanel = this.dockview.getPanel(panelId);
-            const targetPanel = resolvedTargetId ? this.dockview.getPanel(resolvedTargetId) : null;
-            if (movingPanel && targetPanel && resolvedTargetId !== panelId) {
-                const dirMap: Record<string, string> = {
-                    left: 'left', right: 'right', above: 'top', below: 'bottom', within: 'center'
-                };
-                this.dockview.moveGroupOrPanel({
-                    from: { groupId: (movingPanel as any).group.id, panelId: movingPanel.id },
-                    to: { group: (targetPanel as any).group, position: (dirMap[direction] ?? 'right') as any }
-                });
-            }
+            this.savedDragTarget = null;
+            this.activeDraggingId = null;
         }
+        // Panel-to-panel moves are handled in handle's dragend (more reliable timing)
     });
   }
 
@@ -522,8 +524,26 @@ export class RoomWorkspaceManager {
           header.classList.add('is-dragging');
       });
       handle.addEventListener('dragend', () => {
+          // Perform the move here — more reliable than drop event for same-window DnD
+          if (this.savedDragTarget && this.dockview && panelId !== this.savedDragTarget) {
+              const movingPanel = this.dockview.getPanel(panelId);
+              const targetPanel = this.dockview.getPanel(this.savedDragTarget);
+              if (movingPanel && targetPanel) {
+                  const dirMap: Record<string, string> = { left: 'left', right: 'right', above: 'top', below: 'bottom', within: 'center' };
+                  this.dockview.moveGroupOrPanel({
+                      from: { groupId: (movingPanel as any).group.id, panelId: movingPanel.id },
+                      to: { group: (targetPanel as any).group, position: (dirMap[this.savedDragDir] ?? 'right') as any }
+                  });
+              }
+          }
+          this.savedDragTarget = null;
+          this.savedDragDir = 'right';
           this.activeDraggingId = null;
           header.classList.remove('is-dragging');
+          this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => {
+              el.classList.remove('is-drag-over');
+              el.removeAttribute('data-drag-dir');
+          });
           this.dragOverPanelId = null;
       });
 
@@ -881,7 +901,6 @@ style.textContent = `
     gap: 6px;
     border-top: 1px solid var(--pod-color, #444);
     z-index: 100;
-    mix-blend-mode: difference !important;
     flex-shrink: 0;
   }
   .pod-diy-header.is-dragging {
@@ -926,11 +945,12 @@ style.textContent = `
     border-radius: 50%;
   }
   .pod-diy-title {
-    font-size: 0.54rem;
-    font-weight: 700;
+    font-size: 0.58rem;
+    font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: #fff !important;
+    letter-spacing: 0.18em;
+    color: var(--pod-color, #fff) !important;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 1px rgba(0,0,0,0.7);
     opacity: 1;
     white-space: nowrap;
     overflow: hidden;

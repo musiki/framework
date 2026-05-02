@@ -15,17 +15,9 @@ import './sonic-analyzer.css';
       </select>
       <span class="sa-fps-label" data-sa-fps-label>10fps</span>
       <input type="range" class="sa-fps-slider" data-sa-fps min="1" max="30" value="10" title="Update rate" style="width:3.5rem;" />
-      <div style="flex:1;"></div>
-      <div class="sa-tabs" data-sa-tabs>
-        <button type="button" class="musiki-pod-btn sa-tab" data-sa-tab="text"     data-active="true">TXT</button>
-        <button type="button" class="musiki-pod-btn sa-tab" data-sa-tab="spectrum">FFT</button>
-        <button type="button" class="musiki-pod-btn sa-tab" data-sa-tab="timbre">  TMB</button>
-        <button type="button" class="musiki-pod-btn sa-tab" data-sa-tab="lufs">    LUF</button>
-      </div>
     </div>
 
     <div class="sa-status" data-sa-status>
-      <button type="button" class="sa-play-btn" data-sa-play hidden title="Play / Pause">▶</button>
       <span data-sa-status-text>off</span>
       <span class="sa-file-name" data-sa-file-name hidden></span>
       <button type="button" class="sa-save-btn" data-sa-save hidden title="Save to cloud">↑ save</button>
@@ -37,31 +29,22 @@ import './sonic-analyzer.css';
     </div>
 
     <div class="sa-content" data-sa-content>
-
-      <!-- TEXT: split left (metrics) + right (radar + viz) -->
-      <div class="sa-view sa-view--text sa-view--split" data-sa-view="text">
-        <pre class="sa-text-inner" data-sa-text-inner>· waiting for signal ·</pre>
-        <div class="sa-viz-panel">
-          <canvas class="sa-radar" data-sa-radar></canvas>
-          <div class="sa-computed-wrap" data-sa-computed hidden>
-            <div class="sa-vtabs">
-              <button class="sa-vtab" data-sa-vtab="mel" data-active="true">MEL</button>
-              <button class="sa-vtab" data-sa-vtab="chr">CHR</button>
-              <button class="sa-vtab" data-sa-vtab="pch">PCH</button>
-            </div>
-            <canvas class="sa-heatmap" data-sa-heatmap></canvas>
-          </div>
-        </div>
+      <div class="sa-panel sa-panel--text">
+        <div class="sa-panel-title">txt</div>
+        <pre class="sa-text-inner" data-sa-text-inner>· waiting ·</pre>
       </div>
-
-      <pre class="sa-view sa-view--spectrum" data-sa-view="spectrum" hidden>· waiting ·</pre>
-      <pre class="sa-view sa-view--timbre"   data-sa-view="timbre"   hidden>· waiting ·</pre>
-      <pre class="sa-view sa-view--lufs"     data-sa-view="lufs"     hidden>· waiting ·</pre>
-    </div>
-
-    <!-- WAVEFORM player -->
-    <div class="sa-waveform-wrap" data-sa-waveform-container hidden>
-      <canvas class="sa-waveform" data-sa-waveform></canvas>
+      <div class="sa-panel sa-panel--spectrum">
+        <div class="sa-panel-title">fft</div>
+        <pre class="sa-spectrum-inner" data-sa-spectrum-inner>· waiting ·</pre>
+      </div>
+      <div class="sa-panel sa-panel--timbre">
+        <div class="sa-panel-title">tmb</div>
+        <pre class="sa-timbre-inner" data-sa-timbre-inner>· waiting ·</pre>
+      </div>
+      <div class="sa-panel sa-panel--lufs">
+        <div class="sa-panel-title">luf</div>
+        <pre class="sa-lufs-inner" data-sa-lufs-inner>· waiting ·</pre>
+      </div>
     </div>
 
   </div>

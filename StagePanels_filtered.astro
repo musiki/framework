@@ -1,0 +1,113 @@
+---
+---
+
+<section class="conference-stage-panel conference-stage-panel--presentation" data-panel="presentation">
+  <div class="conference-stage-heading">
+    <div class="conference-stage-label">Presentation</div>
+    <button type="button" class="conference-panel-close" data-action="close-panel" aria-label="Cerrar panel" hidden>X</button>
+  </div>
+  <div class="conference-presentation">
+    <iframe
+      title="Presentation stage"
+      data-presentation-frame
+      hidden
+      loading="lazy"
+      allowfullscreen
+    ></iframe>
+    <div class="conference-empty conference-empty--presentation" data-presentation-placeholder>
+      Select a lesson with theme to load Reveal.
+    </div>
+  </div>
+</section>
+
+<section class="conference-stage-panel conference-stage-panel--concept" data-panel="concept">
+  <div class="conference-stage-heading">
+    <div class="conference-stage-label">Concept</div>
+    <button type="button" class="conference-panel-close" data-action="close-panel" aria-label="Cerrar concepto">X</button>
+  </div>
+  <div class="conference-presentation">
+    <iframe
+      title="Concept stage"
+      data-concept-frame
+      hidden
+      loading="lazy"
+      allowfullscreen
+    ></iframe>
+    <div class="conference-empty" data-concept-placeholder>
+      Select a concept to display.
+    </div>
+  </div>
+</section>
+
+<section class="conference-stage-panel conference-stage-panel--whiteboard" data-panel="whiteboard">
+  <div class="conference-stage-heading">
+    <div class="conference-stage-label">Whiteboard</div>
+    <button type="button" class="conference-panel-close" data-action="close-panel" aria-label="Cerrar pizarra">X</button>
+  </div>
+  <div class="conference-whiteboard-container">
+    <canvas class="conference-whiteboard-bg" data-whiteboard-bg-canvas></canvas>
+    <canvas class="conference-whiteboard-canvas" data-whiteboard-canvas></canvas>
+    <div class="conference-whiteboard-toolbar" data-whiteboard-toolbar hidden>
+      <div class="conference-whiteboard-group">
+        <button type="button" class="conference-whiteboard-tool" data-whiteboard-bg-btn="staff" title="Pentagrama">≡</button>
+        <button type="button" class="conference-whiteboard-tool" data-whiteboard-bg-btn="grid" title="Cuadrícula">#</button>
+      </div>
+      <div class="conference-whiteboard-group">
+        <button type="button" class="conference-whiteboard-tool" data-whiteboard-tool="draw" title="Lápiz" data-active="true">D</button>
+        <button type="button" class="conference-whiteboard-tool" data-whiteboard-tool="text-sm" title="Texto chico">T</button>
+        <button type="button" class="conference-whiteboard-tool" data-whiteboard-tool="text-lg" title="Texto grande">T+</button>
+      </div>
+      <div class="conference-whiteboard-group">
+        <button type="button" class="conference-whiteboard-color" data-whiteboard-color="#ffffff" title="Blanco" style="color: #ffffff">●</button>
+        <button type="button" class="conference-whiteboard-color" data-whiteboard-color="#4CAF50" title="Verde" style="color: #4CAF50">●</button>
+        <button type="button" class="conference-whiteboard-color" data-whiteboard-color="#2196F3" title="Azul" style="color: #2196F3">●</button>
+        <button type="button" class="conference-whiteboard-color" data-whiteboard-color="#FF9800" title="Naranja" style="color: #FF9800">●</button>
+      </div>
+      <div class="conference-whiteboard-group">
+        <button type="button" class="conference-whiteboard-tool" data-action="whiteboard-clear" title="Limpiar pizarra">L</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="conference-stage-panel conference-stage-panel--focus" data-panel="teacher">
+  <div class="conference-stage-heading">
+    <div class="conference-stage-label">Speaker</div>
+    <button type="button" class="conference-panel-close" data-action="close-panel" aria-label="Cerrar panel" hidden>X</button>
+    <p class="conference-recent-speakers" data-recent-speakers hidden></p>
+  </div>
+  <div
+    class="conference-slot conference-slot--focus"
+    data-slot="teacher"
+    data-empty-label="Speaker camera"
+  ></div>
+  <div class="conference-test-timer" data-test-timer hidden>0s</div>
+</section>
+
+<section class="conference-stage-panel conference-stage-panel--screen" data-panel="screen">
+  <div class="conference-stage-heading">
+    <div class="conference-stage-label">Share Screen</div>
+    <button type="button" class="conference-panel-close" data-action="close-panel" aria-label="Cerrar panel" hidden>X</button>
+    <p class="conference-recent-speakers" data-recent-speakers hidden></p>
+  </div>
+  <div
+    class="conference-slot conference-slot--screen"
+    data-slot="screen"
+    data-empty-label="Screen share"
+  ></div>
+</section>
+
+<section class="conference-stage-panel conference-stage-panel--grid" data-panel="grid">
+  <div class="conference-stage-heading">
+    <div class="conference-stage-label">Grid</div>
+    <button type="button" class="conference-panel-close" data-action="close-panel" aria-label="Cerrar panel" hidden>X</button>
+    <p class="conference-recent-speakers" data-recent-speakers hidden></p>
+  </div>
+  <div
+    class="conference-slot conference-slot--grid"
+    data-slot="grid"
+    data-empty-label="Participants grid"
+  ></div>
+</section>
+
+<!-- Lilypond static panel removed - now managed via Workspace PodTemplates -->

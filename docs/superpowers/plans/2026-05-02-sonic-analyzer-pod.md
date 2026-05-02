@@ -1292,3 +1292,176 @@ git commit -m "feat(sa): sonic analyzer pod complete — essentia.js, 4 views, L
 - `RoomWorkspaceManager` constructor last param `onSonicAnalyzerInit` — matches Tasks 2 and 12 ✅
 
 **Note on Essentia API calls:** The `analyze()` method in controller.ts uses try/catch around each Essentia call. This is intentional — Essentia.js WASM API throws if inputs are invalid (silence, zero-length vectors). The catch blocks let the frame render with zero values rather than crashing.
+
+---
+
+## Task 14: Extended file-based visualizations (post-MVP)
+
+These features require a loaded audio file (`fileBuffer`) and are computed one-shot in `computeVizFeatures()`, NOT in the real-time tick loop.
+
+### ✅ Implemented (Tasks 13+)
+
+**Responsive radar + resize observer** (`controller.ts` — `bindResize()`)
+- `ResizeObserver` on `.sa-pod` rebuilds waveform cache and redraws heatmap on size change
+- Radar auto-resizes by reading `canvas.clientWidth/clientHeight` on every `drawRadar()` call
+
+**Viz panel layout** (`SonicAnalyzerPanel.astro` + `sonic-analyzer.css`)
+- Right panel 148px wide, vertical flex
+- Radar occupies upper flex space; `sa-radar-wrap` centers canvas with `aspect-ratio:1`
+- Computed section below (MEL / CHR / PCH vtabs + heatmap canvas)
+
+**MEL heatmap** — green palette pixel heatmap of log-mel spectrogram frames (`viz-view.ts`)
+
+**CHR heatmap** — HPCP chroma heatmap (12 pitch classes × time frames, `viz-view.ts`)
+
+**PCH contour** — PitchMelodia log-scale pitch contour line on canvas (`viz-view.ts`)
+
+**Key detection** (`controller.ts` — `computeVizFeatures()`)
+- Average HPCP frames → `E.Key()` → stores `fileKey` + `fileScale`
+- Displayed in TEXT tab as `key · A minor` after the horizontal rule
+
+**BPM detection** (`controller.ts` — `computeVizFeatures()`)
+- `E.RhythmExtractor2013(audioVec)` → stores `fileBpm`
+- Displayed in TEXT tab as `bpm ·   120.0` after the horizontal rule
+
+---
+
+### Planned (future)
+
+#### 14a: Onset detection + beat grid overlay on waveform
+
+**Goal:** Show beat markers on the waveform canvas.
+
+**Approach:**
+1. In `computeVizFeatures()`, run `E.RhythmExtractor2013(audioVec)` (already done for BPM) — it also returns `ticks: VectorFloat` (beat positions in seconds)
+2. Store `this.beatTicks: number[] = []`
+3. In `redrawWaveform()`, after drawing cache + playhead, loop beat ticks:
+   ```ts
+   ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+   ctx.lineWidth = 1;
+   for (const t of this.beatTicks) {
+     const x = (t / this.fileBuffer!.duration) * canvas.width;
+     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+   }
+   ```
+
+**Files to change:** `controller.ts` only
+
+---
+
+#### 14b: Key/scale + BPM in status bar
+
+**Goal:** Show key + BPM in the `sa-status` bar so it's always visible regardless of active tab.
+
+**Approach:**
+- Add a `<span data-sa-key-bpm class="sa-file-name" hidden></span>` to the status bar in `SonicAnalyzerPanel.astro`
+- After key+bpm compute in `computeVizFeatures()`, set its textContent:
+  ```ts
+  const el = this.podEl.querySelector<HTMLElement>('[data-sa-key-bpm]');
+  if (el) { el.textContent = `${this.fileKey} ${this.fileScale} · ${this.fileBpm}bpm`; el.hidden = false; }
+  ```
+
+**Files to change:** `SonicAnalyzerPanel.astro`, `controller.ts`
+
+---
+
+#### 14c: MFCC heatmap vtab
+
+**Goal:** Add "MFC" as a 4th vtab in the computed section alongside MEL/CHR/PCH.
+
+**Approach:**
+1. Add `<button class="sa-vtab" data-sa-vtab="mfc">MFC</button>` to `SonicAnalyzerPanel.astro`
+2. Collect MFCC frames in `computeVizFeatures()` (same frame loop as mel spec, call `E.MFCC(spectrum.spectrum)`)
+3. Store as `this.mfccData: number[][] = []`
+4. In `renderCurrentHeatmap()`, add `else if (this.activeVTab === 'mfc' && this.mfccData.length) renderHeatmap(this.heatmapCanvas, this.mfccData);`
+
+**Files to change:** `SonicAnalyzerPanel.astro`, `controller.ts`
+
+---
+
+#### 14d: Loudness / RMS envelope vtab
+
+**Goal:** Show a scrolling amplitude envelope as a heatmap column (1-bin wide × time).
+
+**Approach:**
+- In `computeVizFeatures()`, compute per-frame RMS and store as `this.rmsEnvData: number[][] = []` (each frame is `[rms_value]`, i.e. 1 bin)
+- Render with `renderHeatmap(canvas, this.rmsEnvData, false)` — it handles arbitrary bin counts
+
+**Files to change:** `controller.ts` only (+ vtab in Astro if shown separately)
+
+---
+
+#### 14e: Tuning / inharmonicity display
+
+**Goal:** Show detected tuning offset (cents from A440) and a per-frame inharmonicity estimate.
+
+**Approach:**
+- After PitchYin in the real-time loop, use `E.TuningFrequency()` on accumulated pitch values
+- Display in TEXT tab as `tune · +12 ¢`
+- Inharmonicity from `E.Inharmonicity(harmonicPeaks)` — add to TIMBRE view
+
+**Files to change:** `controller.ts`, `views/text-view.ts`, `views/timbre-view.ts`
+
+---
+
+#### 14f: Tonal analysis — chord detection (experimental)
+
+**Goal:** Real-time or file-based chord symbol estimation.
+
+**Approach:**
+- Accumulate HPCP over ~0.5s windows (3–5 frames at 10fps)
+- Pass to `E.Chordata()` or `E.ChordsDescriptors()` → returns chord label
+- Display in TEXT tab as `chord · Cmaj7`
+- Note: Essentia.js 0.1.3 browser build may not include ChordsDetection — wrap in try/catch and degrade gracefully
+
+**Files to change:** `controller.ts`, `views/text-view.ts`
+
+---
+
+## Task 15: Multi-user SA/SV sync via LiveKit + R2
+
+**Goal:** When one user activates SA and drops a file, all other users' SV pods automatically load the same file and mirror the visualizations.
+
+**Architecture decision: R2 file relay (not audio streaming)**
+
+Rationale: the Musiki framework already uses "transmit commands, replicate locally" — every pod (whiteboard, lilypond, score) syncs state by broadcasting a message, not by streaming media. SA follows the same pattern:
+
+1. **Uploader (SA active user):** after file is decoded and features computed, the `save` button (or an auto-upload option) POSTs the raw audio file to the existing R2 upload endpoint used by `foro.astro`. R2 returns a signed URL.
+2. **Broadcast:** SA controller sends a LiveKit data message: `{ type: 'sa:file-sync', url: string, fileName: string }`.
+3. **Receivers:** all clients receive the message, fetch the file from R2, decode it via `AudioContext.decodeAudioData()`, and dispatch `sa:file-ready` locally — feeding their own SV pods with locally computed features.
+
+**Why not stream audio:** audio streaming already works via LiveKit tracks. SA analysis of the live stream should use `getAudioTap()` pointing at the remote participant's track (already supported via `addParticipantSource()`). File sharing is the only case requiring R2 relay.
+
+**Why not stream the analysis results:** computed features (mel spec, HPCP, pitches) are large float arrays — sending them as data messages would exceed LiveKit's 15KB data channel limit per message. Computing locally from a shared file is cheaper.
+
+**Implementation sketch:**
+
+```ts
+// SA controller — auto-upload after computeVizFeatures() completes
+private async uploadAndBroadcast(file: Blob, fileName: string): Promise<void> {
+  const fd = new FormData(); fd.append('file', file, fileName);
+  const res = await fetch('/api/upload', { method: 'POST', body: fd });
+  const { url } = await res.json();
+  // broadcast via existing publishMessage() callback
+  this.onBroadcast?.({ type: 'sa:file-sync', url, fileName });
+}
+
+// livekit-room.ts — receive handler (in the incoming data message switch)
+case 'sa:file-sync': {
+  const buf = await (await fetch(msg.url)).arrayBuffer();
+  const decoded = await incomingAudioContext.decodeAudioData(buf);
+  // synthesize a File object and hand to SA controller's loadFile() — or
+  // dispatch sa:file-ready directly after computing features locally
+  break;
+}
+```
+
+**Files to change:**
+- `controller.ts` — add `onBroadcast` callback option, call after upload
+- `livekit-room.ts` — add `sa:file-sync` to incoming data message handler
+- `SonicAnalyzerPanel.astro` — optional "auto-share" toggle in status bar
+
+**Open questions:**
+- Auto-upload vs manual save button (privacy: user might not want to share)
+- R2 URL TTL — signed URLs expire; should store file key and re-sign on demand
+- Should the SV pod show a "synced from user X" label in its status bar?

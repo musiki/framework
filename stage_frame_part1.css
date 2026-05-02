@@ -1,0 +1,982 @@
+/* Room stage domain: stage panels, overlays, countdown, and tile layout. */
+
+.conference-shell[data-show-circle="false"]
+  .conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus {
+  display: none;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus:has(
+    .conference-tile[data-show-circle="false"]
+  ) {
+  display: none;
+}
+
+.conference-stage-frame {
+  min-width: 0;
+  min-height: 0;
+  height: calc(100vh - var(--conference-bar-height));
+  height: calc(100dvh - var(--conference-bar-height));
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+#musiki-workspace-root {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.conference-external-media-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 25000;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: rgba(0, 0, 0, 0.96);
+  border: 1px solid var(--conference-line);
+  backdrop-filter: blur(12px);
+}
+
+.conference-external-media-shell[hidden] {
+  display: none;
+}
+
+.conference-external-media-chrome {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--conference-line);
+  background: rgba(0, 0, 0, 0.92);
+}
+
+.conference-external-media-meta {
+  min-width: 0;
+  display: grid;
+  gap: 0.14rem;
+}
+
+.conference-external-media-kicker {
+  color: var(--conference-muted);
+  font-size: 0.56rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.conference-external-media-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--conference-fg-hi);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.conference-external-media-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+}
+
+.conference-external-media-action {
+  min-width: 34px;
+  min-height: 28px;
+  padding: 0 0.62rem;
+  border: 1px solid var(--conference-line);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--conference-muted);
+  letter-spacing: 0.08em;
+}
+
+.conference-external-media-action:hover:not(:disabled) {
+  color: var(--conference-fg);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.conference-external-media-body {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.conference-external-media-player,
+.conference-external-media-player > iframe,
+.conference-external-media-player > video,
+.conference-external-media-player > audio {
+  width: 100%;
+  height: 100%;
+}
+
+.conference-external-media-player {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: stretch;
+  background: #000;
+}
+
+.conference-external-media-player:empty {
+  display: none;
+}
+
+.conference-external-media-player > iframe,
+.conference-external-media-player > video {
+  border: 0;
+  display: block;
+  background: #000;
+}
+
+.conference-external-media-player > audio {
+  align-self: center;
+  justify-self: stretch;
+  padding: 0 1rem;
+}
+
+.conference-external-media-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 1.4rem;
+}
+
+.conference-external-media-action[disabled] {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.conference-external-media-result {
+  width: 100%;
+  border: 1px solid var(--conference-line, rgba(255,255,255,0.1));
+  background: rgba(0, 0, 0, 0.72);
+  color: inherit;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 0.2rem;
+}
+
+.conference-external-media-result:hover {
+  border-color: rgba(143, 227, 255, 0.34);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.conference-external-media-result-thumb {
+  width: 72px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: rgba(255, 255, 255, 0.03);
+  border: 0;
+}
+
+.conference-external-media-result-meta {
+  min-width: 0;
+  display: grid;
+  gap: 0.14rem;
+  padding: 0.38rem 0.42rem 0.38rem 0;
+}
+
+.conference-external-media-result-title {
+  min-width: 0;
+  color: var(--conference-fg, #f0f0f0);
+  font-size: 0.7rem;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conference-external-media-result-subtitle {
+  min-width: 0;
+  color: var(--conference-muted, #888);
+  font-size: 0.55rem;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conference-external-media-results-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  padding: 0.65rem 0.72rem;
+  color: var(--conference-muted, #888);
+  font-size: 0.58rem;
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.conference-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+.conference-stage-panel {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: transparent;
+  border-right: 1px solid var(--conference-line);
+  border-bottom: 1px solid var(--conference-line);
+}
+
+.conference-stage-panel--presentation,
+.conference-stage-panel--focus,
+.conference-stage-panel--screen,
+.conference-stage-panel--grid,
+.conference-stage-panel--lilypond {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--presentation,
+.conference-stage[data-layout="presentation"] .conference-stage-panel--focus,
+.conference-stage[data-layout="teacher"] .conference-stage-panel--focus,
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--screen,
+.conference-stage[data-layout="grid"] .conference-stage-panel--grid,
+.conference-stage[data-layout="lilypond"] .conference-stage-panel--lilypond {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--presentation,
+.conference-stage[data-layout="teacher"] .conference-stage-panel--focus,
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--screen,
+.conference-stage[data-layout="grid"] .conference-stage-panel--grid {
+  inset: 0;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--presentation {
+  grid-template-rows: 1fr;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--presentation
+  .conference-stage-heading {
+  display: none;
+}
+
+.conference-stage[data-layout="presentation"] .conference-stage-panel--focus {
+  inset: auto 1rem 1rem auto;
+  width: clamp(101px, 13vw, 158px);
+  aspect-ratio: 1;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  overflow: hidden;
+  z-index: 4;
+  background: rgba(0, 0, 0, 0.92);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-stage-heading,
+.conference-stage[data-layout="presentation"] .conference-stage-panel--screen {
+  display: none;
+}
+
+.conference-stage[data-layout="teacher"] .conference-stage-panel--focus {
+  grid-template-rows: 1fr;
+}
+
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus::before {
+  display: none;
+}
+
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-tile,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-tile-media,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-media-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+}
+
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > .conference-tile {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > *,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > *
+  > .conference-tile-media,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > *
+  > .conference-tile-media
+  > .conference-media-frame,
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-slot--focus
+  > *
+  > .conference-tile-media
+  > .conference-media-frame
+  > video {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
+  min-height: 0;
+}
+
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-tile {
+  grid-template-rows: 1fr;
+  border: 0;
+  background: #000;
+}
+
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-tile-meta {
+  position: absolute;
+  inset: auto 0 0 0;
+  border-top: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
+}
+
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--screen {
+  grid-template-rows: 1fr;
+}
+
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-tile--screen,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-tile-media,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-media-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+}
+
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > .conference-tile--screen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > *,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > *
+  > .conference-tile-media,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > *
+  > .conference-tile-media
+  > .conference-media-frame,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-slot--screen
+  > *
+  > .conference-tile-media
+  > .conference-media-frame
+  > video {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
+  min-height: 0;
+}
+
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-tile--screen {
+  grid-template-rows: 1fr;
+  border: 0;
+  background: #000;
+}
+
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-tile-meta {
+  display: none;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-slot--focus {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-slot--focus::before {
+  display: none;
+}
+
+.conference-stage[data-layout="teacher"] .conference-stage-panel--presentation,
+.conference-stage[data-layout="teacher"] .conference-stage-panel--screen,
+.conference-stage[data-layout="teacher"] .conference-stage-panel--grid,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--presentation,
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--focus,
+.conference-stage[data-layout="screenshare"] .conference-stage-panel--grid,
+.conference-stage[data-layout="grid"] .conference-stage-panel--presentation,
+.conference-stage[data-layout="grid"] .conference-stage-panel--focus,
+.conference-stage[data-layout="grid"] .conference-stage-panel--screen {
+  display: none;
+}
+
+.conference-stage-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 3px 0.65rem;
+}
+
+.conference-stage-label {
+  --conference-sidebar-strip-padding-y: 3px;
+  --conference-sidebar-strip-padding-x: 0.65rem;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--conference-muted);
+  font-size: 0.56rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.conference-stage-heading .conference-recent-speakers {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 0;
+  letter-spacing: 0.16em;
+  opacity: 0.5;
+}
+
+.conference-stage-heading .conference-recent-speakers[hidden] {
+  display: none;
+}
+
+.conference-stage[data-layout="teacher"]
+  .conference-stage-panel--focus
+  .conference-stage-heading,
+.conference-stage[data-layout="screenshare"]
+  .conference-stage-panel--screen
+  .conference-stage-heading {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 3;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.62) 0%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  pointer-events: none;
+}
+
+.conference-slot,
+.conference-presentation {
+  min-height: 0;
+  position: relative;
+  display: grid;
+  place-items: stretch;
+  overflow: hidden;
+  background: #000;
+}
+
+.conference-slot::before {
+  content: attr(data-empty-label);
+  position: absolute;
+  left: 0.8rem;
+  bottom: 0.7rem;
+  color: var(--conference-dim);
+  font-size: var(--conference-font-body);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.conference-slot:has(.conference-tile)::before,
+.conference-slot:has(.conference-media-frame)::before {
+  content: "";
+}
+
+.conference-slot--grid {
+  padding: 0.8rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-auto-rows: minmax(min-content, 1fr);
+  gap: 0.8rem;
+  align-content: start;
+  overflow: auto;
+}
+
+.conference-slot--grid-compact {
+  grid-template-columns: repeat(2, 1fr) !important;
+  grid-auto-rows: auto !important;
+}
+
+.conference-slot--grid-compact .conference-tile {
+  aspect-ratio: 16 / 9;
+}
+
+.conference-slot--grid[data-grid-size="avatar"] {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
+  grid-auto-rows: 90px !important;
+}
+.conference-slot--grid[data-grid-size="small"] {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
+  grid-auto-rows: 120px !important;
+}
+.conference-slot--grid[data-grid-size="usable"] {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+  grid-auto-rows: 150px !important;
+}
+.conference-slot--grid[data-grid-size="comfortable"] {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+  grid-auto-rows: 180px !important;
+}
+.conference-slot--grid[data-grid-size="speaker"] {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+  grid-auto-rows: 240px !important;
+}
+
+.conference-slot--grid[data-grid-size="avatar"] .conference-tile,
+.conference-slot--grid[data-grid-size="small"] .conference-tile,
+.conference-slot--grid[data-grid-size="usable"] .conference-tile,
+.conference-slot--grid[data-grid-size="comfortable"] .conference-tile,
+.conference-slot--grid[data-grid-size="speaker"] .conference-tile {
+  aspect-ratio: unset !important;
+  height: 100% !important;
+  width: 100% !important;
+  min-height: 0 !important;
+}
+
+.conference-presentation iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+
+.conference-empty {
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  color: var(--conference-dim);
+  text-align: center;
+  line-height: 1.45;
+}
+
+.conference-empty--tile {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.conference-empty[hidden],
+.conference-presentation > iframe[hidden],
+.conference-presentation > .conference-empty--presentation[hidden] {
+  display: none !important;
+}
+
+.conference-br-countdown {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  z-index: 30;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(10px) saturate(0.7);
+  -webkit-backdrop-filter: blur(10px) saturate(0.7);
+  padding: 0.55rem 1rem 0.6rem;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+
+.conference-br-countdown[hidden] {
+  display: none;
+}
+
+.conference-br-countdown-label {
+  display: block;
+  color: rgba(255, 226, 107, 0.9);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.conference-br-countdown-secs {
+  display: block;
+  color: rgba(255, 226, 107, 1);
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.conference-tile {
+  min-height: 0;
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  background: #020202;
+  border: 1px solid var(--conference-line-soft);
+  overflow: hidden;
+}
+
+.conference-slot--grid .conference-tile {
+  aspect-ratio: 16 / 9;
+}
+
+.conference-tile--participant {
+  grid-template-rows: 1fr;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-tile,
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-media-frame,
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-tile-media,
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-empty--tile {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  border: 0;
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-tile {
+  grid-template-rows: 1fr;
+  background: transparent;
+}
+
+.conference-tile-media,
+.conference-media-frame {
+  min-height: 0;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+.conference-media-frame > video,
+.conference-media-frame > audio,
+.conference-media-frame > img,
+.conference-media-frame > canvas,
+.conference-tile-media > video,
+.conference-tile-media > img,
+.conference-tile-media > canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover;
+  object-position: center;
+  background: #000;
+}
+
+.conference-hand-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: screen;
+  transition: opacity 160ms ease;
+}
+
+.conference-shell[data-hand-track="true"] .conference-hand-overlay {
+  opacity: 1;
+}
+
+.conference-gravity-ball-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.conference-shell[data-gravity-ball="true"][data-gravity-ball-stage-visible="true"]
+  .conference-gravity-ball-overlay {
+  opacity: 1;
+}
+
+.conference-recording-guide {
+  position: absolute;
+  z-index: 8;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  border: 1px dashed
+    color-mix(in srgb, var(--conference-accent) 78%, transparent);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.34);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.conference-shell[data-recording-guide-visible="true"][data-recording-guide-suppressed="false"]
+  .conference-recording-guide {
+  opacity: 0.92;
+}
+
+.conference-hand-overlay--stage {
+  inset: 0;
+}
+
+.conference-reactions-layer {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  z-index: 8;
+}
+
+.conference-reaction-burst {
+  align-items: center;
+  animation: conference-reaction-burst 1.5s ease-out forwards;
+  color: rgba(255, 255, 255, 0.96);
+  display: inline-flex;
+  font-size: 2rem;
+  gap: 0.35rem;
+  left: 50%;
+  line-height: 1;
+  position: absolute;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.55);
+  top: 62%;
+  transform: translate(-50%, 0);
+  white-space: nowrap;
+}
+
+.conference-reaction-burst-name {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@keyframes conference-reaction-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 16px) scale(0.88);
+  }
+
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -88px) scale(1.08);
+  }
+}
+
+.conference-tile-meta {
+  display: grid;
+  gap: 0.08rem;
+  padding: 0.4rem 0.45rem;
+  border-top: 1px solid var(--conference-line-soft);
+  background: rgba(0, 0, 0, 0.88);
+}
+
+.conference-stage[data-layout="presentation"]
+  .conference-stage-panel--focus
+  .conference-tile-meta {
+  display: none;
+}
+
+.conference-tile--participant .conference-tile-meta {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: flex-end;
+  min-height: 1.6rem;
+  padding: 0.5rem 0.6rem 0.28rem;
+  border-top: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.76) 100%
+  );
+  pointer-events: none;
+}
+
+.conference-tile-hand {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.5rem;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3rem;
+  min-height: 3rem;
+  font-size: 2rem;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+
+.conference-tile-hand[hidden] {
+  display: none !important;
+}
+
+.conference-tile-meta strong {
+  color: var(--conference-fg);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+@media (max-width: 1080px) {
+  .conference-stage-frame {
+    height: calc(
+      100vh - var(--conference-sidebar-size) - var(--conference-bar-height)
+    );
+    height: calc(
+      100dvh - var(--conference-sidebar-size) - var(--conference-bar-height)
+    );
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .conference-stage-frame {
+    height: calc(100vh - var(--conference-bar-height));
+    height: calc(100dvh - var(--conference-bar-height));
+  }
+
+  .conference-stage[data-layout="presentation"] .conference-stage-panel--focus {
+    width: clamp(86px, 13.5vw, 119px);
+    inset: auto 0.8rem 0.8rem auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .conference-stage-frame {
+    height: auto;
+  }
+}
+
+/* ── Test mode overlay elements ─────────────────────────────────────────── */
+

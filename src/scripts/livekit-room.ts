@@ -26,6 +26,7 @@ import { WhiteboardController } from './room/whiteboard';
 import { LilyPondLiveController } from './room/lilypond';
 import { RoomWorkspaceManager } from './room/workspace/RoomWorkspaceManager';
 import { SonicAnalyzerController } from './room/sonic-analyzer';
+import { SonicVisualizerController } from './room/sonic-visualizer';
 import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
@@ -4560,7 +4561,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       welcomePreviewStream = null;
     }
     if (welcomeMicMeter) {
-      welcomeMicMeter.stop();
+      welcomeMicMeter.teardown();
+      welcomeMicMeter = null;
     }
     if (welcomeVideoPreview instanceof HTMLVideoElement) {
       welcomeVideoPreview.srcObject = null;
@@ -4589,7 +4591,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (welcomeVumeter instanceof HTMLElement) {
         welcomeMicMeter = createRoomMicMeterController({ micMeter: welcomeVumeter });
-        welcomeMicMeter.start(welcomePreviewStream);
+        const audioTrack = welcomePreviewStream.getAudioTracks()[0];
+        if (audioTrack) {
+          void welcomeMicMeter.start(audioTrack).catch(() => {
+             if (welcomeMicMeter) welcomeMicMeter.stop();
+          });
+        }
       }
       
       // Refresh device list if labels are missing (browser privacy feature)
@@ -10632,6 +10639,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let chatController: ReturnType<typeof createRoomChatController> | null = null;
   let orfController: RoomOrfController | null = null;
   let sonicAnalyzerController: SonicAnalyzerController | null = null;
+  let sonicVisualizerController: SonicVisualizerController | null = null;
 
     // Hyperpiano integration
     const updateActiveHyperpianoAudio = () => {
@@ -10870,6 +10878,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       });
     };
 
+    const onSonicVisualizerInit = (container: HTMLElement) => {
+      sonicVisualizerController?.dispose();
+      sonicVisualizerController = new SonicVisualizerController({ container });
+    };
+
   const getWorkspaceSettingsSnapshot = () => ({
     gridSize,
     showCircle: showPresentationCircle,
@@ -10901,7 +10914,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onChatInit,
     onOrfInit,
     onScoreInit,
-    onSonicAnalyzerInit
+    onSonicAnalyzerInit,
+    onSonicVisualizerInit
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));

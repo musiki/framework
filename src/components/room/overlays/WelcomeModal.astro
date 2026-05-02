@@ -183,7 +183,7 @@ const { isTeacher = false, isExternal = false } = Astro.props;
 
   .welcome-vumeter-fill {
     height: 100%;
-    width: 0%;
+    width: calc(var(--conference-mic-level, 0) * 100%);
     background: var(--conference-accent, #2a87ff);
     transition: width 50ms linear;
     box-shadow: 0 0 8px var(--conference-accent, #2a87ff);

@@ -1,0 +1,12 @@
+diff --git a/Users/zztt/projects/26-musiki/framework/src/components/room/stage/StagePanels.astro b/Users/zztt/projects/26-musiki/framework/StagePanels_filtered.astro
+index d318339..497fbb9 100644
+--- a/Users/zztt/projects/26-musiki/framework/src/components/room/stage/StagePanels.astro
++++ b/Users/zztt/projects/26-musiki/framework/StagePanels_filtered.astro
+@@ -81,7 +81,6 @@
+     data-slot="teacher"
+     data-empty-label="Speaker camera"
+   ></div>
+-  <div class="conference-test-vumeter" data-test-vumeter hidden></div>
+   <div class="conference-test-timer" data-test-timer hidden>0s</div>
+ </section>
+ 

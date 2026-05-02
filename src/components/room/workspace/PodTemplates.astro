@@ -5,6 +5,7 @@ import OrfPanel from '../panels/orf/OrfPanel.astro';
 import NotesPanel from '../panels/notes/NotesPanel.astro';
 import ClasePanel from '../panels/clase/ClasePanel.astro';
 import SonicAnalyzerPanel from '../panels/sonic-analyzer/SonicAnalyzerPanel.astro';
+import SonicVisualizerPanel from '../panels/sonic-visualizer/SonicVisualizerPanel.astro';
 
 type Props = {
   presentationOptions?: any[];
@@ -286,6 +287,9 @@ const { presentationOptions = [] } = Astro.props;
 
   <!-- SA: SONIC ANALYZER -->
   <SonicAnalyzerPanel />
+
+  <!-- SV: SONIC VISUALIZER -->
+  <SonicVisualizerPanel />
 </div>
 
 <style is:global>

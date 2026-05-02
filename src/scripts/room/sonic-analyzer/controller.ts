@@ -3,8 +3,6 @@ import type { SAResults } from './views/text-view';
 import { renderSpectrumView } from './views/spectrum-view';
 import { renderTimbreView } from './views/timbre-view';
 import { LufsHistory } from './views/lufs-view';
-import { drawRadar } from './views/radar-view';
-import { renderHeatmap, renderPitchContour } from './views/viz-view';
 
 type AudioTapFn = () => { context: AudioContext; masterAnalyser: AnalyserNode } | null;
 export type SonicAnalyzerOptions = { container: HTMLElement; getAudioTap: AudioTapFn; };
@@ -15,11 +13,22 @@ declare const Essentia: any;
 const ACCEPTED_TYPES = ['audio/wav','audio/ogg','audio/mpeg','audio/mp3','audio/wave','audio/x-wav'];
 const ACCEPTED_EXTS  = ['.wav','.ogg','.mp3'];
 
+export type SAFilePayload = {
+  buffer: AudioBuffer;
+  fileName: string;
+  peaks: { min: number; max: number }[];
+  melspec: number[][];
+  chroma: number[][];
+  pitches: number[];
+  key: string;
+  scale: string;
+  bpm: number;
+};
+
 export class SonicAnalyzerController {
   private container: HTMLElement;
   private getAudioTap: AudioTapFn;
 
-  // analysis state
   private active = false;
   private essentia: any = null;
   private analyserNode: AnalyserNode | null = null;
@@ -32,35 +41,16 @@ export class SonicAnalyzerController {
   private prevFreqBuf: Float32Array<ArrayBuffer> | null = null;
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private fps = 10;
-  private activeView = 'text';
   private activeSource = 'master';
   private lufsHistory = new LufsHistory();
   private prevLufsM = -70;
   private lufsIAccum = 0;
   private lufsICount = 0;
 
-  // waveform player
-  private waveformContainer!: HTMLElement;
-  private waveformCanvas!: HTMLCanvasElement;
-  private playBtn!: HTMLButtonElement;
-  private isPlaying = false;
-  private playOffset = 0;
-  private playStartTime = 0;
-  private playbackNode: AudioBufferSourceNode | null = null;
-  private rafId: number | null = null;
-  private isDragging = false;
-  private waveformPeaks: { min: number; max: number }[] = [];
-  private waveformCache: HTMLCanvasElement | null = null;
-
-  // viz panel
-  private radarCanvas!: HTMLCanvasElement;
-  private heatmapCanvas!: HTMLCanvasElement;
-  private computedWrap!: HTMLElement;
-  private vtabBtns: HTMLButtonElement[] = [];
-  private activeVTab = 'mel';
-  private melspecData: number[][] = [];
-  private chromaData: number[][] = [];
-  private pitchData: number[] = [];
+  private fileKey = '';
+  private fileScale = '';
+  private fileBpm = 0;
+  private lastFilePayload: SAFilePayload | null = null;
 
   // DOM refs
   private podEl!: HTMLElement;
@@ -71,39 +61,43 @@ export class SonicAnalyzerController {
   private sourceSelect!: HTMLSelectElement;
   private fpsSlider!: HTMLInputElement;
   private fpsLabel!: HTMLElement;
-  private viewEls: Record<string, HTMLElement> = {};
-  private tabBtns: HTMLButtonElement[] = [];
+  private textInner!: HTMLElement;
+  private spectrumInner!: HTMLElement;
+  private timbreInner!: HTMLElement;
+  private lufsInner!: HTMLElement;
+
+  private onSVRequest: () => void;
 
   constructor(options: SonicAnalyzerOptions) {
     this.container = options.container;
     this.getAudioTap = options.getAudioTap;
     this.bindDOM();
     this.bindDropzone();
+    this.onSVRequest = () => this.emitCurrentState();
+    window.addEventListener('sv:request-state', this.onSVRequest);
+  }
+
+  private emitCurrentState(): void {
+    window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: this.active } }));
+    if (this.lastFilePayload) {
+      window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: this.lastFilePayload }));
+    }
   }
 
   private bindDOM(): void {
     const q = <T extends HTMLElement>(sel: string) => this.container.querySelector<T>(sel);
-    this.podEl            = q('.sa-pod')!;
-    this.powerBtn         = q('[data-sa-power]')!;
-    this.statusTextEl     = q('[data-sa-status-text]')!;
-    this.fileNameEl       = q('[data-sa-file-name]')!;
-    this.saveBtnEl        = q<HTMLButtonElement>('[data-sa-save]')!;
-    this.sourceSelect     = q<HTMLSelectElement>('[data-sa-source]')!;
-    this.fpsSlider        = q<HTMLInputElement>('[data-sa-fps]')!;
-    this.fpsLabel         = q('[data-sa-fps-label]')!;
-    this.waveformContainer = q('[data-sa-waveform-container]')!;
-    this.waveformCanvas   = q<HTMLCanvasElement>('[data-sa-waveform]')!;
-    this.playBtn          = q<HTMLButtonElement>('[data-sa-play]')!;
-    this.radarCanvas      = q<HTMLCanvasElement>('[data-sa-radar]')!;
-    this.heatmapCanvas    = q<HTMLCanvasElement>('[data-sa-heatmap]')!;
-    this.computedWrap     = q('[data-sa-computed]')!;
-
-    for (const v of ['text','spectrum','timbre','lufs']) {
-      const el = q<HTMLElement>(`[data-sa-view="${v}"]`);
-      if (el) this.viewEls[v] = el;
-    }
-    this.tabBtns  = Array.from(this.container.querySelectorAll<HTMLButtonElement>('[data-sa-tab]'));
-    this.vtabBtns = Array.from(this.container.querySelectorAll<HTMLButtonElement>('[data-sa-vtab]'));
+    this.podEl         = q('.sa-pod')!;
+    this.powerBtn      = q('[data-sa-power]')!;
+    this.statusTextEl  = q('[data-sa-status-text]')!;
+    this.fileNameEl    = q('[data-sa-file-name]')!;
+    this.saveBtnEl     = q<HTMLButtonElement>('[data-sa-save]')!;
+    this.sourceSelect  = q<HTMLSelectElement>('[data-sa-source]')!;
+    this.fpsSlider     = q<HTMLInputElement>('[data-sa-fps]')!;
+    this.fpsLabel      = q('[data-sa-fps-label]')!;
+    this.textInner     = q('[data-sa-text-inner]')!;
+    this.spectrumInner = q('[data-sa-spectrum-inner]')!;
+    this.timbreInner   = q('[data-sa-timbre-inner]')!;
+    this.lufsInner     = q('[data-sa-lufs-inner]')!;
 
     this.powerBtn.addEventListener('click', () => void this.toggle());
     this.sourceSelect.addEventListener('change', () => {
@@ -115,10 +109,6 @@ export class SonicAnalyzerController {
       this.fpsLabel.textContent = `${this.fps}fps`;
       if (this.active) this.restartLoop();
     });
-    this.tabBtns.forEach(btn  => btn.addEventListener('click',  () => this.switchView(btn.dataset.saTab!)));
-    this.vtabBtns.forEach(btn => btn.addEventListener('click',  () => this.switchVTab(btn.dataset.saVtab!)));
-    this.playBtn.addEventListener('click', () => this.togglePlayback());
-    this.bindWaveformInteraction();
   }
 
   // ─── Dropzone ────────────────────────────────────────────────────────────────
@@ -162,8 +152,6 @@ export class SonicAnalyzerController {
       this.addFileOption(file.name);
       this.showFileMeta(file.name);
       if (this.active) { this.sourceSelect.value = 'file'; this.activeSource = 'file'; void this.reconnectSource(); }
-      this.computeWaveformPeaks();
-      this.showWaveform();
       if (this.essentia) void this.computeVizFeatures();
       else this.setStatus(`file ready · ${file.name}`);
     } catch { this.setStatus('error: could not decode file'); }
@@ -178,25 +166,6 @@ export class SonicAnalyzerController {
     this.fileNameEl.textContent = name; this.fileNameEl.hidden = false; this.saveBtnEl.hidden = false;
   }
 
-  // ─── Views ───────────────────────────────────────────────────────────────────
-
-  private switchView(view: string): void {
-    this.activeView = view;
-    for (const [k, el] of Object.entries(this.viewEls)) el.hidden = k !== view;
-    this.tabBtns.forEach(b => { b.dataset.active = b.dataset.saTab === view ? 'true' : 'false'; });
-  }
-  private switchVTab(tab: string): void {
-    this.activeVTab = tab;
-    this.vtabBtns.forEach(b => { b.dataset.active = b.dataset.saVtab === tab ? 'true' : 'false'; });
-    this.renderCurrentHeatmap();
-  }
-  private renderCurrentHeatmap(): void {
-    if (!this.heatmapCanvas) return;
-    if (this.activeVTab === 'mel' && this.melspecData.length) renderHeatmap(this.heatmapCanvas, this.melspecData);
-    else if (this.activeVTab === 'chr' && this.chromaData.length) renderHeatmap(this.heatmapCanvas, this.chromaData);
-    else if (this.activeVTab === 'pch' && this.pitchData.length) renderPitchContour(this.heatmapCanvas, this.pitchData);
-  }
-
   // ─── Activation ──────────────────────────────────────────────────────────────
 
   async toggle(): Promise<void> { if (this.active) this.deactivate(); else await this.activate(); }
@@ -209,12 +178,15 @@ export class SonicAnalyzerController {
     this.powerBtn.dataset.active = 'true'; this.podEl.dataset.active = 'true';
     this.startLoop();
     this.setStatus(`on · ${this.activeSource} · ${this.fps}fps`);
-    if (this.fileBuffer && !this.melspecData.length) void this.computeVizFeatures();
+    window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: true } }));
+    if (this.fileBuffer && !this.lastFilePayload) void this.computeVizFeatures();
+    else if (this.lastFilePayload) window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: this.lastFilePayload }));
   }
   private deactivate(): void {
-    this.active = false; this.stopLoop(); this.disconnectSource(); this.stopPlayback();
+    this.active = false; this.stopLoop(); this.disconnectSource();
     this.powerBtn.dataset.active = 'false'; this.podEl.dataset.active = 'false';
     this.setStatus('off');
+    window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: false } }));
   }
   private async loadEssentia(): Promise<void> {
     if (this.essentia) return;
@@ -225,7 +197,6 @@ export class SonicAnalyzerController {
     await loadScript('/lib/essentia/essentia.js-core.umd.js');
     this.essentia = new Essentia(EssentiaWASM);
   }
-
   private async connectSource(): Promise<void> {
     this.disconnectSource();
     const tap = this.getAudioTap();
@@ -269,7 +240,9 @@ export class SonicAnalyzerController {
     if (!this.analyserNode || !this.timeDomainBuf || !this.freqBuf || !this.essentia) return;
     this.analyserNode.getFloatTimeDomainData(this.timeDomainBuf);
     this.analyserNode.getFloatFrequencyData(this.freqBuf);
-    this.render(this.analyze());
+    const r = this.analyze();
+    this.render(r);
+    window.dispatchEvent(new CustomEvent('sa:frame', { detail: { results: r, freqBuf: this.freqBuf } }));
   }
   private analyze(): SAResults {
     const E = this.essentia, buf = this.timeDomainBuf!, freq = this.freqBuf!;
@@ -307,37 +280,36 @@ export class SonicAnalyzerController {
     return {pitch,pitchNote:hzToNote(pitch),rmsDb,lufsM,lufsS,lufsI,zcr,centroid,spread,skewness,kurtosis,slope,flux,tristimulus,hnr,mfcc};
   }
   private render(r: SAResults): void {
-    const viewEl = this.viewEls[this.activeView];
-    if (!viewEl) return;
-    switch (this.activeView) {
-      case 'text': {
-        const inner = viewEl.querySelector<HTMLElement>('[data-sa-text-inner]');
-        if (inner) renderTextView(inner, r);
-        drawRadar(this.radarCanvas, r);
-        break;
-      }
-      case 'spectrum': renderSpectrumView(viewEl, this.freqBuf!); break;
-      case 'timbre':   renderTimbreView(viewEl, r); break;
-      case 'lufs':     this.lufsHistory.render(viewEl, r.lufsM, r.lufsS, r.lufsI); break;
+    renderTextView(this.textInner, r);
+    if (this.fileKey || this.fileBpm > 0) {
+      const keyStr = this.fileKey ? `${this.fileKey} ${this.fileScale}` : '---';
+      const bpmStr = this.fileBpm > 0 ? this.fileBpm.toFixed(1) : '---';
+      this.textInner.innerHTML +=
+        '\n<span class="sa-dim">─────────────────────────</span>' +
+        `\n<span class="sa-key">key      </span><span class="sa-dim">·</span> <span class="sa-ok">${keyStr.padStart(8)}</span>` +
+        `\n<span class="sa-key">bpm      </span><span class="sa-dim">·</span> <span class="sa-ok">${bpmStr.padStart(8)}</span>`;
     }
+    renderSpectrumView(this.spectrumInner, this.freqBuf!);
+    renderTimbreView(this.timbreInner, r);
+    this.lufsHistory.render(this.lufsInner, r.lufsM, r.lufsS, r.lufsI);
   }
 
-  // ─── Computed viz features ───────────────────────────────────────────────────
+  // ─── Computed viz features (dispatched to SV) ────────────────────────────────
 
   private async computeVizFeatures(): Promise<void> {
     if (!this.fileBuffer || !this.essentia) return;
     const E = this.essentia;
-    const data       = this.fileBuffer.getChannelData(0);
-    const sampleRate = this.fileBuffer.sampleRate;
-    const fftSize    = 1024;
-    const hopSize    = 2048; // 2048-step → fewer frames, faster
+    const data    = this.fileBuffer.getChannelData(0);
+    const fftSize = 1024;
+    const hopSize = 2048;
 
     this.setStatus('computing features…');
     await tick();
 
-    // Mel spectrogram
+    const peaks = computeWaveformPeaks(this.fileBuffer);
+
+    const melspec: number[][] = [];
     try {
-      const frames: number[][] = [];
       for (let i = 0; i + fftSize <= data.length; i += hopSize) {
         const frame = new Float32Array(fftSize);
         frame.set(data.subarray(i, i + fftSize));
@@ -347,192 +319,65 @@ export class SonicAnalyzerController {
         const bands    = E.MelBands(spectrum.spectrum);
         const row: number[] = [];
         for (let b = 0; b < bands.bands.size(); b++) row.push(Math.log10(Math.max(1e-10, bands.bands.get(b))));
-        frames.push(row);
-        if (frames.length % 200 === 0) await tick();
+        melspec.push(row);
+        if (melspec.length % 200 === 0) await tick();
       }
-      this.melspecData = frames;
-    } catch (e) { console.warn('[sA] mel spec', e); }
-
+    } catch (e) { console.warn('[sA] mel', e); }
     await tick();
 
-    // HPCP chroma (lower resolution — every 4 hops)
+    const chroma: number[][] = [];
     try {
-      const frames: number[][] = [];
       for (let i = 0; i + fftSize <= data.length; i += hopSize * 4) {
         const frame = new Float32Array(fftSize);
         frame.set(data.subarray(i, i + fftSize));
-        const fv       = E.arrayToVector(frame);
-        const windowed = E.Windowing(fv);
-        const spectrum = E.Spectrum(windowed.frame);
-        const peaks    = E.SpectralPeaks(spectrum.spectrum);
-        const hpcp     = E.HPCP(peaks.frequencies, peaks.magnitudes);
+        const fv            = E.arrayToVector(frame);
+        const windowed      = E.Windowing(fv);
+        const spectrum      = E.Spectrum(windowed.frame);
+        const spectralPeaks = E.SpectralPeaks(spectrum.spectrum);
+        const hpcp          = E.HPCP(spectralPeaks.frequencies, spectralPeaks.magnitudes);
         const row: number[] = [];
         for (let b = 0; b < hpcp.hpcp.size(); b++) row.push(hpcp.hpcp.get(b));
-        frames.push(row);
-        if (frames.length % 100 === 0) await tick();
+        chroma.push(row);
+        if (chroma.length % 100 === 0) await tick();
       }
-      this.chromaData = frames;
     } catch (e) { console.warn('[sA] hpcp', e); }
-
     await tick();
 
-    // Pitch melodia (full signal)
+    let pitches: number[] = [];
     try {
       const audioVec = E.arrayToVector(data);
       const melodia  = E.PitchMelodia(audioVec);
-      this.pitchData = Array.from({ length: melodia.pitch.size() }, (_, i) => melodia.pitch.get(i));
-    } catch (e) { console.warn('[sA] pitch melodia', e); }
+      pitches = Array.from({ length: melodia.pitch.size() }, (_, i) => melodia.pitch.get(i));
+    } catch (e) { console.warn('[sA] pitch', e); }
+    await tick();
 
-    this.computedWrap.hidden = false;
-    this.renderCurrentHeatmap();
+    let key = '', scale = '';
+    try {
+      if (chroma.length) {
+        const bins = chroma[0].length;
+        const avg = new Float32Array(bins);
+        for (const frame of chroma) for (let b = 0; b < bins; b++) avg[b] += frame[b];
+        for (let b = 0; b < bins; b++) avg[b] /= chroma.length;
+        const kr = E.Key(E.arrayToVector(avg));
+        key = kr.key ?? ''; scale = kr.scale ?? '';
+      }
+    } catch (e) { console.warn('[sA] key', e); }
+    await tick();
+
+    let bpm = 0;
+    try {
+      const audioVec = E.arrayToVector(data);
+      const rhythm   = E.RhythmExtractor2013(audioVec);
+      bpm = Math.round((rhythm.bpm ?? 0) * 10) / 10;
+    } catch (e) { console.warn('[sA] bpm', e); }
+
+    this.fileKey = key; this.fileScale = scale; this.fileBpm = bpm;
+
+    const payload: SAFilePayload = { buffer: this.fileBuffer, fileName: this.loadedFileName, peaks, melspec, chroma, pitches, key, scale, bpm };
+    this.lastFilePayload = payload;
+    window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: payload }));
     this.setStatus(`on · ${this.activeSource} · ${this.fps}fps`);
   }
-
-  // ─── Waveform player ─────────────────────────────────────────────────────────
-
-  private computeWaveformPeaks(): void {
-    if (!this.fileBuffer) return;
-    const data  = this.fileBuffer.getChannelData(0);
-    const N     = 800;
-    const step  = Math.ceil(data.length / N);
-    const inner = Math.max(1, Math.floor(step / 400));
-    this.waveformPeaks = [];
-    for (let i = 0; i < N; i++) {
-      let min = 0, max = 0;
-      for (let j = i * step; j < Math.min((i+1)*step, data.length); j += inner) {
-        const v = data[j]; if (v < min) min = v; if (v > max) max = v;
-      }
-      this.waveformPeaks.push({ min, max });
-    }
-  }
-
-  private showWaveform(): void {
-    this.waveformContainer.hidden = false;
-    this.playBtn.hidden = false;
-    requestAnimationFrame(() => { this.buildWaveformCache(); this.redrawWaveform(); });
-  }
-
-  private buildWaveformCache(): void {
-    const dpr  = window.devicePixelRatio || 1;
-    const cssW = Math.max(1, this.waveformCanvas.clientWidth);
-    const cssH = Math.max(1, this.waveformCanvas.clientHeight);
-    this.waveformCanvas.width  = Math.round(cssW * dpr);
-    this.waveformCanvas.height = Math.round(cssH * dpr);
-
-    const off = document.createElement('canvas');
-    off.width  = Math.round(cssW * dpr);
-    off.height = Math.round(cssH * dpr);
-    const ctx  = off.getContext('2d')!;
-    ctx.scale(dpr, dpr);
-    const mid  = cssH / 2;
-    const n    = this.waveformPeaks.length;
-
-    ctx.strokeStyle = 'rgba(69,211,132,0.65)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath();
-    for (let i = 0; i < cssW; i++) {
-      const { min, max } = this.waveformPeaks[Math.min(n-1, Math.floor((i/cssW)*n))];
-      ctx.moveTo(i + 0.5, mid - max * mid);
-      ctx.lineTo(i + 0.5, Math.max(mid - min * mid, mid - max * mid + 1));
-    }
-    ctx.stroke();
-    this.waveformCache = off;
-  }
-
-  private redrawWaveform(): void {
-    if (!this.waveformCanvas || !this.waveformCache || !this.fileBuffer) return;
-    const canvas = this.waveformCanvas;
-    const dpr    = window.devicePixelRatio || 1;
-    const cssW   = canvas.width / dpr;
-    const cssH   = canvas.height / dpr;
-    const ctx    = canvas.getContext('2d')!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(this.waveformCache, 0, 0);
-
-    const pos = this.getCurrentPosition();
-    const x   = (pos / this.fileBuffer.duration) * canvas.width;
-
-    // Played region tint
-    ctx.fillStyle = 'rgba(69,211,132,0.07)';
-    ctx.fillRect(0, 0, x, canvas.height);
-
-    // Playhead line
-    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-
-    // Time label
-    const secs = pos | 0;
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font      = `${10 * dpr}px monospace`;
-    ctx.fillText(`${String(secs/60|0).padStart(2,'0')}:${String(secs%60).padStart(2,'0')}`, 4*dpr, 12*dpr);
-  }
-
-  private bindWaveformInteraction(): void {
-    const canvas = this.waveformCanvas;
-    const pos = (e: PointerEvent) => {
-      if (!this.fileBuffer) return 0;
-      const r = canvas.getBoundingClientRect();
-      return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * this.fileBuffer.duration;
-    };
-    canvas.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); canvas.setPointerCapture(e.pointerId);
-      this.isDragging = true;
-      const p = pos(e); this.playOffset = p;
-      if (this.isPlaying) this.startPlayback(p);
-      this.startPlayheadAnim();
-    });
-    canvas.addEventListener('pointermove', (e) => {
-      if (!this.isDragging) return;
-      const p = pos(e);
-      if (this.isPlaying) this.startPlayback(p); else { this.playOffset = p; this.redrawWaveform(); }
-    });
-    canvas.addEventListener('pointerup', (e) => {
-      this.isDragging = false; canvas.releasePointerCapture(e.pointerId);
-      if (!this.isPlaying) this.stopPlayheadAnim();
-    });
-  }
-
-  // Playback
-  private togglePlayback(): void { if (this.isPlaying) this.pausePlayback(); else this.startPlayback(); }
-  private startPlayback(offset = this.playOffset): void {
-    this.stopPlayback();
-    if (!this.fileBuffer) return;
-    const tap = this.getAudioTap();
-    const ctx = tap?.context ?? new AudioContext();
-    const src = ctx.createBufferSource();
-    src.buffer  = this.fileBuffer;
-    src.connect(ctx.destination);
-    this.playOffset   = Math.max(0, Math.min(offset, this.fileBuffer.duration - 0.01));
-    this.playStartTime = ctx.currentTime;
-    src.start(0, this.playOffset);
-    src.onended = () => { if (this.isPlaying) { this.isPlaying=false; this.playOffset=0; this.updatePlayBtn(); this.redrawWaveform(); } };
-    this.playbackNode = src; this.isPlaying = true;
-    this.updatePlayBtn(); this.startPlayheadAnim();
-  }
-  private pausePlayback(): void {
-    if (this.playbackNode) {
-      try { this.playbackNode.stop(); } catch {}
-      try { this.playbackNode.disconnect(); } catch {}
-      this.playbackNode = null;
-    }
-    if (this.isPlaying) { this.playOffset = this.getCurrentPosition(); this.isPlaying = false; }
-    this.updatePlayBtn(); this.stopPlayheadAnim();
-  }
-  private stopPlayback(): void { this.pausePlayback(); }
-  private getCurrentPosition(): number {
-    if (!this.fileBuffer || !this.isPlaying) return this.playOffset;
-    const tap = this.getAudioTap();
-    if (!tap) return this.playOffset;
-    return Math.min(this.playOffset + (tap.context.currentTime - this.playStartTime), this.fileBuffer.duration);
-  }
-  private updatePlayBtn(): void { this.playBtn.textContent = this.isPlaying ? '⏸' : '▶'; }
-  private startPlayheadAnim(): void {
-    if (this.rafId !== null) return;
-    const tick = () => { this.redrawWaveform(); this.rafId = (this.isPlaying || this.isDragging) ? requestAnimationFrame(tick) : null; };
-    this.rafId = requestAnimationFrame(tick);
-  }
-  private stopPlayheadAnim(): void { if (this.rafId!==null) { cancelAnimationFrame(this.rafId); this.rafId=null; } }
 
   // ─── Misc ────────────────────────────────────────────────────────────────────
 
@@ -544,7 +389,26 @@ export class SonicAnalyzerController {
     this.sourceSelect.appendChild(opt);
   }
   public removeParticipantSource(id: string): void { this.sourceSelect?.querySelector(`option[value="participant:${id}"]`)?.remove(); }
-  public dispose(): void { this.deactivate(); }
+  public dispose(): void {
+    this.deactivate();
+    window.removeEventListener('sv:request-state', this.onSVRequest);
+  }
+}
+
+function computeWaveformPeaks(buffer: AudioBuffer): { min: number; max: number }[] {
+  const data  = buffer.getChannelData(0);
+  const N     = 800;
+  const step  = Math.ceil(data.length / N);
+  const inner = Math.max(1, Math.floor(step / 400));
+  const peaks: { min: number; max: number }[] = [];
+  for (let i = 0; i < N; i++) {
+    let min = 0, max = 0;
+    for (let j = i * step; j < Math.min((i+1)*step, data.length); j += inner) {
+      const v = data[j]; if (v < min) min = v; if (v > max) max = v;
+    }
+    peaks.push({ min, max });
+  }
+  return peaks;
 }
 
 function loadScript(src: string): Promise<void> {
