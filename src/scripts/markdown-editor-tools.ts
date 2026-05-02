@@ -371,7 +371,10 @@ function createTemplateButton(
   button.title = template.title;
   button.setAttribute('aria-label', template.title);
   button.dataset.tooltip = template.title;
-  button.innerHTML = template.icon;
+  
+  const labelText = templateKey.charAt(0).toUpperCase() + templateKey.slice(1);
+  button.innerHTML = `${template.icon} <span class="editor-action-label">${labelText}</span>`;
+
   button.addEventListener('mousedown', (event) => {
     event.preventDefault();
   });
@@ -392,7 +395,7 @@ function createUploadButton(textarea: HTMLTextAreaElement, options: EnhanceMarkd
   button.title = 'Insertar archivo';
   button.setAttribute('aria-label', 'Insertar archivo');
   button.dataset.tooltip = 'Insertar archivo';
-  button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.15 8.95 10.9 4.2a2.1 2.1 0 0 1 2.95 2.95L8.1 12.9A3.3 3.3 0 1 1 3.45 8.25l5.35-5.35"/><path d="M5.7 11.05 11 5.75"/></svg>';
+  button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.15 8.95 10.9 4.2a2.1 2.1 0 0 1 2.95 2.95L8.1 12.9A3.3 3.3 0 1 1 3.45 8.25l5.35-5.35"/><path d="M5.7 11.05 11 5.75"/></svg> <span class="editor-action-label">Subir</span>';
   button.addEventListener('mousedown', (event) => {
     event.preventDefault();
   });
