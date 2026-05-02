@@ -27,4 +27,5 @@ Module['vectorToArray'] = function(vect) {
   return typedArray;
 }
 // manually add this to the final builds.
-exports.EssentiaWASM = Module;
+if (typeof exports !== "undefined") { exports.EssentiaWASM = Module; }
+if (typeof window !== "undefined") { window.EssentiaWASM = Module; }

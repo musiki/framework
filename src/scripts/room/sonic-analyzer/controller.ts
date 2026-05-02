@@ -231,7 +231,11 @@ export class SonicAnalyzerController {
 
   private async loadEssentia(): Promise<void> {
     if (this.essentia) return;
+    // essentia-wasm.umd.js uses bare `exports.EssentiaWASM = Module` — shim for safety
+    const hadExports = typeof (window as any).exports !== 'undefined';
+    if (!hadExports) (window as any).exports = {};
     await loadScript('/lib/essentia/essentia-wasm.umd.js');
+    if (!hadExports) delete (window as any).exports;
     await loadScript('/lib/essentia/essentia.js-core.umd.js');
     this.essentia = new Essentia(EssentiaWASM);
   }
