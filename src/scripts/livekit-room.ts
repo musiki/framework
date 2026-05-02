@@ -25,6 +25,7 @@ import { createRoomNotesController } from './room/notes';
 import { WhiteboardController } from './room/whiteboard';
 import { LilyPondLiveController } from './room/lilypond';
 import { RoomWorkspaceManager } from './room/workspace/RoomWorkspaceManager';
+import { SonicAnalyzerController } from './room/sonic-analyzer';
 import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
@@ -10630,6 +10631,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const lilypondLive = new LilyPondLiveController((msg) => void publishMessage(msg));
   let chatController: ReturnType<typeof createRoomChatController> | null = null;
   let orfController: RoomOrfController | null = null;
+  let sonicAnalyzerController: SonicAnalyzerController | null = null;
 
     // Hyperpiano integration
     const updateActiveHyperpianoAudio = () => {
@@ -10857,6 +10859,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       scoreControllers.add(controller);
     };
 
+    const onSonicAnalyzerInit = (container: HTMLElement) => {
+      sonicAnalyzerController?.dispose();
+      sonicAnalyzerController = new SonicAnalyzerController({
+        container,
+        getAudioTap: () => {
+          if (!incomingAudioContext || !incomingAudioMasterAnalyser) return null;
+          return { context: incomingAudioContext, masterAnalyser: incomingAudioMasterAnalyser };
+        },
+      });
+    };
+
   const getWorkspaceSettingsSnapshot = () => ({
     gridSize,
     showCircle: showPresentationCircle,
@@ -10887,7 +10900,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onClaseInit,
     onChatInit,
     onOrfInit,
-    onScoreInit
+    onScoreInit,
+    onSonicAnalyzerInit
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
