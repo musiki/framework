@@ -54,6 +54,7 @@ import './sonic-analyzer.css';
 
     <!-- STATUS bar (loading / error / source info / file name) -->
     <div class="sa-status" data-sa-status>
+      <button type="button" class="sa-play-btn" data-sa-play hidden title="Play / Pause">▶</button>
       <span data-sa-status-text>off</span>
       <span class="sa-file-name" data-sa-file-name hidden></span>
       <button type="button" class="sa-save-btn" data-sa-save hidden title="Save to cloud">↑ save</button>
@@ -67,19 +68,16 @@ import './sonic-analyzer.css';
 
     <!-- VIEW PANELS -->
     <div class="sa-content" data-sa-content>
-
-      <!-- TEXT view -->
-      <pre class="sa-view sa-view--text" data-sa-view="text"><span class="sa-dim">· waiting for signal ·</span></pre>
-
-      <!-- SPECTRUM view -->
+      <pre class="sa-view sa-view--text"  data-sa-view="text"><span class="sa-dim">· waiting for signal ·</span></pre>
       <pre class="sa-view sa-view--spectrum" data-sa-view="spectrum" hidden><span class="sa-dim">· waiting for signal ·</span></pre>
-
-      <!-- TIMBRE view -->
-      <pre class="sa-view sa-view--timbre" data-sa-view="timbre" hidden><span class="sa-dim">· waiting for signal ·</span></pre>
-
-      <!-- LUFS view -->
-      <pre class="sa-view sa-view--lufs" data-sa-view="lufs" hidden><span class="sa-dim">· waiting for signal ·</span></pre>
-
+      <pre class="sa-view sa-view--timbre"   data-sa-view="timbre"   hidden><span class="sa-dim">· waiting for signal ·</span></pre>
+      <pre class="sa-view sa-view--lufs"     data-sa-view="lufs"     hidden><span class="sa-dim">· waiting for signal ·</span></pre>
     </div>
+
+    <!-- WAVEFORM (shown when file loaded) -->
+    <div class="sa-waveform-wrap" data-sa-waveform-container hidden>
+      <canvas class="sa-waveform" data-sa-waveform></canvas>
+    </div>
+
   </div>
 </div>

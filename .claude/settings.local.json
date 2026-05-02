@@ -7,7 +7,18 @@
       "Bash(identify /Users/zztt/projects/26-musiki/framework/public/logo-musiki.png)",
       "Bash(convert -list font)",
       "Bash(magick *)",
-      "Bash(npx astro *)"
+      "Bash(npx astro *)",
+      "Bash(mkdir -p ~/.config/superpowers/worktrees/framework)",
+      "Bash(git worktree *)",
+      "Read(//Users/zztt/.config/superpowers/worktrees/framework/feat-sonic-analyzer/**)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "mcp__plugin_episodic-memory_episodic-memory__search",
+      "mcp__plugin_episodic-memory_episodic-memory__read",
+      "Bash(npx tsc *)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
