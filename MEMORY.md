@@ -2,6 +2,8 @@
 
 <2026-05-01 stabilization-and-graph-fixes> <br>
 Resolved critical auth crashes, fixed Graph pod rendering, and completed Supabase cleanup.
+- Agenda: Fixed UI synchronization issue where a page reload was required to delete newly created reservations. Implemented ID reconciliation in `reloadAfterAction` using server-returned real IDs.
+- Agenda: Updated API actions (`reserve-self`, `reserve-group`, `assign-students`, `assign-event`) to return updated payloads for frontend reconciliation.
 - Agenda: Fixed critical bug where student agendas disappeared after editing/deleting a block due to missing `__metaKind` in the API payload update.
 - Agenda: Added "Editar" button and modal for students to manage their own reservations (comments/notes). Improved UUID matching robustness in frontend/backend.
 - IS/VexFlow: Fixed "Instant Score" pod CSS regression and visual bugs. Forced all VexFlow elements to white and set container background to transparent. Resolved "half white half black" rendering issue by using both JS inkColor overrides and aggressive CSS SVG selectors.

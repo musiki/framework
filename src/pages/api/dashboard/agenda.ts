@@ -531,6 +531,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         if (sid && !existingByStudentId.has(sid)) existingByStudentId.set(sid, row);
       });
 
+      const updatedStudents = [] as any[];
       for (const studentId of groupStudentIds) {
         const existingPayload = normalizeAgendaStudentPayload(
           existingByStudentId.get(studentId)?.payload || {},
@@ -572,9 +573,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
             updatedByEmail: normalizeText(session?.user?.email),
           },
         });
+
+        updatedStudents.push({
+          studentId,
+          color: existingPayload.color || '',
+          blocks: mergedBlocks,
+        });
       }
 
-      return json({ success: true, grupo, studentIds: groupStudentIds });
+      return json({ success: true, grupo, students: updatedStudents });
     }
 
     if (action === 'reserve-self') {

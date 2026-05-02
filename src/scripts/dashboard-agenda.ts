@@ -94,7 +94,7 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
 
   switch (p.action) {
     case 'reserve-self': {
-      const student = d.students.find(s => s.studentId === d.viewer.userId);
+      const student = d.students.find(s => String(s.studentId || '').toLowerCase() === d.viewer.userId.toLowerCase());
       if (student) {
         for (const dateKey of (p.dateKeys as string[] || [])) {
           student.blocks.push({ id: tempId(), dateKey, startMinute: p.startMinute, endMinute: p.endMinute, comment: '', updatedAt: new Date().toISOString() });
@@ -117,8 +117,12 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
       }
       break;
     }
-    case 'update-block': {
-      d.events = d.events.map(e => e.id === p.blockId ? { ...e, text: p.text ?? e.text, virtual: p.virtual !== undefined ? Boolean(p.virtual) : e.virtual } : e);
+    case 'update-block':
+    case 'move-block': {
+      d.events = d.events.map(e => e.id === p.blockId ? { ...e, text: p.text ?? e.text, virtual: p.virtual !== undefined ? Boolean(p.virtual) : e.virtual, dateKey: p.dateKey ?? e.dateKey, startMinute: p.startMinute ?? e.startMinute, endMinute: p.endMinute ?? e.endMinute } : e);
+      d.students.forEach(s => {
+        s.blocks = s.blocks.map(b => b.id === p.blockId ? { ...b, comment: p.comment ?? b.comment, dateKey: p.dateKey ?? b.dateKey, startMinute: p.startMinute ?? b.startMinute, endMinute: p.endMinute ?? b.endMinute } : b);
+      });
       break;
     }
     case 'clear-range': {
@@ -328,12 +332,35 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     // 2. Optimistic: apply change locally and rerender right away so the user
     //    sees the result without waiting for the network.
     const snapshot = data;
-    if (rerender) rerender(applyLocalAction(data, p));
+    const optimisticData = applyLocalAction(data, p);
+    if (rerender) rerender(optimisticData);
 
     // 3. Persist to server in the background — no reload needed, optimistic
-    //    state is already correct. Temp IDs are reconciled on next navigation.
+    //    state is already correct. Temp IDs are reconciled on success.
     try {
-      await postAgendaAction(p);
+      const result = await postAgendaAction(p);
+      if (result.success) {
+        // Reconcile IDs: Replace optimistic blocks/events with real ones from server
+        // so they can be edited/deleted immediately without a page reload.
+        if (result.student) {
+          const sIdx = optimisticData.students.findIndex(s => String(s.studentId || '').toLowerCase() === String(result.student.studentId || '').toLowerCase());
+          if (sIdx !== -1) {
+            optimisticData.students[sIdx] = { ...optimisticData.students[sIdx], ...result.student };
+            if (rerender) rerender(optimisticData);
+          }
+        }
+        if (Array.isArray(result.students)) {
+          result.students.forEach((rs: any) => {
+            const sIdx = optimisticData.students.findIndex(s => String(s.studentId || '').toLowerCase() === String(rs.studentId || '').toLowerCase());
+            if (sIdx !== -1) optimisticData.students[sIdx] = { ...optimisticData.students[sIdx], ...rs };
+          });
+          if (rerender) rerender(optimisticData);
+        }
+        if (Array.isArray(result.events)) {
+          optimisticData.events = result.events;
+          if (rerender) rerender(optimisticData);
+        }
+      }
     } catch (e: any) {
       // Rollback: rerender with the original snapshot.
       if (rerender) rerender(snapshot);
