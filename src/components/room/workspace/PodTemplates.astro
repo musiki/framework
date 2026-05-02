@@ -4,6 +4,7 @@ import ChatPanel from '../panels/chat/ChatPanel.astro';
 import OrfPanel from '../panels/orf/OrfPanel.astro';
 import NotesPanel from '../panels/notes/NotesPanel.astro';
 import ClasePanel from '../panels/clase/ClasePanel.astro';
+import SonicAnalyzerPanel from '../panels/sonic-analyzer/SonicAnalyzerPanel.astro';
 
 type Props = {
   presentationOptions?: any[];
@@ -282,6 +283,9 @@ const { presentationOptions = [] } = Astro.props;
   <div class="musiki-pod" data-pod="instant-score" data-pod-title="SCORE">
     <div class="instant-score-container" data-instant-score-content></div>
   </div>
+
+  <!-- SA: SONIC ANALYZER -->
+  <SonicAnalyzerPanel />
 </div>
 
 <style is:global>
