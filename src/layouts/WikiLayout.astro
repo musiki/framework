@@ -190,7 +190,7 @@ const view = Astro.url.searchParams.get('view');
 
 <html lang="es" class="scroll-smooth" data-view={view || 'default'}>
   <head>
-    <BaseHead title={pageTitle} description={pageDescription} image={resolvedHeroImage} />
+    <BaseHead title={pageTitle} description={pageDescription} image={resolvedHeroImage?.src} />
     <style is:global>
       /* Embed-only styles */
       html[data-view='embedded'],

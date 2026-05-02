@@ -388,17 +388,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const rawOutput = ensureText(
       upstream?.output || upstream?.response || upstream?.message || upstream?.evaluation?.raw || upstream,
     );
+
+    let reasoning = '';
+    const thinkMatch = rawOutput.match(/<think>([\s\S]*?)<\/think>/);
+    if (thinkMatch) {
+      reasoning = thinkMatch[1].trim();
+    }
+
     const parsed = parseJsonLoosely(rawOutput);
     const nested = unwrapNestedModelJson(parsed?.message);
     const output = nested
       ? nested
       : parsed && typeof parsed === 'object'
         ? {
-            message: ensureText(parsed.message) || rawOutput,
+            message: ensureText(parsed.message) || rawOutput.replace(/<think>[\s\S]*?<\/think>/, '').trim(),
             actions: normalizeActions(parsed.actions),
           }
         : {
-            message: rawOutput,
+            message: rawOutput.replace(/<think>[\s\S]*?<\/think>/, '').trim(),
             actions: [],
           };
 
@@ -408,6 +415,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       provider: 'ollama',
       model: ensureText(upstream?.model) || ensureText(body.options?.model),
       output,
+      reasoning,
       timingMs: upstream?.timing_ms || upstream?.timingMs || null,
       usage: upstream?.token_usage || upstream?.usage || null,
     });

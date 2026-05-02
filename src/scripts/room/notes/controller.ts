@@ -559,6 +559,17 @@ export const createRoomNotesController = ({
     // Draft persistence — CM fires input on the textarea which bubbles
     notesBodyInput?.addEventListener('input', persistNotesDraft);
 
+    // Allow external writing (e.g. from ORF)
+    window.addEventListener('musiki:notes:write', (e: any) => {
+      const content = String(e.detail?.content || '');
+      if (content && notesBodyInput) {
+        const current = notesBodyInput.value || '';
+        const spacer = current.trim() ? '\n\n' : '';
+        notesBodyInput.value = `${current}${spacer}${content}`;
+        notesBodyInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
     // Ctrl/Cmd+Enter to save — listen on the form so it catches CM keystrokes too
     notesForm?.addEventListener('keydown', (event) => {
       const keyboardEvent = event as KeyboardEvent;

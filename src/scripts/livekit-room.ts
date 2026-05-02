@@ -10801,6 +10801,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         scroller: container.querySelector('[data-orf-scroller]') as HTMLElement | null,
         sendButton,
         status: container.querySelector('[data-orf-status]') as HTMLElement | null,
+        reasoningContainer: container.querySelector('[data-orf-reasoning]') as HTMLElement | null,
+        testHButton: container.querySelector('[data-action="orf-testh"]') as HTMLButtonElement | null,
       };
 
       if (!orfController) {
@@ -10822,6 +10824,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
               await publishMessage({ type: 'hyperpiano', ...note });
             }
+          },
+          dispatchLocalMidiNote: (note) => {
+            const pods = workspaceManager.getActivePods();
+            pods.forEach(pod => {
+              if (pod.controller instanceof HyperpianoController) {
+                if (note.action === 'on') {
+                  pod.controller.triggerKeyOn(null, note.velocity, null, note.note, true);
+                } else {
+                  pod.controller.triggerKeyOff(null, note.note, true);
+                }
+              }
+            });
+            scoreControllers.forEach(ctrl => {
+              if (note.action === 'on') ctrl.addNote(note.note);
+              else ctrl.removeNote(note.note);
+            });
           },
           reportStatus: (message) => setStatus(message),
         });

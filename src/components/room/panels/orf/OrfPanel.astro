@@ -59,9 +59,16 @@
           disabled
         >C</button>
 
-        <div style="flex: 1;"></div>
+        <button
+          type="button"
+          class="musiki-pod-btn"
+          data-action="orf-testh"
+          style="font-size: 0.5rem; opacity: 0.6;"
+          title="Test HYPERPIANO"
+        >TH</button>
 
         <div class="musiki-pod-status conference-orf-status" data-orf-status role="status" aria-live="polite"></div>
+        <div class="conference-orf-reasoning" data-orf-reasoning hidden></div>
       </div>
     </div>
   </div>
@@ -126,4 +133,21 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  .conference-orf-reasoning {
+    font-family: var(--font-family-mono, monospace);
+    font-size: 0.3rem;
+    line-height: 1.2;
+    opacity: 0.4;
+    max-height: 1.8rem;
+    overflow-y: auto;
+    flex: 1;
+    margin-left: 0.5rem;
+    padding: 2px 4px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 2px;
+    white-space: pre-wrap;
+    scrollbar-width: none;
+  }
+  .conference-orf-reasoning::-webkit-scrollbar { display: none; }
 </style>

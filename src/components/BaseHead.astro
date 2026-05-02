@@ -3,21 +3,21 @@
 // all pages through the use of the <BaseHead /> component.
 import '../styles/theme.css';
 import '../styles/global.css';
-import type { ImageMetadata } from 'astro';
-import FallbackImage from '../assets/universe.png';
 import { SITE_TITLE } from '../consts';
 
 interface Props {
 	title: string;
 	description: string;
-	image?: ImageMetadata;
+	image?: string;
 }
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 const pageURL = canonicalURL.toString();
 
-const { title, description, image = FallbackImage } = Astro.props;
-const imageURL = new URL(image.src, canonicalURL).toString();
+const { title, description, image } = Astro.props;
+const imageURL = image
+	? new URL(image, Astro.site).toString()
+	: new URL('/og-image.png', Astro.site).toString();
 const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || 'G-0NXGW5G7NX').trim();
 ---
 
@@ -77,6 +77,8 @@ const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || 'G-0N
 <meta property="og:title" content={title} />
 <meta property="og:description" content={description} />
 <meta property="og:image" content={imageURL} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
 
 <!-- Twitter -->
 <meta property="twitter:card" content="summary_large_image" />

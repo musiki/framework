@@ -33,12 +33,15 @@ type CreateRoomOrfControllerOptions = {
   modelSelect?: HTMLSelectElement | null;
   publishChatMessage: (message: Extract<ConferenceMessage, { type: 'chat' }>) => Promise<void>;
   publishMidiNote?: (note: { note: number; velocity: number; action: 'on' | 'off' }) => Promise<void>;
+  dispatchLocalMidiNote?: (note: { note: number; velocity: number; action: 'on' | 'off' }) => void;
   reportStatus: (message: string) => void;
   scopeLabel?: HTMLElement | null;
   scroller?: HTMLElement | null;
   sendButton: HTMLButtonElement;
   clearButton?: HTMLButtonElement | null;
   status?: HTMLElement | null;
+  reasoningContainer?: HTMLElement | null;
+  testHButton?: HTMLButtonElement | null;
 };
 
 export type RoomOrfController = {
@@ -46,7 +49,7 @@ export type RoomOrfController = {
   bind: () => void;
   bindElements: (elements: Partial<Pick<
     CreateRoomOrfControllerOptions,
-    'input' | 'list' | 'modelSelect' | 'scopeLabel' | 'scroller' | 'sendButton' | 'clearButton' | 'status'
+    'input' | 'list' | 'modelSelect' | 'scopeLabel' | 'scroller' | 'sendButton' | 'clearButton' | 'status' | 'reasoningContainer' | 'testHButton'
   >>) => void;
   executeAction: (action: any, message?: any) => Promise<void>;
 };
@@ -106,6 +109,8 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
   let currentSendButton = options.sendButton;
   let currentClearButton = options.clearButton;
   let currentStatus = options.status;
+  let currentReasoning = options.reasoningContainer;
+  let currentTestHButton = options.testHButton;
   const messages: OrfMessage[] = [];
   const boundInputs = new WeakSet<HTMLTextAreaElement>();
   const boundButtons = new WeakSet<HTMLButtonElement>();
@@ -113,6 +118,18 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
   const setStatus = (message: string) => {
     if (currentStatus) currentStatus.textContent = message;
     if (message) options.reportStatus(message);
+  };
+
+  const setReasoning = (text: string) => {
+    if (!currentReasoning) return;
+    if (!text) {
+      currentReasoning.hidden = true;
+      currentReasoning.textContent = '';
+      return;
+    }
+    currentReasoning.textContent = text;
+    currentReasoning.hidden = false;
+    currentReasoning.scrollTop = currentReasoning.scrollHeight;
   };
 
   const syncScope = () => {
@@ -157,11 +174,9 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
       const textarea = findWritableTextarea('[data-lilypond-body]');
       if (!textarea) {
         setStatus('Abrí un pod LILY-CODE primero.');
+        // FALLBACK: Dispatch a global event so a controller might catch it
+        window.dispatchEvent(new CustomEvent('musiki:lilypond:write', { detail: { content } }));
         return;
-      }
-      // Strip markdown code blocks if present
-      if (content.includes('```')) {
-        content = content.replace(/```[a-z]*\n?([\s\S]*?)```/g, '$1').trim();
       }
       appendToTextarea(textarea, content);
       setStatus('Enviado a LILY-CODE.');
@@ -172,6 +187,7 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
       const textarea = findWritableTextarea('[data-notes-body]');
       if (!textarea) {
         setStatus('Abrí un pod NOTAS primero.');
+        window.dispatchEvent(new CustomEvent('musiki:notes:write', { detail: { content } }));
         return;
       }
       appendToTextarea(textarea, content);
@@ -201,7 +217,7 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
 
     if (action.kind === 'send_midi_to_hyperpiano') {
       const midiNotes = Array.isArray(proposal.midiNotes) ? proposal.midiNotes : [];
-      if (midiNotes.length === 0 || !options.publishMidiNote) {
+      if (midiNotes.length === 0 || (!options.publishMidiNote && !options.dispatchLocalMidiNote)) {
         setStatus('La propuesta no incluye notas MIDI ejecutables.');
         console.warn('[orf-execute] No midiNotes found in proposal', proposal);
         return;
@@ -218,9 +234,14 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
         const durationMs = Number.isFinite(Number(item.durationMs)) ? Math.max(50, Number(item.durationMs)) : 400;
 
         window.setTimeout(async () => {
-          await options.publishMidiNote?.({ note: Math.round(note), velocity, action: 'on' });
-          window.setTimeout(() => {
-            void options.publishMidiNote?.({ note: Math.round(note), velocity: 0, action: 'off' });
+          const noteOn = { note: Math.round(note), velocity, action: 'on' as const };
+          options.dispatchLocalMidiNote?.(noteOn);
+          await options.publishMidiNote?.(noteOn);
+          
+          window.setTimeout(async () => {
+            const noteOff = { note: Math.round(note), velocity: 0, action: 'off' as const };
+            options.dispatchLocalMidiNote?.(noteOff);
+            await options.publishMidiNote?.(noteOff);
           }, durationMs);
         }, startMs);
       });
@@ -320,6 +341,7 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
 
     syncControls(true);
     setStatus('Orf está pensando...');
+    setReasoning('');
 
     try {
       const response = await fetch('/api/ai/run', {
@@ -344,6 +366,11 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
       const output = payload?.output || {};
       const answer = normalizeText(output.message) || 'No tengo una respuesta útil todavía.';
       const orfModel = normalizeText(payload.model || model) || 'local';
+      const reasoning = normalizeText(payload.reasoning);
+
+      if (reasoning) {
+        setReasoning(reasoning);
+      }
       
       messages.push({
         actions: normalizeActions(output.actions),
@@ -423,6 +450,16 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
       boundButtons.add(currentClearButton);
       currentClearButton.addEventListener('click', clear);
     }
+    if (currentTestHButton && !boundButtons.has(currentTestHButton)) {
+      boundButtons.add(currentTestHButton);
+      currentTestHButton.addEventListener('click', () => {
+        const pitch = 60 + Math.floor(Math.random() * 12);
+        void executeAction({
+          kind: 'send_midi_to_hyperpiano',
+          proposal: { midiNotes: [{ pitch, startMs: 0, durationMs: 500 }] }
+        });
+      });
+    }
   };
 
   const bindElements: RoomOrfController['bindElements'] = (elements) => {
@@ -434,6 +471,8 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
     if (elements.sendButton instanceof HTMLButtonElement) currentSendButton = elements.sendButton;
     if (elements.clearButton instanceof HTMLButtonElement) currentClearButton = elements.clearButton;
     if (elements.status instanceof HTMLElement) currentStatus = elements.status;
+    if (elements.reasoningContainer instanceof HTMLElement) currentReasoning = elements.reasoningContainer;
+    if (elements.testHButton instanceof HTMLButtonElement) currentTestHButton = elements.testHButton;
     bind();
   };
 

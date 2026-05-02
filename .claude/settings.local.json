@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "mcp__claude_ai_Figma__whoami"
+      "mcp__claude_ai_Figma__whoami",
+      "Bash(convert -version)",
+      "Bash(magick -version)",
+      "Bash(identify /Users/zztt/projects/26-musiki/framework/public/logo-musiki.png)",
+      "Bash(convert -list font)",
+      "Bash(magick *)",
+      "Bash(npx astro *)"
     ]
   }
 }

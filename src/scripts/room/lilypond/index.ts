@@ -406,6 +406,18 @@ export class LilyPondLiveController {
           url: url
         });
       });
+
+      // Allow external writing (e.g. from ORF)
+      window.addEventListener('musiki:lilypond:write', (e: any) => {
+        if (!this.canEdit()) return;
+        const content = String(e.detail?.content || '');
+        if (content) {
+            this.setBodyValue(`${this.getCurrentBody().trim()}\n\n${content}`.trim());
+            this.liveSyncNeedsBody = true;
+            this.publishLiveSync(true);
+        }
+      });
+
       this.playbackEventsBound = true;
     }
   }

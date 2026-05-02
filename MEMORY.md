@@ -2,6 +2,11 @@
 
 <2026-05-01 stabilization-and-graph-fixes> <br>
 Resolved critical auth crashes, fixed Graph pod rendering, and completed Supabase cleanup.
+- LILYCODE: Fixed missing icons in editor toolbar after adding text labels. Updated `stage-frame.css` to allow dynamic button width and added support for `.editor-action-label`.
+- ORF: Re-wired structured actions to HYPERPIANO and LILYCODE. Implemented `dispatchLocalMidiNote` for immediate local audio feedback and added global event fallbacks (`musiki:lilypond:write`, `musiki:notes:write`) for more robust editor integration.
+- ORF: Added a temporary "TH" (Test Hyperpiano) button to verify MIDI connectivity.
+- ORF: Implemented real-time reasoning display for DeepSeek-R1. Extracted `<think>` blocks in backend and added a scrollable container in the ORF toolbar (0.3rem font, 0.4 opacity).
+- ORF: Enabled `deepseek-r1:8b` support and updated model selector. Migrated `ollama-api` service to PM2 for better stability.
 - ORF: Wired structured AI actions to workspace pods. Refactored `RoomOrfController` to support array content and optional message context in `executeAction`.
 - ORF: Enabled action button rendering in main chat by sending full structured JSON instead of plain text. Implemented automatic markdown stripping for LilyPond code blocks.
 - Notes: Overhauled `notas.astro` UI to fix visual regressions. Increased button visibility, added labels to template buttons, reformatted dates to `yy-mm-dd`, and repositioned toolbar date next to the title in a muted italic style.
