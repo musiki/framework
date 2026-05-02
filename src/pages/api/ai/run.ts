@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 65000);
+const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 600000);
 const maxPromptChars = Number(import.meta.env.CORRECTION_API_MAX_PROMPT_CHARS || 50000);
 const EMBED_MODEL = 'nomic-embed-text';
 

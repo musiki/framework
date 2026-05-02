@@ -169,10 +169,13 @@ const setConferenceChatBody = (container: HTMLElement, text: string, onAction?: 
   const normalizedBody = String(text || '').trim();
 
   // 1. Try to parse as Orf JSON response
-  if (normalizedBody.startsWith('{') && normalizedBody.endsWith('}')) {
+  // We use a more robust check: does it contain a JSON object with "message"?
+  const jsonMatch = normalizedBody.match(/\{[\s\S]*"message"[\s\S]*\}/);
+  if (jsonMatch) {
     try {
+      const candidate = jsonMatch[0];
       // Loose parse for triple quotes or common model errors
-      const cleaned = normalizedBody.replace(/"""/g, '"');
+      const cleaned = candidate.replace(/"""/g, '"');
       const parsed = JSON.parse(cleaned);
       if (parsed.message) {
         const msgEl = document.createElement('div');
@@ -187,7 +190,7 @@ const setConferenceChatBody = (container: HTMLElement, text: string, onAction?: 
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'musiki-chat-action-btn';
-            btn.textContent = action.label || action.kind.replace(/_/g, ' ').toUpperCase();
+            btn.textContent = action.label || (action.kind || '').replace(/_/g, ' ').toUpperCase();
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();

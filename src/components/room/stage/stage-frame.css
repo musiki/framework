@@ -1920,7 +1920,6 @@
   text-transform: uppercase;
   transition: all 0.14s ease;
   backdrop-filter: blur(10px);
-  gap: 0.35rem;
 }
 
 .conference-lilypond-action {
@@ -1929,8 +1928,8 @@
 }
 
 .conference-lilypond-action--icon {
-  width: auto;
-  padding: 0 0.5rem;
+  width: 1.62rem;
+  padding: 0;
 }
 
 .conference-lilypond-action svg {
@@ -1938,15 +1937,6 @@
   height: 0.95rem;
   stroke: currentColor;
   fill: none;
-  flex-shrink: 0;
-}
-
-.conference-lilypond-action .editor-action-label {
-  font-size: 0.62rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  opacity: 0.85;
 }
 
 .conference-lilypond-action:hover {

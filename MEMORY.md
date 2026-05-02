@@ -2,7 +2,9 @@
 
 <2026-05-01 stabilization-and-graph-fixes> <br>
 Resolved critical auth crashes, fixed Graph pod rendering, and completed Supabase cleanup.
-- LILYCODE: Fixed missing icons in editor toolbar after adding text labels. Updated `stage-frame.css` to allow dynamic button width and added support for `.editor-action-label`.
+- LILYCODE/Notes: Reverted editor toolbar buttons to icon-only (removed text labels) for a cleaner UI. Labels are now only visible as tooltips on hover. Updated `markdown-editor-tools.ts` and associated CSS.
+- ORF: Fixed critical parsing bug in `chat/controller.ts` that caused structured responses to show as raw JSON. Implemented more robust regex-based extraction of the JSON payload.
+- ORF: Increased AI backend timeout to 10 minutes and adjusted token limits for better DeepSeek-R1 reasoning support.
 - ORF: Re-wired structured actions to HYPERPIANO and LILYCODE. Implemented `dispatchLocalMidiNote` for immediate local audio feedback and added global event fallbacks (`musiki:lilypond:write`, `musiki:notes:write`) for more robust editor integration.
 - ORF: Added a temporary "TH" (Test Hyperpiano) button to verify MIDI connectivity.
 - ORF: Implemented real-time reasoning display for DeepSeek-R1. Extracted `<think>` blocks in backend and added a scrollable container in the ORF toolbar (0.3rem font, 0.4 opacity).
