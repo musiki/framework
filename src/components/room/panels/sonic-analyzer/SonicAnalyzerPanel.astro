@@ -1,0 +1,84 @@
+---
+---
+<div class="musiki-pod" data-pod="sonic-analyzer" data-pod-title="SA">
+  <div class="sa-pod" data-active="false" data-sa-dropzone>
+
+    <!-- TOOLBAR: switch + source + fps + tabs -->
+    <div class="musiki-pod-toolbar sa-toolbar">
+
+      <!-- LED Power Switch -->
+      <button
+        type="button"
+        class="conference-mixer-channel-toggle sa-power-btn"
+        data-sa-power
+        data-active="false"
+        aria-label="Activar Sonic Analyzer"
+        title="ON/OFF"
+      >
+        <span class="conference-mixer-led" aria-hidden="true"></span>
+      </button>
+
+      <span class="sa-label">sA</span>
+
+      <!-- Source selector -->
+      <select class="musiki-pod-input sa-source-select" data-sa-source style="width:5.5rem; flex:none;">
+        <option value="master">master</option>
+        <option value="mic">mic:local</option>
+      </select>
+
+      <!-- FPS slider -->
+      <span class="sa-fps-label" data-sa-fps-label>10fps</span>
+      <input
+        type="range"
+        class="sa-fps-slider"
+        data-sa-fps
+        min="1"
+        max="30"
+        value="10"
+        title="Update rate"
+        style="width:3.5rem;"
+      />
+
+      <!-- Spacer -->
+      <div style="flex:1;"></div>
+
+      <!-- View tabs -->
+      <div class="sa-tabs" data-sa-tabs>
+        <button type="button" class="musiki-pod-btn sa-tab" data-sa-tab="text" data-active="true">TXT</button>
+        <button type="button" class="musiki-pod-btn sa-tab" data-sa-tab="spectrum">FFT</button>
+        <button type="button" class="musiki-pod-btn sa-tab" data-sa-tab="timbre">TMB</button>
+        <button type="button" class="musiki-pod-btn sa-tab" data-sa-tab="lufs">LUF</button>
+      </div>
+    </div>
+
+    <!-- STATUS bar (loading / error / source info / file name) -->
+    <div class="sa-status" data-sa-status>
+      <span data-sa-status-text>off</span>
+      <span class="sa-file-name" data-sa-file-name hidden></span>
+      <button type="button" class="sa-save-btn" data-sa-save hidden title="Save to cloud">↑ save</button>
+    </div>
+
+    <!-- DROP OVERLAY (shown on dragover) -->
+    <div class="sa-drop-overlay" data-sa-drop-overlay aria-hidden="true">
+      <span class="sa-drop-label">drop audio file</span>
+      <span class="sa-drop-hint">.wav · .ogg · .mp3</span>
+    </div>
+
+    <!-- VIEW PANELS -->
+    <div class="sa-content" data-sa-content>
+
+      <!-- TEXT view -->
+      <pre class="sa-view sa-view--text" data-sa-view="text"><span class="sa-dim">· waiting for signal ·</span></pre>
+
+      <!-- SPECTRUM view -->
+      <pre class="sa-view sa-view--spectrum" data-sa-view="spectrum" hidden><span class="sa-dim">· waiting for signal ·</span></pre>
+
+      <!-- TIMBRE view -->
+      <pre class="sa-view sa-view--timbre" data-sa-view="timbre" hidden><span class="sa-dim">· waiting for signal ·</span></pre>
+
+      <!-- LUFS view -->
+      <pre class="sa-view sa-view--lufs" data-sa-view="lufs" hidden><span class="sa-dim">· waiting for signal ·</span></pre>
+
+    </div>
+  </div>
+</div>
