@@ -48,7 +48,7 @@ export type RoomOrfController = {
     CreateRoomOrfControllerOptions,
     'input' | 'list' | 'modelSelect' | 'scopeLabel' | 'scroller' | 'sendButton' | 'clearButton' | 'status'
   >>) => void;
-  executeAction: (action: any) => Promise<void>;
+  executeAction: (action: any, message?: any) => Promise<void>;
 };
 
 const appendText = (container: HTMLElement, text: string) => {
@@ -86,7 +86,7 @@ const normalizeActions = (value: unknown): OrfAction[] => {
     .map((item) => ({
       kind: normalizeText(item.kind) as OrfActionKind,
       label: normalizeText(item.label || item.promptLabel),
-      content: typeof item.content === 'string' ? item.content : undefined,
+      content: item.content,
       proposal: item.proposal && typeof item.proposal === 'object' ? item.proposal : item,
     }))
     .filter((item) => (
@@ -138,21 +138,30 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
     }, 80);
   };
 
-  const executeAction = async (action: OrfAction, message: OrfMessage) => {
+  const executeAction = async (action: OrfAction, message?: OrfMessage) => {
     const proposal = action.proposal || {};
-    const content = normalizeText(
-      action.content ||
+    let rawContent = action.content ||
       proposal.source ||
       proposal.markdown ||
       proposal.content ||
-      message.text,
-    );
+      message?.text ||
+      '';
+
+    if (Array.isArray(rawContent)) {
+      rawContent = rawContent.join('\n');
+    }
+
+    let content = normalizeText(String(rawContent));
 
     if (action.kind === 'write_to_lily_code') {
       const textarea = findWritableTextarea('[data-lilypond-body]');
       if (!textarea) {
         setStatus('Abrí un pod LILY-CODE primero.');
         return;
+      }
+      // Strip markdown code blocks if present
+      if (content.includes('```')) {
+        content = content.replace(/```[a-z]*\n?([\s\S]*?)```/g, '$1').trim();
       }
       appendToTextarea(textarea, content);
       setStatus('Enviado a LILY-CODE.');
@@ -175,7 +184,7 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
         setStatus('Conectate a la sala para publicar en chat.');
         return;
       }
-      const model = normalizeText(message.model || currentModelSelect?.value) || 'local';
+      const model = normalizeText(message?.model || currentModelSelect?.value) || 'local';
       const chatMessage: Extract<ConferenceMessage, { type: 'chat' }> = {
         type: 'chat',
         id: `orf-chat-${crypto.randomUUID()}`,
@@ -353,7 +362,7 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
           name: `Orf-${orfModel}`,
           role: 'external',
           sentAt: new Date().toISOString(),
-          text: answer,
+          text: JSON.stringify(output), // Send raw structured JSON so chat controller can render actions
         };
         await options.publishChatMessage(chatMessage);
       }

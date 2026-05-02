@@ -2,6 +2,8 @@
 
 <2026-05-01 stabilization-and-graph-fixes> <br>
 Resolved critical auth crashes, fixed Graph pod rendering, and completed Supabase cleanup.
+- ORF: Wired structured AI actions to workspace pods. Refactored `RoomOrfController` to support array content and optional message context in `executeAction`.
+- ORF: Enabled action button rendering in main chat by sending full structured JSON instead of plain text. Implemented automatic markdown stripping for LilyPond code blocks.
 - Notes: Overhauled `notas.astro` UI to fix visual regressions. Increased button visibility, added labels to template buttons, reformatted dates to `yy-mm-dd`, and repositioned toolbar date next to the title in a muted italic style.
 - Agenda: Fixed UI synchronization issue where a page reload was required to delete newly created reservations. Implemented ID reconciliation in `reloadAfterAction` using server-returned real IDs.
 - Agenda: Updated API actions (`reserve-self`, `reserve-group`, `assign-students`, `assign-event`) to return updated payloads for frontend reconciliation.
