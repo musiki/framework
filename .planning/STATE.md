@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: context exhaustion at 77% (2026-05-03)
-last_updated: "2026-05-03T06:35:23.687Z"
-last_activity: 2026-04-27 — Fixed DIY drag interaction, Hyperpiano audio wiring, and verified Grid video remounting.
+status: in_progress
+stopped_at: context exhaustion at ~80% (2026-05-03)
+last_updated: "2026-05-03"
+last_activity: 2026-05-03 — Stage 15 SA/SV sync merged; SA master audio FM routing fixed; FM curve mapping added; partial SA/SV polish in progress.
 progress:
   total_phases: 2
   completed_phases: 2
@@ -63,7 +63,23 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+Stage 15 SA/SV — post-merge polish (as of 2026-05-03):
+
+| # | Task | File(s) |
+|---|------|---------|
+| T6 | Radar graph: pitch axis → log scale; review all axis ranges (kurtosis, HNR, ZCR); add HSL color gradient to polygon fill + stroke | `src/scripts/room/sonic-analyzer/views/radar-view.ts` |
+| T7 | PCH realtime autoscroll: accumulate pitch from `sa:frame` events (rolling ~10 s at 10 fps); scrolling render; vertical freq axis labels (C2–C6) | `src/scripts/room/sonic-visualizer/controller.ts`, `views/viz-view.ts` |
+| T8 | FM Synth crackling: add `latencyHint` select in setup modal (interactive / balanced / playback) + optional sampleRate (48000 / 44100); rebuild synth context on change; persist in `PersistedRoomSetup` | `src/scripts/livekit-room.ts`, setup modal Astro component |
+| T9 | SEND button: show R2 error text in SA status bar instead of silent fail; also update `.env.example` with required R2 vars | `src/scripts/room/sonic-analyzer/controller.ts`, `.env.example` |
+
+**Completed this session (2026-05-03):**
+- Stage 15 SA/SV remote sync merged to main (8 commits)
+- SA broadcast on participant join
+- R2 upload debug logging (full response text)
+- db-tunnel.fish fixed (Docker 172.18.0.2, unified tunnel+dev)
+- SA master audio retry on "audio context not ready"
+- FM synth per-param curve mapping (LIN/LOG/EXP buttons)
+- SA master audio FM routing fix: `connectFMSynthMonitoring()` feeds FM synth output into `incomingAudioContext` via MediaStream → `hpAudioGroupGainNode`
 
 ### Blockers / Open Issues
 
@@ -75,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-03T06:35:23.685Z
+Last session: 2026-05-03T10:09:02.168Z
 Stopped at: context exhaustion at 77% (2026-05-03)
 Resume file: None
