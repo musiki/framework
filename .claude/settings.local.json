@@ -18,7 +18,9 @@
       "mcp__plugin_episodic-memory_episodic-memory__search",
       "mcp__plugin_episodic-memory_episodic-memory__read",
       "Bash(npx tsc *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(git -C /Users/zztt/projects/26-musiki/framework worktree add ~/.config/superpowers/worktrees/framework/stage15-sa-sv-sync -b feature/stage15-sa-sv-sync)",
+      "Bash(git -C /Users/zztt/projects/26-musiki/framework show main:src/scripts/room/session/messages.ts)"
     ]
   }
 }
