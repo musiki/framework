@@ -330,6 +330,16 @@
     "isPublic": true
   },
   {
+    "slug": "public/lilypond/19-vl/vl-basics",
+    "title": "vl-basics",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
     "slug": "public/lilypond/lilypond MOC",
     "title": "lilypond MOC",
     "description": "",

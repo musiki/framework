@@ -23,7 +23,9 @@
       "Bash(git -C /Users/zztt/projects/26-musiki/framework show main:src/scripts/room/session/messages.ts)",
       "Bash(ssh *)",
       "Bash(git merge *)",
-      "Bash(awk -F: '$2 < 7459 && $2 > 7400 {print}')"
+      "Bash(awk -F: '$2 < 7459 && $2 > 7400 {print}')",
+      "Bash(xargs ls *)",
+      "Bash(awk -F: '$2 >= 225 && $2 <= 320 {print}')"
     ]
   }
 }

@@ -388,6 +388,15 @@
       "group": "tags"
     },
     {
+      "id": "public/lilypond/19-vl/vl-basics",
+      "name": "vl-basics",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "lilypond",
+      "canonicalSlug": "vl-basics",
+      "img": ""
+    },
+    {
       "id": "public/lilypond/lilypond MOC",
       "name": "lilypond MOC",
       "type": "document",
