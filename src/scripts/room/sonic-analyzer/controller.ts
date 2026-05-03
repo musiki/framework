@@ -444,6 +444,8 @@ export class SonicAnalyzerController {
     if (this.essentia) void this.computeVizFeatures();
   }
 
+  public get isActive(): boolean { return this.active; }
+
   public applyRemoteState(active: boolean): void {
     this.setStatus(active ? 'remote · on' : 'remote · off');
   }
