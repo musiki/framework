@@ -328,6 +328,30 @@ details[open] > summary.conference-sidebar-heading::before {
   font-size: 0.76rem;
 }
 
+.conference-synth-curve-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  color: var(--conference-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.52rem;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  padding: 0.1rem 0.22rem;
+  text-transform: uppercase;
+  transition: color 120ms, border-color 120ms;
+}
+.conference-synth-curve-btn:hover {
+  border-color: var(--conference-accent);
+  color: var(--conference-accent);
+}
+.conference-synth-curve-btn[data-curve="log"],
+.conference-synth-curve-btn[data-curve="exp"] {
+  border-color: rgba(143, 227, 255, 0.35);
+  color: var(--conference-accent);
+}
+
 .conference-synth-meter-row {
   display: grid;
   grid-template-columns: 0.7rem minmax(0, 1fr) 0.7rem auto;

@@ -53,7 +53,10 @@
 
   <div class="conference-synth-meters">
     <div class="conference-synth-meter">
-      <label for="conference-synth-carrier-input">Carrier</label>
+      <label for="conference-synth-carrier-input" class="conference-synth-meter-label">
+        <span>Carrier</span>
+        <button type="button" class="conference-synth-curve-btn" data-synth-curve="carrier" title="Curva: lineal">LIN</button>
+      </label>
       <div class="conference-synth-meter-row">
         <button type="button" class="conference-synth-map-button" data-synth-map-capture="carrier:min" aria-label="Capture carrier minimum"></button>
         <input
@@ -72,7 +75,10 @@
     </div>
 
     <div class="conference-synth-meter">
-      <label for="conference-synth-modulator-input">Modulator</label>
+      <label for="conference-synth-modulator-input" class="conference-synth-meter-label">
+        <span>Modulator</span>
+        <button type="button" class="conference-synth-curve-btn" data-synth-curve="modulator" title="Curva: lineal">LIN</button>
+      </label>
       <div class="conference-synth-meter-row">
         <button type="button" class="conference-synth-map-button" data-synth-map-capture="modulator:min" aria-label="Capture modulator minimum"></button>
         <input
@@ -91,7 +97,10 @@
     </div>
 
     <div class="conference-synth-meter">
-      <label for="conference-synth-gain-input">Thumb gain</label>
+      <label for="conference-synth-gain-input" class="conference-synth-meter-label">
+        <span>Thumb gain</span>
+        <button type="button" class="conference-synth-curve-btn" data-synth-curve="gain" title="Curva: lineal">LIN</button>
+      </label>
       <div class="conference-synth-meter-row">
         <button type="button" class="conference-synth-map-button" data-synth-map-capture="gain:min" aria-label="Capture gain minimum"></button>
         <input
@@ -110,7 +119,10 @@
     </div>
 
     <div class="conference-synth-meter">
-      <label for="conference-synth-cutoff-input">Index cutoff</label>
+      <label for="conference-synth-cutoff-input" class="conference-synth-meter-label">
+        <span>Index cutoff</span>
+        <button type="button" class="conference-synth-curve-btn" data-synth-curve="cutoff" title="Curva: lineal">LIN</button>
+      </label>
       <div class="conference-synth-meter-row">
         <button type="button" class="conference-synth-map-button" data-synth-map-capture="cutoff:min" aria-label="Capture cutoff minimum"></button>
         <input
@@ -129,7 +141,10 @@
     </div>
 
     <div class="conference-synth-meter">
-      <label for="conference-synth-resonance-input">Ring resonance</label>
+      <label for="conference-synth-resonance-input" class="conference-synth-meter-label">
+        <span>Ring resonance</span>
+        <button type="button" class="conference-synth-curve-btn" data-synth-curve="resonance" title="Curva: lineal">LIN</button>
+      </label>
       <div class="conference-synth-meter-row">
         <button type="button" class="conference-synth-map-button" data-synth-map-capture="resonance:min" aria-label="Capture resonance minimum"></button>
         <input
@@ -148,7 +163,10 @@
     </div>
 
     <div class="conference-synth-meter">
-      <label for="conference-synth-waveform-input">Middle wave</label>
+      <label for="conference-synth-waveform-input" class="conference-synth-meter-label">
+        <span>Middle wave</span>
+        <button type="button" class="conference-synth-curve-btn" data-synth-curve="waveformMorph" title="Curva: lineal">LIN</button>
+      </label>
       <div class="conference-synth-meter-row">
         <button type="button" class="conference-synth-map-button" data-synth-map-capture="waveformMorph:min" aria-label="Capture waveform minimum"></button>
         <input
@@ -169,6 +187,8 @@
     <div class="conference-synth-meter">
       <label for="conference-synth-distortion-input" class="conference-synth-meter-label">
         <span>Pinky distortion</span>
+        <span style="display:inline-flex;align-items:center;gap:0.3rem">
+        <button type="button" class="conference-synth-curve-btn" data-synth-curve="distortion" title="Curva: lineal">LIN</button>
         <span class="conference-synth-formula-shell" tabindex="0" aria-label="Distortion formula">
           ƒ
           <span class="conference-synth-formula-tooltip" role="note">
@@ -187,7 +207,7 @@
               </mfrac>
             </math>
           </span>
-        </span>
+        </span></span>
       </label>
       <div class="conference-synth-meter-row">
         <button type="button" class="conference-synth-map-button" data-synth-map-capture="distortion:min" aria-label="Capture distortion minimum"></button>

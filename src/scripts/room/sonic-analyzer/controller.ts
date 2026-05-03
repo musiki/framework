@@ -46,6 +46,7 @@ export class SonicAnalyzerController {
   private freqBuf: Float32Array<ArrayBuffer> | null = null;
   private prevFreqBuf: Float32Array<ArrayBuffer> | null = null;
   private intervalId: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private fps = 10;
   private activeSource = 'master';
   private lufsHistory = new LufsHistory();
@@ -214,17 +215,32 @@ export class SonicAnalyzerController {
   private async activate(): Promise<void> {
     this.setStatus('loading essentia…');
     try { await this.loadEssentia(); } catch { this.setStatus('error: essentia failed to load'); return; }
-    try { await this.connectSource(); } catch (e) { this.setStatus(`error: ${(e as Error).message}`); return; }
     this.active = true;
     this.powerBtn.dataset.active = 'true'; this.podEl.dataset.active = 'true';
-    this.startLoop();
-    this.setStatus(`on · ${this.activeSource} · ${this.fps}fps`);
     window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: true } }));
     this.publish?.({ type: 'sa-state', active: true });
-    if (this.fileBuffer && !this.lastFilePayload) void this.computeVizFeatures();
-    else if (this.lastFilePayload) window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: this.lastFilePayload }));
+    await this.tryConnectAndStart();
+  }
+  private async tryConnectAndStart(): Promise<void> {
+    if (!this.active) return;
+    try {
+      await this.connectSource();
+      this.startLoop();
+      this.setStatus(`on · ${this.activeSource} · ${this.fps}fps`);
+      if (this.fileBuffer && !this.lastFilePayload) void this.computeVizFeatures();
+      else if (this.lastFilePayload) window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: this.lastFilePayload }));
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (this.active && msg === 'audio context not ready') {
+        this.setStatus('waiting for audio…');
+        this.reconnectTimer = window.setTimeout(() => void this.tryConnectAndStart(), 2000);
+      } else {
+        this.setStatus(`error: ${msg}`);
+      }
+    }
   }
   private deactivate(): void {
+    if (this.reconnectTimer !== null) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.active = false; this.stopLoop(); this.disconnectSource();
     this.powerBtn.dataset.active = 'false'; this.podEl.dataset.active = 'false';
     this.setStatus('off');

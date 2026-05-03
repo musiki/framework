@@ -188,13 +188,13 @@ const localCameraGravityBallStreamState: {
 };
 
 const createDefaultHandControlRanges = (): Record<HandControlKey, HandControlRange> => ({
-  carrier: { min: 0, max: 1 },
-  modulator: { min: 0, max: 1 },
-  gain: { min: 0, max: 1 },
-  cutoff: { min: 0, max: 1 },
-  resonance: { min: 0, max: 1 },
-  waveformMorph: { min: 0, max: 1 },
-  distortion: { min: 0, max: 1 },
+  carrier: { min: 0, max: 1, curve: 'linear' },
+  modulator: { min: 0, max: 1, curve: 'linear' },
+  gain: { min: 0, max: 1, curve: 'linear' },
+  cutoff: { min: 0, max: 1, curve: 'linear' },
+  resonance: { min: 0, max: 1, curve: 'linear' },
+  waveformMorph: { min: 0, max: 1, curve: 'linear' },
+  distortion: { min: 0, max: 1, curve: 'linear' },
 });
 
 const readPersistedHandControlRanges = (
@@ -206,9 +206,11 @@ const readPersistedHandControlRanges = (
   HAND_CONTROL_KEYS.forEach((key) => {
     const nextValue = value[key];
     if (!nextValue || typeof nextValue !== 'object') return;
+    const curve = nextValue.curve === 'log' || nextValue.curve === 'exp' ? nextValue.curve : 'linear';
     ranges[key] = {
       min: clampNumber(nextValue.min, 0, 1, ranges[key].min, 3),
       max: clampNumber(nextValue.max, 0, 1, ranges[key].max, 3),
+      curve,
     };
   });
 
@@ -219,7 +221,10 @@ const remapHandControl = (value: number, range: HandControlRange) => {
   const min = clamp01(range.min);
   const max = clamp01(range.max);
   if (Math.abs(max - min) < 0.001) return clamp01(value);
-  return clamp01((value - min) / (max - min));
+  let t = clamp01((value - min) / (max - min));
+  if (range.curve === 'log') t = Math.log1p(t * 9) / Math.LN10;
+  else if (range.curve === 'exp') t = (Math.pow(10, t) - 1) / 9;
+  return t;
 };
 
 class FMSynthVoice {
@@ -3664,6 +3669,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     synthDistortionInput,
     synthDistortionOutput,
     synthMapButtons,
+    synthCurveButtons,
     sessionLeaderField,
     sessionLeaderSelect,
     mixerSynthGainInput,
@@ -13492,6 +13498,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (!canUseInstruments()) return;
       synthControlRanges = createDefaultHandControlRanges();
       persistSetupState();
+      syncCurveButtons();
       setStatus('Hand mapping reset.');
     });
   }
@@ -13518,6 +13525,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       };
       persistSetupState();
       setStatus(`${key} ${edge === 'min' ? 'min' : 'max'} = ${nextValue.toFixed(2)}`);
+    });
+  });
+
+  const syncCurveButtons = () => {
+    synthCurveButtons.forEach((btn) => {
+      const key = btn.dataset.synthCurve as HandControlKey | undefined;
+      if (!key || !synthControlRanges[key]) return;
+      const curve = synthControlRanges[key].curve ?? 'linear';
+      btn.textContent = curve === 'log' ? 'LOG' : curve === 'exp' ? 'EXP' : 'LIN';
+      btn.dataset.curve = curve;
+      btn.title = curve === 'log' ? 'Curva: logarítmica' : curve === 'exp' ? 'Curva: exponencial' : 'Curva: lineal';
+    });
+  };
+  syncCurveButtons();
+
+  synthCurveButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!canUseInstruments()) return;
+      const key = btn.dataset.synthCurve as HandControlKey | undefined;
+      if (!key || !synthControlRanges[key]) return;
+      const cur = synthControlRanges[key].curve ?? 'linear';
+      const next = cur === 'linear' ? 'log' : cur === 'log' ? 'exp' : 'linear';
+      synthControlRanges = { ...synthControlRanges, [key]: { ...synthControlRanges[key], curve: next } };
+      persistSetupState();
+      syncCurveButtons();
     });
   });
 

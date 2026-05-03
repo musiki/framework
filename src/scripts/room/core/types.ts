@@ -110,9 +110,12 @@ export type HandControlKey =
   | 'waveformMorph'
   | 'distortion';
 
+export type HandControlCurve = 'linear' | 'log' | 'exp';
+
 export type HandControlRange = {
   max: number;
   min: number;
+  curve: HandControlCurve;
 };
 
 export type PersistedRoomSetup = {

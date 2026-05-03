@@ -237,6 +237,7 @@ export const selectRoomElements = (root: HTMLElement) => {
     synthDistortionInput: root.querySelector('[data-synth-distortion-input]'),
     synthDistortionOutput: root.querySelector('[data-synth-distortion-output]'),
     synthMapButtons: Array.from(root.querySelectorAll('[data-synth-map-capture]')),
+    synthCurveButtons: Array.from(root.querySelectorAll<HTMLButtonElement>('[data-synth-curve]')),
     sessionLeaderField: root.querySelector('[data-session-leader-field]'),
     sessionLeaderSelect: root.querySelector('[data-session-leader-select]'),
     mixerSynthGainInput: root.querySelector('[data-mixer-synth-gain]'),
