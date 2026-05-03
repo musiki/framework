@@ -208,6 +208,28 @@ export type ConferenceMessage =
       sourceUrl: string;
       title: string;
       type: 'external-media';
+    }
+  | {
+      type: 'sa-file-sync';
+      url: string;
+      fileName: string;
+      senderName: string;
+      key: string;
+      scale: string;
+      bpm: number;
+    }
+  | {
+      type: 'sa-state';
+      active: boolean;
+    }
+  | {
+      type: 'sv-playback';
+      action: 'play' | 'pause' | 'seek';
+      offset: number;
+    }
+  | {
+      type: 'sv-vtab';
+      tab: string;
     };
 
 export const MESSAGE_TOPIC = 'conference-ui';
@@ -638,6 +660,44 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'layout-overlay',
         overlay: overlay ? normalizeLayoutMode(overlay) : null,
+      };
+    }
+
+    if (parsed.type === 'sa-file-sync') {
+      const url = normalizeText((parsed as { url?: string }).url);
+      if (!url) return null;
+      return {
+        type: 'sa-file-sync',
+        url,
+        fileName: normalizeText((parsed as { fileName?: string }).fileName) || 'audio',
+        senderName: normalizeText((parsed as { senderName?: string }).senderName) || 'Participant',
+        key: normalizeText((parsed as { key?: string }).key) || '',
+        scale: normalizeText((parsed as { scale?: string }).scale) || '',
+        bpm: Math.max(0, Number((parsed as { bpm?: number }).bpm) || 0),
+      };
+    }
+
+    if (parsed.type === 'sa-state') {
+      return {
+        type: 'sa-state',
+        active: Boolean((parsed as { active?: boolean }).active),
+      };
+    }
+
+    if (parsed.type === 'sv-playback') {
+      const action = normalizeText((parsed as { action?: string }).action);
+      if (action !== 'play' && action !== 'pause' && action !== 'seek') return null;
+      return {
+        type: 'sv-playback',
+        action,
+        offset: Math.max(0, Number((parsed as { offset?: number }).offset) || 0),
+      };
+    }
+
+    if (parsed.type === 'sv-vtab') {
+      return {
+        type: 'sv-vtab',
+        tab: normalizeText((parsed as { tab?: string }).tab) || 'mel',
       };
     }
 
