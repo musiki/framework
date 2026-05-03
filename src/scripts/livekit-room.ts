@@ -4186,6 +4186,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let hpAudioGroupMeterData: Uint8Array | null = null;
   let hpAudioReverbSendNode: GainNode | null = null;
   let hpAudioDelaySendNode: GainNode | null = null;
+  let fmSynthMonitorSource: MediaStreamAudioSourceNode | null = null;
   let incomingAudioReverbConvolverNode: ConvolverNode | null = null;
   let incomingAudioReverbReturnGainNode: GainNode | null = null;
   let incomingAudioReverbSendNode: GainNode | null = null;
@@ -7541,11 +7542,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (incomingAudioContext.state !== 'running') {
       await incomingAudioContext.resume().catch(() => undefined);
     }
-    
+
     updateActiveHyperpianoAudio();
 
     applyMixerState();
+    connectFMSynthMonitoring();
     return incomingAudioContext;
+  };
+
+  const connectFMSynthMonitoring = () => {
+    if (!incomingAudioContext || !hpAudioGroupGainNode) return;
+    const track = fmSynth.getOutputTrack();
+    if (!track || track.readyState !== 'live') return;
+    if (fmSynthMonitorSource) {
+      try { fmSynthMonitorSource.disconnect(); } catch { /* ignore */ }
+      fmSynthMonitorSource = null;
+    }
+    fmSynthMonitorSource = incomingAudioContext.createMediaStreamSource(new MediaStream([track]));
+    fmSynthMonitorSource.connect(hpAudioGroupGainNode);
   };
 
   const disconnectIncomingAudioSource = (key: string) => {
@@ -8302,6 +8316,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     try {
       if (handTrackEnabled) {
         await fmSynth.ensureReady();
+        connectFMSynthMonitoring();
         await ensurePublishedSynthTrack().catch(() => undefined);
         applyMixerState();
         applySynthFxState();

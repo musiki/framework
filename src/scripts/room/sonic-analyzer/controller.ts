@@ -264,6 +264,7 @@ export class SonicAnalyzerController {
     const analyser = context.createAnalyser();
     analyser.fftSize = 4096; analyser.smoothingTimeConstant = 0.5;
     if (this.activeSource === 'master') {
+      if (context.state !== 'running') await context.resume().catch(() => {});
       masterAnalyser.connect(analyser);
     } else if (this.activeSource === 'mic') {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
