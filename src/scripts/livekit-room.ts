@@ -12058,6 +12058,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           void publishTeacherState();
         }, 500);
       }
+      if (sonicAnalyzerController) {
+        window.setTimeout(() => {
+          void publishMessage({ type: 'sa-state', active: sonicAnalyzerController!.isActive });
+        }, 700);
+      }
     })
     .on(RoomEvent.ParticipantDisconnected, (participant) => {
       removeParticipant(participant.identity);

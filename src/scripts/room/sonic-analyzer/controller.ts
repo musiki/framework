@@ -184,8 +184,13 @@ export class SonicAnalyzerController {
       const formData = new FormData();
       formData.append('file', new File([blob], this.loadedFileName, { type: 'audio/wav' }));
       const res = await fetch('/api/room/sa-upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      const text = await res.text();
+      let data: any = {};
+      try { data = JSON.parse(text); } catch { /* non-JSON response */ }
+      if (!res.ok || !data.url) {
+        console.error('[sA] upload failed', res.status, text);
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
       this.publish?.({
         type: 'sa-file-sync',
         url: data.url,
