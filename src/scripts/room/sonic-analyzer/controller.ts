@@ -3,9 +3,15 @@ import type { SAResults } from './views/text-view';
 import { renderSpectrumView } from './views/spectrum-view';
 import { renderTimbreView } from './views/timbre-view';
 import { LufsHistory } from './views/lufs-view';
+import type { ConferenceMessage } from '../session';
 
 type AudioTapFn = () => { context: AudioContext; masterAnalyser: AnalyserNode } | null;
-export type SonicAnalyzerOptions = { container: HTMLElement; getAudioTap: AudioTapFn; };
+export type SonicAnalyzerOptions = {
+  container: HTMLElement;
+  getAudioTap: AudioTapFn;
+  publish?: (msg: ConferenceMessage) => void;
+  getSenderName?: () => string;
+};
 
 declare const EssentiaWASM: any;
 declare const Essentia: any;
@@ -51,6 +57,8 @@ export class SonicAnalyzerController {
   private fileScale = '';
   private fileBpm = 0;
   private lastFilePayload: SAFilePayload | null = null;
+  private publish?: (msg: ConferenceMessage) => void;
+  private getSenderName: () => string = () => '';
 
   // DOM refs
   private podEl!: HTMLElement;
@@ -71,6 +79,8 @@ export class SonicAnalyzerController {
   constructor(options: SonicAnalyzerOptions) {
     this.container = options.container;
     this.getAudioTap = options.getAudioTap;
+    this.publish = options.publish;
+    this.getSenderName = options.getSenderName ?? (() => '');
     this.bindDOM();
     this.bindDropzone();
     this.onSVRequest = () => this.emitCurrentState();
@@ -91,6 +101,7 @@ export class SonicAnalyzerController {
     this.statusTextEl  = q('[data-sa-status-text]')!;
     this.fileNameEl    = q('[data-sa-file-name]')!;
     this.saveBtnEl     = q<HTMLButtonElement>('[data-sa-save]')!;
+    this.saveBtnEl.addEventListener('click', () => void this.handleSave());
     this.sourceSelect  = q<HTMLSelectElement>('[data-sa-source]')!;
     this.fpsSlider     = q<HTMLInputElement>('[data-sa-fps]')!;
     this.fpsLabel      = q('[data-sa-fps-label]')!;
@@ -165,6 +176,31 @@ export class SonicAnalyzerController {
   private showFileMeta(name: string): void {
     this.fileNameEl.textContent = name; this.fileNameEl.hidden = false; this.saveBtnEl.hidden = false;
   }
+  private async handleSave(): Promise<void> {
+    if (!this.fileBuffer || !this.loadedFileName) return;
+    this.setStatus('uploading…');
+    try {
+      const blob = await audioBufferToWav(this.fileBuffer);
+      const formData = new FormData();
+      formData.append('file', new File([blob], this.loadedFileName, { type: 'audio/wav' }));
+      const res = await fetch('/api/room/sa-upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      this.publish?.({
+        type: 'sa-file-sync',
+        url: data.url,
+        fileName: this.loadedFileName,
+        senderName: this.getSenderName(),
+        key: this.fileKey,
+        scale: this.fileScale,
+        bpm: this.fileBpm,
+      });
+      this.setStatus(`shared ✓ · ${this.activeSource} · ${this.fps}fps`);
+    } catch (e: any) {
+      console.error('[sA] upload error', e);
+      this.setStatus('upload failed');
+    }
+  }
 
   // ─── Activation ──────────────────────────────────────────────────────────────
 
@@ -179,6 +215,7 @@ export class SonicAnalyzerController {
     this.startLoop();
     this.setStatus(`on · ${this.activeSource} · ${this.fps}fps`);
     window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: true } }));
+    this.publish?.({ type: 'sa-state', active: true });
     if (this.fileBuffer && !this.lastFilePayload) void this.computeVizFeatures();
     else if (this.lastFilePayload) window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: this.lastFilePayload }));
   }
@@ -187,6 +224,7 @@ export class SonicAnalyzerController {
     this.powerBtn.dataset.active = 'false'; this.podEl.dataset.active = 'false';
     this.setStatus('off');
     window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: false } }));
+    this.publish?.({ type: 'sa-state', active: false });
   }
   private async loadEssentia(): Promise<void> {
     if (this.essentia) return;
@@ -383,6 +421,33 @@ export class SonicAnalyzerController {
 
   private setStatus(msg: string): void { if (this.statusTextEl) this.statusTextEl.textContent = msg; }
 
+  public loadFileFromRemote(
+    buffer: AudioBuffer,
+    fileName: string,
+    senderName: string,
+    key = '',
+    scale = '',
+    bpm = 0,
+  ): void {
+    this.fileBuffer = buffer;
+    this.loadedFileName = fileName;
+    this.fileKey = key;
+    this.fileScale = scale;
+    this.fileBpm = bpm;
+    this.addFileOption(fileName);
+    this.showFileMeta(fileName);
+    const peaks = computeWaveformPeaks(buffer);
+    const payload: SAFilePayload = { buffer, fileName, peaks, melspec: [], chroma: [], pitches: [], key, scale, bpm };
+    this.lastFilePayload = payload;
+    window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: payload }));
+    this.setStatus(`synced · ${senderName}`);
+    if (this.essentia) void this.computeVizFeatures();
+  }
+
+  public applyRemoteState(active: boolean): void {
+    this.setStatus(active ? 'remote · on' : 'remote · off');
+  }
+
   public addParticipantSource(id: string, label: string): void {
     if (!this.sourceSelect || this.sourceSelect.querySelector(`option[value="participant:${id}"]`)) return;
     const opt = document.createElement('option'); opt.value=`participant:${id}`; opt.textContent=`ptcp:${label}`;
@@ -395,7 +460,7 @@ export class SonicAnalyzerController {
   }
 }
 
-function computeWaveformPeaks(buffer: AudioBuffer): { min: number; max: number }[] {
+export function computeWaveformPeaks(buffer: AudioBuffer): { min: number; max: number }[] {
   const data  = buffer.getChannelData(0);
   const N     = 800;
   const step  = Math.ceil(data.length / N);
@@ -421,3 +486,23 @@ function loadScript(src: string): Promise<void> {
 }
 
 function tick(): Promise<void> { return new Promise(r => setTimeout(r, 0)); }
+
+function audioBufferToWav(buffer: AudioBuffer): Promise<Blob> {
+  const sampleRate = buffer.sampleRate;
+  const data = buffer.getChannelData(0);
+  const dataLen = data.length * 2;
+  const ab = new ArrayBuffer(44 + dataLen);
+  const view = new DataView(ab);
+  const w = (off: number, val: number, bytes: number) => {
+    if (bytes === 4) view.setUint32(off, val, true);
+    else if (bytes === 2) view.setUint16(off, val, true);
+  };
+  const ws = (off: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); w(4, 36 + dataLen, 4); ws(8, 'WAVE');
+  ws(12, 'fmt '); w(16, 16, 4); w(20, 1, 2); w(22, 1, 2);
+  w(24, sampleRate, 4); w(28, sampleRate * 2, 4); w(32, 2, 2); w(34, 16, 2);
+  ws(36, 'data'); w(40, dataLen, 4);
+  const samples = new Int16Array(ab, 44);
+  for (let i = 0; i < data.length; i++) samples[i] = Math.max(-32768, Math.min(32767, data[i] * 32767));
+  return Promise.resolve(new Blob([ab], { type: 'audio/wav' }));
+}
