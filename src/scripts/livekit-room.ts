@@ -25,7 +25,7 @@ import { createRoomNotesController } from './room/notes';
 import { WhiteboardController } from './room/whiteboard';
 import { LilyPondLiveController } from './room/lilypond';
 import { RoomWorkspaceManager } from './room/workspace/RoomWorkspaceManager';
-import { SonicAnalyzerController } from './room/sonic-analyzer';
+import { SonicAnalyzerController, computeWaveformPeaks } from './room/sonic-analyzer';
 import { SonicVisualizerController } from './room/sonic-visualizer';
 import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
@@ -10875,12 +10875,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           if (!incomingAudioContext || !incomingAudioMasterAnalyser) return null;
           return { context: incomingAudioContext, masterAnalyser: incomingAudioMasterAnalyser };
         },
+        publish: (msg) => void publishMessage(msg),
+        getSenderName: () => nameInput.value.trim() || room.localParticipant?.name || '',
       });
     };
 
     const onSonicVisualizerInit = (container: HTMLElement) => {
       sonicVisualizerController?.dispose();
-      sonicVisualizerController = new SonicVisualizerController({ container });
+      sonicVisualizerController = new SonicVisualizerController({
+        container,
+        publish: (msg) => void publishMessage(msg),
+      });
     };
 
   const getWorkspaceSettingsSnapshot = () => ({
@@ -12053,6 +12058,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           void publishTeacherState();
         }, 500);
       }
+      if (sonicAnalyzerController) {
+        window.setTimeout(() => {
+          void publishMessage({ type: 'sa-state', active: sonicAnalyzerController!.isActive });
+        }, 700);
+      }
     })
     .on(RoomEvent.ParticipantDisconnected, (participant) => {
       removeParticipant(participant.identity);
@@ -12308,6 +12318,57 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         if (canLeadSession()) {
           void publishPresentationSyncSnapshot().catch(() => undefined);
         }
+        return;
+      }
+
+      if (message.type === 'sa-file-sync') {
+        const audioCtx = incomingAudioContext ?? new AudioContext();
+        fetch(message.url)
+          .then(r => r.arrayBuffer())
+          .then(ab => audioCtx.decodeAudioData(ab))
+          .then(buffer => {
+            if (sonicAnalyzerController) {
+              sonicAnalyzerController.loadFileFromRemote(
+                buffer,
+                message.fileName,
+                message.senderName,
+                message.key,
+                message.scale,
+                message.bpm,
+              );
+            } else {
+              const peaks = computeWaveformPeaks(buffer);
+              window.dispatchEvent(new CustomEvent('sa:file-ready', {
+                detail: {
+                  buffer,
+                  fileName: message.fileName,
+                  peaks,
+                  melspec: [],
+                  chroma: [],
+                  pitches: [],
+                  key: message.key,
+                  scale: message.scale,
+                  bpm: message.bpm,
+                },
+              }));
+            }
+          })
+          .catch(e => console.warn('[room] sa-file-sync fetch error', e));
+        return;
+      }
+
+      if (message.type === 'sa-state') {
+        sonicAnalyzerController?.applyRemoteState(message.active);
+        return;
+      }
+
+      if (message.type === 'sv-playback') {
+        sonicVisualizerController?.applyRemotePlayback(message.action, message.offset);
+        return;
+      }
+
+      if (message.type === 'sv-vtab') {
+        sonicVisualizerController?.applyRemoteVTab(message.tab);
         return;
       }
 

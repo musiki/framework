@@ -1,2 +1,2 @@
-export { SonicAnalyzerController } from './controller';
+export { SonicAnalyzerController, computeWaveformPeaks } from './controller';
 export type { SonicAnalyzerOptions } from './controller';

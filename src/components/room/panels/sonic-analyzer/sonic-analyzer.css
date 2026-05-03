@@ -27,7 +27,8 @@
 .sa-file-name { color:#45D384; opacity:0.8; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
 .sa-save-btn {
   background:none; border:1px solid rgba(69,211,132,0.3); color:#45D384;
-  font-size:0.52rem; padding:0 0.4rem; height:1.1rem; border-radius:2px; cursor:pointer; flex-shrink:0;
+  font-size:0.60rem; padding:0 0.5rem; height:1.2rem; border-radius:2px; cursor:pointer; flex-shrink:0;
+  letter-spacing:0.12em; font-weight:700; text-transform:uppercase;
 }
 .sa-save-btn:hover { background:rgba(69,211,132,0.1); }
 
@@ -42,7 +43,7 @@
   overflow:hidden;
 }
 .sa-panel {
-  background: var(--conference-bg, #1e1e2e);
+  background: #000;
   overflow: hidden;
   display: flex; flex-direction: column;
   min-height: 0; min-width: 0;
