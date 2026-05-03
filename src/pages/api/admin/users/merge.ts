@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
     }
 
-    const result = await mergeUsers(undefined, keepId, mergeId);
+    const result = await mergeUsers(keepId, mergeId);
 
     if (!result.ok) {
       return new Response(JSON.stringify({ error: result.error }), { status: 400 });

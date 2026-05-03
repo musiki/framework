@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-stopped_at: context exhaustion at ~80% (2026-05-03)
-last_updated: "2026-05-03"
-last_activity: 2026-05-03 — Stage 15 SA/SV sync merged; SA master audio FM routing fixed; FM curve mapping added; partial SA/SV polish in progress.
+status: verifying
+stopped_at: context exhaustion at 77% (2026-05-03)
+last_updated: "2026-05-03T11:18:46.494Z"
+last_activity: 2026-04-27 — Fixed DIY drag interaction, Hyperpiano audio wiring, and verified Grid video remounting.
 progress:
   total_phases: 2
   completed_phases: 2
@@ -66,6 +66,7 @@ Recent decisions affecting current work:
 No pending todos — T6–T9 all completed 2026-05-03.
 
 **Completed this session (2026-05-03):**
+
 - Stage 15 SA/SV remote sync merged to main (8 commits)
 - SA broadcast on participant join
 - R2 upload debug logging (full response text)
@@ -88,6 +89,6 @@ No pending todos — T6–T9 all completed 2026-05-03.
 
 ## Session Continuity
 
-Last session: 2026-05-03
-Stopped at: T6–T9 SA/SV polish all completed
+Last session: 2026-05-03T11:18:46.492Z
+Stopped at: context exhaustion at 77% (2026-05-03)
 Resume file: None
