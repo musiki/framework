@@ -7624,6 +7624,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     incomingAudioMasterMeterData = null;
     incomingAudioMasterGainNode = null;
     incomingAudioMasterPannerNode = null;
+    if (fmSynthMonitorSource) { try { fmSynthMonitorSource.disconnect(); } catch { /* ignore */ } fmSynthMonitorSource = null; }
     hpAudioGroupAnalyser = null;
     hpAudioGroupGainNode = null;
     hpAudioGroupMeterData = null;
