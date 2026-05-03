@@ -24,6 +24,8 @@ export class SonicVisualizerController {
   private melspecData: number[][] = [];
   private chromaData: number[][] = [];
   private pitchData: number[] = [];
+  private realtimePitchBuffer: number[] = [];
+  private static readonly PITCH_BUFFER_MAX = 100; // ~10 s at 10 fps
 
   // waveform / playback
   private audioBuffer: AudioBuffer | null = null;
@@ -81,6 +83,11 @@ export class SonicVisualizerController {
 
   private handleFrame(detail: { results: SAResults }): void {
     drawRadar(this.radarCanvas, detail.results);
+    this.realtimePitchBuffer.push(detail.results.pitch);
+    if (this.realtimePitchBuffer.length > SonicVisualizerController.PITCH_BUFFER_MAX)
+      this.realtimePitchBuffer.shift();
+    if (this.activeVTab === 'pch')
+      renderPitchContour(this.heatmapCanvas, this.realtimePitchBuffer, true);
   }
 
   private handleFileReady(payload: SAFilePayload): void {
@@ -120,7 +127,10 @@ export class SonicVisualizerController {
   private renderCurrentHeatmap(): void {
     if (this.activeVTab === 'mel' && this.melspecData.length) renderHeatmap(this.heatmapCanvas, this.melspecData);
     else if (this.activeVTab === 'chr' && this.chromaData.length) renderHeatmap(this.heatmapCanvas, this.chromaData);
-    else if (this.activeVTab === 'pch' && this.pitchData.length) renderPitchContour(this.heatmapCanvas, this.pitchData);
+    else if (this.activeVTab === 'pch') {
+      const src = this.realtimePitchBuffer.length ? this.realtimePitchBuffer : this.pitchData;
+      if (src.length) renderPitchContour(this.heatmapCanvas, src, true);
+    }
   }
 
   // ─── Waveform ────────────────────────────────────────────────────────────────

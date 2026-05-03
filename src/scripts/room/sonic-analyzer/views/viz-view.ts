@@ -42,7 +42,17 @@ export function renderHeatmap(canvas: HTMLCanvasElement, data: number[][], flipY
   ctx.putImageData(img, 0, 0);
 }
 
-export function renderPitchContour(canvas: HTMLCanvasElement, pitches: number[]): void {
+const NOTE_LABELS = [
+  { name: 'C2', hz: 65.41 },
+  { name: 'C3', hz: 130.81 },
+  { name: 'C4', hz: 261.63 },
+  { name: 'C5', hz: 523.25 },
+  { name: 'C6', hz: 1046.5 },
+];
+const LOG_MIN = Math.log(40);
+const LOG_MAX = Math.log(2000);
+
+export function renderPitchContour(canvas: HTMLCanvasElement, pitches: number[], showLabels = false): void {
   const dpr = window.devicePixelRatio || 1;
   const cssW = Math.max(1, canvas.clientWidth);
   const cssH = Math.max(1, canvas.clientHeight);
@@ -52,15 +62,33 @@ export function renderPitchContour(canvas: HTMLCanvasElement, pitches: number[])
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
 
-  const logMin = Math.log(40), logMax = Math.log(2000);
+  // Frequency axis labels and guide lines
+  if (showLabels) {
+    ctx.font = '9px monospace';
+    ctx.textBaseline = 'middle';
+    for (const { name, hz } of NOTE_LABELS) {
+      const norm = Math.max(0, Math.min(1, (Math.log(hz) - LOG_MIN) / (LOG_MAX - LOG_MIN)));
+      const y = (1 - norm) * cssH;
+      ctx.setLineDash([2, 4]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cssW, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(137,180,250,0.45)';
+      ctx.textAlign = 'left';
+      ctx.fillText(name, 2, y);
+    }
+  }
+
+  // Pitch contour line
   ctx.strokeStyle = '#45D384';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   let moved = false;
   pitches.forEach((hz, i) => {
     if (hz < 40) { moved = false; return; }
-    const x = (i / pitches.length) * cssW;
-    const norm = Math.max(0, Math.min(1, (Math.log(hz) - logMin) / (logMax - logMin)));
+    const x = (i / Math.max(pitches.length - 1, 1)) * cssW;
+    const norm = Math.max(0, Math.min(1, (Math.log(hz) - LOG_MIN) / (LOG_MAX - LOG_MIN)));
     const y = (1 - norm) * cssH;
     if (!moved) { ctx.moveTo(x, y); moved = true; } else ctx.lineTo(x, y);
   });

@@ -278,6 +278,8 @@ class FMSynthVoice {
   private ready = false;
   private masterGain = 0.35;
   private reverbMix = 0.5;
+  fmLatencyHint: AudioContextLatencyCategory = 'interactive';
+  fmSampleRate: 44100 | 48000 = 48000;
   private reverbSend = 0.55;
   private reverbSendNode: GainNode | null = null;
   private reverbTime = 3;
@@ -306,7 +308,7 @@ class FMSynthVoice {
       throw new Error('Web Audio is not available in this browser.');
     }
 
-    const context = new AudioContextCtor({ sampleRate: 48_000 });
+    const context = new AudioContextCtor({ latencyHint: this.fmLatencyHint, sampleRate: this.fmSampleRate });
     this.context = context;
 
     const filterNode = context.createBiquadFilter();
@@ -799,6 +801,12 @@ class FMSynthVoice {
     this.rampAudioParam(this.filterNode.Q, resonance, ramp);
     this.rampAudioParam(this.dynamicGain.gain, gain * 0.32, ramp);
     this.rampDistortionAmount(telemetry.distortion, ramp);
+  }
+
+  async applyContextOptions(latencyHint: AudioContextLatencyCategory, sampleRate: 44100 | 48000) {
+    this.fmLatencyHint = latencyHint;
+    this.fmSampleRate = sampleRate;
+    await this.destroy();
   }
 
   async destroy() {
@@ -3654,6 +3662,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     audioEchoCancellationInput,
     audioNoiseSuppressionInput,
     audioAutoGainControlInput,
+    fmLatencySelect,
+    fmSampleRateSelect,
     synthCarrierInput,
     synthCarrierOutput,
     synthModulatorInput,
@@ -4129,6 +4139,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   if (audioAutoGainControlInput instanceof HTMLInputElement) {
     audioAutoGainControlInput.checked = persistedSetup.audioAutoGainControl !== false;
   }
+  if (fmLatencySelect instanceof HTMLSelectElement && persistedSetup.fmLatencyHint) {
+    fmLatencySelect.value = persistedSetup.fmLatencyHint;
+  }
+  if (fmSampleRateSelect instanceof HTMLSelectElement && persistedSetup.fmSampleRate) {
+    fmSampleRateSelect.value = String(persistedSetup.fmSampleRate);
+  }
   let instrumentsOpen = persistedSetup.instrumentsOpen === true;
   let handTrackEnabled = Boolean(persistedSetup.handTrackEnabled);
   let handRampMs = clampNumber(persistedSetup.handRampMs, 10, 4000, 500, 0);
@@ -4266,6 +4282,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let compositorOutputStream: MediaStream | null = null;
   let compositorInStage = false;
   const fmSynth = new FMSynthVoice();
+  if (persistedSetup.fmLatencyHint) fmSynth.fmLatencyHint = persistedSetup.fmLatencyHint;
+  if (persistedSetup.fmSampleRate) fmSynth.fmSampleRate = persistedSetup.fmSampleRate;
   const gravityBallRenderer =
     gravityBallCanvas instanceof HTMLCanvasElement ? new GravityBallRenderer(gravityBallCanvas) : null;
   localCameraGravityBallStreamState.canvas = gravityBallCanvas instanceof HTMLCanvasElement ? gravityBallCanvas : null;
@@ -8138,6 +8156,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       audioEchoCancellation: audioEchoCancellationInput instanceof HTMLInputElement ? audioEchoCancellationInput.checked : undefined,
       audioNoiseSuppression: audioNoiseSuppressionInput instanceof HTMLInputElement ? audioNoiseSuppressionInput.checked : undefined,
       audioAutoGainControl: audioAutoGainControlInput instanceof HTMLInputElement ? audioAutoGainControlInput.checked : undefined,
+      fmLatencyHint: fmLatencySelect instanceof HTMLSelectElement ? (fmLatencySelect.value as PersistedRoomSetup['fmLatencyHint']) : undefined,
+      fmSampleRate: fmSampleRateSelect instanceof HTMLSelectElement ? (Number(fmSampleRateSelect.value) as 44100 | 48000) : undefined,
     });
   };
 
@@ -15093,6 +15113,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           await publication.audioTrack.restart({ autoGainControl: audioAutoGainControlInput.checked });
         }
       }
+    });
+  }
+
+  if (fmLatencySelect instanceof HTMLSelectElement) {
+    fmLatencySelect.addEventListener('change', async () => {
+      const latency = fmLatencySelect.value as AudioContextLatencyCategory;
+      const sr = fmSynth.fmSampleRate;
+      await fmSynth.applyContextOptions(latency, sr);
+      await fmSynth.ensureReady();
+      connectFMSynthMonitoring();
+      persistSetupState();
+    });
+  }
+  if (fmSampleRateSelect instanceof HTMLSelectElement) {
+    fmSampleRateSelect.addEventListener('change', async () => {
+      const sr = Number(fmSampleRateSelect.value) as 44100 | 48000;
+      await fmSynth.applyContextOptions(fmSynth.fmLatencyHint, sr);
+      await fmSynth.ensureReady();
+      connectFMSynthMonitoring();
+      persistSetupState();
     });
   }
 

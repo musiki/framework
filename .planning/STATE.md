@@ -63,14 +63,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-Stage 15 SA/SV — post-merge polish (as of 2026-05-03):
-
-| # | Task | File(s) |
-|---|------|---------|
-| T6 | Radar graph: pitch axis → log scale; review all axis ranges (kurtosis, HNR, ZCR); add HSL color gradient to polygon fill + stroke | `src/scripts/room/sonic-analyzer/views/radar-view.ts` |
-| T7 | PCH realtime autoscroll: accumulate pitch from `sa:frame` events (rolling ~10 s at 10 fps); scrolling render; vertical freq axis labels (C2–C6) | `src/scripts/room/sonic-visualizer/controller.ts`, `views/viz-view.ts` |
-| T8 | FM Synth crackling: add `latencyHint` select in setup modal (interactive / balanced / playback) + optional sampleRate (48000 / 44100); rebuild synth context on change; persist in `PersistedRoomSetup` | `src/scripts/livekit-room.ts`, setup modal Astro component |
-| T9 | SEND button: show R2 error text in SA status bar instead of silent fail; also update `.env.example` with required R2 vars | `src/scripts/room/sonic-analyzer/controller.ts`, `.env.example` |
+No pending todos — T6–T9 all completed 2026-05-03.
 
 **Completed this session (2026-05-03):**
 - Stage 15 SA/SV remote sync merged to main (8 commits)
@@ -80,6 +73,10 @@ Stage 15 SA/SV — post-merge polish (as of 2026-05-03):
 - SA master audio retry on "audio context not ready"
 - FM synth per-param curve mapping (LIN/LOG/EXP buttons)
 - SA master audio FM routing fix: `connectFMSynthMonitoring()` feeds FM synth output into `incomingAudioContext` via MediaStream → `hpAudioGroupGainNode`
+- T6: Radar log-scale pitch + kurtosis/ZCR range review + HSL radial gradient fill/stroke
+- T7: PCH realtime rolling buffer (100 frames) + C2–C6 freq axis labels
+- T8: FM Synth latencyHint + sampleRate selects in setup modal, rebuild-on-change, persisted
+- T9: SA SEND error → status bar; `.env.example` created with R2 vars
 
 ### Blockers / Open Issues
 
@@ -91,6 +88,6 @@ Stage 15 SA/SV — post-merge polish (as of 2026-05-03):
 
 ## Session Continuity
 
-Last session: 2026-05-03T10:09:02.168Z
-Stopped at: context exhaustion at 77% (2026-05-03)
+Last session: 2026-05-03
+Stopped at: T6–T9 SA/SV polish all completed
 Resume file: None

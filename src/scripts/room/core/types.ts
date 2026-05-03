@@ -194,6 +194,9 @@ export type PersistedRoomSetup = {
   audioEchoCancellation?: boolean;
   audioNoiseSuppression?: boolean;
   audioAutoGainControl?: boolean;
+  // FM Synth audio engine
+  fmLatencyHint?: 'interactive' | 'balanced' | 'playback';
+  fmSampleRate?: 44100 | 48000;
 };
 
 export type BandwidthProfile = {

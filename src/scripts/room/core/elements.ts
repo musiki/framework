@@ -222,6 +222,8 @@ export const selectRoomElements = (root: HTMLElement) => {
     audioEchoCancellationInput: root.querySelector('[data-audio-echo-cancellation-input]'),
     audioNoiseSuppressionInput: root.querySelector('[data-audio-noise-suppression-input]'),
     audioAutoGainControlInput: root.querySelector('[data-audio-auto-gain-control-input]'),
+    fmLatencySelect: root.querySelector<HTMLSelectElement>('[data-fm-latency-select]'),
+    fmSampleRateSelect: root.querySelector<HTMLSelectElement>('[data-fm-samplerate-select]'),
     synthCarrierInput: root.querySelector('[data-synth-carrier-input]'),
     synthCarrierOutput: root.querySelector('[data-synth-carrier-output]'),
     synthModulatorInput: root.querySelector('[data-synth-modulator-input]'),

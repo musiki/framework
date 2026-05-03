@@ -105,6 +105,21 @@ const isTeacher = defaultRole === 'teacher';
                 <option value="">Selecciona dispositivo MIDI</option>
               </select>
             </div>
+            <div class="conference-field">
+              <label for="modal-fm-latency">FM Synth Buffer</label>
+              <select id="modal-fm-latency" data-fm-latency-select>
+                <option value="interactive">Interactive (low latency)</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="playback">Playback (stable)</option>
+              </select>
+            </div>
+            <div class="conference-field">
+              <label for="modal-fm-samplerate">FM Synth Sample Rate</label>
+              <select id="modal-fm-samplerate" data-fm-samplerate-select>
+                <option value="48000" selected>48 kHz</option>
+                <option value="44100">44.1 kHz</option>
+              </select>
+            </div>
           </div>
         </section>
 

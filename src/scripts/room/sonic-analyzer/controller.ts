@@ -204,7 +204,8 @@ export class SonicAnalyzerController {
       this.setStatus(`shared ✓ · ${this.activeSource} · ${this.fps}fps`);
     } catch (e: any) {
       console.error('[sA] upload error', e);
-      this.setStatus('upload failed');
+      const msg = e instanceof Error ? e.message : String(e);
+      this.setStatus(`upload error: ${msg.slice(0, 60)}`);
     }
   }
 
@@ -233,7 +234,7 @@ export class SonicAnalyzerController {
       const msg = (e as Error).message;
       if (this.active && msg === 'audio context not ready') {
         this.setStatus('waiting for audio…');
-        this.reconnectTimer = window.setTimeout(() => void this.tryConnectAndStart(), 2000);
+        this.reconnectTimer = setTimeout(() => void this.tryConnectAndStart(), 2000);
       } else {
         this.setStatus(`error: ${msg}`);
       }
