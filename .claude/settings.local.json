@@ -20,7 +20,10 @@
       "Bash(npx tsc *)",
       "Bash(python3 -c ' *)",
       "Bash(git -C /Users/zztt/projects/26-musiki/framework worktree add ~/.config/superpowers/worktrees/framework/stage15-sa-sv-sync -b feature/stage15-sa-sv-sync)",
-      "Bash(git -C /Users/zztt/projects/26-musiki/framework show main:src/scripts/room/session/messages.ts)"
+      "Bash(git -C /Users/zztt/projects/26-musiki/framework show main:src/scripts/room/session/messages.ts)",
+      "Bash(ssh *)",
+      "Bash(git merge *)",
+      "Bash(awk -F: '$2 < 7459 && $2 > 7400 {print}')"
     ]
   }
 }
