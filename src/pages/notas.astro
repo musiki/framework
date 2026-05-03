@@ -38,6 +38,8 @@ for (const note of allNotes) {
   byCourse[course][date].push(note);
 }
 
+const startInEditMode = allNotes.length === 0;
+
 const formatDateFront = (d: any) => {
   const s = String(d || '');
   if (s.length > 8 && s.includes('-')) {
