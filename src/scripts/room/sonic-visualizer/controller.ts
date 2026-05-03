@@ -2,8 +2,9 @@ import { drawRadar } from '../sonic-analyzer/views/radar-view';
 import { renderHeatmap, renderPitchContour } from '../sonic-analyzer/views/viz-view';
 import type { SAResults } from '../sonic-analyzer/views/text-view';
 import type { SAFilePayload } from '../sonic-analyzer/controller';
+import type { ConferenceMessage } from '../session';
 
-export type SVOptions = { container: HTMLElement };
+export type SVOptions = { container: HTMLElement; publish?: (msg: ConferenceMessage) => void };
 
 export class SonicVisualizerController {
   private container: HTMLElement;
@@ -35,6 +36,7 @@ export class SonicVisualizerController {
   private playbackNode: AudioBufferSourceNode | null = null;
   private rafId: number | null = null;
   private isDragging = false;
+  private publish?: (msg: ConferenceMessage) => void;
 
   // bound event handlers (for cleanup)
   private onFrame:      (e: Event) => void;
@@ -43,6 +45,7 @@ export class SonicVisualizerController {
 
   constructor(options: SVOptions) {
     this.container = options.container;
+    this.publish = options.publish;
     this.bindDOM();
 
     this.onFrame     = (e) => this.handleFrame((e as CustomEvent<{ results: SAResults }>).detail);
@@ -99,10 +102,19 @@ export class SonicVisualizerController {
 
   // ─── Vtab / heatmap ──────────────────────────────────────────────────────────
 
-  private switchVTab(tab: string): void {
+  private applyVTab(tab: string): void {
     this.activeVTab = tab;
     this.vtabBtns.forEach(b => { b.dataset.active = b.dataset.svVtab === tab ? 'true' : 'false'; });
     this.renderCurrentHeatmap();
+  }
+
+  private switchVTab(tab: string): void {
+    this.applyVTab(tab);
+    this.publish?.({ type: 'sv-vtab', tab });
+  }
+
+  public applyRemoteVTab(tab: string): void {
+    this.applyVTab(tab);
   }
 
   private renderCurrentHeatmap(): void {
@@ -191,12 +203,25 @@ export class SonicVisualizerController {
     canvas.addEventListener('pointerup', (e) => {
       this.isDragging = false; canvas.releasePointerCapture(e.pointerId);
       if (!this.isPlaying) this.stopPlayheadAnim();
+      this.publish?.({
+        type: 'sv-playback',
+        action: this.isPlaying ? 'play' : 'seek',
+        offset: this.playOffset,
+      });
     });
   }
 
   // ─── Playback ────────────────────────────────────────────────────────────────
 
-  private togglePlayback(): void { if (this.isPlaying) this.pausePlayback(); else this.startPlayback(); }
+  private togglePlayback(): void {
+    if (this.isPlaying) {
+      this.pausePlayback();
+      this.publish?.({ type: 'sv-playback', action: 'pause', offset: this.playOffset });
+    } else {
+      this.startPlayback();
+      this.publish?.({ type: 'sv-playback', action: 'play', offset: this.playOffset });
+    }
+  }
 
   private startPlayback(offset = this.playOffset): void {
     this.stopPlayback();
@@ -249,6 +274,14 @@ export class SonicVisualizerController {
   // ─── Misc ────────────────────────────────────────────────────────────────────
 
   private setStatus(msg: string): void { if (this.statusEl) this.statusEl.textContent = msg; }
+
+  public applyRemotePlayback(action: 'play' | 'pause' | 'seek', offset: number): void {
+    if (action === 'pause') {
+      this.pausePlayback();
+    } else {
+      this.startPlayback(offset);
+    }
+  }
 
   public dispose(): void {
     this.stopPlayback();
