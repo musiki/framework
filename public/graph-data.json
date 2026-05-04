@@ -286,12 +286,39 @@
       "group": "tags"
     },
     {
+      "id": "public/conceptos/afordancia",
+      "name": "afordancia",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "afordancia",
+      "img": ""
+    },
+    {
       "id": "public/conceptos/estructura",
       "name": "estructura",
       "type": "document",
       "group": "public",
       "publicFolder": "conceptos",
       "canonicalSlug": "estructura",
+      "img": ""
+    },
+    {
+      "id": "public/conceptos/instrumentalidad",
+      "name": "instrumentalidad",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "instrumentalidad",
+      "img": ""
+    },
+    {
+      "id": "public/conceptos/liveness",
+      "name": "liveness",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "liveness",
       "img": ""
     },
     {

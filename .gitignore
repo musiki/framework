@@ -33,3 +33,4 @@ src/content/.obsidian/
 .DS_Store
 .aiexclude
 .vscode/easycode.ignore
+.gstack/

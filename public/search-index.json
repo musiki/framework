@@ -270,12 +270,42 @@
     "isPublic": false
   },
   {
+    "slug": "public/conceptos/afordancia",
+    "title": "afordancia",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
     "slug": "public/conceptos/estructura",
     "title": "estructura",
     "description": "",
     "theme": null,
     "reveal": false,
     "type": "concept",
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/conceptos/instrumentalidad",
+    "title": "instrumentalidad",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/conceptos/liveness",
+    "title": "liveness",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
     "courseId": null,
     "isPublic": true
   },

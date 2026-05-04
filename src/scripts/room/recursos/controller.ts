@@ -27,6 +27,12 @@ type RecursosMessage =
   | { type: 'recursos:sync'; items: ResourceItem[]; allowStudents: boolean }
   | { type: 'recursos:allow-students'; allow: boolean };
 
+type RenameMode =
+  | { kind: 'item';       target: ResourceItem }
+  | { kind: 'folder';     target: string }
+  | { kind: 'header' }
+  | { kind: 'new-folder' };
+
 export class RecursosController {
   private container: HTMLElement;
   private isTeacher: boolean;
@@ -38,14 +44,22 @@ export class RecursosController {
   private items: ResourceItem[] = [];
   private allowStudents = false;
   private collapsedFolders = new Set<string>();
+  private emptyFolders = new Set<string>();
   private draggedItemId: string | null = null;
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Rename state — separate from ctx menu targets so closeCtxMenu doesn't clobber them
+  private renameMode: RenameMode | null = null;
+
+  // Ctx menu targets (only live while menu is open)
   private ctxTargetItem: ResourceItem | null = null;
   private ctxTargetFolder: string | null = null;
 
+  // Header label (defaults to claseId path, overridable per course)
+  private headerLabel = '';
+
   private contentEl!: HTMLElement;
-  private claseNameEl!: HTMLElement;
   private dropOverlayEl!: HTMLElement;
   private ctxMenuEl!: HTMLElement;
   private ctxRenameBtn!: HTMLButtonElement;
@@ -53,13 +67,12 @@ export class RecursosController {
   private ctxDeleteBtn!: HTMLButtonElement;
   private renameBarEl!: HTMLElement;
   private renameInputEl!: HTMLInputElement;
-  private exportPopoverEl!: HTMLElement;
-  private exportInputEl!: HTMLInputElement;
   private collabBtn!: HTMLButtonElement;
   private foldBtn!: HTMLButtonElement;
   private newFolderBtn!: HTMLButtonElement;
   private pasteBtn!: HTMLButtonElement;
-  private exportBtn!: HTMLButtonElement;
+  private guardarlBtn!: HTMLButtonElement;
+  private bottombarEl!: HTMLElement;
 
   constructor(opts: RecursosOptions) {
     this.container = opts.container;
@@ -78,7 +91,6 @@ export class RecursosController {
       this.container.querySelector<T>(sel)!;
 
     this.contentEl      = q('[data-re-content]');
-    this.claseNameEl    = q('[data-re-clase-name]');
     this.dropOverlayEl  = q('[data-re-drop-overlay]');
     this.ctxMenuEl      = q('[data-re-ctx-menu]');
     this.ctxRenameBtn   = q('[data-re-ctx-rename]');
@@ -86,14 +98,16 @@ export class RecursosController {
     this.ctxDeleteBtn   = q('[data-re-ctx-delete]');
     this.renameBarEl    = q('[data-re-rename-bar]');
     this.renameInputEl  = q('[data-re-rename-input]');
-    this.exportPopoverEl = q('[data-re-export-popover]');
-    this.exportInputEl  = q('[data-re-export-input]');
     this.collabBtn      = q('[data-re-collab]');
     this.foldBtn        = q('[data-re-fold]');
     this.newFolderBtn   = q('[data-re-new-folder]');
     this.pasteBtn       = q('[data-re-paste]');
-    this.exportBtn      = q('[data-re-export]');
+    this.guardarlBtn    = q('[data-re-guardar]');
+    this.bottombarEl    = q('[data-re-bottombar]');
 
+    // Students: only the tree (no bottom bar)
+    if (!this.isTeacher) this.bottombarEl.hidden = true;
+    // Teacher-only collab toggle
     if (this.isTeacher) this.collabBtn.style.display = '';
   }
 
@@ -102,11 +116,18 @@ export class RecursosController {
     const claseId  = this.getCourseId();
     if (!roomName) return;
 
+    // Restore custom header label
+    this.headerLabel = localStorage.getItem(`re:header:${claseId ?? '_'}`) ?? '';
+
+    // Restore collapsed state
+    try {
+      const raw = localStorage.getItem(`re:collapsed:${claseId ?? '_'}`);
+      if (raw) JSON.parse(raw).forEach((f: string) => this.collapsedFolders.add(f));
+    } catch { /* ignore */ }
+
     try {
       const params = new URLSearchParams({ roomName });
-      if (claseId) params.set('claseId', claseId);
-      else params.set('claseId', '');
-
+      params.set('claseId', claseId ?? '');
       const resp = await fetch(`/api/live/recursos?${params}`);
       if (!resp.ok) return;
       const data = await resp.json();
@@ -134,8 +155,14 @@ export class RecursosController {
 
     window.addEventListener('musiki:clase-presentation-changed', (e: Event) => {
       const ev = e as CustomEvent<{ lessonId: string | null }>;
-      const name = ev.detail?.lessonId?.split('/').slice(-2).join(' / ') ?? '';
-      this.claseNameEl.textContent = name;
+      if (!this.headerLabel) {
+        // Only update header display when no custom label is set
+        const claseId = ev.detail?.lessonId ?? null;
+        const display = claseId
+          ? claseId.split('/').slice(-2).join(' / ')
+          : '';
+        this.updateHeaderEl(display);
+      }
     });
 
     document.addEventListener('visibilitychange', () => {
@@ -163,34 +190,33 @@ export class RecursosController {
       this.addCompartido(ev.detail.url, ev.detail.name || quickNameFromUrl(ev.detail.url), 'external-media');
     });
 
+    // Bottom bar
     this.foldBtn.addEventListener('click', () => this.toggleFoldAll());
-    this.newFolderBtn.addEventListener('click', () => this.createFolder());
+    this.newFolderBtn.addEventListener('click', () => this.startNewFolder());
     this.pasteBtn.addEventListener('click', () => void this.pasteClipboard());
-    this.exportBtn.addEventListener('click', () => this.toggleExportPopover());
+    this.guardarlBtn.addEventListener('click', () => void this.doGuardar());
     this.collabBtn.addEventListener('click', () => this.toggleAllowStudents());
 
-    this.exportInputEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') void this.doExport();
-      if (e.key === 'Escape') this.closeExportPopover();
-    });
-    this.container.querySelector('[data-re-export-ok]')!.addEventListener('click', () => void this.doExport());
-    this.container.querySelector('[data-re-export-cancel]')!.addEventListener('click', () => this.closeExportPopover());
-
-    this.ctxRenameBtn.addEventListener('click', () => this.startRename());
-    this.ctxDeleteBtn.addEventListener('click', () => this.deleteCtxTarget());
-    this.ctxMoveBtn.addEventListener('click', () => this.showMoveSubmenu());
-
+    // Rename bar
     this.renameInputEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.confirmRename();
       if (e.key === 'Escape') this.closeRename();
     });
-    this.container.querySelector('[data-re-rename-ok]')!.addEventListener('click', () => this.confirmRename());
-    this.container.querySelector('[data-re-rename-cancel]')!.addEventListener('click', () => this.closeRename());
+    this.container.querySelector('[data-re-rename-ok]')!
+      .addEventListener('click', () => this.confirmRename());
+    this.container.querySelector('[data-re-rename-cancel]')!
+      .addEventListener('click', () => this.closeRename());
+
+    // Context menu
+    this.ctxRenameBtn.addEventListener('click', () => this.startRename());
+    this.ctxDeleteBtn.addEventListener('click', () => this.deleteCtxTarget());
+    this.ctxMoveBtn.addEventListener('click', () => this.showMoveSubmenu());
 
     document.addEventListener('click', (e) => {
       if (!this.ctxMenuEl.contains(e.target as Node)) this.closeCtxMenu();
     });
 
+    // Drag & drop files into the pod
     this.container.addEventListener('dragenter', (e) => {
       if (e.dataTransfer?.types.includes('Files')) {
         e.preventDefault();
@@ -212,6 +238,7 @@ export class RecursosController {
       for (const file of files) void this.uploadFile(file);
     });
 
+    // Long-press on mobile
     this.contentEl.addEventListener('touchstart', (e) => {
       const el = (e.target as Element).closest('[data-item-id]');
       if (!el) return;
@@ -229,6 +256,38 @@ export class RecursosController {
   private canEdit(): boolean {
     return this.isTeacher || this.allowStudents;
   }
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+
+  private updateHeaderEl(text: string) {
+    const el = this.contentEl.querySelector<HTMLElement>('.re-header');
+    if (el) el.textContent = this.headerLabel || text || 'Re';
+  }
+
+  private buildHeaderEl(): HTMLElement {
+    const claseId = this.getCourseId();
+    const defaultLabel = claseId ? claseId.split('/').slice(-2).join(' / ') : '';
+    const el = document.createElement('div');
+    el.className = 're-header';
+    el.textContent = this.headerLabel || defaultLabel || 'Re';
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.startHeaderRename();
+    });
+    return el;
+  }
+
+  private startHeaderRename() {
+    const claseId = this.getCourseId();
+    const defaultLabel = claseId ? claseId.split('/').slice(-2).join(' / ') : '';
+    this.renameMode = { kind: 'header' };
+    this.renameBarEl.removeAttribute('hidden');
+    this.renameInputEl.value = this.headerLabel || defaultLabel;
+    this.renameInputEl.focus();
+    this.renameInputEl.select();
+  }
+
+  // ── Compartidos ─────────────────────────────────────────────────────────────
 
   private addCompartido(url: string, name: string, source: ResourceItem['source']) {
     if (!url) return;
@@ -248,6 +307,8 @@ export class RecursosController {
     this.scheduleAutosave();
     this.broadcastSync();
   }
+
+  // ── Upload ──────────────────────────────────────────────────────────────────
 
   private async uploadFile(file: File) {
     if (!this.canEdit()) return;
@@ -281,6 +342,8 @@ export class RecursosController {
     } catch (e) { console.error('[Re] upload error', e); }
   }
 
+  // ── Paste clipboard ─────────────────────────────────────────────────────────
+
   private async pasteClipboard() {
     if (!this.canEdit()) return;
     try {
@@ -313,6 +376,8 @@ export class RecursosController {
     } catch { /* clipboard read denied */ }
   }
 
+  // ── Sync ────────────────────────────────────────────────────────────────────
+
   private broadcastSync() {
     this.publish({ type: 'recursos:sync', items: this.items, allowStudents: this.allowStudents });
   }
@@ -328,6 +393,8 @@ export class RecursosController {
       this.updateCollabBtn();
     }
   }
+
+  // ── Autosave ────────────────────────────────────────────────────────────────
 
   private scheduleAutosave() {
     if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
@@ -354,9 +421,12 @@ export class RecursosController {
     navigator.sendBeacon('/api/live/recursos', new Blob([payload], { type: 'application/json' }));
   }
 
-  private async doExport() {
-    const filename = this.exportInputEl.value.trim() || this.defaultExportFilename();
+  // ── Guardar (save + export) ─────────────────────────────────────────────────
+
+  private async doGuardar() {
+    void this.save();
     const claseId = this.getCourseId();
+    const filename = this.computeExportFilename();
     const md = this.buildMarkdown(filename, claseId);
     const courseId = claseId?.split('/')?.[0] ?? '';
     const targetPath = claseId
@@ -366,14 +436,13 @@ export class RecursosController {
       const resp = await fetch('/api/content-admin/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseId, targetPath, content: md, mode: 'create', editSummary: 'Re pod export' }),
+        body: JSON.stringify({ courseId, targetPath, content: md, mode: 'create', editSummary: 'Re pod guardar' }),
       });
-      if (!resp.ok) console.error('[Re] export failed', resp.status);
-    } catch (e) { console.error('[Re] export error', e); }
-    this.closeExportPopover();
+      if (!resp.ok) console.error('[Re] guardar failed', resp.status);
+    } catch (e) { console.error('[Re] guardar error', e); }
   }
 
-  private defaultExportFilename(): string {
+  private computeExportFilename(): string {
     const claseId = this.getCourseId();
     if (claseId) {
       const slug = claseId.split('/').pop() ?? 'clase';
@@ -421,8 +490,12 @@ export class RecursosController {
     return md;
   }
 
+  // ── Render ──────────────────────────────────────────────────────────────────
+
   private render() {
-    renderFiletree(this.contentEl, this.items, this.collapsedFolders, {
+    renderFiletree(this.contentEl, this.items, this.collapsedFolders, this.emptyFolders, {
+      headerEl: this.buildHeaderEl(),
+      canEdit: this.canEdit(),
       onItemClick: (item) => window.open(item.url, '_blank', 'noopener'),
       onItemContextMenu: (item, e) => this.openItemCtxMenu(item, e),
       onFolderContextMenu: (folder, e) => this.openFolderCtxMenu(folder, e),
@@ -447,6 +520,8 @@ export class RecursosController {
     });
   }
 
+  // ── Folder management ───────────────────────────────────────────────────────
+
   private toggleFolder(folder: string) {
     if (this.collapsedFolders.has(folder)) this.collapsedFolders.delete(folder);
     else this.collapsedFolders.add(folder);
@@ -468,16 +543,20 @@ export class RecursosController {
     this.render();
   }
 
-  private createFolder() {
+  // Opens the rename bar in "new-folder" mode instead of using prompt()
+  private startNewFolder() {
     if (!this.canEdit()) return;
-    const name = prompt('Nombre de la carpeta:')?.trim();
-    if (!name) return;
-    (this as any)._pendingFolders ??= new Set();
-    (this as any)._pendingFolders.add(name);
-    this.render();
+    this.renameMode = { kind: 'new-folder' };
+    this.renameBarEl.removeAttribute('hidden');
+    this.renameInputEl.value = '';
+    this.renameInputEl.placeholder = 'nombre de carpeta';
+    this.renameInputEl.focus();
   }
 
+  // ── Context menu ────────────────────────────────────────────────────────────
+
   private openItemCtxMenu(item: ResourceItem, e: MouseEvent) {
+    if (!this.canEdit()) return;
     this.ctxTargetItem = item;
     this.ctxTargetFolder = null;
     this.ctxMoveBtn.style.display = '';
@@ -485,6 +564,7 @@ export class RecursosController {
   }
 
   private openFolderCtxMenu(folder: string, e: MouseEvent) {
+    if (!this.canEdit()) return;
     if (folder === 'compartidos') return;
     this.ctxTargetFolder = folder;
     this.ctxTargetItem = null;
@@ -504,10 +584,21 @@ export class RecursosController {
     this.ctxTargetFolder = null;
   }
 
+  // ── Rename (shared bar) ─────────────────────────────────────────────────────
+
   private startRename() {
-    const current = this.ctxTargetItem?.name ?? this.ctxTargetFolder ?? '';
+    // Capture targets BEFORE closeCtxMenu clears them
+    const item   = this.ctxTargetItem;
+    const folder = this.ctxTargetFolder;
     this.closeCtxMenu();
+
+    const current = item?.name ?? folder ?? '';
+    this.renameMode = item
+      ? { kind: 'item',   target: item }
+      : { kind: 'folder', target: folder! };
+
     this.renameBarEl.removeAttribute('hidden');
+    this.renameInputEl.placeholder = '';
     this.renameInputEl.value = current;
     this.renameInputEl.focus();
     this.renameInputEl.select();
@@ -516,32 +607,55 @@ export class RecursosController {
   private confirmRename() {
     const newName = this.renameInputEl.value.trim();
     if (!newName) { this.closeRename(); return; }
-    if (this.ctxTargetItem) {
-      const id = this.ctxTargetItem.id;
-      this.items = this.items.map(i => i.id === id ? { ...i, name: newName } : i);
-    } else if (this.ctxTargetFolder) {
-      const old = this.ctxTargetFolder;
-      this.items = this.items.map(i => i.folder === old ? { ...i, folder: newName } : i);
-    }
+
+    const mode = this.renameMode;
     this.closeRename();
-    this.render();
-    this.scheduleAutosave();
-    this.broadcastSync();
+
+    if (!mode) return;
+
+    if (mode.kind === 'item') {
+      const id = mode.target.id;
+      this.items = this.items.map(i => i.id === id ? { ...i, name: newName } : i);
+      this.render();
+      this.scheduleAutosave();
+      this.broadcastSync();
+    } else if (mode.kind === 'folder') {
+      const old = mode.target;
+      this.items = this.items.map(i => i.folder === old ? { ...i, folder: newName } : i);
+      if (this.emptyFolders.has(old)) {
+        this.emptyFolders.delete(old);
+        this.emptyFolders.add(newName);
+      }
+      this.render();
+      this.scheduleAutosave();
+      this.broadcastSync();
+    } else if (mode.kind === 'header') {
+      this.headerLabel = newName;
+      localStorage.setItem(`re:header:${this.getCourseId() ?? '_'}`, newName);
+      this.render();
+    } else if (mode.kind === 'new-folder') {
+      this.emptyFolders.add(newName);
+      this.render();
+    }
   }
 
   private closeRename() {
     this.renameBarEl.setAttribute('hidden', '');
-    this.ctxTargetItem = null;
-    this.ctxTargetFolder = null;
+    this.renameInputEl.placeholder = '';
+    this.renameMode = null;
   }
 
+  // ── Delete / move ────────────────────────────────────────────────────────────
+
   private deleteCtxTarget() {
+    const item   = this.ctxTargetItem;
+    const folder = this.ctxTargetFolder;
     this.closeCtxMenu();
-    if (this.ctxTargetItem) {
-      this.items = removeItem(this.items, this.ctxTargetItem.id);
-    } else if (this.ctxTargetFolder) {
-      const folder = this.ctxTargetFolder;
+    if (item) {
+      this.items = removeItem(this.items, item.id);
+    } else if (folder) {
       this.items = this.items.map(i => i.folder === folder ? { ...i, folder: '' } : i);
+      this.emptyFolders.delete(folder);
     }
     this.render();
     this.scheduleAutosave();
@@ -549,18 +663,20 @@ export class RecursosController {
   }
 
   private showMoveSubmenu() {
-    const folders = foldersFromItems(this.items).filter(f => f !== this.ctxTargetItem?.folder);
+    const item = this.ctxTargetItem;
+    this.closeCtxMenu();
+    if (!item) return;
+    const folders = foldersFromItems(this.items).filter(f => f !== item.folder);
     const target = prompt(`Mover a carpeta:\n${['(raíz)', ...folders].join('\n')}`);
     if (target === null) return;
     const folder = target === '(raíz)' ? '' : target.trim();
-    if (this.ctxTargetItem) {
-      this.items = moveItem(this.items, this.ctxTargetItem.id, folder);
-      this.render();
-      this.scheduleAutosave();
-      this.broadcastSync();
-    }
-    this.closeCtxMenu();
+    this.items = moveItem(this.items, item.id, folder);
+    this.render();
+    this.scheduleAutosave();
+    this.broadcastSync();
   }
+
+  // ── Collab toggle ───────────────────────────────────────────────────────────
 
   private toggleAllowStudents() {
     if (!this.isTeacher) return;
@@ -574,23 +690,13 @@ export class RecursosController {
     this.collabBtn.title = this.allowStudents
       ? 'Alumnos pueden agregar recursos (activo)'
       : 'Alumnos pueden agregar recursos (desactivado)';
-  }
-
-  private toggleExportPopover() {
-    const hidden = this.exportPopoverEl.hasAttribute('hidden');
-    if (hidden) {
-      this.exportInputEl.value = this.defaultExportFilename();
-      this.exportPopoverEl.removeAttribute('hidden');
-      this.exportInputEl.focus();
-      this.exportInputEl.select();
-    } else {
-      this.closeExportPopover();
+    // Students gain/lose the bottom bar when teacher toggles allowStudents
+    if (!this.isTeacher) {
+      this.bottombarEl.hidden = !this.allowStudents;
     }
   }
 
-  private closeExportPopover() {
-    this.exportPopoverEl.setAttribute('hidden', '');
-  }
+  // ── Dispose ──────────────────────────────────────────────────────────────────
 
   dispose() {
     if (this.autosaveTimer) clearTimeout(this.autosaveTimer);

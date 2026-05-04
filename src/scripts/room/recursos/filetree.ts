@@ -72,7 +72,10 @@ export function renderFiletree(
   container: HTMLElement,
   items: ResourceItem[],
   collapsedFolders: Set<string>,
+  emptyFolders: Set<string>,
   options: {
+    headerEl?: HTMLElement;
+    canEdit?: boolean;
     onItemClick: (item: ResourceItem) => void;
     onItemContextMenu: (item: ResourceItem, e: MouseEvent) => void;
     onFolderContextMenu: (folder: string, e: MouseEvent) => void;
@@ -84,7 +87,12 @@ export function renderFiletree(
 ) {
   container.innerHTML = '';
 
-  const folders = foldersFromItems(items);
+  if (options.headerEl) container.appendChild(options.headerEl);
+
+  // Merge item-derived folders with explicitly created empty folders
+  const itemFolders = foldersFromItems(items);
+  const allEmpty = [...emptyFolders].filter(f => !itemFolders.includes(f));
+  const folders = [...itemFolders, ...allEmpty];
 
   for (const folder of folders) {
     const isCollapsed = collapsedFolders.has(folder);
@@ -132,13 +140,14 @@ export function renderFiletree(
 
 function buildItemEl(
   item: ResourceItem,
-  options: Parameters<typeof renderFiletree>[3],
+  options: Parameters<typeof renderFiletree>[4],
 ): HTMLElement {
   const { char, color } = iconFor(item.type);
+  const canEdit = options.canEdit ?? true;
   const el = document.createElement('div');
   el.className = 're-item';
   el.dataset.itemId = item.id;
-  el.draggable = true;
+  el.draggable = canEdit;
   el.innerHTML = `
     <span class="re-item-icon" style="color:${color}">${char}</span>
     <span class="re-item-name" title="${escHtml(item.url)}">${escHtml(item.name)}</span>

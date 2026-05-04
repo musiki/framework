@@ -26,7 +26,12 @@
       "Bash(awk -F: '$2 < 7459 && $2 > 7400 {print}')",
       "Bash(xargs ls *)",
       "Bash(awk -F: '$2 >= 225 && $2 <= 320 {print}')",
-      "Skill(gsd-resume-work)"
+      "Skill(gsd-resume-work)",
+      "Skill(land-and-deploy)",
+      "Bash(/Users/zztt/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/start-server.sh *)",
+      "Bash(npm test *)",
+      "Bash(git branch *)",
+      "Skill(qa)"
     ]
   }
 }

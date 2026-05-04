@@ -5892,7 +5892,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const getExternalMediaDefaultStatus = () => {
     if (!externalMediaSession) {
-      return 'Pega un link de YouTube para abrir una sesión externa sincronizada.';
+      return '';
     }
     return `${externalMediaSession.provider === 'youtube' ? 'YouTube' : 'Media externa'} activa.`;
   };
@@ -6025,6 +6025,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             },
             'local',
           );
+          window.dispatchEvent(new CustomEvent('musiki:recursos:external-media', {
+            detail: { url: `https://www.youtube.com/watch?v=${result.mediaId}`, name: result.title },
+          }));
         });
         resEl.appendChild(button);
       });
@@ -6309,7 +6312,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       externalMediaEmpty.hidden = isActive && externalMediaPlayerReady;
       externalMediaEmpty.textContent = isActive
         ? 'Cargando YouTube sincronizado...'
-        : 'Pega un link de YouTube para abrir una sesión externa sincronizada.';
+        : '';
     }
 
     if (externalMediaStatus instanceof HTMLElement && !externalMediaStatus.textContent?.trim()) {
@@ -6589,6 +6592,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       },
       'local',
     );
+    window.dispatchEvent(new CustomEvent('musiki:recursos:external-media', {
+      detail: { url: `https://www.youtube.com/watch?v=${parsedMedia.mediaId}`, name: inputValue },
+    }));
   };
 
   const toggleExternalMediaPlayback = () => {

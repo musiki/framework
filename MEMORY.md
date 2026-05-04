@@ -1,5 +1,9 @@
 # MEMORY.md — Project Activity Log
 
+<2026-05-04 external-media-ui-fix> <br>
+Removed obscuring instructional text from External Media pod.
+- Media: Removed "Pega un link de YouTube para abrir una sesión externa sincronizada." from `StageOverlays.astro` and `livekit-room.ts`. This text was obscuring the YouTube search input box when the session was empty.
+
 <2026-05-01 stabilization-and-graph-fixes> <br>
 Resolved critical auth crashes, fixed Graph pod rendering, and completed Supabase cleanup.
 - ROSTER: Overhauled roster items with a multi-row layout. Added animated speaker icon for active speakers and restored hand-raise (✋) indicator.
