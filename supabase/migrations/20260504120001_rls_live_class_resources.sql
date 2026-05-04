@@ -1,14 +1,8 @@
-BEGIN;
+-- RLS not required: app user has Bypass RLS privilege.
+-- Table is server-side only; all access goes through the API layer (pool.ts).
+-- Keeping this file as a no-op placeholder for migration history consistency.
 
-ALTER TABLE public."LiveClassResource" ENABLE ROW LEVEL SECURITY;
-
-REVOKE ALL ON TABLE public."LiveClassResource" FROM anon, authenticated;
-GRANT ALL ON TABLE public."LiveClassResource" TO service_role;
-
-DROP POLICY IF EXISTS "service_role_only" ON public."LiveClassResource";
-CREATE POLICY "service_role_only"
-  ON public."LiveClassResource"
-  AS PERMISSIVE FOR ALL TO service_role
-  USING (true) WITH CHECK (true);
-
-COMMIT;
+-- If additional DB roles are added in the future, add policies here:
+-- ALTER TABLE public."LiveClassResource" ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY "app_only" ON public."LiveClassResource"
+--   AS PERMISSIVE FOR ALL TO app USING (true) WITH CHECK (true);

@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Shared class resource list: files uploaded to R2 + links + auto-captured from chat/SA/ME.
 -- One flat list per (claseId, roomName) session. Persisted via autosave from the Re pod.
 
@@ -20,3 +22,5 @@ CREATE TABLE "LiveClassResource" (
 
 CREATE INDEX "LiveClassResource_room_idx"
   ON "LiveClassResource" ("roomName", "claseId");
+
+COMMIT;
