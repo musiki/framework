@@ -17,6 +17,7 @@ export class RoomWorkspaceManager {
   private onScoreInit?: (element: HTMLElement) => void;
   private onSonicAnalyzerInit?: (element: HTMLElement) => void;
   private onSonicVisualizerInit?: (element: HTMLElement) => void;
+  private onRecursosInit?: (element: HTMLElement) => void;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
   public hyperpianoController: HyperpianoController | null = null;
@@ -46,7 +47,8 @@ export class RoomWorkspaceManager {
     { id: 'hyperpiano', title: 'HYPERPIANO', icon: 'Hp', atomic: 17, color: '#FFD966', cat: 'tools' },
     { id: 'instant-score', title: 'SCORE', icon: 'Is', atomic: 18, color: '#F1C232', cat: 'tools' },
     { id: 'sonic-analyzer',   title: 'SA', icon: 'Sa', atomic: 19, color: '#45D384', cat: 'tools' },
-    { id: 'sonic-visualizer', title: 'SV', icon: 'Sv', atomic: 20, color: '#45D384', cat: 'tools' }
+    { id: 'sonic-visualizer', title: 'SV', icon: 'Sv', atomic: 20, color: '#45D384', cat: 'tools' },
+    { id: 'recursos', title: 'RECURSOS', icon: 'Re', atomic: 21, color: '#6fa8dc', cat: 'comm' }
   ];
 
   constructor(
@@ -63,7 +65,8 @@ export class RoomWorkspaceManager {
     onOrfInit?: (element: HTMLElement) => void,
     onScoreInit?: (element: HTMLElement) => void,
     onSonicAnalyzerInit?: (element: HTMLElement) => void,
-    onSonicVisualizerInit?: (element: HTMLElement) => void
+    onSonicVisualizerInit?: (element: HTMLElement) => void,
+    onRecursosInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -79,6 +82,7 @@ export class RoomWorkspaceManager {
     this.onScoreInit = onScoreInit;
     this.onSonicAnalyzerInit   = onSonicAnalyzerInit;
     this.onSonicVisualizerInit = onSonicVisualizerInit;
+    this.onRecursosInit        = onRecursosInit;
   }
 
   public init() {
@@ -165,6 +169,9 @@ export class RoomWorkspaceManager {
               }
               if (id === 'sonic-visualizer' && this.onSonicVisualizerInit) {
                 this.onSonicVisualizerInit(element);
+              }
+              if (id === 'recursos' && this.onRecursosInit) {
+                this.onRecursosInit(element);
               }
               if (id === 'graph') {
                 delete element.dataset.graphPodReady;

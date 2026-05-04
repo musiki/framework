@@ -202,6 +202,9 @@ export class SonicAnalyzerController {
         bpm: this.fileBpm,
       });
       this.setStatus(`shared ✓ · ${this.activeSource} · ${this.fps}fps`);
+      window.dispatchEvent(new CustomEvent('musiki:recursos:sa-uploaded', {
+        detail: { url: data.url, name: this.loadedFileName?.replace(/\.[^.]+$/, '') ?? '' },
+      }));
     } catch (e: any) {
       console.error('[sA] upload error', e);
       const msg = e instanceof Error ? e.message : String(e);

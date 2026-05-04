@@ -428,6 +428,10 @@ export const createRoomChatController = ({
       chatUnreadCount += 1;
       syncUnreadDot();
     }
+    const urlMatches = (message.text || '').match(/(https?:\/\/[^\s"'<>(){}|\\^`[\]]{4,})/gi) ?? [];
+    for (const url of urlMatches) {
+      window.dispatchEvent(new CustomEvent('musiki:recursos:chat-url', { detail: { url } }));
+    }
     renderChat();
   };
 
