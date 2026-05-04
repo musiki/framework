@@ -39,7 +39,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
 
   const roomName = cleanString(String(body?.roomName ?? ''), 120);
-  const claseId  = cleanString(String(body?.claseId  ?? ''), 240) || null;
+  const claseId  = body?.claseId == null ? null : cleanString(String(body.claseId), 240) || null;
   const items    = Array.isArray(body?.items) ? body.items : [];
 
   if (!roomName) return json({ error: 'roomName required' }, 400);

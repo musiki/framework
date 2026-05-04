@@ -230,7 +230,9 @@ export type ConferenceMessage =
   | {
       type: 'sv-vtab';
       tab: string;
-    };
+    }
+  | { type: 'recursos:sync'; items: any[]; allowStudents: boolean }
+  | { type: 'recursos:allow-students'; allow: boolean };
 
 export const MESSAGE_TOPIC = 'conference-ui';
 
@@ -698,6 +700,21 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'sv-vtab',
         tab: normalizeText((parsed as { tab?: string }).tab) || 'mel',
+      };
+    }
+
+    if (parsed.type === 'recursos:sync') {
+      return {
+        type: 'recursos:sync',
+        items: Array.isArray((parsed as any).items) ? (parsed as any).items : [],
+        allowStudents: Boolean((parsed as any).allowStudents),
+      };
+    }
+
+    if (parsed.type === 'recursos:allow-students') {
+      return {
+        type: 'recursos:allow-students',
+        allow: Boolean((parsed as any).allow),
       };
     }
 

@@ -10950,6 +10950,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         container,
         isTeacher: canLeadSession(),
         getCourseId: () => recursosCurrentLessonId,
+        getCourseRootId: () => courseId || null,
         getRoomName: () => roomInput.value.trim() || null,
         getIdentity: () => room.localParticipant?.identity ?? '',
         publish: (msg) => void publishMessage(msg as any),

@@ -31,7 +31,9 @@
       "Bash(/Users/zztt/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/start-server.sh *)",
       "Bash(npm test *)",
       "Bash(git branch *)",
-      "Skill(qa)"
+      "Skill(qa)",
+      "Bash(git -C /Users/zztt/projects/26-musiki/framework diff --name-only HEAD)",
+      "Bash(git -C /Users/zztt/projects/26-musiki/framework status --short)"
     ]
   }
 }

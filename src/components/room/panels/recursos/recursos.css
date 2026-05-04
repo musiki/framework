@@ -129,7 +129,7 @@
 
 .re-item-name {
   font-size: 11px;
-  color: #bbb;
+  color: #d0d0d0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -179,25 +179,12 @@
   color: #e06666;
 }
 
-/* ── Rename bar ───────────────────────────────────────────── */
-.re-rename-bar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-top: 1px solid #2a2a2a;
-  flex-shrink: 0;
-}
-
-.re-rename-input {
-  flex: 1;
-  background: #111;
-  border: 1px solid #333;
-  border-radius: 3px;
-  color: #ccc;
-  font-size: 11px;
-  padding: 2px 6px;
-  font-family: inherit;
+/* ── Inline editing ───────────────────────────────────────── */
+[contenteditable="true"] {
+  outline: none;
+  border-bottom: 1px solid #45d384;
+  min-width: 40px;
+  cursor: text;
 }
 
 /* ── Bottom bar ───────────────────────────────────────────── */

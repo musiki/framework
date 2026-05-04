@@ -105,7 +105,7 @@ export function renderFiletree(
     rowEl.className = 're-folder-row';
     rowEl.innerHTML = `
       <span class="re-caret">${isCollapsed ? '▸' : '▾'}</span>
-      <span class="re-folder-icon">${isAuto ? '📂' : '📁'}</span>
+      <span class="re-folder-icon" style="color:${isAuto ? '#6fa8dc' : '#555'}">${isAuto ? '⊕' : '⊟'}</span>
       <span class="re-folder-name${isAuto ? ' re-folder-name--auto' : ''}">${escHtml(folder)}</span>
     `;
     rowEl.addEventListener('click', () => options.onFolderToggle(folder));
@@ -132,10 +132,6 @@ export function renderFiletree(
     container.appendChild(buildItemEl(item, options));
   }
 
-  const hint = document.createElement('div');
-  hint.className = 're-drop-hint';
-  hint.textContent = 'drop files · toda el área es drop zone';
-  container.appendChild(hint);
 }
 
 function buildItemEl(
