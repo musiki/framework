@@ -130,6 +130,15 @@
       "img": ""
     },
     {
+      "id": "cursos/i1/03-organología/materiales",
+      "name": "Materiales, Timbre e Instrumentalidad",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "materiales",
+      "img": ""
+    },
+    {
       "id": "cursos/i1/05-herramientas/instalación y primeros pasos",
       "name": "Instalación y primeros pasos",
       "type": "document",
@@ -262,12 +271,30 @@
       "img": ""
     },
     {
+      "id": "cursos/s123/02-forma-y-estructura/el-objeto-estético-espistémico/recursos-recursos-el-objeto-estetico-espistemico",
+      "name": "Recursos — recursos el objeto estético espistémico",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "recursos-recursos-el-objeto-estetico-espistemico",
+      "img": ""
+    },
+    {
       "id": "cursos/s123/03 Metodología de la Investigación en Música/Metodología de la Investigación en Música MOC",
       "name": "Metodología de la Investigación en Música",
       "type": "document",
       "group": "cursos",
       "publicFolder": null,
       "canonicalSlug": "metodologia-de-la-investigacion-en-musica-moc",
+      "img": ""
+    },
+    {
+      "id": "cursos/s123/80-recursos/recursos-recursos",
+      "name": "Recursos — recursos",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "recursos-recursos",
       "img": ""
     },
     {
@@ -413,15 +440,6 @@
       "name": "contemporary-notation",
       "type": "tag",
       "group": "tags"
-    },
-    {
-      "id": "public/lilypond/19-vl/vl-basics",
-      "name": "vl-basics",
-      "type": "document",
-      "group": "public",
-      "publicFolder": "lilypond",
-      "canonicalSlug": "vl-basics",
-      "img": ""
     },
     {
       "id": "public/lilypond/lilypond MOC",

@@ -130,6 +130,16 @@
     "isPublic": false
   },
   {
+    "slug": "03-organología/materiales",
+    "title": "Materiales, Timbre e Instrumentalidad",
+    "description": "",
+    "theme": "zztt",
+    "reveal": false,
+    "type": "lesson",
+    "courseId": "i1",
+    "isPublic": false
+  },
+  {
     "slug": "05-herramientas/instalación y primeros pasos",
     "title": "Instalación y primeros pasos",
     "description": "Tutoriales de instalación de herramientas de software.",
@@ -250,10 +260,30 @@
     "isPublic": false
   },
   {
+    "slug": "02-forma-y-estructura/el-objeto-estético-espistémico/recursos-recursos-el-objeto-estetico-espistemico",
+    "title": "Recursos — recursos el objeto estético espistémico",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": "lesson",
+    "courseId": "s123",
+    "isPublic": false
+  },
+  {
     "slug": "03 Metodología de la Investigación en Música/Metodología de la Investigación en Música MOC",
     "title": "Metodología de la Investigación en Música",
     "description": "",
     "theme": "zztt",
+    "reveal": false,
+    "type": "lesson",
+    "courseId": "s123",
+    "isPublic": false
+  },
+  {
+    "slug": "80-recursos/recursos-recursos",
+    "title": "Recursos — recursos",
+    "description": "",
+    "theme": null,
     "reveal": false,
     "type": "lesson",
     "courseId": "s123",
@@ -356,16 +386,6 @@
     "theme": null,
     "reveal": false,
     "type": "lilypond_recipe",
-    "courseId": null,
-    "isPublic": true
-  },
-  {
-    "slug": "public/lilypond/19-vl/vl-basics",
-    "title": "vl-basics",
-    "description": "",
-    "theme": null,
-    "reveal": false,
-    "type": null,
     "courseId": null,
     "isPublic": true
   },
