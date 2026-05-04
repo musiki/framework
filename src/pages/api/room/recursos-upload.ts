@@ -5,7 +5,12 @@ import { getR2BucketName, getR2Client, getR2PublicObjectUrl } from '../../../lib
 
 const MAX_BYTES = 24 * 1024 * 1024;
 
-const BLOCKED_EXTS = new Set(['exe', 'sh', 'bat', 'cmd', 'msi', 'ps1', 'vbs', 'js', 'php']);
+const ALLOWED_EXTS = new Set([
+  'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg',
+  'md', 'tex', 'ly', 'txt',
+  'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac',
+  'zip', 'tar', 'gz', 'other',
+]);
 
 function guessExt(file: File): string {
   const m = String(file.name || '').match(/\.([a-z0-9]+)$/i);
@@ -14,8 +19,13 @@ function guessExt(file: File): string {
 
 function guessType(ext: string): string {
   if (['pdf'].includes(ext)) return 'application/pdf';
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'image/' + (ext === 'jpg' ? 'jpeg' : ext);
-  if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) return 'audio/' + ext;
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'image/' + (ext === 'jpg' ? 'jpeg' : ext);
+  if (ext === 'svg') return 'image/svg+xml';
+  const AUDIO_TYPES: Record<string, string> = {
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+    m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac',
+  };
+  if (ext in AUDIO_TYPES) return AUDIO_TYPES[ext];
   if (['md', 'tex', 'ly', 'txt'].includes(ext)) return 'text/plain';
   return 'application/octet-stream';
 }
@@ -44,7 +54,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (file.size > MAX_BYTES) return json({ error: 'File exceeds 24 MB limit.' }, 413);
 
     const ext = guessExt(file);
-    if (BLOCKED_EXTS.has(ext)) return json({ error: 'File type not allowed.' }, 415);
+    if (!ALLOWED_EXTS.has(ext)) return json({ error: 'File type not allowed.' }, 415);
 
     const key = buildKey(file, email);
     const contentType = guessType(ext);
