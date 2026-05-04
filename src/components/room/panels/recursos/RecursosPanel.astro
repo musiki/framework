@@ -1,0 +1,68 @@
+---
+import './recursos.css';
+---
+<div class="musiki-pod" data-pod="recursos" data-pod-title="Re" data-re-dropzone>
+
+  <div class="re-pod">
+
+    <!-- Toolbar -->
+    <div class="musiki-pod-toolbar re-toolbar">
+      <span class="re-label">Re</span>
+      <span class="re-clase-name" data-re-clase-name></span>
+    </div>
+
+    <!-- Drop overlay (visible on dragenter) -->
+    <div class="re-drop-overlay" data-re-drop-overlay aria-hidden="true">
+      <span class="re-drop-label">soltar archivos aquí</span>
+    </div>
+
+    <!-- Context menu -->
+    <div class="re-ctx-menu" data-re-ctx-menu hidden>
+      <button type="button" class="re-ctx-item" data-re-ctx-rename>Renombrar</button>
+      <button type="button" class="re-ctx-item" data-re-ctx-move>Mover a…</button>
+      <button type="button" class="re-ctx-item re-ctx-item--danger" data-re-ctx-delete>Borrar</button>
+    </div>
+
+    <!-- Rename input (inline) -->
+    <div class="re-rename-bar" data-re-rename-bar hidden>
+      <input type="text" class="re-rename-input" data-re-rename-input autocomplete="off" />
+      <button type="button" class="musiki-pod-btn re-rename-ok" data-re-rename-ok>✓</button>
+      <button type="button" class="musiki-pod-btn re-rename-cancel" data-re-rename-cancel>✕</button>
+    </div>
+
+    <!-- Filetree -->
+    <div class="re-content" data-re-content></div>
+
+    <!-- Export popover -->
+    <div class="re-export-popover" data-re-export-popover hidden>
+      <span class="re-export-label">guardar como</span>
+      <input type="text" class="re-export-input" data-re-export-input autocomplete="off" />
+      <button type="button" class="musiki-pod-btn musiki-pod-btn--accent" data-re-export-ok>Guardar</button>
+      <button type="button" class="musiki-pod-btn" data-re-export-cancel>✕</button>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="musiki-pod-toolbar re-bottombar">
+      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-fold title="Plegar/desplegar todo">⊟</button>
+      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-new-folder title="Nueva carpeta">+ folder</button>
+      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-paste title="Pegar clipboard">⎘</button>
+      <div style="flex:1;"></div>
+      <!-- Teacher-only collab toggle -->
+      <button
+        type="button"
+        class="musiki-pod-btn re-bb-btn re-collab-btn"
+        data-re-collab
+        data-active="false"
+        data-teacher-only
+        title="Permitir a estudiantes agregar recursos (desactivado)"
+        style="display:none;"
+      >
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13" aria-hidden="true">
+          <path d="M5.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5ZM1.5 14.5c0-2 1.5-3.5 3.5-3.5h1c2 0 3.5 1.5 3.5 3.5M10.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z"/>
+        </svg>
+      </button>
+      <button type="button" class="musiki-pod-btn re-bb-btn re-export-btn" data-re-export title="Exportar / renombrar .md">E</button>
+    </div>
+
+  </div>
+</div>
