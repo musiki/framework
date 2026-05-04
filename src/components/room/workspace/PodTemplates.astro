@@ -6,6 +6,7 @@ import NotesPanel from '../panels/notes/NotesPanel.astro';
 import ClasePanel from '../panels/clase/ClasePanel.astro';
 import SonicAnalyzerPanel from '../panels/sonic-analyzer/SonicAnalyzerPanel.astro';
 import SonicVisualizerPanel from '../panels/sonic-visualizer/SonicVisualizerPanel.astro';
+import RecursosPanel from '../panels/recursos/RecursosPanel.astro';
 
 type Props = {
   presentationOptions?: any[];
@@ -290,6 +291,9 @@ const { presentationOptions = [] } = Astro.props;
 
   <!-- SV: SONIC VISUALIZER -->
   <SonicVisualizerPanel />
+
+  <!-- Re: RECURSOS -->
+  <RecursosPanel />
 </div>
 
 <style is:global>

@@ -27,6 +27,7 @@ import { LilyPondLiveController } from './room/lilypond';
 import { RoomWorkspaceManager } from './room/workspace/RoomWorkspaceManager';
 import { SonicAnalyzerController, computeWaveformPeaks } from './room/sonic-analyzer';
 import { SonicVisualizerController } from './room/sonic-visualizer';
+import { RecursosController } from './room/recursos';
 import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
@@ -10682,6 +10683,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let orfController: RoomOrfController | null = null;
   let sonicAnalyzerController: SonicAnalyzerController | null = null;
   let sonicVisualizerController: SonicVisualizerController | null = null;
+  let recursosController: RecursosController | null = null;
+  let recursosCurrentLessonId: string | null = null;
 
     // Hyperpiano integration
     const updateActiveHyperpianoAudio = () => {
@@ -10930,6 +10933,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       });
     };
 
+    window.addEventListener('musiki:clase-presentation-changed', (e: Event) => {
+      const ev = e as CustomEvent<{ lessonId: string | null }>;
+      recursosCurrentLessonId = ev.detail?.lessonId ?? null;
+    });
+
+    const onRecursosInit = (container: HTMLElement) => {
+      recursosController?.dispose();
+      recursosController = new RecursosController({
+        container,
+        isTeacher: canLeadSession(),
+        getCourseId: () => recursosCurrentLessonId,
+        getRoomName: () => roomInput.value.trim() || null,
+        getIdentity: () => room.localParticipant?.identity ?? '',
+        publish: (msg) => void publishMessage(msg as any),
+      });
+    };
+
   const getWorkspaceSettingsSnapshot = () => ({
     gridSize,
     showCircle: showPresentationCircle,
@@ -10962,7 +10982,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onOrfInit,
     onScoreInit,
     onSonicAnalyzerInit,
-    onSonicVisualizerInit
+    onSonicVisualizerInit,
+    onRecursosInit
   );
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
@@ -12411,6 +12432,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'sv-vtab') {
         sonicVisualizerController?.applyRemoteVTab(message.tab);
+        return;
+      }
+
+      if (message.type === 'recursos:sync' || message.type === 'recursos:allow-students') {
+        window.dispatchEvent(new CustomEvent('musiki:recursos:receive', { detail: message }));
         return;
       }
 
