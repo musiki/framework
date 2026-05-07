@@ -12436,7 +12436,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'sv-vtab') {
-        sonicVisualizerController?.applyRemoteVTab(message.tab);
+        // removed in layer system redesign — ignore gracefully
+        return;
+      }
+
+      if (message.type === 'sv-layer') {
+        sonicVisualizerController?.applyRemoteLayer(message.layer, message.visible);
+        return;
+      }
+
+      if (message.type === 'sv-loop') {
+        sonicVisualizerController?.applyRemoteLoop(message.inPoint, message.outPoint, message.enabled);
         return;
       }
 
