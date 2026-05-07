@@ -2044,3 +2044,21 @@ details[open]>summary.conference-sidebar-heading::before {
   text-align: center;
   white-space: nowrap;
 }
+
+/* Grid-size segmented control */
+.conference-segmented {
+  display: flex; flex-wrap: wrap; gap: 2px;
+}
+.conference-seg-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--conference-fg, #cdd6f4);
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.52rem; padding: 1px 5px; height: 1.3rem;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  cursor: pointer; border-radius: 2px; flex-shrink: 0;
+}
+.conference-seg-btn:hover { background: rgba(255,255,255,0.06); }
+.conference-seg-btn[data-active="true"] {
+  color: #45D384; border-color: rgba(69,211,132,0.4);
+}
