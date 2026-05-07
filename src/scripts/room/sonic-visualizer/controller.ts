@@ -418,6 +418,7 @@ export class SonicVisualizerController {
 
     canvas.addEventListener('pointerup', (e) => {
       canvas.releasePointerCapture(e.pointerId);
+      if (!this.isDragging) return;
       this.isDragging = false;
       if (!this.isPlaying) this.stopAnimLoop();
       this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
@@ -448,8 +449,8 @@ export class SonicVisualizerController {
     src.start(0, this.playOffset);
     src.onended = () => {
       if (this.isPlaying) {
-        this.isPlaying  = false;
         this.playOffset = this.getCurrentPosition();
+        this.isPlaying  = false;
         this.updatePlayBtn();
       }
     };
@@ -522,7 +523,22 @@ export class SonicVisualizerController {
     if (this.rafId !== null) return;
     const tick = () => {
       if (this.isPlaying && this.loopEnabled && this.loopOut > this.loopIn) {
-        if (this.getCurrentPosition() >= this.loopOut) this.startPlayback(this.loopIn);
+        if (this.getCurrentPosition() >= this.loopOut) {
+          // Restart audio inline to avoid re-entering startAnimLoop
+          if (this.playbackNode) { try { this.playbackNode.stop(); } catch {} try { this.playbackNode.disconnect(); } catch {} this.playbackNode = null; }
+          if (this.audioBuffer && this.audioCtx) {
+            const src = this.audioCtx.createBufferSource();
+            src.buffer = this.audioBuffer;
+            src.connect(this.audioCtx.destination);
+            this.playOffset = this.loopIn;
+            this.playStartTime = this.audioCtx.currentTime;
+            src.start(0, this.loopIn);
+            src.onended = () => {
+              if (this.isPlaying) { this.playOffset = this.getCurrentPosition(); this.isPlaying = false; this.updatePlayBtn(); }
+            };
+            this.playbackNode = src;
+          }
+        }
       }
       this.redrawWavePane();
       this.redrawMainPane();
