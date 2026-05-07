@@ -134,6 +134,7 @@ export const selectRoomElements = (root: HTMLElement) => {
     externalInviteGateStatus: root.querySelector('[data-external-invite-gate-status]'),
     externalInviteJoinButton: root.querySelector('[data-action="external-invite-join"]'),
     externalInviteTeacherPasswordInput: root.querySelector('[data-external-password-input]'),
+    externalGrantTeacherInput: root.querySelector('[data-external-grant-teacher-input]'),
     externalInviteExpirySelect: root.querySelector('[data-external-expiry-select]'),
     externalInviteLinkOutput: root.querySelector('[data-external-invite-link-output]'),
     externalInviteStatus: root.querySelector('[data-external-invite-status]'),

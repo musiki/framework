@@ -319,6 +319,16 @@ const isTeacher = defaultRole === 'teacher';
                      <label>Password</label>
                      <input type="password" placeholder="Password opcional" data-external-password-input />
                    </div>
+                   <div class="conference-field">
+                     <div class="conference-field-row">
+                       <label for="external-grant-teacher" title="El invitado tendrá control total de la sala: puede gestionar layouts, layouts, break rooms y controles de sesión. Usar solo con docentes de confianza.">Dar permisos de docente</label>
+                       <label class="conference-switch">
+                         <input type="checkbox" id="external-grant-teacher" data-external-grant-teacher-input />
+                         <span class="conference-switch-slider"></span>
+                       </label>
+                     </div>
+                     <p class="conference-field-hint">Activa solo para co-docentes. El invitado podrá controlar layouts, break rooms y sesión.</p>
+                   </div>
                    <div class="conference-invite-action-row">
                      <select data-external-expiry-select>
                         <option value="">Vencimiento</option>

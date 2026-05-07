@@ -3579,6 +3579,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     externalInviteGateStatus,
     externalInviteJoinButton,
     externalInviteTeacherPasswordInput,
+    externalGrantTeacherInput,
     externalInviteExpirySelect,
     externalInviteLinkOutput,
     externalInviteStatus,
@@ -4985,6 +4986,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     try {
       const selectedPresentationHref = normalizeText(presentationSelect.value) || presentation.getHref();
+      const grantTeacher = inviteType === 'external'
+        && externalGrantTeacherInput instanceof HTMLInputElement
+        && externalGrantTeacherInput.checked;
       const response = await fetch('/api/live/invite', {
         body: JSON.stringify({
           code: inviteType === 'external' ? currentExternalInviteCode : currentStudentInviteCode,
@@ -4992,6 +4996,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           displayName: roomName,
           expiresAt,
           inviteType,
+          metadata: grantTeacher ? { grantedRole: 'teacher' } : {},
           pageSlug: getCurrentPresentationPageSlug(),
           password,
           presentationHref: inviteType === 'student' ? normalizeText(selectedPresentationHref) : '',

@@ -102,8 +102,11 @@ export const createLiveKitTokenResponse = async ({ request, locals }: APIContext
       normalizeText(isExternalInvite ? externalName : requestedName) ||
       sessionName ||
       identity;
+    const externalGrantedRole = isExternalInvite && activeInvite?.metadata?.grantedRole === 'teacher'
+      ? 'teacher'
+      : 'student';
     const role = isExternalInvite
-      ? 'student'
+      ? externalGrantedRole
       : await resolveLiveParticipantRole(session, requestedCourse);
     let userId = '';
 
