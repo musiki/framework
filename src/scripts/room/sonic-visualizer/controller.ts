@@ -86,7 +86,8 @@ export class SonicVisualizerController {
     this.realtimePitchBuffer.push(detail.results.pitch);
     if (this.realtimePitchBuffer.length > SonicVisualizerController.PITCH_BUFFER_MAX)
       this.realtimePitchBuffer.shift();
-    if (this.activeVTab === 'pch')
+    // PCH is static when a file is loaded; live frames only update it in realtime mode
+    if (this.activeVTab === 'pch' && !this.pitchData.length)
       renderPitchContour(this.heatmapCanvas, this.realtimePitchBuffer, true);
   }
 
@@ -128,7 +129,8 @@ export class SonicVisualizerController {
     if (this.activeVTab === 'mel' && this.melspecData.length) renderHeatmap(this.heatmapCanvas, this.melspecData);
     else if (this.activeVTab === 'chr' && this.chromaData.length) renderHeatmap(this.heatmapCanvas, this.chromaData);
     else if (this.activeVTab === 'pch') {
-      const src = this.realtimePitchBuffer.length ? this.realtimePitchBuffer : this.pitchData;
+      // Static file takes priority; fall back to realtime buffer when no file loaded
+      const src = this.pitchData.length ? this.pitchData : this.realtimePitchBuffer;
       if (src.length) renderPitchContour(this.heatmapCanvas, src, true);
     }
   }

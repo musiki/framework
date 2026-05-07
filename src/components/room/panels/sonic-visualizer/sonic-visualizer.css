@@ -27,11 +27,16 @@
   overflow:hidden;
 }
 .sv-radar-wrap {
-  flex:1; min-width:0; display:flex;
-  align-items:center; justify-content:center;
-  overflow:hidden; padding:4px;
+  /* square: width tracks container height; heatmap gets the rest */
+  flex: 0 0 auto;
+  align-self: stretch;
+  aspect-ratio: 1;
+  max-width: 45%;
+  display: flex;
+  align-items: center; justify-content: center;
+  overflow: hidden; padding: 4px;
 }
-.sv-radar { display:block; width:100%; max-height:100%; aspect-ratio:1; }
+.sv-radar { display:block; width:100%; height:100%; }
 .sv-heatmap { flex:1; min-width:0; display:block; background:#000; }
 
 /* Narrow: stack vertically */

@@ -61,7 +61,7 @@ export function drawRadar(canvas: HTMLCanvasElement, r: SAResults): void {
   }
 
   // Axes + labels
-  ctx.font = `${Math.floor(cssW * 0.066)}px monospace`;
+  ctx.font = `${Math.min(14, Math.floor(cssW * 0.066))}px monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   KEYS.forEach((key, i) => {
