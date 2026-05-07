@@ -169,6 +169,7 @@ export class SonicAnalyzerController {
       if (this.active) { this.sourceSelect.value = 'file'; this.activeSource = 'file'; void this.reconnectSource(); }
       if (this.essentia) void this.computeVizFeatures();
       else this.setStatus(`file ready · ${file.name}`);
+      if (this.publish) void this.handleSave();
     } catch { this.setStatus('error: could not decode file'); }
   }
   private addFileOption(name: string): void {

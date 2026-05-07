@@ -64,6 +64,8 @@ export class SonicVisualizerController {
   private isDragging = false;
   private isLoopDragging = false;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private dragStartX = 0;
+  private dragStartAudioPos = 0;
 
   // Bound handlers (for cleanup)
   private onFrame: (e: Event) => void;
@@ -282,7 +284,8 @@ export class SonicVisualizerController {
     return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * this.audioBuffer.duration;
   }
 
-  // ─── Main canvas interaction (seek + shift-drag loop + segment toggle + touch long-press) ───
+  // ─── Main canvas interaction ──────────────────────────────────────────────────
+  // click = seek · drag = free loop region · segment click = snap loop toggle
 
   private bindMainInteraction(): void {
     const canvas = this.mainCanvas;
@@ -292,29 +295,7 @@ export class SonicVisualizerController {
       canvas.setPointerCapture(e.pointerId);
       const p = this.posAt(canvas, e);
 
-      // Shift+drag → set loop region
-      if (e.shiftKey) {
-        this.isLoopDragging = true;
-        this.loopIn = p;
-        this.loopOut = p;
-        this.startAnimLoop();
-        return;
-      }
-
-      // Touch long-press → set loop region
-      if (e.pointerType === 'touch') {
-        const snapPos = p;
-        this.longPressTimer = setTimeout(() => {
-          this.longPressTimer = null;
-          this.isDragging = false;
-          this.isLoopDragging = true;
-          this.loopIn = snapPos;
-          this.loopOut = snapPos;
-          this.startAnimLoop();
-        }, 400);
-      }
-
-      // Segment click → toggle loop to segment (click same segment again to clear)
+      // Segment click → snap loop (toggle off if same segment)
       if (this.formData?.segments && this.audioBuffer) {
         const ratio = p / this.audioBuffer.duration;
         const seg   = this.formData.segments.find(s => ratio >= s.startRatio && ratio <= s.endRatio);
@@ -330,9 +311,20 @@ export class SonicVisualizerController {
         }
       }
 
+      // Touch long-press → free loop region
+      if (e.pointerType === 'touch') {
+        this.longPressTimer = setTimeout(() => {
+          this.longPressTimer = null;
+          this.isDragging = false;
+          this.isLoopDragging = true;
+          this.loopIn = this.dragStartAudioPos;
+          this.loopOut = this.loopIn;
+        }, 400);
+      }
+
+      this.dragStartX = e.clientX;
+      this.dragStartAudioPos = p;
       this.isDragging = true;
-      this.playOffset = p;
-      if (this.isPlaying) this.startPlayback(p);
       this.startAnimLoop();
     });
 
@@ -344,9 +336,16 @@ export class SonicVisualizerController {
         return;
       }
       if (!this.isDragging) return;
-      const p = this.posAt(canvas, e);
-      if (this.isPlaying) this.startPlayback(p);
-      else this.playOffset = p;
+
+      // Upgrade to loop drag once pointer moves > 5px
+      if (Math.abs(e.clientX - this.dragStartX) > 5) {
+        this.isLoopDragging = true;
+        this.isDragging = false;
+        this.loopIn = this.dragStartAudioPos;
+        const p = this.posAt(canvas, e);
+        if (p < this.loopIn) { this.loopOut = this.loopIn; this.loopIn = p; }
+        else this.loopOut = p;
+      }
     });
 
     canvas.addEventListener('pointerup', (e) => {
@@ -360,12 +359,22 @@ export class SonicVisualizerController {
           this.updateLoopBtn();
           this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: true });
         }
+        if (!this.isPlaying) this.stopAnimLoop();
         return;
       }
 
       if (!this.isDragging) return;
       this.isDragging = false;
-      if (!this.isPlaying) this.stopAnimLoop();
+
+      // Was a click — seek to position
+      const p = this.posAt(canvas, e);
+      this.playOffset = p;
+      if (this.isPlaying) this.startPlayback(p);
+      if (!this.isPlaying) {
+        // Force one redraw so playhead updates even when stopped
+        this.stopAnimLoop();
+        requestAnimationFrame(() => this.redrawMainPane());
+      }
       this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
     });
 
