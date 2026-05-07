@@ -691,13 +691,14 @@ export class RoomWorkspaceManager {
     }
 
     const referencePanel = this.dockview.panels.find((panel) => panel.id !== 'chat');
+    const cW = this.container.getBoundingClientRect().width || this.container.offsetWidth || 1280;
     this.dockview.addPanel({
       id: 'chat',
       component: 'chat',
       title: 'CHAT',
       position: referencePanel ? { referencePanel: referencePanel.id, direction: 'right' } : undefined,
-      size: 20,
-    } as any);
+      initialWidth: Math.round(cW * 0.25),
+    });
     window.setTimeout(() => {
       this.dockview?.getPanel('chat')?.api.setActive();
       window.dispatchEvent(new CustomEvent('musiki:chat:focus-request'));
@@ -736,82 +737,84 @@ export class RoomWorkspaceManager {
       return;
     }
 
-    // Pixel sizes for addPanel (Dockview uses px, not %)
-    const { width: W, height: H } = this.container.getBoundingClientRect();
-    const main = Math.round(W * 0.8);
-    const side = Math.round(W * 0.2);
-    const lilyLeft = Math.round(W * 0.4);
-    const q = Math.round(H * 0.25);   // sidebar quarter-height (4 equal rows)
-    const t = Math.round(H * 0.33);   // sidebar third-height  (3 equal rows)
+    // Pixel sizes for addPanel (Dockview 5.x uses initialWidth/initialHeight, not size)
+    // Use offsetWidth/offsetHeight as fallback when getBoundingClientRect returns 0 at init time
+    const rect = this.container.getBoundingClientRect();
+    const W = rect.width > 10 ? rect.width : (this.container.offsetWidth || 1280);
+    const H = rect.height > 10 ? rect.height : (this.container.offsetHeight || 720);
+    const side = Math.round(W * 0.2);      // right sidebar: 20%
+    const lilyLeft = Math.round(W * 0.4);  // lily-code left panel: 40%
+    const q = Math.round(H * 0.25);        // sidebar quarter-height (4 equal rows)
+    const t = Math.round(H * 0.33);        // sidebar third-height  (3 equal rows)
 
     if (key === 'full-win-speaker') {
       // F — SPEAKER main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER', size: main });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'right' }, size: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'right' }, initialWidth: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
       this.currentWorkspaceKey = 'full-win-speaker';
       this.renderQuickLists();
     } else if (key === 'screenshare') {
       // S — SCREEN SHARE main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'screen', component: 'screen', title: 'SCREEN', size: main });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'screen', direction: 'right' }, size: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'screen', component: 'screen', title: 'SCREEN' });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'screen', direction: 'right' }, initialWidth: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
       this.currentWorkspaceKey = 'screenshare';
       this.renderQuickLists();
     } else if (key === 'presentation') {
       // P — PRESENTACIÓN main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'presentation', component: 'presentation', title: 'PRESENTACIÓN', size: main });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'presentation', direction: 'right' }, size: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'presentation', component: 'presentation', title: 'PRESENTACIÓN' });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'presentation', direction: 'right' }, initialWidth: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
       this.currentWorkspaceKey = 'presentation';
       this.renderQuickLists();
     } else if (key === 'debate' || key === 'grid') {
       // G — GRID main + right sidebar (no grid in sidebar)
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', size: main });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'right' }, size: side });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: t });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: t });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID' });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'right' }, initialWidth: side });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: t });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: t });
       this.currentWorkspaceKey = key;
       this.renderQuickLists();
     } else if (key === 'external-media') {
       // E — EXTERNAL MEDIA main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'external-media', component: 'external-media', title: 'MEDIA', size: main });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'external-media', direction: 'right' }, size: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'external-media', component: 'external-media', title: 'MEDIA' });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'external-media', direction: 'right' }, initialWidth: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
       this.currentWorkspaceKey = 'external-media';
       this.renderQuickLists();
     } else if (key === 'whiteboard') {
       // Z — PIZARRA main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'whiteboard', component: 'whiteboard', title: 'PIZARRA', size: main });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'whiteboard', direction: 'right' }, size: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'whiteboard', component: 'whiteboard', title: 'PIZARRA' });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'whiteboard', direction: 'right' }, initialWidth: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
       this.currentWorkspaceKey = 'whiteboard';
       this.renderQuickLists();
     } else if (key === 'lilypond') {
       // L — LILY-CODE + LILY-RENDER (left 80%) + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER', size: main });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'lily-render', direction: 'right' }, size: side });
-      this.dockview.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILY-CODE', position: { referencePanel: 'lily-render', direction: 'left' }, size: lilyLeft });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER' });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'lily-render', direction: 'right' }, initialWidth: side });
+      this.dockview.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILY-CODE', position: { referencePanel: 'lily-render', direction: 'left' }, initialWidth: lilyLeft });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
       this.currentWorkspaceKey = 'lilypond';
       this.renderQuickLists();
     } else if (key === 'collab') {
@@ -823,17 +826,17 @@ export class RoomWorkspaceManager {
       this.renderQuickLists();
     } else if (key === 'clase') {
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'clase', component: 'clase', title: 'CLASE', size: main });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'clase', direction: 'right' }, size: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'clase', component: 'clase', title: 'CLASE' });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'clase', direction: 'right' }, initialWidth: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
       this.currentWorkspaceKey = 'clase';
       this.renderQuickLists();
     } else if (key === 'mobile') {
       this.clearAllPanels();
       this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'teacher', direction: 'below' }, size: Math.round(H * 0.35) });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'teacher', direction: 'below' }, initialHeight: Math.round(H * 0.35) });
       this.currentWorkspaceKey = 'mobile';
       this.renderQuickLists();
     }
