@@ -3,6 +3,7 @@ import type { SAResults } from './views/text-view';
 import { renderSpectrumView } from './views/spectrum-view';
 import { renderTimbreView } from './views/timbre-view';
 import { LufsHistory } from './views/lufs-view';
+import { drawRadar } from './views/radar-view';
 import type { ConferenceMessage } from '../session';
 
 type AudioTapFn = () => { context: AudioContext; masterAnalyser: AnalyserNode } | null;
@@ -74,6 +75,7 @@ export class SonicAnalyzerController {
   private spectrumInner!: HTMLElement;
   private timbreInner!: HTMLElement;
   private lufsInner!: HTMLElement;
+  private radarCanvas!: HTMLCanvasElement;
 
   private onSVRequest: () => void;
 
@@ -110,6 +112,7 @@ export class SonicAnalyzerController {
     this.spectrumInner = q('[data-sa-spectrum-inner]')!;
     this.timbreInner   = q('[data-sa-timbre-inner]')!;
     this.lufsInner     = q('[data-sa-lufs-inner]')!;
+    this.radarCanvas   = q<HTMLCanvasElement>('[data-sa-radar]')!;
 
     this.powerBtn.addEventListener('click', () => void this.toggle());
     this.sourceSelect.addEventListener('change', () => {
@@ -356,6 +359,7 @@ export class SonicAnalyzerController {
     renderSpectrumView(this.spectrumInner, this.freqBuf!);
     renderTimbreView(this.timbreInner, r);
     this.lufsHistory.render(this.lufsInner, r.lufsM, r.lufsS, r.lufsI);
+    drawRadar(this.radarCanvas, r);
   }
 
   // ─── Computed viz features (dispatched to SV) ────────────────────────────────
