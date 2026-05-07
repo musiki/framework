@@ -4076,8 +4076,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const getGridSizeInputs = () =>
     Array.from(
-      root.querySelectorAll<HTMLSelectElement>('[data-grid-size-input], [data-grid-size-workspace-input]'),
-    ).filter((input) => !input.closest('#musiki-pod-templates'));
+      root.querySelectorAll<HTMLElement>('[data-grid-size-input], [data-grid-size-workspace-input]'),
+    ).filter((el) => !el.closest('#musiki-pod-templates'));
 
   const applyGridSize = (size: PersistedRoomSetup['gridSize']) => {
     gridSize = size || 'normal';
@@ -4089,8 +4089,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       slot.dataset.gridSize = gridSize;
     });
 
-    getGridSizeInputs().forEach((input) => {
-      input.value = gridSize || 'normal';
+    getGridSizeInputs().forEach((el) => {
+      if (el.tagName === 'SELECT') {
+        (el as HTMLSelectElement).value = gridSize || 'normal';
+      } else {
+        el.dataset.value = gridSize || 'normal';
+        el.querySelectorAll<HTMLElement>('[data-value]').forEach(btn => {
+          btn.dataset.active = btn.dataset.value === (gridSize || 'normal') ? 'true' : 'false';
+        });
+      }
     });
   };
 
@@ -13250,13 +13257,27 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   deviceController.bind();
 
-  getGridSizeInputs().forEach((input) => {
-    input.value = gridSize || 'normal';
-    input.addEventListener('change', () => {
-      applyGridSize(input.value as any);
-      persistSetupState();
-      void publishWorkspaceLayoutState().catch(() => undefined);
-    });
+  getGridSizeInputs().forEach((el) => {
+    if (el.tagName === 'SELECT') {
+      (el as HTMLSelectElement).value = gridSize || 'normal';
+      el.addEventListener('change', () => {
+        applyGridSize((el as HTMLSelectElement).value as any);
+        persistSetupState();
+        void publishWorkspaceLayoutState().catch(() => undefined);
+      });
+    } else {
+      el.dataset.value = gridSize || 'normal';
+      el.querySelectorAll<HTMLElement>('[data-value]').forEach(btn => {
+        btn.dataset.active = btn.dataset.value === (gridSize || 'normal') ? 'true' : 'false';
+      });
+      el.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-value]');
+        if (!btn) return;
+        applyGridSize(btn.dataset.value as any);
+        persistSetupState();
+        void publishWorkspaceLayoutState().catch(() => undefined);
+      });
+    }
   });
 
   if (previewZoomSidebarInput instanceof HTMLInputElement) {
