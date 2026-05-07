@@ -152,15 +152,15 @@ const isTeacher = defaultRole === 'teacher';
             {isTeacher && (
               <div class="conference-field">
                 <label for="modal-grid-size">Tamaño de GRID</label>
-                <select id="modal-grid-size" data-grid-size-input>
-                  <option value="normal">Normal (Automático)</option>
-                  <option value="compact">Compacto (2 por fila)</option>
-                  <option value="avatar">Avatar (120x90)</option>
-                  <option value="small">Pequeño (160x120)</option>
-                  <option value="usable">Usable (200x150)</option>
-                  <option value="comfortable">Cómodo (240x180)</option>
-                  <option value="speaker">Speaker (320x240)</option>
-                </select>
+                <div class="conference-segmented" id="modal-grid-size" data-grid-size-input data-value="normal">
+                  <button type="button" class="conference-seg-btn" data-value="normal"      data-active="true" >Normal</button>
+                  <button type="button" class="conference-seg-btn" data-value="compact"     data-active="false">Compact</button>
+                  <button type="button" class="conference-seg-btn" data-value="avatar"      data-active="false">Avatar</button>
+                  <button type="button" class="conference-seg-btn" data-value="small"       data-active="false">Small</button>
+                  <button type="button" class="conference-seg-btn" data-value="usable"      data-active="false">Usable</button>
+                  <button type="button" class="conference-seg-btn" data-value="comfortable" data-active="false">Comfy</button>
+                  <button type="button" class="conference-seg-btn" data-value="speaker"     data-active="false">Speaker</button>
+                </div>
               </div>
             )}
 
