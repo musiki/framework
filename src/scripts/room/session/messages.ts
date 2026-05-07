@@ -231,6 +231,17 @@ export type ConferenceMessage =
       type: 'sv-vtab';
       tab: string;
     }
+  | {
+      type: 'sv-layer';
+      layer: string;
+      visible: boolean;
+    }
+  | {
+      type: 'sv-loop';
+      inPoint: number;
+      outPoint: number;
+      enabled: boolean;
+    }
   | { type: 'recursos:sync'; items: any[]; allowStudents: boolean }
   | { type: 'recursos:allow-students'; allow: boolean };
 
@@ -700,6 +711,23 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'sv-vtab',
         tab: normalizeText((parsed as { tab?: string }).tab) || 'mel',
+      };
+    }
+
+    if (parsed.type === 'sv-layer') {
+      return {
+        type:    'sv-layer',
+        layer:   normalizeText((parsed as { layer?: string }).layer) || '',
+        visible: Boolean((parsed as { visible?: boolean }).visible),
+      };
+    }
+
+    if (parsed.type === 'sv-loop') {
+      return {
+        type:     'sv-loop',
+        inPoint:  Math.max(0, Number((parsed as { inPoint?: number }).inPoint)  || 0),
+        outPoint: Math.max(0, Number((parsed as { outPoint?: number }).outPoint) || 0),
+        enabled:  Boolean((parsed as { enabled?: boolean }).enabled),
       };
     }
 
