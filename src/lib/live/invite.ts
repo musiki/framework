@@ -216,9 +216,6 @@ export const upsertLiveRoomInvite = async ({
 
   const normalizedInviteType = normalizeLiveRoomInviteType(inviteType);
   const normalizedPassword = normalizeText(password);
-  if (normalizedInviteType === 'external' && !normalizedPassword) {
-    throw new Error('password is required for external invites');
-  }
 
   const normalizedCourseId = await canonicalizeCourseId(normalizeText(courseId));
   const normalizedPageSlug = normalizeText(pageSlug) || null;
@@ -230,15 +227,8 @@ export const upsertLiveRoomInvite = async ({
     inviteType: normalizedInviteType,
     room: normalizedRoom,
   }).catch(() => null);
-  const passwordHash = normalizedPassword
-    ? hashInvitePassword(normalizedPassword)
-    : normalizedInviteType === 'external'
-      ? existingInvite?.passwordHash || null
-      : null;
-  if (normalizedInviteType === 'external' && !passwordHash) {
-    throw new Error('password is required for external invites');
-  }
-  const requiresPassword = normalizedInviteType === 'external';
+  const passwordHash = normalizedPassword ? hashInvitePassword(normalizedPassword) : null;
+  const requiresPassword = !!passwordHash;
 
   const payload: Record<string, any> = {
     code: existingInvite?.code || createInviteCode(),

@@ -600,8 +600,8 @@ export class RoomWorkspaceManager {
       { selector: '[data-action="external-media-toggle"]', pods: ['external-media'], master: 'external-media' },
       
       { selector: '[data-layout-choice="clase"]', pods: ['clase'] },
-      { selector: '[data-layout-choice="whiteboard"]', pods: ['whiteboard'] },
-      { selector: '[data-layout-choice="lilypond"]', pods: ['lily-code', 'lily-render'] },
+      { selector: '[data-layout-choice="whiteboard"]', pods: ['whiteboard'], master: 'whiteboard' },
+      { selector: '[data-layout-choice="lilypond"]', pods: ['lily-code', 'lily-render'], master: 'lilypond' },
 
       { selector: '[data-action="chat-focus"]', pods: ['chat'] },
       { selector: '[data-action="forum-toggle"]', pods: ['forum'] },
@@ -736,50 +736,82 @@ export class RoomWorkspaceManager {
       return;
     }
 
-    if (key === 'presentation') {
+    // Pixel sizes for addPanel (Dockview uses px, not %)
+    const { width: W, height: H } = this.container.getBoundingClientRect();
+    const main = Math.round(W * 0.8);
+    const side = Math.round(W * 0.2);
+    const lilyLeft = Math.round(W * 0.4);
+    const q = Math.round(H * 0.25);   // sidebar quarter-height (4 equal rows)
+    const t = Math.round(H * 0.33);   // sidebar third-height  (3 equal rows)
+
+    if (key === 'full-win-speaker') {
+      // F — SPEAKER main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'presentation', component: 'presentation', title: 'PRESENTACIÓN', size: 80 });
-      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER', position: { referencePanel: 'presentation', direction: 'right' }, size: 20 });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'below' }, size: 40 });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'grid-videos', direction: 'below' }, size: 40 });
-      this.currentWorkspaceKey = 'presentation';
+      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER', size: main });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'right' }, size: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.currentWorkspaceKey = 'full-win-speaker';
       this.renderQuickLists();
     } else if (key === 'screenshare') {
+      // S — SCREEN SHARE main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'screen', component: 'screen', title: 'SCREEN', size: 80 });
-      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER', position: { referencePanel: 'screen', direction: 'right' }, size: 20 });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'below' }, size: 40 });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'grid-videos', direction: 'below' }, size: 40 });
+      this.dockview.addPanel({ id: 'screen', component: 'screen', title: 'SCREEN', size: main });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'screen', direction: 'right' }, size: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
       this.currentWorkspaceKey = 'screenshare';
       this.renderQuickLists();
-    } else if (key === 'external-media') {
+    } else if (key === 'presentation') {
+      // P — PRESENTACIÓN main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'external-media', component: 'external-media', title: 'MEDIA', size: 80 });
-      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER', position: { referencePanel: 'external-media', direction: 'right' }, size: 20 });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'below' }, size: 40 });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'grid-videos', direction: 'below' }, size: 40 });
-      this.currentWorkspaceKey = 'external-media';
-      this.renderQuickLists();
-    } else if (key === 'clase') {
-      this.clearAllPanels();
-      this.dockview.addPanel({ id: 'clase', component: 'clase', title: 'CLASE', size: 80 });
-      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER', position: { referencePanel: 'clase', direction: 'right' }, size: 20 });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'below' }, size: 40 });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'grid-videos', direction: 'below' }, size: 40 });
-      this.currentWorkspaceKey = 'clase';
+      this.dockview.addPanel({ id: 'presentation', component: 'presentation', title: 'PRESENTACIÓN', size: main });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'presentation', direction: 'right' }, size: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.currentWorkspaceKey = 'presentation';
       this.renderQuickLists();
     } else if (key === 'debate' || key === 'grid') {
+      // G — GRID main + right sidebar (no grid in sidebar)
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID' });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'right' }, size: 20 });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', size: main });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'right' }, size: side });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: t });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: t });
       this.currentWorkspaceKey = key;
       this.renderQuickLists();
-    } else if (key === 'lilypond') {
+    } else if (key === 'external-media') {
+      // E — EXTERNAL MEDIA main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER', size: 60 });
-      this.dockview.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILY-CODE', position: { referencePanel: 'lily-render', direction: 'left' }, size: 40 });
-      this.dockview.addPanel({ id: 'notes', component: 'notes', title: 'NOTAS', position: { referencePanel: 'lily-render', direction: 'right' }, size: 25 });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'notes', direction: 'below' } });
+      this.dockview.addPanel({ id: 'external-media', component: 'external-media', title: 'MEDIA', size: main });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'external-media', direction: 'right' }, size: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.currentWorkspaceKey = 'external-media';
+      this.renderQuickLists();
+    } else if (key === 'whiteboard') {
+      // Z — PIZARRA main + right sidebar
+      this.clearAllPanels();
+      this.dockview.addPanel({ id: 'whiteboard', component: 'whiteboard', title: 'PIZARRA', size: main });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'whiteboard', direction: 'right' }, size: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.currentWorkspaceKey = 'whiteboard';
+      this.renderQuickLists();
+    } else if (key === 'lilypond') {
+      // L — LILY-CODE + LILY-RENDER (left 80%) + right sidebar
+      this.clearAllPanels();
+      this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER', size: main });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'lily-render', direction: 'right' }, size: side });
+      this.dockview.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILY-CODE', position: { referencePanel: 'lily-render', direction: 'left' }, size: lilyLeft });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
       this.currentWorkspaceKey = 'lilypond';
       this.renderQuickLists();
     } else if (key === 'collab') {
@@ -789,15 +821,19 @@ export class RoomWorkspaceManager {
       this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER', position: { referencePanel: 'lily-code', direction: 'below' } });
       this.currentWorkspaceKey = 'collab';
       this.renderQuickLists();
-    } else if (key === 'full-win-speaker') {
+    } else if (key === 'clase') {
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
-      this.currentWorkspaceKey = 'full-win-speaker';
+      this.dockview.addPanel({ id: 'clase', component: 'clase', title: 'CLASE', size: main });
+      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'clase', direction: 'right' }, size: side });
+      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, size: q });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, size: q });
+      this.currentWorkspaceKey = 'clase';
       this.renderQuickLists();
     } else if (key === 'mobile') {
       this.clearAllPanels();
       this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'teacher', direction: 'below' }, size: 35 });
+      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'teacher', direction: 'below' }, size: Math.round(H * 0.35) });
       this.currentWorkspaceKey = 'mobile';
       this.renderQuickLists();
     }

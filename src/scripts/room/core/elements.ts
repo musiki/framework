@@ -62,6 +62,7 @@ export const selectRoomElements = (root: HTMLElement) => {
     backgroundColorInput: root.querySelector('[data-background-color-input]'),
     backgroundColorApplyButton: root.querySelector('[data-action="background-color-apply"]'),
     previewInvertInput: root.querySelector('[data-preview-invert-input]'),
+    screenshareAudioInput: root.querySelector('[data-screenshare-audio-input]'),
     showCircleInput: root.querySelector('[data-show-circle-input]'),
     statusNode: root.querySelector('[data-room-status]'),
     stateNode: root.querySelector('[data-room-state]'),

@@ -182,6 +182,17 @@ const isTeacher = defaultRole === 'teacher';
               </div>
             </div>
 
+            <div class="conference-field">
+              <div class="conference-field-row">
+                <label for="modal-screenshare-audio">Screen share: audio del sistema</label>
+                <label class="conference-switch">
+                  <input type="checkbox" id="modal-screenshare-audio" data-screenshare-audio-input />
+                  <span class="conference-switch-slider"></span>
+                </label>
+              </div>
+              <p class="conference-field-hint">Captura el audio del sistema al presentar pantalla (para compartir música/video). Desactivado = sin audio de pantalla, micrófono sigue funcionando normalmente. Activar puede causar eco.</p>
+            </div>
+
             <div class="conference-field" data-session-leader-field>
               <label for="modal-leader-select">Delegar sesion</label>
               <select id="modal-leader-select" data-session-leader-select>

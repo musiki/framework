@@ -351,6 +351,33 @@ const { presentationOptions = [] } = Astro.props;
     flex: 1;
   }
 
+  /* Screen pod: slot and tile fill the panel like the conference-stage CSS does */
+  .musiki-pod[data-pod="screen"] .conference-slot--screen {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    overflow: hidden !important;
+  }
+
+  .musiki-pod[data-pod="screen"] .conference-slot--screen > .conference-tile--screen,
+  .musiki-pod[data-pod="screen"] .conference-slot--screen > .conference-tile--screen > .conference-tile-media,
+  .musiki-pod[data-pod="screen"] .conference-slot--screen > .conference-tile--screen > .conference-tile-media > .conference-media-frame,
+  .musiki-pod[data-pod="screen"] .conference-slot--screen > .conference-tile--screen > .conference-tile-media > .conference-media-frame > video {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .musiki-pod[data-pod="screen"] .conference-tile--screen {
+    grid-template-rows: 1fr !important;
+    border: 0 !important;
+  }
+
+  .musiki-pod[data-pod="screen"] .conference-tile-meta {
+    display: none !important;
+  }
+
   .musiki-pod .conference-external-media-player {
     position: relative !important;
     inset: unset !important;

@@ -3145,7 +3145,7 @@ if (
     padding: 0.65rem 0.8rem;
     border: 1px solid var(--conference-line);
     background: rgba(0, 0, 0, 0.98);
-    z-index: 60;
+    z-index: 100;
     display: grid;
     gap: 0.45rem;
   }
@@ -3714,13 +3714,13 @@ if (
     left: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
-    z-index: 100 !important;
+    z-index: 10000 !important;
     height: var(--conference-bar-height) !important;
     display: flex;
     align-items: stretch;
     border-top: 1px solid var(--conference-line);
     background: rgba(0, 0, 0, 0.98);
-    overflow: hidden;
+    overflow: visible;
   }
 
   .conference-bar-group {
@@ -4499,7 +4499,7 @@ if (
     padding: 0.65rem 0.8rem 0.8rem;
     background: #000;
     border: 1px solid var(--conference-line);
-    z-index: 90;
+    z-index: 100;
   }
 
   .conference-device-panel[hidden],

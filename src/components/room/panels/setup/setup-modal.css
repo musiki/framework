@@ -1,7 +1,7 @@
 .conference-setup-modal {
   position: fixed;
   inset: 0;
-  z-index: 2000;
+  z-index: 20000;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(8px);
   display: flex;
@@ -186,6 +186,13 @@
   color: var(--conference-fg);
   text-transform: none;
   letter-spacing: normal;
+}
+
+.conference-setup-modal .conference-field-hint {
+  font-size: 0.75rem;
+  color: var(--conference-fg-muted, rgba(255 255 255 / 0.45));
+  margin: 0;
+  line-height: 1.4;
 }
 
 /* Standard Musiki Switch */

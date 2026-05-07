@@ -3515,6 +3515,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     backgroundColorInput,
     backgroundColorApplyButton,
     previewInvertInput,
+    screenshareAudioInput,
     showCircleInput,
     statusNode,
     stateNode,
@@ -4944,17 +4945,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const password = inviteType === 'external' && externalInviteTeacherPasswordInput instanceof HTMLInputElement
       ? externalInviteTeacherPasswordInput.value
       : '';
-    if (
-      inviteType === 'external' &&
-      !normalizeText(password) &&
-      !currentExternalInviteCode
-    ) {
-      setExternalInviteStatusMessage('Define un password antes de generar el link externo.', true);
-      if (externalInviteTeacherPasswordInput instanceof HTMLInputElement) {
-        externalInviteTeacherPasswordInput.focus();
-      }
-      return;
-    }
+
 
     const roomName = roomInput.value.trim();
     if (!roomName) {
@@ -11052,6 +11043,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mounts.participantVideoMounts.clear();
       mounts.screenVideoMounts.forEach((m) => removeMount(m));
       mounts.screenVideoMounts.clear();
+      screenCards.forEach((refs) => refs.card.remove());
+      screenCards.clear();
 
       updateActiveHyperpianoAudio();
 
@@ -13100,12 +13093,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (room.localParticipant.isScreenShareEnabled) {
         await room.localParticipant.setScreenShareEnabled(false);
       } else {
+        const includeScreenAudio = screenshareAudioInput instanceof HTMLInputElement && screenshareAudioInput.checked;
         await room.localParticipant.setScreenShareEnabled(true, {
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
+          // Plan A: audio: false by default — no ScreenShareAudio track published, zero echo risk.
+          // Only capture system audio if the user explicitly enables it in Setup.
+          audio: includeScreenAudio
+            ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+            : false,
           resolution: {
             width: 1920,
             height: 1080,
@@ -13115,8 +13109,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           contentHint: 'detail',
           selfBrowserSurface: 'include',
           surfaceSwitching: 'include',
-          systemAudio: 'include',
-          suppressLocalAudioPlayback: false,
+          ...(includeScreenAudio && { systemAudio: 'include', suppressLocalAudioPlayback: true }),
         });
       }
       syncAllParticipants();
@@ -14911,6 +14904,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (normalizedCommand === 'workspace:apply:whiteboard') {
+      workspaceManager.applyLayoutByKey('whiteboard');
+      return;
+    }
+
+    if (normalizedCommand === 'workspace:apply:lilypond') {
+      workspaceManager.applyLayoutByKey('lilypond');
+      return;
+    }
+
     if (normalizedCommand === 'workspace:apply:hyperpiano') {
       workspaceManager.togglePod('hyperpiano', true);
       return;
@@ -15001,7 +15004,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         o: 'layout-overlay:concept',
         p: 'workspace:apply:presentation',
         s: 'layout-share',
-        z: 'layout-overlay:whiteboard',
+        z: 'workspace:apply:whiteboard',
       };
       const command = primaryCommandMap[key];
       if (command) {

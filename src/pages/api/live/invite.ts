@@ -156,10 +156,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
     }
 
-    if (inviteType === 'external' && !normalizeText(payload.password) && !normalizeText(payload.code)) {
-      return json({ error: 'password is required for external invites' }, 400);
-    }
-
     const invite = await upsertLiveRoomInvite({
       courseId,
       createdByUserId: access.userId,
