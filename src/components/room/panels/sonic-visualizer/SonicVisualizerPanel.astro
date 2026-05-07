@@ -7,24 +7,27 @@ import './sonic-visualizer.css';
     <div class="musiki-pod-toolbar sv-toolbar">
       <span class="sv-label">sV</span>
       <span class="sv-status" data-sv-status>waiting for sA…</span>
-      <div style="flex:1;"></div>
-      <div class="sv-vtabs" data-sv-vtabs>
-        <button type="button" class="musiki-pod-btn sv-vtab" data-sv-vtab="mel" data-active="true">MEL</button>
-        <button type="button" class="musiki-pod-btn sv-vtab" data-sv-vtab="chr">CHR</button>
-        <button type="button" class="musiki-pod-btn sv-vtab" data-sv-vtab="pch">PCH</button>
+      <div class="sv-layers">
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="spec" data-active="true" >SPEC</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="wav"  data-active="true" >WAV</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="enr"  data-active="true" >ENR</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="brt"  data-active="false">BRT</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="mot"  data-active="false">MOT</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="grv"  data-active="false">GRV</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="ten"  data-active="false">TEN</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="seg"  data-active="true" >SEG</button>
       </div>
+      <button type="button" class="musiki-pod-btn sv-play-btn"  data-sv-play  title="Play / Pause">▶</button>
+      <button type="button" class="musiki-pod-btn sv-loop-btn"  data-sv-loop  data-active="false" title="Loop region">⟳</button>
     </div>
 
-    <div class="sv-main" data-sv-main>
-      <div class="sv-radar-wrap">
-        <canvas class="sv-radar" data-sv-radar></canvas>
+    <div class="sv-panes">
+      <div class="sv-pane sv-pane--wave">
+        <canvas class="sv-wave-canvas" data-sv-wave></canvas>
       </div>
-      <canvas class="sv-heatmap" data-sv-heatmap></canvas>
-    </div>
-
-    <div class="sv-waveform-wrap" data-sv-waveform-container hidden>
-      <button type="button" class="sv-play-btn" data-sv-play hidden title="Play / Pause">▶</button>
-      <canvas class="sv-waveform" data-sv-waveform></canvas>
+      <div class="sv-pane sv-pane--main">
+        <canvas class="sv-main-canvas" data-sv-main-canvas></canvas>
+      </div>
     </div>
 
   </div>
