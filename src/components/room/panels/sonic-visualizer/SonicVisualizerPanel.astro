@@ -8,23 +8,20 @@ import './sonic-visualizer.css';
       <span class="sv-label">sV</span>
       <span class="sv-status" data-sv-status>waiting for sA…</span>
       <div class="sv-layers">
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="spec" data-active="true" >SPEC</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="wav"  data-active="true" >WAV</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="enr"  data-active="true" >ENR</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="brt"  data-active="false">BRT</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="mot"  data-active="false">MOT</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="grv"  data-active="false">GRV</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="ten"  data-active="false">TEN</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="seg"  data-active="true" >SEG</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="spec" data-active="true"  title="Spectrogram">SPEC</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="wav"  data-active="true"  title="Waveform">WAV</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="enr"  data-active="true"  title="Energy">ENR</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="brt"  data-active="false" title="Brightness">BRT</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="mot"  data-active="false" title="Motion">MOT</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="grv"  data-active="false" title="Gravity">GRV</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="ten"  data-active="false" title="Tension">TEN</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="seg"  data-active="true"  title="Segments">SEG</button>
       </div>
       <button type="button" class="musiki-pod-btn sv-play-btn"  data-sv-play  title="Play / Pause">▶</button>
-      <button type="button" class="musiki-pod-btn sv-loop-btn"  data-sv-loop  data-active="false" title="Loop region">⟳</button>
+      <button type="button" class="musiki-pod-btn sv-loop-btn"  data-sv-loop  data-active="false" title="Loop region (shift+drag or click segment)">⟳</button>
     </div>
 
     <div class="sv-panes">
-      <div class="sv-pane sv-pane--wave">
-        <canvas class="sv-wave-canvas" data-sv-wave></canvas>
-      </div>
       <div class="sv-pane sv-pane--main">
         <canvas class="sv-main-canvas" data-sv-main-canvas></canvas>
       </div>

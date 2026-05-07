@@ -252,7 +252,7 @@ export class RecursosController {
     this.items = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
       type: typeFromUrl(url), folder: 'compartidos', source,
-      createdBy: this.getIdentity(), sortOrder: Date.now(), createdAt: new Date().toISOString(),
+      createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
     });
     this.render(); this.scheduleAutosave(); this.broadcastSync();
   }
@@ -270,7 +270,7 @@ export class RecursosController {
       const newItem: ResourceItem = {
         id: crypto.randomUUID(), url, name: nameFromFile(file),
         type: typeFromUrl(url), folder: '', source: 'upload',
-        createdBy: this.getIdentity(), sortOrder: Date.now(), createdAt: new Date().toISOString(),
+        createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       };
       this.items = addItem(this.items, newItem);
       this.render(); this.scheduleAutosave(); this.broadcastSync();
@@ -289,7 +289,7 @@ export class RecursosController {
       const item: ResourceItem = {
         id: crypto.randomUUID(), url: text, name: quickNameFromUrl(text),
         type: typeFromUrl(text), folder: '', source: 'paste',
-        createdBy: this.getIdentity(), sortOrder: Date.now(), createdAt: new Date().toISOString(),
+        createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       };
       this.items = addItem(this.items, item);
       this.render(); this.scheduleAutosave(); this.broadcastSync();

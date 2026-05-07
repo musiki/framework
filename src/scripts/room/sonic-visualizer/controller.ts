@@ -28,7 +28,6 @@ export class SonicVisualizerController {
   // DOM
   private podEl!: HTMLElement;
   private statusEl!: HTMLElement;
-  private waveCanvas!: HTMLCanvasElement;
   private mainCanvas!: HTMLCanvasElement;
   private playBtn!: HTMLButtonElement;
   private loopBtn!: HTMLButtonElement;
@@ -91,7 +90,6 @@ export class SonicVisualizerController {
     const q = <T extends HTMLElement>(sel: string) => this.container.querySelector<T>(sel)!;
     this.podEl      = q('.sv-pod');
     this.statusEl   = q('[data-sv-status]');
-    this.waveCanvas = q<HTMLCanvasElement>('[data-sv-wave]');
     this.mainCanvas = q<HTMLCanvasElement>('[data-sv-main-canvas]');
     this.playBtn    = q<HTMLButtonElement>('[data-sv-play]');
     this.loopBtn    = q<HTMLButtonElement>('[data-sv-loop]');
@@ -103,14 +101,13 @@ export class SonicVisualizerController {
 
     this.playBtn.addEventListener('click', () => this.togglePlayback());
     this.loopBtn.addEventListener('click', () => this.toggleLoop());
-    this.bindWaveInteraction();
     this.bindMainInteraction();
   }
 
   // ─── SA events ───────────────────────────────────────────────────────────────
 
   private handleFrame(_detail: { results: SAResults }): void {
-    // Radar is now rendered by SA controller; SV ignores realtime frames
+    // Radar is rendered by SA controller; SV ignores realtime frames
   }
 
   private handleFileReady(payload: SAFilePayload): void {
@@ -119,7 +116,7 @@ export class SonicVisualizerController {
     const bpm = payload.bpm > 0 ? ` · ${payload.bpm.toFixed(0)}bpm` : '';
     const key = payload.key ? ` · ${payload.key} ${payload.scale}` : '';
     this.setStatus(`${payload.fileName}${key}${bpm}`);
-    this.resizeCanvases();
+    this.resizeCanvas();
     this.runWorker();
   }
 
@@ -150,7 +147,7 @@ export class SonicVisualizerController {
     pixelData: Uint8ClampedArray; width: number; height: number;
     requestId: number; formData: WorkerFormData;
   }): void {
-    if (data.requestId !== this.workerRequestId) return; // stale result
+    if (data.requestId !== this.workerRequestId) return;
     this.formData = data.formData;
     const off = document.createElement('canvas');
     off.width = data.width; off.height = data.height;
@@ -165,6 +162,10 @@ export class SonicVisualizerController {
     this.layers[key] = visible;
     const btn = this.layerBtns.get(key);
     if (btn) btn.dataset.active = visible ? 'true' : 'false';
+    // Redraw immediately if animation loop is not running
+    if (this.rafId === null) {
+      requestAnimationFrame(() => this.redrawMainPane());
+    }
   }
 
   private toggleLayer(key: string): void {
@@ -179,45 +180,13 @@ export class SonicVisualizerController {
 
   // ─── Drawing ─────────────────────────────────────────────────────────────────
 
-  private resizeCanvases(): void {
+  private resizeCanvas(): void {
     const dpr = window.devicePixelRatio || 1;
-    for (const canvas of [this.waveCanvas, this.mainCanvas]) {
-      const w = Math.max(1, canvas.clientWidth);
-      const h = Math.max(1, canvas.clientHeight);
-      canvas.width  = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-    }
-  }
-
-  private redrawWavePane(): void {
-    if (!this.audioBuffer || !this.waveformPeaks.length) return;
-    const canvas = this.waveCanvas;
-    const dpr    = window.devicePixelRatio || 1;
-    const ctx    = canvas.getContext('2d')!;
-    const W = canvas.width, H = canvas.height, dur = this.audioBuffer.duration;
-    const cssW = W / dpr;
-    ctx.clearRect(0, 0, W, H);
-
-    if (this.loopEnabled && this.loopOut > this.loopIn) {
-      ctx.fillStyle = 'rgba(255,255,255,0.1)';
-      ctx.fillRect((this.loopIn / dur) * W, 0, ((this.loopOut - this.loopIn) / dur) * W, H);
-    }
-
-    const n = this.waveformPeaks.length, mid = H / 2;
-    ctx.strokeStyle = 'rgba(69,211,132,0.65)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath();
-    for (let i = 0; i < cssW; i++) {
-      const { min, max } = this.waveformPeaks[Math.min(n - 1, Math.floor((i / cssW) * n))];
-      ctx.moveTo((i + 0.5) * dpr, mid - max * mid);
-      ctx.lineTo((i + 0.5) * dpr, Math.max(mid - min * mid, mid - max * mid + 1));
-    }
-    ctx.stroke();
-
-    const x = (this.getCurrentPosition() / dur) * W;
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    const canvas = this.mainCanvas;
+    const w = Math.max(1, canvas.clientWidth);
+    const h = Math.max(1, canvas.clientHeight);
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
   }
 
   private redrawMainPane(): void {
@@ -313,35 +282,55 @@ export class SonicVisualizerController {
     return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * this.audioBuffer.duration;
   }
 
-  // ─── Wave pane interaction (seek + shift-drag loop + touch long-press loop) ───
+  // ─── Main canvas interaction (seek + shift-drag loop + segment toggle + touch long-press) ───
 
-  private bindWaveInteraction(): void {
-    const canvas = this.waveCanvas;
+  private bindMainInteraction(): void {
+    const canvas = this.mainCanvas;
 
     canvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
+      const p = this.posAt(canvas, e);
 
+      // Shift+drag → set loop region
       if (e.shiftKey) {
         this.isLoopDragging = true;
-        this.loopIn = this.posAt(canvas, e);
-        this.loopOut = this.loopIn;
+        this.loopIn = p;
+        this.loopOut = p;
+        this.startAnimLoop();
         return;
       }
 
+      // Touch long-press → set loop region
       if (e.pointerType === 'touch') {
-        const snapPos = this.posAt(canvas, e);
+        const snapPos = p;
         this.longPressTimer = setTimeout(() => {
           this.longPressTimer = null;
           this.isDragging = false;
           this.isLoopDragging = true;
           this.loopIn = snapPos;
           this.loopOut = snapPos;
+          this.startAnimLoop();
         }, 400);
       }
 
+      // Segment click → toggle loop to segment (click same segment again to clear)
+      if (this.formData?.segments && this.audioBuffer) {
+        const ratio = p / this.audioBuffer.duration;
+        const seg   = this.formData.segments.find(s => ratio >= s.startRatio && ratio <= s.endRatio);
+        if (seg) {
+          const segIn  = seg.startRatio * this.audioBuffer.duration;
+          const segOut = seg.endRatio   * this.audioBuffer.duration;
+          if (this.loopEnabled && Math.abs(this.loopIn - segIn) < 0.01 && Math.abs(this.loopOut - segOut) < 0.01) {
+            this.clearLoop();
+          } else {
+            this.setLoop(segIn, segOut);
+          }
+          return;
+        }
+      }
+
       this.isDragging = true;
-      const p = this.posAt(canvas, e);
       this.playOffset = p;
       if (this.isPlaying) this.startPlayback(p);
       this.startAnimLoop();
@@ -374,6 +363,7 @@ export class SonicVisualizerController {
         return;
       }
 
+      if (!this.isDragging) return;
       this.isDragging = false;
       if (!this.isPlaying) this.stopAnimLoop();
       this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
@@ -381,47 +371,6 @@ export class SonicVisualizerController {
 
     canvas.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.clearLoop();
-    });
-  }
-
-  // ─── Main pane interaction (seek + segment click) ─────────────────────────────
-
-  private bindMainInteraction(): void {
-    const canvas = this.mainCanvas;
-
-    canvas.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      canvas.setPointerCapture(e.pointerId);
-      const p = this.posAt(canvas, e);
-
-      if (this.formData?.segments && this.audioBuffer) {
-        const ratio = p / this.audioBuffer.duration;
-        const seg   = this.formData.segments.find(s => ratio >= s.startRatio && ratio <= s.endRatio);
-        if (seg) {
-          this.setLoop(seg.startRatio * this.audioBuffer.duration, seg.endRatio * this.audioBuffer.duration);
-          return;
-        }
-      }
-
-      this.isDragging = true;
-      this.playOffset = p;
-      if (this.isPlaying) this.startPlayback(p);
-      this.startAnimLoop();
-    });
-
-    canvas.addEventListener('pointermove', (e) => {
-      if (!this.isDragging) return;
-      const p = this.posAt(canvas, e);
-      if (this.isPlaying) this.startPlayback(p);
-      else this.playOffset = p;
-    });
-
-    canvas.addEventListener('pointerup', (e) => {
-      canvas.releasePointerCapture(e.pointerId);
-      if (!this.isDragging) return;
-      this.isDragging = false;
-      if (!this.isPlaying) this.stopAnimLoop();
-      this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
     });
   }
 
@@ -498,12 +447,14 @@ export class SonicVisualizerController {
     this.loopEnabled = true;
     this.updateLoopBtn();
     this.publish?.({ type: 'sv-loop', inPoint, outPoint, enabled: true });
+    if (this.rafId === null) requestAnimationFrame(() => this.redrawMainPane());
   }
 
   private clearLoop(): void {
     this.loopEnabled = false;
     this.updateLoopBtn();
     this.publish?.({ type: 'sv-loop', inPoint: 0, outPoint: 0, enabled: false });
+    if (this.rafId === null) requestAnimationFrame(() => this.redrawMainPane());
   }
 
   private updateLoopBtn(): void {
@@ -524,7 +475,6 @@ export class SonicVisualizerController {
     const tick = () => {
       if (this.isPlaying && this.loopEnabled && this.loopOut > this.loopIn) {
         if (this.getCurrentPosition() >= this.loopOut) {
-          // Restart audio inline to avoid re-entering startAnimLoop
           if (this.playbackNode) { try { this.playbackNode.stop(); } catch {} try { this.playbackNode.disconnect(); } catch {} this.playbackNode = null; }
           if (this.audioBuffer && this.audioCtx) {
             const src = this.audioCtx.createBufferSource();
@@ -540,7 +490,6 @@ export class SonicVisualizerController {
           }
         }
       }
-      this.redrawWavePane();
       this.redrawMainPane();
       this.rafId = (this.isPlaying || this.isDragging || this.isLoopDragging)
         ? requestAnimationFrame(tick)
@@ -558,7 +507,7 @@ export class SonicVisualizerController {
   private bindResize(): void {
     const ro = new ResizeObserver(() => {
       if (!this.audioBuffer) return;
-      this.resizeCanvases();
+      this.resizeCanvas();
       this.runWorker();
     });
     ro.observe(this.podEl);

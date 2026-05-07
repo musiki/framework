@@ -32,14 +32,14 @@
 }
 .sa-save-btn:hover { background:rgba(69,211,132,0.1); }
 
-/* 5-panel content grid — narrow: txt wide left, radar+3 stacked right */
+/* 5-panel content grid — narrow: txt tall left, fft/tmb/luf/radar stacked right */
 .sa-content {
   flex:1; min-height:0;
   display:grid;
   gap:1px;
   background:rgba(255,255,255,0.04);
-  grid-template-columns: 2fr 1fr;
-  grid-template-rows: minmax(0, 1.5fr) repeat(3, 1fr);
+  grid-template-columns: 1.4fr 1fr;
+  grid-template-rows: repeat(4, 1fr);
   overflow:hidden;
 }
 .sa-panel {
@@ -49,17 +49,17 @@
   min-height: 0; min-width: 0;
 }
 .sa-panel--text     { grid-column: 1; grid-row: 1 / 5; }
-.sa-panel--radar    { grid-column: 2; grid-row: 1; }
-.sa-panel--spectrum { grid-column: 2; grid-row: 2; }
-.sa-panel--timbre   { grid-column: 2; grid-row: 3; }
-.sa-panel--lufs     { grid-column: 2; grid-row: 4; }
+.sa-panel--spectrum { grid-column: 2; grid-row: 1; }
+.sa-panel--timbre   { grid-column: 2; grid-row: 2; }
+.sa-panel--lufs     { grid-column: 2; grid-row: 3; }
+.sa-panel--radar    { grid-column: 2; grid-row: 4; }
 
 .sa-radar-canvas { display: block; width: 100%; height: 100%; }
 
-/* Wide: 5 equal columns side by side */
+/* Wide: text wider, then fft/tmb/luf equal, radar last */
 @container sapod (min-width: 640px) {
   .sa-content {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
     grid-template-rows: 1fr;
   }
   .sa-panel { grid-column: auto; grid-row: auto; }

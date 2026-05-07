@@ -35,16 +35,11 @@
 .sv-panes {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column;
-  background: rgba(255,255,255,0.04); gap: 1px;
+  background: rgba(255,255,255,0.04);
 }
 .sv-pane { display: flex; overflow: hidden; min-height: 0; }
-.sv-pane--wave {
-  flex: 0 0 48px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-}
 .sv-pane--main { flex: 1; }
 
-.sv-wave-canvas,
 .sv-main-canvas {
   display: block; width: 100%; height: 100%;
   cursor: crosshair;
