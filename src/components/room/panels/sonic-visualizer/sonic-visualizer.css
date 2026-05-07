@@ -6,56 +6,46 @@
   font-size: 0.72rem; color: var(--conference-fg, #cdd6f4);
   container-type: inline-size; container-name: svpod;
 }
-.sv-toolbar { gap: 0.4rem; flex-shrink: 0; }
+.sv-toolbar { gap: 0.3rem; flex-shrink: 0; flex-wrap: wrap; }
 .sv-label {
   font-size: 0.55rem; font-weight: 900; letter-spacing: 0.18em;
   text-transform: uppercase; color: #45D384; opacity: 0.7; flex-shrink: 0;
 }
 .sv-status {
   font-size: 0.52rem; color: var(--conference-muted,#7f849c);
-  letter-spacing: 0.07em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-}
-.sv-vtabs { display:flex; gap:2px; flex-shrink:0; }
-.sv-vtab  { font-size:0.48rem; letter-spacing:0.07em; padding:1px 5px; min-width:unset; height:1.3rem; }
-.sv-vtab[data-active="true"] { color:#45D384; border-color:rgba(69,211,132,0.4); }
-
-/* Main: radar left + heatmap right */
-.sv-main {
-  flex:1; min-height:0;
-  display:flex; flex-direction:row;
-  gap:1px; background:rgba(255,255,255,0.04);
-  overflow:hidden;
-}
-.sv-radar-wrap {
-  /* square: width tracks container height; heatmap gets the rest */
-  flex: 0 0 auto;
-  align-self: stretch;
-  aspect-ratio: 1;
-  max-width: 45%;
-  display: flex;
-  align-items: center; justify-content: center;
-  overflow: hidden; padding: 4px;
-}
-.sv-radar { display:block; width:100%; height:100%; }
-.sv-heatmap { flex:1; min-width:0; display:block; background:#000; }
-
-/* Narrow: stack vertically */
-@container svpod (max-width: 260px) {
-  .sv-main { flex-direction: column; }
-  .sv-radar-wrap { flex: none; height: 48%; }
-  .sv-heatmap { flex: 1; }
+  letter-spacing: 0.07em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; min-width: 0;
 }
 
-/* Waveform player */
-.sv-waveform-wrap {
-  flex-shrink:0; height:52px;
-  border-top:1px solid rgba(255,255,255,0.05);
-  position:relative; display:flex; align-items:stretch;
+/* Layer toggle row */
+.sv-layers { display: flex; gap: 2px; flex-wrap: wrap; flex-shrink: 0; }
+.sv-layer-btn {
+  font-size: 0.45rem; letter-spacing: 0.06em;
+  padding: 1px 4px; height: 1.3rem; min-width: unset;
 }
-.sv-play-btn {
-  background:none; border:none; color:#45D384; font-size:0.65rem;
-  padding:0 0.3rem; cursor:pointer; flex-shrink:0; opacity:0.85;
-  display:flex; align-items:center;
+.sv-layer-btn[data-active="true"] { color: #45D384; border-color: rgba(69,211,132,0.4); }
+
+/* Play / Loop in toolbar */
+.sv-play-btn, .sv-loop-btn {
+  font-size: 0.65rem; padding: 0 0.35rem; height: 1.3rem; min-width: unset; flex-shrink: 0;
 }
-.sv-play-btn:hover { opacity:1; }
-.sv-waveform { flex:1; display:block; height:100%; cursor:crosshair; min-width:0; }
+.sv-loop-btn[data-active="true"] { color: #45D384; border-color: rgba(69,211,132,0.4); }
+
+/* Pane container */
+.sv-panes {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  background: rgba(255,255,255,0.04); gap: 1px;
+}
+.sv-pane { display: flex; overflow: hidden; min-height: 0; }
+.sv-pane--wave {
+  flex: 0 0 48px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.sv-pane--main { flex: 1; }
+
+.sv-wave-canvas,
+.sv-main-canvas {
+  display: block; width: 100%; height: 100%;
+  cursor: crosshair;
+}
