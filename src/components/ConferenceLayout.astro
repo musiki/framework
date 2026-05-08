@@ -452,6 +452,18 @@ if (
         </button>
         <button
           type="button"
+          class="conference-icon-button conference-screenshare-audio-btn"
+          data-action="screenshare-audio-toggle"
+          title="Screen share: audio del sistema"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="conference-icon" width="14" height="14">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/>
+          </svg>
+          <span class="conference-sr-only">Audio pantalla</span>
+        </button>
+        <button
+          type="button"
           class="conference-record-button"
           data-action="record"
           aria-label="Grabar transmision"
@@ -4451,6 +4463,7 @@ if (
   .conference-layout-button[data-active="true"],
   .conference-share-button[data-enabled="true"],
   .conference-icon-button[data-enabled="true"],
+  .conference-icon-button[data-active="true"],
   .conference-instruments-button[data-active="true"] {
     color: var(--conference-accent);
     background: rgba(255, 255, 255, 0.04);

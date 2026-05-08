@@ -41,15 +41,15 @@ const { isTeacher = false } = Astro.props as Props;
         {isTeacher && (
           <>
             <label class="workspace-list-label" style="margin-bottom: 0.25rem;">Grid Size</label>
-            <select class="workspace-select" data-grid-size-workspace-input>
-              <option value="normal">Normal (Automático)</option>
-              <option value="compact">Compacto (2 por fila)</option>
-              <option value="avatar">Avatar (120x90)</option>
-              <option value="small">Pequeño (160x120)</option>
-              <option value="usable">Usable (200x150)</option>
-              <option value="comfortable">Cómodo (240x180)</option>
-              <option value="speaker">Speaker (320x240)</option>
-            </select>
+            <div class="conference-segmented workspace-segmented" data-grid-size-input data-value="normal">
+              <button type="button" class="conference-seg-btn" data-value="normal"      data-active="true" >Normal</button>
+              <button type="button" class="conference-seg-btn" data-value="compact"     data-active="false">Compact</button>
+              <button type="button" class="conference-seg-btn" data-value="avatar"      data-active="false">Avatar</button>
+              <button type="button" class="conference-seg-btn" data-value="small"       data-active="false">Small</button>
+              <button type="button" class="conference-seg-btn" data-value="usable"      data-active="false">Usable</button>
+              <button type="button" class="conference-seg-btn" data-value="comfortable" data-active="false">Comfy</button>
+              <button type="button" class="conference-seg-btn" data-value="speaker"     data-active="false">Speaker</button>
+            </div>
           </>
         )}
       </div>
@@ -197,6 +197,18 @@ const { isTeacher = false } = Astro.props as Props;
   .workspace-btn--danger:hover {
     background: #ff4d4d;
     color: #000;
+  }
+
+  .workspace-segmented {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .workspace-segmented .conference-seg-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.58rem;
+    padding: 0.22rem 0.3rem;
   }
 
   .workspace-select {

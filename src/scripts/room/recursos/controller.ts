@@ -513,7 +513,8 @@ export class RecursosController {
         btn.textContent = '✓';
         setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 1800);
       } else {
-        console.error('[Re] guardar failed', resp.status);
+        const errBody = await resp.json().catch(() => ({})) as { error?: string };
+        console.error('[Re] guardar failed', resp.status, errBody?.error);
         btn.textContent = '✗';
         setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 2500);
       }

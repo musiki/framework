@@ -11587,6 +11587,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       shareEnabled ? 'Detener pantalla compartida' : 'Compartir pantalla',
     );
     shareScreenButton.title = shareEnabled ? 'Detener pantalla' : 'Compartir pantalla';
+
+    const screenshareAudioBtn = root.querySelector<HTMLButtonElement>('[data-action="screenshare-audio-toggle"]');
+    if (screenshareAudioBtn) {
+      const isOn = screenshareAudioInput instanceof HTMLInputElement && screenshareAudioInput.checked;
+      screenshareAudioBtn.setAttribute('aria-pressed', String(isOn));
+      screenshareAudioBtn.dataset.active = String(isOn);
+    }
     syncExternalMediaShell();
     syncConceptsShell();
     syncWhiteboardUi();
@@ -13138,6 +13145,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       setControlState();
     } catch (error) {
       setStatus(safeErrorMessage(error));
+    }
+  });
+
+  root.querySelector('[data-action="screenshare-audio-toggle"]')?.addEventListener('click', () => {
+    if (screenshareAudioInput instanceof HTMLInputElement) {
+      screenshareAudioInput.checked = !screenshareAudioInput.checked;
+      setControlState();
     }
   });
 

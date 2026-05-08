@@ -167,7 +167,8 @@ export class SonicAnalyzerController {
   private async loadFile(file: File): Promise<void> {
     this.setStatus(`decoding ${file.name}…`);
     try {
-      const ctx = this.getAudioTap()?.context ?? new AudioContext();
+      let ctx = this.getAudioTap()?.context ?? null;
+      if (!ctx || ctx.state === 'closed') ctx = new AudioContext();
       this.fileBuffer = await ctx.decodeAudioData(await file.arrayBuffer());
       this.loadedFileName = file.name;
       this.addFileOption(file.name);
@@ -176,7 +177,7 @@ export class SonicAnalyzerController {
       if (this.essentia) void this.computeVizFeatures();
       else this.setStatus(`file ready · ${file.name}`);
       if (this.publish) void this.handleSave();
-    } catch { this.setStatus('error: could not decode file'); }
+    } catch (e) { console.error('[sA] decode error', e); this.setStatus('error: could not decode file'); }
   }
   private addFileOption(name: string): void {
     let opt = this.sourceSelect.querySelector<HTMLOptionElement>('option[value="file"]');
@@ -501,7 +502,8 @@ export class SonicAnalyzerController {
         : url;
       const resp = await fetch(fetchUrl);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const ctx = this.getAudioTap()?.context ?? new AudioContext();
+      let ctx = this.getAudioTap()?.context ?? null;
+      if (!ctx || ctx.state === 'closed') ctx = new AudioContext();
       this.fileBuffer = await ctx.decodeAudioData(await resp.arrayBuffer());
       this.loadedFileName = name;
       this.addFileOption(name);

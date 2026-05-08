@@ -421,7 +421,7 @@ export class RoomWorkspaceManager {
           const layout = this.dockview?.toJSON();
           const root = document.querySelector<HTMLElement>('[data-conference-root]');
           const showCircle = root?.dataset.showCircle === 'true';
-          const gridSlot = root?.querySelector<HTMLElement>('[data-slot="grid-videos"]');
+          const gridSlot = root?.querySelector<HTMLElement>('[data-slot="grid"]');
           const gridSize = gridSlot?.dataset.gridSize || 'normal';
           
           localStorage.setItem(`musiki:workspace:${name}`, JSON.stringify({
