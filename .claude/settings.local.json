@@ -33,7 +33,16 @@
       "Bash(git branch *)",
       "Skill(qa)",
       "Bash(git -C /Users/zztt/projects/26-musiki/framework diff --name-only HEAD)",
-      "Bash(git -C /Users/zztt/projects/26-musiki/framework status --short)"
+      "Bash(git -C /Users/zztt/projects/26-musiki/framework status --short)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "Bash(git *)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(sed -n '521,535p' /Users/zztt/.config/superpowers/worktrees/framework/feat-sv-sa-redesign/src/scripts/room/sonic-visualizer/controller.ts)",
+      "Bash(sed -n '536,538p' /Users/zztt/.config/superpowers/worktrees/framework/feat-sv-sa-redesign/src/scripts/room/sonic-visualizer/controller.ts)",
+      "Bash(psql *)"
     ]
   }
 }
