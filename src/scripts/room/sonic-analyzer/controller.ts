@@ -139,7 +139,9 @@ export class SonicAnalyzerController {
   private bindDropzone(): void {
     const pod = this.podEl;
     pod.addEventListener('dragover', (e) => {
-      if (!this.hasDraggingAudio(e)) return;
+      const hasAudio = this.hasDraggingAudio(e);
+      console.log('[SA:drop] dragover hasAudio=', hasAudio, 'effectAllowed=', e.dataTransfer?.effectAllowed, 'dropEffect=', e.dataTransfer?.dropEffect);
+      if (!hasAudio) return;
       e.preventDefault(); e.dataTransfer!.dropEffect = 'copy';
       pod.classList.add('sa-pod--drag-over');
     });
@@ -147,8 +149,10 @@ export class SonicAnalyzerController {
       if (!pod.contains(e.relatedTarget as Node)) pod.classList.remove('sa-pod--drag-over');
     });
     pod.addEventListener('drop', (e) => {
+      console.log('[SA:drop] DROP fired! files=', e.dataTransfer?.files?.length);
       e.preventDefault(); pod.classList.remove('sa-pod--drag-over');
       const file = this.extractAudioFile(e.dataTransfer);
+      console.log('[SA:drop] extracted file=', file?.name);
       if (file) void this.loadFile(file);
     });
   }

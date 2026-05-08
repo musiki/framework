@@ -273,6 +273,7 @@ export class RoomWorkspaceManager {
 
     // Handle dropping into the dockview container
     this.container.addEventListener('dragover', (e) => {
+        if (e.dataTransfer?.types.includes('Files')) console.log('[WS:drag] workspace dragover with Files — effectAllowed=', e.dataTransfer?.effectAllowed);
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
         
@@ -322,8 +323,9 @@ export class RoomWorkspaceManager {
     });
 
     this.container.addEventListener('drop', (e) => {
+        console.log('[WS:drop] workspace drop fired files=', e.dataTransfer?.files?.length, 'podId=', e.dataTransfer?.getData('musiki/pod-id'));
         e.preventDefault();
-        
+
         const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
         const direction = shellEl?.getAttribute('data-drag-dir') || 'right';
 

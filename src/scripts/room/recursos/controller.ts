@@ -224,6 +224,7 @@ export class RecursosController {
     });
 
     this.container.addEventListener('dragenter', (e) => {
+      console.log('[Re:drop] dragenter types=', e.dataTransfer?.types);
       if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); this.dropOverlayEl.dataset.active = 'true'; }
     });
     this.container.addEventListener('dragleave', (e) => {
@@ -231,8 +232,10 @@ export class RecursosController {
     });
     this.container.addEventListener('dragover', (e) => {
       if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+      console.log('[Re:drop] dragover types=', e.dataTransfer?.types, 'effectAllowed=', e.dataTransfer?.effectAllowed, 'dropEffect=', e.dataTransfer?.dropEffect);
     });
     this.container.addEventListener('drop', (e) => {
+      console.log('[Re:drop] DROP fired! files=', e.dataTransfer?.files?.length, 'canEdit=', this.canEdit());
       e.preventDefault();
       this.dropOverlayEl.dataset.active = 'false';
       Array.from(e.dataTransfer?.files ?? []).forEach(f => void this.uploadFile(f));
@@ -426,6 +429,7 @@ export class RecursosController {
   // ── Upload ───────────────────────────────────────────────────────────────────
 
   private async uploadFile(file: File) {
+    console.log('[Re:drop] uploadFile', file.name, 'canEdit=', this.canEdit());
     if (!this.canEdit()) return;
     const form = new FormData();
     form.append('file', file);
