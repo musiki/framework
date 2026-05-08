@@ -12,9 +12,18 @@ import './recursos.css';
 
     <!-- Context menu (item / folder right-click) -->
     <div class="re-ctx-menu" data-re-ctx-menu hidden>
+      <button type="button" class="re-ctx-item" data-re-ctx-send-to-sa hidden>Enviar a SA</button>
       <button type="button" class="re-ctx-item" data-re-ctx-rename>Renombrar</button>
       <button type="button" class="re-ctx-item" data-re-ctx-move>Mover a…</button>
       <button type="button" class="re-ctx-item re-ctx-item--danger" data-re-ctx-delete>Borrar</button>
+    </div>
+
+    <!-- Session bar — shown when session exists -->
+    <div class="re-session-bar" data-re-session-bar hidden>
+      <span class="re-session-label">sesión</span>
+      <span class="re-session-name" data-re-session-name></span>
+      <button type="button" class="musiki-pod-btn re-session-btn" data-re-session-rename title="Renombrar sesión">✎</button>
+      <button type="button" class="musiki-pod-btn re-session-btn" data-re-session-new title="Nueva sesión">+</button>
     </div>
 
     <!-- Filetree (header rendered as first row by JS) -->

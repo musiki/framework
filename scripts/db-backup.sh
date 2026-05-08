@@ -27,7 +27,7 @@ Options:
 Env discovery order:
   1. DATABASE_URL
   2. SUPABASE_DB_URL
-  3. SUPABASE_DB_PASSWORD + supabase/.temp/pooler-url
+  3. SUPABASE_DB_PASSWORD + postgres-patches/.temp/pooler-url
 
 Artifacts:
   - database.dump  pg_dump custom-format backup
@@ -142,7 +142,7 @@ append_sslmode() {
 
 build_db_url_from_pooler() {
   local password="${SUPABASE_DB_PASSWORD-}"
-  local pooler_url_file="${ROOT_DIR}/supabase/.temp/pooler-url"
+  local pooler_url_file="${ROOT_DIR}/postgres-patches/.temp/pooler-url"
   if [ -z "${password}" ] || [ ! -f "${pooler_url_file}" ]; then
     return 1
   fi
@@ -201,8 +201,8 @@ data_path="${bundle_dir}/data.sql"
 metadata_path="${bundle_dir}/metadata.json"
 
 project_ref=""
-if [ -f "${ROOT_DIR}/supabase/.temp/project-ref" ]; then
-  project_ref="$(tr -d '\r\n' < "${ROOT_DIR}/supabase/.temp/project-ref")"
+if [ -f "${ROOT_DIR}/postgres-patches/.temp/project-ref" ]; then
+  project_ref="$(tr -d '\r\n' < "${ROOT_DIR}/postgres-patches/.temp/project-ref")"
 fi
 
 supabase_host=""

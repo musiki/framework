@@ -13,7 +13,7 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
   if (!roomName) return json({ error: 'roomName required' }, 400);
 
   const params: any[] = [roomName];
-  let sql = `SELECT id, "claseId", "roomName", url, name, type, folder, source, "createdBy", "sortOrder", "createdAt"
+  let sql = `SELECT id, "claseId", "sessionId", "roomName", url, name, type, folder, source, "createdBy", "sortOrder", "createdAt"
              FROM "LiveClassResource" WHERE "roomName" = $1`;
   if (claseId !== null) {
     params.push(claseId);
@@ -61,6 +61,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const rows = items.map((item: any, i: number) => ({
     id:          String(item.id || crypto.randomUUID()),
     claseId:     claseId,
+    sessionId:   item.sessionId == null ? null : String(item.sessionId),
     roomName:    roomName,
     url:         cleanString(String(item.url ?? ''), 2000),
     name:        cleanString(String(item.name ?? ''), 500) || 'recurso',

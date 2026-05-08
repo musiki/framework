@@ -78,6 +78,7 @@ export class SonicAnalyzerController {
   private radarCanvas!: HTMLCanvasElement;
 
   private onSVRequest: () => void;
+  private onLoadUrl: (e: Event) => void;
 
   constructor(options: SonicAnalyzerOptions) {
     this.container = options.container;
@@ -88,6 +89,11 @@ export class SonicAnalyzerController {
     this.bindDropzone();
     this.onSVRequest = () => this.emitCurrentState();
     window.addEventListener('sv:request-state', this.onSVRequest);
+    this.onLoadUrl = (e: Event) => {
+      const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail;
+      void this.loadFileFromUrl(url, name);
+    };
+    window.addEventListener('musiki:sa:load-url', this.onLoadUrl);
   }
 
   private emitCurrentState(): void {
@@ -487,9 +493,28 @@ export class SonicAnalyzerController {
     this.sourceSelect.appendChild(opt);
   }
   public removeParticipantSource(id: string): void { this.sourceSelect?.querySelector(`option[value="participant:${id}"]`)?.remove(); }
+  public async loadFileFromUrl(url: string, name: string): Promise<void> {
+    this.setStatus(`loading ${name}…`);
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const ctx = this.getAudioTap()?.context ?? new AudioContext();
+      this.fileBuffer = await ctx.decodeAudioData(await resp.arrayBuffer());
+      this.loadedFileName = name;
+      this.addFileOption(name);
+      this.showFileMeta(name);
+      if (this.active) { this.sourceSelect.value = 'file'; this.activeSource = 'file'; void this.reconnectSource(); }
+      if (this.essentia) void this.computeVizFeatures();
+      else this.setStatus(`file ready · ${name}`);
+    } catch (e: any) {
+      this.setStatus(`error: ${(e?.message ?? 'could not load').slice(0, 60)}`);
+    }
+  }
+
   public dispose(): void {
     this.deactivate();
     window.removeEventListener('sv:request-state', this.onSVRequest);
+    window.removeEventListener('musiki:sa:load-url', this.onLoadUrl);
   }
 }
 

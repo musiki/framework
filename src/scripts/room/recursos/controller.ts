@@ -49,18 +49,26 @@ export class RecursosController {
   private ctxTargetItem: ResourceItem | null = null;
   private ctxTargetFolder: string | null = null;
 
+  private sessionId: string | null = null;
+  private sessionName = '';
+
   private contentEl!: HTMLElement;
   private dropOverlayEl!: HTMLElement;
   private ctxMenuEl!: HTMLElement;
   private ctxRenameBtn!: HTMLButtonElement;
   private ctxMoveBtn!: HTMLButtonElement;
   private ctxDeleteBtn!: HTMLButtonElement;
+  private ctxSendToSaBtn!: HTMLButtonElement;
   private collabBtn!: HTMLButtonElement;
   private foldBtn!: HTMLButtonElement;
   private newFolderBtn!: HTMLButtonElement;
   private pasteBtn!: HTMLButtonElement;
   private guardarlBtn!: HTMLButtonElement;
   private bottombarEl!: HTMLElement;
+  private sessionBarEl!: HTMLElement;
+  private sessionNameEl!: HTMLElement;
+  private sessionRenameBtn!: HTMLButtonElement;
+  private sessionNewBtn!: HTMLButtonElement;
 
   constructor(opts: RecursosOptions) {
     this.container = opts.container;
@@ -77,18 +85,23 @@ export class RecursosController {
 
   private bindElements() {
     const q = <T extends HTMLElement>(sel: string) => this.container.querySelector<T>(sel)!;
-    this.contentEl     = q('[data-re-content]');
-    this.dropOverlayEl = q('[data-re-drop-overlay]');
-    this.ctxMenuEl     = q('[data-re-ctx-menu]');
-    this.ctxRenameBtn  = q('[data-re-ctx-rename]');
-    this.ctxMoveBtn    = q('[data-re-ctx-move]');
-    this.ctxDeleteBtn  = q('[data-re-ctx-delete]');
-    this.collabBtn     = q('[data-re-collab]');
-    this.foldBtn       = q('[data-re-fold]');
-    this.newFolderBtn  = q('[data-re-new-folder]');
-    this.pasteBtn      = q('[data-re-paste]');
-    this.guardarlBtn   = q('[data-re-guardar]');
-    this.bottombarEl   = q('[data-re-bottombar]');
+    this.contentEl       = q('[data-re-content]');
+    this.dropOverlayEl   = q('[data-re-drop-overlay]');
+    this.ctxMenuEl       = q('[data-re-ctx-menu]');
+    this.ctxRenameBtn    = q('[data-re-ctx-rename]');
+    this.ctxMoveBtn      = q('[data-re-ctx-move]');
+    this.ctxDeleteBtn    = q('[data-re-ctx-delete]');
+    this.ctxSendToSaBtn  = q('[data-re-ctx-send-to-sa]');
+    this.collabBtn       = q('[data-re-collab]');
+    this.foldBtn         = q('[data-re-fold]');
+    this.newFolderBtn    = q('[data-re-new-folder]');
+    this.pasteBtn        = q('[data-re-paste]');
+    this.guardarlBtn     = q('[data-re-guardar]');
+    this.bottombarEl     = q('[data-re-bottombar]');
+    this.sessionBarEl    = q('[data-re-session-bar]');
+    this.sessionNameEl   = q('[data-re-session-name]');
+    this.sessionRenameBtn = q('[data-re-session-rename]');
+    this.sessionNewBtn   = q('[data-re-session-new]');
 
     if (!this.isTeacher) this.bottombarEl.hidden = true;
     if (this.isTeacher)  this.collabBtn.style.display = '';
@@ -116,7 +129,52 @@ export class RecursosController {
       if (resp.ok) for (const item of ((await resp.json()).items ?? [])) this.items = addItem(this.items, item);
     } catch { /**/ }
 
+    await this.loadSession();
     this.render();
+  }
+
+  private async loadSession(): Promise<void> {
+    const roomName = this.getRoomName() ?? '';
+    if (!roomName) return;
+    try {
+      const resp = await fetch(`/api/live/session?roomName=${encodeURIComponent(roomName)}`);
+      if (resp.ok) {
+        const { session } = await resp.json();
+        if (session) { this.sessionId = session.id; this.sessionName = session.name; }
+      }
+    } catch { /**/ }
+    this.updateSessionBar();
+  }
+
+  private async ensureSession(): Promise<string> {
+    if (this.sessionId) return this.sessionId;
+    const roomName = this.getRoomName() ?? '';
+    const claseId  = this.getCourseId();
+    const name = new Date().toISOString().slice(0, 10) + '-sesión';
+    try {
+      const resp = await fetch('/api/live/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName, name, claseId }),
+      });
+      if (resp.ok) {
+        const { session } = await resp.json();
+        this.sessionId = session.id;
+        this.sessionName = session.name;
+        this.updateSessionBar();
+      }
+    } catch { /**/ }
+    return this.sessionId ?? '';
+  }
+
+  private updateSessionBar(): void {
+    if (!this.sessionBarEl) return;
+    if (this.sessionId) {
+      this.sessionBarEl.hidden = false;
+      this.sessionNameEl.textContent = this.sessionName;
+    } else {
+      this.sessionBarEl.hidden = true;
+    }
   }
 
   private bindEvents() {
@@ -134,7 +192,7 @@ export class RecursosController {
 
     window.addEventListener('musiki:recursos:sa-uploaded', (e: Event) => {
       const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail;
-      this.addCompartido(url, name, 'sa');
+      void this.addSaFile(url, name);
     });
     window.addEventListener('musiki:recursos:chat-url', (e: Event) => {
       const { url } = (e as CustomEvent<{ url: string }>).detail;
@@ -158,6 +216,10 @@ export class RecursosController {
     this.ctxRenameBtn.addEventListener('click', () => this.startInlineRename());
     this.ctxDeleteBtn.addEventListener('click', () => this.deleteCtxTarget());
     this.ctxMoveBtn.addEventListener('click', () => this.showMoveSubmenu());
+    this.ctxSendToSaBtn.addEventListener('click', () => this.sendCtxItemToSa());
+
+    this.sessionRenameBtn.addEventListener('click', () => void this.renameSession());
+    this.sessionNewBtn.addEventListener('click', () => void this.newSession());
 
     document.addEventListener('click', (e) => {
       if (!this.ctxMenuEl.contains(e.target as Node)) this.closeCtxMenu();
@@ -255,6 +317,67 @@ export class RecursosController {
       createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
     });
     this.render(); this.scheduleAutosave(); this.broadcastSync();
+  }
+
+  // ── SA media file ─────────────────────────────────────────────────────────────
+
+  private async addSaFile(url: string, name: string): Promise<void> {
+    if (!url) return;
+    const sid = await this.ensureSession();
+    this.items = addItem(this.items, {
+      id: crypto.randomUUID(), url, name,
+      type: typeFromUrl(url), folder: 'media', source: 'sa',
+      createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
+      sessionId: sid || null,
+    });
+    this.render(); this.scheduleAutosave(); this.broadcastSync();
+  }
+
+  // ── Session management ────────────────────────────────────────────────────────
+
+  private async renameSession(): Promise<void> {
+    if (!this.sessionId) return;
+    const name = prompt('Nombre de sesión:', this.sessionName);
+    if (!name?.trim()) return;
+    this.sessionName = name.trim();
+    this.updateSessionBar();
+    try {
+      await fetch('/api/live/session', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: this.sessionId, name: this.sessionName }),
+      });
+    } catch { /**/ }
+  }
+
+  private async newSession(): Promise<void> {
+    const roomName = this.getRoomName() ?? '';
+    const claseId  = this.getCourseId();
+    const name = new Date().toISOString().slice(0, 10) + '-sesión';
+    try {
+      const resp = await fetch('/api/live/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName, name, claseId }),
+      });
+      if (resp.ok) {
+        const { session } = await resp.json();
+        this.sessionId = session.id;
+        this.sessionName = session.name;
+        this.updateSessionBar();
+      }
+    } catch { /**/ }
+  }
+
+  // ── Enviar a SA ───────────────────────────────────────────────────────────────
+
+  private sendCtxItemToSa(): void {
+    const item = this.ctxTargetItem;
+    this.closeCtxMenu();
+    if (!item) return;
+    window.dispatchEvent(new CustomEvent('musiki:sa:load-url', {
+      detail: { url: item.url, name: item.name },
+    }));
   }
 
   // ── Upload ───────────────────────────────────────────────────────────────────
@@ -525,13 +648,15 @@ export class RecursosController {
     if (!this.canEdit()) return;
     this.ctxTargetItem = item; this.ctxTargetFolder = null;
     this.ctxMoveBtn.style.display = '';
+    const canSendToSa = item.folder === 'media' || item.type === 'audio';
+    this.ctxSendToSaBtn.hidden = !canSendToSa;
     this.ctxMenuEl.removeAttribute('hidden');
     this.ctxMenuEl.style.left = `${e.clientX}px`;
     this.ctxMenuEl.style.top  = `${e.clientY}px`;
   }
 
   private openFolderCtxMenu(folder: string, e: MouseEvent) {
-    if (!this.canEdit() || folder === 'compartidos') return;
+    if (!this.canEdit() || folder === 'compartidos' || folder === 'media') return;
     this.ctxTargetFolder = folder; this.ctxTargetItem = null;
     this.ctxMoveBtn.style.display = 'none';
     this.ctxMenuEl.removeAttribute('hidden');

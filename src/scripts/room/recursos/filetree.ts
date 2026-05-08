@@ -10,6 +10,7 @@ export type ResourceItem = {
   createdBy: string;
   sortOrder: number;
   createdAt: string;
+  sessionId?: string | null;
 };
 
 const TYPE_ICON: Record<string, { char: string; color: string }> = {
@@ -27,15 +28,19 @@ function iconFor(type: string): { char: string; color: string } {
   return TYPE_ICON[type] ?? TYPE_ICON.other;
 }
 
+const PINNED_FOLDERS = ['media', 'compartidos'];
+
 export function foldersFromItems(items: ResourceItem[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
-  if (items.some(i => i.folder === 'compartidos')) {
-    seen.add('compartidos');
-    result.push('compartidos');
+  for (const pinned of PINNED_FOLDERS) {
+    if (items.some(i => i.folder === pinned)) {
+      seen.add(pinned);
+      result.push(pinned);
+    }
   }
   for (const item of items) {
-    if (item.folder && item.folder !== 'compartidos' && !seen.has(item.folder)) {
+    if (item.folder && !seen.has(item.folder)) {
       seen.add(item.folder);
       result.push(item.folder);
     }
@@ -96,17 +101,18 @@ export function renderFiletree(
 
   for (const folder of folders) {
     const isCollapsed = collapsedFolders.has(folder);
-    const isAuto = folder === 'compartidos';
+    const isAuto = folder === 'compartidos' || folder === 'media';
     const folderEl = document.createElement('div');
     folderEl.className = 're-folder';
     folderEl.dataset.folder = folder;
 
+    const isMedia = folder === 'media';
     const rowEl = document.createElement('div');
     rowEl.className = 're-folder-row';
     rowEl.innerHTML = `
       <span class="re-caret">${isCollapsed ? '▸' : '▾'}</span>
-      <span class="re-folder-icon" style="color:${isAuto ? '#6fa8dc' : '#555'}">${isAuto ? '⊕' : '⊟'}</span>
-      <span class="re-folder-name${isAuto ? ' re-folder-name--auto' : ''}">${escHtml(folder)}</span>
+      <span class="re-folder-icon" style="color:${isMedia ? '#93c47d' : isAuto ? '#6fa8dc' : '#555'}">${isMedia ? '♪' : isAuto ? '⊕' : '⊟'}</span>
+      <span class="re-folder-name${isMedia || isAuto ? ' re-folder-name--auto' : ''}" style="${isMedia ? 'color:#93c47d' : ''}">${escHtml(folder)}</span>
     `;
     rowEl.addEventListener('click', () => options.onFolderToggle(folder));
     rowEl.addEventListener('contextmenu', (e) => { e.preventDefault(); options.onFolderContextMenu(folder, e); });

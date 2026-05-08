@@ -29,7 +29,7 @@ Options:
 Env discovery order:
   1. DATABASE_URL
   2. SUPABASE_DB_URL
-  3. SUPABASE_DB_PASSWORD + supabase/.temp/pooler-url
+  3. SUPABASE_DB_PASSWORD + postgres-patches/.temp/pooler-url
 
 Notes:
   - backup directories with schema.sql + data.sql are supported
@@ -144,7 +144,7 @@ append_sslmode() {
 
 build_db_url_from_pooler() {
   local password="${SUPABASE_DB_PASSWORD-}"
-  local pooler_url_file="${ROOT_DIR}/supabase/.temp/pooler-url"
+  local pooler_url_file="${ROOT_DIR}/postgres-patches/.temp/pooler-url"
   if [ -z "${password}" ] || [ ! -f "${pooler_url_file}" ]; then
     return 1
   fi
@@ -205,7 +205,7 @@ if [ -z "${DB_URL}" ]; then
 Provide one of:
   - DATABASE_URL
   - SUPABASE_DB_URL
-  - SUPABASE_DB_PASSWORD together with supabase/.temp/pooler-url
+  - SUPABASE_DB_PASSWORD together with postgres-patches/.temp/pooler-url
 EOF
   exit 1
 fi

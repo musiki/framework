@@ -76,7 +76,7 @@ function append_sslmode
 end
 
 function build_db_url_from_pooler
-    set pooler_url_file "$ROOT_DIR/supabase/.temp/pooler-url"
+    set pooler_url_file "$ROOT_DIR/postgres-patches/.temp/pooler-url"
 
     if test -z "$SUPABASE_DB_PASSWORD"; or not test -f "$pooler_url_file"
         return 1
@@ -170,8 +170,8 @@ set data_path "$bundle_dir/data.sql"
 set metadata_path "$bundle_dir/metadata.json"
 
 set project_ref ""
-if test -f "$ROOT_DIR/supabase/.temp/project-ref"
-    set project_ref (string trim < "$ROOT_DIR/supabase/.temp/project-ref")
+if test -f "$ROOT_DIR/postgres-patches/.temp/project-ref"
+    set project_ref (string trim < "$ROOT_DIR/postgres-patches/.temp/project-ref")
 end
 
 set supabase_host ""
