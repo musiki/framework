@@ -27,11 +27,11 @@
 }
 .sv-layer-btn[data-active="true"] { color: #45D384; border-color: rgba(69,211,132,0.4); }
 
-/* Tooltip */
+/* Tooltip — below button, into canvas space */
 .sv-tip {
   display: none;
   position: absolute;
-  bottom: calc(100% + 4px);
+  top: calc(100% + 4px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
@@ -110,5 +110,7 @@
 .sv-ruler-out { color: #E06666; }
 .sv-ruler-marker[hidden] { display: none; }
 
-/* Lift pod above siblings when a tooltip is hovered */
-.sv-pod:has(.sv-layer-btn:hover) { position: relative; z-index: 100; }
+/* Lift stacking contexts so tooltip paints above canvas and sibling pods */
+.sv-pod { position: relative; }
+.sv-pod:has(.sv-layer-btn:hover) { z-index: 100; }
+.sv-toolbar:has(.sv-layer-btn:hover) { z-index: 9999; }

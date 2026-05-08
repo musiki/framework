@@ -135,10 +135,11 @@
 .sa-info-btn:hover { color: #89b4fa; border-color: rgba(137,180,250,0.5); }
 
 .sa-info-modal {
-  position: absolute; inset: 0; z-index: 9998;
-  background: rgba(0,0,0,0.95);
+  position: fixed; inset: 0; z-index: 20000;
+  background: rgba(0,0,0,0.92);
+  backdrop-filter: blur(8px);
   overflow-y: auto;
-  padding: 0.75rem 0.75rem 1.5rem;
+  padding: 1rem 1rem 2rem;
   display: flex; flex-direction: column;
 }
 .sa-info-modal[hidden] { display: none; }
