@@ -10,7 +10,7 @@ import './recursos.css';
       <span class="re-drop-label">soltar archivos aquí</span>
     </div>
 
-    <!-- Context menu (item / folder right-click) -->
+    <!-- Context menu (item / folder / root right-click) -->
     <div class="re-ctx-menu" data-re-ctx-menu hidden>
       <button type="button" class="re-ctx-item" data-re-ctx-send-to-sa hidden>Enviar a SA</button>
       <button type="button" class="re-ctx-item" data-re-ctx-rename>Renombrar</button>
@@ -18,12 +18,17 @@ import './recursos.css';
       <button type="button" class="re-ctx-item re-ctx-item--danger" data-re-ctx-delete>Borrar</button>
     </div>
 
-    <!-- Session bar — shown when session exists -->
-    <div class="re-session-bar" data-re-session-bar hidden>
-      <span class="re-session-label">sesión</span>
-      <span class="re-session-name" data-re-session-name></span>
-      <button type="button" class="musiki-pod-btn re-session-btn" data-re-session-rename title="Renombrar sesión">✎</button>
-      <button type="button" class="musiki-pod-btn re-session-btn" data-re-session-new title="Nueva sesión">+</button>
+    <!-- Session context menu (root right-click) -->
+    <div class="re-ctx-menu" data-re-session-ctx hidden>
+      <button type="button" class="re-ctx-item" data-re-sctx-new>Nueva sesión</button>
+      <button type="button" class="re-ctx-item" data-re-sctx-list>Listar sesiones</button>
+      <button type="button" class="re-ctx-item re-ctx-item--danger" data-re-sctx-delete>Borrar sesión</button>
+    </div>
+
+    <!-- Sessions list modal -->
+    <div class="re-sessions-modal" data-re-sessions-modal hidden>
+      <div class="re-sessions-header">Sesiones</div>
+      <div class="re-sessions-list" data-re-sessions-list></div>
     </div>
 
     <!-- Filetree (header rendered as first row by JS) -->
@@ -47,7 +52,6 @@ import './recursos.css';
           <path d="M5.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5ZM1.5 14.5c0-2 1.5-3.5 3.5-3.5h1c2 0 3.5 1.5 3.5 3.5M10.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z"/>
         </svg>
       </button>
-      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-guardar title="Guardar y exportar como .md">G</button>
     </div>
 
   </div>

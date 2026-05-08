@@ -11253,6 +11253,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (currentPresentationMediaState) {
       await publishPresentationMediaState(currentPresentationMediaState, true);
     }
+
+    if (sonicAnalyzerController?.isActive) {
+      await publishMessage({ type: 'sa-state', active: true });
+      sonicAnalyzerController.publishLastFileSync();
+    }
   };
 
   const getPresentationSelect = () => {

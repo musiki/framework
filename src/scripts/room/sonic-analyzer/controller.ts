@@ -72,7 +72,6 @@ export class SonicAnalyzerController {
   private powerBtn!: HTMLElement;
   private statusTextEl!: HTMLElement;
   private fileNameEl!: HTMLElement;
-  private saveBtnEl!: HTMLButtonElement;
   private sourceSelect!: HTMLSelectElement;
   private fpsSlider!: HTMLInputElement;
   private fpsLabel!: HTMLElement;
@@ -114,8 +113,6 @@ export class SonicAnalyzerController {
     this.powerBtn      = q('[data-sa-power]')!;
     this.statusTextEl  = q('[data-sa-status-text]')!;
     this.fileNameEl    = q('[data-sa-file-name]')!;
-    this.saveBtnEl     = q<HTMLButtonElement>('[data-sa-save]')!;
-    this.saveBtnEl.addEventListener('click', () => void this.handleSave());
     this.sourceSelect  = q<HTMLSelectElement>('[data-sa-source]')!;
     this.fpsSlider     = q<HTMLInputElement>('[data-sa-fps]')!;
     this.fpsLabel      = q('[data-sa-fps-label]')!;
@@ -195,7 +192,7 @@ export class SonicAnalyzerController {
     this.sourceSelect.value = 'file'; this.activeSource = 'file';
   }
   private showFileMeta(name: string): void {
-    this.fileNameEl.textContent = name; this.fileNameEl.hidden = false; this.saveBtnEl.hidden = false;
+    this.fileNameEl.textContent = name; this.fileNameEl.hidden = false;
   }
   private async handleSave(): Promise<void> {
     if (!this.fileBuffer || !this.loadedFileName) return;

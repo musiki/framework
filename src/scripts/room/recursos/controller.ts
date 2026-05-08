@@ -59,16 +59,17 @@ export class RecursosController {
   private ctxMoveBtn!: HTMLButtonElement;
   private ctxDeleteBtn!: HTMLButtonElement;
   private ctxSendToSaBtn!: HTMLButtonElement;
+  private sessionCtxEl!: HTMLElement;
+  private sessionCtxNewBtn!: HTMLButtonElement;
+  private sessionCtxListBtn!: HTMLButtonElement;
+  private sessionCtxDeleteBtn!: HTMLButtonElement;
+  private sessionsModalEl!: HTMLElement;
+  private sessionsListEl!: HTMLElement;
   private collabBtn!: HTMLButtonElement;
   private foldBtn!: HTMLButtonElement;
   private newFolderBtn!: HTMLButtonElement;
   private pasteBtn!: HTMLButtonElement;
-  private guardarlBtn!: HTMLButtonElement;
   private bottombarEl!: HTMLElement;
-  private sessionBarEl!: HTMLElement;
-  private sessionNameEl!: HTMLElement;
-  private sessionRenameBtn!: HTMLButtonElement;
-  private sessionNewBtn!: HTMLButtonElement;
 
   constructor(opts: RecursosOptions) {
     this.container = opts.container;
@@ -85,23 +86,24 @@ export class RecursosController {
 
   private bindElements() {
     const q = <T extends HTMLElement>(sel: string) => this.container.querySelector<T>(sel)!;
-    this.contentEl       = q('[data-re-content]');
-    this.dropOverlayEl   = q('[data-re-drop-overlay]');
-    this.ctxMenuEl       = q('[data-re-ctx-menu]');
-    this.ctxRenameBtn    = q('[data-re-ctx-rename]');
-    this.ctxMoveBtn      = q('[data-re-ctx-move]');
-    this.ctxDeleteBtn    = q('[data-re-ctx-delete]');
-    this.ctxSendToSaBtn  = q('[data-re-ctx-send-to-sa]');
-    this.collabBtn       = q('[data-re-collab]');
-    this.foldBtn         = q('[data-re-fold]');
-    this.newFolderBtn    = q('[data-re-new-folder]');
-    this.pasteBtn        = q('[data-re-paste]');
-    this.guardarlBtn     = q('[data-re-guardar]');
-    this.bottombarEl     = q('[data-re-bottombar]');
-    this.sessionBarEl    = q('[data-re-session-bar]');
-    this.sessionNameEl   = q('[data-re-session-name]');
-    this.sessionRenameBtn = q('[data-re-session-rename]');
-    this.sessionNewBtn   = q('[data-re-session-new]');
+    this.contentEl          = q('[data-re-content]');
+    this.dropOverlayEl      = q('[data-re-drop-overlay]');
+    this.ctxMenuEl          = q('[data-re-ctx-menu]');
+    this.ctxRenameBtn       = q('[data-re-ctx-rename]');
+    this.ctxMoveBtn         = q('[data-re-ctx-move]');
+    this.ctxDeleteBtn       = q('[data-re-ctx-delete]');
+    this.ctxSendToSaBtn     = q('[data-re-ctx-send-to-sa]');
+    this.sessionCtxEl       = q('[data-re-session-ctx]');
+    this.sessionCtxNewBtn   = q('[data-re-sctx-new]');
+    this.sessionCtxListBtn  = q('[data-re-sctx-list]');
+    this.sessionCtxDeleteBtn = q('[data-re-sctx-delete]');
+    this.sessionsModalEl    = q('[data-re-sessions-modal]');
+    this.sessionsListEl     = q('[data-re-sessions-list]');
+    this.collabBtn          = q('[data-re-collab]');
+    this.foldBtn            = q('[data-re-fold]');
+    this.newFolderBtn       = q('[data-re-new-folder]');
+    this.pasteBtn           = q('[data-re-paste]');
+    this.bottombarEl        = q('[data-re-bottombar]');
 
     if (!this.isTeacher) this.bottombarEl.hidden = true;
     if (this.isTeacher)  this.collabBtn.style.display = '';
@@ -168,13 +170,8 @@ export class RecursosController {
   }
 
   private updateSessionBar(): void {
-    if (!this.sessionBarEl) return;
-    if (this.sessionId) {
-      this.sessionBarEl.hidden = false;
-      this.sessionNameEl.textContent = this.sessionName;
-    } else {
-      this.sessionBarEl.hidden = true;
-    }
+    // session state is reflected in the header — re-render
+    this.render();
   }
 
   private bindEvents() {
@@ -210,7 +207,6 @@ export class RecursosController {
     this.foldBtn.addEventListener('click', () => this.toggleFoldAll());
     this.newFolderBtn.addEventListener('click', () => this.startNewFolder());
     this.pasteBtn.addEventListener('click', () => void this.pasteClipboard());
-    this.guardarlBtn.addEventListener('click', () => void this.doGuardar());
     this.collabBtn.addEventListener('click', () => this.toggleAllowStudents());
 
     this.ctxRenameBtn.addEventListener('click', () => this.startInlineRename());
@@ -218,11 +214,13 @@ export class RecursosController {
     this.ctxMoveBtn.addEventListener('click', () => this.showMoveSubmenu());
     this.ctxSendToSaBtn.addEventListener('click', () => this.sendCtxItemToSa());
 
-    this.sessionRenameBtn.addEventListener('click', () => void this.renameSession());
-    this.sessionNewBtn.addEventListener('click', () => void this.newSession());
+    this.sessionCtxNewBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.newSession(); });
+    this.sessionCtxListBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.showSessionsList(); });
+    this.sessionCtxDeleteBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.deleteSession(); });
 
     document.addEventListener('click', (e) => {
       if (!this.ctxMenuEl.contains(e.target as Node)) this.closeCtxMenu();
+      if (!this.sessionCtxEl.contains(e.target as Node) && !this.sessionsModalEl.contains(e.target as Node)) this.closeSessionCtx();
     });
 
     this.container.addEventListener('dragenter', (e) => {
@@ -269,13 +267,18 @@ export class RecursosController {
   }
 
   private buildHeaderEl(): HTMLElement {
-    const claseId = this.getCourseId();
     const el = document.createElement('div');
     el.className = 're-header';
-    el.textContent = this.headerLabel || this.claseLabel(claseId);
+    if (this.sessionId && this.sessionName) {
+      el.innerHTML = `<span class="re-header-session">📁 ${this.sessionName}</span>`;
+    } else {
+      const claseId = this.getCourseId();
+      el.textContent = this.headerLabel || this.claseLabel(claseId);
+    }
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      this.startHeaderInlineEdit(el);
+      if (this.isTeacher) this.openSessionCtx(e as MouseEvent);
+      else this.startHeaderInlineEdit(el);
     });
     return el;
   }
@@ -335,21 +338,6 @@ export class RecursosController {
 
   // ── Session management ────────────────────────────────────────────────────────
 
-  private async renameSession(): Promise<void> {
-    if (!this.sessionId) return;
-    const name = prompt('Nombre de sesión:', this.sessionName);
-    if (!name?.trim()) return;
-    this.sessionName = name.trim();
-    this.updateSessionBar();
-    try {
-      await fetch('/api/live/session', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: this.sessionId, name: this.sessionName }),
-      });
-    } catch { /**/ }
-  }
-
   private async newSession(): Promise<void> {
     const roomName = this.getRoomName() ?? '';
     const claseId  = this.getCourseId();
@@ -367,6 +355,61 @@ export class RecursosController {
         this.updateSessionBar();
       }
     } catch { /**/ }
+  }
+
+  private async deleteSession(): Promise<void> {
+    if (!this.sessionId) return;
+    try {
+      await fetch(`/api/live/session?id=${encodeURIComponent(this.sessionId)}`, { method: 'DELETE' });
+    } catch { /**/ }
+    this.sessionId = null;
+    this.sessionName = '';
+    this.updateSessionBar();
+  }
+
+  // ── Session context menu ──────────────────────────────────────────────────────
+
+  private openSessionCtx(e: MouseEvent): void {
+    this.sessionCtxEl.removeAttribute('hidden');
+    this.sessionCtxEl.style.left = `${e.clientX}px`;
+    this.sessionCtxEl.style.top  = `${e.clientY}px`;
+    this.sessionCtxDeleteBtn.disabled = !this.sessionId;
+  }
+
+  private closeSessionCtx(): void {
+    this.sessionCtxEl.setAttribute('hidden', '');
+  }
+
+  private async showSessionsList(): Promise<void> {
+    const roomName = this.getRoomName() ?? '';
+    if (!roomName) return;
+    this.sessionsModalEl.removeAttribute('hidden');
+    this.sessionsListEl.innerHTML = '<div style="padding:6px 10px;font-size:10px;color:#444">cargando…</div>';
+    try {
+      const resp = await fetch(`/api/live/session?roomName=${encodeURIComponent(roomName)}&list=1`);
+      if (!resp.ok) throw new Error();
+      const { sessions } = await resp.json();
+      if (!sessions.length) {
+        this.sessionsListEl.innerHTML = '<div style="padding:6px 10px;font-size:10px;color:#444">sin sesiones</div>';
+        return;
+      }
+      this.sessionsListEl.innerHTML = '';
+      for (const s of sessions) {
+        const item = document.createElement('div');
+        item.className = 're-session-item' + (s.id === this.sessionId ? ' re-session-item--active' : '');
+        const date = new Date(s.createdAt).toLocaleDateString('es', { month: 'short', day: 'numeric' });
+        item.innerHTML = `<span class="re-session-item-name">${s.name}</span><span class="re-session-item-date">${date}</span>`;
+        item.addEventListener('click', () => {
+          this.sessionId = s.id;
+          this.sessionName = s.name;
+          this.sessionsModalEl.setAttribute('hidden', '');
+          this.updateSessionBar();
+        });
+        this.sessionsListEl.appendChild(item);
+      }
+    } catch {
+      this.sessionsListEl.innerHTML = '<div style="padding:6px 10px;font-size:10px;color:#e06666">error</div>';
+    }
   }
 
   // ── Enviar a SA ───────────────────────────────────────────────────────────────
@@ -464,112 +507,6 @@ export class RecursosController {
     navigator.sendBeacon('/api/live/recursos',
       new Blob([JSON.stringify({ roomName, claseId: this.getCourseId() ?? null, items: this.items })],
         { type: 'application/json' }));
-  }
-
-  // ── Guardar (save + export to vault) ─────────────────────────────────────────
-
-  private async doGuardar() {
-    void this.save();
-
-    const claseId     = this.getCourseId();
-    // courseId: first segment of claseId, or the root course from the room data-attribute
-    const rootCourseId = claseId
-      ? claseId.split('/')[0]
-      : (this.getCourseRootId?.() ?? '');
-    if (!rootCourseId) return;
-
-    let targetPath: string;
-    let filename: string;
-
-    if (claseId) {
-      // Class selected → cursos/{courseId}/{chapter}/{lesson}/recursos-{lesson}.md
-      const slug = claseId.split('/').pop() ?? 'clase';
-      filename   = `recursos-${slug}.md`;
-      targetPath = `cursos/${claseId}/${filename}`;
-    } else {
-      // No class → cursos/{courseId}/80-recursos/recursos.md (virtual unassigned folder)
-      filename   = 'recursos.md';
-      targetPath = `cursos/${rootCourseId}/80-recursos/${filename}`;
-    }
-
-    const md = this.buildMarkdown(filename, claseId);
-    const btn = this.guardarlBtn;
-    const origText = btn.textContent ?? 'G';
-    btn.textContent = '…';
-    btn.disabled = true;
-    try {
-      // Try edit first (updates file in-place); on 404 (new file) fall back to create
-      let resp = await fetch('/api/content-admin/publish', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseId: rootCourseId, targetPath, content: md, mode: 'edit', editSummary: 'Re pod guardar' }),
-      });
-      if (resp.status === 404) {
-        resp = await fetch('/api/content-admin/publish', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId: rootCourseId, targetPath, content: md, mode: 'create', editSummary: 'Re pod guardar' }),
-        });
-      }
-      if (resp.ok) {
-        btn.textContent = '✓';
-        setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 1800);
-      } else {
-        const errBody = await resp.json().catch(() => ({})) as { error?: string };
-        console.error('[Re] guardar failed', resp.status, errBody?.error);
-        btn.textContent = '✗';
-        setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 2500);
-      }
-    } catch (e) {
-      console.error('[Re] guardar error', e);
-      btn.textContent = '✗';
-      setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 2500);
-    }
-  }
-
-  private buildMarkdown(filename: string, claseId: string | null): string {
-    const title      = filename.replace(/\.md$/, '').replace(/-/g, ' ');
-    // Derive chapter for sidebar grouping
-    // claseId = "courseId/chapter/lesson" → parts[1] is chapter
-    const parts      = claseId ? claseId.split('/') : [];
-    const chapter    = claseId
-      ? (parts.length >= 3 ? parts[parts.length - 2] : parts[0]) // chapter segment or courseId
-      : '80 RECURSOS'; // unassigned resources virtual folder
-
-    const allFolders = ['compartidos', ...foldersFromItems(this.items).filter(f => f !== 'compartidos')];
-    const rootItems  = itemsInFolder(this.items, '');
-    const folderLines = allFolders.filter(f => itemsInFolder(this.items, f).length > 0);
-
-    const treeLines: string[] = ['recursos/'];
-    folderLines.forEach((folder, fi) => {
-      const items = itemsInFolder(this.items, folder);
-      const isLast = fi === folderLines.length - 1 && rootItems.length === 0;
-      treeLines.push(`${isLast ? '└──' : '├──'} ${folder}/`);
-      items.forEach((item, ii) => treeLines.push(
-        `${isLast ? '    ' : '│   '}${ii === items.length - 1 ? '└──' : '├──'} [${item.type}] ${item.name}`
-      ));
-    });
-    rootItems.forEach((item, ii) => treeLines.push(
-      `${ii === rootItems.length - 1 ? '└──' : '├──'} ${item.name}`
-    ));
-
-    const frontmatter = [
-      `title: "Recursos — ${title}"`,
-      `type: lesson`,
-      `chapter: "${chapter}"`,
-      `status: published`,
-      claseId ? `claseId: "${claseId}"` : null,
-      `updatedAt: "${new Date().toISOString()}"`,
-    ].filter(Boolean).join('\n');
-
-    let md = `---\n${frontmatter}\n---\n\n## Recursos — ${title}\n\n\`\`\`\n${treeLines.join('\n')}\n\`\`\`\n`;
-    for (const folder of folderLines) {
-      md += `\n## ${folder}\n\n`;
-      itemsInFolder(this.items, folder).forEach(item => { md += `- [${item.name}](${item.url}) — *${item.source}*\n`; });
-    }
-    if (rootItems.length > 0) {
-      md += `\n## raíz\n\n`;
-      rootItems.forEach(item => { md += `- [${item.name}](${item.url}) — *${item.source}*\n`; });
-    }
-    return md;
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────

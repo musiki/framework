@@ -2,7 +2,8 @@ import type { APIRoute } from 'astro';
 import { cleanString, ensureDbUserFromSession, json } from '../../../lib/forum-server';
 import { query } from '../../../lib/db/pool';
 
-// GET /api/live/session?roomName=... → { session: {...} | null }
+// GET /api/live/session?roomName=...         → { session: {...} | null }
+// GET /api/live/session?roomName=...&list=1  → { sessions: [...] }
 export const GET: APIRoute = async ({ locals, url }) => {
   const session = (locals as any).session;
   const user = await ensureDbUserFromSession(session);
@@ -10,6 +11,17 @@ export const GET: APIRoute = async ({ locals, url }) => {
 
   const roomName = cleanString(url.searchParams.get('roomName') ?? '', 120);
   if (!roomName) return json({ error: 'roomName required' }, 400);
+
+  if (url.searchParams.get('list')) {
+    const result = await query(
+      `SELECT id, "roomName", name, "courseId", "claseId", "createdAt"
+       FROM "ResourceSession" WHERE "roomName" = $1
+       ORDER BY "createdAt" DESC LIMIT 10`,
+      [roomName],
+    );
+    if (result.error) return json({ error: result.error.message }, 500);
+    return json({ sessions: result.data ?? [] });
+  }
 
   const result = await query(
     `SELECT id, "roomName", name, "courseId", "claseId", "createdAt"

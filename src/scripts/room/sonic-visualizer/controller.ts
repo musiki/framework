@@ -67,6 +67,7 @@ export class SonicVisualizerController {
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   private dragStartX = 0;
   private dragStartAudioPos = 0;
+  private seekTarget: number | null = null;
 
   // Access control
   private localRole: 'teacher' | 'student' = 'student';
@@ -286,7 +287,8 @@ export class SonicVisualizerController {
 
   private drawPlayhead(ctx: CanvasRenderingContext2D, W: number, H: number): void {
     if (!this.audioBuffer) return;
-    const x = (this.getCurrentPosition() / this.audioBuffer.duration) * W;
+    const pos = this.seekTarget ?? this.getCurrentPosition();
+    const x = (pos / this.audioBuffer.duration) * W;
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
@@ -301,8 +303,8 @@ export class SonicVisualizerController {
   }
 
   // ─── Main canvas interaction ──────────────────────────────────────────────────
-  // SEG snap evaluated on pointerup to avoid competing with drag
-  // click = seek (or SEG snap) · drag > 5px = free loop region
+  // click = seek · drag = seek (real-time playhead) · shift+drag = loop region
+  // touch long-press+drag = loop region · click on segment = toggle segment loop
 
   private bindMainInteraction(): void {
     const canvas = this.mainCanvas;
@@ -314,6 +316,7 @@ export class SonicVisualizerController {
       this.dragStartX = e.clientX;
       this.dragStartAudioPos = this.posAt(canvas, e);
       this.isDragging = true;
+      this.seekTarget = this.dragStartAudioPos;
       this.startAnimLoop();
 
       if (e.pointerType === 'touch') {
@@ -336,13 +339,21 @@ export class SonicVisualizerController {
         return;
       }
       if (!this.isDragging) return;
-      if (Math.abs(e.clientX - this.dragStartX) > 5) {
+      const moved = Math.abs(e.clientX - this.dragStartX) > 5;
+      if (!moved) return;
+
+      if (e.shiftKey) {
+        // shift+drag → create loop region
         this.isLoopDragging = true;
         this.isDragging = false;
+        this.seekTarget = null;
         const p = this.posAt(canvas, e);
         const anchor = this.dragStartAudioPos;
         if (p < anchor) { this.loopIn = p; this.loopOut = anchor; }
         else            { this.loopIn = anchor; this.loopOut = p; }
+      } else {
+        // plain drag → seek (move playhead)
+        this.seekTarget = this.posAt(canvas, e);
       }
     }, { signal: sig });
 
@@ -352,6 +363,7 @@ export class SonicVisualizerController {
 
       if (this.isLoopDragging) {
         this.isLoopDragging = false;
+        this.seekTarget = null;
         if (this.loopOut > this.loopIn) {
           this.loopEnabled = true;
           this.updateLoopBtn();
@@ -363,25 +375,30 @@ export class SonicVisualizerController {
 
       if (!this.isDragging) return;
       this.isDragging = false;
-      const p = this.posAt(canvas, e);
 
-      // SEG snap on click (no drag): toggle loop region or clear if same segment
-      if (this.formData?.segments && this.audioBuffer) {
-        const ratio = p / this.audioBuffer.duration;
-        const seg   = this.formData.segments.find(s => ratio >= s.startRatio && ratio <= s.endRatio);
-        if (seg) {
-          const segIn  = seg.startRatio * this.audioBuffer.duration;
-          const segOut = seg.endRatio   * this.audioBuffer.duration;
-          if (this.loopEnabled && Math.abs(this.loopIn - segIn) < 0.01 && Math.abs(this.loopOut - segOut) < 0.01) {
-            this.clearLoop();
-          } else {
-            this.setLoop(segIn, segOut);
+      const p = this.seekTarget ?? this.posAt(canvas, e);
+      this.seekTarget = null;
+      const wasDrag = Math.abs(e.clientX - this.dragStartX) > 5;
+
+      if (!wasDrag) {
+        // click: check for segment snap → toggle loop; otherwise seek
+        if (this.formData?.segments && this.audioBuffer) {
+          const ratio = p / this.audioBuffer.duration;
+          const seg   = this.formData.segments.find(s => ratio >= s.startRatio && ratio <= s.endRatio);
+          if (seg) {
+            const segIn  = seg.startRatio * this.audioBuffer.duration;
+            const segOut = seg.endRatio   * this.audioBuffer.duration;
+            if (this.loopEnabled && Math.abs(this.loopIn - segIn) < 0.01 && Math.abs(this.loopOut - segOut) < 0.01) {
+              this.clearLoop();
+            } else {
+              this.setLoop(segIn, segOut);
+            }
+            return;
           }
-          return;
         }
       }
 
-      // Seek to click position
+      // seek (click outside segment or drag release)
       this.playOffset = p;
       if (this.isPlaying) this.startPlayback(p);
       else { this.stopAnimLoop(); requestAnimationFrame(() => this.redrawMainPane()); }
