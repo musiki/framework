@@ -46,7 +46,7 @@ Welcome, Agent. This project is a complex LMS/Wiki system built with Astro. Use 
 - [x] **Corrección de Conexión**: Corregido `DATABASE_URL` en `.env` para usar la IP interna del contenedor (`172.18.0.2:5432`) en lugar de `localhost:5433`.
 - [x] **Pool de Conexiones**: Aumentado `max` en `src/lib/db/pool.ts` de 3 a 20.
 - [ ] **Monitoreo**: Refinar el logging de `DB-POOL` para detectar saturación en tiempo real.
-- [ ] **Limpieza**: Remover `@supabase/supabase-js` de `[...slug].astro` y APIs de storage.
+- [x] **Limpieza**: Removido `@supabase/supabase-js` de `[...slug].astro` y APIs de storage. `supabase/` renombrado a `postgres-patches/`.
 
 #### Fase 2: Rendimiento SSR (Astro)
 - [ ] **Optimizar `listRoomPresentationOptions`**: Cambiar iteración $O(N^2)$ por agrupamiento $O(N)$ y cachear resultados.
@@ -56,24 +56,18 @@ Welcome, Agent. This project is a complex LMS/Wiki system built with Astro. Use 
 - [ ] **Idempotencia**: Asegurar que `bindElements` y la hidratación de pods pesados (LilyPond, Whiteboard) sean idempotentes.
 - [ ] **Persistence**: Validar que el estado del `WorkspaceManager` se guarde correctamente en la nueva DB Postgres.
 
-## 🗺️ Current Work (GSD)
+## 🗺️ Current Work (2026-05-08)
 
+Recent: **SV/SA/RE pod redesign** — Sonic Visualizer + Analyzer overhaul, RS session architecture.
 
-Active milestone: **REFURBISH: Workspace Hospital** — Fixing workspace regressions (LilyPond, Audio, Dockview, Search).
+- [SV/SA redesign spec](docs/superpowers/specs/2026-05-07-sv-sa-redesign.md)
+- [RE pod design](docs/superpowers/specs/2026-05-04-recursos-pod-design.md)
+- [DB management](docs/db/database-management.md) — PostgreSQL on Hetzner, `postgres-patches/`
 
-- [refurbish-workspace.md](.planning/plans/refurbish-workspace.md) — Implementation plan
-- [PROJECT.md](.planning/PROJECT.md) — Project context and goals
-- [ROADMAP.md](.planning/ROADMAP.md) — Phase breakdown (2 phases)
-- [REQUIREMENTS.md](.planning/REQUIREMENTS.md) — 5 requirements (AUDIO-01/02, WSPC-01/02/03)
-- [STATE.md](.planning/STATE.md) — Current project state
-
-**Current priority:** Phase 1 — `src/scripts/room/hyperpiano/HyperpianoController.ts`
-Run `/gsd-plan-phase 1` to start.
-
----
-
-### 🎥 Room — Pod Layout Docs (current focus)
-- [Pod Layout Architecture](docs/room/pod-layout.md) — Dockview pod system design.
+### 🎥 Room — Pod Docs
+- [Pod Layout Architecture](docs/room/pod-layout.md) — Dockview pod system.
+- [Room Architecture Diagram](docs/room/roomMermaid.md) — Full component map.
+- [SA Pod](docs/SA-pod.md) — Sonic Analyzer pod design.
 
 ## 🛠️ AGENT RULES & BEST PRACTICES
 

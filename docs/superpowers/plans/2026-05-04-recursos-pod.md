@@ -15,8 +15,8 @@
 ## File Map
 
 **Create:**
-- `supabase/migrations/20260504120000_live_class_resources.sql` — table + indexes
-- `supabase/migrations/20260504120001_rls_live_class_resources.sql` — RLS policy
+- `postgres-patches/migrations/20260504120000_live_class_resources.sql` — table + indexes
+- `postgres-patches/migrations/20260504120001_rls_live_class_resources.sql` — RLS policy
 - `src/pages/api/room/recursos-upload.ts` — R2 upload endpoint
 - `src/pages/api/live/recursos.ts` — GET/POST resource list
 - `src/pages/api/live/recursos/resolve-title.ts` — server-side URL title fetch
@@ -40,13 +40,13 @@
 ## Task 1: DB Migration — LiveClassResource table
 
 **Files:**
-- Create: `supabase/migrations/20260504120000_live_class_resources.sql`
-- Create: `supabase/migrations/20260504120001_rls_live_class_resources.sql`
+- Create: `postgres-patches/migrations/20260504120000_live_class_resources.sql`
+- Create: `postgres-patches/migrations/20260504120001_rls_live_class_resources.sql`
 
 - [ ] **Step 1.1: Write the table migration**
 
 ```sql
--- supabase/migrations/20260504120000_live_class_resources.sql
+-- postgres-patches/migrations/20260504120000_live_class_resources.sql
 -- Shared class resource list: files uploaded to R2 + links + auto-captured from chat/SA/ME.
 -- One flat list per (claseId, roomName) session. Persisted via autosave from the Re pod.
 
@@ -74,7 +74,7 @@ CREATE INDEX "LiveClassResource_room_idx"
 - [ ] **Step 1.2: Write the RLS migration**
 
 ```sql
--- supabase/migrations/20260504120001_rls_live_class_resources.sql
+-- postgres-patches/migrations/20260504120001_rls_live_class_resources.sql
 BEGIN;
 
 ALTER TABLE public."LiveClassResource" ENABLE ROW LEVEL SECURITY;
@@ -95,7 +95,7 @@ COMMIT;
 
 ```bash
 cd /Users/zztt/projects/26-musiki/framework
-supabase db push
+# Apply via: ssh hetzner "docker exec -i devmusiki-db psql -U app -d musiki26" < postgres-patches/migrations/<file>.sql
 ```
 
 Expected: migrations apply without error. If Supabase CLI is not set up locally, apply via Supabase dashboard SQL editor.
@@ -103,7 +103,7 @@ Expected: migrations apply without error. If Supabase CLI is not set up locally,
 - [ ] **Step 1.4: Verify**
 
 ```bash
-supabase db diff
+# (no longer used — we write migrations manually)
 ```
 
 Expected: no diff (migrations applied). Or confirm table exists in DB:
@@ -115,8 +115,8 @@ WHERE table_name = 'LiveClassResource' ORDER BY ordinal_position;
 - [ ] **Step 1.5: Commit**
 
 ```bash
-git add supabase/migrations/20260504120000_live_class_resources.sql \
-        supabase/migrations/20260504120001_rls_live_class_resources.sql
+git add postgres-patches/migrations/20260504120000_live_class_resources.sql \
+        postgres-patches/migrations/20260504120001_rls_live_class_resources.sql
 git commit -m "feat(db): add LiveClassResource table for Re pod"
 ```
 

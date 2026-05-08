@@ -1,5 +1,17 @@
 # MEMORY.md — Project Activity Log
 
+<2026-05-08 re-sa-sessions-postgres-patches> <br>
+ResourceSession architecture for RE pod, SV/SA interaction fixes, supabase→postgres-patches rename.
+- RE: New `ResourceSession` table (distinct from LiveKit attendance `LiveClassSession`). `LiveClassResource` gains `sessionId` FK. Migration applied to production.
+- RE: SA uploads now land in "media" folder (was "compartidos"). Session created lazily on first upload. Session bar in RE pod shows name, rename (✎), new (+) buttons.
+- RE: "Enviar a SA" right-click on media items dispatches `musiki:sa:load-url` event.
+- SA: `loadFileFromUrl(url, name)` public method added. Listens for `musiki:sa:load-url` to load audio from URL without re-uploading.
+- SA: Auto-upload on file load (`handleSave()` called if `publish` set), broadcasts `sa-file-sync` via LiveKit.
+- SV: Removed wave canvas pane. Unified seek/loop on main canvas: drag=free loop, click=seek, segment click=snap loop.
+- SV: Layer toggle buttons now force immediate redraw when paused.
+- INFRA: `supabase/` renamed to `postgres-patches/` throughout. Backup scripts updated. `docs/db/database-management.md` rewritten for current Postgres-on-VPS reality.
+- API: New `GET/POST/PATCH/DELETE /api/live/session` for ResourceSession CRUD.
+
 <2026-05-04 external-media-ui-fix> <br>
 Removed obscuring instructional text from External Media pod.
 - Media: Removed "Pega un link de YouTube para abrir una sesión externa sincronizada." from `StageOverlays.astro` and `livekit-room.ts`. This text was obscuring the YouTube search input box when the session was empty.

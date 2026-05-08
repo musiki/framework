@@ -91,7 +91,7 @@ flowchart LR
   subgraph EXT["External Services"]
     direction LR
     LK_SRV["LiveKit Server\nwss://live.musiki.org.ar\nSFU · WebRTC · Rooms API"]
-    SUPA["Supabase\nPostgres · User · Enrollment\nLiveKitWebhookEvent · Invite"]
+    SUPA["PostgreSQL · Hetzner VPS\nUser · Enrollment\nLiveKitWebhookEvent · Invite\nLiveClassResource · ResourceSession"]
     R2["Cloudflare R2\nMedia · chat assets\nR2_PUBLIC_URL"]
   end
 
@@ -191,7 +191,7 @@ flowchart LR
 | 🟢 **Lime** `#00ff66`    | Audio engine — FM Synth, Gravity Ball         |
 | 🟣 **Magenta** `#ff00cc` | UI / Right sidebar — session, chat, invites   |
 | 🟠 **Orange** `#ff8800`  | Video engine — blur, hand tracking, recording |
-| 🔵 **Blue** `#4488ff`    | Presentation, SSE, Supabase queries           |
+| 🔵 **Blue** `#4488ff`    | Presentation, SSE, PostgreSQL queries         |
 | 🟡 **Yellow** `#ffe000`  | Token generation API                          |
 | 🔴 **Red** `#ff4466`     | Webhooks — incoming events from LiveKit       |
 | ⬛ **Ghost** `#2a3a4a`    | Internal state, helpers, minor nodes          |
@@ -202,7 +202,7 @@ flowchart LR
 
 ```
 Teacher joins
-  → room.astro resolves role (Supabase)
+  → room.astro resolves role (PostgreSQL)
   → ConferenceLayout renders with defaultRole="teacher"
   → livekit-room.ts fetches /api/token → LiveKit JWT
   → room.connect(wss://live.musiki.org.ar, jwt)

@@ -202,7 +202,7 @@ Persistir highlights y comentarios operativos de dashboard en base y no solo en 
 
 **Archivos nuevos propuestos**
 
-- `/Users/zztt/projects/26-musiki/framework/supabase/migrations/<timestamp>_gradebook_annotations.sql`
+- `/Users/zztt/projects/26-musiki/framework/postgres-patches/migrations/<timestamp>_gradebook_annotations.sql`
 - `/Users/zztt/projects/26-musiki/framework/src/lib/dashboard/annotations.ts`
 
 **Tareas**

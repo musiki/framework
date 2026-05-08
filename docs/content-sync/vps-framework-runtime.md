@@ -112,16 +112,12 @@ cd /opt/musiki/framework
 bash scripts/db-backup.sh --label pre-deploy
 ```
 
-Referencia real tomada el `2026-03-28`:
+Disciplina mínima antes de deploy:
 
-- [20260328-175207Z-pre-forum-fix](/Users/zztt/projects/26-musiki/framework/.tmp/db-backups/20260328-175207Z-pre-forum-fix)
-- `projectRef`: `dkybbahdecnqpwctxzit`
-- `supabaseHost`: `dkybbahdecnqpwctxzit.supabase.co`
-
-Nota importante:
-
-- al `2026-03-28`, Supabase seguía con `PITR` apagado
-- por eso este backup manual es obligatorio antes de deploys que toquen datos vivos
+```bash
+bash scripts/db-backup.sh --label pre-deploy
+ssh hetzner "docker exec -i devmusiki-db psql -U app -d musiki26" < postgres-patches/migrations/<nuevo>.sql
+```
 
 ## 4. Caddy
 
