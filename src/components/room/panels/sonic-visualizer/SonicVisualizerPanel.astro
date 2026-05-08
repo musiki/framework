@@ -27,7 +27,7 @@ import './sonic-visualizer.css';
         <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="enr" data-active="true">
           ENR
           <span class="sv-tip" role="tooltip">
-            <span class="sv-tip-formula">\(E=\sqrt{\tfrac{1}{N}\sum x_i^2}\)</span>
+            <span class="sv-tip-formula">\(E=\sqrt&#123;\tfrac&#123;1&#125;&#123;N&#125;\sum x_i^2&#125;\)</span>
             <span class="sv-tip-body">RMS frame por frame</span>
             <span class="sv-tip-credit">Parseval 1799</span>
           </span>
@@ -35,7 +35,7 @@ import './sonic-visualizer.css';
         <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="brt" data-active="false">
           BRT
           <span class="sv-tip" role="tooltip">
-            <span class="sv-tip-formula">\(C=\tfrac{\sum f\cdot|X(f)|}{\sum|X(f)|}\)</span>
+            <span class="sv-tip-formula">\(C=\tfrac&#123;\sum f\cdot|X(f)|&#125;&#123;\sum|X(f)|&#125;\)</span>
             <span class="sv-tip-body">Centro de masa espectral (brillo)</span>
             <span class="sv-tip-credit">Grey &amp; Gordon 1978, Stanford CCRMA</span>
           </span>
@@ -43,7 +43,7 @@ import './sonic-visualizer.css';
         <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="mot" data-active="false">
           MOT
           <span class="sv-tip" role="tooltip">
-            <span class="sv-tip-formula">\(F=\sum(|X_t|-|X_{t-1}|)^2\)</span>
+            <span class="sv-tip-formula">\(F=\sum(|X_t|-|X_&#123;t-1&#125;|)^2\)</span>
             <span class="sv-tip-body">Cambio de energía espectral entre frames</span>
             <span class="sv-tip-credit">Scheirer &amp; Slaney 1997, MIT Media Lab</span>
           </span>
@@ -59,7 +59,7 @@ import './sonic-visualizer.css';
         <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="ten" data-active="false">
           TEN
           <span class="sv-tip" role="tooltip">
-            <span class="sv-tip-formula">\(T=\tfrac{(\prod|X(f)|)^{1/N}}{\tfrac{1}{N}\sum|X(f)|}\)</span>
+            <span class="sv-tip-formula">\(T=\tfrac&#123;(\prod|X(f)|)^&#123;1/N&#125;&#125;&#123;\tfrac&#123;1&#125;&#123;N&#125;\sum|X(f)|&#125;\)</span>
             <span class="sv-tip-body">Flatness: 0=tonal, 1=ruido blanco</span>
             <span class="sv-tip-credit">Johnston 1988, AT&amp;T Bell Labs</span>
           </span>
