@@ -45,7 +45,8 @@
       "Bash(psql *)",
       "Bash(grep -v \"^$\")",
       "Bash(npm ls *)",
-      "Bash(npm audit *)"
+      "Bash(npm audit *)",
+      "Bash(find src/middleware*)"
     ]
   }
 }
