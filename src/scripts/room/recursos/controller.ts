@@ -212,7 +212,7 @@ export class RecursosController {
     this.ctxRenameBtn.addEventListener('click', () => this.startInlineRename());
     this.ctxDeleteBtn.addEventListener('click', () => this.deleteCtxTarget());
     this.ctxMoveBtn.addEventListener('click', () => this.showMoveSubmenu());
-    this.ctxSendToSaBtn.addEventListener('click', () => this.sendCtxItemToSa());
+    this.ctxSendToSaBtn.addEventListener('click', (e) => { e.stopPropagation(); this.sendCtxItemToSa(); });
 
     this.sessionCtxNewBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.newSession(); });
     this.sessionCtxListBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.showSessionsList(); });

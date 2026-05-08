@@ -463,6 +463,8 @@ export class SonicAnalyzerController {
     this.lastFilePayload = payload;
     window.dispatchEvent(new CustomEvent('sa:analysis-progress', { detail: { phase: 'segments', percent: 100 } }));
     window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: payload }));
+    // Re-publish with full key/bpm now that analysis is complete
+    if (this.lastPublishedUrl) this.publishLastFileSync();
     this.setStatus(`on · ${this.activeSource} · ${this.fps}fps`);
   }
 
@@ -536,12 +538,16 @@ export class SonicAnalyzerController {
       if (!ctx || ctx.state === 'closed') ctx = new AudioContext();
       this.fileBuffer = await ctx.decodeAudioData(await resp.arrayBuffer());
       this.loadedFileName = name;
+      this.lastPublishedUrl = url;
       window.dispatchEvent(new CustomEvent('sa:file-decoded', {
         detail: { buffer: this.fileBuffer, fileName: name },
       }));
       this.addFileOption(name);
       this.showFileMeta(name);
       if (this.active) { this.sourceSelect.value = 'file'; this.activeSource = 'file'; void this.reconnectSource(); }
+      // Publish file sync immediately with whatever metadata is available so students
+      // can load the waveform; computeVizFeatures will re-publish with full key/bpm.
+      this.publishLastFileSync();
       if (this.essentia) void this.computeVizFeatures();
       else this.setStatus(`file ready · ${name}`);
     } catch (e: any) {
