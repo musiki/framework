@@ -387,7 +387,7 @@ export class RecursosController {
     const form = new FormData();
     form.append('file', file);
     try {
-      const resp = await fetch('/api/room/recursos-upload', { method: 'POST', body: form });
+      const resp = await fetch('/api/room/re-store', { method: 'POST', body: form });
       if (!resp.ok) { console.error('[Re] upload failed', resp.status); return; }
       const { url } = await resp.json();
       const newItem: ResourceItem = {

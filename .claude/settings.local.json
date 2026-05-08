@@ -42,7 +42,8 @@
       "Read(//tmp/**)",
       "Bash(sed -n '521,535p' /Users/zztt/.config/superpowers/worktrees/framework/feat-sv-sa-redesign/src/scripts/room/sonic-visualizer/controller.ts)",
       "Bash(sed -n '536,538p' /Users/zztt/.config/superpowers/worktrees/framework/feat-sv-sa-redesign/src/scripts/room/sonic-visualizer/controller.ts)",
-      "Bash(psql *)"
+      "Bash(psql *)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

@@ -496,7 +496,10 @@ export class SonicAnalyzerController {
   public async loadFileFromUrl(url: string, name: string): Promise<void> {
     this.setStatus(`loading ${name}…`);
     try {
-      const resp = await fetch(url);
+      const fetchUrl = url.startsWith('http') && !url.startsWith(location.origin)
+        ? `/api/room/audio-proxy?url=${encodeURIComponent(url)}`
+        : url;
+      const resp = await fetch(fetchUrl);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const ctx = this.getAudioTap()?.context ?? new AudioContext();
       this.fileBuffer = await ctx.decodeAudioData(await resp.arrayBuffer());
