@@ -12152,6 +12152,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (sonicAnalyzerController) {
         window.setTimeout(() => {
           void publishMessage({ type: 'sa-state', active: sonicAnalyzerController!.isActive });
+          sonicAnalyzerController!.publishLastFileSync();
         }, 700);
       }
       if (sonicVisualizerController) {

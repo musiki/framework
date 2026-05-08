@@ -59,6 +59,7 @@ export class SonicAnalyzerController {
   private fileScale = '';
   private fileBpm = 0;
   private lastFilePayload: SAFilePayload | null = null;
+  private lastPublishedUrl = '';
   private publish?: (msg: ConferenceMessage) => void;
   private getSenderName: () => string = () => '';
 
@@ -211,6 +212,7 @@ export class SonicAnalyzerController {
         console.error('[sA] upload failed', res.status, text);
         throw new Error(data.error || `HTTP ${res.status}`);
       }
+      this.lastPublishedUrl = data.url;
       this.publish?.({
         type: 'sa-file-sync',
         url: data.url,
@@ -235,13 +237,13 @@ export class SonicAnalyzerController {
 
   async toggle(): Promise<void> { if (this.active) this.deactivate(); else await this.activate(); }
 
-  private async activate(): Promise<void> {
+  private async activate(suppressPublish = false): Promise<void> {
     this.setStatus('loading essentia…');
     try { await this.loadEssentia(); } catch { this.setStatus('error: essentia failed to load'); return; }
     this.active = true;
     this.powerBtn.dataset.active = 'true'; this.podEl.dataset.active = 'true';
     window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: true } }));
-    this.publish?.({ type: 'sa-state', active: true });
+    if (!suppressPublish) this.publish?.({ type: 'sa-state', active: true });
     await this.tryConnectAndStart();
   }
   private async tryConnectAndStart(): Promise<void> {
@@ -262,13 +264,13 @@ export class SonicAnalyzerController {
       }
     }
   }
-  private deactivate(): void {
+  private deactivate(suppressPublish = false): void {
     if (this.reconnectTimer !== null) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.active = false; this.stopLoop(); this.disconnectSource();
     this.powerBtn.dataset.active = 'false'; this.podEl.dataset.active = 'false';
     this.setStatus('off');
     window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: false } }));
-    this.publish?.({ type: 'sa-state', active: false });
+    if (!suppressPublish) this.publish?.({ type: 'sa-state', active: false });
   }
   private async loadEssentia(): Promise<void> {
     if (this.essentia) return;
@@ -499,9 +501,24 @@ export class SonicAnalyzerController {
   public setRole(role: 'teacher' | 'student'): void { this.localRole = role; }
   public setAllowStudents(allow: boolean): void { this.allowStudents = allow; }
 
+  public publishLastFileSync(): void {
+    if (!this.lastPublishedUrl || !this.loadedFileName) return;
+    this.publish?.({
+      type: 'sa-file-sync',
+      url: this.lastPublishedUrl,
+      fileName: this.loadedFileName,
+      senderName: this.getSenderName(),
+      key: this.fileKey,
+      scale: this.fileScale,
+      bpm: this.fileBpm,
+    });
+  }
+
   public applyRemoteState(active: boolean): void {
     if (active === this.active) return;
-    void this.toggle();
+    // suppressPublish=true: mirror state without echoing back to the room
+    if (active) void this.activate(true);
+    else this.deactivate(true);
   }
 
   public addParticipantSource(id: string, label: string): void {

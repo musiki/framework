@@ -1,6 +1,7 @@
 /* sA — Sonic Analyzer Pod */
 
 .sa-pod {
+  position: relative;
   display: flex; flex-direction: column; height: 100%;
   font-family: var(--font-family-mono, monospace);
   font-size: 0.72rem; color: var(--conference-fg, #cdd6f4);
@@ -99,5 +100,24 @@
 .sa-drop-label { font-size:0.8rem; font-weight:700; letter-spacing:0.12em; color:#45D384; text-transform:lowercase; }
 .sa-drop-hint  { font-size:0.55rem; color:var(--conference-muted,#7f849c); letter-spacing:0.1em; }
 
-/* SA descriptor keys with tooltip (native title attr) */
+/* SA descriptor keys */
 .sa-key[data-sa-tip] { cursor: help; text-decoration: underline dotted rgba(137,180,250,0.3); }
+
+/* Persistent tooltip overlay */
+.sa-tip-overlay {
+  position: absolute;
+  z-index: 9999;
+  max-width: 22rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(17,17,27,0.97);
+  border: 1px solid rgba(137,180,250,0.25);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  display: flex; flex-direction: column; gap: 0.25rem;
+  pointer-events: none;
+}
+.sa-tip-overlay[hidden] { display: none; }
+.sa-tip-formula { font-size: 0.58rem; color: #cba6f7; font-style: italic; }
+.sa-tip-body    { font-size: 0.57rem; color: var(--conference-fg, #cdd6f4); }
+.sa-tip-example { font-size: 0.54rem; color: #a6e3a1; font-style: italic; }
+.sa-tip-credit  { font-size: 0.5rem;  color: var(--conference-muted, #7f849c); }

@@ -50,5 +50,69 @@ import './sonic-analyzer.css';
       </div>
     </div>
 
+    <!-- Persistent tooltip overlay — lives outside the refreshed pre element -->
+    <div class="sa-tip-overlay" id="sa-tip-overlay" hidden aria-hidden="true">
+      <div class="sa-tip-formula" id="sa-tip-formula"></div>
+      <div class="sa-tip-body" id="sa-tip-body"></div>
+      <div class="sa-tip-example" id="sa-tip-example"></div>
+      <div class="sa-tip-credit" id="sa-tip-credit"></div>
+    </div>
+
   </div>
 </div>
+
+<script>
+// Tooltip content — mirrors SA_TIPS in text-view.ts
+const SA_TIPS: Record<string, [string, string, string, string]> = {
+  pitch:    ['f₀ via YIN: acumulación de diferencia cuadrática normalizada','YIN calcula d(τ) entre señal y versión retrasada. El pitch es el τ donde d′(τ) cruza ~0.1 por primera vez, evitando falsos mínimos armónicos.','La4 (440 Hz) → mínimo en τ≈2.27ms. Ruido puede causar octave error (reporta el doble).','De Cheveigné & Kawahara, 2002, IRCAM / ATR Japan'],
+  dBFS:     ['L = 20·log₁₀(√(1/N·∑x[n]²))','RMS de N muestras convertido a dB. Escala logarítmica: cada 6 dB = ×2 en amplitud, cada 20 dB = ×10.','−6 dBFS tiene la mitad de amplitud que 0 dBFS. Conversación normal ≈ 60 dB SPL.','Escala dB: Bell 1920s. RMS digital: AES17 1998'],
+  lufs_m:   ['Lₖ = −0.691 + 10·log₁₀(∑Gᵢ·z̄ᵢ²) · ventana 400ms','BS.1770 momentáneo: filtro K-weighting (énfasis en agudos) + promedio de 400ms. Refleja loudness perceptivo instantáneo.','Picos de voz o percusión elevan el valor momentáneo. Fondo musical sostenido = valor más estable.','Lund & Camerer, 2006, ITU-R BS.1770 / EBU R128'],
+  lufs_s:   ['Lₖ ventana 3s (short-term)','Misma fórmula BS.1770 con ventana de 3 segundos. Más estable que momentáneo, útil para monitorear frases musicales.','Un solo acento rítmico no perturba mucho el valor short-term.','ITU-R BS.1770-4'],
+  lufs_i:   ['Lₖ integrado con gating (umbral −10 LUFS relativo)','Promedio sobre toda la pieza ignorando frames muy silenciosos. Referencia para normalización de plataformas de streaming.','Spotify / YouTube normalizan a −14 LUFS I. Pista "loudness war" ≈ −6 LUFS I.','ITU-R BS.1770-4 / EBU R128'],
+  centroid: ['C = ∑(fₖ·|X[k]|) / ∑|X[k]|','Centro de masa del espectro en frecuencia. Cuando la energía migra hacia agudos (ataque de piano), el centroide sube. Al decaer los armónicos altos, baja. Correlaciona con percepción de "brillo".','Violín fortissimo agudo: 4-6 kHz. Contrabajo en arco: 300-800 Hz. Voz "ahhh" forte → piano: el centroide baja.','Grey & Gordon, 1978, Stanford CCRMA'],
+  spread:   ['S = √(∑(fₖ−C)²·|X[k]| / ∑|X[k]|)','Desviación estándar del espectro respecto al centroide. Mismo centroide puede tener spread muy distinto. Alto = energía distribuida (complejo/ruidoso). Bajo = tonal/puro.','Acorde de piano con muchos armónicos: spread alto. Flauta en registro medio: spread bajo. Noise burst de caja: spread > bombo.','Peeters et al., 2004, IRCAM'],
+  skewness: ['Sk = ∑(fₖ−C)³·|X[k]| / (S³·∑|X[k]|)','Tercer momento estadístico del espectro: asimetría. Positivo = energía concentrada en graves con cola hacia agudos. Negativo = peso en agudos. Cero = distribución simétrica.','Bajo eléctrico con distorsión: skewness positiva. Hi-hat: negativa. Violonchelo sul ponticello: menos positivo que arco normal.','Peeters et al., 2004, IRCAM'],
+  kurtosis: ['K = ∑(fₖ−C)⁴·|X[k]| / (S⁴·∑|X[k]|)','Cuarto momento: "picudez" del espectro. Alto (leptocúrtico) = picos armónicos nítidos y colas delgadas. Bajo (platicúrtico) = espectro plano y difuso.','Flauta con vibrato: K alta (parciales nítidos). Col legno de chelo: K baja. Ruido blanco: K=3 (distribución normal).','Peeters et al., 2004, IRCAM'],
+  slope:    ['Sl = ∑(fₖ−f̄)(|X[k]|−|X̄|) / ∑(fₖ−f̄)²','Pendiente de la regresión lineal espectro-vs-frecuencia en magnitud. Casi siempre negativa: la energía decae con la frecuencia. Más negativa = sonido más oscuro/suave.','Voz operática grave: muy negativa. Violín sul ponticello (arco cerca del puente): menos negativa → más energía en armónicos altos.','Dubnov 1996, Ben-Gurion U. Popularizado: Peeters 2004, IRCAM'],
+  flux:     ['Fₜ = ∑(max(|Xₜ[k]|−|Xₜ₋₁[k]|, 0))²','Half-wave rectified spectral flux: mide solo cambios positivos entre frames. Detecta ataques (onsets): cuando un instrumento empieza a sonar el espectro crece abruptamente.','Alto en cada ataque de piano o golpe de percusión. Casi cero en nota sostenida de flauta. Arpeggio = picos separados; acorde = un solo pico.','Scheirer & Slaney, 1997, MIT Media Lab'],
+  HNR:      ['HNR = 10·log₁₀(E_arm / (E_total − E_arm))','Energía de componentes armónicos (periódicos) dividida por ruido residual (aperiódico). Se estima sumando energía en múltiplos del fundamental. Alto = sonido periódico y limpio.','Voz cantada "ahhh": 20-30 dB. Voz susurrada: 0-5 dB. Violín en arco: ~25 dB. Col legno: ~8 dB.','Yumoto, Gould & Baer, 1982, University of Wisconsin'],
+  ZCR:      ['ZCR = 1/N·∑|sgn(x[n])−sgn(x[n−1])|','Número de cruces por cero por unidad de tiempo. Señales tonales: ZCR ∝ frecuencia. Señales ruidosas o percusivas: ZCR alto e irregular. Distingue voiced/unvoiced en voz.','Sinusoide 440 Hz: ZCR≈0.02. Ruido blanco: ZCR≈0.5. Fricativas (/s/,/f/): ZCR alto. Vocales: ZCR bajo.','Rabiner & Schafer, 1978, Bell Labs'],
+  'T1/T2/T3':['T₁=A₁/∑Aₕ · T₂=(A₂+A₃+A₄)/∑Aₕ · T₃=∑(h≥5)Aₕ/∑Aₕ','Analogía tímbrica del modelo RGB: energía en fundamental (T1), 2°-4° armónicos (T2), y el resto (T3). T1 alto = hueco/flauta; T2 alto = clarinete/quintal; T3 alto = brillante/rico.','Flauta: T1 alto. Oboe: T2 alto. Violín forte: T3 alto. Triángulo resonando: T1≈0, T3≈1.','Pollard & Jansson, 1982, KTH Royal Institute of Technology'],
+};
+
+document.querySelectorAll<HTMLElement>('.sa-panel--text').forEach(panel => {
+  const overlay = document.getElementById('sa-tip-overlay') as HTMLElement | null;
+  if (!overlay) return;
+  const fEl = document.getElementById('sa-tip-formula')!;
+  const bEl = document.getElementById('sa-tip-body')!;
+  const eEl = document.getElementById('sa-tip-example')!;
+  const cEl = document.getElementById('sa-tip-credit')!;
+
+  let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  panel.addEventListener('mouseover', (e) => {
+    const target = (e.target as HTMLElement).closest('[data-sa-tip]') as HTMLElement | null;
+    if (!target) return;
+    const key = target.dataset.saTip!;
+    const tip = SA_TIPS[key];
+    if (!tip) return;
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    fEl.textContent = tip[0];
+    bEl.textContent = tip[1];
+    eEl.textContent = tip[2];
+    cEl.textContent = tip[3];
+    overlay.hidden = false;
+    const r = target.getBoundingClientRect();
+    const pod = panel.closest('.sa-pod') as HTMLElement;
+    const pr = pod.getBoundingClientRect();
+    overlay.style.top = `${r.bottom - pr.top + 4}px`;
+    overlay.style.left = `${Math.max(0, r.left - pr.left)}px`;
+  });
+
+  panel.addEventListener('mouseout', (e) => {
+    const related = e.relatedTarget as HTMLElement | null;
+    if (related?.closest('[data-sa-tip]')) return;
+    hideTimer = setTimeout(() => { overlay!.hidden = true; }, 80);
+  });
+});
+</script>
