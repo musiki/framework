@@ -8,17 +8,73 @@ import './sonic-visualizer.css';
       <span class="sv-label">sV</span>
       <span class="sv-status" data-sv-status>waiting for sA…</span>
       <div class="sv-layers">
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="spec" data-active="true"  title="Spectrogram">SPEC</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="wav"  data-active="true"  title="Waveform">WAV</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="enr"  data-active="true"  title="Energy">ENR</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="brt"  data-active="false" title="Brightness">BRT</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="mot"  data-active="false" title="Motion">MOT</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="grv"  data-active="false" title="Gravity">GRV</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="ten"  data-active="false" title="Tension">TEN</button>
-        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="seg"  data-active="true"  title="Segments">SEG</button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="spec" data-active="true">
+          SPEC
+          <span class="sv-tip" role="tooltip">
+            <span class="sv-tip-formula">\(|X(f,t)|^2\) STFT</span>
+            <span class="sv-tip-body">Intensidad espectral por ventana temporal</span>
+            <span class="sv-tip-credit">Gabor 1946; Serra 1989, IRCAM</span>
+          </span>
+        </button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="wav" data-active="true">
+          WAV
+          <span class="sv-tip" role="tooltip">
+            <span class="sv-tip-formula">\(x(t)\) waveform</span>
+            <span class="sv-tip-body">Amplitud instantánea normalizada</span>
+            <span class="sv-tip-credit">Shannon 1948, Bell Labs</span>
+          </span>
+        </button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="enr" data-active="true">
+          ENR
+          <span class="sv-tip" role="tooltip">
+            <span class="sv-tip-formula">\(E=\sqrt{\tfrac{1}{N}\sum x_i^2}\)</span>
+            <span class="sv-tip-body">RMS frame por frame</span>
+            <span class="sv-tip-credit">Parseval 1799</span>
+          </span>
+        </button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="brt" data-active="false">
+          BRT
+          <span class="sv-tip" role="tooltip">
+            <span class="sv-tip-formula">\(C=\tfrac{\sum f\cdot|X(f)|}{\sum|X(f)|}\)</span>
+            <span class="sv-tip-body">Centro de masa espectral (brillo)</span>
+            <span class="sv-tip-credit">Grey &amp; Gordon 1978, Stanford CCRMA</span>
+          </span>
+        </button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="mot" data-active="false">
+          MOT
+          <span class="sv-tip" role="tooltip">
+            <span class="sv-tip-formula">\(F=\sum(|X_t|-|X_{t-1}|)^2\)</span>
+            <span class="sv-tip-body">Cambio de energía espectral entre frames</span>
+            <span class="sv-tip-credit">Scheirer &amp; Slaney 1997, MIT Media Lab</span>
+          </span>
+        </button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="grv" data-active="false">
+          GRV
+          <span class="sv-tip" role="tooltip">
+            <span class="sv-tip-formula">centroide ponderado por energía acumulada</span>
+            <span class="sv-tip-body">"Peso" armónico en el registro</span>
+            <span class="sv-tip-credit">Lerch 2012, TU Berlin</span>
+          </span>
+        </button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="ten" data-active="false">
+          TEN
+          <span class="sv-tip" role="tooltip">
+            <span class="sv-tip-formula">\(T=\tfrac{(\prod|X(f)|)^{1/N}}{\tfrac{1}{N}\sum|X(f)|}\)</span>
+            <span class="sv-tip-body">Flatness: 0=tonal, 1=ruido blanco</span>
+            <span class="sv-tip-credit">Johnston 1988, AT&amp;T Bell Labs</span>
+          </span>
+        </button>
+        <button type="button" class="musiki-pod-btn sv-layer-btn" data-sv-layer="seg" data-active="true">
+          SEG
+          <span class="sv-tip" role="tooltip">
+            <span class="sv-tip-formula">boundary detection por cambios de timbre</span>
+            <span class="sv-tip-body">Segmentación automática de secciones</span>
+            <span class="sv-tip-credit">Foote 1999, FX Palo Alto Lab</span>
+          </span>
+        </button>
       </div>
       <button type="button" class="musiki-pod-btn sv-play-btn"  data-sv-play  title="Play / Pause">▶</button>
-      <button type="button" class="musiki-pod-btn sv-loop-btn"  data-sv-loop  data-active="false" title="Loop region (shift+drag or click segment)">⟳</button>
+      <button type="button" class="musiki-pod-btn sv-loop-btn"  data-sv-loop  data-active="false" title="Loop region (drag or click segment)">⟳</button>
     </div>
 
     <div class="sv-panes">
@@ -29,3 +85,16 @@ import './sonic-visualizer.css';
 
   </div>
 </div>
+
+<script>
+  // Lazy MathJax rendering on first hover for each tooltip
+  document.querySelectorAll<HTMLElement>('.sv-tip').forEach(tip => {
+    let rendered = false;
+    tip.closest('button')?.addEventListener('mouseenter', () => {
+      if (rendered) return;
+      rendered = true;
+      const mj = (window as any).MathJax;
+      if (mj?.typesetPromise) void mj.typesetPromise([tip]);
+    });
+  });
+</script>

@@ -10932,6 +10932,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         publish: (msg) => void publishMessage(msg),
         getSenderName: () => nameInput.value.trim() || room.localParticipant?.name || '',
       });
+      sonicAnalyzerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
+      sonicAnalyzerController.setAllowStudents(sessionAllowsInstruments);
     };
 
     const onSonicVisualizerInit = (container: HTMLElement) => {
@@ -10940,7 +10942,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         container,
         publish: (msg) => void publishMessage(msg),
       });
+      sonicVisualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
+      sonicVisualizerController.setAllowStudents(sessionAllowsInstruments);
     };
+
+    window.addEventListener('sa:analysis-progress', (e: Event) => {
+      const { phase, percent } = (e as CustomEvent<{ phase: string; percent: number }>).detail;
+      sonicAnalyzerController && console.debug(`[sA] analysis ${phase} ${percent}%`);
+    });
 
     window.addEventListener('musiki:clase-presentation-changed', (e: Event) => {
       const ev = e as CustomEvent<{ lessonId: string | null }>;
@@ -12145,6 +12154,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           void publishMessage({ type: 'sa-state', active: sonicAnalyzerController!.isActive });
         }, 700);
       }
+      if (sonicVisualizerController) {
+        window.setTimeout(() => {
+          sonicVisualizerController!.publishCurrentState();
+        }, 900);
+      }
     })
     .on(RoomEvent.ParticipantDisconnected, (participant) => {
       removeParticipant(participant.identity);
@@ -12500,6 +12514,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'session-control') {
         sessionAllowsInstruments = message.allowInstruments !== false;
+        sonicAnalyzerController?.setAllowStudents(sessionAllowsInstruments);
+        sonicVisualizerController?.setAllowStudents(sessionAllowsInstruments);
         if (!sessionAllowsInstruments) {
           forceSessionInstrumentShutdown();
         }

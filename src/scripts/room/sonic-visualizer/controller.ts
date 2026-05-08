@@ -59,6 +59,7 @@ export class SonicVisualizerController {
   private loopEnabled = false;
   private loopIn = 0;
   private loopOut = 0;
+  private lastLoopRestartAt = -Infinity;
 
   // Interaction state
   private isDragging = false;
@@ -67,7 +68,15 @@ export class SonicVisualizerController {
   private dragStartX = 0;
   private dragStartAudioPos = 0;
 
-  // Bound handlers (for cleanup)
+  // Access control
+  private localRole: 'teacher' | 'student' = 'student';
+  private allowStudents = false;
+
+  // Cleanup
+  private domAbort = new AbortController();
+  private resizeObserver: ResizeObserver | null = null;
+
+  // Bound handlers (for window events cleanup)
   private onFrame: (e: Event) => void;
   private onFileReady: (e: Event) => void;
   private onSAActive: (e: Event) => void;
@@ -89,6 +98,7 @@ export class SonicVisualizerController {
   }
 
   private bindDOM(): void {
+    const sig = this.domAbort.signal;
     const q = <T extends HTMLElement>(sel: string) => this.container.querySelector<T>(sel)!;
     this.podEl      = q('.sv-pod');
     this.statusEl   = q('[data-sv-status]');
@@ -98,13 +108,19 @@ export class SonicVisualizerController {
 
     this.container.querySelectorAll<HTMLButtonElement>('[data-sv-layer]').forEach(btn => {
       this.layerBtns.set(btn.dataset.svLayer!, btn);
-      btn.addEventListener('click', () => this.toggleLayer(btn.dataset.svLayer!));
+      btn.addEventListener('click', () => this.toggleLayer(btn.dataset.svLayer!), { signal: sig });
     });
 
-    this.playBtn.addEventListener('click', () => this.togglePlayback());
-    this.loopBtn.addEventListener('click', () => this.toggleLoop());
+    this.playBtn.addEventListener('click', () => this.togglePlayback(), { signal: sig });
+    this.loopBtn.addEventListener('click', () => this.toggleLoop(), { signal: sig });
     this.bindMainInteraction();
   }
+
+  // ─── Access control ──────────────────────────────────────────────────────────
+
+  public setRole(role: 'teacher' | 'student'): void { this.localRole = role; }
+  public setAllowStudents(allow: boolean): void { this.allowStudents = allow; }
+  private canControl(): boolean { return this.localRole === 'teacher' || this.allowStudents; }
 
   // ─── SA events ───────────────────────────────────────────────────────────────
 
@@ -164,7 +180,6 @@ export class SonicVisualizerController {
     this.layers[key] = visible;
     const btn = this.layerBtns.get(key);
     if (btn) btn.dataset.active = visible ? 'true' : 'false';
-    // Redraw immediately if animation loop is not running
     if (this.rafId === null) {
       requestAnimationFrame(() => this.redrawMainPane());
     }
@@ -173,7 +188,7 @@ export class SonicVisualizerController {
   private toggleLayer(key: string): void {
     const next = !this.layers[key];
     this.applyLayer(key, next);
-    this.publish?.({ type: 'sv-layer', layer: key, visible: next });
+    if (this.canControl()) this.publish?.({ type: 'sv-layer', layer: key, visible: next });
   }
 
   public applyRemoteLayer(layer: string, visible: boolean): void {
@@ -207,7 +222,8 @@ export class SonicVisualizerController {
     if (this.layers.mot  && this.formData?.motion)      this.drawCurve(ctx, this.formData.motion,     CURVE_COLORS.mot, W, H);
     if (this.layers.grv  && this.formData?.gravity)     this.drawCurve(ctx, this.formData.gravity,    CURVE_COLORS.grv, W, H);
     if (this.layers.ten  && this.formData?.tension)     this.drawCurve(ctx, this.formData.tension,    CURVE_COLORS.ten, W, H);
-    if (this.loopEnabled && this.loopOut > this.loopIn) this.drawLoopOverlay(ctx, W, H);
+    // show loop overlay during drag (real-time feedback) and when enabled
+    if ((this.loopEnabled || this.isLoopDragging) && this.loopOut > this.loopIn) this.drawLoopOverlay(ctx, W, H);
     this.drawPlayhead(ctx, W, H);
   }
 
@@ -285,17 +301,71 @@ export class SonicVisualizerController {
   }
 
   // ─── Main canvas interaction ──────────────────────────────────────────────────
-  // click = seek · drag = free loop region · segment click = snap loop toggle
+  // SEG snap evaluated on pointerup to avoid competing with drag
+  // click = seek (or SEG snap) · drag > 5px = free loop region
 
   private bindMainInteraction(): void {
     const canvas = this.mainCanvas;
+    const sig = this.domAbort.signal;
 
     canvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
+      this.dragStartX = e.clientX;
+      this.dragStartAudioPos = this.posAt(canvas, e);
+      this.isDragging = true;
+      this.startAnimLoop();
+
+      if (e.pointerType === 'touch') {
+        this.longPressTimer = setTimeout(() => {
+          this.longPressTimer = null;
+          this.isDragging = false;
+          this.isLoopDragging = true;
+          this.loopIn = this.dragStartAudioPos;
+          this.loopOut = this.loopIn;
+        }, 400);
+      }
+    }, { signal: sig });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (this.isLoopDragging) {
+        const p = this.posAt(canvas, e);
+        const anchor = this.dragStartAudioPos;
+        if (p < anchor) { this.loopIn = p; this.loopOut = anchor; }
+        else            { this.loopIn = anchor; this.loopOut = p; }
+        return;
+      }
+      if (!this.isDragging) return;
+      if (Math.abs(e.clientX - this.dragStartX) > 5) {
+        this.isLoopDragging = true;
+        this.isDragging = false;
+        const p = this.posAt(canvas, e);
+        const anchor = this.dragStartAudioPos;
+        if (p < anchor) { this.loopIn = p; this.loopOut = anchor; }
+        else            { this.loopIn = anchor; this.loopOut = p; }
+      }
+    }, { signal: sig });
+
+    canvas.addEventListener('pointerup', (e) => {
+      if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
+      canvas.releasePointerCapture(e.pointerId);
+
+      if (this.isLoopDragging) {
+        this.isLoopDragging = false;
+        if (this.loopOut > this.loopIn) {
+          this.loopEnabled = true;
+          this.updateLoopBtn();
+          if (this.canControl()) this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: true });
+        }
+        if (!this.isPlaying) this.stopAnimLoop();
+        return;
+      }
+
+      if (!this.isDragging) return;
+      this.isDragging = false;
       const p = this.posAt(canvas, e);
 
-      // Segment click → snap loop (toggle off if same segment)
+      // SEG snap on click (no drag): toggle loop region or clear if same segment
       if (this.formData?.segments && this.audioBuffer) {
         const ratio = p / this.audioBuffer.duration;
         const seg   = this.formData.segments.find(s => ratio >= s.startRatio && ratio <= s.endRatio);
@@ -311,76 +381,16 @@ export class SonicVisualizerController {
         }
       }
 
-      // Touch long-press → free loop region
-      if (e.pointerType === 'touch') {
-        this.longPressTimer = setTimeout(() => {
-          this.longPressTimer = null;
-          this.isDragging = false;
-          this.isLoopDragging = true;
-          this.loopIn = this.dragStartAudioPos;
-          this.loopOut = this.loopIn;
-        }, 400);
-      }
-
-      this.dragStartX = e.clientX;
-      this.dragStartAudioPos = p;
-      this.isDragging = true;
-      this.startAnimLoop();
-    });
-
-    canvas.addEventListener('pointermove', (e) => {
-      if (this.isLoopDragging) {
-        const p = this.posAt(canvas, e);
-        if (p < this.loopIn) { this.loopOut = this.loopIn; this.loopIn = p; }
-        else this.loopOut = p;
-        return;
-      }
-      if (!this.isDragging) return;
-
-      // Upgrade to loop drag once pointer moves > 5px
-      if (Math.abs(e.clientX - this.dragStartX) > 5) {
-        this.isLoopDragging = true;
-        this.isDragging = false;
-        this.loopIn = this.dragStartAudioPos;
-        const p = this.posAt(canvas, e);
-        if (p < this.loopIn) { this.loopOut = this.loopIn; this.loopIn = p; }
-        else this.loopOut = p;
-      }
-    });
-
-    canvas.addEventListener('pointerup', (e) => {
-      if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
-      canvas.releasePointerCapture(e.pointerId);
-
-      if (this.isLoopDragging) {
-        this.isLoopDragging = false;
-        if (this.loopOut > this.loopIn) {
-          this.loopEnabled = true;
-          this.updateLoopBtn();
-          this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: true });
-        }
-        if (!this.isPlaying) this.stopAnimLoop();
-        return;
-      }
-
-      if (!this.isDragging) return;
-      this.isDragging = false;
-
-      // Was a click — seek to position
-      const p = this.posAt(canvas, e);
+      // Seek to click position
       this.playOffset = p;
       if (this.isPlaying) this.startPlayback(p);
-      if (!this.isPlaying) {
-        // Force one redraw so playhead updates even when stopped
-        this.stopAnimLoop();
-        requestAnimationFrame(() => this.redrawMainPane());
-      }
-      this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
-    });
+      else { this.stopAnimLoop(); requestAnimationFrame(() => this.redrawMainPane()); }
+      if (this.canControl()) this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
+    }, { signal: sig });
 
     canvas.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.clearLoop();
-    });
+    }, { signal: sig });
   }
 
   // ─── Playback ─────────────────────────────────────────────────────────────────
@@ -388,10 +398,10 @@ export class SonicVisualizerController {
   private togglePlayback(): void {
     if (this.isPlaying) {
       this.pausePlayback();
-      this.publish?.({ type: 'sv-playback', action: 'pause', offset: this.playOffset });
+      if (this.canControl()) this.publish?.({ type: 'sv-playback', action: 'pause', offset: this.playOffset });
     } else {
       this.startPlayback();
-      this.publish?.({ type: 'sv-playback', action: 'play', offset: this.playOffset });
+      if (this.canControl()) this.publish?.({ type: 'sv-playback', action: 'play', offset: this.playOffset });
     }
   }
 
@@ -447,6 +457,7 @@ export class SonicVisualizerController {
     } else if (this.loopOut > this.loopIn) {
       this.loopEnabled = true;
       this.updateLoopBtn();
+      if (this.canControl()) this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: true });
     }
   }
 
@@ -455,14 +466,14 @@ export class SonicVisualizerController {
     this.loopOut     = outPoint;
     this.loopEnabled = true;
     this.updateLoopBtn();
-    this.publish?.({ type: 'sv-loop', inPoint, outPoint, enabled: true });
+    if (this.canControl()) this.publish?.({ type: 'sv-loop', inPoint, outPoint, enabled: true });
     if (this.rafId === null) requestAnimationFrame(() => this.redrawMainPane());
   }
 
   private clearLoop(): void {
     this.loopEnabled = false;
     this.updateLoopBtn();
-    this.publish?.({ type: 'sv-loop', inPoint: 0, outPoint: 0, enabled: false });
+    if (this.canControl()) this.publish?.({ type: 'sv-loop', inPoint: 0, outPoint: 0, enabled: false });
     if (this.rafId === null) requestAnimationFrame(() => this.redrawMainPane());
   }
 
@@ -477,25 +488,33 @@ export class SonicVisualizerController {
     this.updateLoopBtn();
   }
 
-  // ─── Animation loop ──────────────────────────────────────────────────────────
+  // ─── Animation loop (loop restart debounced via lastLoopRestartAt) ────────────
 
   private startAnimLoop(): void {
     if (this.rafId !== null) return;
     const tick = () => {
       if (this.isPlaying && this.loopEnabled && this.loopOut > this.loopIn) {
-        if (this.getCurrentPosition() >= this.loopOut) {
-          if (this.playbackNode) { try { this.playbackNode.stop(); } catch {} try { this.playbackNode.disconnect(); } catch {} this.playbackNode = null; }
-          if (this.audioBuffer && this.audioCtx) {
-            const src = this.audioCtx.createBufferSource();
-            src.buffer = this.audioBuffer;
-            src.connect(this.audioCtx.destination);
-            this.playOffset = this.loopIn;
-            this.playStartTime = this.audioCtx.currentTime;
-            src.start(0, this.loopIn);
-            src.onended = () => {
-              if (this.isPlaying) { this.playOffset = this.getCurrentPosition(); this.isPlaying = false; this.updatePlayBtn(); }
-            };
-            this.playbackNode = src;
+        if (this.getCurrentPosition() >= this.loopOut - 0.05) {
+          const now = this.audioCtx!.currentTime;
+          if (now - this.lastLoopRestartAt >= 0.15) {
+            this.lastLoopRestartAt = now;
+            if (this.playbackNode) {
+              try { this.playbackNode.stop(); } catch {}
+              try { this.playbackNode.disconnect(); } catch {}
+              this.playbackNode = null;
+            }
+            if (this.audioBuffer && this.audioCtx) {
+              const src = this.audioCtx.createBufferSource();
+              src.buffer = this.audioBuffer;
+              src.connect(this.audioCtx.destination);
+              this.playOffset    = this.loopIn;
+              this.playStartTime = this.audioCtx.currentTime;
+              src.start(0, this.loopIn);
+              src.onended = () => {
+                if (this.isPlaying) { this.playOffset = this.getCurrentPosition(); this.isPlaying = false; this.updatePlayBtn(); }
+              };
+              this.playbackNode = src;
+            }
           }
         }
       }
@@ -514,12 +533,12 @@ export class SonicVisualizerController {
   // ─── Resize ──────────────────────────────────────────────────────────────────
 
   private bindResize(): void {
-    const ro = new ResizeObserver(() => {
+    this.resizeObserver = new ResizeObserver(() => {
       if (!this.audioBuffer) return;
       this.resizeCanvas();
       this.runWorker();
     });
-    ro.observe(this.podEl);
+    this.resizeObserver.observe(this.podEl);
   }
 
   // ─── Remote ──────────────────────────────────────────────────────────────────
@@ -529,6 +548,14 @@ export class SonicVisualizerController {
     else this.startPlayback(offset);
   }
 
+  public publishCurrentState(): void {
+    for (const [layer, visible] of Object.entries(this.layers)) {
+      this.publish?.({ type: 'sv-layer', layer, visible });
+    }
+    this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: this.loopEnabled });
+    this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.getCurrentPosition() });
+  }
+
   // ─── Misc ─────────────────────────────────────────────────────────────────────
 
   private setStatus(msg: string): void { if (this.statusEl) this.statusEl.textContent = msg; }
@@ -536,6 +563,8 @@ export class SonicVisualizerController {
   public dispose(): void {
     this.stopPlayback();
     this.stopAnimLoop();
+    this.domAbort.abort();
+    this.resizeObserver?.disconnect();
     window.removeEventListener('sa:frame',      this.onFrame);
     window.removeEventListener('sa:file-ready', this.onFileReady);
     window.removeEventListener('sa:active',     this.onSAActive);

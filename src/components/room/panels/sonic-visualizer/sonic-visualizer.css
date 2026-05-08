@@ -20,10 +20,42 @@
 /* Layer toggle row */
 .sv-layers { display: flex; gap: 2px; flex-wrap: wrap; flex-shrink: 0; }
 .sv-layer-btn {
+  position: relative;
   font-size: 0.45rem; letter-spacing: 0.06em;
   padding: 1px 4px; height: 1.3rem; min-width: unset;
+  overflow: visible;
 }
 .sv-layer-btn[data-active="true"] { color: #45D384; border-color: rgba(69,211,132,0.4); }
+
+/* Tooltip */
+.sv-tip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  min-width: 14rem;
+  max-width: 20rem;
+  padding: 0.5rem 0.6rem;
+  background: rgba(17,17,27,0.97);
+  border: 1px solid rgba(69,211,132,0.25);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  text-align: left;
+  pointer-events: none;
+  white-space: normal;
+}
+.sv-layer-btn:hover .sv-tip { display: flex; flex-direction: column; gap: 0.2rem; }
+.sv-tip-formula {
+  font-size: 0.6rem; color: #cba6f7; letter-spacing: 0; font-style: italic;
+}
+.sv-tip-body {
+  font-size: 0.58rem; color: var(--conference-fg, #cdd6f4); letter-spacing: 0;
+}
+.sv-tip-credit {
+  font-size: 0.5rem; color: var(--conference-muted, #7f849c); letter-spacing: 0;
+}
 
 /* Play / Loop in toolbar */
 .sv-play-btn, .sv-loop-btn {

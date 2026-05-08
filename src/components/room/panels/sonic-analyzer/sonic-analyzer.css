@@ -98,3 +98,6 @@
 .sa-pod--drag-over .sa-drop-overlay { display:flex; }
 .sa-drop-label { font-size:0.8rem; font-weight:700; letter-spacing:0.12em; color:#45D384; text-transform:lowercase; }
 .sa-drop-hint  { font-size:0.55rem; color:var(--conference-muted,#7f849c); letter-spacing:0.1em; }
+
+/* SA descriptor keys with tooltip (native title attr) */
+.sa-key[data-sa-tip] { cursor: help; text-decoration: underline dotted rgba(137,180,250,0.3); }

@@ -62,6 +62,10 @@ export class SonicAnalyzerController {
   private publish?: (msg: ConferenceMessage) => void;
   private getSenderName: () => string = () => '';
 
+  // Access control
+  private localRole: 'teacher' | 'student' = 'student';
+  private allowStudents = false;
+
   // DOM refs
   private podEl!: HTMLElement;
   private powerBtn!: HTMLElement;
@@ -171,6 +175,10 @@ export class SonicAnalyzerController {
       if (!ctx || ctx.state === 'closed') ctx = new AudioContext();
       this.fileBuffer = await ctx.decodeAudioData(await file.arrayBuffer());
       this.loadedFileName = file.name;
+      // immediate decode event — SV can draw waveform and enable playback right away
+      window.dispatchEvent(new CustomEvent('sa:file-decoded', {
+        detail: { buffer: this.fileBuffer, fileName: file.name },
+      }));
       this.addFileOption(file.name);
       this.showFileMeta(file.name);
       if (this.active) { this.sourceSelect.value = 'file'; this.activeSource = 'file'; void this.reconnectSource(); }
@@ -399,6 +407,7 @@ export class SonicAnalyzerController {
         if (melspec.length % 200 === 0) await tick();
       }
     } catch (e) { console.warn('[sA] mel', e); }
+    window.dispatchEvent(new CustomEvent('sa:analysis-progress', { detail: { phase: 'melspec', percent: 25 } }));
     await tick();
 
     const chroma: number[][] = [];
@@ -417,6 +426,7 @@ export class SonicAnalyzerController {
         if (chroma.length % 100 === 0) await tick();
       }
     } catch (e) { console.warn('[sA] hpcp', e); }
+    window.dispatchEvent(new CustomEvent('sa:analysis-progress', { detail: { phase: 'chroma', percent: 50 } }));
     await tick();
 
     let pitches: number[] = [];
@@ -446,11 +456,13 @@ export class SonicAnalyzerController {
       const rhythm   = E.RhythmExtractor2013(audioVec);
       bpm = Math.round((rhythm.bpm ?? 0) * 10) / 10;
     } catch (e) { console.warn('[sA] bpm', e); }
+    window.dispatchEvent(new CustomEvent('sa:analysis-progress', { detail: { phase: 'pitch', percent: 75 } }));
 
     this.fileKey = key; this.fileScale = scale; this.fileBpm = bpm;
 
     const payload: SAFilePayload = { buffer: this.fileBuffer, fileName: this.loadedFileName, peaks, melspec, chroma, pitches, key, scale, bpm };
     this.lastFilePayload = payload;
+    window.dispatchEvent(new CustomEvent('sa:analysis-progress', { detail: { phase: 'segments', percent: 100 } }));
     window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: payload }));
     this.setStatus(`on · ${this.activeSource} · ${this.fps}fps`);
   }
@@ -484,8 +496,12 @@ export class SonicAnalyzerController {
 
   public get isActive(): boolean { return this.active; }
 
+  public setRole(role: 'teacher' | 'student'): void { this.localRole = role; }
+  public setAllowStudents(allow: boolean): void { this.allowStudents = allow; }
+
   public applyRemoteState(active: boolean): void {
-    this.setStatus(active ? 'remote · on' : 'remote · off');
+    if (active === this.active) return;
+    void this.toggle();
   }
 
   public addParticipantSource(id: string, label: string): void {
@@ -506,6 +522,9 @@ export class SonicAnalyzerController {
       if (!ctx || ctx.state === 'closed') ctx = new AudioContext();
       this.fileBuffer = await ctx.decodeAudioData(await resp.arrayBuffer());
       this.loadedFileName = name;
+      window.dispatchEvent(new CustomEvent('sa:file-decoded', {
+        detail: { buffer: this.fileBuffer, fileName: name },
+      }));
       this.addFileOption(name);
       this.showFileMeta(name);
       if (this.active) { this.sourceSelect.value = 'file'; this.activeSource = 'file'; void this.reconnectSource(); }
