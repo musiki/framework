@@ -92,6 +92,10 @@
   "packageManager": "npm@10.9.3",
   "overrides": {
     "drizzle-orm": "^0.45.2",
-    "@xmldom/xmldom": ">=0.9.10"
+    "@xmldom/xmldom": ">=0.9.10",
+    "fast-xml-parser": ">=5.7.0",
+    "@nodable/entities": ">=2.1.0",
+    "fast-xml-builder": ">=1.1.9",
+    "uuid": ">=11.1.1"
   }
 }

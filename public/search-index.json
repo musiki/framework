@@ -260,30 +260,10 @@
     "isPublic": false
   },
   {
-    "slug": "02-forma-y-estructura/el-objeto-estético-espistémico/recursos-recursos-el-objeto-estetico-espistemico",
-    "title": "Recursos — recursos el objeto estético espistémico",
-    "description": "",
-    "theme": null,
-    "reveal": false,
-    "type": "lesson",
-    "courseId": "s123",
-    "isPublic": false
-  },
-  {
     "slug": "03 Metodología de la Investigación en Música/Metodología de la Investigación en Música MOC",
     "title": "Metodología de la Investigación en Música",
     "description": "",
     "theme": "zztt",
-    "reveal": false,
-    "type": "lesson",
-    "courseId": "s123",
-    "isPublic": false
-  },
-  {
-    "slug": "80-recursos/recursos-recursos",
-    "title": "Recursos — recursos",
-    "description": "",
-    "theme": null,
     "reveal": false,
     "type": "lesson",
     "courseId": "s123",
@@ -390,12 +370,32 @@
     "isPublic": true
   },
   {
+    "slug": "public/lilypond/19-vl/vl-basics",
+    "title": "vl-basics",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
     "slug": "public/lilypond/lilypond MOC",
     "title": "lilypond MOC",
     "description": "",
     "theme": null,
     "reveal": false,
     "type": "service",
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/lilypond/manual/zztt-libraries-manual",
+    "title": "zztt-libraries-manual",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
     "courseId": null,
     "isPublic": true
   }

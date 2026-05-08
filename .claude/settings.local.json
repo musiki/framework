@@ -44,7 +44,8 @@
       "Bash(sed -n '536,538p' /Users/zztt/.config/superpowers/worktrees/framework/feat-sv-sa-redesign/src/scripts/room/sonic-visualizer/controller.ts)",
       "Bash(psql *)",
       "Bash(grep -v \"^$\")",
-      "Bash(npm ls *)"
+      "Bash(npm ls *)",
+      "Bash(npm audit *)"
     ]
   }
 }
