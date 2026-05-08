@@ -12154,9 +12154,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           void publishTeacherState();
         }, 500);
       }
-      if (sonicAnalyzerController) {
+      if (sonicAnalyzerController && localRole === 'teacher') {
         window.setTimeout(() => {
-          void publishMessage({ type: 'sa-state', active: sonicAnalyzerController!.isActive });
           sonicAnalyzerController!.publishLastFileSync();
         }, 700);
       }
@@ -12460,6 +12459,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'sa-state') {
+        // Only mirror SA state from the teacher — ignore broadcasts from students/external
+        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
         sonicAnalyzerController?.applyRemoteState(message.active);
         return;
       }
