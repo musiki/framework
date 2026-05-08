@@ -115,7 +115,7 @@ export function renderFiletree(
       <span class="re-folder-name${isMedia || isAuto ? ' re-folder-name--auto' : ''}" style="${isMedia ? 'color:#93c47d' : ''}">${escHtml(folder)}</span>
     `;
     rowEl.addEventListener('click', () => options.onFolderToggle(folder));
-    rowEl.addEventListener('contextmenu', (e) => { e.preventDefault(); options.onFolderContextMenu(folder, e); });
+    rowEl.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); options.onFolderContextMenu(folder, e); });
     rowEl.addEventListener('dragover', (e) => { e.preventDefault(); options.onDragOverFolder(folder); });
     rowEl.addEventListener('drop', (e) => { e.preventDefault(); options.onDrop(folder); });
     folderEl.appendChild(rowEl);
@@ -155,7 +155,7 @@ function buildItemEl(
     <span class="re-item-name" title="${escHtml(item.url)}">${escHtml(item.name)}</span>
   `;
   el.addEventListener('click', () => options.onItemClick(item));
-  el.addEventListener('contextmenu', (e) => { e.preventDefault(); options.onItemContextMenu(item, e); });
+  el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); options.onItemContextMenu(item, e); });
   el.addEventListener('dragstart', () => options.onDragStart(item.id));
   return el;
 }

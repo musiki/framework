@@ -79,6 +79,11 @@ import './sonic-visualizer.css';
 
     <div class="sv-panes">
       <div class="sv-pane sv-pane--main">
+        <div class="sv-ruler" data-sv-ruler title="Click/drag: seek · Drag IN/OUT markers: ajustar loop">
+          <div class="sv-ruler-playhead" data-sv-ruler-playhead></div>
+          <div class="sv-ruler-marker sv-ruler-in"  data-sv-in-marker  hidden title="Loop IN (drag)">▾</div>
+          <div class="sv-ruler-marker sv-ruler-out" data-sv-out-marker hidden title="Loop OUT (drag)">▾</div>
+        </div>
         <canvas class="sv-main-canvas" data-sv-main-canvas></canvas>
       </div>
     </div>

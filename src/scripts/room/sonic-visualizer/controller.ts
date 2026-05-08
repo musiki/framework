@@ -61,6 +61,12 @@ export class SonicVisualizerController {
   private loopOut = 0;
   private lastLoopRestartAt = -Infinity;
 
+  // Ruler
+  private rulerEl!: HTMLElement;
+  private rulerPlayheadEl!: HTMLElement;
+  private inMarkerEl!: HTMLElement;
+  private outMarkerEl!: HTMLElement;
+
   // Interaction state
   private isDragging = false;
   private isLoopDragging = false;
@@ -104,8 +110,12 @@ export class SonicVisualizerController {
     this.podEl      = q('.sv-pod');
     this.statusEl   = q('[data-sv-status]');
     this.mainCanvas = q<HTMLCanvasElement>('[data-sv-main-canvas]');
-    this.playBtn    = q<HTMLButtonElement>('[data-sv-play]');
-    this.loopBtn    = q<HTMLButtonElement>('[data-sv-loop]');
+    this.playBtn         = q<HTMLButtonElement>('[data-sv-play]');
+    this.loopBtn         = q<HTMLButtonElement>('[data-sv-loop]');
+    this.rulerEl         = q<HTMLElement>('[data-sv-ruler]')!;
+    this.rulerPlayheadEl = q<HTMLElement>('[data-sv-ruler-playhead]')!;
+    this.inMarkerEl      = q<HTMLElement>('[data-sv-in-marker]')!;
+    this.outMarkerEl     = q<HTMLElement>('[data-sv-out-marker]')!;
 
     this.container.querySelectorAll<HTMLButtonElement>('[data-sv-layer]').forEach(btn => {
       this.layerBtns.set(btn.dataset.svLayer!, btn);
@@ -115,6 +125,7 @@ export class SonicVisualizerController {
     this.playBtn.addEventListener('click', () => this.togglePlayback(), { signal: sig });
     this.loopBtn.addEventListener('click', () => this.toggleLoop(), { signal: sig });
     this.bindMainInteraction();
+    this.bindRulerInteraction();
   }
 
   // ─── Access control ──────────────────────────────────────────────────────────
@@ -448,6 +459,7 @@ export class SonicVisualizerController {
   private pausePlayback(): void {
     this.playOffset = this.getCurrentPosition();
     if (this.playbackNode) {
+      this.playbackNode.onended = null;
       try { this.playbackNode.stop(); } catch {}
       try { this.playbackNode.disconnect(); } catch {}
       this.playbackNode = null;
@@ -483,6 +495,7 @@ export class SonicVisualizerController {
     this.loopOut     = outPoint;
     this.loopEnabled = true;
     this.updateLoopBtn();
+    this.updateRulerMarkers();
     if (this.canControl()) this.publish?.({ type: 'sv-loop', inPoint, outPoint, enabled: true });
     if (this.rafId === null) requestAnimationFrame(() => this.redrawMainPane());
   }
@@ -490,6 +503,7 @@ export class SonicVisualizerController {
   private clearLoop(): void {
     this.loopEnabled = false;
     this.updateLoopBtn();
+    this.updateRulerMarkers();
     if (this.canControl()) this.publish?.({ type: 'sv-loop', inPoint: 0, outPoint: 0, enabled: false });
     if (this.rafId === null) requestAnimationFrame(() => this.redrawMainPane());
   }
@@ -503,6 +517,7 @@ export class SonicVisualizerController {
     this.loopOut     = outPoint;
     this.loopEnabled = enabled;
     this.updateLoopBtn();
+    this.updateRulerMarkers();
   }
 
   // ─── Animation loop (loop restart debounced via lastLoopRestartAt) ────────────
@@ -516,6 +531,7 @@ export class SonicVisualizerController {
           if (now - this.lastLoopRestartAt >= 0.15) {
             this.lastLoopRestartAt = now;
             if (this.playbackNode) {
+              this.playbackNode.onended = null;
               try { this.playbackNode.stop(); } catch {}
               try { this.playbackNode.disconnect(); } catch {}
               this.playbackNode = null;
@@ -536,6 +552,7 @@ export class SonicVisualizerController {
         }
       }
       this.redrawMainPane();
+      this.updateRulerMarkers();
       this.rafId = (this.isPlaying || this.isDragging || this.isLoopDragging)
         ? requestAnimationFrame(tick)
         : null;
@@ -571,6 +588,99 @@ export class SonicVisualizerController {
     }
     this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: this.loopEnabled });
     this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.getCurrentPosition() });
+  }
+
+  // ─── Ruler ───────────────────────────────────────────────────────────────────
+
+  private updateRulerMarkers(): void {
+    if (!this.audioBuffer) return;
+    const dur = this.audioBuffer.duration;
+    const pos = this.seekTarget ?? this.getCurrentPosition();
+    this.rulerPlayheadEl.style.left = `${(pos / dur) * 100}%`;
+    const show = this.loopEnabled && this.loopOut > this.loopIn;
+    this.inMarkerEl.hidden  = !show;
+    this.outMarkerEl.hidden = !show;
+    if (show) {
+      this.inMarkerEl.style.left  = `${(this.loopIn  / dur) * 100}%`;
+      this.outMarkerEl.style.left = `${(this.loopOut / dur) * 100}%`;
+    }
+  }
+
+  private bindRulerInteraction(): void {
+    const ruler = this.rulerEl;
+    const sig   = this.domAbort.signal;
+    let seekDragging = false;
+    let markerDrag: 'in' | 'out' | null = null;
+
+    const posFromX = (clientX: number): number => {
+      if (!this.audioBuffer) return 0;
+      const r = ruler.getBoundingClientRect();
+      return Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * this.audioBuffer.duration;
+    };
+
+    // Marker drag — IN
+    this.inMarkerEl.addEventListener('pointerdown', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      this.inMarkerEl.setPointerCapture(e.pointerId);
+      markerDrag = 'in';
+    }, { signal: sig });
+    this.inMarkerEl.addEventListener('pointermove', (e) => {
+      if (markerDrag !== 'in') return;
+      this.loopIn = Math.min(posFromX(e.clientX), this.loopOut - 0.05);
+      this.updateRulerMarkers();
+      if (this.rafId === null) requestAnimationFrame(() => this.redrawMainPane());
+    }, { signal: sig });
+    this.inMarkerEl.addEventListener('pointerup', () => {
+      if (markerDrag !== 'in') return;
+      markerDrag = null;
+      if (this.canControl()) this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: true });
+    }, { signal: sig });
+
+    // Marker drag — OUT
+    this.outMarkerEl.addEventListener('pointerdown', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      this.outMarkerEl.setPointerCapture(e.pointerId);
+      markerDrag = 'out';
+    }, { signal: sig });
+    this.outMarkerEl.addEventListener('pointermove', (e) => {
+      if (markerDrag !== 'out') return;
+      this.loopOut = Math.max(posFromX(e.clientX), this.loopIn + 0.05);
+      this.updateRulerMarkers();
+      if (this.rafId === null) requestAnimationFrame(() => this.redrawMainPane());
+    }, { signal: sig });
+    this.outMarkerEl.addEventListener('pointerup', () => {
+      if (markerDrag !== 'out') return;
+      markerDrag = null;
+      if (this.canControl()) this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: true });
+    }, { signal: sig });
+
+    // Ruler seek drag
+    ruler.addEventListener('pointerdown', (e) => {
+      if (markerDrag) return;
+      e.preventDefault();
+      ruler.setPointerCapture(e.pointerId);
+      seekDragging = true;
+      this.seekTarget = posFromX(e.clientX);
+      this.updateRulerMarkers();
+      this.startAnimLoop();
+    }, { signal: sig });
+
+    ruler.addEventListener('pointermove', (e) => {
+      if (!seekDragging || markerDrag) return;
+      this.seekTarget = posFromX(e.clientX);
+      this.updateRulerMarkers();
+    }, { signal: sig });
+
+    ruler.addEventListener('pointerup', (e) => {
+      if (!seekDragging) return;
+      seekDragging = false;
+      const p = this.seekTarget ?? posFromX(e.clientX);
+      this.seekTarget = null;
+      this.playOffset = p;
+      if (this.isPlaying) this.startPlayback(p);
+      else { this.stopAnimLoop(); requestAnimationFrame(() => { this.redrawMainPane(); this.updateRulerMarkers(); }); }
+      if (this.canControl()) this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
+    }, { signal: sig });
   }
 
   // ─── Misc ─────────────────────────────────────────────────────────────────────

@@ -70,9 +70,45 @@
   background: rgba(255,255,255,0.04);
 }
 .sv-pane { display: flex; overflow: hidden; min-height: 0; }
-.sv-pane--main { flex: 1; }
+.sv-pane--main { flex: 1; display: flex; flex-direction: column; }
 
 .sv-main-canvas {
-  display: block; width: 100%; height: 100%;
+  display: block; width: 100%; flex: 1; min-height: 0;
   cursor: crosshair;
 }
+
+/* Ruler */
+.sv-ruler {
+  height: 14px;
+  position: relative;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+  cursor: crosshair;
+  overflow: visible;
+  z-index: 2;
+  user-select: none;
+}
+.sv-ruler-playhead {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(255,255,255,0.65);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.sv-ruler-marker {
+  position: absolute;
+  top: 0;
+  font-size: 8px;
+  line-height: 14px;
+  cursor: ew-resize;
+  pointer-events: all;
+  transform: translateX(-50%);
+}
+.sv-ruler-in  { color: #45D384; }
+.sv-ruler-out { color: #E06666; }
+.sv-ruler-marker[hidden] { display: none; }
+
+/* Lift pod above siblings when a tooltip is hovered */
+.sv-pod:has(.sv-layer-btn:hover) { position: relative; z-index: 100; }

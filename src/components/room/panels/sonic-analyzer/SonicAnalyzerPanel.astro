@@ -15,6 +15,7 @@ import './sonic-analyzer.css';
       </select>
       <span class="sa-fps-label" data-sa-fps-label>10fps</span>
       <input type="range" class="sa-fps-slider" data-sa-fps min="1" max="30" value="10" title="Update rate" style="width:3.5rem;" />
+      <button type="button" class="musiki-pod-btn sa-info-btn" data-sa-info title="Descripción técnica · SA/SV">?</button>
     </div>
 
     <div class="sa-status" data-sa-status>
@@ -46,6 +47,61 @@ import './sonic-analyzer.css';
       </div>
       <div class="sa-panel sa-panel--radar">
         <canvas class="sa-radar-canvas" data-sa-radar></canvas>
+      </div>
+    </div>
+
+    <!-- Tech info modal -->
+    <div class="sa-info-modal" data-sa-info-modal hidden aria-modal="true">
+      <div class="sa-info-inner">
+        <button class="sa-info-close" data-sa-info-close aria-label="Cerrar">✕</button>
+        <div class="sa-info-section">
+          <div class="sa-info-heading">sA · sV · análisis sónico</div>
+          <div class="sa-info-sub">Essentia.js (WASM) · WebAudio API · OffscreenCanvas · Web Workers</div>
+          <p class="sa-info-p">Análisis acústico de grado IRCAM ejecutado 100% en el cliente — sin servidor de cómputo. Primera integración de este nivel de análisis en un LMS musical colectivo en tiempo real.</p>
+        </div>
+
+        <div class="sa-info-section">
+          <div class="sa-info-heading">descriptores sA</div>
+          <div class="sa-info-table">
+            <div class="sa-info-row"><span class="sa-info-key">pitch</span><span class="sa-info-val">YIN f₀ — diferencia cuadrática normalizada (De Cheveigné &amp; Kawahara, 2002, IRCAM/ATR)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">dBFS</span><span class="sa-info-val">RMS → 20·log₁₀ (AES17 1998)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">LUFS M/S/I</span><span class="sa-info-val">BS.1770 K-weighting, ventanas 400ms/3s/integrado con gating (ITU-R BS.1770-4 / EBU R128)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">centroide</span><span class="sa-info-val">∑(f·|X|)/∑|X| — centro de masa espectral (Grey &amp; Gordon, 1978, Stanford CCRMA)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">spread</span><span class="sa-info-val">Desviación estándar espectral (Peeters et al., 2004, IRCAM)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">skewness</span><span class="sa-info-val">Asimetría espectral — 3er momento (Peeters et al., 2004, IRCAM)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">kurtosis</span><span class="sa-info-val">Picudez espectral — 4to momento (Peeters et al., 2004, IRCAM)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">slope</span><span class="sa-info-val">Pendiente de regresión lineal espectro-vs-frecuencia (Dubnov 1996, Ben-Gurion U.)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">flux</span><span class="sa-info-val">Half-wave rectified spectral flux — detección de ataques (Scheirer &amp; Slaney, 1997, MIT)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">T1/T2/T3</span><span class="sa-info-val">Modelo tímbrico RGB: fundamental / 2°-4° armónicos / resto (Pollard &amp; Jansson, 1982, KTH)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">HNR</span><span class="sa-info-val">Energía armónica vs ruido residual (Yumoto, Gould &amp; Baer, 1982, U. Wisconsin)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">ZCR</span><span class="sa-info-val">Cruces por cero — voiced/unvoiced (Rabiner &amp; Schafer, 1978, Bell Labs)</span></div>
+          </div>
+        </div>
+
+        <div class="sa-info-section">
+          <div class="sa-info-heading">capas sV</div>
+          <div class="sa-info-table">
+            <div class="sa-info-row"><span class="sa-info-key">SPEC</span><span class="sa-info-val">|X(f,t)|² STFT — intensidad espectral por ventana (Gabor, 1946; Serra, 1989, IRCAM)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">WAV</span><span class="sa-info-val">x(t) — amplitud instantánea normalizada (Shannon, 1948, Bell Labs)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">ENR</span><span class="sa-info-val">√(1/N·∑x²) — RMS frame por frame (Parseval, 1799)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">BRT</span><span class="sa-info-val">Centro de masa espectral — brillo (Grey &amp; Gordon, 1978, CCRMA)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">MOT</span><span class="sa-info-val">Cambio de energía espectral entre frames (Scheirer &amp; Slaney, 1997, MIT)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">GRV</span><span class="sa-info-val">Centroide ponderado por energía acumulada — "peso" armónico (Lerch, 2012, TU Berlin)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">TEN</span><span class="sa-info-val">Spectral flatness: 0=tonal, 1=ruido blanco (Johnston, 1988, AT&amp;T Bell Labs)</span></div>
+            <div class="sa-info-row"><span class="sa-info-key">SEG</span><span class="sa-info-val">Boundary detection por cambios de timbre — segmentación automática (Foote, 1999, FX Palo Alto)</span></div>
+          </div>
+        </div>
+
+        <div class="sa-info-section">
+          <div class="sa-info-heading">estigmergia</div>
+          <p class="sa-info-p">Principio biológico de coordinación indirecta a través del entorno (Grassé, 1959). En <em>musiki</em>: el análisis sónico compartido crea un "campo perceptual" colectivo — cada participante modifica el entorno acústico común, y esas modificaciones guían la percepción y acción del resto, sin coordinación explícita. El análisis en tiempo real de parámetros como centroide, flux y BPM es la traza estigmérgica del material sonoro en el espacio cognitivo compartido.</p>
+        </div>
+
+        <div class="sa-info-section sa-info-refs">
+          <div class="sa-info-heading">referencias</div>
+          <div class="sa-info-ref">Bogdanov, D. et al. (2013). ESSENTIA: An open-source library for sound and music analysis. <em>ACM Multimedia</em>, 855–858.</div>
+          <div class="sa-info-ref">Grassé, P.P. (1959). La théorie de la Stigmergie: essai d'interprétation du comportement des Termites constructeurs. <em>Insectes Sociaux</em>, 6(1), 41–80.</div>
+        </div>
       </div>
     </div>
 
@@ -113,5 +169,15 @@ document.querySelectorAll<HTMLElement>('.sa-panel--text').forEach(panel => {
     if (related?.closest('[data-sa-tip]')) return;
     hideTimer = setTimeout(() => { overlay!.hidden = true; }, 80);
   });
+});
+
+// Info modal
+document.querySelectorAll<HTMLElement>('[data-sa-info]').forEach(btn => {
+  const pod = btn.closest('.sa-pod')!;
+  const modal = pod.querySelector<HTMLElement>('[data-sa-info-modal]')!;
+  const closeBtn = modal.querySelector<HTMLElement>('[data-sa-info-close]')!;
+  btn.addEventListener('click', () => { modal.hidden = false; });
+  closeBtn.addEventListener('click', () => { modal.hidden = true; });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
 });
 </script>
