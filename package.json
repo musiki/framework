@@ -91,6 +91,7 @@
   },
   "packageManager": "npm@10.9.3",
   "overrides": {
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "@xmldom/xmldom": ">=0.9.10"
   }
 }
