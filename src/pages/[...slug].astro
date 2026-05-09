@@ -362,6 +362,22 @@ const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapt
     .localeCompare(rightChapter.replace(/-/g, ' '), 'es', { sensitivity: 'base' });
 });
 
+const sidebarChapterEntries: Array<
+  | { kind: 'chapter'; chapterName: string; lessons: typeof allLessons }
+  | { kind: 'recursos' }
+> = [];
+let insertedRecursosSidebarEntry = false;
+for (const [chapterName, lessons] of sortedChapters) {
+  if (canManageLiveInteractions && !insertedRecursosSidebarEntry && /^9\d/.test(chapterName)) {
+    sidebarChapterEntries.push({ kind: 'recursos' });
+    insertedRecursosSidebarEntry = true;
+  }
+  sidebarChapterEntries.push({ kind: 'chapter', chapterName, lessons });
+}
+if (canManageLiveInteractions && !insertedRecursosSidebarEntry) {
+  sidebarChapterEntries.push({ kind: 'recursos' });
+}
+
 // Group concepts and glossary by project and parent
 const groupedConcepts: Record<string, Record<string, typeof allLessons>> = {};
 
@@ -3287,37 +3303,39 @@ order:
           )}
         </div>
 
-        {canManageLiveInteractions && (
-          <div class="chapter">
-            <details class="chapter-details" open={isRecursosEditorPage}>
-              <summary class="chapter-title">
-                <span class="chapter-title-text">80 RECURSOS</span>
-                <span class="chapter-caret">
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </span>
-              </summary>
-              <ul class="lesson-list">
-                <li class="lesson-item">
-                  <a
-                    href={`${courseHref}/recursos`}
-                    class:list={['lesson-link', { active: isRecursosEditorPage }]}
-                    data-course-id={canonicalCourseIdToUse || courseSlug}
-                    data-lesson-page-slug={`${canonicalCourseIdToUse || courseSlug}/recursos`}
-                  >
-                    <span class="lesson-link-text">Editor de recursos</span>
-                    <span class="lesson-link-trailing">
-                      <span class="lesson-type">Re</span>
+        {(!isPublicWikiPage || Boolean(session)) && sidebarChapterEntries.map((entry) => {
+          if (entry.kind === 'recursos') {
+            return (
+              <div class="chapter">
+                <details class="chapter-details" open={isRecursosEditorPage}>
+                  <summary class="chapter-title">
+                    <span class="chapter-title-text">80 RECURSOS</span>
+                    <span class="chapter-caret">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
                     </span>
-                  </a>
-                </li>
-              </ul>
-            </details>
-          </div>
-        )}
-
-        {(!isPublicWikiPage || Boolean(session)) && sortedChapters.map(([chapterName, lessons]) => {
+                  </summary>
+                  <ul class="lesson-list">
+                    <li class="lesson-item">
+                      <a
+                        href={`${courseHref}/recursos`}
+                        class:list={['lesson-link', { active: isRecursosEditorPage }]}
+                        data-course-id={canonicalCourseIdToUse || courseSlug}
+                        data-lesson-page-slug={`${canonicalCourseIdToUse || courseSlug}/recursos`}
+                      >
+                        <span class="lesson-link-text">Editor de recursos</span>
+                        <span class="lesson-link-trailing">
+                          <span class="lesson-type">Re</span>
+                        </span>
+                      </a>
+                    </li>
+                  </ul>
+                </details>
+              </div>
+            );
+          }
+          const { chapterName, lessons } = entry;
           const isPublicFolder = /^9\d /.test(chapterName);
           const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
           const isTOC = chapterName === 'TOC de clase';

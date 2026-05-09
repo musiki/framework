@@ -34,7 +34,7 @@ const { courseId, canManage } = Astro.props;
           <div class="recursos-editor-list" data-recursos-list></div>
         </section>
 
-        <section class="recursos-editor-panel">
+        <section class="recursos-editor-panel recursos-r2-panel">
           <div class="recursos-editor-panel-head">
             <h2>R2 / Cloudflare</h2>
             <button type="button" class="recursos-editor-btn" data-r2-up>Arriba</button>
@@ -139,16 +139,23 @@ const { courseId, canManage } = Astro.props;
     font-size: 1rem;
   }
 
-  .recursos-editor-list,
-  .recursos-r2-list {
+  .recursos-editor-list {
     display: grid;
     gap: 0.55rem;
     max-height: 62vh;
     overflow: auto;
   }
 
-  .recursos-row,
-  .recursos-r2-row {
+  .recursos-r2-list {
+    max-height: 62vh;
+    overflow: auto;
+    border: 1px solid color-mix(in srgb, var(--c-border) 82%, transparent);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%);
+    padding: 0.35rem 0;
+  }
+
+  .recursos-row {
     display: grid;
     gap: 0.45rem;
     border: 1px solid color-mix(in srgb, var(--c-border) 75%, transparent);
@@ -158,12 +165,51 @@ const { courseId, canManage } = Astro.props;
   }
 
   .recursos-row-main,
-  .recursos-row-actions,
-  .recursos-r2-row {
+  .recursos-row-actions {
     display: flex;
     align-items: center;
     gap: 0.45rem;
     min-width: 0;
+  }
+
+  .recursos-r2-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--c-fg);
+    padding: 0.28rem 0.45rem 0.28rem calc(0.55rem + (var(--depth, 0) * 1.15rem));
+    text-align: left;
+  }
+
+  .recursos-r2-row:hover {
+    background: color-mix(in srgb, var(--c-link) 9%, transparent);
+  }
+
+  .recursos-r2-row--folder {
+    cursor: pointer;
+    font-weight: 650;
+  }
+
+  .recursos-r2-row--file {
+    font-weight: 400;
+  }
+
+  .recursos-r2-label {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .recursos-r2-icon {
+    flex: 0 0 1rem;
+    color: color-mix(in srgb, var(--c-link) 80%, var(--c-fg) 20%);
+    text-align: center;
   }
 
   .recursos-row-main input,
@@ -194,7 +240,6 @@ const { courseId, canManage } = Astro.props;
 
   .recursos-row-url,
   .recursos-r2-name {
-    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -222,6 +267,14 @@ const { courseId, canManage } = Astro.props;
 
   .recursos-editor-btn--danger {
     color: #b3261e;
+  }
+
+  .recursos-r2-panel {
+    background: var(--c-bg);
+  }
+
+  .recursos-r2-panel .recursos-editor-btn {
+    padding: 0.28rem 0.48rem;
   }
 
   .recursos-r2-toolbar input {
@@ -264,6 +317,9 @@ const { courseId, canManage } = Astro.props;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
   };
+
+  const depthForPath = (path) => Math.max(0, String(path || '').split('/').filter(Boolean).length - 1);
+  const baseNameForPath = (path) => String(path || '').split('/').filter(Boolean).pop() || String(path || '');
 
   function typeFromUrl(url) {
     const ext = String(url || '').split('?')[0].split('.').pop()?.toLowerCase() || '';
@@ -354,14 +410,21 @@ const { courseId, canManage } = Astro.props;
         }
         r2ListEl.innerHTML = [
           ...folders.map((folder) => `
-            <button type="button" class="recursos-r2-row" data-folder="${esc(folder)}">
-              <span class="recursos-r2-name">/${esc(folder)}</span>
+            <button type="button" class="recursos-r2-row recursos-r2-row--folder" style="--depth:${depthForPath(folder)}" data-folder="${esc(folder)}">
+              <span class="recursos-r2-label">
+                <span class="recursos-r2-icon">▸</span>
+                <span class="recursos-r2-name" title="${esc(folder)}">${esc(baseNameForPath(folder))}</span>
+              </span>
               <span class="recursos-r2-meta">folder</span>
+              <span></span>
             </button>
           `),
           ...objects.map((object) => `
-            <div class="recursos-r2-row" data-url="${esc(object.url)}" data-name="${esc(object.name)}">
-              <span class="recursos-r2-name" title="${esc(object.key)}">${esc(object.name)}</span>
+            <div class="recursos-r2-row recursos-r2-row--file" style="--depth:${depthForPath(object.key)}" data-url="${esc(object.url)}" data-name="${esc(object.name)}">
+              <span class="recursos-r2-label">
+                <span class="recursos-r2-icon">•</span>
+                <span class="recursos-r2-name" title="${esc(object.key)}">${esc(object.name)}</span>
+              </span>
               <span class="recursos-r2-meta">${formatBytes(object.size)}</span>
               <button type="button" class="recursos-editor-btn" data-r2-copy="${esc(object.url)}">Copiar</button>
               <button type="button" class="recursos-editor-btn" data-r2-use>Usar</button>
