@@ -28,7 +28,7 @@ function iconFor(type: string): { char: string; color: string } {
   return TYPE_ICON[type] ?? TYPE_ICON.other;
 }
 
-const PINNED_FOLDERS = ['media', 'compartidos'];
+const PINNED_FOLDERS = ['DOC', 'media', 'compartidos'];
 
 export function foldersFromItems(items: ResourceItem[]): string[] {
   const seen = new Set<string>();
@@ -106,13 +106,14 @@ export function renderFiletree(
     folderEl.className = 're-folder';
     folderEl.dataset.folder = folder;
 
+    const isDoc = folder === 'DOC';
     const isMedia = folder === 'media';
     const rowEl = document.createElement('div');
     rowEl.className = 're-folder-row';
     rowEl.innerHTML = `
       <span class="re-caret">${isCollapsed ? '▸' : '▾'}</span>
-      <span class="re-folder-icon" style="color:${isMedia ? '#93c47d' : isAuto ? '#6fa8dc' : '#555'}">${isMedia ? '♪' : isAuto ? '⊕' : '⊟'}</span>
-      <span class="re-folder-name${isMedia || isAuto ? ' re-folder-name--auto' : ''}" style="${isMedia ? 'color:#93c47d' : ''}">${escHtml(folder)}</span>
+      <span class="re-folder-icon" style="color:${isDoc ? '#e06666' : isMedia ? '#93c47d' : isAuto ? '#6fa8dc' : '#555'}">${isDoc ? '□' : isMedia ? '♪' : isAuto ? '⊕' : '⊟'}</span>
+      <span class="re-folder-name${isDoc || isMedia || isAuto ? ' re-folder-name--auto' : ''}" style="${isDoc ? 'color:#e06666' : isMedia ? 'color:#93c47d' : ''}">${escHtml(folder)}</span>
     `;
     rowEl.addEventListener('click', () => options.onFolderToggle(folder));
     rowEl.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); options.onFolderContextMenu(folder, e); });

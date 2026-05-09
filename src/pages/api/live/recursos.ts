@@ -1,6 +1,10 @@
 import type { APIRoute } from 'astro';
 import { cleanString, ensureDbUserFromSession, json } from '../../../lib/forum-server';
 import { query } from '../../../lib/db/pool';
+import {
+  normalizeResourceProjectionItems,
+  persistRecursosMarkdownProjection,
+} from '../../../lib/live/recursos-markdown';
 
 // GET /api/live/recursos?roomName=...&claseId=...
 export const GET: APIRoute = async ({ request, locals, url }) => {
@@ -28,7 +32,7 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
   return json({ items: result.data ?? [] });
 };
 
-// POST /api/live/recursos  body: { roomName, claseId, items: ResourceItem[] }
+// POST /api/live/recursos  body: { roomName, claseId, courseRootId, items: ResourceItem[] }
 // Full replace: deletes all current items for (roomName, claseId), inserts new list.
 export const POST: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
@@ -40,7 +44,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const roomName = cleanString(String(body?.roomName ?? ''), 120);
   const claseId  = body?.claseId == null ? null : cleanString(String(body.claseId), 240) || null;
-  const items    = Array.isArray(body?.items) ? body.items : [];
+  const courseRootId = cleanString(String(body?.courseRootId ?? ''), 120) || null;
+  const items = normalizeResourceProjectionItems(Array.isArray(body?.items) ? body.items : []);
 
   if (!roomName) return json({ error: 'roomName required' }, 400);
 
@@ -53,7 +58,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const delResult = await query(`DELETE FROM "LiveClassResource" WHERE ${deleteWhere}`, deleteParams);
   if (delResult.error) return json({ error: delResult.error.message }, 500);
 
-  if (items.length === 0) return json({ ok: true, count: 0 });
+  if (items.length === 0) {
+    const projection = await persistProjection({ courseRootId, claseId, roomName, items });
+    return json({ ok: true, count: 0, projection });
+  }
 
   const VALID_TYPES   = ['pdf','img','md','tex','ly','audio','link','other'];
   const VALID_SOURCES = ['upload','chat','external-media','sa','sv','paste'];
@@ -88,5 +96,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
   );
   if (insertResult.error) return json({ error: insertResult.error.message }, 500);
 
-  return json({ ok: true, count: rows.length });
+  const projection = await persistProjection({ courseRootId, claseId, roomName, items: rows });
+  return json({ ok: true, count: rows.length, projection });
 };
+
+async function persistProjection(options: {
+  courseRootId: string | null;
+  claseId: string | null;
+  roomName: string;
+  items: any[];
+}) {
+  try {
+    return await persistRecursosMarkdownProjection(options);
+  } catch (error) {
+    console.error('[recursos] markdown projection failed', error);
+    return null;
+  }
+}

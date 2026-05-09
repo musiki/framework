@@ -269,7 +269,7 @@ export class VisualizerController {
     this.imageEl.hidden = false;
     this.imageEl.src = url;
     this.imageEl.alt = this.state.name || 'visual resource';
-    this.imageEl.style.transform = `scale(${this.state.zoomMode === 'custom' ? this.state.zoom / 100 : 1})`;
+    this.imageEl.style.setProperty('--vs-image-scale', String(this.state.zoomMode === 'custom' ? this.state.zoom / 100 : 1));
   }
 
   private pdfZoomFragment(): string {

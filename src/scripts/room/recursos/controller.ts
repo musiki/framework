@@ -8,6 +8,7 @@ import {
   itemsInFolder,
 } from './filetree';
 import {
+  type ResourceType,
   typeFromUrl,
   nameFromFile,
   quickNameFromUrl,
@@ -125,7 +126,7 @@ export class RecursosController {
     try {
       const params = new URLSearchParams({ roomName, claseId: claseId ?? '' });
       const resp = await fetch(`/api/live/recursos?${params}`);
-      if (resp.ok) this.items = (await resp.json()).items ?? [];
+      if (resp.ok) this.items = this.dedupeItems((await resp.json()).items ?? []);
     } catch { /**/ }
 
     try {
@@ -353,7 +354,7 @@ export class RecursosController {
     const sid = await this.ensureSession();
     this.items = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
-      type: typeFromUrl(url), folder: 'media', source: 'vs',
+      type: typeFromUrl(url), folder: 'DOC', source: 'vs',
       createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       sessionId: sid || null,
     });
@@ -463,9 +464,10 @@ export class RecursosController {
       const resp = await fetch('/api/room/re-store', { method: 'POST', body: form });
       if (!resp.ok) { console.error('[Re] upload failed', resp.status); return; }
       const { url } = await resp.json();
+      const type = typeFromUrl(url);
       const newItem: ResourceItem = {
         id: crypto.randomUUID(), url, name: nameFromFile(file),
-        type: typeFromUrl(url), folder: '', source: 'upload',
+        type, folder: this.defaultFolderForType(type), source: 'upload',
         createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       };
       this.items = addItem(this.items, newItem);
@@ -499,6 +501,7 @@ export class RecursosController {
   // ── Sync ─────────────────────────────────────────────────────────────────────
 
   private broadcastSync() {
+    this.items = this.dedupeItems(this.items);
     this.publish({ type: 'recursos:sync', items: this.items, allowStudents: this.allowStudents });
   }
 
@@ -508,7 +511,7 @@ export class RecursosController {
 
   applyRemoteMessage(msg: RecursosMessage) {
     if (msg.type === 'recursos:sync') {
-      this.items = msg.items; this.allowStudents = msg.allowStudents;
+      this.items = this.dedupeItems(msg.items); this.allowStudents = msg.allowStudents;
       this.updateCollabBtn(); this.render();
       this.emitAllowStudentsChanged();
     } else if (msg.type === 'recursos:allow-students') {
@@ -531,8 +534,8 @@ export class RecursosController {
       await fetch('/api/live/recursos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // claseId must be string | null — never send undefined
-        body: JSON.stringify({ roomName, claseId: this.getCourseId() ?? null, items: this.items }),
+        // claseId must be string | null; courseRootId lets the server mirror under cursos/<course>/80 RECURSOS.
+        body: JSON.stringify(this.buildSavePayload(roomName)),
       });
     } catch { /**/ }
   }
@@ -541,8 +544,32 @@ export class RecursosController {
     const roomName = this.getRoomName() ?? '';
     if (!roomName) return;
     navigator.sendBeacon('/api/live/recursos',
-      new Blob([JSON.stringify({ roomName, claseId: this.getCourseId() ?? null, items: this.items })],
+      new Blob([JSON.stringify(this.buildSavePayload(roomName))],
         { type: 'application/json' }));
+  }
+
+  private buildSavePayload(roomName: string) {
+    return {
+      roomName,
+      claseId: this.getCourseId() ?? null,
+      courseRootId: this.getCourseRootId?.() ?? null,
+      items: this.dedupeItems(this.items),
+    };
+  }
+
+  private dedupeItems(items: ResourceItem[]): ResourceItem[] {
+    const seen = new Set<string>();
+    const result: ResourceItem[] = [];
+    for (const item of items) {
+      const url = String(item?.url || '').trim();
+      if (!url) continue;
+      const folder = String(item?.folder || '').trim();
+      const key = `${folder}\n${url}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ ...item, url, folder });
+    }
+    return result;
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -645,7 +672,7 @@ export class RecursosController {
   }
 
   private openFolderCtxMenu(folder: string, e: MouseEvent) {
-    if (!this.canEdit() || folder === 'compartidos' || folder === 'media') return;
+    if (!this.canEdit() || folder === 'DOC' || folder === 'compartidos' || folder === 'media') return;
     this.ctxTargetFolder = folder; this.ctxTargetItem = null;
     this.ctxMoveBtn.style.display = 'none';
     this.ctxRenameBtn.style.display = '';
@@ -663,6 +690,12 @@ export class RecursosController {
 
   private isVisualMedia(item: ResourceItem): boolean {
     return item.type === 'pdf' || item.type === 'img';
+  }
+
+  private defaultFolderForType(type: ResourceType | 'other'): string {
+    if (type === 'audio') return 'media';
+    if (type === 'pdf' || type === 'img') return 'DOC';
+    return '';
   }
 
   private requestSonicLoad(item: ResourceItem): void {

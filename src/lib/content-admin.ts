@@ -261,3 +261,29 @@ export function writeEditableLocalRepoFile(source: SourceManifestSource | null, 
     writtenPaths,
   };
 }
+
+export function deleteEditableLocalRepoFile(source: SourceManifestSource | null, repoPath: string): {
+  path: string;
+  deletedPaths: string[];
+} {
+  const normalizedRepoPath = sanitizeRepoMarkdownPath(repoPath);
+  if (!normalizedRepoPath) {
+    throw new Error('A valid markdown target path is required.');
+  }
+  if (!source?.id) {
+    throw new Error('No source repository is configured for this course.');
+  }
+
+  const deletedPaths: string[] = [];
+  for (const candidatePath of buildLocalEditableCandidatePaths(source, normalizedRepoPath)) {
+    if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile()) {
+      fs.unlinkSync(candidatePath);
+      deletedPaths.push(candidatePath);
+    }
+  }
+
+  return {
+    path: normalizedRepoPath,
+    deletedPaths,
+  };
+}
