@@ -4,6 +4,22 @@ import type { ConferenceMessage } from '../session';
 
 export type SVOptions = { container: HTMLElement; publish?: (msg: ConferenceMessage) => void };
 
+const ACCEPTED_TYPES = [
+  'audio/wav',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wave',
+  'audio/x-wav',
+  'audio/mp4',
+  'audio/aac',
+  'audio/flac',
+  'video/quicktime',
+  'video/mp4',
+  'video/webm',
+];
+const ACCEPTED_EXTS = ['.wav', '.ogg', '.mp3', '.m4a', '.aac', '.flac', '.mov', '.mp4', '.webm'];
+
 const CURVE_COLORS: Record<string, string> = {
   enr: 'rgba(69,211,132,0.7)',
   brt: 'rgba(255,217,102,0.7)',
@@ -92,6 +108,7 @@ export class SonicVisualizerController {
     this.container = options.container;
     this.publish   = options.publish;
     this.bindDOM();
+    this.bindDropzone();
     this.bindResize();
 
     this.onFrame     = (e) => this.handleFrame((e as CustomEvent<{ results: SAResults }>).detail);
@@ -102,6 +119,44 @@ export class SonicVisualizerController {
     window.addEventListener('sa:file-ready', this.onFileReady);
     window.addEventListener('sa:active',     this.onSAActive);
     window.dispatchEvent(new CustomEvent('sv:request-state'));
+  }
+
+  private bindDropzone(): void {
+    const pod = this.podEl;
+    const sig = this.domAbort.signal;
+    pod.addEventListener('dragover', (e) => {
+      if (!this.hasDraggingAudio(e)) return;
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = 'copy';
+      pod.classList.add('sv-pod--drag-over');
+    }, { signal: sig });
+    pod.addEventListener('dragleave', (e) => {
+      if (!pod.contains(e.relatedTarget as Node)) pod.classList.remove('sv-pod--drag-over');
+    }, { signal: sig });
+    pod.addEventListener('drop', (e) => {
+      e.preventDefault();
+      pod.classList.remove('sv-pod--drag-over');
+      const file = this.extractAudioFile(e.dataTransfer);
+      if (!file) return;
+      window.dispatchEvent(new CustomEvent('musiki:sonic:load-file', { detail: { file } }));
+    }, { signal: sig });
+  }
+
+  private hasDraggingAudio(e: DragEvent): boolean {
+    if (!e.dataTransfer) return false;
+    for (const item of Array.from(e.dataTransfer.items)) {
+      if (item.kind === 'file' && (ACCEPTED_TYPES.includes(item.type) || item.type === '')) return true;
+    }
+    return false;
+  }
+
+  private extractAudioFile(dt: DataTransfer | null): File | null {
+    if (!dt) return null;
+    for (const file of Array.from(dt.files)) {
+      const ext = '.' + file.name.split('.').pop()!.toLowerCase();
+      if (ACCEPTED_TYPES.includes(file.type) || ACCEPTED_EXTS.includes(ext)) return file;
+    }
+    return null;
   }
 
   private bindDOM(): void {
@@ -583,6 +638,7 @@ export class SonicVisualizerController {
   }
 
   public publishCurrentState(): void {
+    if (!this.canControl()) return;
     for (const [layer, visible] of Object.entries(this.layers)) {
       this.publish?.({ type: 'sv-layer', layer, visible });
     }

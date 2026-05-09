@@ -17,8 +17,21 @@ export type SonicAnalyzerOptions = {
 declare const EssentiaWASM: any;
 declare const Essentia: any;
 
-const ACCEPTED_TYPES = ['audio/wav','audio/ogg','audio/mpeg','audio/mp3','audio/wave','audio/x-wav'];
-const ACCEPTED_EXTS  = ['.wav','.ogg','.mp3'];
+const ACCEPTED_TYPES = [
+  'audio/wav',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wave',
+  'audio/x-wav',
+  'audio/mp4',
+  'audio/aac',
+  'audio/flac',
+  'video/quicktime',
+  'video/mp4',
+  'video/webm',
+];
+const ACCEPTED_EXTS  = ['.wav','.ogg','.mp3','.m4a','.aac','.flac','.mov','.mp4','.webm'];
 
 export type SAFilePayload = {
   buffer: AudioBuffer;
@@ -83,6 +96,7 @@ export class SonicAnalyzerController {
 
   private onSVRequest: () => void;
   private onLoadUrl: (e: Event) => void;
+  private onLoadFile: (e: Event) => void;
 
   constructor(options: SonicAnalyzerOptions) {
     this.container = options.container;
@@ -94,10 +108,19 @@ export class SonicAnalyzerController {
     this.onSVRequest = () => this.emitCurrentState();
     window.addEventListener('sv:request-state', this.onSVRequest);
     this.onLoadUrl = (e: Event) => {
-      const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail;
-      void this.loadFileFromUrl(url, name);
+      const { url, name, suppressRoomPublish } = (e as CustomEvent<{
+        url: string;
+        name: string;
+        suppressRoomPublish?: boolean;
+      }>).detail;
+      void this.loadFileFromUrl(url, name, { suppressRoomPublish });
     };
     window.addEventListener('musiki:sa:load-url', this.onLoadUrl);
+    this.onLoadFile = (e: Event) => {
+      const { file } = (e as CustomEvent<{ file: File }>).detail ?? {};
+      if (file instanceof File) void this.loadFile(file);
+    };
+    window.addEventListener('musiki:sa:load-file', this.onLoadFile);
   }
 
   private emitCurrentState(): void {
@@ -214,15 +237,17 @@ export class SonicAnalyzerController {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       this.lastPublishedUrl = data.url;
-      this.publish?.({
-        type: 'sa-file-sync',
-        url: data.url,
-        fileName: this.loadedFileName,
-        senderName: this.getSenderName(),
-        key: this.fileKey,
-        scale: this.fileScale,
-        bpm: this.fileBpm,
-      });
+      if (this.canControl()) {
+        this.publish?.({
+          type: 'sa-file-sync',
+          url: data.url,
+          fileName: this.loadedFileName,
+          senderName: this.getSenderName(),
+          key: this.fileKey,
+          scale: this.fileScale,
+          bpm: this.fileBpm,
+        });
+      }
       this.setStatus(`shared ✓ · ${this.activeSource} · ${this.fps}fps`);
       window.dispatchEvent(new CustomEvent('musiki:recursos:sa-uploaded', {
         detail: { url: data.url, name: this.loadedFileName?.replace(/\.[^.]+$/, '') ?? '' },
@@ -244,7 +269,7 @@ export class SonicAnalyzerController {
     this.active = true;
     this.powerBtn.dataset.active = 'true'; this.podEl.dataset.active = 'true';
     window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: true } }));
-    if (!suppressPublish) this.publish?.({ type: 'sa-state', active: true });
+    if (!suppressPublish && this.canControl()) this.publish?.({ type: 'sa-state', active: true });
     await this.tryConnectAndStart();
   }
   private async tryConnectAndStart(): Promise<void> {
@@ -271,7 +296,7 @@ export class SonicAnalyzerController {
     this.powerBtn.dataset.active = 'false'; this.podEl.dataset.active = 'false';
     this.setStatus('off');
     window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: false } }));
-    if (!suppressPublish) this.publish?.({ type: 'sa-state', active: false });
+    if (!suppressPublish && this.canControl()) this.publish?.({ type: 'sa-state', active: false });
   }
   private async loadEssentia(): Promise<void> {
     if (this.essentia) return;
@@ -503,9 +528,10 @@ export class SonicAnalyzerController {
 
   public setRole(role: 'teacher' | 'student'): void { this.localRole = role; }
   public setAllowStudents(allow: boolean): void { this.allowStudents = allow; }
+  private canControl(): boolean { return this.localRole === 'teacher' || this.allowStudents; }
 
   public publishLastFileSync(): void {
-    if (!this.lastPublishedUrl || !this.loadedFileName) return;
+    if (!this.lastPublishedUrl || !this.loadedFileName || !this.canControl()) return;
     this.publish?.({
       type: 'sa-file-sync',
       url: this.lastPublishedUrl,
@@ -530,7 +556,11 @@ export class SonicAnalyzerController {
     this.sourceSelect.appendChild(opt);
   }
   public removeParticipantSource(id: string): void { this.sourceSelect?.querySelector(`option[value="participant:${id}"]`)?.remove(); }
-  public async loadFileFromUrl(url: string, name: string): Promise<void> {
+  public async loadFileFromUrl(
+    url: string,
+    name: string,
+    options: { suppressRoomPublish?: boolean } = {},
+  ): Promise<void> {
     this.setStatus(`loading ${name}…`);
     try {
       const fetchUrl = url.startsWith('http') && !url.startsWith(location.origin)
@@ -551,7 +581,7 @@ export class SonicAnalyzerController {
       if (this.active) { this.sourceSelect.value = 'file'; this.activeSource = 'file'; void this.reconnectSource(); }
       // Publish file sync immediately with whatever metadata is available so students
       // can load the waveform; computeVizFeatures will re-publish with full key/bpm.
-      this.publishLastFileSync();
+      if (!options.suppressRoomPublish) this.publishLastFileSync();
       if (this.essentia) void this.computeVizFeatures();
       else this.setStatus(`file ready · ${name}`);
     } catch (e: any) {
@@ -560,9 +590,10 @@ export class SonicAnalyzerController {
   }
 
   public dispose(): void {
-    this.deactivate();
+    this.deactivate(true);
     window.removeEventListener('sv:request-state', this.onSVRequest);
     window.removeEventListener('musiki:sa:load-url', this.onLoadUrl);
+    window.removeEventListener('musiki:sa:load-file', this.onLoadFile);
   }
 }
 

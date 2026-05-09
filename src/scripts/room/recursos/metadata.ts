@@ -6,6 +6,7 @@ const EXT_TYPE_MAP: Record<string, ResourceType> = {
   pdf: 'pdf', jpg: 'img', jpeg: 'img', png: 'img', gif: 'img', webp: 'img', svg: 'img',
   md: 'md', markdown: 'md', tex: 'tex', ly: 'ly',
   mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', flac: 'audio',
+  mov: 'audio', mp4: 'audio', webm: 'audio',
 };
 
 export function typeFromExt(ext: string): ResourceType {

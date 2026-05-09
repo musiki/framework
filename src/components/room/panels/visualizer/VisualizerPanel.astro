@@ -1,0 +1,35 @@
+---
+import './visualizer.css';
+---
+<div class="musiki-pod" data-pod="visualizer" data-pod-title="VS">
+  <div class="vs-pod" data-vs-dropzone data-kind="empty">
+    <div class="vs-drop-overlay" data-vs-drop-overlay aria-hidden="true">
+      <span class="vs-drop-label">drop pdf / image</span>
+      <span class="vs-drop-hint">.pdf · .png · .jpg · .gif · .webp</span>
+    </div>
+
+    <div class="musiki-pod-toolbar vs-toolbar">
+      <span class="vs-label">vS</span>
+      <span class="vs-status" data-vs-status>waiting for document…</span>
+      <button type="button" class="musiki-pod-btn vs-page-btn" data-vs-prev title="Previous page">‹</button>
+      <input class="musiki-pod-input vs-page-input" data-vs-page value="1" inputmode="numeric" aria-label="Page" />
+      <button type="button" class="musiki-pod-btn vs-page-btn" data-vs-next title="Next page">›</button>
+      <div class="vs-zoom-group">
+        <button type="button" class="musiki-pod-btn vs-fit-btn" data-vs-zoom="fit" data-active="true" title="Fit page">FIT</button>
+        <button type="button" class="musiki-pod-btn vs-fit-btn" data-vs-zoom="width" data-active="false" title="Fit width">W</button>
+        <button type="button" class="musiki-pod-btn vs-fit-btn" data-vs-zoom="actual" data-active="false" title="Actual size">1:1</button>
+        <button type="button" class="musiki-pod-btn vs-page-btn" data-vs-zoom="out" title="Zoom out">-</button>
+        <button type="button" class="musiki-pod-btn vs-page-btn" data-vs-zoom="in" title="Zoom in">+</button>
+      </div>
+      <button type="button" class="musiki-pod-btn vs-full-btn" data-vs-full title="Temporary full window">⛶</button>
+    </div>
+
+    <div class="vs-stage" data-vs-stage>
+      <iframe class="vs-frame" data-vs-frame title="Visual document" hidden loading="lazy"></iframe>
+      <img class="vs-image" data-vs-image alt="" hidden />
+      <div class="vs-empty" data-vs-empty>
+        <span>PDF / IMAGE</span>
+      </div>
+    </div>
+  </div>
+</div>

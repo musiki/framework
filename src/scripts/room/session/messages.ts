@@ -242,6 +242,15 @@ export type ConferenceMessage =
       outPoint: number;
       enabled: boolean;
     }
+  | {
+      type: 'vs-state';
+      url: string | null;
+      name: string;
+      kind: 'pdf' | 'img' | null;
+      page: number;
+      zoomMode: 'fit' | 'width' | 'actual' | 'custom';
+      zoom: number;
+    }
   | { type: 'recursos:sync'; items: any[]; allowStudents: boolean }
   | { type: 'recursos:allow-students'; allow: boolean };
 
@@ -728,6 +737,25 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         inPoint:  Math.max(0, Number((parsed as { inPoint?: number }).inPoint)  || 0),
         outPoint: Math.max(0, Number((parsed as { outPoint?: number }).outPoint) || 0),
         enabled:  Boolean((parsed as { enabled?: boolean }).enabled),
+      };
+    }
+
+    if (parsed.type === 'vs-state') {
+      const url = normalizeText((parsed as { url?: string | null }).url);
+      const rawKind = normalizeText((parsed as { kind?: string | null }).kind);
+      const rawZoomMode = normalizeText((parsed as { zoomMode?: string }).zoomMode);
+      const zoomMode =
+        rawZoomMode === 'width' || rawZoomMode === 'actual' || rawZoomMode === 'custom'
+          ? rawZoomMode
+          : 'fit';
+      return {
+        type: 'vs-state',
+        url: url || null,
+        name: normalizeText((parsed as { name?: string }).name) || 'document',
+        kind: rawKind === 'pdf' || rawKind === 'img' ? rawKind : null,
+        page: Math.max(1, Math.round(Number((parsed as { page?: number }).page) || 1)),
+        zoomMode,
+        zoom: Math.min(400, Math.max(25, Math.round(Number((parsed as { zoom?: number }).zoom) || 100))),
       };
     }
 

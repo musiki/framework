@@ -59,6 +59,7 @@ export class RecursosController {
   private ctxMoveBtn!: HTMLButtonElement;
   private ctxDeleteBtn!: HTMLButtonElement;
   private ctxSendToSaBtn!: HTMLButtonElement;
+  private ctxSendToVsBtn!: HTMLButtonElement;
   private sessionCtxEl!: HTMLElement;
   private sessionCtxNewBtn!: HTMLButtonElement;
   private sessionCtxListBtn!: HTMLButtonElement;
@@ -93,6 +94,7 @@ export class RecursosController {
     this.ctxMoveBtn         = q('[data-re-ctx-move]');
     this.ctxDeleteBtn       = q('[data-re-ctx-delete]');
     this.ctxSendToSaBtn     = q('[data-re-ctx-send-to-sa]');
+    this.ctxSendToVsBtn     = q('[data-re-ctx-send-to-vs]');
     this.sessionCtxEl       = q('[data-re-session-ctx]');
     this.sessionCtxNewBtn   = q('[data-re-sctx-new]');
     this.sessionCtxListBtn  = q('[data-re-sctx-list]');
@@ -191,6 +193,10 @@ export class RecursosController {
       const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail;
       void this.addSaFile(url, name);
     });
+    window.addEventListener('musiki:recursos:visual-uploaded', (e: Event) => {
+      const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail;
+      void this.addVisualFile(url, name);
+    });
     window.addEventListener('musiki:recursos:chat-url', (e: Event) => {
       const { url } = (e as CustomEvent<{ url: string }>).detail;
       this.addCompartido(url, quickNameFromUrl(url), 'chat');
@@ -213,6 +219,7 @@ export class RecursosController {
     this.ctxDeleteBtn.addEventListener('click', () => this.deleteCtxTarget());
     this.ctxMoveBtn.addEventListener('click', () => this.showMoveSubmenu());
     this.ctxSendToSaBtn.addEventListener('click', (e) => { e.stopPropagation(); this.sendCtxItemToSa(); });
+    this.ctxSendToVsBtn.addEventListener('click', (e) => { e.stopPropagation(); this.sendCtxItemToVs(); });
 
     this.sessionCtxNewBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.newSession(); });
     this.sessionCtxListBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.showSessionsList(); });
@@ -246,7 +253,7 @@ export class RecursosController {
       this.longPressTimer = setTimeout(() => {
         const item = this.items.find(i => i.id === (el as HTMLElement).dataset.itemId!);
         if (item) this.openItemCtxMenu(item, { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY } as MouseEvent);
-      }, 500);
+      }, 2000);
     }, { passive: true });
     this.contentEl.addEventListener('touchend', () => {
       if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
@@ -254,6 +261,8 @@ export class RecursosController {
   }
 
   private canEdit() { return this.isTeacher || this.allowStudents; }
+  private canSendSonic() { return this.isTeacher || this.allowStudents; }
+  private canSendVisual() { return this.isTeacher || this.allowStudents; }
 
   // ── Header ──────────────────────────────────────────────────────────────────
 
@@ -333,6 +342,18 @@ export class RecursosController {
     this.items = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
       type: typeFromUrl(url), folder: 'media', source: 'sa',
+      createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
+      sessionId: sid || null,
+    });
+    this.render(); this.scheduleAutosave(); this.broadcastSync();
+  }
+
+  private async addVisualFile(url: string, name: string): Promise<void> {
+    if (!url) return;
+    const sid = await this.ensureSession();
+    this.items = addItem(this.items, {
+      id: crypto.randomUUID(), url, name,
+      type: typeFromUrl(url), folder: 'media', source: 'vs',
       createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       sessionId: sid || null,
     });
@@ -421,9 +442,14 @@ export class RecursosController {
     const item = this.ctxTargetItem;
     this.closeCtxMenu();
     if (!item) return;
-    window.dispatchEvent(new CustomEvent('musiki:sa:load-url', {
-      detail: { url: item.url, name: item.name },
-    }));
+    this.requestSonicLoad(item);
+  }
+
+  private sendCtxItemToVs(): void {
+    const item = this.ctxTargetItem;
+    this.closeCtxMenu();
+    if (!item) return;
+    this.requestVisualLoad(item);
   }
 
   // ── Upload ───────────────────────────────────────────────────────────────────
@@ -476,12 +502,18 @@ export class RecursosController {
     this.publish({ type: 'recursos:sync', items: this.items, allowStudents: this.allowStudents });
   }
 
+  public publishCurrentState(): void {
+    this.broadcastSync();
+  }
+
   applyRemoteMessage(msg: RecursosMessage) {
     if (msg.type === 'recursos:sync') {
       this.items = msg.items; this.allowStudents = msg.allowStudents;
       this.updateCollabBtn(); this.render();
+      this.emitAllowStudentsChanged();
     } else if (msg.type === 'recursos:allow-students') {
       this.allowStudents = msg.allow; this.updateCollabBtn();
+      this.emitAllowStudentsChanged();
     }
   }
 
@@ -519,7 +551,17 @@ export class RecursosController {
     renderFiletree(this.contentEl, this.items, this.collapsedFolders, this.emptyFolders, {
       headerEl: this.buildHeaderEl(),
       canEdit: this.canEdit(),
-      onItemClick: (item) => window.open(item.url, '_blank', 'noopener'),
+      onItemClick: (item) => {
+        if (this.isVisualMedia(item) && this.canSendVisual()) {
+          this.requestVisualLoad(item);
+          return;
+        }
+        if (this.isSonicMedia(item) && this.canSendSonic()) {
+          this.requestSonicLoad(item);
+          return;
+        }
+        window.open(item.url, '_blank', 'noopener');
+      },
       onItemContextMenu: (item, e) => this.openItemCtxMenu(item, e),
       onFolderContextMenu: (folder, e) => this.openFolderCtxMenu(folder, e),
       onFolderToggle: (folder) => this.toggleFolder(folder),
@@ -587,11 +629,16 @@ export class RecursosController {
   // ── Context menu ──────────────────────────────────────────────────────────────
 
   private openItemCtxMenu(item: ResourceItem, e: MouseEvent) {
-    if (!this.canEdit()) return;
+    const canEdit = this.canEdit();
+    const canSendToSa = this.isSonicMedia(item) && this.canSendSonic();
+    const canSendToVs = this.isVisualMedia(item) && this.canSendVisual();
+    if (!canEdit && !canSendToSa && !canSendToVs) return;
     this.ctxTargetItem = item; this.ctxTargetFolder = null;
-    this.ctxMoveBtn.style.display = '';
-    const canSendToSa = item.folder === 'media' || item.type === 'audio';
+    this.ctxMoveBtn.style.display = canEdit ? '' : 'none';
+    this.ctxRenameBtn.style.display = canEdit ? '' : 'none';
+    this.ctxDeleteBtn.style.display = canEdit ? '' : 'none';
     this.ctxSendToSaBtn.hidden = !canSendToSa;
+    this.ctxSendToVsBtn.hidden = !canSendToVs;
     this.ctxMenuEl.removeAttribute('hidden');
     this.ctxMenuEl.style.left = `${e.clientX}px`;
     this.ctxMenuEl.style.top  = `${e.clientY}px`;
@@ -601,9 +648,33 @@ export class RecursosController {
     if (!this.canEdit() || folder === 'compartidos' || folder === 'media') return;
     this.ctxTargetFolder = folder; this.ctxTargetItem = null;
     this.ctxMoveBtn.style.display = 'none';
+    this.ctxRenameBtn.style.display = '';
+    this.ctxDeleteBtn.style.display = '';
+    this.ctxSendToSaBtn.hidden = true;
+    this.ctxSendToVsBtn.hidden = true;
     this.ctxMenuEl.removeAttribute('hidden');
     this.ctxMenuEl.style.left = `${e.clientX}px`;
     this.ctxMenuEl.style.top  = `${e.clientY}px`;
+  }
+
+  private isSonicMedia(item: ResourceItem): boolean {
+    return item.type === 'audio';
+  }
+
+  private isVisualMedia(item: ResourceItem): boolean {
+    return item.type === 'pdf' || item.type === 'img';
+  }
+
+  private requestSonicLoad(item: ResourceItem): void {
+    window.dispatchEvent(new CustomEvent('musiki:sonic:load-url', {
+      detail: { url: item.url, name: item.name, source: 'recursos' },
+    }));
+  }
+
+  private requestVisualLoad(item: ResourceItem): void {
+    window.dispatchEvent(new CustomEvent('musiki:visual:load-url', {
+      detail: { url: item.url, name: item.name, source: 'recursos' },
+    }));
   }
 
   private closeCtxMenu() {
@@ -683,7 +754,15 @@ export class RecursosController {
   private toggleAllowStudents() {
     if (!this.isTeacher) return;
     this.allowStudents = !this.allowStudents;
-    this.updateCollabBtn(); this.broadcastSync();
+    this.updateCollabBtn();
+    this.emitAllowStudentsChanged();
+    this.broadcastSync();
+  }
+
+  private emitAllowStudentsChanged(): void {
+    window.dispatchEvent(new CustomEvent('musiki:recursos:allow-students-changed', {
+      detail: { allow: this.allowStudents },
+    }));
   }
 
   private updateCollabBtn() {

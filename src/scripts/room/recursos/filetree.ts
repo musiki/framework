@@ -6,7 +6,7 @@ export type ResourceItem = {
   name: string;
   type: ResourceType | 'other';
   folder: string;
-  source: 'upload' | 'chat' | 'external-media' | 'sa' | 'sv' | 'paste';
+  source: 'upload' | 'chat' | 'external-media' | 'sa' | 'sv' | 'vs' | 'paste';
   createdBy: string;
   sortOrder: number;
   createdAt: string;

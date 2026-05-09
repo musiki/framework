@@ -25,7 +25,7 @@ import './sonic-analyzer.css';
 
     <div class="sa-drop-overlay" data-sa-drop-overlay aria-hidden="true">
       <span class="sa-drop-label">drop audio file</span>
-      <span class="sa-drop-hint">.wav · .ogg · .mp3</span>
+      <span class="sa-drop-hint">.wav · .ogg · .mp3 · .mov · .mp4</span>
     </div>
 
     <div class="sa-content" data-sa-content>
@@ -51,57 +51,23 @@ import './sonic-analyzer.css';
     </div>
 
     <!-- Tech info modal -->
-    <div class="sa-info-modal" data-sa-info-modal hidden aria-modal="true">
+    <div class="sa-info-modal" data-sa-info-modal data-lang="es" hidden aria-modal="true">
       <div class="sa-info-inner">
-        <button class="sa-info-close" data-sa-info-close aria-label="Cerrar">✕</button>
+        <button class="sa-info-close" data-sa-info-close aria-label="Cerrar">X</button>
         <div class="sa-info-section">
-          <div class="sa-info-heading">sA · sV · análisis sónico</div>
-          <div class="sa-info-sub">Essentia.js (WASM) · WebAudio API · OffscreenCanvas · Web Workers</div>
-          <p class="sa-info-p">Análisis acústico de grado IRCAM ejecutado 100% en el cliente — sin servidor de cómputo. Primera integración de este nivel de análisis en un LMS musical colectivo en tiempo real.</p>
-        </div>
-
-        <div class="sa-info-section">
-          <div class="sa-info-heading">descriptores sA</div>
-          <div class="sa-info-table">
-            <div class="sa-info-row"><span class="sa-info-key">pitch</span><span class="sa-info-val">YIN f₀ — diferencia cuadrática normalizada (De Cheveigné &amp; Kawahara, 2002, IRCAM/ATR)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">dBFS</span><span class="sa-info-val">RMS → 20·log₁₀ (AES17 1998)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">LUFS M/S/I</span><span class="sa-info-val">BS.1770 K-weighting, ventanas 400ms/3s/integrado con gating (ITU-R BS.1770-4 / EBU R128)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">centroide</span><span class="sa-info-val">∑(f·|X|)/∑|X| — centro de masa espectral (Grey &amp; Gordon, 1978, Stanford CCRMA)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">spread</span><span class="sa-info-val">Desviación estándar espectral (Peeters et al., 2004, IRCAM)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">skewness</span><span class="sa-info-val">Asimetría espectral — 3er momento (Peeters et al., 2004, IRCAM)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">kurtosis</span><span class="sa-info-val">Picudez espectral — 4to momento (Peeters et al., 2004, IRCAM)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">slope</span><span class="sa-info-val">Pendiente de regresión lineal espectro-vs-frecuencia (Dubnov 1996, Ben-Gurion U.)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">flux</span><span class="sa-info-val">Half-wave rectified spectral flux — detección de ataques (Scheirer &amp; Slaney, 1997, MIT)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">T1/T2/T3</span><span class="sa-info-val">Modelo tímbrico RGB: fundamental / 2°-4° armónicos / resto (Pollard &amp; Jansson, 1982, KTH)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">HNR</span><span class="sa-info-val">Energía armónica vs ruido residual (Yumoto, Gould &amp; Baer, 1982, U. Wisconsin)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">ZCR</span><span class="sa-info-val">Cruces por cero — voiced/unvoiced (Rabiner &amp; Schafer, 1978, Bell Labs)</span></div>
+          <div class="sa-info-headrow">
+            <div>
+              <div class="sa-info-heading" data-sa-info-title>sA · sV · análisis sónico</div>
+              <div class="sa-info-sub" data-sa-info-sub>Essentia.js (WASM) · WebAudio API · OffscreenCanvas · Web Workers</div>
+            </div>
+            <div class="sa-info-lang-toggle" role="group" aria-label="Idioma / Language">
+              <button type="button" data-sa-info-lang="es" aria-pressed="true">ES</button>
+              <button type="button" data-sa-info-lang="en" aria-pressed="false">EN</button>
+            </div>
           </div>
+          <p class="sa-info-p" data-sa-info-intro></p>
         </div>
-
-        <div class="sa-info-section">
-          <div class="sa-info-heading">capas sV</div>
-          <div class="sa-info-table">
-            <div class="sa-info-row"><span class="sa-info-key">SPEC</span><span class="sa-info-val">|X(f,t)|² STFT — intensidad espectral por ventana (Gabor, 1946; Serra, 1989, IRCAM)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">WAV</span><span class="sa-info-val">x(t) — amplitud instantánea normalizada (Shannon, 1948, Bell Labs)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">ENR</span><span class="sa-info-val">√(1/N·∑x²) — RMS frame por frame (Parseval, 1799)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">BRT</span><span class="sa-info-val">Centro de masa espectral — brillo (Grey &amp; Gordon, 1978, CCRMA)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">MOT</span><span class="sa-info-val">Cambio de energía espectral entre frames (Scheirer &amp; Slaney, 1997, MIT)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">GRV</span><span class="sa-info-val">Centroide ponderado por energía acumulada — "peso" armónico (Lerch, 2012, TU Berlin)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">TEN</span><span class="sa-info-val">Spectral flatness: 0=tonal, 1=ruido blanco (Johnston, 1988, AT&amp;T Bell Labs)</span></div>
-            <div class="sa-info-row"><span class="sa-info-key">SEG</span><span class="sa-info-val">Boundary detection por cambios de timbre — segmentación automática (Foote, 1999, FX Palo Alto)</span></div>
-          </div>
-        </div>
-
-        <div class="sa-info-section">
-          <div class="sa-info-heading">estigmergia</div>
-          <p class="sa-info-p">Principio biológico de coordinación indirecta a través del entorno (Grassé, 1959). En <em>musiki</em>: el análisis sónico compartido crea un "campo perceptual" colectivo — cada participante modifica el entorno acústico común, y esas modificaciones guían la percepción y acción del resto, sin coordinación explícita. El análisis en tiempo real de parámetros como centroide, flux y BPM es la traza estigmérgica del material sonoro en el espacio cognitivo compartido.</p>
-        </div>
-
-        <div class="sa-info-section sa-info-refs">
-          <div class="sa-info-heading">referencias</div>
-          <div class="sa-info-ref">Bogdanov, D. et al. (2013). ESSENTIA: An open-source library for sound and music analysis. <em>ACM Multimedia</em>, 855–858.</div>
-          <div class="sa-info-ref">Grassé, P.P. (1959). La théorie de la Stigmergie: essai d'interprétation du comportement des Termites constructeurs. <em>Insectes Sociaux</em>, 6(1), 41–80.</div>
-        </div>
+        <div data-sa-info-content></div>
       </div>
     </div>
 
@@ -171,13 +137,550 @@ document.querySelectorAll<HTMLElement>('.sa-panel--text').forEach(panel => {
   });
 });
 
-// Info modal
-document.querySelectorAll<HTMLElement>('[data-sa-info]').forEach(btn => {
-  const pod = btn.closest('.sa-pod')!;
-  const modal = pod.querySelector<HTMLElement>('[data-sa-info-modal]')!;
-  const closeBtn = modal.querySelector<HTMLElement>('[data-sa-info-close]')!;
-  btn.addEventListener('click', () => { modal.hidden = false; });
-  closeBtn.addEventListener('click', () => { modal.hidden = true; });
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
+// Info modal — delegated because pods are created from dockview templates.
+type SaInfoLang = 'es' | 'en';
+type SaInfoStep = { label: string; body: string };
+type SaInfoDescriptor = { title: string; steps: SaInfoStep[] };
+type SaInfoSection = { heading: string; items: SaInfoDescriptor[] };
+type SaInfoContent = {
+  title: string;
+  sub: string;
+  intro: string;
+  sections: SaInfoSection[];
+  refsHeading: string;
+  refs: string[];
+};
+
+const SA_INFO_CONTENT: Record<SaInfoLang, SaInfoContent> = {
+  es: {
+    title: 'sA · sV · análisis sónico',
+    sub: 'Essentia.js (WASM) · WebAudio API · OffscreenCanvas · Web Workers',
+    intro: 'Análisis acústico ejecutado 100% en el cliente. sA extrae descriptores; sV los recompone como una superficie temporal común para investigar forma, energía, gesto, timbre, edición y correlación perceptiva. La visualización no sustituye la escucha: crea un plano operativo donde oído, medición, memoria y decisión pueden trabajar sobre la misma traza.',
+    refsHeading: 'referencias',
+    sections: [
+      {
+        heading: 'descriptores sA',
+        items: [
+          {
+            title: 'Pitch · f0 con YIN',
+            steps: [
+              { label: '1. Síntesis', body: 'Pitch estima la frecuencia fundamental, el periodo dominante que permite interpretar un sonido como nota, voz estable o centro tonal. YIN reduce errores de octava al comparar la señal consigo misma retrasada y buscar mínimos de diferencia normalizada, no simples máximos de correlación.' },
+              { label: '2. Ejemplo', body: 'En naturaleza puede seguir inflexiones de voz, canto de aves o vibraciones mecánicas periódicas. En producción musical sirve para detectar vibrato, glissandi, dobles desafinados, tomas que necesitan pitch correction y momentos donde una textura cruza del ruido hacia una línea melódica.' },
+              { label: '3. Datos duros', body: 'YIN calcula <code>d(&tau;) = &sum;<sub>j</sub>(x<sub>j</sub> - x<sub>j+&tau;</sub>)<sup>2</sup></code> y luego la diferencia media acumulada <code>d\'(&tau;) = d(&tau;) / ((1/&tau;) &sum;<sub>j=1..&tau;</sub>d(j))</code>. La estimación final usa <code>f0 = sampleRate / &tau;</code> sobre el primer mínimo confiable.' },
+            ],
+          },
+          {
+            title: 'dBFS · energía digital instantánea',
+            steps: [
+              { label: '1. Síntesis', body: 'dBFS mide amplitud relativa al máximo digital: 0 dBFS es el techo antes del clipping. Describe margen y ocupación de headroom, no sonoridad perceptiva completa.' },
+              { label: '2. Ejemplo', body: 'Funciona como control de ganancia en grabación, edición, mezcla y mastering. Un golpe de caja puede tocar -1 dBFS y sentirse menos fuerte que un pad limitado a -8 dBFS porque duración, espectro y densidad cambian la percepción.' },
+              { label: '3. Datos duros', body: 'Para una ventana de <code>N</code> muestras, <code>rms = sqrt((1/N) &sum; x[n]<sup>2</sup>)</code> y <code>dBFS = 20 log10(rms / ref)</code>, con <code>ref = 1.0</code> en audio flotante normalizado. El pico digital usa <code>20 log10(max(|x[n]|))</code>.' },
+            ],
+          },
+          {
+            title: 'LUFS M/S/I · loudness perceptivo',
+            steps: [
+              { label: '1. Síntesis', body: 'LUFS aproxima sonoridad percibida mediante ponderación K y ventanas temporales. Momentary observa microdinámica, Short-term estabiliza frases y Integrated resume el programa con compuertas que ignoran material demasiado bajo.' },
+              { label: '2. Ejemplo', body: 'En música publicada, streaming, broadcast, podcast o cine, LUFS explica por qué dos archivos con picos similares pueden sentirse muy distintos. Es central para comparar masters, detectar compresión excesiva y evitar saltos violentos de nivel entre piezas.' },
+              { label: '3. Datos duros', body: 'ITU-R BS.1770 usa filtrado K y suma multicanal ponderada: <code>LKFS = -0.691 + 10 log10(&sum; G<sub>i</sub> z<sub>i</sub>)</code>. Momentary suele usar 400 ms; Short-term 3 s; Integrated aplica gating absoluto y relativo sobre bloques solapados.' },
+            ],
+          },
+          {
+            title: 'Centroide espectral · brillo',
+            steps: [
+              { label: '1. Síntesis', body: 'El centroide espectral es el centro de masa de la energía en frecuencia. Cuando sube, el sonido tiende a percibirse más brillante, incisivo o frontal; cuando baja, más oscuro, opaco o grave.' },
+              { label: '2. Ejemplo', body: 'Distingue agua, viento, hojas secas o madera por distribución de agudos. En producción ayuda a ecualizar voces opacas, platos agresivos, guitarras ásperas, aperturas de filtro, ataques de piano o ruido de púa.' },
+              { label: '3. Datos duros', body: 'Con magnitudes espectrales <code>|X(k)|</code> y frecuencias <code>f<sub>k</sub></code>, <code>C = (&sum; f<sub>k</sub>|X(k)|) / (&sum; |X(k)|)</code>. Puede calcularse por frame STFT, promediarse o suavizarse para obtener una curva temporal de brillo.' },
+            ],
+          },
+          {
+            title: 'Spread espectral · ancho del timbre',
+            steps: [
+              { label: '1. Síntesis', body: 'Spread mide la dispersión de energía alrededor del centroide. Dos sonidos pueden tener el mismo brillo medio y diferir radicalmente: uno compacto y tonal, otro ancho, ruidoso o saturado.' },
+              { label: '2. Ejemplo', body: 'Una flauta estable concentra energía; un acorde distorsionado o una textura granular la reparte. En mezcla ayuda a detectar capas que ocupan demasiado espectro y a comparar pads, coros, percusión y masas híbridas tono-ruido.' },
+              { label: '3. Datos duros', body: 'Es la desviación estándar espectral: <code>spread = sqrt((&sum;(f<sub>k</sub>-C)<sup>2</sup>|X(k)|) / (&sum;|X(k)|))</code>. Un spread alto implica varianza espectral alta respecto del centroide, no necesariamente más volumen.' },
+            ],
+          },
+          {
+            title: 'Skewness espectral · asimetría de la masa',
+            steps: [
+              { label: '1. Síntesis', body: 'Skewness describe la asimetría de la distribución espectral. Permite leer si la masa está sesgada hacia graves con cola aguda o hacia frecuencias altas con otra forma de concentración.' },
+              { label: '2. Ejemplo', body: 'En producción ayuda a identificar bajos con armónicos útiles, voces nasales, hi-hats excesivos, resonancias desplazadas o instrumentos desbalanceados. También diferencia un bombo, una cuerda raspada y una consonante fricativa por geometría espectral.' },
+              { label: '3. Datos duros', body: 'Como momento central normalizado: <code>skew = &mu;<sub>3</sub> / &sigma;<sup>3</sup></code>, donde <code>&mu;<sub>3</sub> = E[(f-C)<sup>3</sup>]</code> y <code>&sigma;</code> es el spread. Signo y magnitud dependen de la distribución ponderada por magnitud o potencia.' },
+            ],
+          },
+          {
+            title: 'Kurtosis espectral · picos, colas y aspereza',
+            steps: [
+              { label: '1. Síntesis', body: 'Kurtosis mide cuán puntiaguda o plana es la distribución espectral respecto de una forma de referencia. Un espectro dominado por parciales nítidos suele diferir de un ruido ancho o una caja con bordonera.' },
+              { label: '2. Ejemplo', body: 'Sirve para localizar resonancias, silbidos, picos molestos, de-essing potencial, EQ quirúrgica o zonas donde saturación y fricción destruyen parciales definidos. En sound design ayuda a controlar la transición entre tono y ruido.' },
+              { label: '3. Datos duros', body: '<code>kurt = &mu;<sub>4</sub> / &sigma;<sup>4</sup></code>, con <code>&mu;<sub>4</sub> = E[(f-C)<sup>4</sup>]</code>. Algunas implementaciones reportan exceso de kurtosis restando 3; aquí conviene leerla comparativamente entre regiones y no como categoría absoluta.' },
+            ],
+          },
+          {
+            title: 'Slope espectral · caída de energía',
+            steps: [
+              { label: '1. Síntesis', body: 'Slope aproxima la pendiente global del espectro: cuán rápido cae o sube la energía a través de la frecuencia. Resume balance tímbrico con una dimensión más estructural que un control de agudos.' },
+              { label: '2. Ejemplo', body: 'Una pendiente muy negativa puede sentirse cálida, velada o lejana; una menos negativa, presente o áspera. En estudio informa cercanía de micrófono, oscuridad de toma, edad perceptiva de archivo y barridos de filtro.' },
+              { label: '3. Datos duros', body: 'Se obtiene por regresión lineal sobre pares <code>(f<sub>k</sub>, |X(k)|)</code> o sobre magnitud en dB: <code>slope = cov(f, A) / var(f)</code>. El resultado depende de escala lineal/logarítmica y del rango de bins elegido.' },
+            ],
+          },
+          {
+            title: 'Flux espectral · ataques y movimiento',
+            steps: [
+              { label: '1. Síntesis', body: 'Flux mide cambio espectral entre frames consecutivos. Es sensible a ataques, articulaciones, cortes y transformaciones internas, especialmente cuando aparece nueva energía.' },
+              { label: '2. Ejemplo', body: 'Revela golpes de piano, consonantes, pizzicati, kicks, glitches, cortes de edición, cambios de textura y material útil para slicing o beat making. En naturaleza distingue lluvia continua de gotas aisladas o fuego estable de chasquidos.' },
+              { label: '3. Datos duros', body: 'Una forma común usa rectificación positiva: <code>flux(t)=&sum;<sub>k</sub> max(0, |X<sub>t</sub>(k)|-|X<sub>t-1</sub>(k)|)<sup>2</sup></code>. Normalizar espectros antes del cálculo separa cambio de forma espectral y cambio de volumen global.' },
+            ],
+          },
+          {
+            title: 'T1/T2/T3 · tristimulus y color armónico',
+            steps: [
+              { label: '1. Síntesis', body: 'Tristimulus reparte energía armónica en fundamental, primeros armónicos y armónicos superiores. Condensa el color tonal en tres zonas funcionales: base, identidad y brillo/riqueza.' },
+              { label: '2. Ejemplo', body: 'T1 alto puede sonar puro o hueco; T2 aporta cuerpo instrumental; T3 agrega filo, aire o complejidad. Es útil al comparar bajos, cuerdas, metales, voces, síntesis aditiva y orquestación tímbrica.' },
+              { label: '3. Datos duros', body: 'Con amplitudes armónicas <code>A<sub>h</sub></code>: <code>T1=A1/&sum;A<sub>h</sub></code>, <code>T2=(A2+A3+A4)/&sum;A<sub>h</sub></code>, <code>T3=(&sum;<sub>h&gt;4</sub>A<sub>h</sub>)/&sum;A<sub>h</sub></code>. Requiere estimación de f0 y seguimiento armónico razonable.' },
+            ],
+          },
+          {
+            title: 'HNR · armónico contra ruido',
+            steps: [
+              { label: '1. Síntesis', body: 'HNR compara energía periódica con energía aperiódica. Un valor alto sugiere periodicidad estable; uno bajo indica soplo, fricción, raspado, distorsión, turbulencia o ruido de fondo.' },
+              { label: '2. Ejemplo', body: 'En voz separa canto claro, susurro, ronquera y aire. En producción evalúa tomas vocales, saturación, respiración, ruido de sala, textura de instrumentos acústicos y el continuo entre nota definida y materia ruidosa.' },
+              { label: '3. Datos duros', body: 'Puede expresarse como <code>HNR = 10 log10(E<sub>harm</sub>/E<sub>noise</sub>)</code>. En métodos autocorrelativos, una aproximación usa el pico normalizado <code>r</code>: <code>HNR = 10 log10(r/(1-r))</code>, con cautela cuando la señal no es estacionaria.' },
+            ],
+          },
+          {
+            title: 'ZCR · cruces por cero',
+            steps: [
+              { label: '1. Síntesis', body: 'ZCR cuenta cambios de signo en la forma de onda. Es simple, pero informa velocidad interna: señales agudas o ruidosas cruzan cero más veces que graves suaves o tonos lentos.' },
+              { label: '2. Ejemplo', body: 'Detecta fricativas, hi-hats, clics, glitches, ruido de cinta, material percusivo brillante o diferencias entre subgrave y ruido fino. Dos sonidos con igual RMS pueden tener ZCR muy diferente y sentirse completamente distintos.' },
+              { label: '3. Datos duros', body: '<code>ZCR = (1/(2N)) &sum;<sub>n=1..N</sub> |sgn(x[n]) - sgn(x[n-1])|</code>. Es sensible a ruido alrededor de cero, DC offset y filtrado; suele estabilizarse usando ventanas cortas y umbrales mínimos.' },
+            ],
+          },
+        ],
+      },
+      {
+        heading: 'capas sV',
+        items: [
+          {
+            title: 'SPEC · espectrograma',
+            steps: [
+              { label: '1. Síntesis', body: 'SPEC proyecta energía por frecuencia y tiempo. Es una cartografía tiempo-frecuencia: eventos horizontales, bandas, ataques, colas, resonancias y ruido aparecen como formas inspeccionables.' },
+              { label: '2. Ejemplo', body: 'En producción muestra sibilancia, subgrave, resonancias, cortes, reverb, hum, huecos de mezcla y transitorios. Permite comparar una voz, un tambor, un dron o una textura granular sin reducirlos a notación de altura.' },
+              { label: '3. Datos duros', body: 'Se basa en STFT: <code>X(m,k)=&sum;<sub>n</sub>x[n]w[n-mH]e<sup>-j2&pi;kn/N</sup></code>. La imagen suele mostrar <code>20 log10(|X(m,k)|)</code>; tamaño de ventana y hop controlan resolución temporal/frecuencial.' },
+            ],
+          },
+          {
+            title: 'WAV · forma de onda',
+            steps: [
+              { label: '1. Síntesis', body: 'WAV muestra amplitud en el tiempo. Es la vista más directa para editar comienzos, silencios, transientes, fades, clipping visible y estructura macrodinámica.' },
+              { label: '2. Ejemplo', body: 'En estudio se usa para limpiar tomas, alinear batería, cortar voz, sincronizar material, detectar golpes desplazados y comparar envolventes. En naturaleza permite observar pulsos, respiración, pasos, olas o impactos.' },
+              { label: '3. Datos duros', body: 'La curva es <code>x[n]</code> o una envolvente derivada por bloques: <code>peak=max(|x[n]|)</code> y <code>rms=sqrt(mean(x[n]<sup>2</sup>))</code>. La forma de onda no codifica timbre completo: muchos espectros pueden compartir amplitudes parecidas.' },
+            ],
+          },
+          {
+            title: 'ENR · energía',
+            steps: [
+              { label: '1. Síntesis', body: 'ENR resume energía frame por frame. Permite leer dinámica, respiración formal, acumulación, reposo, densidad de eventos y cambios de intensidad sin mirar cada muestra.' },
+              { label: '2. Ejemplo', body: 'En un track revela builds, drops, breaks, acentos y zonas de descanso. En producción orienta compresión, automatización, edición de silencios, balance de secciones y comparación entre intención dinámica y resultado medido.' },
+              { label: '3. Datos duros', body: 'Una energía de frame puede ser <code>E(t)=&sum;<sub>n=0..N-1</sub>x<sub>t</sub>[n]<sup>2</sup></code> o <code>RMS(t)=sqrt(E(t)/N)</code>. Suavizado exponencial o ventanas solapadas evitan que picos aislados dominen la lectura.' },
+            ],
+          },
+          {
+            title: 'BRT · brillo temporal',
+            steps: [
+              { label: '1. Síntesis', body: 'BRT traza el centroide en el tiempo. Muestra aperturas, oscurecimientos, presencia, filo y pérdida de aire como procesos continuos, no como etiquetas fijas.' },
+              { label: '2. Ejemplo', body: 'En música electrónica revela barridos de low-pass; en instrumentos acústicos muestra púa, arco, aire o posición de micrófono. En mezcla ayuda a controlar harshness, fatiga de agudos y competencia de presencia entre capas.' },
+              { label: '3. Datos duros', body: 'Es <code>C(t)=(&sum;f<sub>k</sub>|X<sub>t</sub>(k)|)/(&sum;|X<sub>t</sub>(k)|)</code> dibujado como curva. Derivadas <code>dC/dt</code> pueden resaltar gestos de apertura/cierre o automatizaciones de filtro.' },
+            ],
+          },
+          {
+            title: 'MOT · movimiento espectral',
+            steps: [
+              { label: '1. Síntesis', body: 'MOT representa cambio, no estado. Una nota sostenida puede tener mucha energía y poco movimiento; una textura granulada puede tener energía moderada y movimiento intenso.' },
+              { label: '2. Ejemplo', body: 'Localiza transientes, glitches, ediciones, sidechain evidente, variación rítmica, turbulencia y zonas donde el material se transforma. Distingue viento estable de ramas quebradas o agua continua de gotas irregulares.' },
+              { label: '3. Datos duros', body: 'Puede derivarse de flux, distancia entre vectores de características o norma de diferencia: <code>M(t)=||F(t)-F(t-1)||</code>. Si <code>F</code> combina centroid, spread, energía y flatness, MOT captura movimiento tímbrico multivariable.' },
+            ],
+          },
+          {
+            title: 'GRV · gravedad armónica',
+            steps: [
+              { label: '1. Síntesis', body: 'GRV es un descriptor derivado de Musiki: modela peso perceptivo hacia regiones densas, graves o estabilizadoras. No pretende ser una ley física, sino una lectura operacional de masa sonora.' },
+              { label: '2. Ejemplo', body: 'Ayuda a detectar cuándo un bajo domina, cuándo un arreglo pierde fundamento o cuándo un impacto cinematográfico acumula cuerpo. En diseño sonoro compara drones, risers, golpes, subcapas y texturas que sostienen o aplastan el campo auditivo.' },
+              { label: '3. Datos duros', body: 'Una formulación posible combina energía por banda con pesos inversos de frecuencia: <code>GRV(t)=(&sum;E<sub>k,t</sub> w<sub>k</sub>)/(&sum;E<sub>k,t</sub>)</code>, con <code>w<sub>k</sub>=1/log2(2+f<sub>k</sub>/f0)</code>. Se interpreta relativo a la calibración del corpus.' },
+            ],
+          },
+          {
+            title: 'TEN · tensión / flatness',
+            steps: [
+              { label: '1. Síntesis', body: 'TEN usa flatness espectral como índice de tensión tímbrica: mide qué tan parecido es un espectro a ruido frente a una organización tonal o parcial clara.' },
+              { label: '2. Ejemplo', body: 'Controla saturación, ruido de fondo, aspereza de sintetizadores, cymbals, ambientes, distorsión y capas amenazantes. Puede describir tensión sin depender de armonía tonal: fricción, aire y ruido también generan direccionalidad.' },
+              { label: '3. Datos duros', body: 'Flatness se define como relación media geométrica/media aritmética: <code>flatness = exp(mean(log(|X(k)|+&epsilon;))) / mean(|X(k)|+&epsilon;)</code>. Valores cercanos a 1 sugieren ruido blanco; valores bajos indican picos tonales.' },
+            ],
+          },
+          {
+            title: 'SEG · segmentación',
+            steps: [
+              { label: '1. Síntesis', body: 'SEG marca fronteras probables donde cambian rasgos acústicos. No interpreta forma musical completa; propone puntos de transición basados en novedad, distancia o ruptura estadística.' },
+              { label: '2. Ejemplo', body: 'Apoya navegación de archivos largos, sample digging, análisis de arreglos, detección de entradas, cortes de producción, cambios de patrón, variaciones de densidad y preparación de regiones editables.' },
+              { label: '3. Datos duros', body: 'Una estrategia clásica calcula una matriz de autosimilitud <code>S(i,j)=sim(F(i),F(j))</code> y una curva de novedad por convolución checkerboard. Los picos de <code>novelty(t)</code> sobre umbral indican candidatos de frontera.' },
+            ],
+          },
+        ],
+      },
+      {
+        heading: 'estigmergia y cognición distribuida',
+        items: [
+          {
+            title: 'Estigmergia · trazas que organizan acción',
+            steps: [
+              { label: '1. Síntesis', body: 'Estigmergia nombra coordinación indirecta por modificaciones del entorno: una acción deja una traza y esa traza reconfigura las acciones siguientes. En Musiki, archivo, descriptor, loop, cursor y visualización son marcas operativas, no adornos.' },
+              { label: '2. Ejemplo', body: 'Una región marcada por flux alto, un centroide que sube antes de un drop o una zona con HNR bajo se vuelven objetos compartibles de decisión. La conversación puede anclarse en una huella acústica verificable y volver a ella sin depender de memoria verbal.' },
+              { label: '3. Datos duros', body: 'Puede pensarse como un sistema acoplado <code>A<sub>t+1</sub> = f(A<sub>t</sub>, E<sub>t</sub>)</code> y <code>E<sub>t+1</sub> = g(E<sub>t</sub>, A<sub>t+1</sub>)</code>, donde agentes y entorno se actualizan mutuamente. Los descriptores reducen dimensionalidad de <code>x[n]</code> a vectores <code>F(t)</code> que estabilizan referencias comunes.' },
+            ],
+          },
+        ],
+      },
+    ],
+    refs: [
+      'Bogdanov, D., Wack, N., Gómez, E., Gulati, S., Herrera, P., Mayor, O., Roma, G., Salamon, J., Zapata, J. R., &amp; Serra, X. (2013). <a href="https://recercat.cat/handle/10230/35168?show=full" target="_blank" rel="noopener">ESSENTIA: An open-source library for sound and music analysis</a>. <em>ACM Multimedia 2013</em>, Barcelona, 855-858. DOI: 10.1145/2502081.2502229.',
+      'de Cheveigné, A., &amp; Kawahara, H. (2002). <a href="https://asa.scitation.org/doi/10.1121/1.1458024" target="_blank" rel="noopener">YIN, a fundamental frequency estimator for speech and music</a>. <em>Journal of the Acoustical Society of America</em>, 111(4), 1917-1930. DOI: 10.1121/1.1458024.',
+      'ITU-R. (2012/2015). <a href="https://www.itu.int/dms_pubrec/itu-r/rec/bs/R-REC-BS.1770-3-201208-S!!PDF-E.pdf" target="_blank" rel="noopener">Recommendation BS.1770: Algorithms to measure audio programme loudness and true-peak audio level</a>. International Telecommunication Union.',
+      'EBU. (2011). <a href="https://tech.ebu.ch/docs/tech/tech3343.pdf" target="_blank" rel="noopener">Tech 3343: Practical guidelines for production and implementation in accordance with EBU R 128</a>. European Broadcasting Union.',
+      'Peeters, G. (2004). <em>A large set of audio features for sound description in the CUIDADO project</em>. IRCAM Analysis/Synthesis Team technical report. Spectral centroid, spread, skewness, kurtosis, slope, flux and related descriptors.',
+      'Grey, J. M., &amp; Gordon, J. W. (1978). Perceptual effects of spectral modifications on musical timbres. <em>Journal of the Acoustical Society of America</em>, 63(5), 1493-1500.',
+      'Scheirer, E. D., &amp; Slaney, M. (1997). Construction and evaluation of a robust multifeature speech/music discriminator. <em>ICASSP 1997</em>. Multifeature temporal/spectral discrimination reference.',
+      'Pollard, H. F., &amp; Jansson, E. V. (1982). A tristimulus method for the specification of musical timbre. <em>Acustica</em>, 51, 162-171.',
+      'Yumoto, E., Gould, W. J., &amp; Baer, T. (1982). Harmonics-to-noise ratio as an index of the degree of hoarseness. <em>Journal of the Acoustical Society of America</em>, 71(6), 1544-1550.',
+      'Rabiner, L. R., &amp; Schafer, R. W. (1978). <em>Digital Processing of Speech Signals</em>. Prentice-Hall. Classical reference for zero-crossing and short-time analysis.',
+      'Foote, J. (1999). Visualizing music and audio using self-similarity. <em>ACM Multimedia 1999</em>. Foote, J. (2000). Automatic audio segmentation using a measure of audio novelty. <em>ICME 2000</em>.',
+      'Grassé, P. P. (1959). La théorie de la stigmergie: essai d\'interprétation du comportement des termites constructeurs. <em>Insectes Sociaux</em>, 6(1), 41-80.',
+      'Hutchins, E. (1995). <em>Cognition in the Wild</em>. MIT Press. Distributed cognition reference for tools, traces and coordinated action.',
+    ],
+  },
+  en: {
+    title: 'sA · sV · sonic analysis',
+    sub: 'Essentia.js (WASM) · WebAudio API · OffscreenCanvas · Web Workers',
+    intro: 'Acoustic analysis runs entirely in the client. sA extracts descriptors; sV recomposes them as a shared temporal surface for investigating form, energy, gesture, timbre, editing and perceptual correlation. The visualization does not replace listening: it creates an operational plane where ear, measurement, memory and decision can work on the same trace.',
+    refsHeading: 'references',
+    sections: [
+      {
+        heading: 'sA descriptors',
+        items: [
+          {
+            title: 'Pitch · f0 with YIN',
+            steps: [
+              { label: '1. Synopsis', body: 'Pitch estimates the fundamental frequency, the dominant period that lets a sound behave as a note, stable voice or tonal center. YIN reduces octave errors by comparing the signal with delayed versions of itself and looking for normalized difference minima.' },
+              { label: '2. Example', body: 'In nature it can trace vocal inflection, bird song or periodic mechanical vibration. In music production it detects vibrato, glissandi, out-of-tune doubles, pitch-correction candidates and points where a noisy texture becomes melodic.' },
+              { label: '3. Hard data', body: 'YIN computes <code>d(&tau;) = &sum;<sub>j</sub>(x<sub>j</sub> - x<sub>j+&tau;</sub>)<sup>2</sup></code> and the cumulative mean normalized difference <code>d\'(&tau;) = d(&tau;) / ((1/&tau;) &sum;<sub>j=1..&tau;</sub>d(j))</code>. Final pitch is <code>f0 = sampleRate / &tau;</code> at the first reliable minimum.' },
+            ],
+          },
+          {
+            title: 'dBFS · instant digital energy',
+            steps: [
+              { label: '1. Synopsis', body: 'dBFS measures amplitude relative to the digital maximum: 0 dBFS is the ceiling before clipping. It describes headroom and digital occupancy, not full perceived loudness.' },
+              { label: '2. Example', body: 'It is a gain-staging tool for recording, editing, mixing and mastering. A snare peak at -1 dBFS can feel quieter than a limited pad at -8 dBFS because duration, spectrum and density shape perception.' },
+              { label: '3. Hard data', body: 'For a window of <code>N</code> samples, <code>rms = sqrt((1/N) &sum; x[n]<sup>2</sup>)</code> and <code>dBFS = 20 log10(rms / ref)</code>, with <code>ref = 1.0</code> in normalized floating audio. Digital peak uses <code>20 log10(max(|x[n]|))</code>.' },
+            ],
+          },
+          {
+            title: 'LUFS M/S/I · perceptual loudness',
+            steps: [
+              { label: '1. Synopsis', body: 'LUFS approximates perceived loudness through K-weighting and temporal windows. Momentary tracks microdynamics, Short-term stabilizes phrases, and Integrated summarizes the whole programme with gates that ignore very quiet material.' },
+              { label: '2. Example', body: 'For released music, streaming, broadcast, podcast and film, LUFS explains why files with similar peaks may feel radically different. It helps compare masters, expose over-compression and avoid violent level jumps.' },
+              { label: '3. Hard data', body: 'ITU-R BS.1770 uses K-filtering and weighted multichannel summation: <code>LKFS = -0.691 + 10 log10(&sum; G<sub>i</sub> z<sub>i</sub>)</code>. Momentary commonly uses 400 ms; Short-term 3 s; Integrated applies absolute and relative gating.' },
+            ],
+          },
+          {
+            title: 'Spectral centroid · brightness',
+            steps: [
+              { label: '1. Synopsis', body: 'Spectral centroid is the frequency center of mass. When it rises, sound tends to feel brighter, sharper or more forward; when it falls, darker, duller or heavier.' },
+              { label: '2. Example', body: 'It separates water, wind, dry leaves or struck wood by high-frequency distribution. In production it supports EQ decisions for dull vocals, aggressive cymbals, harsh guitars, filter openings, piano attacks and pick noise.' },
+              { label: '3. Hard data', body: 'With spectral magnitudes <code>|X(k)|</code> and frequencies <code>f<sub>k</sub></code>, <code>C = (&sum; f<sub>k</sub>|X(k)|) / (&sum; |X(k)|)</code>. It is usually computed per STFT frame and optionally smoothed into a temporal brightness curve.' },
+            ],
+          },
+          {
+            title: 'Spectral spread · timbral width',
+            steps: [
+              { label: '1. Synopsis', body: 'Spread measures how far energy disperses around the centroid. Two sounds can share the same average brightness while one is compact and tonal and the other broad, noisy or saturated.' },
+              { label: '2. Example', body: 'A stable flute concentrates energy; a distorted chord or granular texture distributes it. In mixing it helps identify layers occupying too much spectrum and compare pads, choirs, percussion and tone-noise hybrids.' },
+              { label: '3. Hard data', body: 'It is spectral standard deviation: <code>spread = sqrt((&sum;(f<sub>k</sub>-C)<sup>2</sup>|X(k)|) / (&sum;|X(k)|))</code>. High spread means high variance around the centroid, not necessarily higher loudness.' },
+            ],
+          },
+          {
+            title: 'Spectral skewness · mass asymmetry',
+            steps: [
+              { label: '1. Synopsis', body: 'Skewness describes asymmetry in the spectral distribution. It reveals whether mass is biased toward lows with a high-frequency tail or toward highs with another concentration shape.' },
+              { label: '2. Example', body: 'In production it flags basses with useful harmonics, nasal vocals, excessive hi-hats, shifted resonances or unbalanced instruments. It differentiates a kick, scraped string and fricative consonant through spectral geometry.' },
+              { label: '3. Hard data', body: 'As a normalized central moment: <code>skew = &mu;<sub>3</sub> / &sigma;<sup>3</sup></code>, where <code>&mu;<sub>3</sub> = E[(f-C)<sup>3</sup>]</code> and <code>&sigma;</code> is spread. Sign and magnitude depend on magnitude/power weighting.' },
+            ],
+          },
+          {
+            title: 'Spectral kurtosis · peaks, tails and roughness',
+            steps: [
+              { label: '1. Synopsis', body: 'Kurtosis measures how peaked or flat a spectral distribution is relative to a reference shape. A spectrum dominated by clear partials differs from broad noise or a snare-wire texture.' },
+              { label: '2. Example', body: 'It helps locate resonances, whistles, painful peaks, de-essing targets, surgical EQ areas and places where saturation or friction breaks partial clarity. In sound design it controls the transition from tone to noise.' },
+              { label: '3. Hard data', body: '<code>kurt = &mu;<sub>4</sub> / &sigma;<sup>4</sup></code>, with <code>&mu;<sub>4</sub> = E[(f-C)<sup>4</sup>]</code>. Some implementations report excess kurtosis by subtracting 3; comparative reading across regions is usually more robust.' },
+            ],
+          },
+          {
+            title: 'Spectral slope · energy falloff',
+            steps: [
+              { label: '1. Synopsis', body: 'Slope approximates the global spectral tilt: how quickly energy falls or rises across frequency. It summarizes timbral balance more structurally than a simple treble control.' },
+              { label: '2. Example', body: 'A steep negative slope can feel warm, veiled or distant; a flatter slope can feel present or abrasive. In studio work it informs microphone distance, take darkness, archival age and filter sweeps.' },
+              { label: '3. Hard data', body: 'It is obtained by linear regression over <code>(f<sub>k</sub>, |X(k)|)</code> or magnitude in dB: <code>slope = cov(f, A) / var(f)</code>. The result depends on linear/log scale and selected bin range.' },
+            ],
+          },
+          {
+            title: 'Spectral flux · attacks and motion',
+            steps: [
+              { label: '1. Synopsis', body: 'Flux measures spectral change between consecutive frames. It is sensitive to attacks, articulations, edits and internal transformations, especially when new energy appears.' },
+              { label: '2. Example', body: 'It reveals piano strikes, consonants, pizzicati, kicks, glitches, edit cuts, texture shifts and beat-slicing material. In natural sound it separates continuous rain from isolated drops or steady fire from crackles.' },
+              { label: '3. Hard data', body: 'A common form uses positive half-wave rectification: <code>flux(t)=&sum;<sub>k</sub> max(0, |X<sub>t</sub>(k)|-|X<sub>t-1</sub>(k)|)<sup>2</sup></code>. Normalizing spectra separates shape change from global level change.' },
+            ],
+          },
+          {
+            title: 'T1/T2/T3 · tristimulus and harmonic color',
+            steps: [
+              { label: '1. Synopsis', body: 'Tristimulus distributes harmonic energy into fundamental, early harmonics and upper harmonics. It condenses tonal color into three functional zones: base, identity and brightness/complexity.' },
+              { label: '2. Example', body: 'High T1 can feel pure or hollow; T2 gives instrumental body; T3 adds edge, air or richness. It is useful for comparing basses, strings, brass, voices, additive synthesis and orchestration.' },
+              { label: '3. Hard data', body: 'With harmonic amplitudes <code>A<sub>h</sub></code>: <code>T1=A1/&sum;A<sub>h</sub></code>, <code>T2=(A2+A3+A4)/&sum;A<sub>h</sub></code>, <code>T3=(&sum;<sub>h&gt;4</sub>A<sub>h</sub>)/&sum;A<sub>h</sub></code>. It requires usable f0 and harmonic tracking.' },
+            ],
+          },
+          {
+            title: 'HNR · harmonic-to-noise ratio',
+            steps: [
+              { label: '1. Synopsis', body: 'HNR compares periodic energy against aperiodic energy. High values suggest stable periodicity; low values indicate breath, friction, scraping, distortion, turbulence or noise floor.' },
+              { label: '2. Example', body: 'In voice it separates clean singing, whisper, hoarseness and air. In production it evaluates vocal takes, saturation, breaths, room noise, acoustic instrument texture and the continuum between note and noisy matter.' },
+              { label: '3. Hard data', body: 'It may be written as <code>HNR = 10 log10(E<sub>harm</sub>/E<sub>noise</sub>)</code>. Autocorrelation approximations can use normalized peak <code>r</code>: <code>HNR = 10 log10(r/(1-r))</code>, with caution for non-stationary signals.' },
+            ],
+          },
+          {
+            title: 'ZCR · zero-crossing rate',
+            steps: [
+              { label: '1. Synopsis', body: 'ZCR counts sign changes in the waveform. It is simple but reveals internal speed: high or noisy signals cross zero more often than smooth low-frequency tones.' },
+              { label: '2. Example', body: 'It detects fricatives, hi-hats, clicks, glitches, tape noise, bright percussion or differences between sub-bass and fine noise. Sounds with equal RMS can have very different ZCR and feel unrelated.' },
+              { label: '3. Hard data', body: '<code>ZCR = (1/(2N)) &sum;<sub>n=1..N</sub> |sgn(x[n]) - sgn(x[n-1])|</code>. It is sensitive to near-zero noise, DC offset and filtering; short windows and minimum thresholds improve stability.' },
+            ],
+          },
+        ],
+      },
+      {
+        heading: 'sV layers',
+        items: [
+          {
+            title: 'SPEC · spectrogram',
+            steps: [
+              { label: '1. Synopsis', body: 'SPEC projects energy over frequency and time. It is a time-frequency cartography: horizontal events, bands, attacks, tails, resonances and noise become inspectable shapes.' },
+              { label: '2. Example', body: 'In production it reveals sibilance, sub-bass, resonances, cuts, reverb, hum, mix holes and transients. It compares voice, drum, drone or granular texture without reducing them to pitch notation.' },
+              { label: '3. Hard data', body: 'It is based on STFT: <code>X(m,k)=&sum;<sub>n</sub>x[n]w[n-mH]e<sup>-j2&pi;kn/N</sup></code>. The image often displays <code>20 log10(|X(m,k)|)</code>; window and hop sizes control time/frequency resolution.' },
+            ],
+          },
+          {
+            title: 'WAV · waveform',
+            steps: [
+              { label: '1. Synopsis', body: 'WAV shows amplitude over time. It is the most direct surface for editing starts, silences, transients, fades, visible clipping and macro-dynamic structure.' },
+              { label: '2. Example', body: 'Studio workflows use it to clean takes, align drums, cut voice, sync material, detect displaced hits and compare envelopes. Natural sounds show pulses, breathing, footsteps, waves or impacts.' },
+              { label: '3. Hard data', body: 'The curve is <code>x[n]</code> or a block envelope: <code>peak=max(|x[n]|)</code> and <code>rms=sqrt(mean(x[n]<sup>2</sup>))</code>. Waveform alone does not encode full timbre; many spectra can share similar amplitude shapes.' },
+            ],
+          },
+          {
+            title: 'ENR · energy',
+            steps: [
+              { label: '1. Synopsis', body: 'ENR summarizes frame-by-frame energy. It reveals dynamics, formal breathing, accumulation, rest, event density and intensity changes without inspecting every sample.' },
+              { label: '2. Example', body: 'In a track it shows builds, drops, breaks, accents and resting areas. In production it guides compression, automation, silence editing, section balance and comparison between dynamic intention and measured result.' },
+              { label: '3. Hard data', body: 'Frame energy can be <code>E(t)=&sum;<sub>n=0..N-1</sub>x<sub>t</sub>[n]<sup>2</sup></code> or <code>RMS(t)=sqrt(E(t)/N)</code>. Exponential smoothing or overlapped windows keep isolated peaks from dominating the reading.' },
+            ],
+          },
+          {
+            title: 'BRT · temporal brightness',
+            steps: [
+              { label: '1. Synopsis', body: 'BRT draws centroid through time. It shows openings, darkening, presence, edge and loss of air as continuous processes rather than fixed labels.' },
+              { label: '2. Example', body: 'In electronic music it reveals low-pass sweeps; in acoustic instruments it exposes pick, bow, breath or mic position. In mixing it helps control harshness, treble fatigue and presence conflicts.' },
+              { label: '3. Hard data', body: 'It is <code>C(t)=(&sum;f<sub>k</sub>|X<sub>t</sub>(k)|)/(&sum;|X<sub>t</sub>(k)|)</code> drawn as a curve. Derivatives <code>dC/dt</code> can highlight opening/closing gestures or filter automation.' },
+            ],
+          },
+          {
+            title: 'MOT · spectral motion',
+            steps: [
+              { label: '1. Synopsis', body: 'MOT represents change rather than state. A sustained note may have high energy and little motion; a granular texture may have moderate energy and intense motion.' },
+              { label: '2. Example', body: 'It locates transients, glitches, edits, obvious sidechain, rhythmic variation, turbulence and regions where material transforms. It separates stable wind from breaking branches or continuous water from irregular drops.' },
+              { label: '3. Hard data', body: 'It can derive from flux, feature-vector distance or difference norms: <code>M(t)=||F(t)-F(t-1)||</code>. If <code>F</code> combines centroid, spread, energy and flatness, MOT captures multivariate timbral motion.' },
+            ],
+          },
+          {
+            title: 'GRV · harmonic gravity',
+            steps: [
+              { label: '1. Synopsis', body: 'GRV is a Musiki-derived descriptor: it models perceptual weight toward dense, low or stabilizing regions. It is not a physical law; it is an operational reading of sonic mass.' },
+              { label: '2. Example', body: 'It helps detect when bass dominates, when an arrangement lacks foundation or when a cinematic impact accumulates body. In sound design it compares drones, risers, hits, sublayers and textures that sustain or crush the field.' },
+              { label: '3. Hard data', body: 'One formulation combines band energy with inverse-frequency weights: <code>GRV(t)=(&sum;E<sub>k,t</sub> w<sub>k</sub>)/(&sum;E<sub>k,t</sub>)</code>, with <code>w<sub>k</sub>=1/log2(2+f<sub>k</sub>/f0)</code>. Interpret it relative to corpus calibration.' },
+            ],
+          },
+          {
+            title: 'TEN · tension / flatness',
+            steps: [
+              { label: '1. Synopsis', body: 'TEN uses spectral flatness as an index of timbral tension: how noise-like a spectrum is compared with clear tonal or partial organization.' },
+              { label: '2. Example', body: 'It controls saturation, noise floor, synth roughness, cymbals, ambience, distortion and threatening layers. It describes tension without relying on tonal harmony: friction, air and noise also create directionality.' },
+              { label: '3. Hard data', body: 'Flatness is geometric mean divided by arithmetic mean: <code>flatness = exp(mean(log(|X(k)|+&epsilon;))) / mean(|X(k)|+&epsilon;)</code>. Values near 1 suggest white-noise-like spectra; low values indicate tonal peaks.' },
+            ],
+          },
+          {
+            title: 'SEG · segmentation',
+            steps: [
+              { label: '1. Synopsis', body: 'SEG marks likely boundaries where acoustic features change. It does not understand musical form completely; it proposes transitions based on novelty, distance or statistical rupture.' },
+              { label: '2. Example', body: 'It supports navigation of long files, sample digging, arrangement analysis, entry detection, production cuts, pattern changes, density shifts and preparation of editable regions.' },
+              { label: '3. Hard data', body: 'A classic method computes self-similarity <code>S(i,j)=sim(F(i),F(j))</code> and a novelty curve by checkerboard convolution. Peaks in <code>novelty(t)</code> above threshold are boundary candidates.' },
+            ],
+          },
+        ],
+      },
+      {
+        heading: 'stigmergy and distributed cognition',
+        items: [
+          {
+            title: 'Stigmergy · traces that organize action',
+            steps: [
+              { label: '1. Synopsis', body: 'Stigmergy means indirect coordination through environmental modifications: an action leaves a trace, and that trace reshapes the next action. In Musiki, file, descriptor, loop, cursor and visualization are operative marks, not decoration.' },
+              { label: '2. Example', body: 'A region marked by high flux, a centroid rising before a drop or a low-HNR texture becomes a shareable decision object. Discussion can anchor itself in a verifiable acoustic trace and return to it without relying only on verbal memory.' },
+              { label: '3. Hard data', body: 'It can be modeled as a coupled system <code>A<sub>t+1</sub> = f(A<sub>t</sub>, E<sub>t</sub>)</code> and <code>E<sub>t+1</sub> = g(E<sub>t</sub>, A<sub>t+1</sub>)</code>, where agents and environment update each other. Descriptors reduce <code>x[n]</code> to vectors <code>F(t)</code> that stabilize common references.' },
+            ],
+          },
+        ],
+      },
+    ],
+    refs: [
+      'Bogdanov, D., Wack, N., Gómez, E., Gulati, S., Herrera, P., Mayor, O., Roma, G., Salamon, J., Zapata, J. R., &amp; Serra, X. (2013). <a href="https://recercat.cat/handle/10230/35168?show=full" target="_blank" rel="noopener">ESSENTIA: An open-source library for sound and music analysis</a>. <em>ACM Multimedia 2013</em>, Barcelona, 855-858. DOI: 10.1145/2502081.2502229.',
+      'de Cheveigné, A., &amp; Kawahara, H. (2002). <a href="https://asa.scitation.org/doi/10.1121/1.1458024" target="_blank" rel="noopener">YIN, a fundamental frequency estimator for speech and music</a>. <em>Journal of the Acoustical Society of America</em>, 111(4), 1917-1930. DOI: 10.1121/1.1458024.',
+      'ITU-R. (2012/2015). <a href="https://www.itu.int/dms_pubrec/itu-r/rec/bs/R-REC-BS.1770-3-201208-S!!PDF-E.pdf" target="_blank" rel="noopener">Recommendation BS.1770: Algorithms to measure audio programme loudness and true-peak audio level</a>. International Telecommunication Union.',
+      'EBU. (2011). <a href="https://tech.ebu.ch/docs/tech/tech3343.pdf" target="_blank" rel="noopener">Tech 3343: Practical guidelines for production and implementation in accordance with EBU R 128</a>. European Broadcasting Union.',
+      'Peeters, G. (2004). <em>A large set of audio features for sound description in the CUIDADO project</em>. IRCAM Analysis/Synthesis Team technical report. Spectral centroid, spread, skewness, kurtosis, slope, flux and related descriptors.',
+      'Grey, J. M., &amp; Gordon, J. W. (1978). Perceptual effects of spectral modifications on musical timbres. <em>Journal of the Acoustical Society of America</em>, 63(5), 1493-1500.',
+      'Scheirer, E. D., &amp; Slaney, M. (1997). Construction and evaluation of a robust multifeature speech/music discriminator. <em>ICASSP 1997</em>. Multifeature temporal/spectral discrimination reference.',
+      'Pollard, H. F., &amp; Jansson, E. V. (1982). A tristimulus method for the specification of musical timbre. <em>Acustica</em>, 51, 162-171.',
+      'Yumoto, E., Gould, W. J., &amp; Baer, T. (1982). Harmonics-to-noise ratio as an index of the degree of hoarseness. <em>Journal of the Acoustical Society of America</em>, 71(6), 1544-1550.',
+      'Rabiner, L. R., &amp; Schafer, R. W. (1978). <em>Digital Processing of Speech Signals</em>. Prentice-Hall. Classical reference for zero-crossing and short-time analysis.',
+      'Foote, J. (1999). Visualizing music and audio using self-similarity. <em>ACM Multimedia 1999</em>. Foote, J. (2000). Automatic audio segmentation using a measure of audio novelty. <em>ICME 2000</em>.',
+      'Grassé, P. P. (1959). La théorie de la stigmergie: essai d\'interprétation du comportement des termites constructeurs. <em>Insectes Sociaux</em>, 6(1), 41-80.',
+      'Hutchins, E. (1995). <em>Cognition in the Wild</em>. MIT Press. Distributed cognition reference for tools, traces and coordinated action.',
+    ],
+  },
+};
+
+const getSaInfoLang = (): SaInfoLang => {
+  try {
+    return window.localStorage.getItem('musiki-sa-info-lang') === 'en' ? 'en' : 'es';
+  } catch {
+    return 'es';
+  }
+};
+
+const setSaInfoLang = (lang: SaInfoLang) => {
+  try {
+    window.localStorage.setItem('musiki-sa-info-lang', lang);
+  } catch {
+    // Local storage can be unavailable in restricted contexts.
+  }
+};
+
+const renderSaInfoModal = (modal: HTMLElement) => {
+  const lang: SaInfoLang = modal.dataset.lang === 'en' ? 'en' : 'es';
+  const data = SA_INFO_CONTENT[lang];
+  const title = modal.querySelector<HTMLElement>('[data-sa-info-title]');
+  const sub = modal.querySelector<HTMLElement>('[data-sa-info-sub]');
+  const intro = modal.querySelector<HTMLElement>('[data-sa-info-intro]');
+  const content = modal.querySelector<HTMLElement>('[data-sa-info-content]');
+  if (!content) return;
+  if (title) title.textContent = data.title;
+  if (sub) sub.textContent = data.sub;
+  if (intro) intro.innerHTML = data.intro;
+  modal.querySelectorAll<HTMLButtonElement>('[data-sa-info-lang]').forEach((button) => {
+    const active = button.dataset.saInfoLang === lang;
+    button.dataset.active = active ? 'true' : 'false';
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  content.innerHTML = [
+    ...data.sections.map((section) => `
+      <div class="sa-info-section">
+        <div class="sa-info-heading">${section.heading}</div>
+        <div class="sa-info-doc">
+          ${section.items.map((item) => `
+            <article class="sa-info-descriptor">
+              <h3>${item.title}</h3>
+              <div class="sa-info-steps">
+                ${item.steps.map((step) => `
+                  <section class="sa-info-step">
+                    <h4>${step.label}</h4>
+                    <p>${step.body}</p>
+                  </section>
+                `).join('')}
+              </div>
+            </article>
+          `).join('')}
+        </div>
+      </div>
+    `),
+    `
+      <div class="sa-info-section sa-info-refs">
+        <div class="sa-info-heading">${data.refsHeading}</div>
+        ${data.refs.map((ref) => `<div class="sa-info-ref">${ref}</div>`).join('')}
+      </div>
+    `,
+  ].join('');
+};
+
+const closeSaInfoModal = (modal: HTMLElement) => {
+  modal.hidden = true;
+  modal.dataset.open = 'false';
+  document.documentElement.dataset.saInfoOpen = 'false';
+};
+
+document.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement | null;
+  const infoBtn = target?.closest<HTMLElement>('[data-sa-info]');
+  if (infoBtn) {
+    const pod = infoBtn.closest('.sa-pod');
+    const existingId = infoBtn.dataset.saInfoModalId;
+    const modal = (existingId ? document.getElementById(existingId) as HTMLElement | null : null)
+      ?? pod?.querySelector<HTMLElement>('[data-sa-info-modal]');
+    if (!modal) return;
+    if (!modal.id) modal.id = `sa-info-modal-${crypto.randomUUID()}`;
+    infoBtn.dataset.saInfoModalId = modal.id;
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
+    modal.dataset.lang = getSaInfoLang();
+    renderSaInfoModal(modal);
+    modal.hidden = false;
+    modal.dataset.open = 'true';
+    document.documentElement.dataset.saInfoOpen = 'true';
+    return;
+  }
+
+  const langBtn = target?.closest<HTMLButtonElement>('[data-sa-info-lang]');
+  if (langBtn) {
+    const modal = langBtn.closest<HTMLElement>('[data-sa-info-modal]');
+    const lang = langBtn.dataset.saInfoLang === 'en' ? 'en' : 'es';
+    if (modal) {
+      modal.dataset.lang = lang;
+      setSaInfoLang(lang);
+      renderSaInfoModal(modal);
+    }
+    return;
+  }
+
+  const closeBtn = target?.closest<HTMLElement>('[data-sa-info-close]');
+  if (closeBtn) {
+    const modal = closeBtn.closest<HTMLElement>('[data-sa-info-modal]');
+    if (modal) closeSaInfoModal(modal);
+    return;
+  }
+
+  const modal = target?.closest<HTMLElement>('[data-sa-info-modal]');
+  if (modal && e.target === modal) closeSaInfoModal(modal);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  document
+    .querySelectorAll<HTMLElement>('[data-sa-info-modal][data-open="true"]')
+    .forEach(closeSaInfoModal);
 });
 </script>

@@ -1,6 +1,7 @@
 /* sV — Sonic Visualizer Pod */
 
 .sv-pod {
+  position: relative;
   display: flex; flex-direction: column; height: 100%;
   font-family: var(--font-family-mono, monospace);
   font-size: 0.72rem; color: var(--conference-fg, #cdd6f4);
@@ -110,7 +111,38 @@
 .sv-ruler-out { color: #E06666; }
 .sv-ruler-marker[hidden] { display: none; }
 
+.sv-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: rgba(0,0,0,0.82);
+  border: 1px dashed rgba(69,211,132,0.6);
+  pointer-events: none;
+}
+
+.sv-pod--drag-over .sv-drop-overlay {
+  display: flex;
+}
+
+.sv-drop-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #45D384;
+  text-transform: lowercase;
+}
+
+.sv-drop-hint {
+  font-size: 0.55rem;
+  color: var(--conference-muted,#7f849c);
+  letter-spacing: 0.1em;
+}
+
 /* Lift stacking contexts so tooltip paints above canvas and sibling pods */
-.sv-pod { position: relative; }
 .sv-pod:has(.sv-layer-btn:hover) { z-index: 100; }
 .sv-toolbar:has(.sv-layer-btn:hover) { z-index: 9999; }

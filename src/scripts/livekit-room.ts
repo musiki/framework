@@ -27,6 +27,7 @@ import { LilyPondLiveController } from './room/lilypond';
 import { RoomWorkspaceManager } from './room/workspace/RoomWorkspaceManager';
 import { SonicAnalyzerController, computeWaveformPeaks } from './room/sonic-analyzer';
 import { SonicVisualizerController } from './room/sonic-visualizer';
+import { VisualizerController } from './room/visualizer';
 import { RecursosController } from './room/recursos';
 import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
@@ -4168,6 +4169,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     GRAVITY_BALL_EARTH_MS2,
   );
   let sessionAllowsInstruments = true;
+  let recursosAllowsStudents = false;
+  let ignoreRemoteSaOffUntil = 0;
   let sidebarCollapsed = root.dataset.sidebarCollapsed === 'true';
   let graphVisible = false;
   let externalMediaSession: ExternalMediaSessionState | null = null;
@@ -10627,6 +10630,59 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  const canAcceptSonicControl = (participant: any) =>
+    readParticipantRole(room, participant, localRole) === 'teacher' || recursosAllowsStudents;
+
+  const canPublishSonicControl = () => localRole === 'teacher' || recursosAllowsStudents;
+  const canAcceptVisualControl = canAcceptSonicControl;
+
+  const sonicFetchUrl = (url: string) =>
+    url.startsWith('http') && !url.startsWith(location.origin)
+      ? `/api/room/audio-proxy?url=${encodeURIComponent(url)}`
+      : url;
+
+  const decodeSonicUrl = async (url: string): Promise<AudioBuffer> => {
+    const audioCtx = incomingAudioContext ?? new AudioContext();
+    const resp = await fetch(sonicFetchUrl(url));
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return audioCtx.decodeAudioData(await resp.arrayBuffer());
+  };
+
+  const decodeSonicFile = async (file: File): Promise<AudioBuffer> => {
+    const audioCtx = incomingAudioContext ?? new AudioContext();
+    return audioCtx.decodeAudioData(await file.arrayBuffer());
+  };
+
+  const dispatchDecodedSonicFile = (buffer: AudioBuffer, fileName: string, key = '', scale = '', bpm = 0) => {
+    const peaks = computeWaveformPeaks(buffer);
+    const detail = { buffer, fileName, peaks, melspec: [], chroma: [], pitches: [], key, scale, bpm };
+    const emit = () => window.dispatchEvent(new CustomEvent('sa:file-ready', { detail }));
+    emit();
+    [180, 700, 1600].forEach((delay) => window.setTimeout(emit, delay));
+  };
+
+  const reinforceSonicVisualizer = () => {
+    [120, 480, 1200, 2400].forEach((delay) => {
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('sv:request-state'));
+      }, delay);
+    });
+  };
+
+  const publishSonicFileSync = (url: string, fileName: string, key = '', scale = '', bpm = 0) => {
+    if (!canPublishSonicControl()) return;
+    ignoreRemoteSaOffUntil = Date.now() + 5000;
+    void publishMessage({
+      type: 'sa-file-sync',
+      url,
+      fileName,
+      senderName: nameInput.value.trim() || room.localParticipant?.name || room.localParticipant?.identity || '',
+      key,
+      scale,
+      bpm,
+    });
+  };
+
   const whiteboard = new WhiteboardController((msg) => void publishMessage(msg));
   const whiteboards = new Set<WhiteboardController>([whiteboard]);
 
@@ -10692,6 +10748,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let orfController: RoomOrfController | null = null;
   let sonicAnalyzerController: SonicAnalyzerController | null = null;
   let sonicVisualizerController: SonicVisualizerController | null = null;
+  let visualizerController: VisualizerController | null = null;
   let recursosController: RecursosController | null = null;
   let recursosCurrentLessonId: string | null = null;
 
@@ -10933,7 +10990,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         getSenderName: () => nameInput.value.trim() || room.localParticipant?.name || '',
       });
       sonicAnalyzerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
-      sonicAnalyzerController.setAllowStudents(sessionAllowsInstruments);
+      sonicAnalyzerController.setAllowStudents(recursosAllowsStudents);
     };
 
     const onSonicVisualizerInit = (container: HTMLElement) => {
@@ -10943,7 +11000,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         publish: (msg) => void publishMessage(msg),
       });
       sonicVisualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
-      sonicVisualizerController.setAllowStudents(sessionAllowsInstruments);
+      sonicVisualizerController.setAllowStudents(recursosAllowsStudents);
+    };
+
+    const onVisualizerInit = (container: HTMLElement) => {
+      visualizerController?.dispose();
+      visualizerController = new VisualizerController({
+        container,
+        publish: (msg) => void publishMessage(msg),
+      });
+      visualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
+      visualizerController.setAllowStudents(recursosAllowsStudents);
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent('vs:request-state')), 100);
     };
 
     window.addEventListener('sa:analysis-progress', (e: Event) => {
@@ -10956,11 +11024,60 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       recursosCurrentLessonId = ev.detail?.lessonId ?? null;
     });
 
+    window.addEventListener('musiki:recursos:allow-students-changed', (e: Event) => {
+      recursosAllowsStudents = Boolean((e as CustomEvent<{ allow: boolean }>).detail?.allow);
+      sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
+      sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
+      visualizerController?.setAllowStudents(recursosAllowsStudents);
+    });
+
+    window.addEventListener('musiki:sonic:load-url', (e: Event) => {
+      const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail ?? {};
+      if (!url) return;
+      const fileName = normalizeText(name) || 'audio';
+      workspaceManager.focusOrOpenSonicVisualizer('recursos');
+      window.setTimeout(() => {
+        if (sonicAnalyzerController) {
+          void sonicAnalyzerController.loadFileFromUrl(url, fileName, { suppressRoomPublish: true })
+            .then(() => reinforceSonicVisualizer())
+            .catch((error) => console.warn('[room] local sonic load error', error));
+        } else {
+          void decodeSonicUrl(url)
+            .then((buffer) => dispatchDecodedSonicFile(buffer, fileName))
+            .catch((error) => console.warn('[room] local sonic decode error', error));
+        }
+      }, 80);
+      publishSonicFileSync(url, fileName);
+    });
+
+    window.addEventListener('musiki:sonic:load-file', (e: Event) => {
+      const { file } = (e as CustomEvent<{ file: File }>).detail ?? {};
+      if (!(file instanceof File)) return;
+      workspaceManager.focusOrOpenSonicVisualizer('sonic-visualizer');
+      if (sonicAnalyzerController) {
+        window.dispatchEvent(new CustomEvent('musiki:sa:load-file', { detail: { file } }));
+        reinforceSonicVisualizer();
+        return;
+      }
+      void decodeSonicFile(file)
+        .then((buffer) => dispatchDecodedSonicFile(buffer, file.name))
+        .catch((error) => console.warn('[room] local sonic file decode error', error));
+    });
+
+    window.addEventListener('musiki:visual:load-url', (e: Event) => {
+      const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail ?? {};
+      if (!url) return;
+      workspaceManager.focusOrOpenVisualizer('recursos');
+      window.setTimeout(() => {
+        visualizerController?.loadUrl(url, normalizeText(name) || 'document');
+      }, 80);
+    });
+
     const onRecursosInit = (container: HTMLElement) => {
       recursosController?.dispose();
       recursosController = new RecursosController({
         container,
-        isTeacher: canLeadSession(),
+        isTeacher: localRole === 'teacher',
         getCourseId: () => recursosCurrentLessonId,
         getCourseRootId: () => courseId || null,
         getRoomName: () => roomInput.value.trim() || null,
@@ -11002,6 +11119,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onScoreInit,
     onSonicAnalyzerInit,
     onSonicVisualizerInit,
+    onVisualizerInit,
     onRecursosInit
   );
 
@@ -12153,6 +12271,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         window.setTimeout(() => {
           void publishTeacherState();
         }, 500);
+        window.setTimeout(() => {
+          recursosController?.publishCurrentState();
+        }, 650);
       }
       if (sonicAnalyzerController && localRole === 'teacher') {
         window.setTimeout(() => {
@@ -12163,6 +12284,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         window.setTimeout(() => {
           sonicVisualizerController!.publishCurrentState();
         }, 900);
+      }
+      if (visualizerController) {
+        window.setTimeout(() => {
+          visualizerController!.publishCurrentState();
+        }, 980);
       }
     })
     .on(RoomEvent.ParticipantDisconnected, (participant) => {
@@ -12423,49 +12549,40 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'sa-file-sync') {
-        const audioCtx = incomingAudioContext ?? new AudioContext();
-        fetch(message.url)
-          .then(r => r.arrayBuffer())
-          .then(ab => audioCtx.decodeAudioData(ab))
-          .then(buffer => {
-            if (sonicAnalyzerController) {
-              sonicAnalyzerController.loadFileFromRemote(
-                buffer,
-                message.fileName,
-                message.senderName,
-                message.key,
-                message.scale,
-                message.bpm,
-              );
-            } else {
-              const peaks = computeWaveformPeaks(buffer);
-              window.dispatchEvent(new CustomEvent('sa:file-ready', {
-                detail: {
+        if (!canAcceptSonicControl(participant)) return;
+        ignoreRemoteSaOffUntil = Date.now() + 5000;
+        workspaceManager.focusOrOpenSonicVisualizer('recursos');
+        window.setTimeout(() => {
+          decodeSonicUrl(message.url)
+            .then(buffer => {
+              if (sonicAnalyzerController) {
+                sonicAnalyzerController.loadFileFromRemote(
                   buffer,
-                  fileName: message.fileName,
-                  peaks,
-                  melspec: [],
-                  chroma: [],
-                  pitches: [],
-                  key: message.key,
-                  scale: message.scale,
-                  bpm: message.bpm,
-                },
-              }));
-            }
-          })
-          .catch(e => console.warn('[room] sa-file-sync fetch error', e));
+                  message.fileName,
+                  message.senderName,
+                  message.key,
+                  message.scale,
+                  message.bpm,
+                );
+                reinforceSonicVisualizer();
+              } else {
+                dispatchDecodedSonicFile(buffer, message.fileName, message.key, message.scale, message.bpm);
+              }
+            })
+            .catch(e => console.warn('[room] sa-file-sync fetch error', e));
+        }, 80);
         return;
       }
 
       if (message.type === 'sa-state') {
-        // Only mirror SA state from the teacher — ignore broadcasts from students/external
-        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+        if (!canAcceptSonicControl(participant)) return;
+        if (!message.active && Date.now() < ignoreRemoteSaOffUntil) return;
         sonicAnalyzerController?.applyRemoteState(message.active);
         return;
       }
 
       if (message.type === 'sv-playback') {
+        if (!canAcceptSonicControl(participant)) return;
         sonicVisualizerController?.applyRemotePlayback(message.action, message.offset);
         return;
       }
@@ -12476,16 +12593,30 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'sv-layer') {
+        if (!canAcceptSonicControl(participant)) return;
         sonicVisualizerController?.applyRemoteLayer(message.layer, message.visible);
         return;
       }
 
       if (message.type === 'sv-loop') {
+        if (!canAcceptSonicControl(participant)) return;
         sonicVisualizerController?.applyRemoteLoop(message.inPoint, message.outPoint, message.enabled);
         return;
       }
 
+      if (message.type === 'vs-state') {
+        if (!canAcceptVisualControl(participant)) return;
+        workspaceManager.focusOrOpenVisualizer('recursos');
+        window.setTimeout(() => visualizerController?.applyRemoteState(message), 80);
+        return;
+      }
+
       if (message.type === 'recursos:sync' || message.type === 'recursos:allow-students') {
+        if (!canAcceptSonicControl(participant)) return;
+        recursosAllowsStudents = message.type === 'recursos:sync' ? message.allowStudents : message.allow;
+        sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
+        sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
+        visualizerController?.setAllowStudents(recursosAllowsStudents);
         window.dispatchEvent(new CustomEvent('musiki:recursos:receive', { detail: message }));
         return;
       }
@@ -12521,8 +12652,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'session-control') {
         sessionAllowsInstruments = message.allowInstruments !== false;
-        sonicAnalyzerController?.setAllowStudents(sessionAllowsInstruments);
-        sonicVisualizerController?.setAllowStudents(sessionAllowsInstruments);
         if (!sessionAllowsInstruments) {
           forceSessionInstrumentShutdown();
         }

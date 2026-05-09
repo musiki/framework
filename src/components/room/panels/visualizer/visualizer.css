@@ -1,0 +1,193 @@
+/* vS — Visualizer Pod */
+
+.vs-pod {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #050607;
+  color: var(--conference-fg, #cdd6f4);
+  font-family: var(--font-family-mono, monospace);
+  container-type: inline-size;
+  container-name: vspod;
+}
+
+.vs-toolbar {
+  gap: 0.3rem;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.vs-label {
+  flex-shrink: 0;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #76d3ff;
+  opacity: 0.78;
+}
+
+.vs-status {
+  flex: 1;
+  min-width: 4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--conference-muted, #7f849c);
+  font-size: 0.58rem;
+}
+
+.vs-page-input {
+  width: 3.3rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  text-align: center;
+  font-size: 0.65rem;
+}
+
+.vs-page-btn,
+.vs-fit-btn,
+.vs-full-btn {
+  height: 1.35rem;
+  min-width: 1.55rem;
+  padding: 0 0.4rem;
+  font-size: 0.62rem;
+  flex-shrink: 0;
+}
+
+.vs-fit-btn[data-active="true"] {
+  color: #061015;
+  background: #76d3ff;
+  border-color: rgba(118,211,255,0.7);
+}
+
+.vs-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.vs-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+    #07080b;
+  background-size: 24px 24px;
+}
+
+.vs-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #111;
+}
+
+.vs-image {
+  display: block;
+  transform-origin: center center;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+.vs-pod[data-zoom-mode="width"] .vs-image {
+  width: 100%;
+  height: auto;
+  max-height: none;
+}
+
+.vs-pod[data-zoom-mode="actual"] .vs-image {
+  max-width: none;
+  max-height: none;
+}
+
+.vs-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: rgba(118,211,255,0.34);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.vs-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  pointer-events: none;
+  background: rgba(0,0,0,0.84);
+  border: 1px dashed rgba(118,211,255,0.65);
+}
+
+.vs-pod--drag-over .vs-drop-overlay {
+  display: flex;
+}
+
+.vs-drop-label {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #76d3ff;
+  text-transform: lowercase;
+}
+
+.vs-drop-hint {
+  font-size: 0.55rem;
+  color: var(--conference-muted, #7f849c);
+  letter-spacing: 0.1em;
+}
+
+.vs-pod[data-kind="empty"] .vs-page-btn,
+.vs-pod[data-kind="empty"] .vs-page-input,
+.vs-pod[data-kind="empty"] .vs-fit-btn,
+.vs-pod[data-kind="empty"] .vs-full-btn {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.vs-pod[data-kind="img"] [data-vs-prev],
+.vs-pod[data-kind="img"] [data-vs-next],
+.vs-pod[data-kind="img"] .vs-page-input {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.vs-pod[data-fullscreen="true"] {
+  position: fixed;
+  inset: clamp(0.4rem, 1.5vw, 1rem);
+  z-index: 2147482500;
+  height: auto;
+  border: 1px solid rgba(118,211,255,0.38);
+  box-shadow: 0 24px 90px rgba(0,0,0,0.72);
+}
+
+.vs-pod[data-fullscreen="true"] .vs-full-btn {
+  color: #061015;
+  background: #76d3ff;
+}
+
+@container vspod (max-width: 620px) {
+  .vs-toolbar {
+    flex-wrap: wrap;
+  }
+  .vs-status {
+    flex-basis: calc(100% - 3.5rem);
+  }
+}

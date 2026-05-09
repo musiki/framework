@@ -17,6 +17,7 @@ export class RoomWorkspaceManager {
   private onScoreInit?: (element: HTMLElement) => void;
   private onSonicAnalyzerInit?: (element: HTMLElement) => void;
   private onSonicVisualizerInit?: (element: HTMLElement) => void;
+  private onVisualizerInit?: (element: HTMLElement) => void;
   private onRecursosInit?: (element: HTMLElement) => void;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
@@ -48,7 +49,8 @@ export class RoomWorkspaceManager {
     { id: 'instant-score', title: 'SCORE', icon: 'Is', atomic: 18, color: '#F1C232', cat: 'tools' },
     { id: 'sonic-analyzer',   title: 'SA', icon: 'Sa', atomic: 19, color: '#45D384', cat: 'tools' },
     { id: 'sonic-visualizer', title: 'SV', icon: 'Sv', atomic: 20, color: '#45D384', cat: 'tools' },
-    { id: 'recursos', title: 'RECURSOS', icon: 'Re', atomic: 21, color: '#6fa8dc', cat: 'comm' }
+    { id: 'visualizer', title: 'VS', icon: 'Vs', atomic: 21, color: '#76D3FF', cat: 'tools' },
+    { id: 'recursos', title: 'RECURSOS', icon: 'Re', atomic: 22, color: '#6fa8dc', cat: 'comm' }
   ];
 
   constructor(
@@ -66,6 +68,7 @@ export class RoomWorkspaceManager {
     onScoreInit?: (element: HTMLElement) => void,
     onSonicAnalyzerInit?: (element: HTMLElement) => void,
     onSonicVisualizerInit?: (element: HTMLElement) => void,
+    onVisualizerInit?: (element: HTMLElement) => void,
     onRecursosInit?: (element: HTMLElement) => void
   ) {
     this.container = container;
@@ -82,6 +85,7 @@ export class RoomWorkspaceManager {
     this.onScoreInit = onScoreInit;
     this.onSonicAnalyzerInit   = onSonicAnalyzerInit;
     this.onSonicVisualizerInit = onSonicVisualizerInit;
+    this.onVisualizerInit      = onVisualizerInit;
     this.onRecursosInit        = onRecursosInit;
   }
 
@@ -170,6 +174,9 @@ export class RoomWorkspaceManager {
               if (id === 'sonic-visualizer' && this.onSonicVisualizerInit) {
                 this.onSonicVisualizerInit(element);
               }
+              if (id === 'visualizer' && this.onVisualizerInit) {
+                this.onVisualizerInit(element);
+              }
               if (id === 'recursos' && this.onRecursosInit) {
                 this.onRecursosInit(element);
               }
@@ -234,6 +241,34 @@ export class RoomWorkspaceManager {
           id: p.id,
           controller: this.podControllers.get(p.id)
       }));
+  }
+
+  public hasPod(id: string): boolean {
+    return Boolean(this.findPanelByBaseId(id));
+  }
+
+  public focusOrOpenSonicVisualizer(referencePanelId?: string): void {
+    if (!this.dockview) return;
+    const existing = this.findPanelByBaseId('sonic-visualizer');
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+
+    const referencePanel =
+      (referencePanelId ? this.dockview.getPanel(referencePanelId) : null)
+      ?? this.findPanelByBaseId('recursos')
+      ?? this.findPanelByBaseId('sonic-analyzer')
+      ?? this.dockview.panels[0]
+      ?? null;
+
+    this.dockview.addPanel({
+      id: 'sonic-visualizer',
+      component: 'sonic-visualizer',
+      title: 'SV',
+      position: referencePanel ? { referencePanel: referencePanel.id, direction: 'below' } : undefined,
+      initialHeight: 110,
+    });
   }
 
   private initPodGallery() {
@@ -705,6 +740,29 @@ export class RoomWorkspaceManager {
       this.dockview?.getPanel('chat')?.api.setActive();
       window.dispatchEvent(new CustomEvent('musiki:chat:focus-request'));
     }, 80);
+  }
+
+  public focusOrOpenVisualizer(source: 'recursos' | 'visualizer' = 'visualizer') {
+    if (!this.dockview) return;
+    const existing = this.findPanelByBaseId('visualizer');
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+
+    const reference =
+      this.findPanelByBaseId(source === 'recursos' ? 'recursos' : 'presentation')
+      ?? this.dockview.panels.find((panel) => panel.id !== 'visualizer');
+    const rect = this.container.getBoundingClientRect();
+    const W = rect.width || this.container.offsetWidth || 1280;
+    this.dockview.addPanel({
+      id: 'visualizer',
+      component: 'visualizer',
+      title: 'VS',
+      position: reference ? { referencePanel: reference.id, direction: 'left' } : undefined,
+      initialWidth: Math.round(W * 0.45),
+    });
+    window.setTimeout(() => this.dockview?.getPanel('visualizer')?.api.setActive(), 80);
   }
 
   private bindForum(root: HTMLElement) {
