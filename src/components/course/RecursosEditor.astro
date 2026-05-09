@@ -1,0 +1,474 @@
+---
+type Props = {
+  courseId: string;
+  canManage: boolean;
+};
+
+const { courseId, canManage } = Astro.props;
+---
+
+<section
+  class="recursos-editor"
+  data-recursos-editor
+  data-course-id={courseId}
+  data-can-manage={canManage ? 'true' : 'false'}
+>
+  <header class="recursos-editor-header">
+    <div>
+      <p class="recursos-editor-kicker">80 RECURSOS</p>
+      <h1>Editor de recursos</h1>
+    </div>
+    <button type="button" class="recursos-editor-btn" data-recursos-refresh>Actualizar</button>
+  </header>
+
+  {!canManage ? (
+    <p class="recursos-editor-empty">No tenes permisos para editar recursos de este curso.</p>
+  ) : (
+    <>
+      <div class="recursos-editor-grid">
+        <section class="recursos-editor-panel">
+          <div class="recursos-editor-panel-head">
+            <h2>Recursos vinculados</h2>
+            <span data-recursos-count>0</span>
+          </div>
+          <div class="recursos-editor-list" data-recursos-list></div>
+        </section>
+
+        <section class="recursos-editor-panel">
+          <div class="recursos-editor-panel-head">
+            <h2>R2 / Cloudflare</h2>
+            <button type="button" class="recursos-editor-btn" data-r2-up>Arriba</button>
+          </div>
+          <div class="recursos-r2-toolbar">
+            <input data-r2-prefix value="room/" spellcheck="false" />
+            <button type="button" class="recursos-editor-btn" data-r2-load>Listar</button>
+          </div>
+          <div class="recursos-r2-list" data-r2-list></div>
+        </section>
+      </div>
+
+      <section class="recursos-editor-panel recursos-attach-panel">
+        <div class="recursos-editor-panel-head">
+          <h2>Vincular URL a RECURSOS</h2>
+          <span data-recursos-status></span>
+        </div>
+        <form class="recursos-attach-form" data-recursos-attach-form>
+          <label>
+            URL
+            <input name="url" data-attach-url required />
+          </label>
+          <label>
+            Nombre
+            <input name="name" data-attach-name />
+          </label>
+          <label>
+            Carpeta
+            <input name="folder" data-attach-folder placeholder="DOC, media, compartidos..." />
+          </label>
+          <label>
+            Clase
+            <input name="claseId" data-attach-clase placeholder={`${courseId}/... o vacio para sala general`} />
+          </label>
+          <label>
+            Sala
+            <input name="roomName" data-attach-room value={`${courseId}-stage`} />
+          </label>
+          <button type="submit" class="recursos-editor-btn recursos-editor-btn--primary">Vincular</button>
+        </form>
+      </section>
+    </>
+  )}
+</section>
+
+<style>
+  .recursos-editor {
+    display: grid;
+    gap: 1rem;
+    max-width: min(1180px, 100%);
+    margin: 0 auto;
+  }
+
+  .recursos-editor-header,
+  .recursos-editor-panel-head,
+  .recursos-r2-toolbar,
+  .recursos-attach-form {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .recursos-editor-header {
+    justify-content: space-between;
+    border-bottom: 1px solid var(--c-border);
+    padding-bottom: 0.8rem;
+  }
+
+  .recursos-editor-header h1 {
+    margin: 0;
+    font-size: 1.7rem;
+  }
+
+  .recursos-editor-kicker {
+    margin: 0 0 0.2rem;
+    font-size: 0.78rem;
+    color: var(--c-fg-dim);
+    letter-spacing: 0.08em;
+  }
+
+  .recursos-editor-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+    gap: 1rem;
+  }
+
+  .recursos-editor-panel {
+    border: 1px solid var(--c-border);
+    background: color-mix(in srgb, var(--c-bg) 94%, var(--c-link) 6%);
+    border-radius: 8px;
+    padding: 0.9rem;
+    min-width: 0;
+  }
+
+  .recursos-editor-panel-head {
+    justify-content: space-between;
+    margin-bottom: 0.7rem;
+  }
+
+  .recursos-editor-panel h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .recursos-editor-list,
+  .recursos-r2-list {
+    display: grid;
+    gap: 0.55rem;
+    max-height: 62vh;
+    overflow: auto;
+  }
+
+  .recursos-row,
+  .recursos-r2-row {
+    display: grid;
+    gap: 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--c-border) 75%, transparent);
+    border-radius: 6px;
+    padding: 0.55rem;
+    background: var(--c-bg);
+  }
+
+  .recursos-row-main,
+  .recursos-row-actions,
+  .recursos-r2-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .recursos-row-main input,
+  .recursos-r2-toolbar input,
+  .recursos-attach-form input {
+    min-width: 0;
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    padding: 0.45rem 0.55rem;
+  }
+
+  .recursos-row-main input[data-field="name"] {
+    flex: 1 1 18rem;
+  }
+
+  .recursos-row-main input[data-field="folder"] {
+    flex: 0 1 9rem;
+  }
+
+  .recursos-meta,
+  .recursos-r2-meta,
+  .recursos-editor-empty {
+    color: var(--c-fg-dim);
+    font-size: 0.78rem;
+  }
+
+  .recursos-row-url,
+  .recursos-r2-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recursos-editor-btn {
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    padding: 0.42rem 0.62rem;
+    cursor: pointer;
+  }
+
+  .recursos-editor-btn:hover {
+    border-color: var(--c-link);
+  }
+
+  .recursos-editor-btn--primary {
+    background: var(--c-link);
+    color: white;
+    border-color: var(--c-link);
+  }
+
+  .recursos-editor-btn--danger {
+    color: #b3261e;
+  }
+
+  .recursos-r2-toolbar input {
+    flex: 1 1 auto;
+  }
+
+  .recursos-attach-form {
+    align-items: end;
+    flex-wrap: wrap;
+  }
+
+  .recursos-attach-form label {
+    display: grid;
+    gap: 0.25rem;
+    flex: 1 1 12rem;
+    min-width: 10rem;
+    font-size: 0.78rem;
+    color: var(--c-fg-dim);
+  }
+
+  .recursos-attach-form label:first-child {
+    flex-basis: 24rem;
+  }
+
+  @media (max-width: 900px) {
+    .recursos-editor-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<script>
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[ch]));
+
+  const formatBytes = (value) => {
+    const n = Number(value || 0);
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  };
+
+  function typeFromUrl(url) {
+    const ext = String(url || '').split('?')[0].split('.').pop()?.toLowerCase() || '';
+    if (ext === 'pdf') return 'pdf';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'img';
+    if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'mov', 'mp4'].includes(ext)) return 'audio';
+    if (ext === 'md') return 'md';
+    if (ext === 'tex') return 'tex';
+    if (ext === 'ly') return 'ly';
+    return /^https?:\/\//i.test(url) ? 'link' : 'other';
+  }
+
+  document.querySelectorAll('[data-recursos-editor]').forEach((root) => {
+    if (!(root instanceof HTMLElement) || root.dataset.bound === 'true') return;
+    root.dataset.bound = 'true';
+    const courseId = root.dataset.courseId || '';
+    const canManage = root.dataset.canManage === 'true';
+    if (!courseId || !canManage) return;
+
+    const listEl = root.querySelector('[data-recursos-list]');
+    const countEl = root.querySelector('[data-recursos-count]');
+    const statusEl = root.querySelector('[data-recursos-status]');
+    const r2ListEl = root.querySelector('[data-r2-list]');
+    const r2PrefixInput = root.querySelector('[data-r2-prefix]');
+    const attachForm = root.querySelector('[data-recursos-attach-form]');
+    const attachUrl = root.querySelector('[data-attach-url]');
+    const attachName = root.querySelector('[data-attach-name]');
+    const attachFolder = root.querySelector('[data-attach-folder]');
+
+    const setStatus = (message) => {
+      if (statusEl) statusEl.textContent = message || '';
+    };
+
+    const requestJson = async (url, options = {}) => {
+      const resp = await fetch(url, options);
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(payload?.error || `HTTP ${resp.status}`);
+      return payload;
+    };
+
+    const copyText = async (text) => {
+      await navigator.clipboard.writeText(text);
+      setStatus('Link copiado');
+    };
+
+    const loadResources = async () => {
+      if (!listEl) return;
+      listEl.innerHTML = '<div class="recursos-editor-empty">cargando...</div>';
+      try {
+        const payload = await requestJson(`/api/live/recursos/editor?courseId=${encodeURIComponent(courseId)}`);
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        if (countEl) countEl.textContent = String(items.length);
+        if (items.length === 0) {
+          listEl.innerHTML = '<div class="recursos-editor-empty">Sin recursos vinculados.</div>';
+          return;
+        }
+        listEl.innerHTML = items.map((item) => `
+          <article class="recursos-row" data-id="${esc(item.id)}">
+            <div class="recursos-row-main">
+              <input data-field="name" value="${esc(item.name)}" aria-label="Nombre" />
+              <input data-field="folder" value="${esc(item.folder)}" aria-label="Carpeta" />
+            </div>
+            <div class="recursos-meta">${esc(item.type)} / ${esc(item.source)} / ${esc(item.roomName)}${item.claseId ? ` / ${esc(item.claseId)}` : ''}</div>
+            <div class="recursos-row-actions">
+              <span class="recursos-row-url" title="${esc(item.url)}">${esc(item.url)}</span>
+              <button type="button" class="recursos-editor-btn" data-copy="${esc(item.url)}">Copiar</button>
+              <button type="button" class="recursos-editor-btn" data-save>Guardar</button>
+              <button type="button" class="recursos-editor-btn recursos-editor-btn--danger" data-delete>Borrar</button>
+            </div>
+          </article>
+        `).join('');
+      } catch (error) {
+        listEl.innerHTML = `<div class="recursos-editor-empty">${esc(error.message || error)}</div>`;
+      }
+    };
+
+    const loadR2 = async () => {
+      if (!r2ListEl || !(r2PrefixInput instanceof HTMLInputElement)) return;
+      const prefix = r2PrefixInput.value || 'room/';
+      r2ListEl.innerHTML = '<div class="recursos-editor-empty">cargando R2...</div>';
+      try {
+        const payload = await requestJson(`/api/live/recursos/r2?courseId=${encodeURIComponent(courseId)}&prefix=${encodeURIComponent(prefix)}`);
+        const folders = Array.isArray(payload.folders) ? payload.folders : [];
+        const objects = Array.isArray(payload.objects) ? payload.objects : [];
+        if (!folders.length && !objects.length) {
+          r2ListEl.innerHTML = '<div class="recursos-editor-empty">Sin objetos en este prefijo.</div>';
+          return;
+        }
+        r2ListEl.innerHTML = [
+          ...folders.map((folder) => `
+            <button type="button" class="recursos-r2-row" data-folder="${esc(folder)}">
+              <span class="recursos-r2-name">/${esc(folder)}</span>
+              <span class="recursos-r2-meta">folder</span>
+            </button>
+          `),
+          ...objects.map((object) => `
+            <div class="recursos-r2-row" data-url="${esc(object.url)}" data-name="${esc(object.name)}">
+              <span class="recursos-r2-name" title="${esc(object.key)}">${esc(object.name)}</span>
+              <span class="recursos-r2-meta">${formatBytes(object.size)}</span>
+              <button type="button" class="recursos-editor-btn" data-r2-copy="${esc(object.url)}">Copiar</button>
+              <button type="button" class="recursos-editor-btn" data-r2-use>Usar</button>
+            </div>
+          `),
+        ].join('');
+      } catch (error) {
+        r2ListEl.innerHTML = `<div class="recursos-editor-empty">${esc(error.message || error)}</div>`;
+      }
+    };
+
+    listEl?.addEventListener('click', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const row = target.closest('.recursos-row');
+      if (!(row instanceof HTMLElement)) return;
+      const id = row.dataset.id || '';
+      if (target.matches('[data-copy]')) {
+        await copyText(target.getAttribute('data-copy') || '');
+        return;
+      }
+      if (target.matches('[data-save]')) {
+        const name = row.querySelector('[data-field="name"]')?.value || '';
+        const folder = row.querySelector('[data-field="folder"]')?.value || '';
+        setStatus('Guardando...');
+        await requestJson('/api/live/recursos/editor', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId, id, name, folder }),
+        });
+        setStatus('Guardado');
+        await loadResources();
+        return;
+      }
+      if (target.matches('[data-delete]')) {
+        if (!confirm('Borrar este recurso de RECURSOS?')) return;
+        setStatus('Borrando...');
+        await requestJson(`/api/live/recursos/editor?courseId=${encodeURIComponent(courseId)}&id=${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+        setStatus('Borrado');
+        await loadResources();
+      }
+    });
+
+    r2ListEl?.addEventListener('click', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const folderRow = target.closest('[data-folder]');
+      if (folderRow instanceof HTMLElement && r2PrefixInput instanceof HTMLInputElement) {
+        r2PrefixInput.value = folderRow.dataset.folder || 'room/';
+        await loadR2();
+        return;
+      }
+      const row = target.closest('[data-url]');
+      if (!(row instanceof HTMLElement)) return;
+      const url = row.dataset.url || '';
+      const name = row.dataset.name || '';
+      if (target.matches('[data-r2-copy]')) {
+        await copyText(url);
+        return;
+      }
+      if (target.matches('[data-r2-use]')) {
+        if (attachUrl instanceof HTMLInputElement) attachUrl.value = url;
+        if (attachName instanceof HTMLInputElement) attachName.value = name;
+        if (attachFolder instanceof HTMLInputElement && !attachFolder.value) {
+          const type = typeFromUrl(url);
+          attachFolder.value = type === 'audio' ? 'media' : (type === 'pdf' || type === 'img' ? 'DOC' : '');
+        }
+        setStatus('URL preparada para vincular');
+      }
+    });
+
+    attachForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = new FormData(attachForm);
+      setStatus('Vinculando...');
+      await requestJson('/api/live/recursos/editor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId,
+          url: form.get('url'),
+          name: form.get('name'),
+          folder: form.get('folder'),
+          claseId: form.get('claseId'),
+          roomName: form.get('roomName'),
+        }),
+      });
+      attachForm.reset();
+      const roomInput = root.querySelector('[data-attach-room]');
+      if (roomInput instanceof HTMLInputElement) roomInput.value = `${courseId}-stage`;
+      setStatus('Vinculado');
+      await loadResources();
+    });
+
+    root.querySelector('[data-recursos-refresh]')?.addEventListener('click', () => loadResources());
+    root.querySelector('[data-r2-load]')?.addEventListener('click', () => loadR2());
+    root.querySelector('[data-r2-up]')?.addEventListener('click', () => {
+      if (!(r2PrefixInput instanceof HTMLInputElement)) return;
+      const parts = r2PrefixInput.value.split('/').filter(Boolean);
+      parts.pop();
+      r2PrefixInput.value = parts.length ? `${parts.join('/')}/` : 'room/';
+      void loadR2();
+    });
+
+    void loadResources();
+    void loadR2();
+  });
+</script>

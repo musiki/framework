@@ -4,6 +4,7 @@ export const prerender = false;
 import { getCollection, getEntry, render } from 'astro:content';
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
+import RecursosEditor from '../components/course/RecursosEditor.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
   getPublicContentStaticPaths,
@@ -241,6 +242,11 @@ if (session && canonicalCourseIdToUse && !isPublicWikiPage && !hasCourseEnrollme
 // Redirect enrolled students to welcome poll if not yet completed
 const isStudentEnrolled = session && hasCourseEnrollment && !canManageLiveInteractions && normalizeRole(sessionEnrollmentRole) === 'student';
 const isRequestingWelcomePage = requestedLessonPath === '_welcome' || requestedLessonPath.startsWith('_welcome/');
+const normalizedRequestedLessonPage = normalizeContentSlug(requestedLessonPath);
+const isRecursosEditorPage =
+  parts.length > 1 &&
+  !isCourseForumPage &&
+  ['recursos', '80-recursos', '80-recursos-recursos'].includes(normalizedRequestedLessonPage);
 if (isStudentEnrolled && !isRequestingWelcomePage) {
   const welcomeEntry = allLessons.find((entry) => entry.id === `${canonicalCourseIdToUse}/_welcome`);
   if (welcomeEntry) {
@@ -390,6 +396,9 @@ if (parts.length === 1) {
 } else if (isCourseForumPage) {
   // Show course forum hub
   currentEntry = courseIndex;
+} else if (isRecursosEditorPage) {
+  currentEntry = courseIndex;
+  resolvedLessonRoutePath = 'recursos';
 } else {
   const lessonPath = requestedLessonPath;
 
@@ -465,7 +474,7 @@ if (currentEntryType === 'info' && !session) {
 
 const renderedEntry = PublicContent ? { Content: PublicContent } : await render(currentEntry);
 const { Content: StaticContent } = renderedEntry;
-const dynamicContent = !isCourseForumPage
+const dynamicContent = !isCourseForumPage && !isRecursosEditorPage
   ? await getRuntimeDynamicContent(currentEntry.id)
   : null;
 
@@ -482,7 +491,7 @@ const lessonDescription =
   String(courseIndex?.data?.summary || courseIndex?.data?.description || '').trim();
 const lessonSlug = isLessonPage
   ? (
-    resolvedLessonRoutePath
+    (isRecursosEditorPage ? 'recursos' : resolvedLessonRoutePath)
     || lessonPathIndex.pathByEntryId.get(currentEntry.id)
     || getCourseEntryLegacyPath(currentEntry, canonicalCourseId)
   )
@@ -530,7 +539,7 @@ const activeCourseCode = String(
 const currentEntrySourcePath =
   sourcePathFromFrameworkFilePath((currentEntry as { filePath?: string } | null | undefined)?.filePath) ||
   (
-    isLessonPage
+    isLessonPage && !isRecursosEditorPage
       ? `cursos/${canonicalCourseId}/${getCourseEntryLegacyPath(currentEntry, canonicalCourseId)}.md`
       : `cursos/${canonicalCourseId}/_index.md`
   );
@@ -3278,6 +3287,36 @@ order:
           )}
         </div>
 
+        {canManageLiveInteractions && (
+          <div class="chapter">
+            <details class="chapter-details" open={isRecursosEditorPage}>
+              <summary class="chapter-title">
+                <span class="chapter-title-text">80 RECURSOS</span>
+                <span class="chapter-caret">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </span>
+              </summary>
+              <ul class="lesson-list">
+                <li class="lesson-item">
+                  <a
+                    href={`${courseHref}/recursos`}
+                    class:list={['lesson-link', { active: isRecursosEditorPage }]}
+                    data-course-id={canonicalCourseIdToUse || courseSlug}
+                    data-lesson-page-slug={`${canonicalCourseIdToUse || courseSlug}/recursos`}
+                  >
+                    <span class="lesson-link-text">Editor de recursos</span>
+                    <span class="lesson-link-trailing">
+                      <span class="lesson-type">Re</span>
+                    </span>
+                  </a>
+                </li>
+              </ul>
+            </details>
+          </div>
+        )}
+
         {(!isPublicWikiPage || Boolean(session)) && sortedChapters.map(([chapterName, lessons]) => {
           const isPublicFolder = /^9\d /.test(chapterName);
           const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
@@ -3462,8 +3501,15 @@ order:
           </section>
         )}
 
-      <div class="class-content" data-class-content data-entry-type={currentEntryType} hidden={isEditorActive}>
-        {dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />}
+      <div class="class-content" data-class-content data-entry-type={isRecursosEditorPage ? 'recursos-editor' : currentEntryType} hidden={isEditorActive}>
+        {isRecursosEditorPage ? (
+          <RecursosEditor
+            courseId={canonicalCourseId || courseSlug}
+            canManage={canManageLiveInteractions}
+          />
+        ) : (
+          dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />
+        )}
       </div>
 
         {isAssignment && (
