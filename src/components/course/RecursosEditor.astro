@@ -503,6 +503,31 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
     background: color-mix(in srgb, var(--c-bg) 96%, var(--c-link) 4%);
   }
 
+  .recursos-editor .recursos-session-group {
+    display: grid;
+    gap: 0.42rem;
+  }
+
+  .recursos-editor .recursos-session-group[data-drag-over="true"] .recursos-session-item {
+    border-color: var(--c-link);
+    background: color-mix(in srgb, var(--c-link) 10%, var(--c-bg) 90%);
+  }
+
+  .recursos-editor .recursos-session-resources {
+    display: grid;
+    gap: 0.42rem;
+    padding-left: 0.72rem;
+    border-left: 1px solid color-mix(in srgb, var(--c-border) 65%, transparent);
+  }
+
+  .recursos-editor .recursos-session-name-static {
+    flex: 1 1 10rem;
+    min-width: 0;
+    color: var(--c-fg);
+    font-weight: 650;
+    padding: 0.25rem 0.32rem;
+  }
+
   .recursos-editor .recursos-session-item input {
     flex: 1 1 10rem;
     min-width: 0;
@@ -929,17 +954,49 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 
     const renderSessionList = () => {
       if (!sessionListEl) return;
-      if (!availableSessions.length) {
-        sessionListEl.innerHTML = '';
-        return;
-      }
-      sessionListEl.innerHTML = availableSessions.map((session) => `
-        <div class="recursos-session-item" data-session-id="${esc(session.id)}">
-          <input data-session-name value="${esc(session.name || '')}" aria-label="Nombre de sesión" />
-          <span class="recursos-session-meta">${esc(labelForClaseId(session.claseId))}</span>
-          <button type="button" class="recursos-editor-btn" data-session-save>Guardar</button>
+      sessionListEl.innerHTML = '';
+    };
+
+    const resourceRowMarkup = (item) => `
+      <article class="recursos-row" data-id="${esc(item.id)}" draggable="true">
+        <div class="recursos-row-main">
+          <input data-field="name" value="${esc(item.name)}" aria-label="Nombre" title="Nombre" />
+          <a class="recursos-row-link" href="${esc(item.url)}" target="_blank" rel="noreferrer" aria-label="Abrir recurso" title="${esc(item.url)}">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
+              <path d="M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1" />
+            </svg>
+          </a>
+          <input data-field="folder" value="${esc(item.folder)}" aria-label="Carpeta" title="Carpeta" />
+          <input data-field="claseId" list="recursos-editor-class-options" value="${esc(item.claseId || '')}" aria-label="Clase / capítulo" title="Clase / capítulo" placeholder="curso" />
+          <select data-field="sessionId" aria-label="Sesión" title="Sesión">${sessionOptionsMarkup(item.sessionId || '', item.claseId || '')}</select>
         </div>
-      `).join('');
+        <div class="recursos-meta">${rowMetaMarkup(item)}</div>
+        <div class="recursos-row-actions">
+          <button type="button" class="recursos-editor-btn" data-copy="${esc(item.url)}">Copiar</button>
+          <button type="button" class="recursos-editor-btn" data-save>Guardar</button>
+          <button type="button" class="recursos-editor-btn recursos-editor-btn--danger" data-delete>Borrar</button>
+        </div>
+      </article>
+    `;
+
+    const sessionGroupMarkup = (session, items) => {
+      const sessionId = session?.id || '';
+      const isUnsessioned = !sessionId;
+      return `
+        <section class="recursos-session-group" data-session-drop="${esc(sessionId)}">
+          <div class="recursos-session-item" ${sessionId ? `data-session-id="${esc(sessionId)}"` : ''}>
+            ${sessionId
+              ? `<input data-session-name value="${esc(session.name || '')}" aria-label="Nombre de sesión" title="Nombre de sesión" />`
+              : '<span class="recursos-session-name-static">Sin sesión</span>'}
+            <span class="recursos-session-meta">${esc(isUnsessioned ? 'recursos generales' : labelForClaseId(session.claseId))}</span>
+            ${sessionId ? '<button type="button" class="recursos-editor-btn" data-session-save>Guardar</button>' : ''}
+          </div>
+          <div class="recursos-session-resources">
+            ${items.length ? items.map(resourceRowMarkup).join('') : '<div class="recursos-editor-empty">Sin recursos en esta sesión.</div>'}
+          </div>
+        </section>
+      `;
     };
 
     const uploadR2Files = async (files) => {
@@ -1001,28 +1058,24 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
           listEl.innerHTML = '<div class="recursos-editor-empty">Sin recursos vinculados.</div>';
           return;
         }
-        listEl.innerHTML = items.map((item) => `
-          <article class="recursos-row" data-id="${esc(item.id)}">
-            <div class="recursos-row-main">
-              <input data-field="name" value="${esc(item.name)}" aria-label="Nombre" />
-              <a class="recursos-row-link" href="${esc(item.url)}" target="_blank" rel="noreferrer" aria-label="Abrir recurso" title="${esc(item.url)}">
-                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
-                  <path d="M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1" />
-                </svg>
-              </a>
-              <input data-field="folder" value="${esc(item.folder)}" aria-label="Carpeta" />
-              <input data-field="claseId" list="recursos-editor-class-options" value="${esc(item.claseId || '')}" aria-label="Clase / capítulo" placeholder="curso" />
-              <select data-field="sessionId" aria-label="Sesión">${sessionOptionsMarkup(item.sessionId || '', item.claseId || '')}</select>
-            </div>
-            <div class="recursos-meta">${rowMetaMarkup(item)}</div>
-            <div class="recursos-row-actions">
-              <button type="button" class="recursos-editor-btn" data-copy="${esc(item.url)}">Copiar</button>
-              <button type="button" class="recursos-editor-btn" data-save>Guardar</button>
-              <button type="button" class="recursos-editor-btn recursos-editor-btn--danger" data-delete>Borrar</button>
-            </div>
-          </article>
-        `).join('');
+        const itemsBySession = new Map();
+        for (const item of items) {
+          const key = String(item.sessionId || '');
+          if (!itemsBySession.has(key)) itemsBySession.set(key, []);
+          itemsBySession.get(key).push(item);
+        }
+        const knownSessionIds = new Set(availableSessions.map((session) => String(session.id || '')));
+        const orphanSessionGroups = [...itemsBySession.keys()]
+          .filter((sessionId) => sessionId && !knownSessionIds.has(sessionId))
+          .map((sessionId) => ({ id: sessionId, name: `Sesión ${sessionId.slice(0, 8)}`, claseId: '' }));
+        const groups = [
+          ...availableSessions,
+          ...orphanSessionGroups,
+          { id: '', name: 'Sin sesión', claseId: '' },
+        ].filter((session) => session.id || (itemsBySession.get('') || []).length);
+        listEl.innerHTML = groups
+          .map((session) => sessionGroupMarkup(session, itemsBySession.get(String(session.id || '')) || []))
+          .join('');
       } catch (error) {
         listEl.innerHTML = `<div class="recursos-editor-empty">${esc(error.message || error)}</div>`;
       }
@@ -1096,9 +1149,44 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
       }
     };
 
+    const saveResourceRow = async (row, overrides = {}) => {
+      if (!(row instanceof HTMLElement)) return;
+      const id = row.dataset.id || '';
+      const payload = {
+        courseId,
+        id,
+        name: row.querySelector('[data-field="name"]')?.value || '',
+        folder: row.querySelector('[data-field="folder"]')?.value || '',
+        claseId: row.querySelector('[data-field="claseId"]')?.value || '',
+        sessionId: row.querySelector('[data-field="sessionId"]')?.value || '',
+        ...overrides,
+      };
+      await requestJson('/api/live/recursos/editor', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    };
+
     listEl?.addEventListener('click', async (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
+      if (target.matches('[data-session-save]')) {
+        const sessionRow = target.closest('[data-session-id]');
+        if (!(sessionRow instanceof HTMLElement)) return;
+        const nameInput = sessionRow.querySelector('[data-session-name]');
+        const name = nameInput instanceof HTMLInputElement ? nameInput.value : '';
+        if (!name.trim()) return;
+        setStatus('Guardando sesión...');
+        await requestJson('/api/live/session', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: sessionRow.dataset.sessionId || '', name }),
+        });
+        setStatus('Sesión guardada');
+        await loadResources();
+        return;
+      }
       const row = target.closest('.recursos-row');
       if (!(row instanceof HTMLElement)) return;
       const id = row.dataset.id || '';
@@ -1107,16 +1195,8 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         return;
       }
       if (target.matches('[data-save]')) {
-        const name = row.querySelector('[data-field="name"]')?.value || '';
-        const folder = row.querySelector('[data-field="folder"]')?.value || '';
-        const claseId = row.querySelector('[data-field="claseId"]')?.value || '';
-        const sessionId = row.querySelector('[data-field="sessionId"]')?.value || '';
         setStatus('Guardando...');
-        await requestJson('/api/live/recursos/editor', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId, id, name, folder, claseId, sessionId }),
-        });
+        await saveResourceRow(row);
         setStatus('Guardado');
         await loadResources();
         return;
@@ -1130,6 +1210,51 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         setStatus('Borrado');
         await loadResources();
       }
+    });
+
+    listEl?.addEventListener('dragstart', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const row = target.closest('.recursos-row');
+      if (!(row instanceof HTMLElement)) return;
+      event.dataTransfer?.setData('text/plain', row.dataset.id || '');
+      event.dataTransfer?.setData('application/x-recursos-row-id', row.dataset.id || '');
+    });
+
+    listEl?.addEventListener('dragover', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const group = target.closest('[data-session-drop]');
+      if (!(group instanceof HTMLElement)) return;
+      event.preventDefault();
+      group.dataset.dragOver = 'true';
+    });
+
+    listEl?.addEventListener('dragleave', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const group = target.closest('[data-session-drop]');
+      if (group instanceof HTMLElement) group.dataset.dragOver = 'false';
+    });
+
+    listEl?.addEventListener('drop', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const group = target.closest('[data-session-drop]');
+      if (!(group instanceof HTMLElement)) return;
+      event.preventDefault();
+      group.dataset.dragOver = 'false';
+      const id = event.dataTransfer?.getData('application/x-recursos-row-id') || event.dataTransfer?.getData('text/plain') || '';
+      if (!id) return;
+      const row = listEl.querySelector(`.recursos-row[data-id="${CSS.escape(id)}"]`);
+      if (!(row instanceof HTMLElement)) return;
+      const sessionId = group.dataset.sessionDrop || '';
+      const select = row.querySelector('[data-field="sessionId"]');
+      if (select instanceof HTMLSelectElement) select.value = sessionId;
+      setStatus('Moviendo recurso...');
+      await saveResourceRow(row, { sessionId });
+      setStatus('Recurso movido');
+      await loadResources();
     });
 
     listEl?.addEventListener('change', (event) => {

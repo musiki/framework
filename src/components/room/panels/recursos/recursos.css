@@ -66,12 +66,18 @@
 }
 
 .re-session-item {
+  display: grid;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.re-session-item-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-  font-size: 10px;
+  min-width: 0;
 }
 
 .re-session-item:hover {
@@ -99,6 +105,37 @@
   font-size: 9px;
   color: #444;
   flex-shrink: 0;
+}
+
+.re-session-files {
+  display: grid;
+  gap: 2px;
+  padding-left: 12px;
+}
+
+.re-session-file {
+  border: 0;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.re-session-file:hover {
+  color: #ddd;
+}
+
+.re-session-file-empty {
+  color: #444;
+  font-size: 9px;
+  font-style: italic;
 }
 
 /* ── Content / tree ───────────────────────────────────────── */

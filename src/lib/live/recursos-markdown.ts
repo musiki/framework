@@ -45,7 +45,8 @@ export function normalizeResourceProjectionItems(items: LiveResourceProjectionIt
     if (!url) continue;
 
     const folder = normalizeText(item.folder);
-    const key = `${folder}\n${url}`;
+    const sessionId = normalizeText((item as any).sessionId);
+    const key = `${sessionId}\n${folder}\n${url}`;
     if (seen.has(key)) continue;
     seen.add(key);
 

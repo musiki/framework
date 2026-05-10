@@ -14,12 +14,19 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
 
   const roomName = cleanString(url.searchParams.get('roomName') ?? '', 120);
   const claseId  = cleanString(url.searchParams.get('claseId')  ?? '', 240) || null;
+  const sessionIds = (url.searchParams.get('sessionIds') ?? '')
+    .split(',')
+    .map((value) => cleanString(value, 80))
+    .filter(Boolean);
   if (!roomName) return json({ error: 'roomName required' }, 400);
 
   const params: any[] = [roomName];
   let sql = `SELECT id, "claseId", "sessionId", "roomName", url, name, type, folder, source, "createdBy", "sortOrder", "createdAt"
              FROM "LiveClassResource" WHERE "roomName" = $1`;
-  if (claseId !== null) {
+  if (sessionIds.length > 0) {
+    params.push(sessionIds);
+    sql += ` AND "sessionId" = ANY($${params.length})`;
+  } else if (claseId !== null) {
     params.push(claseId);
     sql += ` AND "claseId" = $${params.length}`;
   } else {
@@ -64,7 +71,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const VALID_TYPES   = ['pdf','img','md','tex','ly','audio','link','other'];
-  const VALID_SOURCES = ['upload','chat','external-media','sa','sv','paste'];
+  const VALID_SOURCES = ['upload','chat','external-media','sa','sv','vs','paste'];
 
   const rows = items.map((item: any, i: number) => ({
     id:          String(item.id || crypto.randomUUID()),

@@ -69,7 +69,8 @@ export function removeItem(items: ResourceItem[], id: string): ResourceItem[] {
 }
 
 export function addItem(items: ResourceItem[], item: ResourceItem): ResourceItem[] {
-  if (items.some(i => i.url === item.url)) return items;
+  const sessionId = item.sessionId ?? '';
+  if (items.some(i => i.url === item.url && (i.sessionId ?? '') === sessionId && i.folder === item.folder)) return items;
   return [...items, item];
 }
 

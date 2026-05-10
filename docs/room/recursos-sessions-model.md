@@ -81,6 +81,10 @@ The room pod can remain optimized for live use, while the normal editor can be o
 - Room `RECURSOS` sessions created from the pod now store `courseId` in addition to `roomName` and `claseId`.
 - Room `RECURSOS` session context menu can rename the active session, writing through the same `/api/live/session` endpoint.
 - Normal editor resource saves persist both `claseId` and `sessionId`, then refresh the markdown projection.
+- Room `RECURSOS` session list renders files under each session and lazy-loads session resources from the database when needed.
+- Room file-drop, paste, chat, and external-media resources now attach to the active session.
+- Normal editor groups resources directly under each session and supports dragging rows between sessions.
+- Course sidebar `80 RECURSOS` renders a session/resource tree from Postgres; markdown projection remains as a background compatibility layer.
 
 ## Migration Direction
 

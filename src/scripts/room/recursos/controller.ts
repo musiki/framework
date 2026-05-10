@@ -52,6 +52,7 @@ export class RecursosController {
 
   private sessionId: string | null = null;
   private sessionName = '';
+  private sessionResources = new Map<string, ResourceItem[]>();
 
   private contentEl!: HTMLElement;
   private dropOverlayEl!: HTMLElement;
@@ -147,10 +148,31 @@ export class RecursosController {
       const resp = await fetch(`/api/live/session?roomName=${encodeURIComponent(roomName)}`);
       if (resp.ok) {
         const { session } = await resp.json();
-        if (session) { this.sessionId = session.id; this.sessionName = session.name; }
+        if (session) {
+          this.sessionId = session.id;
+          this.sessionName = session.name;
+          await this.loadSessionResources([session.id]);
+        }
       }
     } catch { /**/ }
     this.updateSessionBar();
+  }
+
+  private async loadSessionResources(sessionIds: string[]): Promise<void> {
+    const roomName = this.getRoomName() ?? '';
+    const ids = [...new Set(sessionIds.filter(Boolean))];
+    if (!roomName || ids.length === 0) return;
+    try {
+      const params = new URLSearchParams({ roomName, sessionIds: ids.join(',') });
+      const resp = await fetch(`/api/live/recursos?${params}`);
+      if (!resp.ok) return;
+      const items = this.dedupeItems((await resp.json()).items ?? []);
+      for (const sessionId of ids) {
+        this.sessionResources.set(sessionId, items.filter((item) => item.sessionId === sessionId));
+      }
+      for (const item of items) this.items = addItem(this.items, item);
+      this.items = this.dedupeItems(this.items);
+    } catch { /**/ }
   }
 
   private async ensureSession(): Promise<string> {
@@ -203,7 +225,7 @@ export class RecursosController {
     });
     window.addEventListener('musiki:recursos:chat-url', (e: Event) => {
       const { url } = (e as CustomEvent<{ url: string }>).detail;
-      this.addCompartido(url, quickNameFromUrl(url), 'chat');
+      void this.addCompartido(url, quickNameFromUrl(url), 'chat');
       void resolveNameFromUrl(url).then(name => {
         this.items = this.items.map(i => i.url === url ? { ...i, name } : i);
         this.render(); this.scheduleAutosave();
@@ -211,7 +233,7 @@ export class RecursosController {
     });
     window.addEventListener('musiki:recursos:external-media', (e: Event) => {
       const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail;
-      this.addCompartido(url, name || quickNameFromUrl(url), 'external-media');
+      void this.addCompartido(url, name || quickNameFromUrl(url), 'external-media');
     });
 
     this.foldBtn.addEventListener('click', () => this.toggleFoldAll());
@@ -329,12 +351,14 @@ export class RecursosController {
 
   // ── Compartidos ──────────────────────────────────────────────────────────────
 
-  private addCompartido(url: string, name: string, source: ResourceItem['source']) {
+  private async addCompartido(url: string, name: string, source: ResourceItem['source']) {
     if (!url) return;
+    const sid = await this.ensureSession();
     this.items = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
       type: typeFromUrl(url), folder: 'compartidos', source,
       createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
+      sessionId: sid || null,
     });
     this.render(); this.scheduleAutosave(); this.broadcastSync();
   }
@@ -441,23 +465,57 @@ export class RecursosController {
         this.sessionsListEl.innerHTML = '<div style="padding:6px 10px;font-size:10px;color:#444">sin sesiones</div>';
         return;
       }
+      await this.loadSessionResources(sessions.map((session: any) => String(session.id || '')).filter(Boolean));
       this.sessionsListEl.innerHTML = '';
       for (const s of sessions) {
         const item = document.createElement('div');
         item.className = 're-session-item' + (s.id === this.sessionId ? ' re-session-item--active' : '');
         const date = new Date(s.createdAt).toLocaleDateString('es', { month: 'short', day: 'numeric' });
-        item.innerHTML = `<span class="re-session-item-name">${s.name}</span><span class="re-session-item-date">${date}</span>`;
-        item.addEventListener('click', () => {
+        const sessionItems = this.itemsForSession(s.id);
+        item.innerHTML = `
+          <div class="re-session-item-row">
+            <span class="re-session-item-name">${this.escapeHtml(s.name)}</span>
+            <span class="re-session-item-date">${date}</span>
+          </div>
+          <div class="re-session-files">
+            ${sessionItems.length
+              ? sessionItems.map((resource) => `<button type="button" class="re-session-file" data-item-id="${this.escapeHtml(resource.id)}" title="${this.escapeHtml(resource.url)}">${this.escapeHtml(resource.name)}</button>`).join('')
+              : '<span class="re-session-file-empty">sin archivos</span>'}
+          </div>
+        `;
+        item.addEventListener('click', async (event) => {
+          const target = event.target;
+          if (target instanceof HTMLElement && target.matches('[data-item-id]')) {
+            const resource = this.items.find((candidate) => candidate.id === target.dataset.itemId);
+            if (resource) this.requestResourceOpen(resource);
+            return;
+          }
           this.sessionId = s.id;
           this.sessionName = s.name;
+          await this.loadSessionResources([s.id]);
           this.sessionsModalEl.setAttribute('hidden', '');
-          this.updateSessionBar();
+          this.render();
         });
         this.sessionsListEl.appendChild(item);
       }
     } catch {
       this.sessionsListEl.innerHTML = '<div style="padding:6px 10px;font-size:10px;color:#e06666">error</div>';
     }
+  }
+
+  private itemsForSession(sessionId: string): ResourceItem[] {
+    const known = this.items.filter((item) => item.sessionId === sessionId);
+    const loaded = this.sessionResources.get(sessionId) ?? [];
+    return this.dedupeItems([...known, ...loaded]);
+  }
+
+  private escapeHtml(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   // ── Enviar a SA ───────────────────────────────────────────────────────────────
@@ -488,10 +546,12 @@ export class RecursosController {
       if (!resp.ok) { console.error('[Re] upload failed', resp.status); return; }
       const { url } = await resp.json();
       const type = typeFromUrl(url);
+      const sid = await this.ensureSession();
       const newItem: ResourceItem = {
         id: crypto.randomUUID(), url, name: nameFromFile(file),
         type, folder: this.defaultFolderForType(type), source: 'upload',
         createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
+        sessionId: sid || null,
       };
       this.items = addItem(this.items, newItem);
       this.render(); this.scheduleAutosave(); this.broadcastSync();
@@ -507,10 +567,12 @@ export class RecursosController {
     try {
       const text = (await navigator.clipboard.readText()).trim();
       if (!/^https?:\/\//i.test(text)) return;
+      const sid = await this.ensureSession();
       const item: ResourceItem = {
         id: crypto.randomUUID(), url: text, name: quickNameFromUrl(text),
         type: typeFromUrl(text), folder: '', source: 'paste',
         createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
+        sessionId: sid || null,
       };
       this.items = addItem(this.items, item);
       this.render(); this.scheduleAutosave(); this.broadcastSync();
@@ -587,7 +649,8 @@ export class RecursosController {
       const url = String(item?.url || '').trim();
       if (!url) continue;
       const folder = String(item?.folder || '').trim();
-      const key = `${folder}\n${url}`;
+      const sessionId = String(item?.sessionId || '').trim();
+      const key = `${sessionId}\n${folder}\n${url}`;
       if (seen.has(key)) continue;
       seen.add(key);
       result.push({ ...item, url, folder });
@@ -598,20 +661,13 @@ export class RecursosController {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   private render() {
-    renderFiletree(this.contentEl, this.items, this.collapsedFolders, this.emptyFolders, {
+    const visibleItems = this.sessionId
+      ? this.itemsForSession(this.sessionId)
+      : this.items;
+    renderFiletree(this.contentEl, visibleItems, this.collapsedFolders, this.emptyFolders, {
       headerEl: this.buildHeaderEl(),
       canEdit: this.canEdit(),
-      onItemClick: (item) => {
-        if (this.isVisualMedia(item) && this.canSendVisual()) {
-          this.requestVisualLoad(item);
-          return;
-        }
-        if (this.isSonicMedia(item) && this.canSendSonic()) {
-          this.requestSonicLoad(item);
-          return;
-        }
-        window.open(item.url, '_blank', 'noopener');
-      },
+      onItemClick: (item) => this.requestResourceOpen(item),
       onItemContextMenu: (item, e) => this.openItemCtxMenu(item, e),
       onFolderContextMenu: (folder, e) => this.openFolderCtxMenu(folder, e),
       onFolderToggle: (folder) => this.toggleFolder(folder),
@@ -630,6 +686,18 @@ export class RecursosController {
         }
       },
     });
+  }
+
+  private requestResourceOpen(item: ResourceItem): void {
+    if (this.isVisualMedia(item) && this.canSendVisual()) {
+      this.requestVisualLoad(item);
+      return;
+    }
+    if (this.isSonicMedia(item) && this.canSendSonic()) {
+      this.requestSonicLoad(item);
+      return;
+    }
+    window.open(item.url, '_blank', 'noopener');
   }
 
   // ── Folders ───────────────────────────────────────────────────────────────────

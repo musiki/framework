@@ -397,6 +397,70 @@ const recursosClassOptions = sortedChapters
   })
   .filter(Boolean) as Array<{ value: string; label: string }>;
 
+let recursosSidebarGroups: Array<{
+  session: { id: string; name: string; claseId: string | null } | null;
+  resources: Array<{ id: string; url: string; name: string; type: string; folder: string | null }>;
+}> = [];
+
+if (session && recursosCourseId) {
+  try {
+    const { query } = await import('../lib/db/pool');
+    const stageRoomName = `${recursosCourseId}-stage`;
+    const [{ data: sessionRows }, { data: resourceRows }] = await Promise.all([
+      query(
+        `SELECT id, name, "claseId"
+           FROM "ResourceSession"
+          WHERE "roomName" = $1
+             OR "courseId" = $2
+             OR "claseId" = $2
+             OR "claseId" LIKE $3
+          ORDER BY "createdAt" DESC
+          LIMIT 50`,
+        [stageRoomName, recursosCourseId, `${recursosCourseId}/%`],
+      ),
+      query(
+        `SELECT id, "sessionId", url, name, type, folder
+           FROM "LiveClassResource"
+          WHERE "claseId" = $1
+             OR "claseId" LIKE $2
+             OR "roomName" = $3
+          ORDER BY "roomName" ASC, "claseId" ASC NULLS FIRST, folder ASC, "sortOrder" ASC, "createdAt" ASC
+          LIMIT 200`,
+        [recursosCourseId, `${recursosCourseId}/%`, stageRoomName],
+      ),
+    ]);
+    const resourcesBySession = new Map<string, any[]>();
+    for (const resource of resourceRows ?? []) {
+      const key = String((resource as any).sessionId || '');
+      if (!resourcesBySession.has(key)) resourcesBySession.set(key, []);
+      resourcesBySession.get(key)!.push(resource as any);
+    }
+    const knownSessionIds = new Set((sessionRows ?? []).map((row: any) => String(row.id || '')));
+    const orphanGroups = [...resourcesBySession.keys()]
+      .filter((sessionId) => sessionId && !knownSessionIds.has(sessionId))
+      .map((sessionId) => ({
+        session: { id: sessionId, name: `Sesión ${sessionId.slice(0, 8)}`, claseId: null },
+        resources: resourcesBySession.get(sessionId) ?? [],
+      }));
+    recursosSidebarGroups = [
+      ...(sessionRows ?? []).map((row: any) => ({
+        session: {
+          id: String(row.id || ''),
+          name: String(row.name || 'Sesión'),
+          claseId: row.claseId == null ? null : String(row.claseId),
+        },
+        resources: resourcesBySession.get(String(row.id || '')) ?? [],
+      })),
+      ...orphanGroups,
+      ...((resourcesBySession.get('') ?? []).length
+        ? [{ session: null, resources: resourcesBySession.get('') ?? [] }]
+        : []),
+    ];
+  } catch (error) {
+    console.error('[recursos-sidebar] failed to load resources', error);
+  }
+}
+
 // Group concepts and glossary by project and parent
 const groupedConcepts: Record<string, Record<string, typeof allLessons>> = {};
 
@@ -1494,6 +1558,75 @@ order:
 
       .sidebar--left .lesson-link {
         padding: 0.15rem 0.6rem;
+      }
+
+      .sidebar--left .recursos-sidebar-tree {
+        display: grid;
+        gap: 0.35rem;
+        margin: 0.35rem 0 0.55rem;
+        padding: 0 0.35rem 0 0.8rem;
+      }
+
+      .sidebar--left .recursos-sidebar-session {
+        display: grid;
+        gap: 0.12rem;
+        border-left: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
+        padding-left: 0.45rem;
+      }
+
+      .sidebar--left .recursos-sidebar-session-name {
+        color: var(--c-fg-subtle);
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sidebar--left .recursos-sidebar-resource-list {
+        display: grid;
+        gap: 1px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .sidebar--left .recursos-sidebar-resource-item {
+        list-style: none;
+        margin: 0;
+      }
+
+      .sidebar--left .recursos-sidebar-resource-link {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        min-width: 0;
+        border-radius: 4px;
+        color: var(--c-fg);
+        font-size: 0.76rem;
+        line-height: 1.2;
+        padding: 0.12rem 0.25rem;
+        text-decoration: none;
+      }
+
+      .sidebar--left .recursos-sidebar-resource-link:hover {
+        background: color-mix(in srgb, var(--accent) 9%, transparent);
+        color: var(--accent);
+      }
+
+      .sidebar--left .recursos-sidebar-resource-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sidebar--left .recursos-sidebar-resource-folder {
+        flex: 0 0 auto;
+        color: var(--c-fg-subtle);
+        font-size: 0.66rem;
       }
 
       .lesson-link {
@@ -3380,6 +3513,27 @@ order:
                       </svg>
                     </span>
                   </summary>
+                  {recursosSidebarGroups.length > 0 && (
+                    <div class="recursos-sidebar-tree">
+                      {recursosSidebarGroups.map((group) => (
+                        <div class="recursos-sidebar-session">
+                          <div class="recursos-sidebar-session-name">
+                            {group.session?.name || 'Sin sesión'}
+                          </div>
+                          <ul class="recursos-sidebar-resource-list">
+                            {group.resources.map((resource) => (
+                              <li class="recursos-sidebar-resource-item">
+                                <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                  <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                  {resource.folder && <span class="recursos-sidebar-resource-folder">{resource.folder}</span>}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </details>
               </div>
             );
@@ -3417,8 +3571,29 @@ order:
                     </svg>
                   </span>
                 </summary>
-                <ul class="lesson-list">
-                  {lessons.map((lesson) => {
+                {isRecursosChapter && recursosSidebarGroups.length > 0 ? (
+                  <div class="recursos-sidebar-tree">
+                    {recursosSidebarGroups.map((group) => (
+                      <div class="recursos-sidebar-session">
+                        <div class="recursos-sidebar-session-name">
+                          {group.session?.name || 'Sin sesión'}
+                        </div>
+                        <ul class="recursos-sidebar-resource-list">
+                          {group.resources.map((resource) => (
+                            <li class="recursos-sidebar-resource-item">
+                              <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                {resource.folder && <span class="recursos-sidebar-resource-folder">{resource.folder}</span>}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <ul class="lesson-list">
+                    {lessons.map((lesson) => {
                     const isContentCollection = (lesson as any).collection === 'content';
                     const lessonType = String(lesson.data.type || '').trim().toLowerCase();
                     const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
@@ -3494,8 +3669,9 @@ order:
                         </a>
                       </li>
                     );
-                  })}
-                </ul>
+                    })}
+                  </ul>
+                )}
               </details>
             </div>
           );
