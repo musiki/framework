@@ -1,6 +1,6 @@
 import type { ConferenceMessage } from '../session';
 
-export type VisualKind = 'pdf' | 'img';
+export type VisualKind = 'pdf' | 'img' | 'video';
 export type VisualZoomMode = 'fit' | 'width' | 'actual' | 'custom';
 
 export type VisualizerState = {
@@ -24,9 +24,12 @@ const ACCEPTED_TYPES = [
   'image/gif',
   'image/webp',
   'image/svg+xml',
+  'video/quicktime',
+  'video/mp4',
+  'video/webm',
 ];
 
-const ACCEPTED_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+const ACCEPTED_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.mov', '.mp4', '.webm'];
 
 const emptyState = (): VisualizerState => ({
   url: null,
@@ -44,6 +47,7 @@ const kindFromUrl = (url: string): VisualKind | null => {
   const ext = extFromName(url);
   if (ext === '.pdf') return 'pdf';
   if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) return 'img';
+  if (['.mov', '.mp4', '.webm'].includes(ext)) return 'video';
   return null;
 };
 
@@ -62,6 +66,7 @@ export class VisualizerController {
   private statusEl!: HTMLElement;
   private frameEl!: HTMLIFrameElement;
   private imageEl!: HTMLImageElement;
+  private videoEl!: HTMLVideoElement;
   private emptyEl!: HTMLElement;
   private pageInput!: HTMLInputElement;
   private zoomButtons: HTMLButtonElement[] = [];
@@ -104,7 +109,7 @@ export class VisualizerController {
 
   public applyRemoteState(next: Partial<VisualizerState>): void {
     const url = typeof next.url === 'string' && next.url ? next.url : null;
-    const kind = next.kind === 'pdf' || next.kind === 'img' ? next.kind : (url ? kindFromUrl(url) : null);
+    const kind = next.kind === 'pdf' || next.kind === 'img' || next.kind === 'video' ? next.kind : (url ? kindFromUrl(url) : null);
     this.state = {
       url,
       name: typeof next.name === 'string' ? next.name : '',
@@ -133,6 +138,7 @@ export class VisualizerController {
     this.statusEl = q('[data-vs-status]');
     this.frameEl = q<HTMLIFrameElement>('[data-vs-frame]');
     this.imageEl = q<HTMLImageElement>('[data-vs-image]');
+    this.videoEl = q<HTMLVideoElement>('[data-vs-video]');
     this.emptyEl = q('[data-vs-empty]');
     this.pageInput = q<HTMLInputElement>('[data-vs-page]');
     this.zoomButtons = Array.from(this.container.querySelectorAll<HTMLButtonElement>('[data-vs-zoom]'));
@@ -249,27 +255,40 @@ export class VisualizerController {
     if (!url || !kind) {
       this.frameEl.hidden = true;
       this.imageEl.hidden = true;
+      this.videoEl.hidden = true;
       this.emptyEl.hidden = false;
       return;
     }
 
     this.emptyEl.hidden = true;
     if (kind === 'pdf') this.renderPdf(url);
-    else this.renderImage(url);
+    else if (kind === 'img') this.renderImage(url);
+    else this.renderVideo(url);
   }
 
   private renderPdf(url: string): void {
     this.imageEl.hidden = true;
+    this.videoEl.hidden = true;
     this.frameEl.hidden = false;
     this.frameEl.src = `${url}${url.includes('#') ? '&' : '#'}page=${this.state.page}&zoom=${this.pdfZoomFragment()}`;
   }
 
   private renderImage(url: string): void {
     this.frameEl.hidden = true;
+    this.videoEl.hidden = true;
     this.imageEl.hidden = false;
     this.imageEl.src = url;
     this.imageEl.alt = this.state.name || 'visual resource';
     this.imageEl.style.setProperty('--vs-image-scale', String(this.state.zoomMode === 'custom' ? this.state.zoom / 100 : 1));
+  }
+
+  private renderVideo(url: string): void {
+    this.frameEl.hidden = true;
+    this.imageEl.hidden = true;
+    this.videoEl.hidden = false;
+    if (this.videoEl.getAttribute('src') !== url) this.videoEl.src = url;
+    this.videoEl.title = this.state.name || 'video resource';
+    this.videoEl.style.setProperty('--vs-image-scale', String(this.state.zoomMode === 'custom' ? this.state.zoom / 100 : 1));
   }
 
   private pdfZoomFragment(): string {

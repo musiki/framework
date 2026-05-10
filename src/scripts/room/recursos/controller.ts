@@ -555,6 +555,7 @@ export class RecursosController {
       };
       this.items = addItem(this.items, newItem);
       this.render(); this.scheduleAutosave(); this.broadcastSync();
+      if (type === 'video') this.requestResourceOpen(newItem);
       void resolveNameFromUrl(url).then(name => {
         this.items = this.items.map(i => i.id === newItem.id ? { ...i, name } : i);
         this.render(); this.scheduleAutosave();
@@ -689,14 +690,15 @@ export class RecursosController {
   }
 
   private requestResourceOpen(item: ResourceItem): void {
-    if (this.isVisualMedia(item) && this.canSendVisual()) {
+    const sentVisual = this.isVisualMedia(item) && this.canSendVisual();
+    const sentSonic = this.isSonicMedia(item) && this.canSendSonic();
+    if (sentVisual) {
       this.requestVisualLoad(item);
-      return;
     }
-    if (this.isSonicMedia(item) && this.canSendSonic()) {
+    if (sentSonic) {
       this.requestSonicLoad(item);
-      return;
     }
+    if (sentVisual || sentSonic) return;
     window.open(item.url, '_blank', 'noopener');
   }
 
@@ -776,16 +778,16 @@ export class RecursosController {
   }
 
   private isSonicMedia(item: ResourceItem): boolean {
-    return item.type === 'audio';
+    return item.type === 'audio' || item.type === 'video';
   }
 
   private isVisualMedia(item: ResourceItem): boolean {
-    return item.type === 'pdf' || item.type === 'img';
+    return item.type === 'pdf' || item.type === 'img' || item.type === 'video';
   }
 
   private defaultFolderForType(type: ResourceType | 'other'): string {
     if (type === 'audio') return 'media';
-    if (type === 'pdf' || type === 'img') return 'DOC';
+    if (type === 'pdf' || type === 'img' || type === 'video') return 'DOC';
     return '';
   }
 

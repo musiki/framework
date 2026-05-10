@@ -752,7 +752,8 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
   }
 
   .recursos-editor .recursos-r2-preview img,
-  .recursos-editor .recursos-r2-preview iframe {
+  .recursos-editor .recursos-r2-preview iframe,
+  .recursos-editor .recursos-r2-preview video {
     width: 100%;
     height: 100%;
     border: 0;
@@ -820,7 +821,8 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
     const ext = String(url || '').split('?')[0].split('.').pop()?.toLowerCase() || '';
     if (ext === 'pdf') return 'pdf';
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'img';
-    if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'mov', 'mp4'].includes(ext)) return 'audio';
+    if (['mov', 'mp4', 'webm'].includes(ext)) return 'video';
+    if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) return 'audio';
     if (ext === 'md') return 'md';
     if (ext === 'tex') return 'tex';
     if (ext === 'ly') return 'ly';
@@ -836,6 +838,9 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
     }
     if (type === 'pdf') {
       return `<div class="recursos-r2-preview recursos-r2-preview--pdf"><iframe src="${esc(url)}#page=1&toolbar=0&navpanes=0&scrollbar=0" title="${esc(name)}" loading="lazy"></iframe></div>`;
+    }
+    if (type === 'video') {
+      return `<div class="recursos-r2-preview recursos-r2-preview--video"><video src="${esc(url)}" muted playsinline preload="metadata"></video></div>`;
     }
     return `<div class="recursos-r2-preview recursos-r2-preview--${esc(type)}"><span class="recursos-r2-preview-token">${esc(type.toUpperCase())}</span></div>`;
   }
@@ -1340,7 +1345,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         if (attachName instanceof HTMLInputElement) attachName.value = name;
         if (attachFolder instanceof HTMLInputElement && !attachFolder.value) {
           const type = typeFromUrl(url);
-          attachFolder.value = type === 'audio' ? 'media' : (type === 'pdf' || type === 'img' ? 'DOC' : '');
+          attachFolder.value = type === 'audio' ? 'media' : (type === 'pdf' || type === 'img' || type === 'video' ? 'DOC' : '');
         }
         setStatus('URL preparada para vincular');
       }

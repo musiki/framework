@@ -243,10 +243,15 @@ export type ConferenceMessage =
       enabled: boolean;
     }
   | {
+      type: 'sv-zoom';
+      zoomX: number;
+      viewStart: number;
+    }
+  | {
       type: 'vs-state';
       url: string | null;
       name: string;
-      kind: 'pdf' | 'img' | null;
+      kind: 'pdf' | 'img' | 'video' | null;
       page: number;
       zoomMode: 'fit' | 'width' | 'actual' | 'custom';
       zoom: number;
@@ -740,6 +745,14 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       };
     }
 
+    if (parsed.type === 'sv-zoom') {
+      return {
+        type: 'sv-zoom',
+        zoomX: Math.min(256, Math.max(1, Number((parsed as { zoomX?: number }).zoomX) || 1)),
+        viewStart: Math.max(0, Number((parsed as { viewStart?: number }).viewStart) || 0),
+      };
+    }
+
     if (parsed.type === 'vs-state') {
       const url = normalizeText((parsed as { url?: string | null }).url);
       const rawKind = normalizeText((parsed as { kind?: string | null }).kind);
@@ -752,7 +765,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         type: 'vs-state',
         url: url || null,
         name: normalizeText((parsed as { name?: string }).name) || 'document',
-        kind: rawKind === 'pdf' || rawKind === 'img' ? rawKind : null,
+        kind: rawKind === 'pdf' || rawKind === 'img' || rawKind === 'video' ? rawKind : null,
         page: Math.max(1, Math.round(Number((parsed as { page?: number }).page) || 1)),
         zoomMode,
         zoom: Math.min(400, Math.max(25, Math.round(Number((parsed as { zoom?: number }).zoom) || 100))),

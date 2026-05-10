@@ -20,6 +20,7 @@ const TYPE_ICON: Record<string, { char: string; color: string }> = {
   tex:   { char: '■', color: '#f6b26b' },
   ly:    { char: '♩', color: '#ffd966' },
   audio: { char: '♪', color: '#93c47d' },
+  video: { char: '▶', color: '#76d3ff' },
   link:  { char: '⬡', color: '#8e7cc3' },
   other: { char: '·', color: '#666'    },
 };

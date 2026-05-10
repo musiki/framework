@@ -77,18 +77,23 @@ import './sonic-visualizer.css';
           </span>
         </button>
       </div>
+      <button type="button" class="musiki-pod-btn sv-zoom-btn" data-sv-zoom-out title="Zoom horizontal -">−</button>
+      <button type="button" class="musiki-pod-btn sv-zoom-btn sv-zoom-reset" data-sv-zoom-reset title="Volver a 1:1">1:1</button>
+      <button type="button" class="musiki-pod-btn sv-zoom-btn" data-sv-zoom-in title="Zoom horizontal +">+</button>
+      <span class="sv-zoom-readout" data-sv-zoom-readout>1.00×</span>
       <button type="button" class="musiki-pod-btn sv-play-btn"  data-sv-play  title="Play / Pause">▶</button>
       <button type="button" class="musiki-pod-btn sv-loop-btn"  data-sv-loop  data-active="false" title="Loop region (drag or click segment)">⟳</button>
     </div>
 
     <div class="sv-panes">
       <div class="sv-pane sv-pane--main">
-        <div class="sv-ruler" data-sv-ruler title="Click/drag: seek · Drag IN/OUT markers: ajustar loop">
-          <div class="sv-ruler-playhead" data-sv-ruler-playhead></div>
-          <div class="sv-ruler-marker sv-ruler-in"  data-sv-in-marker  hidden title="Loop IN (drag)">▾</div>
-          <div class="sv-ruler-marker sv-ruler-out" data-sv-out-marker hidden title="Loop OUT (drag)">▾</div>
-        </div>
         <canvas class="sv-main-canvas" data-sv-main-canvas></canvas>
+        <div class="sv-ruler" data-sv-ruler title="Click/drag: seek · rueda/pinch: zoom horizontal · Drag IN/OUT markers: ajustar loop">
+          <div class="sv-ruler-ticks" data-sv-ruler-ticks></div>
+          <div class="sv-ruler-playhead" data-sv-ruler-playhead></div>
+          <div class="sv-ruler-marker sv-ruler-in"  data-sv-in-marker  hidden title="Loop IN (drag)">▴</div>
+          <div class="sv-ruler-marker sv-ruler-out" data-sv-out-marker hidden title="Loop OUT (drag)">▴</div>
+        </div>
       </div>
     </div>
 

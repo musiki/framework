@@ -1,12 +1,12 @@
 // Pure functions for extracting Author-year-title display names from URLs and filenames.
 
-export type ResourceType = 'pdf' | 'img' | 'md' | 'tex' | 'ly' | 'audio' | 'link' | 'other';
+export type ResourceType = 'pdf' | 'img' | 'md' | 'tex' | 'ly' | 'audio' | 'video' | 'link' | 'other';
 
 const EXT_TYPE_MAP: Record<string, ResourceType> = {
   pdf: 'pdf', jpg: 'img', jpeg: 'img', png: 'img', gif: 'img', webp: 'img', svg: 'img',
   md: 'md', markdown: 'md', tex: 'tex', ly: 'ly',
   mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', flac: 'audio',
-  mov: 'audio', mp4: 'audio', webm: 'audio',
+  mov: 'video', mp4: 'video', webm: 'video',
 };
 
 export function typeFromExt(ext: string): ResourceType {

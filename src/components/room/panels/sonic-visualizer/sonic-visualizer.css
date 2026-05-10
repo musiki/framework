@@ -59,10 +59,21 @@
 }
 
 /* Play / Loop in toolbar */
-.sv-play-btn, .sv-loop-btn {
+.sv-play-btn, .sv-loop-btn, .sv-zoom-btn {
   font-size: 0.65rem; padding: 0 0.35rem; height: 1.3rem; min-width: unset; flex-shrink: 0;
 }
 .sv-loop-btn[data-active="true"] { color: #45D384; border-color: rgba(69,211,132,0.4); }
+.sv-zoom-reset {
+  font-size: 0.5rem;
+  letter-spacing: 0;
+}
+.sv-zoom-readout {
+  flex: 0 0 auto;
+  min-width: 2.8rem;
+  color: var(--conference-muted,#7f849c);
+  font-size: 0.5rem;
+  text-align: right;
+}
 
 /* Pane container */
 .sv-panes {
@@ -76,19 +87,45 @@
 .sv-main-canvas {
   display: block; width: 100%; flex: 1; min-height: 0;
   cursor: crosshair;
+  touch-action: none;
 }
 
 /* Ruler */
 .sv-ruler {
-  height: 14px;
+  height: 18px;
   position: relative;
-  background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: transparent;
+  border-top: 1px solid rgba(255,255,255,0.07);
   flex-shrink: 0;
   cursor: crosshair;
   overflow: visible;
   z-index: 2;
   user-select: none;
+  touch-action: none;
+}
+.sv-ruler-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.sv-ruler-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255,255,255,0.18);
+}
+.sv-ruler-tick--major {
+  background: rgba(255,255,255,0.34);
+}
+.sv-ruler-label {
+  position: absolute;
+  top: 3px;
+  transform: translateX(3px);
+  color: rgba(255,255,255,0.58);
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
 }
 .sv-ruler-playhead {
   position: absolute;
@@ -100,9 +137,9 @@
 }
 .sv-ruler-marker {
   position: absolute;
-  top: 0;
+  bottom: 0;
   font-size: 8px;
-  line-height: 14px;
+  line-height: 12px;
   cursor: ew-resize;
   pointer-events: all;
   transform: translateX(-50%);
@@ -110,6 +147,11 @@
 .sv-ruler-in  { color: #45D384; }
 .sv-ruler-out { color: #E06666; }
 .sv-ruler-marker[hidden] { display: none; }
+
+@container svpod (max-width: 560px) {
+  .sv-zoom-readout { display: none; }
+  .sv-zoom-btn { padding-inline: 0.28rem; }
+}
 
 .sv-drop-overlay {
   position: absolute;

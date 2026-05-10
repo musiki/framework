@@ -12604,6 +12604,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
+      if (message.type === 'sv-zoom') {
+        if (!canAcceptSonicControl(participant)) return;
+        sonicVisualizerController?.applyRemoteZoom(message.zoomX, message.viewStart);
+        return;
+      }
+
       if (message.type === 'vs-state') {
         if (!canAcceptVisualControl(participant)) return;
         workspaceManager.focusOrOpenVisualizer('recursos');

@@ -3,12 +3,13 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { json } from '../../../lib/forum-server';
 import { getR2BucketName, getR2Client, getR2PublicObjectUrl } from '../../../lib/r2';
 
-const MAX_BYTES = 24 * 1024 * 1024;
+const MAX_BYTES = 256 * 1024 * 1024;
 
 const ALLOWED_EXTS = new Set([
   'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg',
   'md', 'tex', 'ly', 'txt',
   'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac',
+  'mov', 'mp4', 'webm',
   'zip', 'tar', 'gz', 'other',
 ]);
 
@@ -26,6 +27,9 @@ function guessType(ext: string): string {
     m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac',
   };
   if (ext in AUDIO_TYPES) return AUDIO_TYPES[ext];
+  if (ext === 'mov') return 'video/quicktime';
+  if (ext === 'mp4') return 'video/mp4';
+  if (ext === 'webm') return 'video/webm';
   if (['md', 'tex', 'ly', 'txt'].includes(ext)) return 'text/plain';
   return 'application/octet-stream';
 }
@@ -51,7 +55,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const file = form.get('file');
     if (!(file instanceof File)) return json({ error: 'No file provided.' }, 400);
     if (file.size <= 0) return json({ error: 'File is empty.' }, 400);
-    if (file.size > MAX_BYTES) return json({ error: 'File exceeds 24 MB limit.' }, 413);
+    if (file.size > MAX_BYTES) return json({ error: 'File exceeds 256 MB limit.' }, 413);
 
     const ext = guessExt(file);
     if (!ALLOWED_EXTS.has(ext)) return json({ error: 'File type not allowed.' }, 415);

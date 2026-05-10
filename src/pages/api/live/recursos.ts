@@ -70,7 +70,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ ok: true, count: 0, projection });
   }
 
-  const VALID_TYPES   = ['pdf','img','md','tex','ly','audio','link','other'];
+  const VALID_TYPES   = ['pdf','img','md','tex','ly','audio','video','link','other'];
   const VALID_SOURCES = ['upload','chat','external-media','sa','sv','vs','paste'];
 
   const rows = items.map((item: any, i: number) => ({

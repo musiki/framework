@@ -7,9 +7,10 @@ const AUDIO_MIME: Record<string, string> = {
   'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav',
   'audio/wave': 'wav', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a',
   'audio/aac': 'aac', 'audio/flac': 'flac', 'audio/x-flac': 'flac',
+  'video/quicktime': 'mov', 'video/mp4': 'mp4', 'video/webm': 'webm',
 };
-const AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac']);
-const MAX_BYTES = 24 * 1024 * 1024;
+const AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'mov', 'mp4', 'webm']);
+const MAX_BYTES = 256 * 1024 * 1024;
 
 function guessExt(file: File): string {
   const mime = String(file.type || '').toLowerCase();
@@ -41,10 +42,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const mime = String(file.type || '').toLowerCase();
     const ext = guessExt(file);
-    if (!mime.startsWith('audio/') && !AUDIO_EXTS.has(ext))
-      return json({ error: 'Only audio files are accepted.' }, 415);
+    if (!mime.startsWith('audio/') && !mime.startsWith('video/') && !AUDIO_EXTS.has(ext))
+      return json({ error: 'Only audio/video files are accepted.' }, 415);
     if (file.size <= 0) return json({ error: 'File is empty.' }, 400);
-    if (file.size > MAX_BYTES) return json({ error: 'Audio exceeds 24 MB limit.' }, 413);
+    if (file.size > MAX_BYTES) return json({ error: 'Audio/video exceeds 256 MB limit.' }, 413);
 
     const key = buildKey(file, email);
     await getR2Client().send(new PutObjectCommand({

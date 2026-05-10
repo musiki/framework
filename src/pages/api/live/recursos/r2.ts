@@ -6,12 +6,12 @@ import { resolveLiveManageAccess } from '../../../../lib/live/access';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 const VIRTUAL_TREE_DEPTH = 3;
-const MAX_UPLOAD_BYTES = 24 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
 const ALLOWED_UPLOAD_EXTS = new Set([
   'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg',
   'md', 'tex', 'ly', 'txt',
   'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac',
-  'mov', 'mp4',
+  'mov', 'mp4', 'webm',
   'zip', 'tar', 'gz',
 ]);
 
@@ -66,6 +66,7 @@ function guessContentType(ext: string): string {
   if (ext in audioTypes) return audioTypes[ext];
   if (ext === 'mov') return 'video/quicktime';
   if (ext === 'mp4') return 'video/mp4';
+  if (ext === 'webm') return 'video/webm';
   if (['md', 'tex', 'ly', 'txt'].includes(ext)) return 'text/plain; charset=utf-8';
   return 'application/octet-stream';
 }
@@ -167,7 +168,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
 
     for (const file of files) {
       if (file.size <= 0) return json({ error: `${file.name || 'File'} is empty.` }, 400);
-      if (file.size > MAX_UPLOAD_BYTES) return json({ error: `${file.name || 'File'} exceeds 24 MB limit.` }, 413);
+      if (file.size > MAX_UPLOAD_BYTES) return json({ error: `${file.name || 'File'} exceeds 256 MB limit.` }, 413);
 
       const ext = guessFileExt(file);
       if (!ALLOWED_UPLOAD_EXTS.has(ext)) return json({ error: `${file.name || 'File'} type not allowed.` }, 415);

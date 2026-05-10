@@ -77,15 +77,30 @@ export class SonicVisualizerController {
   private loopOut = 0;
   private lastLoopRestartAt = -Infinity;
 
+  // Horizontal viewport
+  private zoomX = 1;
+  private viewStart = 0;
+  private readonly minZoomX = 1;
+  private readonly maxZoomX = 256;
+
   // Ruler
   private rulerEl!: HTMLElement;
+  private rulerTicksEl!: HTMLElement;
   private rulerPlayheadEl!: HTMLElement;
   private inMarkerEl!: HTMLElement;
   private outMarkerEl!: HTMLElement;
+  private zoomReadoutEl!: HTMLElement;
+  private zoomInBtn!: HTMLButtonElement;
+  private zoomOutBtn!: HTMLButtonElement;
+  private zoomResetBtn!: HTMLButtonElement;
 
   // Interaction state
   private isDragging = false;
   private isLoopDragging = false;
+  private pinchStartDistance = 0;
+  private pinchStartZoom = 1;
+  private pinchCenterRatio = 0.5;
+  private activePointers = new Map<number, PointerEvent>();
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   private dragStartX = 0;
   private dragStartAudioPos = 0;
@@ -168,9 +183,14 @@ export class SonicVisualizerController {
     this.playBtn         = q<HTMLButtonElement>('[data-sv-play]');
     this.loopBtn         = q<HTMLButtonElement>('[data-sv-loop]');
     this.rulerEl         = q<HTMLElement>('[data-sv-ruler]')!;
+    this.rulerTicksEl    = q<HTMLElement>('[data-sv-ruler-ticks]')!;
     this.rulerPlayheadEl = q<HTMLElement>('[data-sv-ruler-playhead]')!;
     this.inMarkerEl      = q<HTMLElement>('[data-sv-in-marker]')!;
     this.outMarkerEl     = q<HTMLElement>('[data-sv-out-marker]')!;
+    this.zoomReadoutEl   = q<HTMLElement>('[data-sv-zoom-readout]')!;
+    this.zoomInBtn       = q<HTMLButtonElement>('[data-sv-zoom-in]');
+    this.zoomOutBtn      = q<HTMLButtonElement>('[data-sv-zoom-out]');
+    this.zoomResetBtn    = q<HTMLButtonElement>('[data-sv-zoom-reset]');
 
     this.container.querySelectorAll<HTMLButtonElement>('[data-sv-layer]').forEach(btn => {
       this.layerBtns.set(btn.dataset.svLayer!, btn);
@@ -179,6 +199,9 @@ export class SonicVisualizerController {
 
     this.playBtn.addEventListener('click', () => this.togglePlayback(), { signal: sig });
     this.loopBtn.addEventListener('click', () => this.toggleLoop(), { signal: sig });
+    this.zoomInBtn.addEventListener('click', () => this.zoomAroundRatio(this.zoomX * 1.45, 0.5, true), { signal: sig });
+    this.zoomOutBtn.addEventListener('click', () => this.zoomAroundRatio(this.zoomX / 1.45, 0.5, true), { signal: sig });
+    this.zoomResetBtn.addEventListener('click', () => this.resetZoom(true), { signal: sig });
     this.bindMainInteraction();
     this.bindRulerInteraction();
   }
@@ -198,6 +221,7 @@ export class SonicVisualizerController {
   private handleFileReady(payload: SAFilePayload): void {
     this.audioBuffer   = payload.buffer;
     this.waveformPeaks = payload.peaks;
+    this.resetZoom(false);
     const bpm = payload.bpm > 0 ? ` · ${payload.bpm.toFixed(0)}bpm` : '';
     const key = payload.key ? ` · ${payload.key} ${payload.scale}` : '';
     this.setStatus(`${payload.fileName}${key}${bpm}`);
@@ -262,6 +286,103 @@ export class SonicVisualizerController {
     this.applyLayer(layer, visible);
   }
 
+  // ─── Horizontal zoom / viewport ──────────────────────────────────────────────
+
+  private clampZoom(value: number): number {
+    return Math.min(this.maxZoomX, Math.max(this.minZoomX, Number.isFinite(value) ? value : 1));
+  }
+
+  private visibleDuration(): number {
+    if (!this.audioBuffer) return 0;
+    return this.audioBuffer.duration / this.zoomX;
+  }
+
+  private clampViewStart(value = this.viewStart): number {
+    if (!this.audioBuffer) return 0;
+    const maxStart = Math.max(0, this.audioBuffer.duration - this.visibleDuration());
+    return Math.min(maxStart, Math.max(0, Number.isFinite(value) ? value : 0));
+  }
+
+  private visibleEnd(): number {
+    if (!this.audioBuffer) return 0;
+    return Math.min(this.audioBuffer.duration, this.viewStart + this.visibleDuration());
+  }
+
+  private timeToRatio(time: number): number {
+    const visible = this.visibleDuration();
+    if (!visible) return 0;
+    return (time - this.viewStart) / visible;
+  }
+
+  private timeToX(time: number, width: number): number {
+    return this.timeToRatio(time) * width;
+  }
+
+  private xToTime(clientX: number, el: HTMLElement): number {
+    if (!this.audioBuffer) return 0;
+    const r = el.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - r.left) / Math.max(1, r.width)));
+    return Math.max(0, Math.min(this.audioBuffer.duration, this.viewStart + ratio * this.visibleDuration()));
+  }
+
+  private zoomAroundRatio(nextZoomRaw: number, anchorRatio: number, publish = false): void {
+    if (!this.audioBuffer) return;
+    const anchorTime = this.viewStart + Math.max(0, Math.min(1, anchorRatio)) * this.visibleDuration();
+    this.zoomX = this.clampZoom(nextZoomRaw);
+    this.viewStart = this.clampViewStart(anchorTime - anchorRatio * this.visibleDuration());
+    this.updateZoomUI();
+    this.updateRulerTicks();
+    this.updateRulerMarkers();
+    requestAnimationFrame(() => this.redrawMainPane());
+    if (publish && this.canControl()) this.publishZoomState();
+  }
+
+  private panViewport(deltaRatio: number, publish = false): void {
+    if (!this.audioBuffer || this.zoomX <= 1) return;
+    this.viewStart = this.clampViewStart(this.viewStart + deltaRatio * this.visibleDuration());
+    this.updateRulerTicks();
+    this.updateRulerMarkers();
+    requestAnimationFrame(() => this.redrawMainPane());
+    if (publish && this.canControl()) this.publishZoomState();
+  }
+
+  private resetZoom(publish = false): void {
+    this.zoomX = 1;
+    this.viewStart = 0;
+    this.updateZoomUI();
+    this.updateRulerTicks();
+    this.updateRulerMarkers();
+    requestAnimationFrame(() => this.redrawMainPane());
+    if (publish && this.canControl()) this.publishZoomState();
+  }
+
+  private updateZoomUI(): void {
+    if (this.zoomReadoutEl) this.zoomReadoutEl.textContent = `${this.zoomX.toFixed(this.zoomX < 10 ? 2 : 1)}×`;
+    if (this.zoomOutBtn) this.zoomOutBtn.disabled = this.zoomX <= this.minZoomX + 0.001;
+    if (this.zoomResetBtn) this.zoomResetBtn.disabled = this.zoomX <= this.minZoomX + 0.001 && this.viewStart <= 0.001;
+  }
+
+  private publishZoomState(): void {
+    this.publish?.({ type: 'sv-zoom', zoomX: this.zoomX, viewStart: this.viewStart });
+  }
+
+  private ensureTimeVisible(time: number): void {
+    if (!this.audioBuffer || this.zoomX <= 1) return;
+    if (time >= this.viewStart && time <= this.visibleEnd()) return;
+    this.viewStart = this.clampViewStart(time - this.visibleDuration() * 0.5);
+    this.updateRulerTicks();
+    this.updateRulerMarkers();
+  }
+
+  public applyRemoteZoom(zoomX: number, viewStart: number): void {
+    this.zoomX = this.clampZoom(zoomX);
+    this.viewStart = this.clampViewStart(viewStart);
+    this.updateZoomUI();
+    this.updateRulerTicks();
+    this.updateRulerMarkers();
+    requestAnimationFrame(() => this.redrawMainPane());
+  }
+
   // ─── Drawing ─────────────────────────────────────────────────────────────────
 
   private resizeCanvas(): void {
@@ -282,7 +403,7 @@ export class SonicVisualizerController {
     ctx.clearRect(0, 0, W, H);
 
     if (this.layers.seg  && this.formData?.segments)    this.drawSegments(ctx, W, H, dpr);
-    if (this.layers.spec && this.spectroOffscreen)       ctx.drawImage(this.spectroOffscreen, 0, 0, W, H);
+    if (this.layers.spec && this.spectroOffscreen)       this.drawSpectrogram(ctx, W, H);
     if (this.layers.wav  && this.waveformPeaks.length)  this.drawWaveOverlay(ctx, W, H, dpr);
     if (this.layers.enr  && this.formData?.energy)      this.drawCurve(ctx, this.formData.energy,     CURVE_COLORS.enr, W, H);
     if (this.layers.brt  && this.formData?.brightness)  this.drawCurve(ctx, this.formData.brightness, CURVE_COLORS.brt, W, H);
@@ -294,10 +415,22 @@ export class SonicVisualizerController {
     this.drawPlayhead(ctx, W, H);
   }
 
+  private drawSpectrogram(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+    if (!this.spectroOffscreen || !this.audioBuffer) return;
+    const dur = this.audioBuffer.duration || 1;
+    const sx = (this.viewStart / dur) * this.spectroOffscreen.width;
+    const sw = (this.visibleDuration() / dur) * this.spectroOffscreen.width;
+    ctx.drawImage(this.spectroOffscreen, sx, 0, Math.max(1, sw), this.spectroOffscreen.height, 0, 0, W, H);
+  }
+
   private drawSegments(ctx: CanvasRenderingContext2D, W: number, H: number, dpr: number): void {
     this.formData!.segments.forEach((seg, idx) => {
-      const x     = seg.startRatio * W;
-      const w     = (seg.endRatio - seg.startRatio) * W;
+      if (!this.audioBuffer) return;
+      const start = seg.startRatio * this.audioBuffer.duration;
+      const end = seg.endRatio * this.audioBuffer.duration;
+      if (end < this.viewStart || start > this.visibleEnd()) return;
+      const x     = this.timeToX(start, W);
+      const w     = this.timeToX(end, W) - x;
       const hue   = 220 - seg.energy * 190;
       const light = 35 + seg.brightness * 30;
       const alpha = 0.12 + seg.tension * 0.28;
@@ -317,7 +450,9 @@ export class SonicVisualizerController {
     ctx.lineWidth   = 1;
     ctx.beginPath();
     for (let i = 0; i < cssW; i++) {
-      const { min, max } = this.waveformPeaks[Math.min(n - 1, Math.floor((i / cssW) * n))];
+      const time = this.viewStart + (i / cssW) * this.visibleDuration();
+      const fullRatio = this.audioBuffer ? time / this.audioBuffer.duration : i / cssW;
+      const { min, max } = this.waveformPeaks[Math.min(n - 1, Math.max(0, Math.floor(fullRatio * n)))];
       ctx.moveTo((i + 0.5) * dpr, mid - max * mid);
       ctx.lineTo((i + 0.5) * dpr, Math.max(mid - min * mid, mid - max * mid + 1));
     }
@@ -329,18 +464,22 @@ export class SonicVisualizerController {
     ctx.strokeStyle = color;
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
+    const dur = this.audioBuffer?.duration || 1;
+    let started = false;
     data.forEach((v, i) => {
-      const x = (i / (data.length - 1)) * W;
+      const time = (i / Math.max(1, data.length - 1)) * dur;
+      if (time < this.viewStart || time > this.visibleEnd()) return;
+      const x = this.timeToX(time, W);
       const y = H - v * H;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
     });
     ctx.stroke();
   }
 
   private drawLoopOverlay(ctx: CanvasRenderingContext2D, W: number, H: number): void {
-    const dur = this.audioBuffer!.duration;
-    const lx  = (this.loopIn  / dur) * W;
-    const rx  = (this.loopOut / dur) * W;
+    const lx  = this.timeToX(this.loopIn, W);
+    const rx  = this.timeToX(this.loopOut, W);
     ctx.fillStyle = 'rgba(255,255,255,0.07)';
     ctx.fillRect(lx, 0, rx - lx, H);
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
@@ -354,7 +493,8 @@ export class SonicVisualizerController {
   private drawPlayhead(ctx: CanvasRenderingContext2D, W: number, H: number): void {
     if (!this.audioBuffer) return;
     const pos = this.seekTarget ?? this.getCurrentPosition();
-    const x = (pos / this.audioBuffer.duration) * W;
+    if (pos < this.viewStart || pos > this.visibleEnd()) return;
+    const x = this.timeToX(pos, W);
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
@@ -363,9 +503,52 @@ export class SonicVisualizerController {
   // ─── Pointer position helper ──────────────────────────────────────────────────
 
   private posAt(canvas: HTMLCanvasElement, e: PointerEvent): number {
-    if (!this.audioBuffer) return 0;
-    const r = canvas.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * this.audioBuffer.duration;
+    return this.xToTime(e.clientX, canvas);
+  }
+
+  private pinchDistance(): number {
+    const points = [...this.activePointers.values()];
+    if (points.length < 2) return 0;
+    return Math.abs(points[0].clientX - points[1].clientX);
+  }
+
+  private getPinchCenterRatio(el: HTMLElement): number {
+    const points = [...this.activePointers.values()];
+    if (points.length < 2) return 0.5;
+    const r = el.getBoundingClientRect();
+    const centerX = (points[0].clientX + points[1].clientX) / 2;
+    return Math.max(0, Math.min(1, (centerX - r.left) / Math.max(1, r.width)));
+  }
+
+  private beginPinch(el: HTMLElement): void {
+    if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
+    this.isDragging = false;
+    this.isLoopDragging = false;
+    this.seekTarget = null;
+    this.pinchStartDistance = Math.max(1, this.pinchDistance());
+    this.pinchStartZoom = this.zoomX;
+    this.pinchCenterRatio = this.getPinchCenterRatio(el);
+  }
+
+  private updatePinchZoom(el: HTMLElement): void {
+    if (this.activePointers.size < 2 || this.pinchStartDistance <= 0) return;
+    const nextZoom = this.pinchStartZoom * (this.pinchDistance() / this.pinchStartDistance);
+    this.zoomAroundRatio(nextZoom, this.pinchCenterRatio, false);
+  }
+
+  private bindWheelZoom(el: HTMLElement): void {
+    el.addEventListener('wheel', (e) => {
+      if (!this.audioBuffer) return;
+      e.preventDefault();
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && this.zoomX > 1) {
+        this.panViewport(e.deltaX / Math.max(1, el.clientWidth || 400), true);
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const anchorRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+      const multiplier = Math.exp(-e.deltaY * 0.0025);
+      this.zoomAroundRatio(this.zoomX * multiplier, anchorRatio, true);
+    }, { signal: this.domAbort.signal, passive: false });
   }
 
   // ─── Main canvas interaction ──────────────────────────────────────────────────
@@ -375,10 +558,16 @@ export class SonicVisualizerController {
   private bindMainInteraction(): void {
     const canvas = this.mainCanvas;
     const sig = this.domAbort.signal;
+    this.bindWheelZoom(canvas);
 
     canvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
+      this.activePointers.set(e.pointerId, e);
+      if (this.activePointers.size >= 2) {
+        this.beginPinch(canvas);
+        return;
+      }
       this.dragStartX = e.clientX;
       this.dragStartAudioPos = this.posAt(canvas, e);
       this.isDragging = true;
@@ -397,6 +586,11 @@ export class SonicVisualizerController {
     }, { signal: sig });
 
     canvas.addEventListener('pointermove', (e) => {
+      if (this.activePointers.has(e.pointerId)) this.activePointers.set(e.pointerId, e);
+      if (this.activePointers.size >= 2) {
+        this.updatePinchZoom(canvas);
+        return;
+      }
       if (this.isLoopDragging) {
         const p = this.posAt(canvas, e);
         const anchor = this.dragStartAudioPos;
@@ -424,8 +618,15 @@ export class SonicVisualizerController {
     }, { signal: sig });
 
     canvas.addEventListener('pointerup', (e) => {
+      this.activePointers.delete(e.pointerId);
+      if (this.pinchStartDistance > 0 && this.activePointers.size < 2) {
+        try { canvas.releasePointerCapture(e.pointerId); } catch {}
+        this.pinchStartDistance = 0;
+        if (this.canControl()) this.publishZoomState();
+        return;
+      }
       if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
-      canvas.releasePointerCapture(e.pointerId);
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
 
       if (this.isLoopDragging) {
         this.isLoopDragging = false;
@@ -469,6 +670,15 @@ export class SonicVisualizerController {
       if (this.isPlaying) this.startPlayback(p);
       else { this.stopAnimLoop(); requestAnimationFrame(() => this.redrawMainPane()); }
       if (this.canControl()) this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
+    }, { signal: sig });
+
+    canvas.addEventListener('pointercancel', (e) => {
+      this.activePointers.delete(e.pointerId);
+      this.pinchStartDistance = 0;
+      if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
+      this.isDragging = false;
+      this.isLoopDragging = false;
+      this.seekTarget = null;
     }, { signal: sig });
 
     canvas.addEventListener('keydown', (e) => {
@@ -625,6 +835,9 @@ export class SonicVisualizerController {
     this.resizeObserver = new ResizeObserver(() => {
       if (!this.audioBuffer) return;
       this.resizeCanvas();
+      this.viewStart = this.clampViewStart();
+      this.updateRulerTicks();
+      this.updateRulerMarkers();
       this.runWorker();
     });
     this.resizeObserver.observe(this.podEl);
@@ -634,7 +847,10 @@ export class SonicVisualizerController {
 
   public applyRemotePlayback(action: 'play' | 'pause' | 'seek', offset: number): void {
     if (action === 'pause') this.pausePlayback();
-    else this.startPlayback(offset);
+    else {
+      this.ensureTimeVisible(offset);
+      this.startPlayback(offset);
+    }
   }
 
   public publishCurrentState(): void {
@@ -644,22 +860,60 @@ export class SonicVisualizerController {
     }
     this.publish?.({ type: 'sv-loop', inPoint: this.loopIn, outPoint: this.loopOut, enabled: this.loopEnabled });
     this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.getCurrentPosition() });
+    this.publishZoomState();
   }
 
   // ─── Ruler ───────────────────────────────────────────────────────────────────
 
   private updateRulerMarkers(): void {
     if (!this.audioBuffer) return;
-    const dur = this.audioBuffer.duration;
     const pos = this.seekTarget ?? this.getCurrentPosition();
-    this.rulerPlayheadEl.style.left = `${(pos / dur) * 100}%`;
+    const playheadRatio = this.timeToRatio(pos);
+    this.rulerPlayheadEl.hidden = playheadRatio < 0 || playheadRatio > 1;
+    this.rulerPlayheadEl.style.left = `${playheadRatio * 100}%`;
     const show = this.loopEnabled && this.loopOut > this.loopIn;
     this.inMarkerEl.hidden  = !show;
     this.outMarkerEl.hidden = !show;
     if (show) {
-      this.inMarkerEl.style.left  = `${(this.loopIn  / dur) * 100}%`;
-      this.outMarkerEl.style.left = `${(this.loopOut / dur) * 100}%`;
+      const inRatio = this.timeToRatio(this.loopIn);
+      const outRatio = this.timeToRatio(this.loopOut);
+      this.inMarkerEl.hidden = inRatio < 0 || inRatio > 1;
+      this.outMarkerEl.hidden = outRatio < 0 || outRatio > 1;
+      this.inMarkerEl.style.left  = `${inRatio * 100}%`;
+      this.outMarkerEl.style.left = `${outRatio * 100}%`;
     }
+  }
+
+  private updateRulerTicks(): void {
+    if (!this.audioBuffer || !this.rulerTicksEl) return;
+    const visible = this.visibleDuration();
+    if (!visible) return;
+    const targetPixels = 84;
+    const width = Math.max(1, this.rulerEl.clientWidth || this.mainCanvas.clientWidth || 400);
+    const targetStep = visible / Math.max(1, width / targetPixels);
+    const bases = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+    const step = bases.find((candidate) => candidate >= targetStep) ?? 600;
+    const minorStep = step / 5;
+    const start = Math.floor(this.viewStart / minorStep) * minorStep;
+    const end = this.visibleEnd();
+    const ticks: string[] = [];
+    for (let t = start; t <= end + minorStep; t += minorStep) {
+      if (t < 0) continue;
+      const ratio = this.timeToRatio(t);
+      if (ratio < -0.01 || ratio > 1.01) continue;
+      const isMajor = Math.abs((t / step) - Math.round(t / step)) < 0.001;
+      ticks.push(`<span class="sv-ruler-tick${isMajor ? ' sv-ruler-tick--major' : ''}" style="left:${ratio * 100}%"></span>`);
+      if (isMajor) ticks.push(`<span class="sv-ruler-label" style="left:${ratio * 100}%">${this.formatTimeLabel(t, step)}</span>`);
+    }
+    this.rulerTicksEl.innerHTML = ticks.join('');
+  }
+
+  private formatTimeLabel(seconds: number, step: number): string {
+    if (step < 1) return `${seconds.toFixed(step < 0.01 ? 3 : 2)}s`;
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds - minutes * 60;
+    if (minutes > 0) return `${minutes}:${secs.toFixed(step < 10 ? 1 : 0).padStart(step < 10 ? 4 : 2, '0')}`;
+    return `${secs.toFixed(step < 10 ? 1 : 0)}s`;
   }
 
   private bindRulerInteraction(): void {
@@ -667,11 +921,10 @@ export class SonicVisualizerController {
     const sig   = this.domAbort.signal;
     let seekDragging = false;
     let markerDrag: 'in' | 'out' | null = null;
+    this.bindWheelZoom(ruler);
 
     const posFromX = (clientX: number): number => {
-      if (!this.audioBuffer) return 0;
-      const r = ruler.getBoundingClientRect();
-      return Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * this.audioBuffer.duration;
+      return this.xToTime(clientX, ruler);
     };
 
     // Marker drag — IN
