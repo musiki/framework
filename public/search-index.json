@@ -270,6 +270,16 @@
     "isPublic": false
   },
   {
+    "slug": "80 RECURSOS/recursos-s123-stage",
+    "title": "Recursos - s123 stage",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": "info",
+    "courseId": "s123",
+    "isPublic": false
+  },
+  {
     "slug": "_index",
     "title": "Seminarios de Composición",
     "description": "Seminarios de Composición I y II de la Licenciatura en Música UNTREF",
@@ -280,8 +290,8 @@
     "isPublic": false
   },
   {
-    "slug": "public/conceptos/afordancia",
-    "title": "afordancia",
+    "slug": "public/conceptos/affordance",
+    "title": "affordance",
     "description": "",
     "theme": null,
     "reveal": false,
@@ -296,6 +306,16 @@
     "theme": null,
     "reveal": false,
     "type": "concept",
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/conceptos/geneaología organológica",
+    "title": "geneaología organológica",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
     "courseId": null,
     "isPublic": true
   },
@@ -330,6 +350,26 @@
     "isPublic": true
   },
   {
+    "slug": "public/conceptos/mediación",
+    "title": "mediación",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/conceptos/nueva organología",
+    "title": "nueva organología",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
     "slug": "public/conceptos/objeto de sonido-movimiento",
     "title": "objeto de sonido-movimiento",
     "description": "",
@@ -340,12 +380,62 @@
     "isPublic": true
   },
   {
+    "slug": "public/conceptos/organología especulativa",
+    "title": "organología especulativa",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/conceptos/organología general",
+    "title": "organología general",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/conceptos/performatividad",
+    "title": "performatividad",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/conceptos/playability",
+    "title": "playability",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
     "slug": "public/conceptos/tropo",
     "title": "tropo",
     "description": "",
     "theme": null,
     "reveal": false,
     "type": "concept",
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/conceptos/ética instrumental",
+    "title": "ética instrumental",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
     "courseId": null,
     "isPublic": true
   },
@@ -392,6 +482,16 @@
   {
     "slug": "public/lilypond/manual/zztt-libraries-manual",
     "title": "zztt-libraries-manual",
+    "description": "",
+    "theme": null,
+    "reveal": false,
+    "type": null,
+    "courseId": null,
+    "isPublic": true
+  },
+  {
+    "slug": "public/speakers/IKO",
+    "title": "IKO",
     "description": "",
     "theme": null,
     "reveal": false,

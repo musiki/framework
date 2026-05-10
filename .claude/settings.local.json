@@ -46,7 +46,13 @@
       "Bash(grep -v \"^$\")",
       "Bash(npm ls *)",
       "Bash(npm audit *)",
-      "Bash(find src/middleware*)"
+      "Bash(find src/middleware*)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); pg=d['packages'].get\\('node_modules/pg',{}\\); pt=d['packages'].get\\('node_modules/pg-types',{}\\); print\\('pg:', pg.get\\('version'\\)\\); print\\('pg-types:', pt.get\\('version'\\)\\)\")",
+      "Bash(npm show *)",
+      "Bash(python3 -c \"import json,sys; v=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(v[-5:]\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('pg-types version:', d['version']\\); print\\('main:', d.get\\('main',''\\)\\)\")",
+      "Bash(node *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('pg version:', d['version']\\); print\\('deps:', {k:v for k,v in d.get\\('dependencies',{}\\).items\\(\\)}\\)\")"
     ]
   }
 }

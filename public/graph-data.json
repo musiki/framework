@@ -280,6 +280,15 @@
       "img": ""
     },
     {
+      "id": "cursos/s123/80 RECURSOS/recursos-s123-stage",
+      "name": "Recursos - s123 stage",
+      "type": "document",
+      "group": "cursos",
+      "publicFolder": null,
+      "canonicalSlug": "recursos-s123-stage",
+      "img": ""
+    },
+    {
       "id": "cursos/s123/_index",
       "name": "Seminarios de Composición",
       "type": "document",
@@ -295,13 +304,43 @@
       "group": "tags"
     },
     {
-      "id": "public/conceptos/afordancia",
-      "name": "afordancia",
+      "id": "public/conceptos/affordance",
+      "name": "affordance",
       "type": "document",
       "group": "public",
       "publicFolder": "conceptos",
-      "canonicalSlug": "afordancia",
+      "canonicalSlug": "affordance",
       "img": ""
+    },
+    {
+      "id": "tag:affordance",
+      "name": "affordance",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:gibson",
+      "name": "gibson",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:norman",
+      "name": "norman",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:interfaz",
+      "name": "interfaz",
+      "type": "tag",
+      "group": "tags"
+    },
+    {
+      "id": "tag:percepción",
+      "name": "percepción",
+      "type": "tag",
+      "group": "tags"
     },
     {
       "id": "public/conceptos/estructura",
@@ -310,6 +349,15 @@
       "group": "public",
       "publicFolder": "conceptos",
       "canonicalSlug": "estructura",
+      "img": ""
+    },
+    {
+      "id": "public/conceptos/geneaología organológica",
+      "name": "geneaología organológica",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "geneaologia-organologica",
       "img": ""
     },
     {
@@ -352,6 +400,24 @@
       "group": "tags"
     },
     {
+      "id": "public/conceptos/mediación",
+      "name": "mediación",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "mediacion",
+      "img": ""
+    },
+    {
+      "id": "public/conceptos/nueva organología",
+      "name": "nueva organología",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "nueva-organologia",
+      "img": ""
+    },
+    {
       "id": "public/conceptos/objeto de sonido-movimiento",
       "name": "objeto de sonido-movimiento",
       "type": "document",
@@ -361,12 +427,57 @@
       "img": ""
     },
     {
+      "id": "public/conceptos/organología especulativa",
+      "name": "organología especulativa",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "organologia-especulativa",
+      "img": ""
+    },
+    {
+      "id": "public/conceptos/organología general",
+      "name": "organología general",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "organologia-general",
+      "img": ""
+    },
+    {
+      "id": "public/conceptos/performatividad",
+      "name": "performatividad",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "performatividad",
+      "img": ""
+    },
+    {
+      "id": "public/conceptos/playability",
+      "name": "playability",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "playability",
+      "img": ""
+    },
+    {
       "id": "public/conceptos/tropo",
       "name": "tropo",
       "type": "document",
       "group": "public",
       "publicFolder": "conceptos",
       "canonicalSlug": "tropo",
+      "img": ""
+    },
+    {
+      "id": "public/conceptos/ética instrumental",
+      "name": "ética instrumental",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "conceptos",
+      "canonicalSlug": "etica-instrumental",
       "img": ""
     },
     {
@@ -449,6 +560,21 @@
       "publicFolder": "lilypond",
       "canonicalSlug": "zztt-libraries-manual",
       "img": ""
+    },
+    {
+      "id": "public/speakers/IKO",
+      "name": "IKO",
+      "type": "document",
+      "group": "public",
+      "publicFolder": "speakers",
+      "canonicalSlug": "iko",
+      "img": "https://i.imgur.com/M7AVcGP.png"
+    },
+    {
+      "id": "tag:speakers",
+      "name": "speakers",
+      "type": "tag",
+      "group": "tags"
     }
   ],
   "links": [
@@ -508,6 +634,36 @@
       "type": "tag"
     },
     {
+      "source": "public/conceptos/affordance",
+      "target": "tag:affordance",
+      "type": "tag"
+    },
+    {
+      "source": "public/conceptos/affordance",
+      "target": "tag:gibson",
+      "type": "tag"
+    },
+    {
+      "source": "public/conceptos/affordance",
+      "target": "tag:norman",
+      "type": "tag"
+    },
+    {
+      "source": "public/conceptos/affordance",
+      "target": "tag:interfaz",
+      "type": "tag"
+    },
+    {
+      "source": "public/conceptos/affordance",
+      "target": "tag:percepción",
+      "type": "tag"
+    },
+    {
+      "source": "public/conceptos/affordance",
+      "target": "public/conceptos/playability",
+      "type": "link"
+    },
+    {
       "source": "public/conceptos/los cuatro ámbitos morfológicos",
       "target": "tag:morfología",
       "type": "tag"
@@ -516,6 +672,11 @@
       "source": "public/conceptos/los cuatro ámbitos morfológicos",
       "target": "tag:forma",
       "type": "tag"
+    },
+    {
+      "source": "public/conceptos/playability",
+      "target": "public/conceptos/affordance",
+      "type": "link"
     },
     {
       "source": "public/instrumentos/spectral parrot",
@@ -545,6 +706,11 @@
     {
       "source": "public/lilypond/03-clarinet/cl-multiphonic-basic.md",
       "target": "tag:contemporary-notation",
+      "type": "tag"
+    },
+    {
+      "source": "public/speakers/IKO",
+      "target": "tag:speakers",
       "type": "tag"
     }
   ]
