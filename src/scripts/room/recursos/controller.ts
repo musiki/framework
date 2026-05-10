@@ -44,6 +44,7 @@ export class RecursosController {
   private emptyFolders = new Set<string>();
   private draggedItemId: string | null = null;
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private autosaveDirty = false;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   private headerLabel = '';
 
@@ -609,26 +610,34 @@ export class RecursosController {
   // ── Save ──────────────────────────────────────────────────────────────────────
 
   private scheduleAutosave() {
+    this.autosaveDirty = true;
     if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
     this.autosaveTimer = setTimeout(() => void this.save(), 5000);
   }
 
   private async save() {
     const roomName = this.getRoomName() ?? '';
-    if (!roomName) return;
+    if (!roomName || !this.autosaveDirty) return;
     try {
-      await fetch('/api/live/recursos', {
+      const resp = await fetch('/api/live/recursos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // claseId must be string | null; courseRootId lets the server mirror under cursos/<course>/80 RECURSOS.
+        // claseId must be string | null. The live autosave endpoint persists DB only;
+        // markdown projection is intentionally reserved for the recursos editor.
         body: JSON.stringify(this.buildSavePayload(roomName)),
       });
+      if (resp.ok) this.autosaveDirty = false;
     } catch { /**/ }
   }
 
   private flushSave() {
     const roomName = this.getRoomName() ?? '';
-    if (!roomName) return;
+    if (!roomName || !this.autosaveDirty) return;
+    if (this.autosaveTimer) {
+      clearTimeout(this.autosaveTimer);
+      this.autosaveTimer = null;
+    }
+    this.autosaveDirty = false;
     navigator.sendBeacon('/api/live/recursos',
       new Blob([JSON.stringify(this.buildSavePayload(roomName))],
         { type: 'application/json' }));

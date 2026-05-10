@@ -1,10 +1,7 @@
 import type { APIRoute } from 'astro';
 import { cleanString, ensureDbUserFromSession, json } from '../../../lib/forum-server';
 import { query } from '../../../lib/db/pool';
-import {
-  normalizeResourceProjectionItems,
-  persistRecursosMarkdownProjection,
-} from '../../../lib/live/recursos-markdown';
+import { normalizeResourceProjectionItems } from '../../../lib/live/recursos-markdown';
 import { normalizeDbResourceSource, normalizeDbResourceType } from '../../../lib/live/resource-db-enums';
 
 // GET /api/live/recursos?roomName=...&claseId=...
@@ -52,7 +49,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const roomName = cleanString(String(body?.roomName ?? ''), 120);
   const claseId  = body?.claseId == null ? null : cleanString(String(body.claseId), 240) || null;
-  const courseRootId = cleanString(String(body?.courseRootId ?? ''), 120) || null;
   const items = normalizeResourceProjectionItems(Array.isArray(body?.items) ? body.items : []);
 
   if (!roomName) return json({ error: 'roomName required' }, 400);
@@ -67,8 +63,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (delResult.error) return json({ error: delResult.error.message }, 500);
 
   if (items.length === 0) {
-    const projection = await persistProjection({ courseRootId, claseId, roomName, items });
-    return json({ ok: true, count: 0, projection });
+    return json({ ok: true, count: 0 });
   }
 
   const rows = await Promise.all(items.map(async (item: any, i: number) => ({
@@ -101,20 +96,5 @@ export const POST: APIRoute = async ({ request, locals }) => {
   );
   if (insertResult.error) return json({ error: insertResult.error.message }, 500);
 
-  const projection = await persistProjection({ courseRootId, claseId, roomName, items: rows });
-  return json({ ok: true, count: rows.length, projection });
+  return json({ ok: true, count: rows.length });
 };
-
-async function persistProjection(options: {
-  courseRootId: string | null;
-  claseId: string | null;
-  roomName: string;
-  items: any[];
-}) {
-  try {
-    return await persistRecursosMarkdownProjection(options);
-  } catch (error) {
-    console.error('[recursos] markdown projection failed', error);
-    return null;
-  }
-}

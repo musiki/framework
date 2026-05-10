@@ -4,7 +4,7 @@
 
 set REMOTE_USER "zz"
 set REMOTE_HOST "46.225.154.68"
-set REMOTE_DB_HOST "172.18.0.2"
+set REMOTE_DB_HOST "172.18.0.10"
 set REMOTE_PORT 5432
 set LOCAL_PORT 5433
 set DB_URL "postgresql://app:3bce519832b81f101ebc5bc80af7f501@localhost:$LOCAL_PORT/musiki26"
