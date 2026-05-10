@@ -43,7 +43,10 @@ const { courseId, canManage } = Astro.props;
             <input data-r2-prefix value="room/" spellcheck="false" />
             <button type="button" class="recursos-editor-btn" data-r2-load>Listar</button>
           </div>
-          <div class="recursos-r2-list" data-r2-list></div>
+          <div class="recursos-file-tree-browser" data-r2-browser>
+            <div class="ft-tree" data-r2-tree></div>
+            <div class="ft-explorer" data-r2-explorer></div>
+          </div>
         </section>
       </div>
 
@@ -146,13 +149,30 @@ const { courseId, canManage } = Astro.props;
     overflow: auto;
   }
 
-  .recursos-r2-list {
+  .recursos-file-tree-browser {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.42fr) minmax(0, 0.58fr);
     max-height: 62vh;
+    min-height: 19rem;
     overflow: auto;
     border: 1px solid color-mix(in srgb, var(--c-border) 82%, transparent);
     border-radius: 7px;
     background: color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%);
-    padding: 0.35rem 0;
+  }
+
+  .ft-tree,
+  .ft-explorer {
+    min-width: 0;
+    padding: 0.45rem 0;
+  }
+
+  .ft-tree {
+    border-right: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
+    background: color-mix(in srgb, var(--c-bg) 96%, var(--c-link) 4%);
+  }
+
+  .ft-explorer {
+    background: var(--c-bg);
   }
 
   .recursos-row {
@@ -172,9 +192,9 @@ const { courseId, canManage } = Astro.props;
     min-width: 0;
   }
 
+  .recursos-r2-node,
   .recursos-r2-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
     align-items: center;
     gap: 0.4rem;
     width: 100%;
@@ -182,16 +202,31 @@ const { courseId, canManage } = Astro.props;
     border-radius: 0;
     background: transparent;
     color: var(--c-fg);
-    padding: 0.28rem 0.45rem 0.28rem calc(0.55rem + (var(--depth, 0) * 1.15rem));
     text-align: left;
   }
 
+  .recursos-r2-node {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0.3rem 0.45rem 0.3rem calc(0.55rem + (var(--depth, 0) * 1rem));
+    cursor: pointer;
+  }
+
+  .recursos-r2-row {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    padding: 0.32rem 0.5rem;
+  }
+
+  .recursos-r2-node:hover,
   .recursos-r2-row:hover {
     background: color-mix(in srgb, var(--c-link) 9%, transparent);
   }
 
-  .recursos-r2-row--folder {
-    cursor: pointer;
+  .recursos-r2-node[data-active="true"] {
+    background: color-mix(in srgb, var(--c-link) 14%, transparent);
+    color: var(--c-link);
+  }
+
+  .recursos-r2-node--folder {
     font-weight: 650;
   }
 
@@ -277,6 +312,17 @@ const { courseId, canManage } = Astro.props;
     padding: 0.28rem 0.48rem;
   }
 
+  .recursos-r2-current {
+    padding: 0.3rem 0.55rem 0.45rem;
+    color: var(--c-fg-dim);
+    font-size: 0.76rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-border) 62%, transparent);
+    margin-bottom: 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .recursos-r2-toolbar input {
     flex: 1 1 auto;
   }
@@ -303,6 +349,17 @@ const { courseId, canManage } = Astro.props;
     .recursos-editor-grid {
       grid-template-columns: 1fr;
     }
+
+    .recursos-file-tree-browser {
+      grid-template-columns: 1fr;
+    }
+
+    .ft-tree {
+      border-right: 0;
+      border-bottom: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
+      max-height: 14rem;
+      overflow: auto;
+    }
   }
 </style>
 
@@ -320,6 +377,18 @@ const { courseId, canManage } = Astro.props;
 
   const depthForPath = (path) => Math.max(0, String(path || '').split('/').filter(Boolean).length - 1);
   const baseNameForPath = (path) => String(path || '').split('/').filter(Boolean).pop() || String(path || '');
+  const normalizePrefix = (path) => {
+    const parts = String(path || 'room/').split('/').filter(Boolean);
+    return parts.length ? `${parts.join('/')}/` : 'room/';
+  };
+  const ancestorPrefixes = (path) => {
+    const parts = normalizePrefix(path).split('/').filter(Boolean);
+    const result = [];
+    for (let index = 0; index < parts.length; index += 1) {
+      result.push(`${parts.slice(0, index + 1).join('/')}/`);
+    }
+    return result.length ? result : ['room/'];
+  };
 
   function typeFromUrl(url) {
     const ext = String(url || '').split('?')[0].split('.').pop()?.toLowerCase() || '';
@@ -342,7 +411,8 @@ const { courseId, canManage } = Astro.props;
     const listEl = root.querySelector('[data-recursos-list]');
     const countEl = root.querySelector('[data-recursos-count]');
     const statusEl = root.querySelector('[data-recursos-status]');
-    const r2ListEl = root.querySelector('[data-r2-list]');
+    const r2TreeEl = root.querySelector('[data-r2-tree]');
+    const r2ExplorerEl = root.querySelector('[data-r2-explorer]');
     const r2PrefixInput = root.querySelector('[data-r2-prefix]');
     const attachForm = root.querySelector('[data-recursos-attach-form]');
     const attachUrl = root.querySelector('[data-attach-url]');
@@ -397,30 +467,47 @@ const { courseId, canManage } = Astro.props;
     };
 
     const loadR2 = async () => {
-      if (!r2ListEl || !(r2PrefixInput instanceof HTMLInputElement)) return;
-      const prefix = r2PrefixInput.value || 'room/';
-      r2ListEl.innerHTML = '<div class="recursos-editor-empty">cargando R2...</div>';
+      if (!r2TreeEl || !r2ExplorerEl || !(r2PrefixInput instanceof HTMLInputElement)) return;
+      const prefix = normalizePrefix(r2PrefixInput.value || 'room/');
+      r2PrefixInput.value = prefix;
+      r2TreeEl.innerHTML = '<div class="recursos-editor-empty">cargando...</div>';
+      r2ExplorerEl.innerHTML = '<div class="recursos-editor-empty">cargando R2...</div>';
       try {
         const payload = await requestJson(`/api/live/recursos/r2?courseId=${encodeURIComponent(courseId)}&prefix=${encodeURIComponent(prefix)}`);
         const folders = Array.isArray(payload.folders) ? payload.folders : [];
         const objects = Array.isArray(payload.objects) ? payload.objects : [];
-        if (!folders.length && !objects.length) {
-          r2ListEl.innerHTML = '<div class="recursos-editor-empty">Sin objetos en este prefijo.</div>';
-          return;
-        }
-        r2ListEl.innerHTML = [
+        const ancestors = ancestorPrefixes(prefix);
+        r2TreeEl.innerHTML = [
+          ...ancestors.map((folder) => `
+            <button type="button" class="recursos-r2-node recursos-r2-node--folder" style="--depth:${depthForPath(folder)}" data-folder="${esc(folder)}" data-active="${folder === prefix ? 'true' : 'false'}">
+              <span class="recursos-r2-label">
+                <span class="recursos-r2-icon">${folder === prefix ? '▾' : '▸'}</span>
+                <span class="recursos-r2-name" title="${esc(folder)}">${esc(baseNameForPath(folder))}</span>
+              </span>
+            </button>
+          `),
           ...folders.map((folder) => `
-            <button type="button" class="recursos-r2-row recursos-r2-row--folder" style="--depth:${depthForPath(folder)}" data-folder="${esc(folder)}">
+            <button type="button" class="recursos-r2-node recursos-r2-node--folder" style="--depth:${depthForPath(folder)}" data-folder="${esc(folder)}" data-active="false">
               <span class="recursos-r2-label">
                 <span class="recursos-r2-icon">▸</span>
                 <span class="recursos-r2-name" title="${esc(folder)}">${esc(baseNameForPath(folder))}</span>
               </span>
-              <span class="recursos-r2-meta">folder</span>
-              <span></span>
             </button>
           `),
+        ].join('');
+
+        if (!objects.length) {
+          r2ExplorerEl.innerHTML = `
+            <div class="recursos-r2-current">${esc(prefix)}</div>
+            <div class="recursos-editor-empty">Sin archivos en esta carpeta.</div>
+          `;
+          return;
+        }
+
+        r2ExplorerEl.innerHTML = [
+          `<div class="recursos-r2-current">${esc(prefix)}</div>`,
           ...objects.map((object) => `
-            <div class="recursos-r2-row recursos-r2-row--file" style="--depth:${depthForPath(object.key)}" data-url="${esc(object.url)}" data-name="${esc(object.name)}">
+            <div class="recursos-r2-row recursos-r2-row--file" data-url="${esc(object.url)}" data-name="${esc(object.name)}">
               <span class="recursos-r2-label">
                 <span class="recursos-r2-icon">•</span>
                 <span class="recursos-r2-name" title="${esc(object.key)}">${esc(object.name)}</span>
@@ -432,7 +519,8 @@ const { courseId, canManage } = Astro.props;
           `),
         ].join('');
       } catch (error) {
-        r2ListEl.innerHTML = `<div class="recursos-editor-empty">${esc(error.message || error)}</div>`;
+        r2TreeEl.innerHTML = '';
+        r2ExplorerEl.innerHTML = `<div class="recursos-editor-empty">${esc(error.message || error)}</div>`;
       }
     };
 
@@ -470,15 +558,19 @@ const { courseId, canManage } = Astro.props;
       }
     });
 
-    r2ListEl?.addEventListener('click', async (event) => {
+    r2TreeEl?.addEventListener('click', async (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
       const folderRow = target.closest('[data-folder]');
       if (folderRow instanceof HTMLElement && r2PrefixInput instanceof HTMLInputElement) {
         r2PrefixInput.value = folderRow.dataset.folder || 'room/';
         await loadR2();
-        return;
       }
+    });
+
+    r2ExplorerEl?.addEventListener('click', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
       const row = target.closest('[data-url]');
       if (!(row instanceof HTMLElement)) return;
       const url = row.dataset.url || '';
