@@ -34,3 +34,10 @@ src/content/.obsidian/
 .aiexclude
 .vscode/easycode.ignore
 .gstack/
+
+# Generated build artifacts (regenerated on every build)
+public/graph-data.json
+public/search-index.json
+public/vault-embeddings.json
+public/lily/*.svg
+public/lily/*.pdf
