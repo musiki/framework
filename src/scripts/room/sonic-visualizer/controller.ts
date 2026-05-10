@@ -668,7 +668,11 @@ export class SonicVisualizerController {
       // seek (click outside segment or drag release)
       this.playOffset = p;
       if (this.isPlaying) this.startPlayback(p);
-      else { this.stopAnimLoop(); requestAnimationFrame(() => this.redrawMainPane()); }
+      else {
+        this.stopAnimLoop();
+        this.emitTransport('seek', this.playOffset);
+        requestAnimationFrame(() => this.redrawMainPane());
+      }
       if (this.canControl()) this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
     }, { signal: sig });
 
@@ -713,15 +717,17 @@ export class SonicVisualizerController {
         this.playOffset = this.getCurrentPosition();
         this.isPlaying  = false;
         this.updatePlayBtn();
+        this.emitTransport('pause', this.playOffset);
       }
     };
     this.playbackNode = src;
     this.isPlaying    = true;
     this.updatePlayBtn();
     this.startAnimLoop();
+    this.emitTransport('play', this.playOffset);
   }
 
-  private pausePlayback(): void {
+  private pausePlayback(options: { emit?: boolean } = {}): void {
     this.playOffset = this.getCurrentPosition();
     if (this.playbackNode) {
       this.playbackNode.onended = null;
@@ -732,9 +738,10 @@ export class SonicVisualizerController {
     this.isPlaying = false;
     this.updatePlayBtn();
     this.stopAnimLoop();
+    if (options.emit !== false) this.emitTransport('pause', this.playOffset);
   }
 
-  private stopPlayback(): void { this.pausePlayback(); }
+  private stopPlayback(): void { this.pausePlayback({ emit: false }); }
 
   private getCurrentPosition(): number {
     if (!this.audioBuffer || !this.isPlaying || !this.audioCtx) return this.playOffset;
@@ -742,6 +749,16 @@ export class SonicVisualizerController {
   }
 
   private updatePlayBtn(): void { this.playBtn.textContent = this.isPlaying ? '⏸' : '▶'; }
+
+  private emitTransport(action: 'play' | 'pause' | 'seek', offset = this.getCurrentPosition()): void {
+    window.dispatchEvent(new CustomEvent('musiki:sv:transport', {
+      detail: {
+        action,
+        offset: Math.max(0, Number(offset) || 0),
+        duration: this.audioBuffer?.duration ?? 0,
+      },
+    }));
+  }
 
   // ─── Loop ─────────────────────────────────────────────────────────────────────
 
@@ -808,8 +825,14 @@ export class SonicVisualizerController {
               this.playOffset    = this.loopIn;
               this.playStartTime = this.audioCtx.currentTime;
               src.start(0, this.loopIn);
+              this.emitTransport('play', this.loopIn);
               src.onended = () => {
-                if (this.isPlaying) { this.playOffset = this.getCurrentPosition(); this.isPlaying = false; this.updatePlayBtn(); }
+                if (this.isPlaying) {
+                  this.playOffset = this.getCurrentPosition();
+                  this.isPlaying = false;
+                  this.updatePlayBtn();
+                  this.emitTransport('pause', this.playOffset);
+                }
               };
               this.playbackNode = src;
             }
@@ -847,9 +870,15 @@ export class SonicVisualizerController {
 
   public applyRemotePlayback(action: 'play' | 'pause' | 'seek', offset: number): void {
     if (action === 'pause') this.pausePlayback();
-    else {
+    else if (action === 'play') {
       this.ensureTimeVisible(offset);
       this.startPlayback(offset);
+    } else {
+      this.ensureTimeVisible(offset);
+      this.playOffset = Math.max(0, Number(offset) || 0);
+      this.emitTransport('seek', this.playOffset);
+      this.updateRulerMarkers();
+      requestAnimationFrame(() => this.redrawMainPane());
     }
   }
 
@@ -987,7 +1016,11 @@ export class SonicVisualizerController {
       this.seekTarget = null;
       this.playOffset = p;
       if (this.isPlaying) this.startPlayback(p);
-      else { this.stopAnimLoop(); requestAnimationFrame(() => { this.redrawMainPane(); this.updateRulerMarkers(); }); }
+      else {
+        this.stopAnimLoop();
+        this.emitTransport('seek', this.playOffset);
+        requestAnimationFrame(() => { this.redrawMainPane(); this.updateRulerMarkers(); });
+      }
       if (this.canControl()) this.publish?.({ type: 'sv-playback', action: this.isPlaying ? 'play' : 'seek', offset: this.playOffset });
     }, { signal: sig });
   }

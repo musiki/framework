@@ -5,6 +5,7 @@ import {
   normalizeResourceProjectionItems,
   persistRecursosMarkdownProjection,
 } from '../../../lib/live/recursos-markdown';
+import { normalizeDbResourceSource, normalizeDbResourceType } from '../../../lib/live/resource-db-enums';
 
 // GET /api/live/recursos?roomName=...&claseId=...
 export const GET: APIRoute = async ({ request, locals, url }) => {
@@ -70,23 +71,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ ok: true, count: 0, projection });
   }
 
-  const VALID_TYPES   = ['pdf','img','md','tex','ly','audio','video','link','other'];
-  const VALID_SOURCES = ['upload','chat','external-media','sa','sv','vs','paste'];
-
-  const rows = items.map((item: any, i: number) => ({
+  const rows = await Promise.all(items.map(async (item: any, i: number) => ({
     id:          String(item.id || crypto.randomUUID()),
     claseId:     claseId,
     sessionId:   item.sessionId == null ? null : String(item.sessionId),
     roomName:    roomName,
     url:         cleanString(String(item.url ?? ''), 2000),
     name:        cleanString(String(item.name ?? ''), 500) || 'recurso',
-    type:        VALID_TYPES.includes(item.type) ? item.type : 'other',
+    type:        await normalizeDbResourceType(String(item.type ?? '')),
     folder:      cleanString(String(item.folder ?? ''), 120),
-    source:      VALID_SOURCES.includes(item.source) ? item.source : 'upload',
+    source:      await normalizeDbResourceSource(String(item.source ?? '')),
     createdBy:   cleanString(String(item.createdBy ?? ''), 120),
     sortOrder:   typeof item.sortOrder === 'number' ? item.sortOrder : i,
     createdAt:   item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
-  }));
+  })));
 
   const cols = Object.keys(rows[0]);
   const colSql = cols.map(c => `"${c}"`).join(', ');

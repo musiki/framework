@@ -11881,6 +11881,9 @@ a[node] -->|edge| b[hub]
           const rawPath = decodeURIComponent(parsed.pathname || '');
           const basename = rawPath.split('/').filter(Boolean).pop() || '';
           if (LEGACY_OBSIDIAN_AUDIO_REGEX.test(basename)) {
+            if (parsed.origin !== window.location.origin || rawPath.startsWith('/content-media/')) {
+              return parsed.href;
+            }
             return basename;
           }
         } catch {
@@ -11896,6 +11899,7 @@ a[node] -->|edge| b[hub]
       async function resolveLegacyAudioName(name) {
         const key = String(name || '').trim();
         if (!key) return '';
+        if (/^https?:\/\//i.test(key) || key.startsWith('/content-media/')) return key;
         if (legacyAudioResolveCache.has(key)) return legacyAudioResolveCache.get(key);
 
         try {

@@ -72,6 +72,7 @@ export class VisualizerController {
   private zoomButtons: HTMLButtonElement[] = [];
 
   private onStateRequest: () => void;
+  private onSonicTransport: (event: Event) => void;
 
   constructor(options: VisualizerOptions) {
     this.container = options.container;
@@ -80,8 +81,10 @@ export class VisualizerController {
     this.bindDropzone();
 
     this.onStateRequest = () => this.publishCurrentState();
+    this.onSonicTransport = (event) => this.applySonicTransport((event as CustomEvent).detail);
 
     window.addEventListener('vs:request-state', this.onStateRequest);
+    window.addEventListener('musiki:sv:transport', this.onSonicTransport);
   }
 
   public setRole(role: 'teacher' | 'student'): void {
@@ -129,6 +132,7 @@ export class VisualizerController {
   public dispose(): void {
     this.domAbort.abort();
     window.removeEventListener('vs:request-state', this.onStateRequest);
+    window.removeEventListener('musiki:sv:transport', this.onSonicTransport);
   }
 
   private bindDOM(): void {
@@ -237,7 +241,9 @@ export class VisualizerController {
   }
 
   private toggleFullscreen(): void {
-    this.podEl.dataset.fullscreen = this.podEl.dataset.fullscreen === 'true' ? 'false' : 'true';
+    const next = this.podEl.dataset.fullscreen === 'true' ? 'false' : 'true';
+    this.podEl.dataset.fullscreen = next;
+    this.podEl.closest<HTMLElement>('.pod-diy-shell')?.classList.toggle('vs-shell-fullscreen', next === 'true');
   }
 
   private render(): void {
@@ -287,8 +293,30 @@ export class VisualizerController {
     this.imageEl.hidden = true;
     this.videoEl.hidden = false;
     if (this.videoEl.getAttribute('src') !== url) this.videoEl.src = url;
+    this.videoEl.muted = true;
     this.videoEl.title = this.state.name || 'video resource';
     this.videoEl.style.setProperty('--vs-image-scale', String(this.state.zoomMode === 'custom' ? this.state.zoom / 100 : 1));
+  }
+
+  private applySonicTransport(detail: { action?: unknown; offset?: unknown; duration?: unknown } | undefined): void {
+    if (this.state.kind !== 'video' || !this.state.url || !this.videoEl) return;
+    const action = detail?.action;
+    if (action !== 'play' && action !== 'pause' && action !== 'seek') return;
+
+    const rawOffset = Math.max(0, Number(detail?.offset) || 0);
+    const duration = Number.isFinite(this.videoEl.duration) ? this.videoEl.duration : Number(detail?.duration) || 0;
+    const offset = duration > 0 ? Math.min(rawOffset, Math.max(0, duration - 0.02)) : rawOffset;
+
+    this.videoEl.muted = true;
+    if (Math.abs((this.videoEl.currentTime || 0) - offset) > 0.12) {
+      try { this.videoEl.currentTime = offset; } catch {}
+    }
+
+    if (action === 'play') {
+      void this.videoEl.play().catch(() => {});
+    } else if (action === 'pause') {
+      this.videoEl.pause();
+    }
   }
 
   private pdfZoomFragment(): string {

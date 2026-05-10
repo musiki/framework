@@ -227,6 +227,15 @@
   box-shadow: 0 24px 90px rgba(0,0,0,0.72);
 }
 
+.pod-diy-shell.vs-shell-fullscreen,
+.pod-diy-shell.vs-shell-fullscreen .pod-diy-body {
+  overflow: visible !important;
+}
+
+.pod-diy-shell.vs-shell-fullscreen {
+  z-index: 2147482400 !important;
+}
+
 .vs-pod[data-fullscreen="true"] .vs-full-btn {
   color: #061015;
   background: #76d3ff;

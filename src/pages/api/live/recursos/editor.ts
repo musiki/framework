@@ -4,6 +4,7 @@ import { query } from '../../../../lib/db/pool';
 import { persistRecursosMarkdownProjection } from '../../../../lib/live/recursos-markdown';
 import { resolveLiveManageAccess } from '../../../../lib/live/access';
 import { typeFromUrl } from '../../../../scripts/room/recursos/metadata';
+import { normalizeDbResourceSource, normalizeDbResourceType } from '../../../../lib/live/resource-db-enums';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 
@@ -157,6 +158,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   );
   if (maxOrder.error) return json({ error: maxOrder.error.message }, 500);
 
+  const resourceType = await normalizeDbResourceType(typeFromUrl(url));
+  const resourceSource = await normalizeDbResourceSource('upload');
+
   const item = {
     id: crypto.randomUUID(),
     claseId,
@@ -164,9 +168,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     roomName,
     url,
     name: cleanString(String(body?.name ?? ''), 500) || url.split('/').pop() || 'recurso',
-    type: typeFromUrl(url),
+    type: resourceType,
     folder: cleanString(String(body?.folder ?? ''), 120),
-    source: 'upload',
+    source: resourceSource,
     createdBy: cleanString(String(user.email || session?.user?.email || ''), 120),
     sortOrder: Number(maxOrder.data?.[0]?.nextOrder ?? 0),
     createdAt: new Date().toISOString(),

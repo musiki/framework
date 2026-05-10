@@ -98,8 +98,6 @@ export class RoomWorkspaceManager {
         if (this.dockview) return;
 
         this.dockview = new DockviewComponent(this.container, {
-          disableProportionalLayout: true,
-          hideTabs: true, // Use our DIY headers instead
           createComponent: (options) => {
             const rawId = options.id;
             // Find which pod type this is by checking if the ID starts with any known POD_TYPE id
@@ -256,7 +254,7 @@ export class RoomWorkspaceManager {
     }
 
     const referencePanel =
-      (referencePanelId ? this.dockview.getPanel(referencePanelId) : null)
+      (referencePanelId ? this.dockview.getGroupPanel(referencePanelId) : null)
       ?? this.findPanelByBaseId('recursos')
       ?? this.findPanelByBaseId('sonic-analyzer')
       ?? this.dockview.panels[0]
@@ -373,10 +371,17 @@ export class RoomWorkspaceManager {
         if (!this.dockview) return;
 
         const podId = e.dataTransfer?.getData('musiki/pod-id');
+        const panelId = e.dataTransfer?.getData('musiki/panel-id');
 
         this.dragOverPanelId = null;
 
-        if (podId) {
+        if (panelId) {
+            const targetId = shellEl?.dataset.panelId || this.savedDragTarget;
+            this.movePanelRelative(panelId, targetId || null, direction || this.savedDragDir);
+            this.savedDragTarget = null;
+            this.savedDragDir = 'right';
+            this.activeDraggingId = null;
+        } else if (podId) {
             // Gallery pod drop: place relative to last valid hover target
             const position = this.savedDragTarget
                 ? { referencePanel: this.savedDragTarget, direction: this.savedDragDir as any }
@@ -385,8 +390,36 @@ export class RoomWorkspaceManager {
             this.savedDragTarget = null;
             this.activeDraggingId = null;
         }
-        // Panel-to-panel moves are handled in handle's dragend (more reliable timing)
     });
+  }
+
+  private movePanelRelative(panelId: string, targetId: string | null, dragDir: string): boolean {
+    if (!this.dockview || !targetId || panelId === targetId) return false;
+    const movingPanel = this.dockview.getGroupPanel(panelId);
+    const targetPanel = this.dockview.getGroupPanel(targetId);
+    if (!movingPanel || !targetPanel) return false;
+
+    const dirMap: Record<string, 'left' | 'right' | 'top' | 'bottom' | 'center'> = {
+      left: 'left',
+      right: 'right',
+      above: 'top',
+      below: 'bottom',
+      within: 'center',
+      top: 'top',
+      bottom: 'bottom',
+      center: 'center',
+    };
+
+    try {
+      this.dockview.moveGroupOrPanel({
+        from: { groupId: movingPanel.group.id, panelId: movingPanel.id },
+        to: { group: targetPanel.group, position: dirMap[dragDir] ?? 'right' },
+      });
+      return true;
+    } catch (error) {
+      console.warn('[RoomWorkspaceManager] panel move failed', { panelId, targetId, dragDir, error });
+      return false;
+    }
   }
 
   private showPodPicker(anchor: HTMLElement, targetPanel: any) {
@@ -569,16 +602,8 @@ export class RoomWorkspaceManager {
       });
       handle.addEventListener('dragend', () => {
           // Perform the move here — more reliable than drop event for same-window DnD
-          if (this.savedDragTarget && this.dockview && panelId !== this.savedDragTarget) {
-              const movingPanel = this.dockview.getPanel(panelId);
-              const targetPanel = this.dockview.getPanel(this.savedDragTarget);
-              if (movingPanel && targetPanel) {
-                  const dirMap: Record<string, string> = { left: 'left', right: 'right', above: 'top', below: 'bottom', within: 'center' };
-                  this.dockview.moveGroupOrPanel({
-                      from: { groupId: (movingPanel as any).group.id, panelId: movingPanel.id },
-                      to: { group: (targetPanel as any).group, position: (dirMap[this.savedDragDir] ?? 'right') as any }
-                  });
-              }
+          if (this.savedDragTarget && panelId !== this.savedDragTarget) {
+              this.movePanelRelative(panelId, this.savedDragTarget, this.savedDragDir);
           }
           this.savedDragTarget = null;
           this.savedDragDir = 'right';
@@ -608,7 +633,7 @@ export class RoomWorkspaceManager {
       closeBtn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const panel = this.dockview?.getPanel(panelId);
+          const panel = this.dockview?.getGroupPanel(panelId);
           if (panel) {
               panel.api.close();
           } else {
@@ -647,9 +672,9 @@ export class RoomWorkspaceManager {
     ];
     mappings.forEach((mapping) => {
       const { selector, pods, master } = (mapping as any);
-      const btn = document.querySelector(selector);
+      const btn = document.querySelector<HTMLButtonElement>(selector);
       if (btn) {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', (e: MouseEvent) => {
           if (master) {
              e.preventDefault(); e.stopPropagation();
              this.applyLayoutByKey(master);
@@ -657,8 +682,8 @@ export class RoomWorkspaceManager {
           }
           if (selector.includes('lilypond')) {
              e.preventDefault(); e.stopPropagation();
-             const hasOne = pods.some(id => this.dockview?.getPanel(id));
-             if (hasOne) pods.forEach(id => this.dockview?.getPanel(id)?.api.close());
+             const hasOne = pods.some((id: string) => this.dockview?.getGroupPanel(id));
+             if (hasOne) pods.forEach((id: string) => this.dockview?.getGroupPanel(id)?.api.close());
              else {
                    this.dockview?.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER' });
                    this.dockview?.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILYCODE', position: { referencePanel: 'lily-render', direction: 'left' } });
@@ -675,9 +700,9 @@ export class RoomWorkspaceManager {
 
           if (selector.includes('data-action')) {
              e.preventDefault(); e.stopPropagation();
-             pods.forEach(id => this.togglePod(id, true));
+             pods.forEach((id: string) => this.togglePod(id, true));
           }
-          if (selector.includes('data-layout-choice')) pods.forEach(id => this.togglePod(id, true));
+          if (selector.includes('data-layout-choice')) pods.forEach((id: string) => this.togglePod(id, true));
         }, true);
       }
     });
@@ -687,16 +712,13 @@ export class RoomWorkspaceManager {
     if (!this.dockview) return;
     try {
         const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'clase', 'lily-code', 'lily-render'].includes(id); 
-        const existing = this.dockview.getPanel(id);
+        const existing = this.dockview.getGroupPanel(id);
         
         if (existing && !canHaveMultiple) {
           if (forceOpen) {
               existing.api.setActive();
               if (position) {
-                  this.dockview.moveGroupOrPanel({
-                      from: existing as any,
-                      to: position as any
-                  });
+                  this.movePanelRelative(existing.id, position.referencePanel ?? null, position.direction ?? 'right');
               }
           }
           else existing.api.close();
@@ -737,7 +759,7 @@ export class RoomWorkspaceManager {
       initialWidth: Math.round(cW * 0.25),
     });
     window.setTimeout(() => {
-      this.dockview?.getPanel('chat')?.api.setActive();
+      this.dockview?.getGroupPanel('chat')?.api.setActive();
       window.dispatchEvent(new CustomEvent('musiki:chat:focus-request'));
     }, 80);
   }
@@ -762,7 +784,7 @@ export class RoomWorkspaceManager {
       position: reference ? { referencePanel: reference.id, direction: 'left' } : undefined,
       initialWidth: Math.round(W * 0.45),
     });
-    window.setTimeout(() => this.dockview?.getPanel('visualizer')?.api.setActive(), 80);
+    window.setTimeout(() => this.dockview?.getGroupPanel('visualizer')?.api.setActive(), 80);
   }
 
   private bindForum(root: HTMLElement) {

@@ -778,11 +778,14 @@ export class RecursosController {
   }
 
   private isSonicMedia(item: ResourceItem): boolean {
-    return item.type === 'audio' || item.type === 'video';
+    const inferred = typeFromUrl(item.url);
+    return item.type === 'audio' || item.type === 'video' || inferred === 'audio' || inferred === 'video';
   }
 
   private isVisualMedia(item: ResourceItem): boolean {
-    return item.type === 'pdf' || item.type === 'img' || item.type === 'video';
+    const inferred = typeFromUrl(item.url);
+    return item.type === 'pdf' || item.type === 'img' || item.type === 'video'
+      || inferred === 'pdf' || inferred === 'img' || inferred === 'video';
   }
 
   private defaultFolderForType(type: ResourceType | 'other'): string {
