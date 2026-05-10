@@ -63,6 +63,7 @@ export class RecursosController {
   private ctxSendToVsBtn!: HTMLButtonElement;
   private sessionCtxEl!: HTMLElement;
   private sessionCtxNewBtn!: HTMLButtonElement;
+  private sessionCtxRenameBtn!: HTMLButtonElement;
   private sessionCtxListBtn!: HTMLButtonElement;
   private sessionCtxDeleteBtn!: HTMLButtonElement;
   private sessionsModalEl!: HTMLElement;
@@ -98,6 +99,7 @@ export class RecursosController {
     this.ctxSendToVsBtn     = q('[data-re-ctx-send-to-vs]');
     this.sessionCtxEl       = q('[data-re-session-ctx]');
     this.sessionCtxNewBtn   = q('[data-re-sctx-new]');
+    this.sessionCtxRenameBtn = q('[data-re-sctx-rename]');
     this.sessionCtxListBtn  = q('[data-re-sctx-list]');
     this.sessionCtxDeleteBtn = q('[data-re-sctx-delete]');
     this.sessionsModalEl    = q('[data-re-sessions-modal]');
@@ -155,12 +157,13 @@ export class RecursosController {
     if (this.sessionId) return this.sessionId;
     const roomName = this.getRoomName() ?? '';
     const claseId  = this.getCourseId();
+    const courseId = this.getCourseRootId?.() ?? null;
     const name = new Date().toISOString().slice(0, 10) + '-sesión';
     try {
       const resp = await fetch('/api/live/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomName, name, claseId }),
+        body: JSON.stringify({ roomName, name, claseId, courseId }),
       });
       if (resp.ok) {
         const { session } = await resp.json();
@@ -223,6 +226,7 @@ export class RecursosController {
     this.ctxSendToVsBtn.addEventListener('click', (e) => { e.stopPropagation(); this.sendCtxItemToVs(); });
 
     this.sessionCtxNewBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.newSession(); });
+    this.sessionCtxRenameBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.renameSession(); });
     this.sessionCtxListBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.showSessionsList(); });
     this.sessionCtxDeleteBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.deleteSession(); });
 
@@ -366,12 +370,13 @@ export class RecursosController {
   private async newSession(): Promise<void> {
     const roomName = this.getRoomName() ?? '';
     const claseId  = this.getCourseId();
+    const courseId = this.getCourseRootId?.() ?? null;
     const name = new Date().toISOString().slice(0, 10) + '-sesión';
     try {
       const resp = await fetch('/api/live/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomName, name, claseId }),
+        body: JSON.stringify({ roomName, name, claseId, courseId }),
       });
       if (resp.ok) {
         const { session } = await resp.json();
@@ -392,12 +397,30 @@ export class RecursosController {
     this.updateSessionBar();
   }
 
+  private async renameSession(): Promise<void> {
+    if (!this.sessionId) return;
+    const name = window.prompt('Nombre de sesión', this.sessionName || new Date().toISOString().slice(0, 10) + '-sesión');
+    if (!name?.trim()) return;
+    try {
+      const resp = await fetch('/api/live/session', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: this.sessionId, name }),
+      });
+      if (resp.ok) {
+        this.sessionName = name.trim();
+        this.updateSessionBar();
+      }
+    } catch { /**/ }
+  }
+
   // ── Session context menu ──────────────────────────────────────────────────────
 
   private openSessionCtx(e: MouseEvent): void {
     this.sessionCtxEl.removeAttribute('hidden');
     this.sessionCtxEl.style.left = `${e.clientX}px`;
     this.sessionCtxEl.style.top  = `${e.clientY}px`;
+    this.sessionCtxRenameBtn.disabled = !this.sessionId;
     this.sessionCtxDeleteBtn.disabled = !this.sessionId;
   }
 

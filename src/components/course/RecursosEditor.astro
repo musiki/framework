@@ -2,9 +2,11 @@
 type Props = {
   courseId: string;
   canManage: boolean;
+  classOptions?: Array<{ value: string; label: string }>;
 };
 
-const { courseId, canManage } = Astro.props;
+const { courseId, canManage, classOptions = [] } = Astro.props;
+const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 ---
 
 <section
@@ -31,6 +33,7 @@ const { courseId, canManage } = Astro.props;
             <h2>Recursos vinculados</h2>
             <span data-recursos-count>0</span>
           </div>
+          <div class="recursos-session-list" data-session-list></div>
           <div class="recursos-editor-list" data-recursos-list></div>
         </section>
 
@@ -42,6 +45,11 @@ const { courseId, canManage } = Astro.props;
           <div class="recursos-r2-toolbar">
             <input data-r2-prefix value="room/" spellcheck="false" />
             <button type="button" class="recursos-editor-btn" data-r2-load>Listar</button>
+          </div>
+          <div class="recursos-r2-upload" data-r2-dropzone>
+            <input type="file" data-r2-file-input multiple hidden />
+            <button type="button" class="recursos-editor-btn" data-r2-upload-button>Subir archivo</button>
+            <span data-r2-upload-status>Soltar archivos aca para subirlos a la carpeta actual.</span>
           </div>
           <div class="recursos-file-tree-browser" data-r2-browser>
             <div class="ft-tree" data-r2-tree></div>
@@ -69,18 +77,26 @@ const { courseId, canManage } = Astro.props;
             <input name="folder" data-attach-folder placeholder="DOC, media, compartidos..." />
           </label>
           <label>
-            Clase
-            <input name="claseId" data-attach-clase placeholder={`${courseId}/... o vacio para sala general`} />
+            Clase / capítulo
+            <input name="claseId" data-attach-clase list="recursos-editor-class-options" placeholder="general del curso" />
           </label>
           <label>
-            Sala
-            <input name="roomName" data-attach-room value={`${courseId}-stage`} />
+            Sesión
+            <select name="sessionId" data-attach-session></select>
           </label>
+          <input type="hidden" name="roomName" data-attach-room value={`${courseId}-stage`} />
+          <button type="button" class="recursos-editor-btn" data-session-new>Nueva sesión</button>
           <button type="submit" class="recursos-editor-btn recursos-editor-btn--primary">Vincular</button>
         </form>
       </section>
     </>
   )}
+  <datalist id="recursos-editor-class-options" data-class-options-list>
+    {classOptions.map((option) => (
+      <option value={option.value} label={option.label}></option>
+    ))}
+  </datalist>
+  <script type="application/json" data-recursos-class-options set:html={classOptionsJson}></script>
 </section>
 
 <style>
@@ -149,12 +165,18 @@ const { courseId, canManage } = Astro.props;
     overflow: auto;
   }
 
+  .recursos-session-list {
+    display: grid;
+    gap: 0.42rem;
+    margin-bottom: 0.7rem;
+  }
+
   .recursos-file-tree-browser {
     display: grid;
-    grid-template-columns: minmax(150px, 0.42fr) minmax(0, 0.58fr);
+    grid-template-columns: minmax(116px, 0.34fr) minmax(0, 0.66fr);
     max-height: 62vh;
     min-height: 19rem;
-    overflow: auto;
+    overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--c-border) 82%, transparent);
     border-radius: 7px;
     background: color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%);
@@ -164,6 +186,7 @@ const { courseId, canManage } = Astro.props;
   .ft-explorer {
     min-width: 0;
     padding: 0.45rem 0;
+    overflow: auto;
   }
 
   .ft-tree {
@@ -212,7 +235,7 @@ const { courseId, canManage } = Astro.props;
   }
 
   .recursos-r2-row {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto auto;
     padding: 0.32rem 0.5rem;
   }
 
@@ -247,9 +270,9 @@ const { courseId, canManage } = Astro.props;
     text-align: center;
   }
 
-  .recursos-row-main input,
   .recursos-r2-toolbar input,
-  .recursos-attach-form input {
+  .recursos-attach-form input,
+  .recursos-attach-form select {
     min-width: 0;
     border: 1px solid var(--c-border);
     border-radius: 6px;
@@ -327,6 +350,30 @@ const { courseId, canManage } = Astro.props;
     flex: 1 1 auto;
   }
 
+  .recursos-r2-upload {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    border: 1px dashed color-mix(in srgb, var(--c-border) 82%, transparent);
+    border-radius: 7px;
+    padding: 0.55rem 0.65rem;
+    margin-bottom: 0.65rem;
+    color: var(--c-fg-dim);
+    font-size: 0.78rem;
+    background: color-mix(in srgb, var(--c-bg) 96%, var(--c-link) 4%);
+  }
+
+  .recursos-r2-upload[data-dragging="true"] {
+    border-color: var(--c-link);
+    background: color-mix(in srgb, var(--c-link) 10%, var(--c-bg) 90%);
+    color: var(--c-fg);
+  }
+
+  .recursos-r2-upload span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .recursos-attach-form {
     align-items: end;
     flex-wrap: wrap;
@@ -359,6 +406,360 @@ const { courseId, canManage } = Astro.props;
       border-bottom: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
       max-height: 14rem;
       overflow: auto;
+    }
+  }
+</style>
+
+<style is:global>
+  .recursos-editor .recursos-row {
+    display: grid;
+    gap: 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--c-border) 62%, transparent);
+    border-radius: 6px;
+    padding: 0.55rem;
+    background: var(--c-bg);
+  }
+
+  .recursos-editor .recursos-row:hover {
+    border-color: color-mix(in srgb, var(--c-link) 32%, var(--c-border) 68%);
+  }
+
+  .recursos-editor .recursos-row-main,
+  .recursos-editor .recursos-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-width: 0;
+  }
+
+  .recursos-editor .recursos-row-main input {
+    min-width: 0;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--c-fg);
+    padding: 0.26rem 0.34rem;
+    outline: 0;
+  }
+
+  .recursos-editor .recursos-row-main select {
+    min-width: 0;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--c-fg-dim);
+    padding: 0.26rem 0.34rem;
+    outline: 0;
+  }
+
+  .recursos-editor .recursos-row-main select:hover,
+  .recursos-editor .recursos-row-main select:focus {
+    border-color: var(--c-link);
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+
+  .recursos-editor .recursos-row-main input:hover {
+    background: color-mix(in srgb, var(--c-fg) 4%, transparent);
+  }
+
+  .recursos-editor .recursos-row-main input:focus {
+    border-color: var(--c-link);
+    background: var(--c-bg);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-link) 15%, transparent);
+    cursor: text;
+  }
+
+  .recursos-editor .recursos-row-main input[data-field="name"] {
+    flex: 1 1 18rem;
+    font-weight: 650;
+  }
+
+  .recursos-editor .recursos-row-main input[data-field="folder"] {
+    flex: 0 1 8rem;
+    color: var(--c-fg-dim);
+    font-size: 0.78rem;
+  }
+
+  .recursos-editor .recursos-row-main input[data-field="claseId"] {
+    flex: 0 1 12rem;
+    color: var(--c-fg-dim);
+    font-size: 0.78rem;
+  }
+
+  .recursos-editor .recursos-row-main select[data-field="sessionId"] {
+    flex: 0 1 10rem;
+    font-size: 0.78rem;
+  }
+
+  .recursos-editor .recursos-session-item {
+    display: flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-width: 0;
+    padding: 0.35rem 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--c-border) 58%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c-bg) 96%, var(--c-link) 4%);
+  }
+
+  .recursos-editor .recursos-session-item input {
+    flex: 1 1 10rem;
+    min-width: 0;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--c-fg);
+    padding: 0.25rem 0.32rem;
+    outline: 0;
+    font-weight: 650;
+  }
+
+  .recursos-editor .recursos-session-item input:hover {
+    background: color-mix(in srgb, var(--c-fg) 4%, transparent);
+  }
+
+  .recursos-editor .recursos-session-item input:focus {
+    border-color: var(--c-link);
+    background: var(--c-bg);
+  }
+
+  .recursos-editor .recursos-session-meta {
+    flex: 0 1 8rem;
+    min-width: 0;
+    color: var(--c-fg-dim);
+    font-size: 0.74rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recursos-editor .recursos-row-link {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 1.78rem;
+    height: 1.78rem;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--c-fg-dim);
+  }
+
+  .recursos-editor .recursos-row-link:hover {
+    border-color: var(--c-link);
+    color: var(--c-link);
+    background: color-mix(in srgb, var(--c-link) 8%, transparent);
+  }
+
+  .recursos-editor .recursos-row-link svg {
+    width: 1rem;
+    height: 1rem;
+    stroke: currentColor;
+  }
+
+  .recursos-editor .recursos-row-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .recursos-editor .recursos-meta {
+    color: var(--c-fg-dim);
+    font-size: 0.76rem;
+    padding-left: 0.34rem;
+  }
+
+  .recursos-editor .recursos-r2-node,
+  .recursos-editor .recursos-r2-row {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--c-fg);
+    text-align: left;
+  }
+
+  .recursos-editor .recursos-r2-node {
+    display: flex;
+    align-items: center;
+    min-height: 1.85rem;
+    padding: 0.24rem 0.45rem 0.24rem calc(0.52rem + (var(--depth, 0) * 0.82rem));
+    border-left: 2px solid transparent;
+    cursor: pointer;
+  }
+
+  .recursos-editor .recursos-r2-node:hover,
+  .recursos-editor .recursos-r2-node[data-active="true"] {
+    background: color-mix(in srgb, var(--c-link) 10%, transparent);
+  }
+
+  .recursos-editor .recursos-r2-node[data-active="true"] {
+    border-left-color: var(--c-link);
+    color: var(--c-link);
+  }
+
+  .recursos-editor .recursos-r2-row {
+    display: grid;
+    grid-template-columns: 1.1rem minmax(4.5rem, 6.25rem) minmax(0, 1fr);
+    gap: 0.6rem;
+    padding: 0.55rem 0.65rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-border) 58%, transparent);
+  }
+
+  .recursos-editor .recursos-r2-row:hover {
+    background: color-mix(in srgb, var(--c-link) 6%, transparent);
+  }
+
+  .recursos-editor .recursos-r2-label {
+    display: flex;
+    align-items: center;
+    gap: 0.38rem;
+    min-width: 0;
+  }
+
+  .recursos-editor .recursos-r2-icon {
+    flex: 0 0 1rem;
+    color: color-mix(in srgb, var(--c-link) 78%, var(--c-fg) 22%);
+    text-align: center;
+  }
+
+  .recursos-editor .recursos-r2-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recursos-editor .recursos-r2-file-main {
+    display: grid;
+    align-content: center;
+    gap: 0.38rem;
+    min-width: 0;
+  }
+
+  .recursos-editor .recursos-r2-select {
+    display: grid;
+    place-items: start center;
+    padding-top: 0.12rem;
+  }
+
+  .recursos-editor .recursos-r2-select input {
+    width: 0.95rem;
+    height: 0.95rem;
+    accent-color: var(--c-link);
+    cursor: pointer;
+  }
+
+  .recursos-editor .recursos-r2-file-name {
+    min-width: 0;
+    color: var(--c-fg);
+    font-size: 0.86rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+  }
+
+  .recursos-editor .recursos-r2-meta,
+  .recursos-editor .recursos-r2-current {
+    color: var(--c-fg-dim);
+    font-size: 0.76rem;
+  }
+
+  .recursos-editor .recursos-r2-current {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.55rem;
+    padding: 0.3rem 0.65rem 0.45rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-border) 62%, transparent);
+    margin-bottom: 0.25rem;
+  }
+
+  .recursos-editor .recursos-r2-current-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recursos-editor .recursos-r2-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.34rem;
+  }
+
+  .recursos-editor .recursos-r2-bulk-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .recursos-editor .recursos-editor-btn {
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    padding: 0.28rem 0.48rem;
+    cursor: pointer;
+  }
+
+  .recursos-editor .recursos-editor-btn:hover:not(:disabled) {
+    border-color: var(--c-link);
+  }
+
+  .recursos-editor .recursos-editor-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+  }
+
+  .recursos-editor .recursos-editor-btn--danger {
+    color: #b3261e;
+  }
+
+  .recursos-editor .recursos-r2-preview {
+    width: min(100%, 6.25rem);
+    aspect-ratio: 4 / 3;
+    border: 1px solid color-mix(in srgb, var(--c-border) 70%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c-bg) 92%, var(--c-fg) 8%);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+  }
+
+  .recursos-editor .recursos-r2-preview img,
+  .recursos-editor .recursos-r2-preview iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    object-fit: cover;
+  }
+
+  .recursos-editor .recursos-r2-preview--pdf {
+    background: white;
+  }
+
+  .recursos-editor .recursos-r2-preview-token {
+    color: var(--c-fg-dim);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .recursos-editor .recursos-editor-empty {
+    color: var(--c-fg-dim);
+    font-size: 0.78rem;
+    padding: 0.5rem 0.65rem;
+  }
+
+  @media (max-width: 520px) {
+    .recursos-editor .recursos-r2-row {
+      grid-template-columns: 1rem 4.75rem minmax(0, 1fr);
+      gap: 0.45rem;
+    }
+
+    .recursos-editor .recursos-r2-current {
+      align-items: flex-start;
+      flex-direction: column;
     }
   }
 </style>
@@ -401,6 +802,33 @@ const { courseId, canManage } = Astro.props;
     return /^https?:\/\//i.test(url) ? 'link' : 'other';
   }
 
+  function r2PreviewMarkup(object) {
+    const url = String(object?.url || '');
+    const name = String(object?.name || '');
+    const type = typeFromUrl(url);
+    if (type === 'img') {
+      return `<div class="recursos-r2-preview recursos-r2-preview--image"><img src="${esc(url)}" alt="${esc(name)}" loading="lazy" decoding="async" /></div>`;
+    }
+    if (type === 'pdf') {
+      return `<div class="recursos-r2-preview recursos-r2-preview--pdf"><iframe src="${esc(url)}#page=1&toolbar=0&navpanes=0&scrollbar=0" title="${esc(name)}" loading="lazy"></iframe></div>`;
+    }
+    return `<div class="recursos-r2-preview recursos-r2-preview--${esc(type)}"><span class="recursos-r2-preview-token">${esc(type.toUpperCase())}</span></div>`;
+  }
+
+  function r2CurrentMarkup(prefix, hasObjects = false, virtualFlat = false) {
+    return `
+      <div class="recursos-r2-current">
+        <span class="recursos-r2-current-path">${esc(prefix)}${virtualFlat ? ' · vista plana' : ''}</span>
+        ${hasObjects ? `
+          <span class="recursos-r2-bulk-actions">
+            <span><span data-r2-selected-count>0</span> sel.</span>
+            <button type="button" class="recursos-editor-btn recursos-editor-btn--danger" data-r2-bulk-delete disabled>Borrar seleccionados</button>
+          </span>
+        ` : ''}
+      </div>
+    `;
+  }
+
   document.querySelectorAll('[data-recursos-editor]').forEach((root) => {
     if (!(root instanceof HTMLElement) || root.dataset.bound === 'true') return;
     root.dataset.bound = 'true';
@@ -408,16 +836,33 @@ const { courseId, canManage } = Astro.props;
     const canManage = root.dataset.canManage === 'true';
     if (!courseId || !canManage) return;
 
+    const sessionListEl = root.querySelector('[data-session-list]');
     const listEl = root.querySelector('[data-recursos-list]');
     const countEl = root.querySelector('[data-recursos-count]');
     const statusEl = root.querySelector('[data-recursos-status]');
     const r2TreeEl = root.querySelector('[data-r2-tree]');
     const r2ExplorerEl = root.querySelector('[data-r2-explorer]');
     const r2PrefixInput = root.querySelector('[data-r2-prefix]');
+    const r2Dropzone = root.querySelector('[data-r2-dropzone]');
+    const r2FileInput = root.querySelector('[data-r2-file-input]');
+    const r2UploadButton = root.querySelector('[data-r2-upload-button]');
+    const r2UploadStatus = root.querySelector('[data-r2-upload-status]');
     const attachForm = root.querySelector('[data-recursos-attach-form]');
     const attachUrl = root.querySelector('[data-attach-url]');
     const attachName = root.querySelector('[data-attach-name]');
     const attachFolder = root.querySelector('[data-attach-folder]');
+    const attachClase = root.querySelector('[data-attach-clase]');
+    const attachSession = root.querySelector('[data-attach-session]');
+    const sessionNewBtn = root.querySelector('[data-session-new]');
+    const classOptionsPayload = root.querySelector('[data-recursos-class-options]');
+    let availableSessions = [];
+    let classOptions = [];
+    try {
+      classOptions = JSON.parse(classOptionsPayload?.textContent || '[]');
+    } catch {
+      classOptions = [];
+    }
+    if (!Array.isArray(classOptions)) classOptions = [];
 
     const setStatus = (message) => {
       if (statusEl) statusEl.textContent = message || '';
@@ -435,12 +880,122 @@ const { courseId, canManage } = Astro.props;
       setStatus('Link copiado');
     };
 
+    const setR2UploadStatus = (message) => {
+      if (r2UploadStatus) r2UploadStatus.textContent = message || '';
+    };
+
+    const normalizeText = (value) => String(value ?? '').trim();
+
+    const labelForClaseId = (claseId) => {
+      const normalized = normalizeText(claseId);
+      if (!normalized) return 'curso';
+      const match = classOptions.find((option) => normalizeText(option?.value) === normalized);
+      return match?.label || normalized;
+    };
+
+    const sessionMatchesClase = (session, claseId) => {
+      const sessionClaseId = normalizeText(session?.claseId);
+      const selectedClaseId = normalizeText(claseId);
+      return !selectedClaseId || !sessionClaseId || sessionClaseId === selectedClaseId;
+    };
+
+    const sessionLabel = (session) => {
+      const name = normalizeText(session?.name) || 'sesión';
+      return `${name} · ${labelForClaseId(session?.claseId)}`;
+    };
+
+    const sessionOptionsMarkup = (selected = '', claseId = '') => [
+      '<option value="">Sin sesión</option>',
+      ...availableSessions
+        .filter((session) => sessionMatchesClase(session, claseId))
+        .map((session) => `<option value="${esc(session.id)}" ${String(session.id) === String(selected) ? 'selected' : ''}>${esc(sessionLabel(session))}</option>`),
+    ].join('');
+
+    const renderAttachSessions = () => {
+      if (!(attachSession instanceof HTMLSelectElement)) return;
+      const selected = attachSession.value;
+      const claseId = attachClase instanceof HTMLInputElement ? attachClase.value : '';
+      attachSession.innerHTML = sessionOptionsMarkup(selected, claseId);
+      if (selected && !attachSession.value) attachSession.value = '';
+    };
+
+    const rowMetaMarkup = (item) => {
+      const parts = [item.type || 'recurso', item.source || 'manual'];
+      parts.push(item.claseId ? `clase: ${labelForClaseId(item.claseId)}` : 'curso');
+      const session = availableSessions.find((candidate) => String(candidate.id) === String(item.sessionId || ''));
+      if (session) parts.push(`sesión: ${session.name || session.id}`);
+      return parts.map(esc).join(' / ');
+    };
+
+    const renderSessionList = () => {
+      if (!sessionListEl) return;
+      if (!availableSessions.length) {
+        sessionListEl.innerHTML = '';
+        return;
+      }
+      sessionListEl.innerHTML = availableSessions.map((session) => `
+        <div class="recursos-session-item" data-session-id="${esc(session.id)}">
+          <input data-session-name value="${esc(session.name || '')}" aria-label="Nombre de sesión" />
+          <span class="recursos-session-meta">${esc(labelForClaseId(session.claseId))}</span>
+          <button type="button" class="recursos-editor-btn" data-session-save>Guardar</button>
+        </div>
+      `).join('');
+    };
+
+    const uploadR2Files = async (files) => {
+      if (!(r2PrefixInput instanceof HTMLInputElement)) return;
+      const fileList = Array.from(files || []).filter((file) => file instanceof File);
+      if (!fileList.length) return;
+
+      const form = new FormData();
+      form.set('courseId', courseId);
+      form.set('prefix', r2PrefixInput.value || 'room/');
+      fileList.forEach((file) => form.append('file', file));
+
+      try {
+        setStatus(`Subiendo ${fileList.length} archivo${fileList.length === 1 ? '' : 's'}...`);
+        setR2UploadStatus(`Subiendo ${fileList.length} archivo${fileList.length === 1 ? '' : 's'} a ${r2PrefixInput.value || 'room/'}`);
+        const payload = await requestJson('/api/live/recursos/r2', {
+          method: 'POST',
+          body: form,
+        });
+        const uploaded = Array.isArray(payload.uploaded) ? payload.uploaded : [];
+        setStatus(`${uploaded.length || fileList.length} archivo${(uploaded.length || fileList.length) === 1 ? '' : 's'} subido${(uploaded.length || fileList.length) === 1 ? '' : 's'}`);
+        setR2UploadStatus('Soltar archivos aca para subirlos a la carpeta actual.');
+        await loadR2();
+      } catch (error) {
+        const message = error?.message || String(error);
+        setStatus(message);
+        setR2UploadStatus(message);
+      }
+    };
+
+    const getSelectedR2Keys = () => {
+      if (!r2ExplorerEl) return [];
+      return Array.from(r2ExplorerEl.querySelectorAll('[data-r2-select]:checked'))
+        .filter((input) => input instanceof HTMLInputElement)
+        .map((input) => input.value)
+        .filter(Boolean);
+    };
+
+    const updateR2SelectionControls = () => {
+      if (!r2ExplorerEl) return;
+      const selectedCount = getSelectedR2Keys().length;
+      const countEl = r2ExplorerEl.querySelector('[data-r2-selected-count]');
+      const bulkBtn = r2ExplorerEl.querySelector('[data-r2-bulk-delete]');
+      if (countEl) countEl.textContent = String(selectedCount);
+      if (bulkBtn instanceof HTMLButtonElement) bulkBtn.disabled = selectedCount === 0;
+    };
+
     const loadResources = async () => {
       if (!listEl) return;
       listEl.innerHTML = '<div class="recursos-editor-empty">cargando...</div>';
       try {
         const payload = await requestJson(`/api/live/recursos/editor?courseId=${encodeURIComponent(courseId)}`);
         const items = Array.isArray(payload.items) ? payload.items : [];
+        availableSessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+        renderSessionList();
+        renderAttachSessions();
         if (countEl) countEl.textContent = String(items.length);
         if (items.length === 0) {
           listEl.innerHTML = '<div class="recursos-editor-empty">Sin recursos vinculados.</div>';
@@ -450,11 +1005,18 @@ const { courseId, canManage } = Astro.props;
           <article class="recursos-row" data-id="${esc(item.id)}">
             <div class="recursos-row-main">
               <input data-field="name" value="${esc(item.name)}" aria-label="Nombre" />
+              <a class="recursos-row-link" href="${esc(item.url)}" target="_blank" rel="noreferrer" aria-label="Abrir recurso" title="${esc(item.url)}">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
+                  <path d="M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1" />
+                </svg>
+              </a>
               <input data-field="folder" value="${esc(item.folder)}" aria-label="Carpeta" />
+              <input data-field="claseId" list="recursos-editor-class-options" value="${esc(item.claseId || '')}" aria-label="Clase / capítulo" placeholder="curso" />
+              <select data-field="sessionId" aria-label="Sesión">${sessionOptionsMarkup(item.sessionId || '', item.claseId || '')}</select>
             </div>
-            <div class="recursos-meta">${esc(item.type)} / ${esc(item.source)} / ${esc(item.roomName)}${item.claseId ? ` / ${esc(item.claseId)}` : ''}</div>
+            <div class="recursos-meta">${rowMetaMarkup(item)}</div>
             <div class="recursos-row-actions">
-              <span class="recursos-row-url" title="${esc(item.url)}">${esc(item.url)}</span>
               <button type="button" class="recursos-editor-btn" data-copy="${esc(item.url)}">Copiar</button>
               <button type="button" class="recursos-editor-btn" data-save>Guardar</button>
               <button type="button" class="recursos-editor-btn recursos-editor-btn--danger" data-delete>Borrar</button>
@@ -474,14 +1036,17 @@ const { courseId, canManage } = Astro.props;
       r2ExplorerEl.innerHTML = '<div class="recursos-editor-empty">cargando R2...</div>';
       try {
         const payload = await requestJson(`/api/live/recursos/r2?courseId=${encodeURIComponent(courseId)}&prefix=${encodeURIComponent(prefix)}`);
+        const effectivePrefix = normalizePrefix(payload.prefix || prefix);
+        r2PrefixInput.value = effectivePrefix;
         const folders = Array.isArray(payload.folders) ? payload.folders : [];
         const objects = Array.isArray(payload.objects) ? payload.objects : [];
-        const ancestors = ancestorPrefixes(prefix);
+        const virtualFlat = Boolean(payload.virtualFlat);
+        const ancestors = ancestorPrefixes(effectivePrefix);
         r2TreeEl.innerHTML = [
           ...ancestors.map((folder) => `
-            <button type="button" class="recursos-r2-node recursos-r2-node--folder" style="--depth:${depthForPath(folder)}" data-folder="${esc(folder)}" data-active="${folder === prefix ? 'true' : 'false'}">
+            <button type="button" class="recursos-r2-node recursos-r2-node--folder" style="--depth:${depthForPath(folder)}" data-folder="${esc(folder)}" data-active="${folder === effectivePrefix ? 'true' : 'false'}">
               <span class="recursos-r2-label">
-                <span class="recursos-r2-icon">${folder === prefix ? '▾' : '▸'}</span>
+                <span class="recursos-r2-icon">${folder === effectivePrefix ? '▾' : '▸'}</span>
                 <span class="recursos-r2-name" title="${esc(folder)}">${esc(baseNameForPath(folder))}</span>
               </span>
             </button>
@@ -498,26 +1063,33 @@ const { courseId, canManage } = Astro.props;
 
         if (!objects.length) {
           r2ExplorerEl.innerHTML = `
-            <div class="recursos-r2-current">${esc(prefix)}</div>
+            ${r2CurrentMarkup(effectivePrefix, false, virtualFlat)}
             <div class="recursos-editor-empty">Sin archivos en esta carpeta.</div>
           `;
           return;
         }
 
         r2ExplorerEl.innerHTML = [
-          `<div class="recursos-r2-current">${esc(prefix)}</div>`,
+          r2CurrentMarkup(effectivePrefix, true, virtualFlat),
           ...objects.map((object) => `
-            <div class="recursos-r2-row recursos-r2-row--file" data-url="${esc(object.url)}" data-name="${esc(object.name)}">
-              <span class="recursos-r2-label">
-                <span class="recursos-r2-icon">•</span>
-                <span class="recursos-r2-name" title="${esc(object.key)}">${esc(object.name)}</span>
-              </span>
-              <span class="recursos-r2-meta">${formatBytes(object.size)}</span>
-              <button type="button" class="recursos-editor-btn" data-r2-copy="${esc(object.url)}">Copiar</button>
-              <button type="button" class="recursos-editor-btn" data-r2-use>Usar</button>
+            <div class="recursos-r2-row recursos-r2-row--file" data-url="${esc(object.url)}" data-key="${esc(object.key)}" data-name="${esc(object.name)}">
+              <label class="recursos-r2-select">
+                <input type="checkbox" data-r2-select value="${esc(object.key)}" aria-label="Seleccionar ${esc(object.name)}" />
+              </label>
+              ${r2PreviewMarkup(object)}
+              <div class="recursos-r2-file-main">
+                <span class="recursos-r2-file-name" title="${esc(object.key)}">${esc(object.name)}</span>
+                <span class="recursos-r2-meta">${formatBytes(object.size)}</span>
+                <div class="recursos-r2-actions">
+                  <button type="button" class="recursos-editor-btn" data-r2-copy="${esc(object.url)}">Copiar</button>
+                  <button type="button" class="recursos-editor-btn" data-r2-use>Usar</button>
+                  <button type="button" class="recursos-editor-btn recursos-editor-btn--danger" data-r2-delete>Borrar</button>
+                </div>
+              </div>
             </div>
           `),
         ].join('');
+        updateR2SelectionControls();
       } catch (error) {
         r2TreeEl.innerHTML = '';
         r2ExplorerEl.innerHTML = `<div class="recursos-editor-empty">${esc(error.message || error)}</div>`;
@@ -537,11 +1109,13 @@ const { courseId, canManage } = Astro.props;
       if (target.matches('[data-save]')) {
         const name = row.querySelector('[data-field="name"]')?.value || '';
         const folder = row.querySelector('[data-field="folder"]')?.value || '';
+        const claseId = row.querySelector('[data-field="claseId"]')?.value || '';
+        const sessionId = row.querySelector('[data-field="sessionId"]')?.value || '';
         setStatus('Guardando...');
         await requestJson('/api/live/recursos/editor', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId, id, name, folder }),
+          body: JSON.stringify({ courseId, id, name, folder, claseId, sessionId }),
         });
         setStatus('Guardado');
         await loadResources();
@@ -558,6 +1132,36 @@ const { courseId, canManage } = Astro.props;
       }
     });
 
+    listEl?.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || !target.matches('[data-field="claseId"]')) return;
+      const row = target.closest('.recursos-row');
+      if (!(row instanceof HTMLElement)) return;
+      const sessionSelect = row.querySelector('[data-field="sessionId"]');
+      if (!(sessionSelect instanceof HTMLSelectElement)) return;
+      const selected = sessionSelect.value;
+      sessionSelect.innerHTML = sessionOptionsMarkup(selected, target.value);
+      if (selected && !sessionSelect.value) sessionSelect.value = '';
+    });
+
+    sessionListEl?.addEventListener('click', async (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.matches('[data-session-save]')) return;
+      const row = target.closest('[data-session-id]');
+      if (!(row instanceof HTMLElement)) return;
+      const nameInput = row.querySelector('[data-session-name]');
+      const name = nameInput instanceof HTMLInputElement ? nameInput.value : '';
+      if (!name.trim()) return;
+      setStatus('Guardando sesión...');
+      await requestJson('/api/live/session', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.dataset.sessionId || '', name }),
+      });
+      setStatus('Sesión guardada');
+      await loadResources();
+    });
+
     r2TreeEl?.addEventListener('click', async (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
@@ -571,12 +1175,39 @@ const { courseId, canManage } = Astro.props;
     r2ExplorerEl?.addEventListener('click', async (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
+      if (target.matches('[data-r2-bulk-delete]')) {
+        const keys = getSelectedR2Keys();
+        if (!keys.length) return;
+        if (!confirm(`Borrar ${keys.length} archivos de R2?`)) return;
+        setStatus(`Borrando ${keys.length} archivos R2...`);
+        await requestJson('/api/live/recursos/r2', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId, keys }),
+        });
+        setStatus(`${keys.length} archivos R2 borrados`);
+        await loadR2();
+        return;
+      }
       const row = target.closest('[data-url]');
       if (!(row instanceof HTMLElement)) return;
       const url = row.dataset.url || '';
+      const key = row.dataset.key || '';
       const name = row.dataset.name || '';
       if (target.matches('[data-r2-copy]')) {
         await copyText(url);
+        return;
+      }
+      if (target.matches('[data-r2-delete]')) {
+        if (!confirm(`Borrar este archivo de R2?\n${key}`)) return;
+        setStatus('Borrando archivo R2...');
+        await requestJson('/api/live/recursos/r2', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId, key }),
+        });
+        setStatus('Archivo R2 borrado');
+        await loadR2();
         return;
       }
       if (target.matches('[data-r2-use]')) {
@@ -587,6 +1218,13 @@ const { courseId, canManage } = Astro.props;
           attachFolder.value = type === 'audio' ? 'media' : (type === 'pdf' || type === 'img' ? 'DOC' : '');
         }
         setStatus('URL preparada para vincular');
+      }
+    });
+
+    r2ExplorerEl?.addEventListener('change', (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.matches('[data-r2-select]')) {
+        updateR2SelectionControls();
       }
     });
 
@@ -603,18 +1241,66 @@ const { courseId, canManage } = Astro.props;
           name: form.get('name'),
           folder: form.get('folder'),
           claseId: form.get('claseId'),
+          sessionId: form.get('sessionId'),
           roomName: form.get('roomName'),
         }),
       });
       attachForm.reset();
       const roomInput = root.querySelector('[data-attach-room]');
       if (roomInput instanceof HTMLInputElement) roomInput.value = `${courseId}-stage`;
+      renderAttachSessions();
       setStatus('Vinculado');
       await loadResources();
     });
 
+    attachClase?.addEventListener('input', renderAttachSessions);
+    sessionNewBtn?.addEventListener('click', async () => {
+      const defaultName = new Date().toISOString().slice(0, 10) + '-sesión';
+      const name = prompt('Nombre de sesión', defaultName);
+      if (!name) return;
+      const claseId = attachClase instanceof HTMLInputElement ? attachClase.value : '';
+      setStatus('Creando sesión...');
+      const payload = await requestJson('/api/live/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: `${courseId}-stage`,
+          courseId,
+          claseId: claseId || null,
+          name,
+        }),
+      });
+      const newSessionId = payload?.session?.id || '';
+      await loadResources();
+      if (newSessionId && attachSession instanceof HTMLSelectElement) {
+        attachSession.value = newSessionId;
+      }
+      setStatus('Sesión creada');
+    });
+
     root.querySelector('[data-recursos-refresh]')?.addEventListener('click', () => loadResources());
     root.querySelector('[data-r2-load]')?.addEventListener('click', () => loadR2());
+    r2UploadButton?.addEventListener('click', () => {
+      if (r2FileInput instanceof HTMLInputElement) r2FileInput.click();
+    });
+    r2FileInput?.addEventListener('change', async () => {
+      if (!(r2FileInput instanceof HTMLInputElement)) return;
+      await uploadR2Files(r2FileInput.files);
+      r2FileInput.value = '';
+    });
+    r2Dropzone?.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      if (r2Dropzone instanceof HTMLElement) r2Dropzone.dataset.dragging = 'true';
+    });
+    r2Dropzone?.addEventListener('dragleave', (event) => {
+      if (!(event.currentTarget instanceof HTMLElement)) return;
+      event.currentTarget.dataset.dragging = 'false';
+    });
+    r2Dropzone?.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      if (r2Dropzone instanceof HTMLElement) r2Dropzone.dataset.dragging = 'false';
+      await uploadR2Files(event.dataTransfer?.files);
+    });
     root.querySelector('[data-r2-up]')?.addEventListener('click', () => {
       if (!(r2PrefixInput instanceof HTMLInputElement)) return;
       const parts = r2PrefixInput.value.split('/').filter(Boolean);

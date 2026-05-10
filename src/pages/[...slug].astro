@@ -367,16 +367,35 @@ const sidebarChapterEntries: Array<
   | { kind: 'recursos' }
 > = [];
 let insertedRecursosSidebarEntry = false;
+const hasRecursosSidebarChapter = sortedChapters.some(([chapterName]) => normalizeContentSlug(chapterName) === '80-recursos');
 for (const [chapterName, lessons] of sortedChapters) {
-  if (canManageLiveInteractions && !insertedRecursosSidebarEntry && /^9\d/.test(chapterName)) {
+  if (canManageLiveInteractions && !hasRecursosSidebarChapter && !insertedRecursosSidebarEntry && /^9\d/.test(chapterName)) {
     sidebarChapterEntries.push({ kind: 'recursos' });
     insertedRecursosSidebarEntry = true;
   }
   sidebarChapterEntries.push({ kind: 'chapter', chapterName, lessons });
 }
-if (canManageLiveInteractions && !insertedRecursosSidebarEntry) {
+if (canManageLiveInteractions && !hasRecursosSidebarChapter && !insertedRecursosSidebarEntry) {
   sidebarChapterEntries.push({ kind: 'recursos' });
 }
+
+const recursosCourseId = canonicalCourseIdToUse || courseSlug || '';
+const recursosClassOptionSeen = new Set<string>();
+const recursosClassOptions = sortedChapters
+  .map(([chapterName]) => {
+    const chapterSlug = normalizeContentSlug(chapterName);
+    if (!recursosCourseId || !chapterSlug || chapterSlug === '80-recursos' || /^9\d/.test(chapterName)) {
+      return null;
+    }
+    const value = `${recursosCourseId}/${chapterSlug}`;
+    if (recursosClassOptionSeen.has(value)) return null;
+    recursosClassOptionSeen.add(value);
+    return {
+      value,
+      label: chapterName.replace(/-/g, ' '),
+    };
+  })
+  .filter(Boolean) as Array<{ value: string; label: string }>;
 
 // Group concepts and glossary by project and parent
 const groupedConcepts: Record<string, Record<string, typeof allLessons>> = {};
@@ -1406,6 +1425,37 @@ order:
         cursor: pointer;
         user-select: none;
         list-style: none;
+      }
+
+      .sidebar--left .chapter-title-main {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        min-width: 0;
+      }
+
+      .sidebar--left .chapter-editor-link {
+        display: inline-grid;
+        place-items: center;
+        width: 1.15rem;
+        height: 1.15rem;
+        border-radius: 4px;
+        color: var(--c-fg-subtle);
+        opacity: 0.72;
+        text-decoration: none;
+      }
+
+      .sidebar--left .chapter-editor-link:hover,
+      .sidebar--left .chapter-editor-link.active {
+        color: var(--accent);
+        opacity: 1;
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+      }
+
+      .sidebar--left .chapter-editor-link svg {
+        width: 0.82rem;
+        height: 0.82rem;
+        stroke: currentColor;
       }
 
       .sidebar--left .chapter-title::-webkit-details-marker {
@@ -3309,28 +3359,27 @@ order:
               <div class="chapter">
                 <details class="chapter-details" open={isRecursosEditorPage}>
                   <summary class="chapter-title">
-                    <span class="chapter-title-text">80 RECURSOS</span>
+                    <span class="chapter-title-main">
+                      <span class="chapter-title-text">80 RECURSOS</span>
+                      <a
+                        href={`${courseHref}/recursos`}
+                        class:list={['chapter-editor-link', { active: isRecursosEditorPage }]}
+                        title="Editor de recursos"
+                        aria-label="Editor de recursos"
+                        onclick="event.stopPropagation()"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </a>
+                    </span>
                     <span class="chapter-caret">
                       <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="6 9 12 15 18 9"></polyline>
                       </svg>
                     </span>
                   </summary>
-                  <ul class="lesson-list">
-                    <li class="lesson-item">
-                      <a
-                        href={`${courseHref}/recursos`}
-                        class:list={['lesson-link', { active: isRecursosEditorPage }]}
-                        data-course-id={canonicalCourseIdToUse || courseSlug}
-                        data-lesson-page-slug={`${canonicalCourseIdToUse || courseSlug}/recursos`}
-                      >
-                        <span class="lesson-link-text">Editor de recursos</span>
-                        <span class="lesson-link-trailing">
-                          <span class="lesson-type">Re</span>
-                        </span>
-                      </a>
-                    </li>
-                  </ul>
                 </details>
               </div>
             );
@@ -3339,12 +3388,29 @@ order:
           const isPublicFolder = /^9\d /.test(chapterName);
           const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
           const isTOC = chapterName === 'TOC de clase';
+          const isRecursosChapter = normalizeContentSlug(chapterName) === '80-recursos';
 
           return (
             <div class="chapter">
-              <details class="chapter-details" open={lessons.some(l => currentEntry?.id === l.id)}>
+              <details class="chapter-details" open={isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
                 <summary class="chapter-title">
-                  <span class="chapter-title-text">{displayTitle}</span>
+                  <span class="chapter-title-main">
+                    <span class="chapter-title-text">{displayTitle}</span>
+                    {canManageLiveInteractions && isRecursosChapter && (
+                      <a
+                        href={`${courseHref}/recursos`}
+                        class:list={['chapter-editor-link', { active: isRecursosEditorPage }]}
+                        title="Editor de recursos"
+                        aria-label="Editor de recursos"
+                        onclick="event.stopPropagation()"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </a>
+                    )}
+                  </span>
                   <span class="chapter-caret">
                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="6 9 12 15 18 9"></polyline>
@@ -3524,6 +3590,7 @@ order:
           <RecursosEditor
             courseId={canonicalCourseId || courseSlug}
             canManage={canManageLiveInteractions}
+            classOptions={recursosClassOptions}
           />
         ) : (
           dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />

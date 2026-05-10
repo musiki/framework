@@ -226,6 +226,38 @@ pre {
 pre > code {
   all: unset;
 }
+
+.astro-code {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg) !important;
+  border: 1px solid rgba(var(--gray-light), 0.9);
+  overflow-x: auto;
+}
+
+.astro-code code {
+  background: transparent;
+}
+
+.astro-code span {
+  color: var(--shiki-light);
+  font-style: var(--shiki-light-font-style);
+  font-weight: var(--shiki-light-font-weight);
+  text-decoration: var(--shiki-light-text-decoration);
+}
+
+.dark .astro-code {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg) !important;
+  border-color: #313244;
+}
+
+.dark .astro-code span {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style);
+  font-weight: var(--shiki-dark-font-weight);
+  text-decoration: var(--shiki-dark-text-decoration);
+}
+
 blockquote {
   border-left: 4px solid var(--accent);
   padding: 0 0 0 1rem;
@@ -396,6 +428,12 @@ hr {
 .dark pre {
   background-color: #181825;
   border: 1px solid #313244;
+}
+
+.dark .astro-code > code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
 }
 
 .dark blockquote {

@@ -12,6 +12,8 @@ const selectColumns = `
   "createdBy", "sortOrder", "createdAt"
 `;
 
+const sessionSelectColumns = `id, "roomName", name, "courseId", "claseId", "createdAt"`;
+
 async function requireCourseManager(session: any, courseId: string) {
   if (!courseId) return false;
   const access = await resolveLiveManageAccess(session, courseId);
@@ -50,6 +52,46 @@ async function persistGroupProjection(courseId: string, roomName: string, claseI
   });
 }
 
+async function listEditorSessions(courseId: string, roomName: string) {
+  const result = await query(
+    `SELECT ${sessionSelectColumns}
+       FROM "ResourceSession"
+      WHERE "roomName" = $1
+         OR "courseId" = $2
+         OR "claseId" = $2
+         OR "claseId" LIKE $3
+      ORDER BY "createdAt" DESC
+      LIMIT 100`,
+    [roomName, courseId, `${courseId}/%`],
+  );
+  if (result.error) throw result.error;
+  return result.data ?? [];
+}
+
+async function resolveSessionIdForCourse(options: {
+  courseId: string;
+  roomName: string;
+  sessionId?: string | null;
+}) {
+  const sessionId = cleanString(String(options.sessionId ?? ''), 80);
+  if (!sessionId) return null;
+  const result = await query<any>(
+    `SELECT ${sessionSelectColumns}
+       FROM "ResourceSession"
+      WHERE id = $1
+        AND (
+          "roomName" = $2
+          OR "courseId" = $3
+          OR "claseId" = $3
+          OR "claseId" LIKE $4
+        )
+      LIMIT 1`,
+    [sessionId, options.roomName, options.courseId, `${options.courseId}/%`],
+  );
+  if (result.error) throw result.error;
+  return result.data?.[0]?.id ? String(result.data[0].id) : null;
+}
+
 export const GET: APIRoute = async ({ locals, url }) => {
   const session = (locals as any).session;
   const user = await ensureDbUserFromSession(session);
@@ -70,7 +112,11 @@ export const GET: APIRoute = async ({ locals, url }) => {
   );
 
   if (result.error) return json({ error: result.error.message }, 500);
-  return json({ items: result.data ?? [] });
+  const sessions = await listEditorSessions(courseId, stageRoomName).catch((error) => {
+    console.error('[recursos-editor] sessions failed', error);
+    return [];
+  });
+  return json({ items: result.data ?? [], sessions, stageRoomName });
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -93,6 +139,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (claseId && !(claseId === courseId || claseId.startsWith(`${courseId}/`))) {
     return json({ error: 'claseId is outside this course' }, 403);
   }
+  const sessionId = await resolveSessionIdForCourse({
+    courseId,
+    roomName,
+    sessionId: body?.sessionId,
+  }).catch((error) => {
+    console.error('[recursos-editor] session validation failed', error);
+    return undefined;
+  });
+  if (sessionId === undefined) return json({ error: 'Could not validate session' }, 500);
 
   const maxOrder = await query<{ nextOrder: number }>(
     `SELECT COALESCE(MAX("sortOrder") + 1, 0) AS "nextOrder"
@@ -105,7 +160,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const item = {
     id: crypto.randomUUID(),
     claseId,
-    sessionId: null,
+    sessionId,
     roomName,
     url,
     name: cleanString(String(body?.name ?? ''), 500) || url.split('/').pop() || 'recurso',
@@ -159,22 +214,48 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return json({ error: 'Resource is outside this course' }, 403);
   }
 
+  const roomName = normalizeText(current.roomName) || `${courseId}-stage`;
+  const rawClaseId = normalizeText(body?.claseId);
+  const claseId = rawClaseId ? cleanString(rawClaseId, 240) : null;
+  if (claseId && !(claseId === courseId || claseId.startsWith(`${courseId}/`))) {
+    return json({ error: 'claseId is outside this course' }, 403);
+  }
+  const sessionId = await resolveSessionIdForCourse({
+    courseId,
+    roomName,
+    sessionId: body?.sessionId,
+  }).catch((error) => {
+    console.error('[recursos-editor] session validation failed', error);
+    return undefined;
+  });
+  if (sessionId === undefined) return json({ error: 'Could not validate session' }, 500);
+
   const name = cleanString(String(body?.name ?? current.name ?? ''), 500) || 'recurso';
   const folder = cleanString(String(body?.folder ?? current.folder ?? ''), 120);
   const update = await query(
     `UPDATE "LiveClassResource"
-        SET name = $1, folder = $2
-      WHERE id = $3
+        SET name = $1, folder = $2, "claseId" = $3, "sessionId" = $4
+      WHERE id = $5
       RETURNING ${selectColumns}`,
-    [name, folder, id],
+    [name, folder, claseId, sessionId, id],
   );
   if (update.error) return json({ error: update.error.message }, 500);
 
   const updated = update.data?.[0] ?? current;
+  const oldRoomName = normalizeText(current.roomName);
+  const oldClaseId = normalizeText(current.claseId) || null;
+  const newRoomName = normalizeText(updated.roomName);
+  const newClaseId = normalizeText(updated.claseId) || null;
+  if (oldRoomName && (oldRoomName !== newRoomName || oldClaseId !== newClaseId)) {
+    await persistGroupProjection(courseId, oldRoomName, oldClaseId).catch((error) => {
+      console.error('[recursos-editor] previous projection failed', error);
+      return null;
+    });
+  }
   const projection = await persistGroupProjection(
     courseId,
-    normalizeText(updated.roomName),
-    normalizeText(updated.claseId) || null,
+    newRoomName,
+    newClaseId,
   ).catch((error) => {
     console.error('[recursos-editor] projection failed', error);
     return null;
