@@ -973,9 +973,7 @@
 }
 
 @media (max-width: 760px) {
-  .conference-stage-frame {
-    height: auto;
-  }
+  /* Height inherited or handled by specific mobile media query below */
 }
 
 /* ── Test mode overlay elements ─────────────────────────────────────────── */

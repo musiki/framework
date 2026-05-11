@@ -4657,15 +4657,15 @@ if (
     }
 
     .conference-stage-frame {
-      height: calc(
-        100dvh - var(--conference-sidebar-size) -
-          var(--conference-bar-stack-height)
-      );
+      /* Remove fixed height to let flex/grid handle it, but keep dvh based fallback if needed */
+      height: auto;
+      flex-grow: 1;
       min-height: 180px;
     }
 
     .conference-shell[data-has-sidebar="false"] .conference-stage-frame {
-      height: calc(100dvh - var(--conference-bar-stack-height));
+      height: auto;
+      flex-grow: 1;
     }
 
     .conference-icon-button,
