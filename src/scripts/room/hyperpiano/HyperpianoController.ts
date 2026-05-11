@@ -1,4 +1,8 @@
 import { createImpulseResponseBuffer } from '../core/helpers';
+import {
+  FALLBACK_PARTICIPANT_COLOR,
+  type ParticipantAppearance,
+} from '../participants/appearance';
 
 export type HyperpianoOptions = {
   audioContext: AudioContext | null;
@@ -6,6 +10,8 @@ export type HyperpianoOptions = {
   outputNode: AudioNode | null;
   onStatusChange?: (status: string) => void;
   onNoteEvent?: (note: number, velocity: number, action: 'on' | 'off') => void;
+  getParticipantAppearance?: (participantId: string | null) => ParticipantAppearance | null;
+  getLocalParticipantId?: () => string | null;
   getMidiInputId: () => string | null;
 };
 
@@ -15,6 +21,8 @@ export class HyperpianoController {
   private outputNode: AudioNode | null = null;
   private onStatusChange?: (status: string) => void;
   private onNoteEvent?: (note: number, velocity: number, action: 'on' | 'off') => void;
+  private getParticipantAppearance?: (participantId: string | null) => ParticipantAppearance | null;
+  private getLocalParticipantId?: () => string | null;
   private getMidiInputId: () => string | null;
 
   private roots: any[] = [];
@@ -58,6 +66,8 @@ export class HyperpianoController {
     this.container = options.container;
     this.onStatusChange = options.onStatusChange;
     this.onNoteEvent = options.onNoteEvent;
+    this.getParticipantAppearance = options.getParticipantAppearance;
+    this.getLocalParticipantId = options.getLocalParticipantId;
     this.getMidiInputId = options.getMidiInputId;
 
     if (options.audioContext && options.outputNode) {
@@ -308,7 +318,14 @@ export class HyperpianoController {
     return { keyChar, velocity, dynamic, midiNote };
   }
 
-  public triggerKeyOn(k: string | null, velocity = 1.0, dynamic: string | null = null, midiNote: number | null = null, isRemote = false) {
+  public triggerKeyOn(
+    k: string | null,
+    velocity = 1.0,
+    dynamic: string | null = null,
+    midiNote: number | null = null,
+    isRemote = false,
+    participantId: string | null = null,
+  ) {
     if (!this.audioContext || !this.masterOut) return;
     if (this.audioContext.state === 'suspended') this.audioContext.resume();
     let targetMIDI: number;
@@ -330,7 +347,7 @@ export class HyperpianoController {
     if (!root) return;
     const playback = this.playWithRoot(root, targetMIDI, velocity);
     this.activeNotes.set(targetMIDI, playback);
-    this.startKeyHighlight(k, playback.adjustedDuration, semi, velocity, targetMIDI);
+    this.startKeyHighlight(k, playback.adjustedDuration, semi, velocity, targetMIDI, participantId);
 
     if (!isRemote && this.onNoteEvent) {
       this.onNoteEvent(targetMIDI, velocity, 'on');
@@ -403,18 +420,29 @@ export class HyperpianoController {
     return { source: src, gain: g, adjustedDuration: root.buffer.duration / rate };
   }
 
-  private startKeyHighlight(key: string | null, duration: number, semitone: number, velocity: number, midi: number) {
-    const baseRgb = '0, 255, 0';
-    const color = `rgba(${baseRgb}, ${velocity})`;
+  private startKeyHighlight(
+    key: string | null,
+    duration: number,
+    semitone: number,
+    velocity: number,
+    midi: number,
+    participantId: string | null,
+  ) {
+    const identity = participantId || this.getLocalParticipantId?.() || null;
+    const color = this.getParticipantAppearance?.(identity)?.color ?? FALLBACK_PARTICIPANT_COLOR;
+    const intensity = Math.max(18, Math.min(88, Math.round(velocity * 88)));
+    const backgroundColor = `color-mix(in srgb, ${color.stroke} ${intensity}%, transparent)`;
     const octOff = Math.floor(midi / 12) - 1 - this.currentOctave;
     
     const selector = `.key[data-semitone="${semitone}"][data-octave-offset="${octOff}"]`;
     this.container.querySelectorAll(selector).forEach((el: any) => {
       el.style.transition = 'none';
-      el.style.backgroundColor = color;
+      el.style.backgroundColor = backgroundColor;
+      el.style.boxShadow = color.shadow;
       void el.offsetWidth;
-      el.style.transition = `background-color ${duration}s cubic-bezier(0.1, 0.9, 0.2, 1)`;
+      el.style.transition = `background-color ${duration}s cubic-bezier(0.1, 0.9, 0.2, 1), box-shadow ${duration}s cubic-bezier(0.1, 0.9, 0.2, 1)`;
       el.style.backgroundColor = 'transparent';
+      el.style.boxShadow = 'none';
     });
   }
 

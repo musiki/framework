@@ -26,6 +26,14 @@ export {
   resolveParticipantTargetSlot,
 } from './focus';
 export {
+  FALLBACK_PARTICIPANT_COLOR,
+  LEAD_TEACHER_COLOR,
+  assignParticipantAppearances,
+  bindParticipantAppearance,
+  normalizeParticipantAppearance,
+  participantAppearanceStore,
+} from './appearance';
+export {
   ensureParticipantCard,
   listRoomParticipants,
   removeParticipantCards,
@@ -39,4 +47,9 @@ export type {
   ParticipantMount,
   ScreenCardRefs,
 } from './media';
+export type {
+  ParticipantAppearance,
+  ParticipantAppearanceColor,
+  ParticipantAppearanceKind,
+} from './appearance';
 export type { RoomParticipant } from './metadata';

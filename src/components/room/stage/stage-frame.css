@@ -1266,6 +1266,31 @@
   pointer-events: none;
 }
 
+.conference-whiteboard-remote-cursor {
+  position: absolute;
+  z-index: 4;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #14e7ff;
+  border-radius: 999px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.conference-whiteboard-remote-cursor-label {
+  position: absolute;
+  left: 8px;
+  top: -1.45rem;
+  padding: 0.12rem 0.32rem;
+  border-radius: 0.25rem;
+  background: #09232a;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .conference-whiteboard-toolbar {
   position: absolute;
   top: 0.5rem;

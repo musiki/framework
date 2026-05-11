@@ -1,4 +1,8 @@
 import { type ConferenceMessage } from '../session';
+import {
+  FALLBACK_PARTICIPANT_COLOR,
+  type ParticipantAppearance,
+} from '../participants/appearance';
 
 export interface WhiteboardStroke {
   x: number;
@@ -15,6 +19,16 @@ export interface WhiteboardText {
   size: 'sm' | 'lg';
 }
 
+type RemoteCursorOptions = {
+  appearance?: ParticipantAppearance | null;
+  identity: string;
+  name: string;
+};
+
+const findRemoteCursor = (parent: Element, identity: string) =>
+  Array.from(parent.querySelectorAll<HTMLElement>('.conference-whiteboard-remote-cursor'))
+    .find((cursor) => cursor.dataset.identity === identity) ?? null;
+
 export class WhiteboardController {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -25,6 +39,7 @@ export class WhiteboardController {
   private tool: 'draw' | 'text-sm' | 'text-lg' = 'draw';
   private background: 'none' | 'staff' | 'grid' = 'none';
   private snapToGrid = false;
+  private remoteCursorTimers = new Map<string, number>();
   
   private readonly VIRTUAL_COORD_BASE = 2000; 
 
@@ -314,12 +329,69 @@ export class WhiteboardController {
     }
   }
 
-  handleStroke(stroke: WhiteboardStroke, broadcast = false) {
+  private syncRemoteCursor(x: number, y: number, options: RemoteCursorOptions) {
+    if (!this.canvas) return;
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+
+    const color = options.appearance?.color ?? FALLBACK_PARTICIPANT_COLOR;
+    const safeIdentity = options.identity.replace(/[^a-z0-9_-]+/gi, '-');
+    let cursor = findRemoteCursor(parent, options.identity);
+    if (!cursor) {
+      cursor = document.createElement('span');
+      cursor.className = 'conference-whiteboard-remote-cursor';
+      cursor.dataset.identity = options.identity;
+      const label = document.createElement('span');
+      label.className = 'conference-whiteboard-remote-cursor-label';
+      cursor.appendChild(label);
+      parent.appendChild(cursor);
+    }
+
+    cursor.dataset.safeIdentity = safeIdentity;
+    cursor.style.left = `${x}px`;
+    cursor.style.top = `${y}px`;
+    cursor.style.borderColor = color.stroke;
+    cursor.style.boxShadow = color.shadow;
+    const label = cursor.querySelector<HTMLElement>('.conference-whiteboard-remote-cursor-label');
+    if (label) {
+      label.textContent = options.name;
+      label.style.backgroundColor = color.fill;
+      label.style.color = color.text;
+      label.style.boxShadow = color.shadow;
+    }
+
+    if (this.remoteCursorTimers.has(options.identity)) {
+      window.clearTimeout(this.remoteCursorTimers.get(options.identity));
+    }
+    this.remoteCursorTimers.set(
+      options.identity,
+      window.setTimeout(() => {
+        cursor?.remove();
+        this.remoteCursorTimers.delete(options.identity);
+      }, 1600),
+    );
+  }
+
+  hideRemoteCursor(identity: string) {
+    const parent = this.canvas?.parentElement;
+    if (parent) findRemoteCursor(parent, identity)?.remove();
+    if (this.remoteCursorTimers.has(identity)) {
+      window.clearTimeout(this.remoteCursorTimers.get(identity));
+      this.remoteCursorTimers.delete(identity);
+    }
+  }
+
+  handleStroke(stroke: WhiteboardStroke, broadcast = false, remoteCursor?: RemoteCursorOptions) {
     if (!this.ctx || !this.canvas) return;
     const rect = this.canvas.getBoundingClientRect();
 
     const x = stroke.x * rect.width;
     const y = stroke.y * rect.height;
+
+    if (remoteCursor) {
+      if (stroke.action === 'end') this.hideRemoteCursor(remoteCursor.identity);
+      else this.syncRemoteCursor(x, y, remoteCursor);
+    }
 
     if (stroke.action === 'start') {
       this.ctx.beginPath();

@@ -38,6 +38,8 @@ import {
   cloneTemplate,
   createMediaElement,
   ensureParticipantCard as ensureRoomParticipantCard,
+  assignParticipantAppearances,
+  participantAppearanceStore,
   getPresentationCircleIdentity as resolvePresentationCircleIdentity,
   getTrackSid,
   hasCameraTrack,
@@ -7829,6 +7831,40 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  const getParticipantAppearancePayload = () =>
+    allParticipants().map((participant) => ({
+      identity: participant.identity,
+      role: readParticipantRole(room, participant, localRole),
+    }));
+
+  const publishParticipantAppearanceSnapshot = async () => {
+    if (!canLeadSession()) return;
+    const changedAppearances = assignParticipantAppearances({
+      authorityId: room.localParticipant.identity,
+      leadTeacherIdentity: getResolvedSessionLeaderIdentity(),
+      participants: getParticipantAppearancePayload(),
+    });
+
+    for (const appearance of changedAppearances) {
+      await publishMessage({
+        type: 'participant-appearance',
+        appearance,
+      });
+    }
+
+    await publishMessage({
+      type: 'participant-appearance-snapshot',
+      appearances: participantAppearanceStore.list(),
+    });
+  };
+
+  const syncParticipantAppearanceAssignments = () => {
+    if (!canLeadSession()) return;
+    void publishParticipantAppearanceSnapshot().catch((error) => {
+      console.warn('[room] participant appearance sync failed', error);
+    });
+  };
+
   const muteStudentsLocally = async () => {
     if (room.state !== ConnectionState.Connected || localRole !== 'student') return;
     if (room.localParticipant.isScreenShareEnabled) return;
@@ -10989,6 +11025,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         container,
         outputNode: hpAudioGroupGainNode,
         getMidiInputId: () => preferredMidiInputId,
+        getLocalParticipantId: () => room.localParticipant?.identity || null,
+        getParticipantAppearance: (participantId) => participantId
+          ? participantAppearanceStore.get(participantId)
+          : null,
         onStatusChange: (status) => setStatus(status),
         onNoteEvent: (note, velocity, action) => {
           if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
@@ -11169,7 +11209,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             pods.forEach(pod => {
               if (pod.controller instanceof HyperpianoController) {
                 if (note.action === 'on') {
-                  pod.controller.triggerKeyOn(null, note.velocity, null, note.note, true);
+                  pod.controller.triggerKeyOn(
+                    null,
+                    note.velocity,
+                    null,
+                    note.note,
+                    true,
+                    room.localParticipant?.identity || null,
+                  );
                 } else {
                   pod.controller.triggerKeyOff(null, note.note, true);
                 }
@@ -11581,6 +11628,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       open: graphVisible,
     });
 
+    await publishParticipantAppearanceSnapshot();
     await publishLilypondSnapshot();
 
     const currentLayout = workspaceManager.getLayout();
@@ -12141,6 +12189,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
     syncIdentityPreview();
     syncDisconnectedStagePreview();
+    if (canLeadSession()) {
+      assignParticipantAppearances({
+        authorityId: room.localParticipant.identity,
+        leadTeacherIdentity: getResolvedSessionLeaderIdentity(),
+        participants: getParticipantAppearancePayload(),
+      });
+    }
     renderParticipantList();
     queuePreferredRemoteVideoDimensionsSync();
     setControlState();
@@ -12375,6 +12430,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       setStatus(`Conectado a ${roomName}.`);
       await publishTeacherState();
       requestPresentationState();
+      if (!canLeadSession()) {
+        void publishMessage({ type: 'participant-appearance-request' }).catch(() => undefined);
+      }
     } catch (error) {
       if (isExternalInviteMode) {
         openExternalInviteGate();
@@ -12422,6 +12480,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       setStatus(`Conectado a ${roomInput.value.trim()}.`);
       void refreshDeviceOptions(true);
       requestPresentationState();
+      if (!canLeadSession()) {
+        void publishMessage({ type: 'participant-appearance-request' }).catch(() => undefined);
+      }
       renderSessionTimer();
       syncBreakRoomsShell();
       // Re-broadcast break rooms info to participants who joined after creation
@@ -12573,6 +12634,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     .on(RoomEvent.ParticipantMetadataChanged, (_, participant) => {
       if (!participant) return;
       syncParticipant(participant);
+      syncParticipantAppearanceAssignments();
       renderParticipantList();
     })
     .on(RoomEvent.ParticipantNameChanged, (_, participant) => {
@@ -12592,12 +12654,37 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       const message = readMessage(payload);
       if (!message) return;
 
+      if (message.type === 'participant-appearance-request') {
+        if (canLeadSession()) {
+          void publishParticipantAppearanceSnapshot().catch(() => undefined);
+        }
+        return;
+      }
+
+      if (message.type === 'participant-appearance') {
+        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+        if (!isSessionLeader(participant)) return;
+        participantAppearanceStore.apply(message.appearance);
+        lilypondLive.refreshRemoteCursorAppearance(message.appearance.userId, message.appearance.color);
+        return;
+      }
+
+      if (message.type === 'participant-appearance-snapshot') {
+        if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+        if (!isSessionLeader(participant)) return;
+        participantAppearanceStore.applySnapshot(message.appearances);
+        message.appearances.forEach((appearance) => {
+          lilypondLive.refreshRemoteCursorAppearance(appearance.userId, appearance.color);
+        });
+        return;
+      }
+
     if (message.type === 'hyperpiano') {
       const pods = workspaceManager.getActivePods();
       pods.forEach(pod => {
         if (pod.controller instanceof HyperpianoController) {
           if (message.action === 'on') {
-            pod.controller.triggerKeyOn(null, message.velocity, null, message.note, true);
+            pod.controller.triggerKeyOn(null, message.velocity, null, message.note, true, participant.identity);
           } else {
             pod.controller.triggerKeyOff(null, message.note, true);
           }
@@ -12642,7 +12729,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'whiteboard-draw') {
-        whiteboards.forEach((controller) => controller.handleStroke(message));
+        whiteboards.forEach((controller) => controller.handleStroke(message, false, {
+          appearance: participantAppearanceStore.get(participant.identity),
+          identity: participant.identity,
+          name: readParticipantName(participant),
+        }));
         return;
       }
 
@@ -12680,14 +12771,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'lilypond-live') {
-        const hash = Array.from(participant.identity).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        const colors = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'];
-        const color = colors[hash % colors.length];
+        const appearance = participantAppearanceStore.get(participant.identity);
+        const color = appearance?.color;
 
         lilypondLive.handleIncomingLiveState(message, {
           id: participant.identity,
           name: participant.name || 'Estudiante',
-          color,
+          color: color?.stroke || '#14e7ff',
+          fill: color?.fill,
+          text: color?.text,
+          shadow: color?.shadow,
         });
         return;
       }
@@ -12719,6 +12812,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         applySessionLeaderState();
         syncAllParticipants();
         if (canLeadSession()) {
+          syncParticipantAppearanceAssignments();
           void publishTeacherState().catch(() => undefined);
         }
         return;
@@ -14625,6 +14719,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       manualSessionLeaderIdentity = normalizeText(sessionLeaderSelect.value);
       applySessionLeaderState();
       syncAllParticipants();
+      syncParticipantAppearanceAssignments();
       void publishSessionLeaderIdentity(manualSessionLeaderIdentity).catch((error) => {
         setStatus(safeErrorMessage(error));
       });

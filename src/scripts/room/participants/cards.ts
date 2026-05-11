@@ -16,6 +16,11 @@ import {
   type ParticipantCardRefs,
   type ScreenCardRefs,
 } from './media';
+import {
+  FALLBACK_PARTICIPANT_COLOR,
+  bindParticipantAppearance,
+  participantAppearanceStore,
+} from './appearance';
 
 export const listRoomParticipants = (room: Room): RoomParticipant[] => {
   if (room.state === ConnectionState.Disconnected) return [];
@@ -199,6 +204,25 @@ export const renderParticipantRoster = ({
       const primary = document.createElement('span');
       primary.className = 'conference-roster-name';
       primary.textContent = readParticipantName(participant);
+
+      const colorDot = document.createElement('span');
+      colorDot.className = 'roster-participant-color-dot';
+      colorDot.setAttribute('aria-hidden', 'true');
+      const applyColorDot = () => {
+        const appearance = participantAppearanceStore.get(participant.identity);
+        const color = appearance?.color ?? FALLBACK_PARTICIPANT_COLOR;
+        colorDot.style.backgroundColor = color.stroke;
+        colorDot.style.boxShadow = color.shadow;
+      };
+      applyColorDot();
+      let unsubscribeColorDot = () => {};
+      unsubscribeColorDot = bindParticipantAppearance(participant.identity, () => {
+        if (!colorDot.isConnected) {
+          unsubscribeColorDot();
+          return;
+        }
+        applyColorDot();
+      });
       
       const indicators = document.createElement('span');
       indicators.className = 'conference-roster-indicators';
@@ -219,7 +243,7 @@ export const renderParticipantRoster = ({
         indicators.appendChild(speaker);
       }
 
-      info.append(primary, indicators);
+      info.append(colorDot, primary, indicators);
 
       const secondary = document.createElement('span');
       secondary.className = 'conference-roster-role';

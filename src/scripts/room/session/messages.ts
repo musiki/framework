@@ -1,5 +1,11 @@
 import { normalizeLayoutMode, type LayoutMode } from '../../layout-controller';
 import { normalizePreviewZoom, normalizeText } from '../core/normalize';
+import {
+  normalizeParticipantAppearance,
+  type ParticipantAppearance,
+} from '../participants/appearance';
+
+export type { ParticipantAppearance } from '../participants/appearance';
 
 export type ParticipantRole = 'teacher' | 'student' | 'external' | 'admin';
 export type ReactionKind = 'clap' | 'heart' | 'joy' | 'tada' | 'thumbsup' | 'wow';
@@ -57,6 +63,17 @@ export type ConferenceMessage =
   | {
       type: 'session-leader';
       identity: string;
+    }
+  | {
+      type: 'participant-appearance';
+      appearance: ParticipantAppearance;
+    }
+  | {
+      type: 'participant-appearance-snapshot';
+      appearances: ParticipantAppearance[];
+    }
+  | {
+      type: 'participant-appearance-request';
     }
   | {
       id: string;
@@ -382,6 +399,33 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'session-leader',
         identity: normalizeText((parsed as { identity?: string }).identity),
+      };
+    }
+
+    if (parsed.type === 'participant-appearance') {
+      const appearance = normalizeParticipantAppearance((parsed as { appearance?: unknown }).appearance);
+      if (!appearance) return null;
+      return {
+        type: 'participant-appearance',
+        appearance,
+      };
+    }
+
+    if (parsed.type === 'participant-appearance-snapshot') {
+      const appearances = Array.isArray((parsed as { appearances?: unknown }).appearances)
+        ? (parsed as { appearances: unknown[] }).appearances
+            .map(normalizeParticipantAppearance)
+            .filter((appearance): appearance is ParticipantAppearance => Boolean(appearance))
+        : [];
+      return {
+        type: 'participant-appearance-snapshot',
+        appearances,
+      };
+    }
+
+    if (parsed.type === 'participant-appearance-request') {
+      return {
+        type: 'participant-appearance-request',
       };
     }
 

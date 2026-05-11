@@ -97,19 +97,34 @@ const unmatchedStringDecoration = Decoration.mark({
 
 export type RemoteCursorState = {
   anchor: number;
+  fill?: string;
   head: number;
   id: string;
   name: string;
   color: string;
+  shadow?: string;
+  text?: string;
 };
 
 class RemoteCursorWidget extends WidgetType {
-  constructor(public color: string, public name: string) {
+  constructor(
+    public color: string,
+    public name: string,
+    public fill = color,
+    public text = '#ffffff',
+    public shadow = '',
+  ) {
     super();
   }
 
   override eq(other: RemoteCursorWidget) {
-    return this.color === other.color && this.name === other.name;
+    return (
+      this.color === other.color &&
+      this.name === other.name &&
+      this.fill === other.fill &&
+      this.text === other.text &&
+      this.shadow === other.shadow
+    );
   }
 
   override toDOM() {
@@ -122,7 +137,9 @@ class RemoteCursorWidget extends WidgetType {
       const label = document.createElement('span');
       label.className = 'cm-musiki-remote-cursor-label';
       label.textContent = this.name;
-      label.style.backgroundColor = this.color;
+      label.style.backgroundColor = this.fill;
+      label.style.color = this.text;
+      if (this.shadow) label.style.boxShadow = this.shadow;
       cursor.appendChild(label);
     }
     
@@ -174,7 +191,7 @@ const buildRemoteSelectionDecorations = (
     widgets.push({
       pos: head,
       deco: Decoration.widget({
-        widget: new RemoteCursorWidget(sel.color, sel.name),
+        widget: new RemoteCursorWidget(sel.color, sel.name, sel.fill, sel.text, sel.shadow),
         side: 1,
       })
     });

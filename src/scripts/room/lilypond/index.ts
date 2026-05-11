@@ -631,7 +631,7 @@ export class LilyPondLiveController {
 
   public handleIncomingLiveState(
     message: Extract<ConferenceMessage, { type: 'lilypond-live' }>,
-    sender?: { id: string; name: string; color: string },
+    sender?: { id: string; name: string; color: string; fill?: string; text?: string; shadow?: string },
   ) {
     if (typeof message.body === 'string' && this.getCurrentBody() !== message.body) {
       this.lastLiveBody = message.body;
@@ -643,6 +643,9 @@ export class LilyPondLiveController {
         id: sender.id,
         name: sender.name,
         color: sender.color,
+        fill: sender.fill,
+        text: sender.text,
+        shadow: sender.shadow,
         anchor: message.anchor,
         head: message.head,
       });
@@ -660,6 +663,22 @@ export class LilyPondLiveController {
       );
     }
 
+    this.updateRemoteCursors();
+  }
+
+  public refreshRemoteCursorAppearance(
+    participantId: string,
+    color: { stroke: string; fill: string; text: string; shadow: string },
+  ) {
+    const cursor = this.remoteCursors.get(participantId);
+    if (!cursor) return;
+    this.remoteCursors.set(participantId, {
+      ...cursor,
+      color: color.stroke,
+      fill: color.fill,
+      text: color.text,
+      shadow: color.shadow,
+    });
     this.updateRemoteCursors();
   }
 

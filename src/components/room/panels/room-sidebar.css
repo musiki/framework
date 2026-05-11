@@ -1354,6 +1354,14 @@ details[open] > summary.conference-sidebar-heading::before {
   min-width: 0;
 }
 
+.roster-participant-color-dot {
+  width: 4px;
+  height: 4px;
+  flex: 0 0 4px;
+  border-radius: 999px;
+  align-self: center;
+}
+
 .conference-roster-name {
   font-size: 0.82rem;
   font-weight: 600;
