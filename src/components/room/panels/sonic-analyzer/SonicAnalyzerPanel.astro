@@ -2,12 +2,9 @@
 import './sonic-analyzer.css';
 ---
 <div class="musiki-pod" data-pod="sonic-analyzer" data-pod-title="SA">
-  <div class="sa-pod" data-active="false" data-sa-dropzone>
+  <div class="sa-pod" data-active="true" data-sa-dropzone>
 
     <div class="musiki-pod-toolbar sa-toolbar">
-      <button type="button" class="conference-mixer-channel-toggle sa-power-btn" data-sa-power data-active="false" aria-label="Activar Sonic Analyzer" title="ON/OFF">
-        <span class="conference-mixer-led" aria-hidden="true"></span>
-      </button>
       <span class="sa-label">sA</span>
       <select class="musiki-pod-input sa-source-select" data-sa-source style="width:5.5rem;flex:none;">
         <option value="master">master</option>
@@ -19,7 +16,7 @@ import './sonic-analyzer.css';
     </div>
 
     <div class="sa-status" data-sa-status>
-      <span data-sa-status-text>off</span>
+      <span data-sa-status-text>ready</span>
       <span class="sa-file-name" data-sa-file-name hidden></span>
     </div>
 

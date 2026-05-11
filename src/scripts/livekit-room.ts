@@ -4170,7 +4170,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   );
   let sessionAllowsInstruments = true;
   let recursosAllowsStudents = false;
-  let ignoreRemoteSaOffUntil = 0;
   let sidebarCollapsed = root.dataset.sidebarCollapsed === 'true';
   let graphVisible = false;
   let externalMediaSession: ExternalMediaSessionState | null = null;
@@ -10621,7 +10620,78 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     window.history.replaceState({}, '', nextUrl);
   };
 
+  const mediaSession = {
+    sonic: null as {
+      url: string;
+      fileName: string;
+      senderName: string;
+      key: string;
+      scale: string;
+      bpm: number;
+      buffer: AudioBuffer | null;
+    } | null,
+    svPlayback: null as { action: 'play' | 'pause' | 'seek'; offset: number; sentAt?: number } | null,
+    svLoop: null as { inPoint: number; outPoint: number; enabled: boolean } | null,
+    svZoom: null as { zoomX: number; viewStart: number } | null,
+    svLayers: {} as Record<string, boolean>,
+    visual: null as {
+      url: string | null;
+      name: string;
+      kind: 'pdf' | 'img' | 'video' | null;
+      page: number;
+      zoomMode: 'fit' | 'width' | 'actual' | 'custom';
+      zoom: number;
+    } | null,
+  };
+
+  const rememberMediaMessage = (message: ConferenceMessage) => {
+    if (message.type === 'sa-file-sync') {
+      const existing = mediaSession.sonic;
+      mediaSession.sonic = {
+        url: message.url,
+        fileName: message.fileName,
+        senderName: message.senderName,
+        key: message.key,
+        scale: message.scale,
+        bpm: message.bpm,
+        buffer: existing?.url === message.url ? existing.buffer : null,
+      };
+      return;
+    }
+    if (message.type === 'sv-playback') {
+      mediaSession.svPlayback = {
+        action: message.action,
+        offset: message.offset,
+        sentAt: message.sentAt,
+      };
+      return;
+    }
+    if (message.type === 'sv-loop') {
+      mediaSession.svLoop = { inPoint: message.inPoint, outPoint: message.outPoint, enabled: message.enabled };
+      return;
+    }
+    if (message.type === 'sv-zoom') {
+      mediaSession.svZoom = { zoomX: message.zoomX, viewStart: message.viewStart };
+      return;
+    }
+    if (message.type === 'sv-layer') {
+      mediaSession.svLayers[message.layer] = message.visible;
+      return;
+    }
+    if (message.type === 'vs-state') {
+      mediaSession.visual = {
+        url: message.url,
+        name: message.name,
+        kind: message.kind,
+        page: message.page,
+        zoomMode: message.zoomMode,
+        zoom: message.zoom,
+      };
+    }
+  };
+
   const publishMessage = async (message: ConferenceMessage) => {
+    rememberMediaMessage(message);
     if (room.state !== ConnectionState.Connected || !room.localParticipant) return;
 
     await room.localParticipant.publishData(textEncoder.encode(JSON.stringify(message)), {
@@ -10656,6 +10726,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const dispatchDecodedSonicFile = (buffer: AudioBuffer, fileName: string, key = '', scale = '', bpm = 0) => {
     const peaks = computeWaveformPeaks(buffer);
     const detail = { buffer, fileName, peaks, melspec: [], chroma: [], pitches: [], key, scale, bpm };
+    mediaSession.sonic = {
+      url: mediaSession.sonic?.url ?? '',
+      fileName,
+      senderName: mediaSession.sonic?.senderName ?? '',
+      key,
+      scale,
+      bpm,
+      buffer,
+    };
     const emit = () => window.dispatchEvent(new CustomEvent('sa:file-ready', { detail }));
     emit();
     [180, 700, 1600].forEach((delay) => window.setTimeout(emit, delay));
@@ -10669,9 +10748,28 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  window.addEventListener('sa:file-ready', (event: Event) => {
+    const detail = (event as CustomEvent<{
+      buffer?: AudioBuffer;
+      fileName?: string;
+      key?: string;
+      scale?: string;
+      bpm?: number;
+    }>).detail;
+    if (!(detail?.buffer instanceof AudioBuffer)) return;
+    mediaSession.sonic = {
+      url: mediaSession.sonic?.url ?? '',
+      fileName: normalizeText(detail.fileName) || mediaSession.sonic?.fileName || 'audio',
+      senderName: mediaSession.sonic?.senderName ?? '',
+      key: normalizeText(detail.key),
+      scale: normalizeText(detail.scale),
+      bpm: Math.max(0, Number(detail.bpm) || 0),
+      buffer: detail.buffer,
+    };
+  });
+
   const publishSonicFileSync = (url: string, fileName: string, key = '', scale = '', bpm = 0) => {
     if (!canPublishSonicControl()) return;
-    ignoreRemoteSaOffUntil = Date.now() + 5000;
     void publishMessage({
       type: 'sa-file-sync',
       url,
@@ -10751,6 +10849,89 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let visualizerController: VisualizerController | null = null;
   let recursosController: RecursosController | null = null;
   let recursosCurrentLessonId: string | null = null;
+  let lastAppliedSonicCacheKey = '';
+  let lastDispatchedSonicCacheKey = '';
+
+  const sonicCacheKey = () => {
+    const sonic = mediaSession.sonic;
+    if (!sonic) return '';
+    return [sonic.url, sonic.fileName, sonic.key, sonic.scale, sonic.bpm].join('|');
+  };
+
+  const adjustedPlaybackOffset = (playback: { action: 'play' | 'pause' | 'seek'; offset: number; sentAt?: number }) => {
+    if (playback.action !== 'play' || !playback.sentAt) return playback.offset;
+    return Math.max(0, playback.offset + Math.max(0, Date.now() - playback.sentAt) / 1000);
+  };
+
+  const rehydrateMediaControllers = () => {
+    const sonic = mediaSession.sonic;
+    if (sonic?.buffer) {
+      const cacheKey = sonicCacheKey();
+      if (cacheKey !== lastDispatchedSonicCacheKey) {
+        lastDispatchedSonicCacheKey = cacheKey;
+        dispatchDecodedSonicFile(sonic.buffer, sonic.fileName, sonic.key, sonic.scale, sonic.bpm);
+      }
+      if (sonicAnalyzerController && cacheKey !== lastAppliedSonicCacheKey) {
+        lastAppliedSonicCacheKey = cacheKey;
+        sonicAnalyzerController.loadFileFromRemote(
+          sonic.buffer,
+          sonic.fileName,
+          sonic.senderName || 'room',
+          sonic.key,
+          sonic.scale,
+          sonic.bpm,
+        );
+      }
+    } else if (sonic?.url && sonicAnalyzerController) {
+      const cacheKey = sonicCacheKey();
+      if (cacheKey !== lastAppliedSonicCacheKey) {
+        lastAppliedSonicCacheKey = cacheKey;
+        void sonicAnalyzerController.loadFileFromUrl(sonic.url, sonic.fileName, { suppressRoomPublish: true });
+      }
+    }
+
+    Object.entries(mediaSession.svLayers).forEach(([layer, visible]) => {
+      sonicVisualizerController?.applyRemoteLayer(layer, visible);
+    });
+    if (mediaSession.svLoop) {
+      sonicVisualizerController?.applyRemoteLoop(
+        mediaSession.svLoop.inPoint,
+        mediaSession.svLoop.outPoint,
+        mediaSession.svLoop.enabled,
+      );
+    }
+    if (mediaSession.svZoom) {
+      sonicVisualizerController?.applyRemoteZoom(mediaSession.svZoom.zoomX, mediaSession.svZoom.viewStart);
+    } else {
+      sonicVisualizerController?.refreshLayout();
+    }
+    if (mediaSession.svPlayback) {
+      sonicVisualizerController?.applyRemotePlayback(
+        mediaSession.svPlayback.action,
+        adjustedPlaybackOffset(mediaSession.svPlayback),
+      );
+    }
+
+    if (mediaSession.visual) {
+      visualizerController?.applyRemoteState(mediaSession.visual);
+    }
+    visualizerController?.refreshLayout();
+  };
+
+  const scheduleMediaRehydrate = (delays = [0, 120, 500, 1200]) => {
+    delays.forEach((delay) => window.setTimeout(rehydrateMediaControllers, delay));
+  };
+
+  const reinforceMediaSession = (delays = [250, 900, 1800]) => {
+    delays.forEach((delay) => {
+      window.setTimeout(() => {
+        if (!canPublishSonicControl()) return;
+        sonicAnalyzerController?.publishLastFileSync();
+        sonicVisualizerController?.publishCurrentState();
+        visualizerController?.publishCurrentState();
+      }, delay);
+    });
+  };
 
     // Hyperpiano integration
     const updateActiveHyperpianoAudio = () => {
@@ -10991,6 +11172,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       });
       sonicAnalyzerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
       sonicAnalyzerController.setAllowStudents(recursosAllowsStudents);
+      lastAppliedSonicCacheKey = '';
+      scheduleMediaRehydrate([140, 520, 1200]);
     };
 
     const onSonicVisualizerInit = (container: HTMLElement) => {
@@ -11001,6 +11184,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       });
       sonicVisualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
       sonicVisualizerController.setAllowStudents(recursosAllowsStudents);
+      lastDispatchedSonicCacheKey = '';
+      scheduleMediaRehydrate([120, 420, 1000]);
     };
 
     const onVisualizerInit = (container: HTMLElement) => {
@@ -11011,6 +11196,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       });
       visualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
       visualizerController.setAllowStudents(recursosAllowsStudents);
+      scheduleMediaRehydrate([100, 360, 900]);
       window.setTimeout(() => window.dispatchEvent(new CustomEvent('vs:request-state')), 100);
     };
 
@@ -11029,6 +11215,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
       sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
       visualizerController?.setAllowStudents(recursosAllowsStudents);
+      if (recursosAllowsStudents) reinforceMediaSession([160, 650, 1300]);
     });
 
     window.addEventListener('musiki:sonic:load-url', (e: Event) => {
@@ -11107,7 +11294,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const workspaceManager = new RoomWorkspaceManager(
     root.querySelector('[data-workspace-root]') as HTMLElement,
     canLeadSession,
-    (layout) => void publishWorkspaceLayoutState(layout),
+    (layout) => {
+      void publishWorkspaceLayoutState(layout);
+      scheduleMediaRehydrate([120, 420, 1000]);
+      reinforceMediaSession([240, 900, 1700]);
+    },
     onHyperpianoInit,
     onWhiteboardInit,
     onLilypondInit,
@@ -11372,10 +11563,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       await publishPresentationMediaState(currentPresentationMediaState, true);
     }
 
-    if (sonicAnalyzerController?.isActive) {
-      await publishMessage({ type: 'sa-state', active: true });
-      sonicAnalyzerController.publishLastFileSync();
-    }
+    sonicAnalyzerController?.publishLastFileSync();
+    sonicVisualizerController?.publishCurrentState();
+    visualizerController?.publishCurrentState();
   };
 
   const getPresentationSelect = () => {
@@ -12290,6 +12480,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           visualizerController!.publishCurrentState();
         }, 980);
       }
+      reinforceMediaSession([1200, 2200, 3600]);
     })
     .on(RoomEvent.ParticipantDisconnected, (participant) => {
       removeParticipant(participant.identity);
@@ -12469,6 +12660,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'session-workspace') {
         workspaceManager.applyLayout(message.layout);
+        scheduleMediaRehydrate([140, 520, 1200]);
         return;
       }
 
@@ -12550,11 +12742,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'sa-file-sync') {
         if (!canAcceptSonicControl(participant)) return;
-        ignoreRemoteSaOffUntil = Date.now() + 5000;
+        rememberMediaMessage(message);
+        lastDispatchedSonicCacheKey = '';
         workspaceManager.focusOrOpenSonicVisualizer('recursos');
         window.setTimeout(() => {
           decodeSonicUrl(message.url)
             .then(buffer => {
+              if (mediaSession.sonic) mediaSession.sonic.buffer = buffer;
               if (sonicAnalyzerController) {
                 sonicAnalyzerController.loadFileFromRemote(
                   buffer,
@@ -12576,14 +12770,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'sa-state') {
         if (!canAcceptSonicControl(participant)) return;
-        if (!message.active && Date.now() < ignoreRemoteSaOffUntil) return;
+        if (!message.active) return;
         sonicAnalyzerController?.applyRemoteState(message.active);
         return;
       }
 
       if (message.type === 'sv-playback') {
         if (!canAcceptSonicControl(participant)) return;
-        sonicVisualizerController?.applyRemotePlayback(message.action, message.offset);
+        rememberMediaMessage(message);
+        sonicVisualizerController?.applyRemotePlayback(message.action, adjustedPlaybackOffset(message));
         return;
       }
 
@@ -12594,24 +12789,28 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'sv-layer') {
         if (!canAcceptSonicControl(participant)) return;
+        rememberMediaMessage(message);
         sonicVisualizerController?.applyRemoteLayer(message.layer, message.visible);
         return;
       }
 
       if (message.type === 'sv-loop') {
         if (!canAcceptSonicControl(participant)) return;
+        rememberMediaMessage(message);
         sonicVisualizerController?.applyRemoteLoop(message.inPoint, message.outPoint, message.enabled);
         return;
       }
 
       if (message.type === 'sv-zoom') {
         if (!canAcceptSonicControl(participant)) return;
+        rememberMediaMessage(message);
         sonicVisualizerController?.applyRemoteZoom(message.zoomX, message.viewStart);
         return;
       }
 
       if (message.type === 'vs-state') {
         if (!canAcceptVisualControl(participant)) return;
+        rememberMediaMessage(message);
         workspaceManager.focusOrOpenVisualizer('recursos');
         window.setTimeout(() => visualizerController?.applyRemoteState(message), 80);
         return;
@@ -12623,6 +12822,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
         sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
         visualizerController?.setAllowStudents(recursosAllowsStudents);
+        scheduleMediaRehydrate([120, 500]);
         window.dispatchEvent(new CustomEvent('musiki:recursos:receive', { detail: message }));
         return;
       }

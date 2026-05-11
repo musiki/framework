@@ -87,9 +87,6 @@
 .sa-history { color:#45D384; opacity:0.7; display:block; overflow:hidden; white-space:pre; }
 .sa-bars    { color:#45D384; letter-spacing:-0.05em; }
 
-/* Pod off: dim content */
-.sa-pod[data-active="false"] .sa-content { opacity:0.25; pointer-events:none; }
-
 /* Drop overlay */
 .sa-drop-overlay {
   position:absolute; inset:0; z-index:20; display:none;

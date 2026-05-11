@@ -129,6 +129,17 @@ export class VisualizerController {
     this.publishState();
   }
 
+  public getState(): VisualizerState {
+    return { ...this.state };
+  }
+
+  public refreshLayout(): void {
+    if (!this.state.url) return;
+    [0, 80, 260].forEach((delay) => {
+      window.setTimeout(() => this.render(), delay);
+    });
+  }
+
   public dispose(): void {
     this.domAbort.abort();
     window.removeEventListener('vs:request-state', this.onStateRequest);
@@ -298,12 +309,14 @@ export class VisualizerController {
     this.videoEl.style.setProperty('--vs-image-scale', String(this.state.zoomMode === 'custom' ? this.state.zoom / 100 : 1));
   }
 
-  private applySonicTransport(detail: { action?: unknown; offset?: unknown; duration?: unknown } | undefined): void {
+  private applySonicTransport(detail: { action?: unknown; offset?: unknown; duration?: unknown; sentAt?: unknown } | undefined): void {
     if (this.state.kind !== 'video' || !this.state.url || !this.videoEl) return;
     const action = detail?.action;
     if (action !== 'play' && action !== 'pause' && action !== 'seek') return;
 
-    const rawOffset = Math.max(0, Number(detail?.offset) || 0);
+    const sentAt = Math.max(0, Number(detail?.sentAt) || 0);
+    const drift = action === 'play' && sentAt > 0 ? Math.max(0, Date.now() - sentAt) / 1000 : 0;
+    const rawOffset = Math.max(0, (Number(detail?.offset) || 0) + drift);
     const duration = Number.isFinite(this.videoEl.duration) ? this.videoEl.duration : Number(detail?.duration) || 0;
     const offset = duration > 0 ? Math.min(rawOffset, Math.max(0, duration - 0.02)) : rawOffset;
 

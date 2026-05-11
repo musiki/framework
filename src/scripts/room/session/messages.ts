@@ -226,6 +226,7 @@ export type ConferenceMessage =
       type: 'sv-playback';
       action: 'play' | 'pause' | 'seek';
       offset: number;
+      sentAt?: number;
     }
   | {
       type: 'sv-vtab';
@@ -718,6 +719,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         type: 'sv-playback',
         action,
         offset: Math.max(0, Number((parsed as { offset?: number }).offset) || 0),
+        sentAt: Math.max(0, Number((parsed as { sentAt?: number }).sentAt) || 0) || undefined,
       };
     }
 

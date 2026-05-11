@@ -82,7 +82,6 @@ export class SonicAnalyzerController {
 
   // DOM refs
   private podEl!: HTMLElement;
-  private powerBtn!: HTMLElement;
   private statusTextEl!: HTMLElement;
   private fileNameEl!: HTMLElement;
   private sourceSelect!: HTMLSelectElement;
@@ -121,10 +120,10 @@ export class SonicAnalyzerController {
       if (file instanceof File) void this.loadFile(file);
     };
     window.addEventListener('musiki:sa:load-file', this.onLoadFile);
+    window.setTimeout(() => void this.activate(true), 0);
   }
 
   private emitCurrentState(): void {
-    window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: this.active } }));
     if (this.lastFilePayload) {
       window.dispatchEvent(new CustomEvent('sa:file-ready', { detail: this.lastFilePayload }));
     }
@@ -133,7 +132,6 @@ export class SonicAnalyzerController {
   private bindDOM(): void {
     const q = <T extends HTMLElement>(sel: string) => this.container.querySelector<T>(sel);
     this.podEl         = q('.sa-pod')!;
-    this.powerBtn      = q('[data-sa-power]')!;
     this.statusTextEl  = q('[data-sa-status-text]')!;
     this.fileNameEl    = q('[data-sa-file-name]')!;
     this.sourceSelect  = q<HTMLSelectElement>('[data-sa-source]')!;
@@ -145,7 +143,6 @@ export class SonicAnalyzerController {
     this.lufsInner     = q('[data-sa-lufs-inner]')!;
     this.radarCanvas   = q<HTMLCanvasElement>('[data-sa-radar]')!;
 
-    this.powerBtn.addEventListener('click', () => void this.toggle());
     this.sourceSelect.addEventListener('change', () => {
       this.activeSource = this.sourceSelect.value;
       if (this.active) void this.reconnectSource();
@@ -261,15 +258,14 @@ export class SonicAnalyzerController {
 
   // ─── Activation ──────────────────────────────────────────────────────────────
 
-  async toggle(): Promise<void> { if (this.active) this.deactivate(); else await this.activate(); }
+  async toggle(): Promise<void> { await this.activate(); }
 
   private async activate(suppressPublish = false): Promise<void> {
     this.setStatus('loading essentia…');
     try { await this.loadEssentia(); } catch { this.setStatus('error: essentia failed to load'); return; }
     this.active = true;
-    this.powerBtn.dataset.active = 'true'; this.podEl.dataset.active = 'true';
-    window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: true } }));
-    if (!suppressPublish && this.canControl()) this.publish?.({ type: 'sa-state', active: true });
+    this.podEl.dataset.active = 'true';
+    if (!suppressPublish && this.canControl()) this.publishLastFileSync();
     await this.tryConnectAndStart();
   }
   private async tryConnectAndStart(): Promise<void> {
@@ -293,10 +289,9 @@ export class SonicAnalyzerController {
   private deactivate(suppressPublish = false): void {
     if (this.reconnectTimer !== null) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.active = false; this.stopLoop(); this.disconnectSource();
-    this.powerBtn.dataset.active = 'false'; this.podEl.dataset.active = 'false';
+    this.podEl.dataset.active = 'false';
     this.setStatus('off');
-    window.dispatchEvent(new CustomEvent('sa:active', { detail: { active: false } }));
-    if (!suppressPublish && this.canControl()) this.publish?.({ type: 'sa-state', active: false });
+    void suppressPublish;
   }
   private async loadEssentia(): Promise<void> {
     if (this.essentia) return;
@@ -544,10 +539,7 @@ export class SonicAnalyzerController {
   }
 
   public applyRemoteState(active: boolean): void {
-    if (active === this.active) return;
-    // suppressPublish=true: mirror state without echoing back to the room
-    if (active) void this.activate(true);
-    else this.deactivate(true);
+    if (active || !this.active) void this.activate(true);
   }
 
   public addParticipantSource(id: string, label: string): void {
