@@ -1,24 +1,26 @@
 import { DockviewComponent } from 'dockview-core';
 import type { HyperpianoController } from '../hyperpiano/HyperpianoController';
 
+type PodDisposable = { dispose?: () => void } | (() => void) | void;
+
 export class RoomWorkspaceManager {
   private dockview: DockviewComponent | null = null;
   private container: HTMLElement;
   private canLeadSession: () => boolean;
   private onLayoutChange: (layout: any) => void;
   private onHyperpianoInit?: (element: HTMLElement) => HyperpianoController;
-  private onWhiteboardInit?: (element: HTMLElement) => void;
-  private onLilypondInit?: (element: HTMLElement) => void;
-  private onConceptInit?: (element: HTMLElement) => void;
-  private onMediaInit?: (element: HTMLElement) => void;
-  private onClaseInit?: (element: HTMLElement) => void;
-  private onChatInit?: (element: HTMLElement) => void;
-  private onOrfInit?: (element: HTMLElement) => void;
-  private onScoreInit?: (element: HTMLElement) => void;
-  private onSonicAnalyzerInit?: (element: HTMLElement) => void;
-  private onSonicVisualizerInit?: (element: HTMLElement) => void;
-  private onVisualizerInit?: (element: HTMLElement) => void;
-  private onRecursosInit?: (element: HTMLElement) => void;
+  private onWhiteboardInit?: (element: HTMLElement) => PodDisposable;
+  private onLilypondInit?: (element: HTMLElement) => PodDisposable;
+  private onConceptInit?: (element: HTMLElement) => PodDisposable;
+  private onMediaInit?: (element: HTMLElement) => PodDisposable;
+  private onClaseInit?: (element: HTMLElement) => PodDisposable;
+  private onChatInit?: (element: HTMLElement) => PodDisposable;
+  private onOrfInit?: (element: HTMLElement) => PodDisposable;
+  private onScoreInit?: (element: HTMLElement) => PodDisposable;
+  private onSonicAnalyzerInit?: (element: HTMLElement) => PodDisposable;
+  private onSonicVisualizerInit?: (element: HTMLElement) => PodDisposable;
+  private onVisualizerInit?: (element: HTMLElement) => PodDisposable;
+  private onRecursosInit?: (element: HTMLElement) => PodDisposable;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = 'full-win-speaker';
   public hyperpianoController: HyperpianoController | null = null;
@@ -58,18 +60,18 @@ export class RoomWorkspaceManager {
     canLeadSession: () => boolean,
     onLayoutChange: (layout: any) => void,
     onHyperpianoInit?: (element: HTMLElement) => HyperpianoController,
-    onWhiteboardInit?: (element: HTMLElement) => void,
-    onLilypondInit?: (element: HTMLElement) => void,
-    onConceptInit?: (element: HTMLElement) => void,
-    onMediaInit?: (element: HTMLElement) => void,
-    onClaseInit?: (element: HTMLElement) => void,
-    onChatInit?: (element: HTMLElement) => void,
-    onOrfInit?: (element: HTMLElement) => void,
-    onScoreInit?: (element: HTMLElement) => void,
-    onSonicAnalyzerInit?: (element: HTMLElement) => void,
-    onSonicVisualizerInit?: (element: HTMLElement) => void,
-    onVisualizerInit?: (element: HTMLElement) => void,
-    onRecursosInit?: (element: HTMLElement) => void
+    onWhiteboardInit?: (element: HTMLElement) => PodDisposable,
+    onLilypondInit?: (element: HTMLElement) => PodDisposable,
+    onConceptInit?: (element: HTMLElement) => PodDisposable,
+    onMediaInit?: (element: HTMLElement) => PodDisposable,
+    onClaseInit?: (element: HTMLElement) => PodDisposable,
+    onChatInit?: (element: HTMLElement) => PodDisposable,
+    onOrfInit?: (element: HTMLElement) => PodDisposable,
+    onScoreInit?: (element: HTMLElement) => PodDisposable,
+    onSonicAnalyzerInit?: (element: HTMLElement) => PodDisposable,
+    onSonicVisualizerInit?: (element: HTMLElement) => PodDisposable,
+    onVisualizerInit?: (element: HTMLElement) => PodDisposable,
+    onRecursosInit?: (element: HTMLElement) => PodDisposable
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -87,6 +89,23 @@ export class RoomWorkspaceManager {
     this.onSonicVisualizerInit = onSonicVisualizerInit;
     this.onVisualizerInit      = onVisualizerInit;
     this.onRecursosInit        = onRecursosInit;
+  }
+
+  private rememberPodController(panelId: string, controller: PodDisposable) {
+    if (!controller) return;
+    this.podControllers.set(panelId, controller);
+  }
+
+  private disposePodController(panelId: string) {
+    const controller = this.podControllers.get(panelId);
+    this.podControllers.delete(panelId);
+    if (!controller) return;
+    try {
+      if (typeof controller === 'function') controller();
+      else controller.dispose?.();
+    } catch (error) {
+      console.warn(`[RoomWorkspaceManager] Error disposing pod "${panelId}"`, error);
+    }
   }
 
   public init() {
@@ -143,40 +162,40 @@ export class RoomWorkspaceManager {
               }
               if (id === 'hyperpiano' && this.onHyperpianoInit) {
                 const hp = this.onHyperpianoInit(element);
-                this.podControllers.set(options.id, hp);
+                this.rememberPodController(options.id, hp);
               }
               if ((id === 'lily-code' || id === 'lily-render') && this.onLilypondInit) {
-                this.onLilypondInit(element);
+                this.rememberPodController(options.id, this.onLilypondInit(element));
               }
               if (id === 'concept' && this.onConceptInit) {
-                this.onConceptInit(element);
+                this.rememberPodController(options.id, this.onConceptInit(element));
               }
               if (id === 'external-media' && this.onMediaInit) {
-                this.onMediaInit(element);
+                this.rememberPodController(options.id, this.onMediaInit(element));
               }
               if (id === 'clase' && this.onClaseInit) {
-                this.onClaseInit(element);
+                this.rememberPodController(options.id, this.onClaseInit(element));
               }
               if (id === 'chat' && this.onChatInit) {
-                this.onChatInit(element);
+                this.rememberPodController(options.id, this.onChatInit(element));
               }
               if (id === 'orf' && this.onOrfInit) {
-                this.onOrfInit(element);
+                this.rememberPodController(options.id, this.onOrfInit(element));
               }
               if (id === 'instant-score' && this.onScoreInit) {
-                this.onScoreInit(element);
+                this.rememberPodController(options.id, this.onScoreInit(element));
               }
               if (id === 'sonic-analyzer' && this.onSonicAnalyzerInit) {
-                this.onSonicAnalyzerInit(element);
+                this.rememberPodController(options.id, this.onSonicAnalyzerInit(element));
               }
               if (id === 'sonic-visualizer' && this.onSonicVisualizerInit) {
-                this.onSonicVisualizerInit(element);
+                this.rememberPodController(options.id, this.onSonicVisualizerInit(element));
               }
               if (id === 'visualizer' && this.onVisualizerInit) {
-                this.onVisualizerInit(element);
+                this.rememberPodController(options.id, this.onVisualizerInit(element));
               }
               if (id === 'recursos' && this.onRecursosInit) {
-                this.onRecursosInit(element);
+                this.rememberPodController(options.id, this.onRecursosInit(element));
               }
               if (id === 'graph') {
                 delete element.dataset.graphPodReady;
@@ -200,11 +219,8 @@ export class RoomWorkspaceManager {
               },
               update: (params: any) => {},
               dispose: () => {
+                 this.disposePodController(options.id);
                  if (element) element.remove();
-                 if (id === 'hyperpiano') {
-                   this.podControllers.get(options.id)?.dispose();
-                 }
-                 this.podControllers.delete(options.id);
               }
             };
           }

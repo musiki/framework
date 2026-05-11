@@ -115,6 +115,7 @@ export class SonicVisualizerController {
   // Cleanup
   private domAbort = new AbortController();
   private resizeObserver: ResizeObserver | null = null;
+  private refreshLayoutTimers: number[] = [];
 
   // Bound handlers (for window events cleanup)
   private onFrame: (e: Event) => void;
@@ -911,8 +912,10 @@ export class SonicVisualizerController {
 
   public refreshLayout(): void {
     if (!this.audioBuffer) return;
+    this.refreshLayoutTimers.forEach((timer) => window.clearTimeout(timer));
+    this.refreshLayoutTimers = [];
     [0, 80, 260, 700].forEach((delay) => {
-      window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
         if (!this.audioBuffer) return;
         this.resizeCanvas();
         this.viewStart = this.clampViewStart();
@@ -922,6 +925,7 @@ export class SonicVisualizerController {
         if (this.formData && this.spectroOffscreen) requestAnimationFrame(() => this.redrawMainPane());
         else this.runWorker();
       }, delay);
+      this.refreshLayoutTimers.push(timer);
     });
   }
 
@@ -1065,6 +1069,8 @@ export class SonicVisualizerController {
   public dispose(): void {
     this.stopPlayback();
     this.stopAnimLoop();
+    this.refreshLayoutTimers.forEach((timer) => window.clearTimeout(timer));
+    this.refreshLayoutTimers = [];
     this.domAbort.abort();
     this.resizeObserver?.disconnect();
     window.removeEventListener('sa:frame',      this.onFrame);

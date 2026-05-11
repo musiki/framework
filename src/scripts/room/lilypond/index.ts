@@ -56,6 +56,7 @@ export class LilyPondLiveController {
   private hasRenderedPreviewSnapshot = false;
   private isTeacher = false;
   private allowStudents = false;
+  private activeContainers = new Set<HTMLElement>();
 
   // Combobox elements
   private comboboxInput: HTMLInputElement | null = null;
@@ -66,6 +67,8 @@ export class LilyPondLiveController {
   private liveSyncTimer: number | null = null;
   private liveSyncNeedsBody = false;
   private lastRenderedBody = '';
+  private lastRenderedHtml = '';
+  private lastLiveBody = '';
   private lastRenderResult: LilyRenderResult | null = null;
   private newBtn: HTMLButtonElement | null = null;
   private onPublish: (msg: LilyTransportMessage) => void;
@@ -99,11 +102,15 @@ export class LilyPondLiveController {
   public init(container: HTMLElement, isTeacher: boolean, reportStatus: (msg: string) => void) {
     this.isTeacher = isTeacher;
     this.reportStatus = reportStatus;
+    this.activeContainers.add(container);
     
     const bodyInput = container.querySelector<HTMLTextAreaElement>('[data-lilypond-body]');
     if (bodyInput && this.bodyInput !== bodyInput) {
       this.stopEditorSync?.();
       this.bodyInput = bodyInput;
+      if (this.lastLiveBody.trim() && this.bodyInput.value !== this.lastLiveBody) {
+        this.bodyInput.value = this.lastLiveBody;
+      }
       this.editorReady = false;
     }
 
@@ -111,7 +118,9 @@ export class LilyPondLiveController {
     if (previewEl && this.previewEl !== previewEl) {
       this.previewEl = previewEl;
       this.applyPreviewZoom();
-      if (this.hasRenderedPreviewSnapshot && this.lastRenderedBody.trim()) {
+      if (this.lastRenderedHtml.trim()) {
+        this.applyRenderedHtml(this.lastRenderedHtml);
+      } else if (this.hasRenderedPreviewSnapshot && this.lastRenderedBody.trim()) {
         void this.renderLocally(this.lastRenderedBody);
       }
     }
@@ -597,7 +606,7 @@ export class LilyPondLiveController {
   }
 
   public getCurrentBody() {
-    return this.editorBinding?.getValue() || String(this.bodyInput?.value || '');
+    return this.editorBinding?.getValue() || String(this.bodyInput?.value || this.lastLiveBody || '');
   }
 
   public getCurrentLiveState() {
@@ -616,6 +625,7 @@ export class LilyPondLiveController {
       url: this.lastRenderResult?.url,
       midiUrl: this.lastRenderResult?.midiUrl,
       pdfUrl: this.lastRenderResult?.pdfUrl,
+      html: this.lastRenderedHtml,
     };
   }
 
@@ -624,6 +634,7 @@ export class LilyPondLiveController {
     sender?: { id: string; name: string; color: string },
   ) {
     if (typeof message.body === 'string' && this.getCurrentBody() !== message.body) {
+      this.lastLiveBody = message.body;
       this.setBodyValue(message.body);
     }
 
@@ -664,6 +675,10 @@ export class LilyPondLiveController {
   ) {
     this.hasRenderedPreviewSnapshot = true;
     this.lastRenderedBody = String(message.body || '');
+    this.lastLiveBody = this.lastRenderedBody;
+    if (typeof message.html !== 'string') {
+      this.lastRenderedHtml = '';
+    }
 
     // Extract lily source from incoming body for students to be able to download PDF
     const body = this.lastRenderedBody;
@@ -672,6 +687,11 @@ export class LilyPondLiveController {
     } else {
       const match = body.match(/```lily(?:pond)?\n([\s\S]*?)```/);
       this.lastLilySource = match ? match[1] : '';
+    }
+
+    if (typeof message.html === 'string' && message.html.trim()) {
+      this.lastRenderedHtml = message.html;
+      this.applyRenderedHtml(message.html);
     }
 
     if (message.url) {
@@ -691,12 +711,40 @@ export class LilyPondLiveController {
       this.updateDownloadButtons();
     }
 
-    void this.renderLocally(this.lastRenderedBody);
+    if (!this.lastRenderedHtml.trim()) {
+      void this.renderLocally(this.lastRenderedBody);
+    }
+  }
+
+  public disposeContainer(container: HTMLElement) {
+    this.activeContainers.delete(container);
+    if (this.bodyInput && container.contains(this.bodyInput)) {
+      this.lastLiveBody = this.getCurrentBody();
+      this.stopEditorSync?.();
+      this.stopEditorSync = null;
+      this.bodyInput = null;
+      this.editorReady = false;
+    }
+    if (this.previewEl && container.contains(this.previewEl)) {
+      this.previewEl = null;
+    }
+    if (this.comboboxInput && container.contains(this.comboboxInput)) this.comboboxInput = null;
+    if (this.comboboxMenu && container.contains(this.comboboxMenu)) this.comboboxMenu = null;
+    if (this.activeContainers.size === 0) {
+      if (this.liveSyncTimer) {
+        window.clearTimeout(this.liveSyncTimer);
+        this.liveSyncTimer = null;
+      }
+      this.remoteCursorTimeout.forEach((timer) => window.clearTimeout(timer));
+      this.remoteCursorTimeout.clear();
+      this.remoteCursors.clear();
+    }
   }
 
   private setBodyValue(value: string) {
-    if (!this.bodyInput) return;
     const nextValue = String(value || '');
+    this.lastLiveBody = nextValue;
+    if (!this.bodyInput) return;
 
     // Crucial: avoid feedback loops
     this.suppressLivePublish = true;
@@ -722,6 +770,15 @@ export class LilyPondLiveController {
     if (!(this.previewEl instanceof HTMLElement)) return;
     this.previewEl.innerHTML = '';
     delete this.previewEl.dataset.loading;
+  }
+
+  private applyRenderedHtml(html: string) {
+    if (!(this.previewEl instanceof HTMLElement)) return;
+    this.previewEl.innerHTML = html;
+    delete this.previewEl.dataset.loading;
+    this.runMermaidIn(this.previewEl);
+    this.hydrateRenderedLilyBlocks(this.previewEl);
+    this.runScriptsIn(this.previewEl);
   }
 
   private readCurrentSelection() {
@@ -944,12 +1001,13 @@ export class LilyPondLiveController {
 
     const selection = this.readCurrentSelection();
     const includeBody = forceIncludeBody || this.liveSyncNeedsBody;
+    this.lastLiveBody = this.getCurrentBody();
     const message: LilyTransportMessage = includeBody
       ? {
           type: 'lilypond-live',
           anchor: selection.anchor,
           head: selection.head,
-          body: this.getCurrentBody(),
+          body: this.lastLiveBody,
         }
       : {
           type: 'lilypond-live',
@@ -977,6 +1035,7 @@ export class LilyPondLiveController {
       url: result?.url,
       midiUrl: result?.midiUrl,
       pdfUrl: result?.pdfUrl,
+      html: this.lastRenderedHtml,
     });
   }
 
@@ -1136,6 +1195,7 @@ export class LilyPondLiveController {
       if (ticket !== this.renderNonce) return result;
 
       this.previewEl.innerHTML = html;
+      this.lastRenderedHtml = html;
       delete this.previewEl.dataset.loading;
 
       if (result) {

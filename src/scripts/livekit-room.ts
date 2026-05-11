@@ -10851,6 +10851,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let recursosCurrentLessonId: string | null = null;
   let lastAppliedSonicCacheKey = '';
   let lastDispatchedSonicCacheKey = '';
+  let lastRemoteWorkspaceAppliedAt = 0;
+  let lastRemoteWorkspaceSentAt = 0;
 
   const sonicCacheKey = () => {
     const sonic = mediaSession.sonic;
@@ -10933,6 +10935,39 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  const publishLilypondSnapshot = async () => {
+    if (!canLeadSession()) return;
+    const lilyLiveState = lilypondLive.getCurrentLiveState();
+    await publishMessage({
+      type: 'lilypond-live',
+      body: lilyLiveState.body,
+      anchor: lilyLiveState.anchor,
+      head: lilyLiveState.head,
+    });
+    const lilySetupSnapshot = lilypondLive.getSetupSnapshot();
+    await publishMessage({
+      type: 'lilypond-setup',
+      allowStudents: lilySetupSnapshot.allowStudents,
+    });
+    const lilyRenderSnapshot = lilypondLive.getRenderSnapshot();
+    if (lilyRenderSnapshot.published) {
+      await publishMessage({
+        type: 'lilypond-render',
+        body: lilyRenderSnapshot.body,
+        url: lilyRenderSnapshot.url,
+        midiUrl: lilyRenderSnapshot.midiUrl,
+        pdfUrl: lilyRenderSnapshot.pdfUrl,
+        html: lilyRenderSnapshot.html,
+      });
+    }
+  };
+
+  const reinforceLilypondSession = (delays = [180, 850, 1800]) => {
+    delays.forEach((delay) => {
+      window.setTimeout(() => void publishLilypondSnapshot().catch(() => undefined), delay);
+    });
+  };
+
     // Hyperpiano integration
     const updateActiveHyperpianoAudio = () => {
         if (!incomingAudioContext || !hpAudioGroupGainNode) return;
@@ -10978,6 +11013,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     const onLilypondInit = (container: HTMLElement) => {
       lilypondLive.init(container, localRole === 'teacher', setStatus);
+      if (localRole === 'teacher') reinforceLilypondSession([180, 900]);
+      return { dispose: () => lilypondLive.disposeContainer(container) };
     };
 
     const onConceptInit = (container: HTMLElement) => {
@@ -11161,7 +11198,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     const onSonicAnalyzerInit = (container: HTMLElement) => {
       sonicAnalyzerController?.dispose();
-      sonicAnalyzerController = new SonicAnalyzerController({
+      const controller = new SonicAnalyzerController({
         container,
         getAudioTap: () => {
           if (!incomingAudioContext || !incomingAudioMasterAnalyser) return null;
@@ -11170,34 +11207,55 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         publish: (msg) => void publishMessage(msg),
         getSenderName: () => nameInput.value.trim() || room.localParticipant?.name || '',
       });
+      sonicAnalyzerController = controller;
       sonicAnalyzerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
       sonicAnalyzerController.setAllowStudents(recursosAllowsStudents);
       lastAppliedSonicCacheKey = '';
       scheduleMediaRehydrate([140, 520, 1200]);
+      return {
+        dispose: () => {
+          controller.dispose();
+          if (sonicAnalyzerController === controller) sonicAnalyzerController = null;
+        },
+      };
     };
 
     const onSonicVisualizerInit = (container: HTMLElement) => {
       sonicVisualizerController?.dispose();
-      sonicVisualizerController = new SonicVisualizerController({
+      const controller = new SonicVisualizerController({
         container,
         publish: (msg) => void publishMessage(msg),
       });
+      sonicVisualizerController = controller;
       sonicVisualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
       sonicVisualizerController.setAllowStudents(recursosAllowsStudents);
       lastDispatchedSonicCacheKey = '';
       scheduleMediaRehydrate([120, 420, 1000]);
+      return {
+        dispose: () => {
+          controller.dispose();
+          if (sonicVisualizerController === controller) sonicVisualizerController = null;
+        },
+      };
     };
 
     const onVisualizerInit = (container: HTMLElement) => {
       visualizerController?.dispose();
-      visualizerController = new VisualizerController({
+      const controller = new VisualizerController({
         container,
         publish: (msg) => void publishMessage(msg),
       });
+      visualizerController = controller;
       visualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
       visualizerController.setAllowStudents(recursosAllowsStudents);
       scheduleMediaRehydrate([100, 360, 900]);
       window.setTimeout(() => window.dispatchEvent(new CustomEvent('vs:request-state')), 100);
+      return {
+        dispose: () => {
+          controller.dispose();
+          if (visualizerController === controller) visualizerController = null;
+        },
+      };
     };
 
     window.addEventListener('sa:analysis-progress', (e: Event) => {
@@ -11271,6 +11329,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         getIdentity: () => room.localParticipant?.identity ?? '',
         publish: (msg) => void publishMessage(msg as any),
       });
+      const controller = recursosController;
+      return {
+        dispose: () => {
+          controller.dispose();
+          if (recursosController === controller) recursosController = null;
+        },
+      };
     };
 
   const getWorkspaceSettingsSnapshot = () => ({
@@ -11284,6 +11349,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (!dockviewLayout) return;
     await publishMessage({
       type: 'session-workspace',
+      sentAt: Date.now(),
       layout: {
         dockview: dockviewLayout,
         settings: getWorkspaceSettingsSnapshot(),
@@ -11298,6 +11364,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       void publishWorkspaceLayoutState(layout);
       scheduleMediaRehydrate([120, 420, 1000]);
       reinforceMediaSession([240, 900, 1700]);
+      reinforceLilypondSession([260, 960, 1900]);
     },
     onHyperpianoInit,
     onWhiteboardInit,
@@ -11514,34 +11581,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       open: graphVisible,
     });
 
-    const lilyLiveState = lilypondLive.getCurrentLiveState();
-    await publishMessage({
-      type: 'lilypond-live',
-      body: lilyLiveState.body,
-      anchor: lilyLiveState.anchor,
-      head: lilyLiveState.head,
-    });
-
-    const lilySetupSnapshot = lilypondLive.getSetupSnapshot();
-    await publishMessage({
-      type: 'lilypond-setup',
-      allowStudents: lilySetupSnapshot.allowStudents,
-    });
-
-    const lilyRenderSnapshot = lilypondLive.getRenderSnapshot();
-    if (lilyRenderSnapshot.published) {
-      await publishMessage({
-        type: 'lilypond-render',
-        body: lilyRenderSnapshot.body,
-        url: lilyRenderSnapshot.url,
-        midiUrl: lilyRenderSnapshot.midiUrl,
-      });
-    }
+    await publishLilypondSnapshot();
 
     const currentLayout = workspaceManager.getLayout();
     if (currentLayout) {
       await publishMessage({
         type: 'session-workspace',
+        sentAt: Date.now(),
         layout: {
           dockview: currentLayout,
           settings: getWorkspaceSettingsSnapshot(),
@@ -12659,6 +12705,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'session-workspace') {
+        if (message.sentAt && message.sentAt < lastRemoteWorkspaceSentAt) return;
+        if (message.sentAt) lastRemoteWorkspaceSentAt = message.sentAt;
+        lastRemoteWorkspaceAppliedAt = Date.now();
         workspaceManager.applyLayout(message.layout);
         scheduleMediaRehydrate([140, 520, 1200]);
         return;
@@ -12810,6 +12859,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'vs-state') {
         if (!canAcceptVisualControl(participant)) return;
+        const recentlyClosedByWorkspace =
+          !workspaceManager.hasPod('visualizer') &&
+          Date.now() - lastRemoteWorkspaceAppliedAt < 2500;
+        if (recentlyClosedByWorkspace) return;
         rememberMediaMessage(message);
         workspaceManager.focusOrOpenVisualizer('recursos');
         window.setTimeout(() => visualizerController?.applyRemoteState(message), 80);

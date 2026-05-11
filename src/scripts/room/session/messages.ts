@@ -137,6 +137,7 @@ export type ConferenceMessage =
       url?: string;
       midiUrl?: string;
       pdfUrl?: string;
+      html?: string;
     }
   | {
       type: 'lilypond-play';
@@ -156,6 +157,7 @@ export type ConferenceMessage =
   | {
       type: 'session-workspace';
       layout: any;
+      sentAt?: number;
     }
   | {
       type: 'concept-load';
@@ -623,6 +625,9 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       const pdfUrl = typeof (parsed as { pdfUrl?: string }).pdfUrl === 'string'
         ? (parsed as { pdfUrl: string }).pdfUrl
         : undefined;
+      const html = typeof (parsed as { html?: string }).html === 'string'
+        ? (parsed as { html: string }).html
+        : undefined;
 
       return {
         type: 'lilypond-render',
@@ -630,6 +635,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         url,
         midiUrl,
         pdfUrl,
+        html,
       };
     }
 
@@ -663,6 +669,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'session-workspace',
         layout: (parsed as { layout: any }).layout,
+        sentAt: Math.max(0, Number((parsed as { sentAt?: number }).sentAt) || 0) || undefined,
       };
     }
 
