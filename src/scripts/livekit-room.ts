@@ -12154,6 +12154,29 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  const syncSpatialAudioPanning = () => {
+    const roomRect = root.getBoundingClientRect();
+    if (roomRect.width === 0) return;
+
+    participantCards.forEach((refs, identity) => {
+      const cardRect = refs.card.getBoundingClientRect();
+      if (cardRect.width === 0) return;
+
+      // Calculate relative X center of the card (0 to 1)
+      const centerX = (cardRect.left + cardRect.width / 2 - roomRect.left) / roomRect.width;
+      // Map 0..1 to -1..1 (pan)
+      const pan = Math.min(1, Math.max(-1, (centerX - 0.5) * 2));
+
+      // Update all audio sources for this participant
+      incomingAudioSources.forEach((source, key) => {
+        if (key.startsWith(`${identity}:`)) {
+          // Smooth transition if possible, but immediate is fine for now
+          source.panner.pan.setTargetAtTime(pan, (incomingAudioContext?.currentTime || 0), 0.1);
+        }
+      });
+    });
+  };
+
   const syncAllParticipants = () => {
     applySessionLeaderState();
     refreshFocusIdentity();
@@ -12199,6 +12222,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     renderParticipantList();
     queuePreferredRemoteVideoDimensionsSync();
     setControlState();
+    syncSpatialAudioPanning();
   };
 
   const syncRecentSpeakers = () => {
@@ -15909,6 +15933,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const handleViewportResize = () => {
     updateRecordingGuideLayout();
     queuePreferredRemoteVideoDimensionsSync();
+    syncSpatialAudioPanning();
   };
 
   navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
