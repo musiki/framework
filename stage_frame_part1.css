@@ -596,11 +596,11 @@
 }
 
 .conference-slot--grid {
-  padding: 0.8rem;
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   grid-auto-rows: minmax(min-content, 1fr);
-  gap: 0.8rem;
+  gap: 0;
   align-content: start;
   overflow: auto;
 }
@@ -719,7 +719,7 @@
   display: grid;
   grid-template-rows: 1fr auto;
   background: #020202;
-  border: 1px solid var(--conference-line-soft);
+  border: none !important;
   overflow: hidden;
 }
 

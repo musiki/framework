@@ -33,14 +33,13 @@
 }
 .sa-save-btn:hover { background:rgba(69,211,132,0.1); }
 
-/* 5-panel content grid — narrow: txt | fft+tmb+luf | radar */
+/* 2-panel content grid: text (unified) | radar */
 .sa-content {
   flex:1; min-height:0;
   display:grid;
   gap:1px;
   background:rgba(255,255,255,0.04);
-  grid-template-columns: 1.4fr 1fr 1.4fr;
-  grid-template-rows: repeat(3, 1fr);
+  grid-template-columns: 1.4fr 1fr;
   overflow:hidden;
 }
 .sa-panel {
@@ -49,21 +48,16 @@
   display: flex; flex-direction: column;
   min-height: 0; min-width: 0;
 }
-.sa-panel--text     { grid-column: 1; grid-row: 1 / 4; }
-.sa-panel--spectrum { grid-column: 2; grid-row: 1; }
-.sa-panel--timbre   { grid-column: 2; grid-row: 2; }
-.sa-panel--lufs     { grid-column: 2; grid-row: 3; }
-.sa-panel--radar    { grid-column: 3; grid-row: 1 / 4; }
+.sa-panel--text     { grid-column: 1; }
+.sa-panel--radar    { grid-column: 2; }
 
 .sa-radar-canvas { display: block; width: 100%; height: 100%; }
 
-/* Wide: text wider, then fft/tmb/luf equal, radar last */
+/* Wide: text wider */
 @container sapod (min-width: 640px) {
   .sa-content {
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
-    grid-template-rows: 1fr;
+    grid-template-columns: 2fr 1fr;
   }
-  .sa-panel { grid-column: auto; grid-row: auto; }
 }
 
 .sa-panel-title {
@@ -80,12 +74,26 @@
   scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.1) transparent;
 }
 
+.sa-history {
+  color: #45D384;
+  opacity: 0.7;
+  display: block;
+  overflow: hidden;
+  white-space: pre;
+  font-size: 0.6rem;
+  margin-top: 4px;
+}
+
+.sa-val {
+  color: #cdd6f4;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Colorization */
 .sa-ok   { color:#45D384; } .sa-warn { color:#FFD966; } .sa-clip { color:#E06666; }
 .sa-dim  { color:var(--conference-muted,#7f849c); opacity:0.5; }
-.sa-key  { color:#89b4fa; } .sa-val  { color:#cdd6f4; }
-.sa-history { color:#45D384; opacity:0.7; display:block; overflow:hidden; white-space:pre; }
-.sa-bars    { color:#45D384; letter-spacing:-0.05em; }
+.sa-key  { color:#89b4fa; }
+.sa-bars { color:#45D384; letter-spacing:-0.05em; }
 
 /* Drop overlay */
 .sa-drop-overlay {

@@ -1844,6 +1844,24 @@ style.textContent = `
     position: relative !important;
   }
 
+  .musiki-pod[data-pod="grid-videos"] .conference-stage-panel--grid {
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    background: #000;
+  }
+  .musiki-pod[data-pod="grid-videos"] .conference-slot--grid {
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+  .musiki-pod[data-pod="grid-videos"] .conference-tile {
+    border: none !important;
+    border-radius: 0 !important;
+  }
+  .musiki-pod[data-pod="grid-videos"] .conference-tile-media img {
+    border: none !important;
+  }
+
   .pod-picker-menu {
     position: fixed;
     background: #111;

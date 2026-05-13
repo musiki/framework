@@ -1,7 +1,5 @@
 import { renderTextView, hzToNote } from './views/text-view';
 import type { SAResults } from './views/text-view';
-import { renderSpectrumView } from './views/spectrum-view';
-import { renderTimbreView } from './views/timbre-view';
 import { LufsHistory } from './views/lufs-view';
 import { drawRadar } from './views/radar-view';
 import type { ConferenceMessage } from '../session';
@@ -386,7 +384,7 @@ export class SonicAnalyzerController {
     return {pitch,pitchNote:hzToNote(pitch),rmsDb,lufsM,lufsS,lufsI,zcr,centroid,spread,skewness,kurtosis,slope,flux,tristimulus,hnr,mfcc};
   }
   private render(r: SAResults): void {
-    renderTextView(this.textInner, r);
+    renderTextView(this.textInner, r, this.lufsHistory.history);
     if (this.fileKey || this.fileBpm > 0) {
       const keyStr = this.fileKey ? `${this.fileKey} ${this.fileScale}` : '---';
       const bpmStr = this.fileBpm > 0 ? this.fileBpm.toFixed(1) : '---';
@@ -395,9 +393,6 @@ export class SonicAnalyzerController {
         `\n<span class="sa-key">key      </span><span class="sa-dim">·</span> <span class="sa-ok">${keyStr.padStart(8)}</span>` +
         `\n<span class="sa-key">bpm      </span><span class="sa-dim">·</span> <span class="sa-ok">${bpmStr.padStart(8)}</span>`;
     }
-    renderSpectrumView(this.spectrumInner, this.freqBuf!);
-    renderTimbreView(this.timbreInner, r);
-    this.lufsHistory.render(this.lufsInner, r.lufsM, r.lufsS, r.lufsI);
     drawRadar(this.radarCanvas, r);
   }
 

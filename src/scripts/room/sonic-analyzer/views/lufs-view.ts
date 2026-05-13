@@ -14,7 +14,7 @@ function lufsColor(lufs: number): string {
 }
 
 export class LufsHistory {
-  private history: number[] = [];
+  public history: number[] = [];
 
   push(lufsM: number): void {
     this.history.push(lufsM);

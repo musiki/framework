@@ -19,11 +19,27 @@ export type SAResults = {
 
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
+const BAR_LEN = 8;
+const LUFS_HISTORY_LEN = 40;
+
 export function hzToNote(hz: number): string {
   if (hz <= 0) return '---';
   const midi = Math.round(12 * Math.log2(hz / 440) + 69);
   const octave = Math.floor(midi / 12) - 1;
   return NOTE_NAMES[midi % 12] + octave;
+}
+
+function miniBar(value: number, min: number, max: number): string {
+  const norm = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const filled = Math.round(norm * BAR_LEN);
+  return '█'.repeat(filled) + '░'.repeat(BAR_LEN - filled);
+}
+
+function lufsToChar(lufs: number): string {
+  if (lufs < -40) return '_';
+  if (lufs < -24) return '.';
+  if (lufs < -14) return '-';
+  return '‾';
 }
 
 function dbColor(db: number): string {
@@ -141,26 +157,32 @@ function tipAttr(key: string): string {
   return ` data-sa-tip="${esc(key)}" title="${esc(t.formula)} — ${esc(t.body)}"`;
 }
 
-export function renderTextView(el: HTMLElement, r: SAResults): void {
+export function renderTextView(el: HTMLElement, r: SAResults, history: number[] = []): void {
   const pitchClass = r.pitch > 50 ? 'ok' : 'dim';
   const dbCls = dbColor(r.rmsDb);
-  const lufsClass = lufsColor(r.lufsM);
+  const mCls = lufsColor(r.lufsM);
+  const sCls = lufsColor(r.lufsS);
+  const iCls = lufsColor(r.lufsI);
+
+  const envelope = history.slice(-LUFS_HISTORY_LEN).map(v => lufsToChar(v)).join('');
+  const padding = ' '.repeat(Math.max(0, LUFS_HISTORY_LEN - envelope.length));
 
   el.innerHTML = [
     `<span class="sa-key"${tipAttr('pitch')}>pitch    </span><span class="sa-dim">·</span> <span class="sa-${pitchClass}">${pad(fmt(r.pitch, 1), 8)} Hz</span>  <span class="sa-dim">${r.pitchNote}</span>`,
     `<span class="sa-key"${tipAttr('dBFS')}>dBFS     </span><span class="sa-dim">·</span> <span class="sa-${dbCls}">${pad(fmt(r.rmsDb, 1), 8)} dBFS</span>`,
-    `<span class="sa-key"${tipAttr('lufs_m')}>lufs_m   </span><span class="sa-dim">·</span> <span class="sa-${lufsClass}">${pad(fmt(r.lufsM, 1), 8)} LUFS</span>`,
-    `<span class="sa-key"${tipAttr('lufs_s')}>lufs_s   </span><span class="sa-dim">·</span> <span class="sa-dim">${pad(fmt(r.lufsS, 1), 8)} LUFS</span>`,
-    `<span class="sa-key"${tipAttr('lufs_i')}>lufs_i   </span><span class="sa-dim">·</span> <span class="sa-dim">${pad(fmt(r.lufsI, 1), 8)} LUFS</span>`,
+    `<span class="sa-key"${tipAttr('lufs_m')}>lufs_m   </span><span class="sa-dim">·</span> <span class="sa-${mCls}">${pad(fmt(r.lufsM, 1), 8)} LUFS</span>`,
+    `<span class="sa-key"${tipAttr('lufs_s')}>lufs_s   </span><span class="sa-dim">·</span> <span class="sa-${sCls}">${pad(fmt(r.lufsS, 1), 8)} LUFS</span>`,
+    `<span class="sa-key"${tipAttr('lufs_i')}>lufs_i   </span><span class="sa-dim">·</span> <span class="sa-${iCls}">${pad(fmt(r.lufsI, 1), 8)} LUFS</span>`,
+    `<span class="sa-history">${padding}${envelope}</span>`,
     `<span class="sa-dim">─────────────────────────</span>`,
-    `<span class="sa-key"${tipAttr('centroid')}>centroid </span><span class="sa-dim">·</span> <span class="sa-val">${pad(fmt(r.centroid, 0), 8)} Hz</span>`,
-    `<span class="sa-key"${tipAttr('spread')}>spread   </span><span class="sa-dim">·</span> <span class="sa-val">${pad(fmt(r.spread, 0), 8)} Hz</span>`,
-    `<span class="sa-key"${tipAttr('skewness')}>skewness </span><span class="sa-dim">·</span> <span class="sa-val">${pad(fmt(r.skewness, 3), 8)}</span>`,
-    `<span class="sa-key"${tipAttr('kurtosis')}>kurtosis </span><span class="sa-dim">·</span> <span class="sa-val">${pad(fmt(r.kurtosis, 3), 8)}</span>`,
-    `<span class="sa-key"${tipAttr('slope')}>slope    </span><span class="sa-dim">·</span> <span class="sa-val">${pad(fmt(r.slope, 4), 8)}</span>`,
-    `<span class="sa-key"${tipAttr('flux')}>flux     </span><span class="sa-dim">·</span> <span class="sa-val">${pad(fmt(r.flux, 3), 8)}</span>`,
-    `<span class="sa-key"${tipAttr('HNR')}>HNR      </span><span class="sa-dim">·</span> <span class="sa-val">${pad(fmt(r.hnr, 1), 8)} dB</span>`,
+    `<span class="sa-key"${tipAttr('centroid')}>centroid </span><span class="sa-dim">${miniBar(r.centroid, 0, 8000)}</span> <span class="sa-val">${pad(fmt(r.centroid, 0), 5)} Hz</span>`,
+    `<span class="sa-key"${tipAttr('spread')}>spread   </span><span class="sa-dim">${miniBar(r.spread, 0, 4000)}</span> <span class="sa-val">${pad(fmt(r.spread, 0), 5)} Hz</span>`,
+    `<span class="sa-key"${tipAttr('skewness')}>skewness </span><span class="sa-dim">${miniBar(r.skewness, -3, 3)}</span> <span class="sa-val">${pad(fmt(r.skewness, 3), 7)}</span>`,
+    `<span class="sa-key"${tipAttr('kurtosis')}>kurtosis </span><span class="sa-dim">${miniBar(r.kurtosis, 0, 20)}</span> <span class="sa-val">${pad(fmt(r.kurtosis, 3), 7)}</span>`,
+    `<span class="sa-key"${tipAttr('slope')}>slope    </span><span class="sa-dim">${miniBar(r.slope + 0.05, 0, 0.1)}</span> <span class="sa-val">${pad(fmt(r.slope, 4), 7)}</span>`,
+    `<span class="sa-key"${tipAttr('flux')}>flux     </span><span class="sa-dim">${miniBar(r.flux, 0, 1)}</span> <span class="sa-val">${pad(fmt(r.flux, 3), 7)}</span>`,
+    `<span class="sa-key"${tipAttr('HNR')}>HNR      </span><span class="sa-dim">${miniBar(r.hnr, -20, 40)}</span> <span class="sa-val">${pad(fmt(r.hnr, 1), 5)} dB</span>`,
     `<span class="sa-key"${tipAttr('ZCR')}>ZCR      </span><span class="sa-dim">·</span> <span class="sa-val">${pad(fmt(r.zcr, 4), 8)}</span>`,
-    `<span class="sa-key"${tipAttr('T1/T2/T3')}>T1/T2/T3 </span><span class="sa-dim">·</span> <span class="sa-val">${fmt(r.tristimulus[0],2)} / ${fmt(r.tristimulus[1],2)} / ${fmt(r.tristimulus[2],2)}</span>`,
+    `<span class="sa-key"${tipAttr('T1/T2/T3')}>T1/T2/T3 </span><span class="sa-val">${fmt(r.tristimulus[0],2)} / ${fmt(r.tristimulus[1],2)} / ${fmt(r.tristimulus[2],2)}</span>`,
   ].join('\n');
 }
