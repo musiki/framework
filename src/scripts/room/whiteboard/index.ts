@@ -102,7 +102,13 @@ export class WhiteboardController {
     this.publish({
       type: 'whiteboard-full-state',
       dataUrl: this.canvas.toDataURL(),
+      stillIndex: this.currentStillIndex,
+      stillTotal: this.stills.length || 1,
     });
+  }
+
+  public publishCurrentState() {
+    this.broadcastFullState();
   }
 
   // Still Management
@@ -578,5 +584,27 @@ export class WhiteboardController {
     if (broadcast) {
       this.publish({ type: 'whiteboard-clear' });
     }
+  }
+
+  handleFullState(dataUrl: string, stillIndex?: number, stillTotal?: number) {
+    if (!this.ctx || !this.canvas || !dataUrl) return;
+    
+    if (typeof stillIndex === 'number') {
+      this.currentStillIndex = stillIndex;
+      // We don't have the full history of blobs, but we know the count
+      if (typeof stillTotal === 'number' && this.stills.length < stillTotal) {
+         // Placeholder so the counter looks right
+         while(this.stills.length < stillTotal) this.stills.push(this.ctx.getImageData(0,0,1,1));
+      }
+      this.emitStillChanged();
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      this.ctx?.clearRect(0, 0, this.canvas!.width, this.canvas!.height);
+      this.ctx?.drawImage(img, 0, 0, this.canvas!.width / (window.devicePixelRatio || 1), this.canvas!.height / (window.devicePixelRatio || 1));
+      this.pushHistory();
+    };
+    img.src = dataUrl;
   }
 }

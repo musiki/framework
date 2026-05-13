@@ -10894,10 +10894,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (!shell) return;
       const isActive = shell.dataset.overlayActive === 'true';
       shell.dataset.overlayActive = isActive ? 'false' : 'true';
+      
+      if (canLeadSession()) {
+        void publishWorkspaceLayoutState().catch(() => undefined);
+      }
+
       // Trigger a resize after a small delay to allow CSS to apply
       window.setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 50);
+    });
+
+    window.addEventListener('musiki:workspace:settings', (e: Event) => {
+      const settings = (e as CustomEvent<any>).detail;
+      if (typeof settings.whiteboardOverlay === 'boolean') {
+        const shell = clonedElement.closest('.musiki-pod') as HTMLElement;
+        if (shell) {
+          const current = shell.dataset.overlayActive === 'true';
+          if (current !== settings.whiteboardOverlay) {
+             shell.dataset.overlayActive = String(settings.whiteboardOverlay);
+             window.setTimeout(() => {
+               window.dispatchEvent(new Event('resize'));
+             }, 50);
+          }
+        }
+      }
     });
 
     clonedElement.querySelector('[data-whiteboard-action="prev-still"]')?.addEventListener('click', () => wb.prevStill());
@@ -11451,6 +11472,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const getWorkspaceSettingsSnapshot = () => ({
     gridSize,
     showCircle: showPresentationCircle,
+    whiteboardOverlay: (root.querySelector('.musiki-pod[data-pod="whiteboard"]') as HTMLElement)?.dataset.overlayActive === 'true',
   });
 
   const publishWorkspaceLayoutState = async (layoutOverride?: any) => {
@@ -12748,6 +12770,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         window.setTimeout(() => {
           recursosController?.publishCurrentState();
         }, 650);
+        window.setTimeout(() => {
+          whiteboards.forEach(wb => wb.publishCurrentState());
+        }, 800);
       }
       if (sonicAnalyzerController && localRole === 'teacher') {
         window.setTimeout(() => {
@@ -12916,6 +12941,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'whiteboard-text') {
         whiteboards.forEach((controller) => controller.drawText(message));
+        return;
+      }
+
+      if (message.type === 'whiteboard-full-state') {
+        whiteboards.forEach((controller) => controller.handleFullState(message.dataUrl, message.stillIndex, message.stillTotal));
         return;
       }
 

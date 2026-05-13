@@ -143,6 +143,12 @@ export type ConferenceMessage =
       bg: 'none' | 'staff' | 'grid';
     }
   | {
+      type: 'whiteboard-full-state';
+      dataUrl: string;
+      stillIndex?: number;
+      stillTotal?: number;
+    }
+  | {
       type: 'lilypond-live';
       anchor: number;
       head: number;
@@ -640,6 +646,15 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'whiteboard-bg',
         bg: bg === 'staff' || bg === 'grid' ? bg : 'none',
+      };
+    }
+
+    if (parsed.type === 'whiteboard-full-state') {
+      return {
+        type: 'whiteboard-full-state',
+        dataUrl: normalizeText((parsed as { dataUrl?: string }).dataUrl),
+        stillIndex: Number((parsed as any).stillIndex) || 0,
+        stillTotal: Number((parsed as any).stillTotal) || 1,
       };
     }
 

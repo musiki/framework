@@ -39,7 +39,7 @@
   display:grid;
   gap:1px;
   background:rgba(255,255,255,0.04);
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 17.5rem 1fr;
   overflow:hidden;
 }
 .sa-panel {
@@ -52,13 +52,6 @@
 .sa-panel--radar    { grid-column: 2; }
 
 .sa-radar-canvas { display: block; width: 100%; height: 100%; }
-
-/* Wide: text wider */
-@container sapod (min-width: 640px) {
-  .sa-content {
-    grid-template-columns: 2fr 1fr;
-  }
-}
 
 .sa-panel-title {
   font-size: 0.45rem; font-weight: 900; letter-spacing: 0.2em;
