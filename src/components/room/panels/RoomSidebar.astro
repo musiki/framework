@@ -2,6 +2,7 @@
 import './room-sidebar.css';
 import WorkspaceManager from '../workspace/WorkspaceManager.astro';
 import BreakRoomsPanel from './break-rooms/BreakRoomsPanel.astro';
+import SessionSnapshotsPanel from './snapshots/SessionSnapshotsPanel.astro';
 
 type Props = {
   defaultIdentity?: string;
@@ -30,9 +31,9 @@ const {
         </div>
       </details>
       <BreakRoomsPanel />
+      <SessionSnapshotsPanel />
       <WorkspaceManager isTeacher={defaultRole === 'teacher'} />
-    </div>
-  </div>
+      </div>  </div>
 </aside>
 
 <button

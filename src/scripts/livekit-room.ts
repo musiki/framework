@@ -10875,6 +10875,57 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         (btn as HTMLElement).dataset.active = nextSnap ? 'true' : 'false';
       });
     });
+
+    const stillLabel = clonedElement.querySelector('[data-whiteboard-still-label]');
+    const updateStillLabel = (detail: { index: number; total: number }) => {
+      if (stillLabel) stillLabel.textContent = `${detail.index + 1}/${Math.max(1, detail.total)}`;
+    };
+
+    window.addEventListener('musiki:whiteboard:still-changed', (e: Event) => {
+      const detail = (e as CustomEvent<{ index: number; total: number }>).detail;
+      updateStillLabel(detail);
+    });
+
+    clonedElement.querySelector('[data-whiteboard-action="undo"]')?.addEventListener('click', () => wb.undo());
+    clonedElement.querySelector('[data-whiteboard-action="redo"]')?.addEventListener('click', () => wb.redo());
+    clonedElement.querySelector('[data-whiteboard-action="prev-still"]')?.addEventListener('click', () => wb.prevStill());
+    clonedElement.querySelector('[data-whiteboard-action="next-still"]')?.addEventListener('click', () => wb.nextStill());
+
+    clonedElement.querySelector('[data-whiteboard-action="export-recursos"]')?.addEventListener('click', async () => {
+      const btn = clonedElement.querySelector('[data-whiteboard-action="export-recursos"]') as HTMLButtonElement;
+      if (btn) btn.disabled = true;
+      try {
+        const blobs = await wb.exportStills();
+        if (blobs.length === 0) return;
+        
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const folderName = `pizarra-${timestamp.slice(0, 16)}`;
+        
+        for (let i = 0; i < blobs.length; i++) {
+          const fileName = `still-${i + 1}.png`;
+          const file = new File([blobs[i]], fileName, { type: 'image/png' });
+          const form = new FormData();
+          form.append('file', file);
+          
+          const resp = await fetch('/api/room/re-store', { method: 'POST', body: form });
+          if (resp.ok) {
+            const { url } = await resp.json();
+            // We use a custom event to notify RecursosController to add the file
+            window.dispatchEvent(new CustomEvent('musiki:recursos:external-media', {
+              detail: { url, name: fileName, folder: folderName }
+            }));
+          }
+        }
+        setStatus('Pizarra exportada a RECURSOS.');
+      } catch (e) {
+        console.error('Whiteboard export failed:', e);
+        setStatus('Error al exportar pizarra.');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+
+    return wb;
   };
 
   const lilypondLive = new LilyPondLiveController((msg) => void publishMessage(msg));
@@ -11427,6 +11478,96 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onVisualizerInit,
     onRecursosInit
   );
+
+  const syncSnapshots = async () => {
+    const listEls = root.querySelectorAll('[data-snapshot-list], [data-snapshot-list-student]');
+    if (listEls.length === 0) return;
+    const roomName = getRoomName() ?? '';
+    try {
+      const resp = await fetch(`/api/live/snapshot?roomName=${encodeURIComponent(roomName)}`);
+      if (!resp.ok) return;
+      const { snapshots } = await resp.json();
+      
+      listEls.forEach(listEl => {
+        if (!snapshots.length) {
+          listEl.innerHTML = '<div style="font-size:0.65rem; color:var(--conference-muted); text-align:center; padding:1rem;">No hay snapshots.</div>';
+          return;
+        }
+        listEl.innerHTML = '';
+        snapshots.forEach((s: any) => {
+          const item = document.createElement('div');
+          item.className = 'snapshot-item';
+          item.innerHTML = `
+            <div class="snapshot-item-header">
+              <span class="snapshot-name">${s.name}</span>
+              <span class="snapshot-date">${new Date(s.createdAt).toLocaleDateString()}</span>
+            </div>
+            <div class="snapshot-meta">por ${s.createdBy}</div>
+          `;
+          item.addEventListener('click', () => {
+            if (s.layout) {
+              workspaceManager.applyLayout(s.layout);
+              if (canLeadSession()) {
+                void publishWorkspaceLayoutState(s.layout.dockview || s.layout);
+              }
+              // Close modal if open
+              const modal = root.querySelector('[data-snapshots-modal]') as HTMLElement;
+              if (modal) modal.hidden = true;
+            }
+          });
+          listEl.appendChild(item);
+        });
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  root.querySelector('[data-action="snapshots-toggle"]')?.addEventListener('click', () => {
+    const modal = root.querySelector('[data-snapshots-modal]') as HTMLElement;
+    if (modal) {
+      modal.hidden = !modal.hidden;
+      if (!modal.hidden) void syncSnapshots();
+    }
+  });
+
+  root.querySelector('[data-action="close-snapshots"]')?.addEventListener('click', () => {
+    const modal = root.querySelector('[data-snapshots-modal]') as HTMLElement;
+    if (modal) modal.hidden = true;
+  });
+
+  root.querySelector('[data-snapshot-create]')?.addEventListener('click', async () => {
+    const name = window.prompt('Nombre del snapshot', new Date().toLocaleString('es'));
+    if (!name) return;
+    const roomName = getRoomName() ?? '';
+    const layout = {
+      dockview: workspaceManager.getLayout(),
+      settings: getWorkspaceSettingsSnapshot(),
+    };
+    const createdBy = nameInput.value.trim() || room.localParticipant?.name || room.localParticipant?.identity || 'anónimo';
+    try {
+      const resp = await fetch('/api/live/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName,
+          name,
+          layout,
+          createdBy,
+          courseId: activeCourseId,
+          claseId: rawCourseId,
+        }),
+      });
+      if (resp.ok) {
+        void syncSnapshots();
+      }
+    } catch {
+      // ignore
+    }
+  });
+
+  // Load initial snapshots
+  window.setTimeout(() => void syncSnapshots(), 2000);
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
 

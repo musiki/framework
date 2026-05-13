@@ -233,8 +233,8 @@ export class RecursosController {
       });
     });
     window.addEventListener('musiki:recursos:external-media', (e: Event) => {
-      const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail;
-      void this.addCompartido(url, name || quickNameFromUrl(url), 'external-media');
+      const { url, name, folder } = (e as CustomEvent<{ url: string; name: string; folder?: string }>).detail;
+      void this.addCompartido(url, name || quickNameFromUrl(url), 'external-media', folder);
     });
 
     this.foldBtn.addEventListener('click', () => this.toggleFoldAll());
@@ -352,12 +352,12 @@ export class RecursosController {
 
   // ── Compartidos ──────────────────────────────────────────────────────────────
 
-  private async addCompartido(url: string, name: string, source: ResourceItem['source']) {
+  private async addCompartido(url: string, name: string, source: ResourceItem['source'], folder = 'compartidos') {
     if (!url) return;
     const sid = await this.ensureSession();
     this.items = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
-      type: typeFromUrl(url), folder: 'compartidos', source,
+      type: typeFromUrl(url), folder, source,
       createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       sessionId: sid || null,
     });

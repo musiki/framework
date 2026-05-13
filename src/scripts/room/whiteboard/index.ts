@@ -40,6 +40,11 @@ export class WhiteboardController {
   private background: 'none' | 'staff' | 'grid' = 'none';
   private snapToGrid = false;
   private remoteCursorTimers = new Map<string, number>();
+
+  private history: ImageData[] = [];
+  private historyIndex = -1;
+  private stills: ImageData[] = [];
+  private currentStillIndex = 0;
   
   private readonly VIRTUAL_COORD_BASE = 2000; 
 
@@ -51,6 +56,127 @@ export class WhiteboardController {
     this.ctx = canvas.getContext('2d', { alpha: true });
     this.setupListeners();
     this.setupResizeObserver();
+    
+    // Initial history state
+    window.setTimeout(() => this.pushHistory(), 100);
+  }
+
+  private pushHistory() {
+    if (!this.ctx || !this.canvas) return;
+    const data = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    
+    // If we're not at the end of history, discard future states
+    if (this.historyIndex < this.history.length - 1) {
+      this.history = this.history.slice(0, this.historyIndex + 1);
+    }
+    
+    this.history.push(data);
+    if (this.history.length > 50) this.history.shift();
+    this.historyIndex = this.history.length - 1;
+  }
+
+  undo() {
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      this.applyHistoryState();
+      this.broadcastFullState();
+    }
+  }
+
+  redo() {
+    if (this.historyIndex < this.history.length - 1) {
+      this.historyIndex++;
+      this.applyHistoryState();
+      this.broadcastFullState();
+    }
+  }
+
+  private applyHistoryState() {
+    if (!this.ctx || !this.canvas || this.historyIndex < 0) return;
+    const data = this.history[this.historyIndex];
+    this.ctx.putImageData(data, 0, 0);
+  }
+
+  private broadcastFullState() {
+    if (!this.canvas) return;
+    this.publish({
+      type: 'whiteboard-full-state',
+      dataUrl: this.canvas.toDataURL(),
+    });
+  }
+
+  // Still Management
+  get currentStillNumber() { return this.currentStillIndex + 1; }
+  get totalStills() { return Math.max(1, this.stills.length); }
+
+  nextStill() {
+    if (!this.ctx || !this.canvas) return;
+    
+    // Save current as a still if needed
+    const currentData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    if (this.currentStillIndex >= this.stills.length) {
+      this.stills.push(currentData);
+    } else {
+      this.stills[this.currentStillIndex] = currentData;
+    }
+
+    this.currentStillIndex++;
+    
+    // If we're moving to a "new" still, it's a copy of the previous one
+    if (this.currentStillIndex >= this.stills.length) {
+       // Canvas already has the content, just push it as the new still
+       this.stills.push(this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height));
+    } else {
+       // Load existing still
+       this.ctx.putImageData(this.stills[this.currentStillIndex], 0, 0);
+    }
+    
+    this.history = [];
+    this.pushHistory();
+    this.broadcastFullState();
+    this.emitStillChanged();
+  }
+
+  prevStill() {
+    if (!this.ctx || !this.canvas || this.currentStillIndex <= 0) return;
+    
+    // Save current before leaving
+    this.stills[this.currentStillIndex] = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    
+    this.currentStillIndex--;
+    this.ctx.putImageData(this.stills[this.currentStillIndex], 0, 0);
+    
+    this.history = [];
+    this.pushHistory();
+    this.broadcastFullState();
+    this.emitStillChanged();
+  }
+
+  private emitStillChanged() {
+    window.dispatchEvent(new CustomEvent('musiki:whiteboard:still-changed', {
+      detail: { index: this.currentStillIndex, total: this.stills.length }
+    }));
+  }
+
+  async exportStills(): Promise<Blob[]> {
+    if (!this.canvas || !this.ctx) return [];
+    
+    const blobs: Blob[] = [];
+    const originalIndex = this.currentStillIndex;
+    const originalData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Ensure current is saved
+    this.stills[this.currentStillIndex] = originalData;
+
+    for (let i = 0; i < this.stills.length; i++) {
+      this.ctx.putImageData(this.stills[i], 0, 0);
+      const blob = await new Promise<Blob | null>(resolve => this.canvas?.toBlob(resolve, 'image/png'));
+      if (blob) blobs.push(blob);
+    }
+    
+    // Restore
+    this.ctx.putImageData(originalData, 0, 0);
+    return blobs;
   }
 
   initBg(canvas: HTMLCanvasElement) {
@@ -152,6 +278,7 @@ export class WhiteboardController {
     if (!this.isDrawing) return;
     this.isDrawing = false;
     this.handleStroke({ x: 0, y: 0, action: 'end', color: this.color }, true);
+    this.pushHistory();
   }
 
   private spawnTextInput(e: MouseEvent | Touch) {
@@ -438,6 +565,7 @@ export class WhiteboardController {
         ...textData
       });
     }
+    this.pushHistory();
   }
 
   clear(broadcast = false) {

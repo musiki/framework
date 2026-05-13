@@ -1,0 +1,51 @@
+---
+---
+<details class="conference-sidebar-section conference-sidebar-panel" data-snapshots-panel data-teacher-only>
+  <summary class="conference-sidebar-heading">SNAPSHOTS</summary>
+  <div class="conference-sidebar-panel-body">
+    <div class="snapshot-actions" style="margin-bottom: 0.8rem; display: flex; gap: 0.5rem;">
+      <button type="button" class="musiki-pod-btn" data-snapshot-create style="flex: 1">
+        NUEVO SNAPSHOT
+      </button>
+    </div>
+    <div class="snapshot-list" data-snapshot-list style="display: flex; flex-direction: column; gap: 0.4rem;">
+      <div style="font-size: 0.65rem; color: var(--conference-muted); text-align: center; padding: 1rem;">
+        No hay snapshots guardados.
+      </div>
+    </div>
+  </div>
+</details>
+
+<style>
+  .snapshot-item {
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    cursor: pointer;
+    transition: all 0.1s ease;
+  }
+  .snapshot-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .snapshot-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .snapshot-name {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--conference-fg);
+  }
+  .snapshot-date {
+    font-size: 0.55rem;
+    color: var(--conference-muted);
+  }
+  .snapshot-meta {
+    font-size: 0.6rem;
+    color: var(--conference-dim);
+  }
+</style>

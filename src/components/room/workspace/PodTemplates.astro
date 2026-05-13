@@ -188,6 +188,21 @@ const { presentationOptions = [] } = Astro.props;
              <button type="button" class="musiki-pod-btn" data-whiteboard-snap-btn title="Snap to Grid">S</button>
            </div>
            <div class="whiteboard-divider"></div>
+           <div class="whiteboard-group">
+             <button type="button" class="musiki-pod-btn" data-whiteboard-action="undo" title="Deshacer">↩</button>
+             <button type="button" class="musiki-pod-btn" data-whiteboard-action="redo" title="Rehacer">↪</button>
+           </div>
+           <div class="whiteboard-divider"></div>
+           <div class="whiteboard-group">
+             <button type="button" class="musiki-pod-btn" data-whiteboard-action="prev-still" title="Still Anterior">◀</button>
+             <span class="whiteboard-still-counter" data-whiteboard-still-label style="font-size:0.6rem; color:var(--conference-muted); min-width:1.5rem; text-align:center">1/1</span>
+             <button type="button" class="musiki-pod-btn" data-whiteboard-action="next-still" title="Siguiente Still (copia)">▶</button>
+           </div>
+           <div class="whiteboard-divider"></div>
+           <div class="whiteboard-group">
+             <button type="button" class="musiki-pod-btn" data-whiteboard-action="export-recursos" title="Exportar stills a RECURSOS" style="color:var(--conference-green)">📦</button>
+           </div>
+           <div class="whiteboard-divider"></div>
            <div class="whiteboard-group whiteboard-colors">
               <button type="button" class="color-dot" style="background:#ffffff" data-whiteboard-color="#ffffff" data-active="true"></button>
               <button type="button" class="color-dot" style="background:#ff4d4d" data-whiteboard-color="#ff4d4d"></button>

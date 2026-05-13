@@ -383,6 +383,14 @@ if (
           >Fr</button
         >
 
+        <button
+          type="button"
+          class="conference-layout-button"
+          data-action="snapshots-toggle"
+          data-tooltip="Snapshots de la sala"
+          >SN</button
+        >
+
         <div class="conference-break-rooms-shell" data-break-rooms-shell hidden>
           <button
             type="button"
@@ -546,6 +554,18 @@ if (
       <ul class="conference-break-rooms-list" data-break-rooms-list></ul>
     </div>
   </footer>
+
+  <div class="conference-snapshots-modal" data-snapshots-modal hidden>
+    <div class="snapshots-modal-inner">
+      <div class="snapshots-modal-header">
+        <h2 style="font-size: 1.1rem; font-weight: 800; letter-spacing: 0.1em;">SNAPSHOTS DE LA SALA</h2>
+        <button type="button" class="musiki-pod-btn" data-action="close-snapshots" style="min-width: 2rem; height: 2rem;">X</button>
+      </div>
+      <div class="snapshot-list" data-snapshot-list-student style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.65rem; max-height: 60vh; overflow-y: auto;">
+        {/* Snapshots will be injected here */}
+      </div>
+    </div>
+  </div>
 
   <template data-template="participant-card">
     <article class="conference-tile conference-tile--participant">
@@ -1076,6 +1096,68 @@ if (
    *      These are clearly marked; avoid adding new !important uses.
    */
 
+  .conference-snapshots-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  .conference-snapshots-modal[hidden] {
+    display: none;
+  }
+  .snapshots-modal-inner {
+    max-width: 500px;
+    width: 100%;
+    background: rgba(12, 14, 18, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.6rem;
+    padding: 1.5rem;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  }
+  .snapshots-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  :global(.snapshot-item) {
+    padding: 0.8rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.1s ease;
+  }
+  :global(.snapshot-item:hover) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  :global(.snapshot-item-header) {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+  }
+  :global(.snapshot-name) {
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #fff;
+  }
+  :global(.snapshot-date) {
+    font-size: 0.65rem;
+    color: var(--conference-muted);
+  }
+  :global(.snapshot-meta) {
+    font-size: 0.65rem;
+    color: var(--conference-dim);
+  }
+
   :global(body.room-page) {
     margin: 0;
     background: #000;
@@ -1144,6 +1226,10 @@ if (
     color: var(--conference-fg);
     overflow: hidden;
     padding-bottom: var(--conference-bar-stack-height);
+  }
+
+  .conference-shell[data-role="student"] [data-teacher-only] {
+    display: none !important;
   }
 
   .conference-shell[data-has-sidebar="false"] {
