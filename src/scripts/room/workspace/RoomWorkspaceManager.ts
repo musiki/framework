@@ -1862,6 +1862,34 @@ style.textContent = `
     border: none !important;
   }
 
+  /* Pizarra Overlay (Stigmergia) */
+  .musiki-pod[data-pod="whiteboard"][data-overlay-active="true"] {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 10000 !important;
+    background: transparent !important;
+    pointer-events: none;
+  }
+  .musiki-pod[data-pod="whiteboard"][data-overlay-active="true"] .conference-stage-panel--whiteboard {
+    background: transparent !important;
+  }
+  .musiki-pod[data-pod="whiteboard"][data-overlay-active="true"] .conference-whiteboard-container {
+    background: transparent !important;
+  }
+  .musiki-pod[data-pod="whiteboard"][data-overlay-active="true"] .whiteboard-canvas-shell {
+    pointer-events: auto;
+  }
+  .musiki-pod[data-pod="whiteboard"][data-overlay-active="true"] .musiki-pod-toolbar {
+    pointer-events: auto;
+    background: rgba(0,0,0,0.4) !important;
+    backdrop-filter: blur(8px);
+    width: fit-content;
+    border-radius: 0 0 8px 0;
+  }
+  .musiki-pod[data-pod="whiteboard"][data-overlay-active="true"] .pod-diy-header {
+    display: none !important;
+  }
+
   .pod-picker-menu {
     position: fixed;
     background: #111;

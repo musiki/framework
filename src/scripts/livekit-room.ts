@@ -10888,6 +10888,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     clonedElement.querySelector('[data-whiteboard-action="undo"]')?.addEventListener('click', () => wb.undo());
     clonedElement.querySelector('[data-whiteboard-action="redo"]')?.addEventListener('click', () => wb.redo());
+    
+    clonedElement.querySelector('[data-whiteboard-action="overlay-toggle"]')?.addEventListener('click', () => {
+      const shell = clonedElement.closest('.musiki-pod') as HTMLElement;
+      if (!shell) return;
+      const isActive = shell.dataset.overlayActive === 'true';
+      shell.dataset.overlayActive = isActive ? 'false' : 'true';
+      // Trigger a resize after a small delay to allow CSS to apply
+      window.setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 50);
+    });
+
     clonedElement.querySelector('[data-whiteboard-action="prev-still"]')?.addEventListener('click', () => wb.prevStill());
     clonedElement.querySelector('[data-whiteboard-action="next-still"]')?.addEventListener('click', () => wb.nextStill());
 

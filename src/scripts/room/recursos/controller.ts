@@ -146,6 +146,7 @@ export class RecursosController {
     const roomName = this.getRoomName() ?? '';
     if (!roomName) return;
     try {
+      // Fetch latest session for the room
       const resp = await fetch(`/api/live/session?roomName=${encodeURIComponent(roomName)}`);
       if (resp.ok) {
         const { session } = await resp.json();
