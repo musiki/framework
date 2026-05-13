@@ -169,6 +169,7 @@ export const normalizeParticipantAppearance = (value: unknown): ParticipantAppea
 class ParticipantAppearanceStore {
   private appearances = new Map<string, ParticipantAppearance>();
   private listeners = new Map<string, Set<(appearance: ParticipantAppearance | null) => void>>();
+  private allListeners = new Set<() => void>();
 
   get(userId: string) {
     return this.appearances.get(normalizeText(userId)) ?? null;
@@ -189,6 +190,7 @@ class ParticipantAppearanceStore {
 
     this.appearances.set(normalized.userId, normalized);
     this.emit(normalized.userId);
+    this.allListeners.forEach((listener) => listener());
     return true;
   }
 
@@ -211,6 +213,13 @@ class ParticipantAppearanceStore {
       const current = this.listeners.get(normalizedUserId);
       current?.delete(listener);
       if (current && current.size === 0) this.listeners.delete(normalizedUserId);
+    };
+  }
+
+  subscribeAll(listener: () => void) {
+    this.allListeners.add(listener);
+    return () => {
+      this.allListeners.delete(listener);
     };
   }
 

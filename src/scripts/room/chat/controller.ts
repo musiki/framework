@@ -1,5 +1,6 @@
 import { normalizeText } from '../core/normalize';
 import type { ConferenceMessage, ParticipantRole } from '../session';
+import { participantAppearanceStore } from '../participants/appearance';
 
 type ChatMessage = Extract<ConferenceMessage, { type: 'chat' }>;
 
@@ -38,6 +39,7 @@ export type RoomChatController = {
   resetUnread: () => void;
   sendMessage: () => Promise<void>;
   syncControlState: () => void;
+  dispose: () => void;
 };
 
 const getFirstName = (value: string) =>
@@ -55,33 +57,10 @@ const CHAT_EMOTICON_MAP: Record<string, { glyph: string; label: string }> = {
   ':(': { glyph: '☹︎', label: 'triste' },
   ':>': { glyph: '☻', label: 'sonrisa lateral' },
 };
-const CHAT_COLORS = [
-  '#00f5ff',
-  '#39ff14',
-  '#ff6ec7',
-  '#ff9d00',
-  '#ffe600',
-  '#c264ff',
-  '#4da8ff',
-  '#ff4f4f',
-  '#ccff00',
-  '#00ffcc',
-  '#ee00cc',
-  '#ffb300',
-] as const;
-
 const isLikelyImageUrl = (value: string) =>
   DIRECT_IMAGE_URL_REGEX.test(value) || KNOWN_IMAGE_HOST_REGEX.test(value);
 const isLikelyAudioUrl = (value: string) => DIRECT_AUDIO_URL_REGEX.test(value);
 const isLikelyVideoUrl = (value: string) => DIRECT_VIDEO_URL_REGEX.test(value);
-
-const chatUserColor = (identity: string): string => {
-  let hash = 0;
-  for (let index = 0; index < identity.length; index += 1) {
-    hash = (hash * 31 + identity.charCodeAt(index)) >>> 0;
-  }
-  return CHAT_COLORS[hash % CHAT_COLORS.length];
-};
 
 const appendConferenceTextNode = (container: HTMLElement, text: string) => {
   if (!text) return;
@@ -317,6 +296,7 @@ export const createRoomChatController = ({
   let currentChatUnreadDot = chatUnreadDot;
   const boundInputs = new WeakSet<HTMLInputElement | HTMLTextAreaElement>();
   const boundButtons = new WeakSet<HTMLButtonElement>();
+  let unsubscribeAppearance: (() => void) | null = null;
 
   const syncUnreadDot = () => {
     if (!(currentChatUnreadDot instanceof HTMLElement)) return;
@@ -359,7 +339,11 @@ export const createRoomChatController = ({
       const sender = document.createElement('span');
       sender.className = 'conference-chat-author';
       sender.textContent = getFirstName(message.name);
-      sender.style.color = chatUserColor(message.identity);
+
+      const appearance = participantAppearanceStore.get(message.identity);
+      if (appearance) {
+        sender.style.color = appearance.color.stroke;
+      }
 
       const separator = document.createElement('span');
       separator.className = 'conference-chat-header-separator';
@@ -524,6 +508,12 @@ export const createRoomChatController = ({
   };
 
   const bind = () => {
+    if (!unsubscribeAppearance) {
+      unsubscribeAppearance = participantAppearanceStore.subscribeAll(() => {
+        renderChat();
+      });
+    }
+
     if (currentChatFocusButton instanceof HTMLButtonElement && !boundButtons.has(currentChatFocusButton)) {
       boundButtons.add(currentChatFocusButton);
       currentChatFocusButton.addEventListener('click', () => {
@@ -581,6 +571,13 @@ export const createRoomChatController = ({
     syncControlState();
   };
 
+  const dispose = () => {
+    if (unsubscribeAppearance) {
+      unsubscribeAppearance();
+      unsubscribeAppearance = null;
+    }
+  };
+
   syncControlState();
 
   return {
@@ -592,5 +589,6 @@ export const createRoomChatController = ({
     resetUnread,
     sendMessage,
     syncControlState,
+    dispose,
   };
 };

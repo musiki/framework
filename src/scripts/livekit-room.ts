@@ -15976,6 +15976,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     gravityBallRenderer?.destroy();
     void fmSynth.destroy();
     micMeterController.teardown();
+    chatController.dispose();
     applyImmersiveFullscreenState(false);
     stopRecording();
     stopTestMode();

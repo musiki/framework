@@ -951,19 +951,13 @@
 
 @media (max-width: 1080px) {
   .conference-stage-frame {
-    height: calc(
-      100vh - var(--conference-sidebar-size) - var(--conference-bar-height)
-    );
-    height: calc(
-      100dvh - var(--conference-sidebar-size) - var(--conference-bar-height)
-    );
+    height: 100%;
   }
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
   .conference-stage-frame {
-    height: calc(100vh - var(--conference-bar-height));
-    height: calc(100dvh - var(--conference-bar-height));
+    height: 100%;
   }
 
   .conference-stage[data-layout="presentation"] .conference-stage-panel--focus {
