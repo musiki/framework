@@ -64,3 +64,10 @@ export function getR2PublicObjectUrl(rawKey: string): string {
     .map((segment) => encodeURIComponent(segment))
     .join('/')}`;
 }
+
+export function extractR2KeyFromUrl(url: string): string | null {
+  const publicBaseUrl = getR2PublicBaseUrl();
+  if (!publicBaseUrl || !url.startsWith(publicBaseUrl)) return null;
+  const path = url.slice(publicBaseUrl.length).replace(/^\/+/, '');
+  return decodeURIComponent(path);
+}

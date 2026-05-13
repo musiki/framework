@@ -9,6 +9,7 @@ const VIRTUAL_TREE_DEPTH = 3;
 const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
 const ALLOWED_UPLOAD_EXTS = new Set([
   'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg',
+  'pptx',
   'md', 'tex', 'ly', 'txt',
   'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac',
   'mov', 'mp4', 'webm',
@@ -53,6 +54,7 @@ function guessFileExt(file: File): string {
 
 function guessContentType(ext: string): string {
   if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'pptx') return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
   if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
   if (ext === 'svg') return 'image/svg+xml';
   const audioTypes: Record<string, string> = {
@@ -78,6 +80,15 @@ function safeKeySegment(value: unknown, fallback = 'file'): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 72)
     || fallback;
+}
+
+function normalizeFolderName(value: unknown): string {
+  return normalizeText(value)
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((segment) => safeKeySegment(segment, ''))
+    .filter(Boolean)
+    .join('/');
 }
 
 function buildUploadKey(prefix: string, file: File, identity: string): string {
@@ -119,6 +130,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
         .filter(Boolean),
       objects: (result.Contents || [])
         .filter((entry) => normalizeText(entry.Key) && normalizeText(entry.Key) !== prefix)
+        .filter((entry) => !normalizeText(entry.Key).endsWith('/.keep'))
         .map((entry) => {
           const key = normalizeText(entry.Key);
           return {
@@ -147,6 +159,40 @@ export const POST: APIRoute = async ({ locals, request }) => {
   const session = (locals as any).session;
   const user = await ensureDbUserFromSession(session);
   if (!user) return json({ error: 'Not authenticated' }, 401);
+
+  const contentType = request.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const body = await request.json().catch(() => ({}));
+    const courseId = cleanString(body?.courseId ?? '', 120);
+    const access = await resolveLiveManageAccess(session, courseId);
+    if (!access.canManage) return json({ error: 'Forbidden' }, 403);
+
+    if (normalizeText(body?.action) !== 'create-folder') {
+      return json({ error: 'Unsupported R2 action.' }, 400);
+    }
+
+    const prefix = capPrefixDepth(normalizePrefix(body?.prefix ?? 'room/') || 'room/');
+    const folderName = normalizeFolderName(body?.folderName);
+    if (!folderName) return json({ error: 'Folder name required.' }, 400);
+
+    const key = `${prefix}${folderName}/.keep`;
+    try {
+      await getR2Client().send(new PutObjectCommand({
+        Bucket: getR2BucketName(),
+        Key: key,
+        Body: new Uint8Array(),
+        ContentType: 'application/octet-stream',
+        CacheControl: 'no-cache',
+      }));
+      return json({ ok: true, prefix, folder: `${prefix}${folderName}/`, key });
+    } catch (error: any) {
+      console.error('[recursos-r2] create folder failed', error);
+      if (String(error?.message || '').includes('R2_NOT_CONFIGURED')) {
+        return json({ error: 'R2 not configured.' }, 503);
+      }
+      return json({ error: error?.message || 'Could not create R2 folder.' }, 500);
+    }
+  }
 
   const form = await request.formData().catch(() => null);
   if (!form) return json({ error: 'Invalid upload payload.' }, 400);

@@ -7,6 +7,7 @@ const MAX_BYTES = 256 * 1024 * 1024;
 
 const ALLOWED_EXTS = new Set([
   'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg',
+  'pptx',
   'md', 'tex', 'ly', 'txt',
   'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac',
   'mov', 'mp4', 'webm',
@@ -20,6 +21,7 @@ function guessExt(file: File): string {
 
 function guessType(ext: string): string {
   if (['pdf'].includes(ext)) return 'application/pdf';
+  if (ext === 'pptx') return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
   if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'image/' + (ext === 'jpg' ? 'jpeg' : ext);
   if (ext === 'svg') return 'image/svg+xml';
   const AUDIO_TYPES: Record<string, string> = {

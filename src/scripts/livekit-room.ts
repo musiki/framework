@@ -10673,7 +10673,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     visual: null as {
       url: string | null;
       name: string;
-      kind: 'pdf' | 'img' | 'video' | null;
+      kind: 'pdf' | 'img' | 'video' | 'pptx' | null;
       page: number;
       zoomMode: 'fit' | 'width' | 'actual' | 'custom';
       zoom: number;
@@ -10945,7 +10945,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             const { url } = await resp.json();
             // We use a custom event to notify RecursosController to add the file
             window.dispatchEvent(new CustomEvent('musiki:recursos:external-media', {
-              detail: { url, name: fileName, folder: folderName }
+              detail: { url, name: fileName, folder: folderName, source: 'upload' }
             }));
           }
         }

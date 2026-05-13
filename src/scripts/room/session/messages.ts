@@ -277,7 +277,7 @@ export type ConferenceMessage =
       type: 'vs-state';
       url: string | null;
       name: string;
-      kind: 'pdf' | 'img' | 'video' | null;
+      kind: 'pdf' | 'img' | 'video' | 'pptx' | null;
       page: number;
       zoomMode: 'fit' | 'width' | 'actual' | 'custom';
       zoom: number;
@@ -833,7 +833,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         type: 'vs-state',
         url: url || null,
         name: normalizeText((parsed as { name?: string }).name) || 'document',
-        kind: rawKind === 'pdf' || rawKind === 'img' || rawKind === 'video' ? rawKind : null,
+        kind: rawKind === 'pdf' || rawKind === 'img' || rawKind === 'video' || rawKind === 'pptx' ? rawKind : null,
         page: Math.max(1, Math.round(Number((parsed as { page?: number }).page) || 1)),
         zoomMode,
         zoom: Math.min(400, Math.max(25, Math.round(Number((parsed as { zoom?: number }).zoom) || 100))),

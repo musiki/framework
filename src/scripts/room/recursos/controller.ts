@@ -236,8 +236,8 @@ export class RecursosController {
       });
     });
     window.addEventListener('musiki:recursos:external-media', (e: Event) => {
-      const { url, name, folder } = (e as CustomEvent<{ url: string; name: string; folder?: string }>).detail;
-      void this.addCompartido(url, name || quickNameFromUrl(url), 'external-media', folder);
+      const { url, name, folder, source } = (e as CustomEvent<{ url: string; name: string; folder?: string; source?: ResourceItem['source'] }>).detail;
+      void this.addCompartido(url, name || quickNameFromUrl(url), source || 'external-media', folder);
     });
 
     this.foldBtn.addEventListener('click', () => this.toggleFoldAll());
@@ -828,13 +828,13 @@ export class RecursosController {
 
   private isVisualMedia(item: ResourceItem): boolean {
     const inferred = typeFromUrl(item.url);
-    return item.type === 'pdf' || item.type === 'img' || item.type === 'video'
-      || inferred === 'pdf' || inferred === 'img' || inferred === 'video';
+    return item.type === 'pdf' || item.type === 'pptx' || item.type === 'img' || item.type === 'video'
+      || inferred === 'pdf' || inferred === 'pptx' || inferred === 'img' || inferred === 'video';
   }
 
   private defaultFolderForType(type: ResourceType | 'other'): string {
     if (type === 'audio') return 'media';
-    if (type === 'pdf' || type === 'img' || type === 'video') return 'DOC';
+    if (type === 'pdf' || type === 'pptx' || type === 'img' || type === 'video') return 'DOC';
     return '';
   }
 
@@ -904,12 +904,52 @@ export class RecursosController {
 
   // ── Delete / move ──────────────────────────────────────────────────────────────
 
-  private deleteCtxTarget() {
-    const item = this.ctxTargetItem; const folder = this.ctxTargetFolder;
+  private async deleteCtxTarget() {
+    if (!this.isTeacher) return;
+    const item = this.ctxTargetItem;
+    const folder = this.ctxTargetFolder;
     this.closeCtxMenu();
-    if (item) this.items = removeItem(this.items, item.id);
-    else if (folder) { this.items = this.items.map(i => i.folder === folder ? { ...i, folder: '' } : i); this.emptyFolders.delete(folder); }
-    this.render(); this.scheduleAutosave(); this.broadcastSync();
+
+    const courseId = this.getCourseId();
+    const roomName = this.getRoomName();
+    if (!courseId || !roomName) return;
+
+    if (item) {
+      if (!confirm(`¿Eliminar físicamente "${item.name}"?`)) return;
+      
+      try {
+        const resp = await fetch(`/api/live/recursos/editor?id=${item.id}&courseId=${courseId}`, {
+          method: 'DELETE'
+        });
+        if (resp.ok) {
+          this.items = removeItem(this.items, item.id);
+          this.render(); this.broadcastSync();
+        } else {
+          const err = await resp.json();
+          alert(`Error al borrar: ${err.error}`);
+        }
+      } catch (e) {
+        console.error('[Re] delete failed', e);
+      }
+    } else if (folder) {
+      if (!confirm(`¿Eliminar la carpeta "${folder}" y TODO su contenido físicamente?`)) return;
+
+      try {
+        const resp = await fetch(`/api/live/recursos/editor?folder=${encodeURIComponent(folder)}&roomName=${encodeURIComponent(roomName)}&courseId=${courseId}`, {
+          method: 'DELETE'
+        });
+        if (resp.ok) {
+          this.items = this.items.filter(i => i.folder !== folder);
+          this.emptyFolders.delete(folder);
+          this.render(); this.broadcastSync();
+        } else {
+          const err = await resp.json();
+          alert(`Error al borrar carpeta: ${err.error}`);
+        }
+      } catch (e) {
+        console.error('[Re] folder delete failed', e);
+      }
+    }
   }
 
   private showMoveSubmenu() {

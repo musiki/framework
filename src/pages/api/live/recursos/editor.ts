@@ -5,6 +5,8 @@ import { persistRecursosMarkdownProjection } from '../../../../lib/live/recursos
 import { resolveLiveManageAccess } from '../../../../lib/live/access';
 import { typeFromUrl } from '../../../../scripts/room/recursos/metadata';
 import { normalizeDbResourceSource, normalizeDbResourceType } from '../../../../lib/live/resource-db-enums';
+import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { extractR2KeyFromUrl, getR2BucketName, getR2Client } from '../../../../lib/r2';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 
@@ -273,41 +275,92 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   const user = await ensureDbUserFromSession(session);
   if (!user) return json({ error: 'Not authenticated' }, 401);
 
-  const url = new URL(request.url);
-  const courseId = cleanString(url.searchParams.get('courseId') ?? '', 120);
+  const urlObj = new URL(request.url);
+  const courseId = cleanString(urlObj.searchParams.get('courseId') ?? '', 120);
   if (!(await requireCourseManager(session, courseId))) return json({ error: 'Forbidden' }, 403);
 
-  const id = cleanString(url.searchParams.get('id') ?? '', 80);
-  if (!id) return json({ error: 'id required' }, 400);
+  const id = cleanString(urlObj.searchParams.get('id') ?? '', 80);
+  const folder = cleanString(urlObj.searchParams.get('folder') ?? '', 120);
+  const roomName = cleanString(urlObj.searchParams.get('roomName') ?? '', 120);
 
-  const existing = await query<any>(
-    `SELECT ${selectColumns} FROM "LiveClassResource" WHERE id = $1 LIMIT 1`,
-    [id],
-  );
-  if (existing.error) return json({ error: existing.error.message }, 500);
-  const current = existing.data?.[0];
-  if (!current) return json({ error: 'Not found' }, 404);
-  if (!resourceBelongsToCourse(current, courseId)) {
-    return json({ error: 'Resource is outside this course' }, 403);
+  if (!id && !folder) return json({ error: 'id or folder required' }, 400);
+
+  let deletedItems: any[] = [];
+  let affectedRoomName = roomName;
+  let affectedClaseId: string | null = null;
+
+  try {
+    if (id) {
+      // Single item deletion
+      const existing = await query<any>(
+        `SELECT ${selectColumns} FROM "LiveClassResource" WHERE id = $1 LIMIT 1`,
+        [id],
+      );
+      if (existing.error) throw existing.error;
+      const current = existing.data?.[0];
+      if (!current) return json({ error: 'Not found' }, 404);
+      if (!resourceBelongsToCourse(current, courseId)) return json({ error: 'Forbidden' }, 403);
+
+      affectedRoomName = current.roomName;
+      affectedClaseId = current.claseId;
+
+      await deletePhysicalResource(current);
+      const del = await query(`DELETE FROM "LiveClassResource" WHERE id = $1`, [id]);
+      if (del.error) throw del.error;
+      deletedItems = [current];
+    } else if (folder && roomName) {
+      // Folder deletion
+      const existing = await query<any>(
+        `SELECT ${selectColumns} FROM "LiveClassResource" WHERE "roomName" = $1 AND folder = $2`,
+        [roomName, folder],
+      );
+      if (existing.error) throw existing.error;
+      const items = existing.data ?? [];
+
+      for (const item of items) {
+        if (!resourceBelongsToCourse(item, courseId)) continue;
+        await deletePhysicalResource(item);
+      }
+
+      const del = await query(
+        `DELETE FROM "LiveClassResource" WHERE "roomName" = $1 AND folder = $2`,
+        [roomName, folder],
+      );
+      if (del.error) throw del.error;
+      deletedItems = items;
+      affectedRoomName = roomName;
+    }
+
+    // Persist projection to Markdown
+    if (affectedRoomName) {
+      await persistGroupProjection(courseId, affectedRoomName, affectedClaseId).catch((error) => {
+        console.error('[recursos-editor] projection failed during delete', error);
+      });
+    }
+
+    return json({ ok: true, deletedCount: deletedItems.length });
+  } catch (error: any) {
+    console.error('[recursos-editor] DELETE failed', error);
+    return json({ error: error.message || 'Internal server error' }, 500);
   }
-
-  const del = await query<any>(
-    `DELETE FROM "LiveClassResource" WHERE id = $1 RETURNING ${selectColumns}`,
-    [id],
-  );
-  if (del.error) return json({ error: del.error.message }, 500);
-  const deleted = del.data?.[0];
-  if (!deleted) return json({ error: 'Not found' }, 404);
-
-  const deletedClaseId = normalizeText(deleted.claseId);
-  const projection = await persistGroupProjection(
-    courseId,
-    normalizeText(deleted.roomName),
-    deletedClaseId || null,
-  ).catch((error) => {
-    console.error('[recursos-editor] projection failed', error);
-    return null;
-  });
-
-  return json({ deleted, projection });
 };
+
+async function deletePhysicalResource(item: any) {
+  if (!item || !item.url) return;
+
+  // We only delete if it's an R2 URL belonging to our public base
+  const key = extractR2KeyFromUrl(item.url);
+  if (!key) return;
+
+  try {
+    const client = getR2Client();
+    await client.send(new DeleteObjectCommand({
+      Bucket: getR2BucketName(),
+      Key: key,
+    }));
+    console.log(`[recursos] physical delete success: ${key}`);
+  } catch (e) {
+    console.error(`[recursos] physical delete failed for ${key}`, e);
+    // We don't block the whole operation if R2 delete fails
+  }
+}

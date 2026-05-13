@@ -45,6 +45,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
           <div class="recursos-r2-toolbar">
             <input data-r2-prefix value="room/" spellcheck="false" />
             <button type="button" class="recursos-editor-btn" data-r2-load>Listar</button>
+            <button type="button" class="recursos-editor-btn" data-r2-new-folder>Nueva carpeta</button>
           </div>
           <div class="recursos-r2-upload" data-r2-dropzone>
             <input type="file" data-r2-file-input multiple hidden />
@@ -808,6 +809,14 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
     const parts = String(path || 'room/').split('/').filter(Boolean);
     return parts.length ? `${parts.join('/')}/` : 'room/';
   };
+  const normalizeFolderName = (value) => String(value || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((part) => part.trim().toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, ''))
+    .filter(Boolean)
+    .join('/');
   const ancestorPrefixes = (path) => {
     const parts = normalizePrefix(path).split('/').filter(Boolean);
     const result = [];
@@ -820,6 +829,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
   function typeFromUrl(url) {
     const ext = String(url || '').split('?')[0].split('.').pop()?.toLowerCase() || '';
     if (ext === 'pdf') return 'pdf';
+    if (ext === 'pptx') return 'pptx';
     if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'img';
     if (['mov', 'mp4', 'webm'].includes(ext)) return 'video';
     if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) return 'audio';
@@ -838,6 +848,10 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
     }
     if (type === 'pdf') {
       return `<div class="recursos-r2-preview recursos-r2-preview--pdf"><iframe src="${esc(url)}#page=1&toolbar=0&navpanes=0&scrollbar=0" title="${esc(name)}" loading="lazy"></iframe></div>`;
+    }
+    if (type === 'pptx') {
+      const embedUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+      return `<div class="recursos-r2-preview recursos-r2-preview--pdf"><iframe src="${esc(embedUrl)}" title="${esc(name)}" loading="lazy"></iframe></div>`;
     }
     if (type === 'video') {
       return `<div class="recursos-r2-preview recursos-r2-preview--video"><video src="${esc(url)}" muted playsinline preload="metadata"></video></div>`;
@@ -1029,6 +1043,34 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         const message = error?.message || String(error);
         setStatus(message);
         setR2UploadStatus(message);
+      }
+    };
+
+    const createR2Folder = async () => {
+      if (!(r2PrefixInput instanceof HTMLInputElement)) return;
+      const rawName = prompt('Nombre de carpeta');
+      if (!rawName) return;
+      const folderName = normalizeFolderName(rawName);
+      if (!folderName) {
+        setStatus('Nombre de carpeta inválido');
+        return;
+      }
+      try {
+        setStatus(`Creando carpeta ${folderName}...`);
+        await requestJson('/api/live/recursos/r2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId,
+            action: 'create-folder',
+            prefix: r2PrefixInput.value || 'room/',
+            folderName,
+          }),
+        });
+        setStatus('Carpeta creada');
+        await loadR2();
+      } catch (error) {
+        setStatus(error?.message || String(error));
       }
     };
 
@@ -1303,20 +1345,31 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
     });
 
     r2ExplorerEl?.addEventListener('click', async (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (target.matches('[data-r2-bulk-delete]')) {
+      const target = event.target instanceof HTMLElement
+        ? event.target
+        : event.target instanceof Node
+          ? event.target.parentElement
+          : null;
+      if (!target) return;
+      const bulkDeleteButton = target.closest('[data-r2-bulk-delete]');
+      if (bulkDeleteButton instanceof HTMLButtonElement) {
         const keys = getSelectedR2Keys();
         if (!keys.length) return;
         if (!confirm(`Borrar ${keys.length} archivos de R2?`)) return;
         setStatus(`Borrando ${keys.length} archivos R2...`);
-        await requestJson('/api/live/recursos/r2', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId, keys }),
-        });
-        setStatus(`${keys.length} archivos R2 borrados`);
-        await loadR2();
+        bulkDeleteButton.disabled = true;
+        try {
+          const payload = await requestJson('/api/live/recursos/r2', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courseId, keys }),
+          });
+          setStatus(`${payload.deleted || keys.length} archivos R2 borrados`);
+          await loadR2();
+        } catch (error) {
+          setStatus(error?.message || String(error));
+          updateR2SelectionControls();
+        }
         return;
       }
       const row = target.closest('[data-url]');
@@ -1345,7 +1398,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         if (attachName instanceof HTMLInputElement) attachName.value = name;
         if (attachFolder instanceof HTMLInputElement && !attachFolder.value) {
           const type = typeFromUrl(url);
-          attachFolder.value = type === 'audio' ? 'media' : (type === 'pdf' || type === 'img' || type === 'video' ? 'DOC' : '');
+          attachFolder.value = type === 'audio' ? 'media' : (type === 'pdf' || type === 'pptx' || type === 'img' || type === 'video' ? 'DOC' : '');
         }
         setStatus('URL preparada para vincular');
       }
@@ -1410,6 +1463,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 
     root.querySelector('[data-recursos-refresh]')?.addEventListener('click', () => loadResources());
     root.querySelector('[data-r2-load]')?.addEventListener('click', () => loadR2());
+    root.querySelector('[data-r2-new-folder]')?.addEventListener('click', () => void createR2Folder());
     r2UploadButton?.addEventListener('click', () => {
       if (r2FileInput instanceof HTMLInputElement) r2FileInput.click();
     });

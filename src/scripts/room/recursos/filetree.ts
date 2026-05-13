@@ -15,6 +15,7 @@ export type ResourceItem = {
 
 const TYPE_ICON: Record<string, { char: string; color: string }> = {
   pdf:   { char: '■', color: '#e06666' },
+  pptx:  { char: '▣', color: '#f6b26b' },
   img:   { char: '▪', color: '#76d3ff' },
   md:    { char: '■', color: '#45d384' },
   tex:   { char: '■', color: '#f6b26b' },

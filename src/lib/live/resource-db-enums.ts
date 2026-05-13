@@ -1,7 +1,7 @@
 import { query } from '../db/pool';
 
-const FALLBACK_RESOURCE_TYPES = new Set(['pdf', 'img', 'md', 'tex', 'ly', 'audio', 'link', 'other']);
-const FALLBACK_RESOURCE_SOURCES = new Set(['upload', 'chat', 'external-media', 'sa', 'sv', 'paste']);
+const FALLBACK_RESOURCE_TYPES = new Set<string>(['pdf', 'pptx', 'img', 'md', 'tex', 'ly', 'audio', 'video', 'link', 'other']);
+const FALLBACK_RESOURCE_SOURCES = new Set<string>(['upload', 'chat', 'external-media', 'sa', 'sv', 'paste']);
 
 const enumCache = new Map<string, { labels: Set<string>; loadedAt: number }>();
 const ENUM_CACHE_TTL_MS = 60_000;
@@ -19,9 +19,9 @@ async function getEnumLabels(typeName: string, fallback: Set<string>): Promise<S
     [typeName],
   );
 
-  const labels = result.error || !result.data?.length
-    ? new Set(fallback)
-    : new Set(result.data.map((row) => String(row.enumlabel || '').trim()).filter(Boolean));
+  const labels: Set<string> = result.error || !result.data?.length
+    ? new Set<string>(fallback)
+    : new Set<string>(result.data.map((row) => String(row.enumlabel || '').trim()).filter(Boolean));
 
   enumCache.set(typeName, { labels, loadedAt: Date.now() });
   return labels;

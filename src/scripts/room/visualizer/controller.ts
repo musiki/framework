@@ -1,6 +1,6 @@
 import type { ConferenceMessage } from '../session';
 
-export type VisualKind = 'pdf' | 'img' | 'video';
+export type VisualKind = 'pdf' | 'img' | 'video' | 'pptx';
 export type VisualZoomMode = 'fit' | 'width' | 'actual' | 'custom';
 
 export type VisualizerState = {
@@ -19,6 +19,7 @@ export type VisualizerOptions = {
 
 const ACCEPTED_TYPES = [
   'application/pdf',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'image/png',
   'image/jpeg',
   'image/gif',
@@ -29,7 +30,7 @@ const ACCEPTED_TYPES = [
   'video/webm',
 ];
 
-const ACCEPTED_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.mov', '.mp4', '.webm'];
+const ACCEPTED_EXTS = ['.pdf', '.pptx', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.mov', '.mp4', '.webm'];
 
 const emptyState = (): VisualizerState => ({
   url: null,
@@ -46,6 +47,7 @@ const extFromName = (value: string): string =>
 const kindFromUrl = (url: string): VisualKind | null => {
   const ext = extFromName(url);
   if (ext === '.pdf') return 'pdf';
+  if (ext === '.pptx') return 'pptx';
   if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) return 'img';
   if (['.mov', '.mp4', '.webm'].includes(ext)) return 'video';
   return null;
@@ -112,7 +114,9 @@ export class VisualizerController {
 
   public applyRemoteState(next: Partial<VisualizerState>): void {
     const url = typeof next.url === 'string' && next.url ? next.url : null;
-    const kind = next.kind === 'pdf' || next.kind === 'img' || next.kind === 'video' ? next.kind : (url ? kindFromUrl(url) : null);
+    const kind = next.kind === 'pdf' || next.kind === 'img' || next.kind === 'video' || next.kind === 'pptx'
+      ? next.kind
+      : (url ? kindFromUrl(url) : null);
     this.state = {
       url,
       name: typeof next.name === 'string' ? next.name : '',
@@ -279,6 +283,7 @@ export class VisualizerController {
 
     this.emptyEl.hidden = true;
     if (kind === 'pdf') this.renderPdf(url);
+    else if (kind === 'pptx') this.renderPptx(url);
     else if (kind === 'img') this.renderImage(url);
     else this.renderVideo(url);
   }
@@ -288,6 +293,14 @@ export class VisualizerController {
     this.videoEl.hidden = true;
     this.frameEl.hidden = false;
     this.frameEl.src = `${url}${url.includes('#') ? '&' : '#'}page=${this.state.page}&zoom=${this.pdfZoomFragment()}`;
+  }
+
+  private renderPptx(url: string): void {
+    this.imageEl.hidden = true;
+    this.videoEl.hidden = true;
+    this.frameEl.hidden = false;
+    const embedUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+    if (this.frameEl.getAttribute('src') !== embedUrl) this.frameEl.src = embedUrl;
   }
 
   private renderImage(url: string): void {

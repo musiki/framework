@@ -213,7 +213,11 @@
 .vs-pod[data-kind="img"] .vs-page-input,
 .vs-pod[data-kind="video"] [data-vs-prev],
 .vs-pod[data-kind="video"] [data-vs-next],
-.vs-pod[data-kind="video"] .vs-page-input {
+.vs-pod[data-kind="video"] .vs-page-input,
+.vs-pod[data-kind="pptx"] [data-vs-prev],
+.vs-pod[data-kind="pptx"] [data-vs-next],
+.vs-pod[data-kind="pptx"] .vs-page-input,
+.vs-pod[data-kind="pptx"] .vs-fit-btn {
   opacity: 0.35;
   pointer-events: none;
 }
