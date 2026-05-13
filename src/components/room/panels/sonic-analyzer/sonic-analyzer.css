@@ -22,7 +22,7 @@
   display:flex; align-items:center; gap:0.4rem;
   font-size:0.55rem; color:var(--conference-muted,#7f849c);
   letter-spacing:0.08em; padding:0.15rem 0.5rem;
-  border-bottom:1px solid rgba(255,255,255,0.04);
+  border-bottom:none !important;
   flex-shrink:0; text-transform:lowercase; white-space:nowrap; overflow:hidden;
 }
 .sa-file-name { color:#45D384; opacity:0.8; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
@@ -70,7 +70,7 @@
   font-size: 0.45rem; font-weight: 900; letter-spacing: 0.2em;
   text-transform: uppercase; color: #45D384; opacity: 0.4;
   padding: 2px 5px 1px; flex-shrink: 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: none !important;
 }
 .sa-text-inner, .sa-spectrum-inner, .sa-timbre-inner, .sa-lufs-inner {
   flex:1; min-height:0; overflow-y:auto; overflow-x:hidden;

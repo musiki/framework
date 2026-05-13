@@ -1,5 +1,5 @@
-import { DockviewComponent } from 'dockview-core';
-import type { HyperpianoController } from '../hyperpiano/HyperpianoController';
+import { DockviewComponent } from "dockview-core";
+import type { HyperpianoController } from "../hyperpiano/HyperpianoController";
 
 type PodDisposable = { dispose?: () => void } | (() => void) | void;
 
@@ -22,37 +22,191 @@ export class RoomWorkspaceManager {
   private onVisualizerInit?: (element: HTMLElement) => PodDisposable;
   private onRecursosInit?: (element: HTMLElement) => PodDisposable;
   private isApplyingRemoteLayout = false;
-  private currentWorkspaceKey = 'full-win-speaker';
+  private currentWorkspaceKey = "full-win-speaker";
   public hyperpianoController: HyperpianoController | null = null;
   private podControllers = new Map<string, any>();
   private dragOverPanelId: string | null = null;
   private activeDraggingId: string | null = null;
   private savedDragTarget: string | null = null;
-  private savedDragDir = 'right';
+  private savedDragDir = "right";
 
   private POD_TYPES = [
-    { id: 'presentation', title: 'PRESENTACIÓN', icon: 'Pr', atomic: 1, color: '#6FA8DC', cat: 'structured' },
-    { id: 'clase', title: 'CLASE', icon: 'Cl', atomic: 2, color: '#6FA8DC', cat: 'structured' },
-    { id: 'lily-code', title: 'LILYCODE', icon: 'Lc', atomic: 3, color: '#E06666', cat: 'structured' },
-    { id: 'lily-render', title: 'LILY-RENDER', icon: 'Lr', atomic: 4, color: '#F6B26B', cat: 'structured' },
-    { id: 'concept', title: 'CONCEPTOS', icon: 'Co', atomic: 5, color: '#93C47D', cat: 'structured' },
-    { id: 'chat', title: 'CHAT', icon: 'Ch', atomic: 6, color: '#93C47D', cat: 'comm' },
-    { id: 'orf', title: 'ORF', icon: 'Or', atomic: 7, color: '#76D3FF', cat: 'comm' },
-    { id: 'notes', title: 'NOTAS', icon: 'Nt', atomic: 8, color: '#93C47D', cat: 'comm' },
-    { id: 'whiteboard', title: 'PIZARRA', icon: 'Pi', atomic: 9, color: '#76D3FF', cat: 'comm' },
-    { id: 'grid-videos', title: 'GRID', icon: 'Gr', atomic: 10, color: '#B4A7D6', cat: 'presence' },
-    { id: 'roster', title: 'ROSTER', icon: 'Ro', atomic: 11, color: '#B4A7D6', cat: 'presence' },
-    { id: 'teacher', title: 'SPEAKER', icon: 'Sp', atomic: 12, color: '#E06666', cat: 'focus' },
-    { id: 'screen', title: 'SCREEN', icon: 'Sc', atomic: 13, color: '#E06666', cat: 'focus' },
-    { id: 'external-media', title: 'MEDIA', icon: 'Me', atomic: 14, color: '#8E7CC3', cat: 'media' },
-    { id: 'graph', title: 'GRAPH', icon: 'Gr', atomic: 15, color: '#93C47D', cat: 'tools' },
-    { id: 'forum', title: 'FORO', icon: 'Fo', atomic: 16, color: '#93C47D', cat: 'comm' },
-    { id: 'hyperpiano', title: 'HYPERPIANO', icon: 'Hp', atomic: 17, color: '#FFD966', cat: 'tools' },
-    { id: 'instant-score', title: 'SCORE', icon: 'Is', atomic: 18, color: '#F1C232', cat: 'tools' },
-    { id: 'sonic-analyzer',   title: 'SA', icon: 'Sa', atomic: 19, color: '#45D384', cat: 'tools' },
-    { id: 'sonic-visualizer', title: 'SV', icon: 'Sv', atomic: 20, color: '#45D384', cat: 'tools' },
-    { id: 'visualizer', title: 'VS', icon: 'Vs', atomic: 21, color: '#76D3FF', cat: 'tools' },
-    { id: 'recursos', title: 'RECURSOS', icon: 'Re', atomic: 22, color: '#6fa8dc', cat: 'comm' }
+    {
+      id: "presentation",
+      title: "PRESENTACIÓN",
+      icon: "Pr",
+      atomic: 1,
+      color: "#6FA8DC",
+      cat: "structured",
+    },
+    {
+      id: "clase",
+      title: "CLASE",
+      icon: "Cl",
+      atomic: 2,
+      color: "#6FA8DC",
+      cat: "structured",
+    },
+    {
+      id: "lily-code",
+      title: "LILYCODE",
+      icon: "Lc",
+      atomic: 3,
+      color: "#E06666",
+      cat: "structured",
+    },
+    {
+      id: "lily-render",
+      title: "LILY-RENDER",
+      icon: "Lr",
+      atomic: 4,
+      color: "#F6B26B",
+      cat: "structured",
+    },
+    {
+      id: "concept",
+      title: "CONCEPTOS",
+      icon: "Co",
+      atomic: 5,
+      color: "#93C47D",
+      cat: "structured",
+    },
+    {
+      id: "chat",
+      title: "CHAT",
+      icon: "Ch",
+      atomic: 6,
+      color: "#93C47D",
+      cat: "comm",
+    },
+    {
+      id: "orf",
+      title: "ORF",
+      icon: "Or",
+      atomic: 7,
+      color: "#76D3FF",
+      cat: "comm",
+    },
+    {
+      id: "notes",
+      title: "NOTAS",
+      icon: "Nt",
+      atomic: 8,
+      color: "#93C47D",
+      cat: "comm",
+    },
+    {
+      id: "whiteboard",
+      title: "PIZARRA",
+      icon: "Pi",
+      atomic: 9,
+      color: "#76D3FF",
+      cat: "comm",
+    },
+    {
+      id: "grid-videos",
+      title: "GRID",
+      icon: "Gr",
+      atomic: 10,
+      color: "#B4A7D6",
+      cat: "presence",
+    },
+    {
+      id: "roster",
+      title: "ROSTER",
+      icon: "Ro",
+      atomic: 11,
+      color: "#B4A7D6",
+      cat: "presence",
+    },
+    {
+      id: "teacher",
+      title: "SPEAKER",
+      icon: "Sp",
+      atomic: 12,
+      color: "#E06666",
+      cat: "focus",
+    },
+    {
+      id: "screen",
+      title: "SCREEN",
+      icon: "Sc",
+      atomic: 13,
+      color: "#E06666",
+      cat: "focus",
+    },
+    {
+      id: "external-media",
+      title: "MEDIA",
+      icon: "Me",
+      atomic: 14,
+      color: "#8E7CC3",
+      cat: "media",
+    },
+    {
+      id: "graph",
+      title: "GRAPH",
+      icon: "Gr",
+      atomic: 15,
+      color: "#93C47D",
+      cat: "tools",
+    },
+    {
+      id: "forum",
+      title: "FORO",
+      icon: "Fo",
+      atomic: 16,
+      color: "#93C47D",
+      cat: "comm",
+    },
+    {
+      id: "hyperpiano",
+      title: "HYPERPIANO",
+      icon: "Hp",
+      atomic: 17,
+      color: "#FFD966",
+      cat: "tools",
+    },
+    {
+      id: "instant-score",
+      title: "SCORE",
+      icon: "Is",
+      atomic: 18,
+      color: "#F1C232",
+      cat: "tools",
+    },
+    {
+      id: "sonic-analyzer",
+      title: "SA",
+      icon: "Sa",
+      atomic: 19,
+      color: "#45D384",
+      cat: "tools",
+    },
+    {
+      id: "sonic-visualizer",
+      title: "SV",
+      icon: "Sv",
+      atomic: 20,
+      color: "#45D384",
+      cat: "tools",
+    },
+    {
+      id: "visualizer",
+      title: "VS",
+      icon: "Vs",
+      atomic: 21,
+      color: "#76D3FF",
+      cat: "tools",
+    },
+    {
+      id: "recursos",
+      title: "RECURSOS",
+      icon: "Re",
+      atomic: 22,
+      color: "#6fa8dc",
+      cat: "comm",
+    },
   ];
 
   constructor(
@@ -71,7 +225,7 @@ export class RoomWorkspaceManager {
     onSonicAnalyzerInit?: (element: HTMLElement) => PodDisposable,
     onSonicVisualizerInit?: (element: HTMLElement) => PodDisposable,
     onVisualizerInit?: (element: HTMLElement) => PodDisposable,
-    onRecursosInit?: (element: HTMLElement) => PodDisposable
+    onRecursosInit?: (element: HTMLElement) => PodDisposable,
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -85,10 +239,10 @@ export class RoomWorkspaceManager {
     this.onChatInit = onChatInit;
     this.onOrfInit = onOrfInit;
     this.onScoreInit = onScoreInit;
-    this.onSonicAnalyzerInit   = onSonicAnalyzerInit;
+    this.onSonicAnalyzerInit = onSonicAnalyzerInit;
     this.onSonicVisualizerInit = onSonicVisualizerInit;
-    this.onVisualizerInit      = onVisualizerInit;
-    this.onRecursosInit        = onRecursosInit;
+    this.onVisualizerInit = onVisualizerInit;
+    this.onRecursosInit = onRecursosInit;
   }
 
   private rememberPodController(panelId: string, controller: PodDisposable) {
@@ -101,17 +255,20 @@ export class RoomWorkspaceManager {
     this.podControllers.delete(panelId);
     if (!controller) return;
     try {
-      if (typeof controller === 'function') controller();
+      if (typeof controller === "function") controller();
       else controller.dispose?.();
     } catch (error) {
-      console.warn(`[RoomWorkspaceManager] Error disposing pod "${panelId}"`, error);
+      console.warn(
+        `[RoomWorkspaceManager] Error disposing pod "${panelId}"`,
+        error,
+      );
     }
   }
 
   public init() {
     if (!this.container) return;
-    this.container.classList.add('dockview-container');
-    
+    this.container.classList.add("dockview-container");
+
     setTimeout(() => {
       try {
         if (this.dockview) return;
@@ -120,110 +277,155 @@ export class RoomWorkspaceManager {
           createComponent: (options) => {
             const rawId = options.id;
             // Find which pod type this is by checking if the ID starts with any known POD_TYPE id
-            const podType = this.POD_TYPES.find(t => rawId === t.id || rawId.startsWith(t.id + '-'));
-            let id = podType ? podType.id : rawId.split('-')[0];
-            
-            // Map old IDs to new ones if necessary
-            if (id === 'lilypond-editor') id = 'lily-code';
-            if (id === 'lilypond-preview') id = 'lily-render';
+            const podType = this.POD_TYPES.find(
+              (t) => rawId === t.id || rawId.startsWith(t.id + "-"),
+            );
+            let id = podType ? podType.id : rawId.split("-")[0];
 
-            const templateDiv = document.getElementById('musiki-pod-templates');
-            const dataScript = document.getElementById('musiki-presentation-data');
-            const presentationOptions = dataScript ? JSON.parse(dataScript.textContent || '[]') : [];
-            
-            let element = templateDiv?.querySelector(`[data-pod="${id}"]`) as HTMLElement;
+            // Map old IDs to new ones if necessary
+            if (id === "lilypond-editor") id = "lily-code";
+            if (id === "lilypond-preview") id = "lily-render";
+
+            const templateDiv = document.getElementById("musiki-pod-templates");
+            const dataScript = document.getElementById(
+              "musiki-presentation-data",
+            );
+            const presentationOptions = dataScript
+              ? JSON.parse(dataScript.textContent || "[]")
+              : [];
+
+            let element = templateDiv?.querySelector(
+              `[data-pod="${id}"]`,
+            ) as HTMLElement;
 
             if (element) {
-                // ALWAYS CLONE from template storage so we never exhaust the source
-                element = element.cloneNode(true) as HTMLElement;
-                element.removeAttribute('hidden');
-                element.style.display = 'block';
+              // ALWAYS CLONE from template storage so we never exhaust the source
+              element = element.cloneNode(true) as HTMLElement;
+              element.removeAttribute("hidden");
+              element.style.display = "block";
             } else {
-                console.warn(`[RoomWorkspaceManager] Template for pod "${id}" (resolved from ${rawId}) not found.`);
+              console.warn(
+                `[RoomWorkspaceManager] Template for pod "${id}" (resolved from ${rawId}) not found.`,
+              );
             }
-            
+
             // Create DIY Shell
-            const shell = document.createElement('div');
-            shell.className = 'pod-diy-shell';
+            const shell = document.createElement("div");
+            shell.className = "pod-diy-shell";
             shell.dataset.panelId = options.id;
-            
-            const title = podType ? podType.title : id.toUpperCase().replace(/-/g, '');
+
+            const title = podType
+              ? podType.title
+              : id.toUpperCase().replace(/-/g, "");
             const header = this.createPodHeader(options.id, title, element);
             shell.appendChild(header);
 
-            const body = document.createElement('div');
-            body.className = 'pod-diy-body';
+            const body = document.createElement("div");
+            body.className = "pod-diy-body";
             if (element) body.appendChild(element);
             shell.appendChild(body);
 
             if (element) {
-              if (id === 'forum') {
+              if (id === "forum") {
                 this.bindForum(element);
               }
-              if (id === 'hyperpiano' && this.onHyperpianoInit) {
+              if (id === "hyperpiano" && this.onHyperpianoInit) {
                 const hp = this.onHyperpianoInit(element);
                 this.rememberPodController(options.id, hp);
               }
-              if ((id === 'lily-code' || id === 'lily-render') && this.onLilypondInit) {
-                this.rememberPodController(options.id, this.onLilypondInit(element));
+              if (
+                (id === "lily-code" || id === "lily-render") &&
+                this.onLilypondInit
+              ) {
+                this.rememberPodController(
+                  options.id,
+                  this.onLilypondInit(element),
+                );
               }
-              if (id === 'concept' && this.onConceptInit) {
-                this.rememberPodController(options.id, this.onConceptInit(element));
+              if (id === "concept" && this.onConceptInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onConceptInit(element),
+                );
               }
-              if (id === 'external-media' && this.onMediaInit) {
-                this.rememberPodController(options.id, this.onMediaInit(element));
+              if (id === "external-media" && this.onMediaInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onMediaInit(element),
+                );
               }
-              if (id === 'clase' && this.onClaseInit) {
-                this.rememberPodController(options.id, this.onClaseInit(element));
+              if (id === "clase" && this.onClaseInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onClaseInit(element),
+                );
               }
-              if (id === 'chat' && this.onChatInit) {
-                this.rememberPodController(options.id, this.onChatInit(element));
+              if (id === "chat" && this.onChatInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onChatInit(element),
+                );
               }
-              if (id === 'orf' && this.onOrfInit) {
+              if (id === "orf" && this.onOrfInit) {
                 this.rememberPodController(options.id, this.onOrfInit(element));
               }
-              if (id === 'instant-score' && this.onScoreInit) {
-                this.rememberPodController(options.id, this.onScoreInit(element));
+              if (id === "instant-score" && this.onScoreInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onScoreInit(element),
+                );
               }
-              if (id === 'sonic-analyzer' && this.onSonicAnalyzerInit) {
-                this.rememberPodController(options.id, this.onSonicAnalyzerInit(element));
+              if (id === "sonic-analyzer" && this.onSonicAnalyzerInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onSonicAnalyzerInit(element),
+                );
               }
-              if (id === 'sonic-visualizer' && this.onSonicVisualizerInit) {
-                this.rememberPodController(options.id, this.onSonicVisualizerInit(element));
+              if (id === "sonic-visualizer" && this.onSonicVisualizerInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onSonicVisualizerInit(element),
+                );
               }
-              if (id === 'visualizer' && this.onVisualizerInit) {
-                this.rememberPodController(options.id, this.onVisualizerInit(element));
+              if (id === "visualizer" && this.onVisualizerInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onVisualizerInit(element),
+                );
               }
-              if (id === 'recursos' && this.onRecursosInit) {
-                this.rememberPodController(options.id, this.onRecursosInit(element));
+              if (id === "recursos" && this.onRecursosInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onRecursosInit(element),
+                );
               }
-              if (id === 'graph') {
+              if (id === "graph") {
                 delete element.dataset.graphPodReady;
                 window.setTimeout(() => {
                   (window as any).MusikiGraphPodInit?.(element);
                 }, 100);
               }
             }
-            
+
             return {
               element: shell,
               init: (params: any) => {
-                if (id === 'hyperpiano') {
+                if (id === "hyperpiano") {
                   params.api.onDidFocusChange((focused: boolean) => {
                     this.podControllers.get(options.id)?.setFocused(focused);
                   });
                 }
-                if (id === 'whiteboard' && element && this.onWhiteboardInit) {
+                if (id === "whiteboard" && element && this.onWhiteboardInit) {
                   this.onWhiteboardInit(element);
                 }
               },
               update: (params: any) => {},
               dispose: () => {
-                 this.disposePodController(options.id);
-                 if (element) element.remove();
-              }
+                this.disposePodController(options.id);
+                if (element) element.remove();
+              },
             };
-          }
+          },
         });
 
         const rect = this.container.getBoundingClientRect();
@@ -236,25 +438,36 @@ export class RoomWorkspaceManager {
             const layout = this.dockview?.toJSON();
             if (layout) this.onLayoutChange(layout);
           }
-          window.dispatchEvent(new CustomEvent('musiki:workspace:changed'));
+          window.dispatchEvent(new CustomEvent("musiki:workspace:changed"));
         });
+
+        // Ensure Dockview reacts to container size changes
+        const resizeObserver = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            const { width, height } = entry.contentRect;
+            if (width > 0 && height > 0) {
+              this.dockview?.layout(width, height);
+            }
+          }
+        });
+        resizeObserver.observe(this.container);
 
         this.setupUI();
         this.setupDefaultLayout();
         this.bindBottomBarButtons();
         this.initPodGallery();
       } catch (err) {
-        console.error('Dockview init failed:', err);
+        console.error("Dockview init failed:", err);
       }
     }, 200);
   }
 
   public getActivePods() {
-      if (!this.dockview) return [];
-      return this.dockview.panels.map(p => ({
-          id: p.id,
-          controller: this.podControllers.get(p.id)
-      }));
+    if (!this.dockview) return [];
+    return this.dockview.panels.map((p) => ({
+      id: p.id,
+      controller: this.podControllers.get(p.id),
+    }));
   }
 
   public hasPod(id: string): boolean {
@@ -263,194 +476,239 @@ export class RoomWorkspaceManager {
 
   public focusOrOpenSonicVisualizer(referencePanelId?: string): void {
     if (!this.dockview) return;
-    const existing = this.findPanelByBaseId('sonic-visualizer');
+    const existing = this.findPanelByBaseId("sonic-visualizer");
     if (existing) {
       existing.api.setActive();
       return;
     }
 
     const referencePanel =
-      (referencePanelId ? this.dockview.getGroupPanel(referencePanelId) : null)
-      ?? this.findPanelByBaseId('recursos')
-      ?? this.findPanelByBaseId('sonic-analyzer')
-      ?? this.dockview.panels[0]
-      ?? null;
+      (referencePanelId
+        ? this.dockview.getGroupPanel(referencePanelId)
+        : null) ??
+      this.findPanelByBaseId("recursos") ??
+      this.findPanelByBaseId("sonic-analyzer") ??
+      this.dockview.panels[0] ??
+      null;
 
     this.dockview.addPanel({
-      id: 'sonic-visualizer',
-      component: 'sonic-visualizer',
-      title: 'SV',
-      position: referencePanel ? { referencePanel: referencePanel.id, direction: 'below' } : undefined,
+      id: "sonic-visualizer",
+      component: "sonic-visualizer",
+      title: "SV",
+      position: referencePanel
+        ? { referencePanel: referencePanel.id, direction: "below" }
+        : undefined,
       initialHeight: 110,
     });
   }
 
   private initPodGallery() {
-    const gallery = document.querySelector('[data-pod-gallery-list]');
+    const gallery = document.querySelector("[data-pod-gallery-list]");
     if (!gallery) return;
-    gallery.innerHTML = '';
-    this.POD_TYPES.forEach(type => {
-      const item = document.createElement('div');
-      item.className = 'pod-gallery-item';
+    gallery.innerHTML = "";
+    this.POD_TYPES.forEach((type) => {
+      const item = document.createElement("div");
+      item.className = "pod-gallery-item";
       item.draggable = true;
-      item.style.setProperty('--pod-color', type.color);
+      item.style.setProperty("--pod-color", type.color);
       item.innerHTML = `
         <div class="pod-gallery-atomic">${type.atomic}</div>
         <div class="pod-gallery-item-icon">${type.icon}</div>
         <div class="pod-gallery-item-title">${type.title}</div>
       `;
-      
-      item.addEventListener('dragstart', (e) => {
-          if (e.dataTransfer) {
-              e.dataTransfer.setData('musiki/pod-id', type.id);
-              e.dataTransfer.effectAllowed = 'move';
-          }
-          this.activeDraggingId = type.id;
-          item.classList.add('is-dragging');
+
+      item.addEventListener("dragstart", (e) => {
+        if (e.dataTransfer) {
+          e.dataTransfer.setData("musiki/pod-id", type.id);
+          e.dataTransfer.effectAllowed = "move";
+        }
+        this.activeDraggingId = type.id;
+        item.classList.add("is-dragging");
       });
 
-      item.addEventListener('dragend', () => {
-          this.activeDraggingId = null;
-          item.classList.remove('is-dragging');
+      item.addEventListener("dragend", () => {
+        this.activeDraggingId = null;
+        item.classList.remove("is-dragging");
       });
 
-      item.addEventListener('click', () => {
+      item.addEventListener("click", () => {
         this.togglePod(type.id);
       });
       gallery.appendChild(item);
     });
 
     // Handle dropping into the dockview container
-    this.container.addEventListener('dragover', (e) => {
-        if (e.dataTransfer?.types.includes('Files')) console.log('[WS:drag] workspace dragover with Files — effectAllowed=', e.dataTransfer?.effectAllowed);
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        
-        let shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
-        if (!shellEl) {
-            const handleEl = (e.target as HTMLElement).closest('.pod-diy-handle');
-            if (handleEl) {
-                shellEl = handleEl.closest('.pod-diy-shell') as HTMLElement;
-            }
+    this.container.addEventListener("dragover", (e) => {
+      if (e.dataTransfer?.types.includes("Files"))
+        console.log(
+          "[WS:drag] workspace dragover with Files — effectAllowed=",
+          e.dataTransfer?.effectAllowed,
+        );
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+
+      let shellEl = (e.target as HTMLElement).closest(
+        ".pod-diy-shell",
+      ) as HTMLElement;
+      if (!shellEl) {
+        const handleEl = (e.target as HTMLElement).closest(".pod-diy-handle");
+        if (handleEl) {
+          shellEl = handleEl.closest(".pod-diy-shell") as HTMLElement;
         }
+      }
 
-        if (shellEl && shellEl.dataset.panelId !== this.activeDraggingId) {
-            // Calculate direction for preview
-            const rect = shellEl.getBoundingClientRect();
-            const relX = (e.clientX - rect.left) / rect.width;
-            const relY = (e.clientY - rect.top) / rect.height;
-            
-            let direction = 'within';
-            if (relX < 0.2) direction = 'left';
-            else if (relX > 0.8) direction = 'right';
-            else if (relY < 0.2) direction = 'above';
-            else if (relY > 0.8) direction = 'below';
-            
-            // Clear others first to be safe, then set current
-            this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => {
-                if (el !== shellEl) el.classList.remove('is-drag-over');
-            });
-            
-            shellEl.classList.add('is-drag-over');
-            shellEl.setAttribute('data-drag-dir', direction);
-            this.dragOverPanelId = shellEl.dataset.panelId ?? null;
-            this.savedDragTarget = this.dragOverPanelId;
-            this.savedDragDir = direction;
-        } else {
-            this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => el.classList.remove('is-drag-over'));
-            this.dragOverPanelId = null;
-            // savedDragTarget intentionally NOT cleared here — preserved for dragend
-        }
-    });
+      if (shellEl && shellEl.dataset.panelId !== this.activeDraggingId) {
+        // Calculate direction for preview
+        const rect = shellEl.getBoundingClientRect();
+        const relX = (e.clientX - rect.left) / rect.width;
+        const relY = (e.clientY - rect.top) / rect.height;
 
-    this.container.addEventListener('dragleave', (e) => {
-        const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
-        if (shellEl && !shellEl.contains(e.relatedTarget as Node)) {
-            shellEl.classList.remove('is-drag-over');
-            shellEl.removeAttribute('data-drag-dir');
-        }
-    });
+        let direction = "within";
+        if (relX < 0.2) direction = "left";
+        else if (relX > 0.8) direction = "right";
+        else if (relY < 0.2) direction = "above";
+        else if (relY > 0.8) direction = "below";
 
-    this.container.addEventListener('drop', (e) => {
-        console.log('[WS:drop] workspace drop fired files=', e.dataTransfer?.files?.length, 'podId=', e.dataTransfer?.getData('musiki/pod-id'));
-        e.preventDefault();
+        // Clear others first to be safe, then set current
+        this.container
+          .querySelectorAll(".pod-diy-shell.is-drag-over")
+          .forEach((el) => {
+            if (el !== shellEl) el.classList.remove("is-drag-over");
+          });
 
-        const shellEl = (e.target as HTMLElement).closest('.pod-diy-shell') as HTMLElement;
-        const direction = shellEl?.getAttribute('data-drag-dir') || 'right';
-
-        // Clear highlights
-        this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => {
-            el.classList.remove('is-drag-over');
-            el.removeAttribute('data-drag-dir');
-        });
-        
-        if (!this.dockview) return;
-
-        const podId = e.dataTransfer?.getData('musiki/pod-id');
-        const panelId = e.dataTransfer?.getData('musiki/panel-id');
-
+        shellEl.classList.add("is-drag-over");
+        shellEl.setAttribute("data-drag-dir", direction);
+        this.dragOverPanelId = shellEl.dataset.panelId ?? null;
+        this.savedDragTarget = this.dragOverPanelId;
+        this.savedDragDir = direction;
+      } else {
+        this.container
+          .querySelectorAll(".pod-diy-shell.is-drag-over")
+          .forEach((el) => el.classList.remove("is-drag-over"));
         this.dragOverPanelId = null;
+        // savedDragTarget intentionally NOT cleared here — preserved for dragend
+      }
+    });
 
-        if (panelId) {
-            const targetId = shellEl?.dataset.panelId || this.savedDragTarget;
-            this.movePanelRelative(panelId, targetId || null, direction || this.savedDragDir);
-            this.savedDragTarget = null;
-            this.savedDragDir = 'right';
-            this.activeDraggingId = null;
-        } else if (podId) {
-            // Gallery pod drop: place relative to last valid hover target
-            const position = this.savedDragTarget
-                ? { referencePanel: this.savedDragTarget, direction: this.savedDragDir as any }
-                : undefined;
-            this.togglePod(podId, true, position);
-            this.savedDragTarget = null;
-            this.activeDraggingId = null;
-        }
+    this.container.addEventListener("dragleave", (e) => {
+      const shellEl = (e.target as HTMLElement).closest(
+        ".pod-diy-shell",
+      ) as HTMLElement;
+      if (shellEl && !shellEl.contains(e.relatedTarget as Node)) {
+        shellEl.classList.remove("is-drag-over");
+        shellEl.removeAttribute("data-drag-dir");
+      }
+    });
+
+    this.container.addEventListener("drop", (e) => {
+      console.log(
+        "[WS:drop] workspace drop fired files=",
+        e.dataTransfer?.files?.length,
+        "podId=",
+        e.dataTransfer?.getData("musiki/pod-id"),
+      );
+      e.preventDefault();
+
+      const shellEl = (e.target as HTMLElement).closest(
+        ".pod-diy-shell",
+      ) as HTMLElement;
+      const direction = shellEl?.getAttribute("data-drag-dir") || "right";
+
+      // Clear highlights
+      this.container
+        .querySelectorAll(".pod-diy-shell.is-drag-over")
+        .forEach((el) => {
+          el.classList.remove("is-drag-over");
+          el.removeAttribute("data-drag-dir");
+        });
+
+      if (!this.dockview) return;
+
+      const podId = e.dataTransfer?.getData("musiki/pod-id");
+      const panelId = e.dataTransfer?.getData("musiki/panel-id");
+
+      this.dragOverPanelId = null;
+
+      if (panelId) {
+        const targetId = shellEl?.dataset.panelId || this.savedDragTarget;
+        this.movePanelRelative(
+          panelId,
+          targetId || null,
+          direction || this.savedDragDir,
+        );
+        this.savedDragTarget = null;
+        this.savedDragDir = "right";
+        this.activeDraggingId = null;
+      } else if (podId) {
+        // Gallery pod drop: place relative to last valid hover target
+        const position = this.savedDragTarget
+          ? {
+              referencePanel: this.savedDragTarget,
+              direction: this.savedDragDir as any,
+            }
+          : undefined;
+        this.togglePod(podId, true, position);
+        this.savedDragTarget = null;
+        this.activeDraggingId = null;
+      }
     });
   }
 
-  private movePanelRelative(panelId: string, targetId: string | null, dragDir: string): boolean {
+  private movePanelRelative(
+    panelId: string,
+    targetId: string | null,
+    dragDir: string,
+  ): boolean {
     if (!this.dockview || !targetId || panelId === targetId) return false;
     const movingPanel = this.dockview.getGroupPanel(panelId);
     const targetPanel = this.dockview.getGroupPanel(targetId);
     if (!movingPanel || !targetPanel) return false;
 
-    const dirMap: Record<string, 'left' | 'right' | 'top' | 'bottom' | 'center'> = {
-      left: 'left',
-      right: 'right',
-      above: 'top',
-      below: 'bottom',
-      within: 'center',
-      top: 'top',
-      bottom: 'bottom',
-      center: 'center',
+    const dirMap: Record<
+      string,
+      "left" | "right" | "top" | "bottom" | "center"
+    > = {
+      left: "left",
+      right: "right",
+      above: "top",
+      below: "bottom",
+      within: "center",
+      top: "top",
+      bottom: "bottom",
+      center: "center",
     };
 
     try {
       this.dockview.moveGroupOrPanel({
         from: { groupId: movingPanel.group.id, panelId: movingPanel.id },
-        to: { group: targetPanel.group, position: dirMap[dragDir] ?? 'right' },
+        to: { group: targetPanel.group, position: dirMap[dragDir] ?? "right" },
       });
       return true;
     } catch (error) {
-      console.warn('[RoomWorkspaceManager] panel move failed', { panelId, targetId, dragDir, error });
+      console.warn("[RoomWorkspaceManager] panel move failed", {
+        panelId,
+        targetId,
+        dragDir,
+        error,
+      });
       return false;
     }
   }
 
   private showPodPicker(anchor: HTMLElement, targetPanel: any) {
-    const existing = document.querySelector('.pod-picker-menu');
+    const existing = document.querySelector(".pod-picker-menu");
     if (existing) existing.remove();
-    const menu = document.createElement('div');
-    menu.className = 'pod-picker-menu';
-    this.POD_TYPES.forEach(type => {
-      const item = document.createElement('button');
-      item.className = 'pod-picker-item';
-      if (type.id === targetPanel.id) item.classList.add('active');
-      item.style.setProperty('--pod-color', type.color);
+    const menu = document.createElement("div");
+    menu.className = "pod-picker-menu";
+    this.POD_TYPES.forEach((type) => {
+      const item = document.createElement("button");
+      item.className = "pod-picker-item";
+      if (type.id === targetPanel.id) item.classList.add("active");
+      item.style.setProperty("--pod-color", type.color);
       item.innerHTML = `<span class="pod-picker-icon" style="color:${type.color}">${type.icon}</span> ${type.title}`;
-      item.addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation();
+      item.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         this.replacePod(targetPanel, type.id);
         menu.remove();
       });
@@ -463,57 +721,76 @@ export class RoomWorkspaceManager {
     const closeMenu = (e: MouseEvent) => {
       if (!menu.contains(e.target as Node) && e.target !== anchor) {
         menu.remove();
-        document.removeEventListener('mousedown', closeMenu);
+        document.removeEventListener("mousedown", closeMenu);
       }
     };
-    document.addEventListener('mousedown', closeMenu);
+    document.addEventListener("mousedown", closeMenu);
   }
 
   private replacePod(oldPanel: any, newId: string) {
     if (!this.dockview) return;
     const oldId = oldPanel.id;
-    
-    // If it's the same base pod type, do nothing
-    if (oldId.split('-')[0] === newId) return;
 
-    const titleObj = this.POD_TYPES.find(t => t.id === newId);
-    const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'clase', 'lily-code', 'lily-render'].includes(newId);
+    // If it's the same base pod type, do nothing
+    if (oldId.split("-")[0] === newId) return;
+
+    const titleObj = this.POD_TYPES.find((t) => t.id === newId);
+    const canHaveMultiple = [
+      "concept",
+      "whiteboard",
+      "hyperpiano",
+      "graph",
+      "forum",
+      "clase",
+      "lily-code",
+      "lily-render",
+    ].includes(newId);
     const panelId = canHaveMultiple ? `${newId}-${Date.now()}` : newId;
 
     // ADD NEW PANEL FIRST relative to the old one's position
     this.dockview.addPanel({
-        id: panelId,
-        component: newId,
-        title: titleObj ? titleObj.title : newId.toUpperCase().replace('-', ' '),
-        position: { referencePanel: oldId, direction: 'within' as any }
+      id: panelId,
+      component: newId,
+      title: titleObj ? titleObj.title : newId.toUpperCase().replace("-", " "),
+      position: { referencePanel: oldId, direction: "within" as any },
     });
-    
+
     // NOW CLOSE OLD
     setTimeout(() => {
-        if (oldPanel.api) oldPanel.api.close();
+      if (oldPanel.api) oldPanel.api.close();
     }, 50);
   }
 
   private setupUI() {
-    const saveBtn = document.querySelector<HTMLButtonElement>('[data-workspace-save]');
-    const deleteBtn = document.querySelector<HTMLButtonElement>('[data-workspace-delete]');
+    const saveBtn = document.querySelector<HTMLButtonElement>(
+      "[data-workspace-save]",
+    );
+    const deleteBtn = document.querySelector<HTMLButtonElement>(
+      "[data-workspace-delete]",
+    );
 
     if (saveBtn) {
-      saveBtn.addEventListener('click', (e) => {
+      saveBtn.addEventListener("click", (e) => {
         e.preventDefault();
         if (!this.canLeadSession()) return;
-        const name = window.prompt('Nombre del Workspace:');
+        const name = window.prompt("Nombre del Workspace:");
         if (name) {
           const layout = this.dockview?.toJSON();
-          const root = document.querySelector<HTMLElement>('[data-conference-root]');
-          const showCircle = root?.dataset.showCircle === 'true';
-          const gridSlot = root?.querySelector<HTMLElement>('[data-slot="grid"]');
-          const gridSize = gridSlot?.dataset.gridSize || 'normal';
-          
-          localStorage.setItem(`musiki:workspace:${name}`, JSON.stringify({
-            dockview: layout,
-            settings: { showCircle, gridSize },
-          }));
+          const root = document.querySelector<HTMLElement>(
+            "[data-conference-root]",
+          );
+          const showCircle = root?.dataset.showCircle === "true";
+          const gridSlot =
+            root?.querySelector<HTMLElement>('[data-slot="grid"]');
+          const gridSize = gridSlot?.dataset.gridSize || "normal";
+
+          localStorage.setItem(
+            `musiki:workspace:${name}`,
+            JSON.stringify({
+              dockview: layout,
+              settings: { showCircle, gridSize },
+            }),
+          );
           this.currentWorkspaceKey = name;
           this.renderQuickLists();
         }
@@ -521,205 +798,289 @@ export class RoomWorkspaceManager {
     }
 
     if (deleteBtn) {
-      deleteBtn.addEventListener('click', (e) => {
+      deleteBtn.addEventListener("click", (e) => {
         e.preventDefault();
         if (!this.canLeadSession()) return;
         const val = this.currentWorkspaceKey;
-        if (val && !['presentation', 'lilypond', 'debate', 'collab', 'full-win-speaker'].includes(val)) {
+        if (
+          val &&
+          ![
+            "presentation",
+            "lilypond",
+            "debate",
+            "collab",
+            "full-win-speaker",
+          ].includes(val)
+        ) {
           if (window.confirm(`¿Borrar workspace "${val}"?`)) {
             localStorage.removeItem(`musiki:workspace:${val}`);
-            this.currentWorkspaceKey = 'full-win-speaker';
+            this.currentWorkspaceKey = "full-win-speaker";
             this.renderQuickLists();
-            this.applyLayoutByKey('full-win-speaker');
+            this.applyLayoutByKey("full-win-speaker");
           }
         }
       });
     }
-    
+
     this.renderQuickLists();
   }
 
   private renderQuickLists() {
-    const customList = document.querySelector('[data-workspace-custom-list]');
-    const masterItems = document.querySelectorAll<HTMLButtonElement>('[data-workspace-master-list] .workspace-item');
-    
-    masterItems.forEach(item => {
-      const val = item.dataset.workspaceVal || '';
-      item.classList.toggle('active', this.currentWorkspaceKey === val);
+    const customList = document.querySelector("[data-workspace-custom-list]");
+    const masterItems = document.querySelectorAll<HTMLButtonElement>(
+      "[data-workspace-master-list] .workspace-item",
+    );
+
+    masterItems.forEach((item) => {
+      const val = item.dataset.workspaceVal || "";
+      item.classList.toggle("active", this.currentWorkspaceKey === val);
       if (!item.dataset.bound) {
-        item.addEventListener('click', () => {
+        item.addEventListener("click", () => {
           this.currentWorkspaceKey = val;
           this.applyLayoutByKey(val);
           this.renderQuickLists();
         });
-        item.dataset.bound = 'true';
+        item.dataset.bound = "true";
       }
     });
 
     if (customList) {
-      customList.innerHTML = '';
+      customList.innerHTML = "";
       const customs: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key?.startsWith('musiki:workspace:')) customs.push(key.replace('musiki:workspace:', ''));
+        if (key?.startsWith("musiki:workspace:"))
+          customs.push(key.replace("musiki:workspace:", ""));
       }
-      
+
       if (customs.length > 0) {
-        customs.sort().slice(0, 10).forEach(name => {
-          const btn = document.createElement('button');
-          btn.type = 'button'; 
-          btn.className = 'workspace-item';
-          if (this.currentWorkspaceKey === name) btn.classList.add('active');
-          btn.textContent = name;
-          btn.addEventListener('click', () => {
-            this.currentWorkspaceKey = name;
-            this.applyLayoutByKey(name);
-            this.renderQuickLists();
+        customs
+          .sort()
+          .slice(0, 10)
+          .forEach((name) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "workspace-item";
+            if (this.currentWorkspaceKey === name) btn.classList.add("active");
+            btn.textContent = name;
+            btn.addEventListener("click", () => {
+              this.currentWorkspaceKey = name;
+              this.applyLayoutByKey(name);
+              this.renderQuickLists();
+            });
+            customList.appendChild(btn);
           });
-          customList.appendChild(btn);
-        });
       }
     }
   }
 
-  private createPodHeader(panelId: string, title: string, element: HTMLElement) {
-      const header = document.createElement('div');
-      header.className = 'pod-diy-header';
-      
-      const id = panelId.split('-')[0];
-      const type = this.POD_TYPES.find(t => t.id === id);
-      const color = type?.color || '#fff';
-      header.style.setProperty('--pod-color', color);
+  private createPodHeader(
+    panelId: string,
+    title: string,
+    element: HTMLElement,
+  ) {
+    const header = document.createElement("div");
+    header.className = "pod-diy-header";
 
-      const arrow = document.createElement('div');
-      arrow.className = 'pod-diy-arrow';
-      const arrowInner = document.createElement('span');
-      arrowInner.className = 'pod-diy-arrow-inner';
-      arrow.appendChild(arrowInner);
-      arrow.addEventListener('mousedown', (e) => {
-          e.preventDefault(); e.stopPropagation();
-          const panels = this.dockview?.panels || [];
-          const targetPanel = panels.find(p => p.id === panelId);
-          if (targetPanel) this.showPodPicker(arrow, targetPanel);
-      });
+    const id = panelId.split("-")[0];
+    const type = this.POD_TYPES.find((t) => t.id === id);
+    const color = type?.color || "#fff";
+    header.style.setProperty("--pod-color", color);
 
-      const handle = document.createElement('div');
-      handle.className = 'pod-diy-handle';
-      handle.innerHTML = `<div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div>`;
-      handle.draggable = true;
-      handle.addEventListener('dragstart', (e) => {
-          if (e.dataTransfer) {
-              e.dataTransfer.setData('musiki/panel-id', panelId);
-              e.dataTransfer.setData('text/plain', panelId);
-              e.dataTransfer.effectAllowed = 'move';
-          }
-          this.activeDraggingId = panelId;
-          header.classList.add('is-dragging');
-      });
-      handle.addEventListener('dragend', () => {
-          // Perform the move here — more reliable than drop event for same-window DnD
-          if (this.savedDragTarget && panelId !== this.savedDragTarget) {
-              this.movePanelRelative(panelId, this.savedDragTarget, this.savedDragDir);
-          }
-          this.savedDragTarget = null;
-          this.savedDragDir = 'right';
-          this.activeDraggingId = null;
-          header.classList.remove('is-dragging');
-          this.container.querySelectorAll('.pod-diy-shell.is-drag-over').forEach(el => {
-              el.classList.remove('is-drag-over');
-              el.removeAttribute('data-drag-dir');
-          });
-          this.dragOverPanelId = null;
-      });
+    const arrow = document.createElement("div");
+    arrow.className = "pod-diy-arrow";
+    const arrowInner = document.createElement("span");
+    arrowInner.className = "pod-diy-arrow-inner";
+    arrow.appendChild(arrowInner);
+    arrow.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const panels = this.dockview?.panels || [];
+      const targetPanel = panels.find((p) => p.id === panelId);
+      if (targetPanel) this.showPodPicker(arrow, targetPanel);
+    });
 
-      const titleEl = document.createElement('div');
-      titleEl.className = 'pod-diy-title';
-      titleEl.textContent = title || id.toUpperCase().replace(/-/g, '');
+    const handle = document.createElement("div");
+    handle.className = "pod-diy-handle";
+    handle.innerHTML = `<div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div>`;
+    handle.draggable = true;
+    handle.addEventListener("dragstart", (e) => {
+      if (e.dataTransfer) {
+        e.dataTransfer.setData("musiki/panel-id", panelId);
+        e.dataTransfer.setData("text/plain", panelId);
+        e.dataTransfer.effectAllowed = "move";
+      }
+      this.activeDraggingId = panelId;
+      header.classList.add("is-dragging");
+    });
+    handle.addEventListener("dragend", () => {
+      // Perform the move here — more reliable than drop event for same-window DnD
+      if (this.savedDragTarget && panelId !== this.savedDragTarget) {
+        this.movePanelRelative(
+          panelId,
+          this.savedDragTarget,
+          this.savedDragDir,
+        );
+      }
+      this.savedDragTarget = null;
+      this.savedDragDir = "right";
+      this.activeDraggingId = null;
+      header.classList.remove("is-dragging");
+      this.container
+        .querySelectorAll(".pod-diy-shell.is-drag-over")
+        .forEach((el) => {
+          el.classList.remove("is-drag-over");
+          el.removeAttribute("data-drag-dir");
+        });
+      this.dragOverPanelId = null;
+    });
 
-      const actions = document.createElement('div');
-      actions.className = 'pod-diy-actions';
-      
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'pod-diy-btn pod-diy-btn--close';
-      closeBtn.type = 'button';
-      closeBtn.innerHTML = '×';
-      closeBtn.title = 'Cerrar pod';
-      closeBtn.style.cursor = 'pointer';
-      closeBtn.addEventListener('mousedown', (e) => { e.stopPropagation(); }); 
-      closeBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const panel = this.dockview?.getGroupPanel(panelId);
-          if (panel) {
-              panel.api.close();
-          } else {
-              // Try finding by base ID as fallback
-              const baseId = panelId.split('-')[0];
-              const found = this.dockview?.panels.find(p => p.id === baseId || p.id.startsWith(baseId + '-'));
-              found?.api.close();
-          }
-      });
-      
-      header.appendChild(arrow);
-      header.appendChild(handle);
-      header.appendChild(titleEl);
-      header.appendChild(actions);
-      header.appendChild(closeBtn);
-      
-      return header;
+    const titleEl = document.createElement("div");
+    titleEl.className = "pod-diy-title";
+    titleEl.textContent = title || id.toUpperCase().replace(/-/g, "");
+
+    const actions = document.createElement("div");
+    actions.className = "pod-diy-actions";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "pod-diy-btn pod-diy-btn--close";
+    closeBtn.type = "button";
+    closeBtn.innerHTML = "×";
+    closeBtn.title = "Cerrar pod";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+    });
+    closeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const panel = this.dockview?.getGroupPanel(panelId);
+      if (panel) {
+        panel.api.close();
+      } else {
+        // Try finding by base ID as fallback
+        const baseId = panelId.split("-")[0];
+        const found = this.dockview?.panels.find(
+          (p) => p.id === baseId || p.id.startsWith(baseId + "-"),
+        );
+        found?.api.close();
+      }
+    });
+
+    header.appendChild(arrow);
+    header.appendChild(handle);
+    header.appendChild(titleEl);
+    header.appendChild(actions);
+    header.appendChild(closeBtn);
+
+    return header;
   }
 
   private bindBottomBarButtons() {
     const mappings = [
-      { selector: '[data-layout-choice="teacher"]', pods: ['teacher'], master: 'full-win-speaker' },
-      { selector: '[data-layout-choice="screenshare"]', pods: ['screen'], master: 'screenshare' },
-      { selector: '[data-layout-choice="presentation"]', pods: ['presentation'], master: 'presentation' },
-      { selector: '[data-layout-choice="grid"]', pods: ['grid-videos'], master: 'grid' },
-      { selector: '[data-action="external-media-toggle"]', pods: ['external-media'], master: 'external-media' },
-      
-      { selector: '[data-layout-choice="clase"]', pods: ['clase'] },
-      { selector: '[data-layout-choice="whiteboard"]', pods: ['whiteboard'], master: 'whiteboard' },
-      { selector: '[data-layout-choice="lilypond"]', pods: ['lily-code', 'lily-render'], master: 'lilypond' },
+      {
+        selector: '[data-layout-choice="teacher"]',
+        pods: ["teacher"],
+        master: "full-win-speaker",
+      },
+      {
+        selector: '[data-layout-choice="screenshare"]',
+        pods: ["screen"],
+        master: "screenshare",
+      },
+      {
+        selector: '[data-layout-choice="presentation"]',
+        pods: ["presentation"],
+        master: "presentation",
+      },
+      {
+        selector: '[data-layout-choice="grid"]',
+        pods: ["grid-videos"],
+        master: "grid",
+      },
+      {
+        selector: '[data-action="external-media-toggle"]',
+        pods: ["external-media"],
+        master: "external-media",
+      },
 
-      { selector: '[data-action="chat-focus"]', pods: ['chat'] },
-      { selector: '[data-action="forum-toggle"]', pods: ['forum'] },
-      { selector: '[data-action="concepts-toggle"]', pods: ['concept'] },
-      { selector: '[data-layout-choice="graph"]', pods: ['graph'] },
+      { selector: '[data-layout-choice="clase"]', pods: ["clase"] },
+      {
+        selector: '[data-layout-choice="whiteboard"]',
+        pods: ["whiteboard"],
+        master: "whiteboard",
+      },
+      {
+        selector: '[data-layout-choice="lilypond"]',
+        pods: ["lily-code", "lily-render"],
+        master: "lilypond",
+      },
+
+      { selector: '[data-action="chat-focus"]', pods: ["chat"] },
+      { selector: '[data-action="forum-toggle"]', pods: ["forum"] },
+      { selector: '[data-action="concepts-toggle"]', pods: ["concept"] },
+      { selector: '[data-layout-choice="graph"]', pods: ["graph"] },
     ];
     mappings.forEach((mapping) => {
-      const { selector, pods, master } = (mapping as any);
+      const { selector, pods, master } = mapping as any;
       const btn = document.querySelector<HTMLButtonElement>(selector);
       if (btn) {
-        btn.addEventListener('click', (e: MouseEvent) => {
-          if (master) {
-             e.preventDefault(); e.stopPropagation();
-             this.applyLayoutByKey(master);
-             return;
-          }
-          if (selector.includes('lilypond')) {
-             e.preventDefault(); e.stopPropagation();
-             const hasOne = pods.some((id: string) => this.dockview?.getGroupPanel(id));
-             if (hasOne) pods.forEach((id: string) => this.dockview?.getGroupPanel(id)?.api.close());
-             else {
-                   this.dockview?.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER' });
-                   this.dockview?.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILYCODE', position: { referencePanel: 'lily-render', direction: 'left' } });
-                 }
+        btn.addEventListener(
+          "click",
+          (e: MouseEvent) => {
+            if (master) {
+              e.preventDefault();
+              e.stopPropagation();
+              this.applyLayoutByKey(master);
+              return;
+            }
+            if (selector.includes("lilypond")) {
+              e.preventDefault();
+              e.stopPropagation();
+              const hasOne = pods.some((id: string) =>
+                this.dockview?.getGroupPanel(id),
+              );
+              if (hasOne)
+                pods.forEach((id: string) =>
+                  this.dockview?.getGroupPanel(id)?.api.close(),
+                );
+              else {
+                this.dockview?.addPanel({
+                  id: "lily-render",
+                  component: "lily-render",
+                  title: "LILY-RENDER",
+                });
+                this.dockview?.addPanel({
+                  id: "lily-code",
+                  component: "lily-code",
+                  title: "LILYCODE",
+                  position: {
+                    referencePanel: "lily-render",
+                    direction: "left",
+                  },
+                });
+              }
 
-             return;
-          }
+              return;
+            }
 
-          if (selector.includes('chat-focus')) {
-             e.preventDefault(); e.stopPropagation();
-             this.focusOrOpenChat();
-             return;
-          }
+            if (selector.includes("chat-focus")) {
+              e.preventDefault();
+              e.stopPropagation();
+              this.focusOrOpenChat();
+              return;
+            }
 
-          if (selector.includes('data-action')) {
-             e.preventDefault(); e.stopPropagation();
-             pods.forEach((id: string) => this.togglePod(id, true));
-          }
-          if (selector.includes('data-layout-choice')) pods.forEach((id: string) => this.togglePod(id, true));
-        }, true);
+            if (selector.includes("data-action")) {
+              e.preventDefault();
+              e.stopPropagation();
+              pods.forEach((id: string) => this.togglePod(id, true));
+            }
+            if (selector.includes("data-layout-choice"))
+              pods.forEach((id: string) => this.togglePod(id, true));
+          },
+          true,
+        );
       }
     });
   }
@@ -727,100 +1088,144 @@ export class RoomWorkspaceManager {
   public togglePod(id: string, forceOpen = false, position?: any) {
     if (!this.dockview) return;
     try {
-        const canHaveMultiple = ['concept', 'whiteboard', 'hyperpiano', 'graph', 'forum', 'clase', 'lily-code', 'lily-render'].includes(id); 
-        const existing = this.dockview.getGroupPanel(id);
-        
-        if (existing && !canHaveMultiple) {
-          if (forceOpen) {
-              existing.api.setActive();
-              if (position) {
-                  this.movePanelRelative(existing.id, position.referencePanel ?? null, position.direction ?? 'right');
-              }
-          }
-          else existing.api.close();
-        } else {
-          const titleObj = this.POD_TYPES.find(t => t.id === id);
-          const panelId = canHaveMultiple ? `${id}-${Date.now()}` : id;
-          this.dockview.addPanel({
-            id: panelId,
-            component: id,
-            title: titleObj ? titleObj.title : id.toUpperCase().replace(/-/g, ''),
-            position: position
-          });
-        }
+      const canHaveMultiple = [
+        "concept",
+        "whiteboard",
+        "hyperpiano",
+        "graph",
+        "forum",
+        "clase",
+        "lily-code",
+        "lily-render",
+      ].includes(id);
+      const existing = this.dockview.getGroupPanel(id);
 
-    } catch (err) { console.warn(`TogglePod failed for ${id}:`, err); }
+      if (existing && !canHaveMultiple) {
+        if (forceOpen) {
+          existing.api.setActive();
+          if (position) {
+            this.movePanelRelative(
+              existing.id,
+              position.referencePanel ?? null,
+              position.direction ?? "right",
+            );
+          }
+        } else existing.api.close();
+      } else {
+        const titleObj = this.POD_TYPES.find((t) => t.id === id);
+        const panelId = canHaveMultiple ? `${id}-${Date.now()}` : id;
+        this.dockview.addPanel({
+          id: panelId,
+          component: id,
+          title: titleObj ? titleObj.title : id.toUpperCase().replace(/-/g, ""),
+          position: position,
+        });
+      }
+    } catch (err) {
+      console.warn(`TogglePod failed for ${id}:`, err);
+    }
   }
 
   private findPanelByBaseId(id: string) {
-    return this.dockview?.panels.find((panel) => panel.id === id || panel.id.startsWith(`${id}-`)) ?? null;
+    return (
+      this.dockview?.panels.find(
+        (panel) => panel.id === id || panel.id.startsWith(`${id}-`),
+      ) ?? null
+    );
   }
 
   public focusOrOpenChat() {
     if (!this.dockview) return;
-    const existing = this.findPanelByBaseId('chat');
+    const existing = this.findPanelByBaseId("chat");
     if (existing) {
       existing.api.setActive();
-      window.dispatchEvent(new CustomEvent('musiki:chat:focus-request'));
+      window.dispatchEvent(new CustomEvent("musiki:chat:focus-request"));
       return;
     }
 
-    const referencePanel = this.dockview.panels.find((panel) => panel.id !== 'chat');
-    const cW = this.container.getBoundingClientRect().width || this.container.offsetWidth || 1280;
+    const referencePanel = this.dockview.panels.find(
+      (panel) => panel.id !== "chat",
+    );
+    const cW =
+      this.container.getBoundingClientRect().width ||
+      this.container.offsetWidth ||
+      1280;
     this.dockview.addPanel({
-      id: 'chat',
-      component: 'chat',
-      title: 'CHAT',
-      position: referencePanel ? { referencePanel: referencePanel.id, direction: 'right' } : undefined,
+      id: "chat",
+      component: "chat",
+      title: "CHAT",
+      position: referencePanel
+        ? { referencePanel: referencePanel.id, direction: "right" }
+        : undefined,
       initialWidth: Math.round(cW * 0.25),
     });
     window.setTimeout(() => {
-      this.dockview?.getGroupPanel('chat')?.api.setActive();
-      window.dispatchEvent(new CustomEvent('musiki:chat:focus-request'));
+      this.dockview?.getGroupPanel("chat")?.api.setActive();
+      window.dispatchEvent(new CustomEvent("musiki:chat:focus-request"));
     }, 80);
   }
 
-  public focusOrOpenVisualizer(source: 'recursos' | 'visualizer' = 'visualizer') {
+  public focusOrOpenVisualizer(
+    source: "recursos" | "visualizer" = "visualizer",
+  ) {
     if (!this.dockview) return;
-    const existing = this.findPanelByBaseId('visualizer');
+    const existing = this.findPanelByBaseId("visualizer");
     if (existing) {
       existing.api.setActive();
       return;
     }
 
     const reference =
-      this.findPanelByBaseId(source === 'recursos' ? 'recursos' : 'presentation')
-      ?? this.dockview.panels.find((panel) => panel.id !== 'visualizer');
+      this.findPanelByBaseId(
+        source === "recursos" ? "recursos" : "presentation",
+      ) ?? this.dockview.panels.find((panel) => panel.id !== "visualizer");
     const rect = this.container.getBoundingClientRect();
     const W = rect.width || this.container.offsetWidth || 1280;
     this.dockview.addPanel({
-      id: 'visualizer',
-      component: 'visualizer',
-      title: 'VS',
-      position: reference ? { referencePanel: reference.id, direction: 'left' } : undefined,
+      id: "visualizer",
+      component: "visualizer",
+      title: "VS",
+      position: reference
+        ? { referencePanel: reference.id, direction: "left" }
+        : undefined,
       initialWidth: Math.round(W * 0.45),
     });
-    window.setTimeout(() => this.dockview?.getGroupPanel('visualizer')?.api.setActive(), 80);
+    window.setTimeout(
+      () => this.dockview?.getGroupPanel("visualizer")?.api.setActive(),
+      80,
+    );
   }
 
   private bindForum(root: HTMLElement) {
-    const frame = root.querySelector<HTMLIFrameElement>('[data-forum-frame]');
-    const placeholder = root.querySelector<HTMLElement>('[data-forum-placeholder]');
-    const homeBtn = root.querySelector<HTMLButtonElement>('[data-forum-action="home"]');
+    const frame = root.querySelector<HTMLIFrameElement>("[data-forum-frame]");
+    const placeholder = root.querySelector<HTMLElement>(
+      "[data-forum-placeholder]",
+    );
+    const homeBtn = root.querySelector<HTMLButtonElement>(
+      '[data-forum-action="home"]',
+    );
     if (!frame) return;
-    const courseId = document.querySelector('[data-conference-root]')?.getAttribute('data-course-id') || '';
+    const courseId =
+      document
+        .querySelector("[data-conference-root]")
+        ?.getAttribute("data-course-id") || "";
     const baseUrl = `/foro?course=${encodeURIComponent(courseId)}&view=board&scope=general&view_mode=embedded&theme=dark`;
     const loadHome = () => {
       frame.src = baseUrl;
       frame.hidden = false;
       if (placeholder) placeholder.hidden = true;
     };
-    if (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href) loadHome();
-    homeBtn?.addEventListener('click', () => loadHome());
+    if (
+      !frame.src ||
+      frame.src === "about:blank" ||
+      frame.src === window.location.href
+    )
+      loadHome();
+    homeBtn?.addEventListener("click", () => loadHome());
   }
 
   private setupDefaultLayout() {
-    this.applyLayoutByKey(window.innerWidth <= 500 ? 'mobile' : 'presentation');
+    this.applyLayoutByKey(window.innerWidth <= 500 ? "mobile" : "presentation");
   }
 
   public applyLayoutByKey(key: string) {
@@ -838,136 +1243,392 @@ export class RoomWorkspaceManager {
     // Pixel sizes for addPanel (Dockview 5.x uses initialWidth/initialHeight, not size)
     // Use offsetWidth/offsetHeight as fallback when getBoundingClientRect returns 0 at init time
     const rect = this.container.getBoundingClientRect();
-    const W = rect.width > 10 ? rect.width : (this.container.offsetWidth || 1280);
-    const H = rect.height > 10 ? rect.height : (this.container.offsetHeight || 720);
-    const side = Math.round(W * 0.2);      // right sidebar: 20%
-    const lilyLeft = Math.round(W * 0.4);  // lily-code left panel: 40%
-    const q = Math.round(H * 0.25);        // sidebar quarter-height (4 equal rows)
-    const t = Math.round(H * 0.33);        // sidebar third-height  (3 equal rows)
+    const W = rect.width > 10 ? rect.width : this.container.offsetWidth || 1280;
+    const H =
+      rect.height > 10 ? rect.height : this.container.offsetHeight || 720;
+    const side = Math.round(W * 0.2); // right sidebar: 20%
+    const lilyLeft = Math.round(W * 0.4); // lily-code left panel: 40%
+    const q = Math.round(H * 0.25); // sidebar quarter-height (4 equal rows)
+    const t = Math.round(H * 0.33); // sidebar third-height  (3 equal rows)
 
-    if (key === 'full-win-speaker') {
+    if (key === "full-win-speaker") {
       // F — SPEAKER main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'teacher', direction: 'right' }, initialWidth: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
-      this.currentWorkspaceKey = 'full-win-speaker';
+      this.dockview.addPanel({
+        id: "teacher",
+        component: "teacher",
+        title: "SPEAKER",
+      });
+      this.dockview.addPanel({
+        id: "grid-videos",
+        component: "grid-videos",
+        title: "GRID",
+        position: { referencePanel: "teacher", direction: "right" },
+        initialWidth: side,
+      });
+      this.dockview.addPanel({
+        id: "roster",
+        component: "roster",
+        title: "ROSTER",
+        position: { referencePanel: "grid-videos", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "recursos",
+        component: "recursos",
+        title: "RECURSOS",
+        position: { referencePanel: "roster", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "recursos", direction: "below" },
+        initialHeight: q,
+      });
+      this.currentWorkspaceKey = "full-win-speaker";
       this.renderQuickLists();
-    } else if (key === 'screenshare') {
+    } else if (key === "screenshare") {
       // S — SCREEN SHARE main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'screen', component: 'screen', title: 'SCREEN' });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'screen', direction: 'right' }, initialWidth: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
-      this.currentWorkspaceKey = 'screenshare';
+      this.dockview.addPanel({
+        id: "screen",
+        component: "screen",
+        title: "SCREEN",
+      });
+      this.dockview.addPanel({
+        id: "grid-videos",
+        component: "grid-videos",
+        title: "GRID",
+        position: { referencePanel: "screen", direction: "right" },
+        initialWidth: side,
+      });
+      this.dockview.addPanel({
+        id: "roster",
+        component: "roster",
+        title: "ROSTER",
+        position: { referencePanel: "grid-videos", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "recursos",
+        component: "recursos",
+        title: "RECURSOS",
+        position: { referencePanel: "roster", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "recursos", direction: "below" },
+        initialHeight: q,
+      });
+      this.currentWorkspaceKey = "screenshare";
       this.renderQuickLists();
-    } else if (key === 'presentation') {
+    } else if (key === "presentation") {
       // P — PRESENTACIÓN main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'presentation', component: 'presentation', title: 'PRESENTACIÓN' });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'presentation', direction: 'right' }, initialWidth: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
-      this.currentWorkspaceKey = 'presentation';
+      this.dockview.addPanel({
+        id: "presentation",
+        component: "presentation",
+        title: "PRESENTACIÓN",
+      });
+      this.dockview.addPanel({
+        id: "grid-videos",
+        component: "grid-videos",
+        title: "GRID",
+        position: { referencePanel: "presentation", direction: "right" },
+        initialWidth: side,
+      });
+      this.dockview.addPanel({
+        id: "roster",
+        component: "roster",
+        title: "ROSTER",
+        position: { referencePanel: "grid-videos", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "recursos",
+        component: "recursos",
+        title: "RECURSOS",
+        position: { referencePanel: "roster", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "recursos", direction: "below" },
+        initialHeight: q,
+      });
+      this.currentWorkspaceKey = "presentation";
       this.renderQuickLists();
-    } else if (key === 'debate' || key === 'grid') {
+    } else if (key === "debate" || key === "grid") {
       // G — GRID main + right sidebar (no grid in sidebar)
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID' });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'right' }, initialWidth: side });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: t });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: t });
+      this.dockview.addPanel({
+        id: "grid-videos",
+        component: "grid-videos",
+        title: "GRID",
+      });
+      this.dockview.addPanel({
+        id: "roster",
+        component: "roster",
+        title: "ROSTER",
+        position: { referencePanel: "grid-videos", direction: "right" },
+        initialWidth: side,
+      });
+      this.dockview.addPanel({
+        id: "recursos",
+        component: "recursos",
+        title: "RECURSOS",
+        position: { referencePanel: "roster", direction: "below" },
+        initialHeight: t,
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "recursos", direction: "below" },
+        initialHeight: t,
+      });
       this.currentWorkspaceKey = key;
       this.renderQuickLists();
-    } else if (key === 'external-media') {
+    } else if (key === "external-media") {
       // E — EXTERNAL MEDIA main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'external-media', component: 'external-media', title: 'MEDIA' });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'external-media', direction: 'right' }, initialWidth: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
-      this.currentWorkspaceKey = 'external-media';
+      this.dockview.addPanel({
+        id: "external-media",
+        component: "external-media",
+        title: "MEDIA",
+      });
+      this.dockview.addPanel({
+        id: "grid-videos",
+        component: "grid-videos",
+        title: "GRID",
+        position: { referencePanel: "external-media", direction: "right" },
+        initialWidth: side,
+      });
+      this.dockview.addPanel({
+        id: "roster",
+        component: "roster",
+        title: "ROSTER",
+        position: { referencePanel: "grid-videos", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "recursos",
+        component: "recursos",
+        title: "RECURSOS",
+        position: { referencePanel: "roster", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "recursos", direction: "below" },
+        initialHeight: q,
+      });
+      this.currentWorkspaceKey = "external-media";
       this.renderQuickLists();
-    } else if (key === 'whiteboard') {
+    } else if (key === "whiteboard") {
       // Z — PIZARRA main + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'whiteboard', component: 'whiteboard', title: 'PIZARRA' });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'whiteboard', direction: 'right' }, initialWidth: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
-      this.currentWorkspaceKey = 'whiteboard';
+      this.dockview.addPanel({
+        id: "whiteboard",
+        component: "whiteboard",
+        title: "PIZARRA",
+      });
+      this.dockview.addPanel({
+        id: "grid-videos",
+        component: "grid-videos",
+        title: "GRID",
+        position: { referencePanel: "whiteboard", direction: "right" },
+        initialWidth: side,
+      });
+      this.dockview.addPanel({
+        id: "roster",
+        component: "roster",
+        title: "ROSTER",
+        position: { referencePanel: "grid-videos", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "recursos",
+        component: "recursos",
+        title: "RECURSOS",
+        position: { referencePanel: "roster", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "recursos", direction: "below" },
+        initialHeight: q,
+      });
+      this.currentWorkspaceKey = "whiteboard";
       this.renderQuickLists();
-    } else if (key === 'lilypond') {
+    } else if (key === "lilypond") {
       // L — LILY-CODE + LILY-RENDER (left 80%) + right sidebar
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER' });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'lily-render', direction: 'right' }, initialWidth: side });
-      this.dockview.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILY-CODE', position: { referencePanel: 'lily-render', direction: 'left' }, initialWidth: lilyLeft });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
-      this.currentWorkspaceKey = 'lilypond';
+      this.dockview.addPanel({
+        id: "lily-render",
+        component: "lily-render",
+        title: "LILY-RENDER",
+      });
+      this.dockview.addPanel({
+        id: "grid-videos",
+        component: "grid-videos",
+        title: "GRID",
+        position: { referencePanel: "lily-render", direction: "right" },
+        initialWidth: side,
+      });
+      this.dockview.addPanel({
+        id: "lily-code",
+        component: "lily-code",
+        title: "LILY-CODE",
+        position: { referencePanel: "lily-render", direction: "left" },
+        initialWidth: lilyLeft,
+      });
+      this.dockview.addPanel({
+        id: "roster",
+        component: "roster",
+        title: "ROSTER",
+        position: { referencePanel: "grid-videos", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "recursos",
+        component: "recursos",
+        title: "RECURSOS",
+        position: { referencePanel: "roster", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "recursos", direction: "below" },
+        initialHeight: q,
+      });
+      this.currentWorkspaceKey = "lilypond";
       this.renderQuickLists();
-    } else if (key === 'collab') {
+    } else if (key === "collab") {
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'notes', component: 'notes', title: 'NOTAS' });
-      this.dockview.addPanel({ id: 'lily-code', component: 'lily-code', title: 'LILY-CODE', position: { referencePanel: 'notes', direction: 'right' } });
-      this.dockview.addPanel({ id: 'lily-render', component: 'lily-render', title: 'LILY-RENDER', position: { referencePanel: 'lily-code', direction: 'below' } });
-      this.currentWorkspaceKey = 'collab';
+      this.dockview.addPanel({
+        id: "notes",
+        component: "notes",
+        title: "NOTAS",
+      });
+      this.dockview.addPanel({
+        id: "lily-code",
+        component: "lily-code",
+        title: "LILY-CODE",
+        position: { referencePanel: "notes", direction: "right" },
+      });
+      this.dockview.addPanel({
+        id: "lily-render",
+        component: "lily-render",
+        title: "LILY-RENDER",
+        position: { referencePanel: "lily-code", direction: "below" },
+      });
+      this.currentWorkspaceKey = "collab";
       this.renderQuickLists();
-    } else if (key === 'clase') {
+    } else if (key === "clase") {
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'clase', component: 'clase', title: 'CLASE' });
-      this.dockview.addPanel({ id: 'grid-videos', component: 'grid-videos', title: 'GRID', position: { referencePanel: 'clase', direction: 'right' }, initialWidth: side });
-      this.dockview.addPanel({ id: 'roster', component: 'roster', title: 'ROSTER', position: { referencePanel: 'grid-videos', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'recursos', component: 'recursos', title: 'RECURSOS', position: { referencePanel: 'roster', direction: 'below' }, initialHeight: q });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'recursos', direction: 'below' }, initialHeight: q });
-      this.currentWorkspaceKey = 'clase';
+      this.dockview.addPanel({
+        id: "clase",
+        component: "clase",
+        title: "CLASE",
+      });
+      this.dockview.addPanel({
+        id: "grid-videos",
+        component: "grid-videos",
+        title: "GRID",
+        position: { referencePanel: "clase", direction: "right" },
+        initialWidth: side,
+      });
+      this.dockview.addPanel({
+        id: "roster",
+        component: "roster",
+        title: "ROSTER",
+        position: { referencePanel: "grid-videos", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "recursos",
+        component: "recursos",
+        title: "RECURSOS",
+        position: { referencePanel: "roster", direction: "below" },
+        initialHeight: q,
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "recursos", direction: "below" },
+        initialHeight: q,
+      });
+      this.currentWorkspaceKey = "clase";
       this.renderQuickLists();
-    } else if (key === 'mobile') {
+    } else if (key === "mobile") {
       this.clearAllPanels();
-      this.dockview.addPanel({ id: 'teacher', component: 'teacher', title: 'SPEAKER' });
-      this.dockview.addPanel({ id: 'chat', component: 'chat', title: 'CHAT', position: { referencePanel: 'teacher', direction: 'below' }, initialHeight: Math.round(H * 0.35) });
-      this.currentWorkspaceKey = 'mobile';
+      this.dockview.addPanel({
+        id: "teacher",
+        component: "teacher",
+        title: "SPEAKER",
+      });
+      this.dockview.addPanel({
+        id: "chat",
+        component: "chat",
+        title: "CHAT",
+        position: { referencePanel: "teacher", direction: "below" },
+        initialHeight: Math.max(300, Math.round(H * 0.45)),
+      });
+      this.currentWorkspaceKey = "mobile";
       this.renderQuickLists();
     }
   }
 
   private clearAllPanels() {
     if (!this.dockview) return;
-    this.dockview.panels.forEach(p => p.api.close());
+    this.dockview.panels.forEach((p) => p.api.close());
   }
 
   public applyLayout(layout: any) {
     if (!this.dockview || !layout) return;
     this.isApplyingRemoteLayout = true;
     try {
-      if (typeof layout === 'string') this.applyLayoutByKey(layout);
+      if (typeof layout === "string") this.applyLayoutByKey(layout);
       else {
         const dockviewLayout = layout.dockview ?? layout;
         this.dockview.fromJSON(dockviewLayout);
         if (layout.settings) {
-          window.dispatchEvent(new CustomEvent('musiki:workspace:settings', {
-            detail: layout.settings,
-          }));
+          window.dispatchEvent(
+            new CustomEvent("musiki:workspace:settings", {
+              detail: layout.settings,
+            }),
+          );
         }
       }
-    } catch (e) { console.error('Error applying remote layout:', e); }
-    finally { this.isApplyingRemoteLayout = false; }
+    } catch (e) {
+      console.error("Error applying remote layout:", e);
+    } finally {
+      this.isApplyingRemoteLayout = false;
+    }
   }
 
-  public getLayout() { return this.dockview?.toJSON(); }
+  public getLayout() {
+    return this.dockview?.toJSON();
+  }
 }
 
 // DIY Pod Styles
-const style = document.createElement('style');
+const style = document.createElement("style");
 style.textContent = `
   .workspace-item {
     width: 100% !important;
@@ -1043,7 +1704,6 @@ style.textContent = `
     color: #fff;
     padding: 0 4px;
     gap: 6px;
-    border-top: 1px solid var(--pod-color, #444);
     z-index: 100;
     flex-shrink: 0;
   }
@@ -1089,13 +1749,13 @@ style.textContent = `
     border-radius: 50%;
   }
   .pod-diy-title {
-    font-size: 0.58rem;
+    font-size: 0.5rem;
     font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.12em;
     color: var(--pod-color, #fff) !important;
     text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 1px rgba(0,0,0,0.7);
-    opacity: 1;
+    opacity: 0.7;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1141,11 +1801,11 @@ style.textContent = `
   }
 
   /* Aggressive Dockview Header Hiding - Kill the Abyss - Scoped to container */
-  .dockview-container .dv-header, 
-  .dockview-container .dv-tab-container, 
-  .dockview-container .dv-tab, 
-  .dockview-container .dv-tab-divider, 
-  .dockview-container .dv-tab-separator, 
+  .dockview-container .dv-header,
+  .dockview-container .dv-tab-container,
+  .dockview-container .dv-tab,
+  .dockview-container .dv-tab-divider,
+  .dockview-container .dv-tab-separator,
   .dockview-container .dv-tabs-and-actions-container {
     height: 0 !important;
     min-height: 0 !important;
@@ -1231,7 +1891,6 @@ style.textContent = `
     .pod-diy-handle { display: none; }
     .pod-diy-arrow { display: none; }
     .dockview-container .dv-view-container { flex-direction: column !important; }
-    .dockview-container .dv-view { width: 100% !important; flex: 1 1 auto !important; }
     .dockview-container .dv-separator-handle-container { display: none !important; }
   }
 `;

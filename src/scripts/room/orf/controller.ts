@@ -435,11 +435,30 @@ export const createRoomOrfController = (options: CreateRoomOrfControllerOptions)
     syncControls(false);
     if (!boundInputs.has(currentInput)) {
       boundInputs.add(currentInput);
-      currentInput.addEventListener('input', () => syncControls(false));
+      
+      const autoResize = () => {
+        currentInput.style.height = 'auto';
+        const lineHeight = 16;
+        const padding = 16;
+        const maxLines = 4;
+        const maxHeight = (lineHeight * maxLines) + padding;
+        const newHeight = Math.min(maxHeight, currentInput.scrollHeight);
+        currentInput.style.height = newHeight + 'px';
+        currentInput.style.overflowY = currentInput.scrollHeight > maxHeight ? 'auto' : 'hidden';
+      };
+
+      currentInput.addEventListener('input', () => {
+        autoResize();
+        syncControls(false);
+      });
+
       currentInput.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' || event.shiftKey) return;
         event.preventDefault();
-        void ask();
+        void ask().then(() => {
+          currentInput.style.height = '1.8rem';
+          currentInput.style.overflowY = 'hidden';
+        });
       });
     }
     if (!boundButtons.has(currentSendButton)) {

@@ -57,7 +57,7 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
   padding: 5px 10px;
-  border-bottom: 1px solid #222;
+  border-bottom: none !important;
 }
 
 .re-sessions-list {
@@ -294,7 +294,7 @@
 /* ── Bottom bar ───────────────────────────────────────────── */
 .re-bottombar {
   flex-shrink: 0;
-  border-top: 1px solid #2a2a2a;
+  border-top: none !important;
 }
 
 .re-bb-btn {

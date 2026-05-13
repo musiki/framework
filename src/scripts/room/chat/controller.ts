@@ -527,11 +527,29 @@ export const createRoomChatController = ({
         resetUnread();
       });
 
+      const autoResize = () => {
+        currentChatInput.style.height = 'auto';
+        const lineHeight = 16; // approx
+        const padding = 16; // 0.5rem top + 0.5rem bottom
+        const maxLines = 4;
+        const maxHeight = (lineHeight * maxLines) + padding;
+        const newHeight = Math.min(maxHeight, currentChatInput.scrollHeight);
+        currentChatInput.style.height = newHeight + 'px';
+        
+        // If we reached max height, enable scrollbar, otherwise hide it
+        currentChatInput.style.overflowY = currentChatInput.scrollHeight > maxHeight ? 'auto' : 'hidden';
+      };
+
+      currentChatInput.addEventListener('input', autoResize);
+
       currentChatInput.addEventListener('keydown', (event) => {
         if (!(event instanceof KeyboardEvent)) return;
         if (event.key !== 'Enter' || event.shiftKey) return;
         event.preventDefault();
-        void sendMessage();
+        void sendMessage().then(() => {
+          currentChatInput.style.height = '1.8rem'; // Reset to 1 line
+          currentChatInput.style.overflowY = 'hidden';
+        });
       });
     }
 

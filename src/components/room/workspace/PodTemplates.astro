@@ -424,8 +424,7 @@ const { presentationOptions = [] } = Astro.props;
   }
 
   .musiki-pod-toolbar--top {
-    border-top: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border: none !important;
   }
 
   .whiteboard-group {
@@ -514,9 +513,9 @@ const { presentationOptions = [] } = Astro.props;
     align-items: center;
     gap: 0.4rem;
     padding: 0.3rem 0.5rem;
-    background: rgba(10, 10, 12, 0.96);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(16px);
+    background: transparent !important;
+    border: none !important;
+    backdrop-filter: none !important;
     z-index: 500;
     min-height: 2.4rem;
     position: relative;
@@ -569,7 +568,7 @@ const { presentationOptions = [] } = Astro.props;
     min-width: 0;
     height: 1.6rem;
     padding: 0 0.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: none !important;
     border-radius: 0.35rem;
     background: rgba(255, 255, 255, 0.04);
     color: #f8fafc;
@@ -951,19 +950,24 @@ const { presentationOptions = [] } = Astro.props;
 
   .conference-chat-compose-anchor {
     padding: 0.5rem;
-    background: rgba(10, 10, 15, 0.5);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: transparent !important;
+    border: none !important;
   }
 
   .conference-chat-compose textarea {
     width: 100%;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: none !important;
     border-radius: 0.4rem;
     color: #fff;
     padding: 0.5rem;
     font-size: 0.8rem;
     resize: none;
+    height: 1.8rem;
+    min-height: 1.8rem;
+    line-height: 1.2;
+    overflow-y: hidden;
+    transition: height 0.12s ease-out;
   }
 
   .conference-notes-source {
