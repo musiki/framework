@@ -71,6 +71,7 @@ export class RecursosController {
   private sessionsModalEl!: HTMLElement;
   private sessionsListEl!: HTMLElement;
   private collabBtn!: HTMLButtonElement;
+  private saveRepoBtn!: HTMLButtonElement;
   private foldBtn!: HTMLButtonElement;
   private newFolderBtn!: HTMLButtonElement;
   private pasteBtn!: HTMLButtonElement;
@@ -107,6 +108,7 @@ export class RecursosController {
     this.sessionsModalEl    = q('[data-re-sessions-modal]');
     this.sessionsListEl     = q('[data-re-sessions-list]');
     this.collabBtn          = q('[data-re-collab]');
+    this.saveRepoBtn        = q('[data-re-save-repo]');
     this.foldBtn            = q('[data-re-fold]');
     this.newFolderBtn       = q('[data-re-new-folder]');
     this.pasteBtn           = q('[data-re-paste]');
@@ -239,6 +241,7 @@ export class RecursosController {
     });
 
     this.foldBtn.addEventListener('click', () => this.toggleFoldAll());
+    this.saveRepoBtn.addEventListener('click', () => void this.saveToRepo());
     this.newFolderBtn.addEventListener('click', () => this.startNewFolder());
     this.pasteBtn.addEventListener('click', () => void this.pasteClipboard());
     this.collabBtn.addEventListener('click', () => this.toggleAllowStudents());
@@ -614,6 +617,37 @@ export class RecursosController {
     this.autosaveDirty = true;
     if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
     this.autosaveTimer = setTimeout(() => void this.save(), 5000);
+  }
+
+  private async saveToRepo() {
+    const roomName = this.getRoomName() ?? '';
+    if (!roomName) return;
+    
+    this.saveRepoBtn.disabled = true;
+    const oldText = this.saveRepoBtn.textContent;
+    this.saveRepoBtn.textContent = '...';
+    
+    try {
+      const payload = {
+        ...this.buildSavePayload(roomName),
+        persist: true,
+        courseRootId: this.getCourseRootId() ?? null,
+      };
+      const resp = await fetch('/api/live/recursos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (resp.ok) {
+        this.autosaveDirty = false;
+        console.log('[Re] Saved to Markdown repository.');
+      }
+    } catch (e) {
+      console.error('[Re] Manual save failed', e);
+    } finally {
+      this.saveRepoBtn.disabled = false;
+      this.saveRepoBtn.textContent = oldText;
+    }
   }
 
   private async save() {

@@ -53,13 +53,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   if (!roomName) return json({ error: 'roomName required' }, 400);
 
-  const deleteParams: any[] = [roomName];
-  const deleteWhere = claseId === null
+  const incomingIds = items.map(i => String(i.id)).filter(Boolean);
+
+  // Coherence: we want the DB to match the pod's state for this specific scope (room + clase).
+  // We delete items that are NOT in the incoming list, but ONLY for this room/clase.
+  // This avoids wiping out other sessions or classes.
+  const cleanupWhere = claseId === null
     ? `"roomName" = $1 AND "claseId" IS NULL`
     : `"roomName" = $1 AND "claseId" = $2`;
-  if (claseId !== null) deleteParams.push(claseId);
+  const cleanupParams: any[] = [roomName];
+  if (claseId !== null) cleanupParams.push(claseId);
+  
+  const idPlaceholder = claseId === null ? '$2' : '$3';
+  const deleteSql = `DELETE FROM "LiveClassResource" 
+                     WHERE ${cleanupWhere} 
+                     ${incomingIds.length > 0 ? `AND id NOT IN (${incomingIds.map((_, i) => `$${(claseId === null ? 2 : 3) + i}`).join(', ')})` : ''}`;
+  
+  if (incomingIds.length > 0) {
+    cleanupParams.push(...incomingIds);
+  }
 
-  const delResult = await query(`DELETE FROM "LiveClassResource" WHERE ${deleteWhere}`, deleteParams);
+  const delResult = await query(deleteSql, cleanupParams);
   if (delResult.error) return json({ error: delResult.error.message }, 500);
 
   if (items.length === 0) {
@@ -90,11 +104,40 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }).join(', ');
   const vals = rows.flatMap(row => Object.values(row));
 
+  // Upsert: update existing IDs, insert new ones.
+  const updateSql = cols.filter(c => c !== 'id').map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+
   const insertResult = await query(
-    `INSERT INTO "LiveClassResource" (${colSql}) VALUES ${rowPlaceholders}`,
+    `INSERT INTO "LiveClassResource" (${colSql}) 
+     VALUES ${rowPlaceholders}
+     ON CONFLICT (id) DO UPDATE SET ${updateSql}`,
     vals,
   );
   if (insertResult.error) return json({ error: insertResult.error.message }, 500);
 
+  // Coherence: only auto-persist to Markdown in production.
+  // In development, the teacher must use the "Save to Repo" button to avoid reload loops.
+  if (process.env.NODE_ENV === 'production' || body?.persist === true) {
+    const courseRootId = cleanString(String(body?.courseRootId ?? ''), 120) || null;
+    await persistProjection({ courseRootId, claseId, roomName, items: rows }).catch(err => {
+      console.error('[recursos] background markdown sync failed', err);
+    });
+  }
+
   return json({ ok: true, count: rows.length });
 };
+
+async function persistProjection(options: {
+  courseRootId: string | null;
+  claseId: string | null;
+  roomName: string;
+  items: any[];
+}) {
+  try {
+    const { persistRecursosMarkdownProjection } = await import('../../../lib/live/recursos-markdown');
+    return await persistRecursosMarkdownProjection(options);
+  } catch (error) {
+    console.error('[recursos] markdown projection failed', error);
+    return null;
+  }
+}
