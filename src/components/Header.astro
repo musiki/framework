@@ -210,7 +210,7 @@ const withActiveCourse = (href: string) => {
 };
 ---
 
-<header>
+<header data-logged-in={headerDbUserId ? 'true' : undefined}>
 	<nav>
 		<h2>
 			<a
@@ -1014,6 +1014,16 @@ const withActiveCourse = (href: string) => {
 		setupOnlinePresence();
 	}
 	document.addEventListener('astro:page-load', setupOnlinePresence);
+</script>
+<script>
+	// Fire-and-forget platform access log (client-side to avoid blocking SSR)
+	function fireLogAccess() {
+		const header = document.querySelector('header[data-logged-in]');
+		if (!header) return;
+		fetch('/api/user/log-access', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+	}
+	fireLogAccess();
+	document.addEventListener('astro:page-load', fireLogAccess);
 </script>
 <style>
 	header {
