@@ -3857,13 +3857,11 @@ const buildTable = (
 ) => {
   const isComplexTable = context.kind === 'gradebook' || context.kind === 'attendance-summary';
   const isRangeTable = supportsRangeSelection(context.kind);
-  const fillPanelHeight = ['teacher-main', 'overview', 'gradebook', 'attendance-summary', 'admin'].includes(context.kind);
+  const fillPanelHeight = ['teacher-main', 'overview', 'gradebook', 'attendance-summary', 'admin', 'attendance-log', 'login-log'].includes(context.kind);
   const maxHeight =
     ['comments', 'teacher-eval'].includes(context.kind)
       ? '34vh'
-      : ['attendance-log', 'login-log'].includes(context.kind)
-        ? '50vh'
-        : false;
+      : false;
   element.dataset.rangeSelection = isRangeTable ? 'true' : 'false';
     const table = new Tabulator(element, {
     index: 'id',

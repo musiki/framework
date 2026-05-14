@@ -4024,12 +4024,13 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         display: flex;
       }
       [data-dashboard-tab-panel="log"]:not([hidden]) {
-        overflow-y: auto;
+        overflow: hidden;
       }
       /* Log sub-tabs */
       .log-subtab-shell {
         display: flex;
         flex-direction: column;
+        flex: 1 1 0;
         width: 100%;
         min-height: 0;
         gap: 0.5rem;
