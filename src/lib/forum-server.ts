@@ -135,7 +135,6 @@ export async function ensureDbUserFromSession(
       }
     }
 
-    void logPlatformAccess(existing.id, normalizedEmail, existing.name).catch(() => {});
     return normalizeDbUser(existing);
   }
 
@@ -187,7 +186,6 @@ export async function ensureDbUserFromSession(
       const { registerEmailForUser } = await import('./user-email');
       await registerEmailForUser(inserted.id, normalizedEmail, true).catch(() => undefined);
     } catch {}
-    void logPlatformAccess(inserted.id, normalizedEmail, insertPayload.name).catch(() => {});
     return normalizeDbUser(inserted);
   }
 
