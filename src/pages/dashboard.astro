@@ -4026,6 +4026,65 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       [data-dashboard-tab-panel="log"]:not([hidden]) {
         overflow-y: auto;
       }
+      /* Log sub-tabs */
+      .log-subtab-shell {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        min-height: 0;
+        gap: 0.5rem;
+        padding: 0.5rem 0.7rem 0.7rem;
+      }
+      .log-subtab-nav {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.15rem;
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid var(--c-border);
+      }
+      .log-subtab-btn {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        padding: 0.22rem 0.55rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--c-fg-mute, #888);
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color 0.15s, border-color 0.15s, background 0.15s;
+        border-radius: 3px 3px 0 0;
+        letter-spacing: 0.01em;
+      }
+      .log-subtab-btn:hover { color: var(--c-fg); background: var(--c-bg-mute); }
+      .log-subtab-btn.active { color: var(--c-link); border-bottom-color: var(--c-link); }
+      .log-subtab-panels { flex: 1; min-height: 0; }
+      .log-subtab-panel { display: flex; flex-direction: column; gap: 0.4rem; height: 100%; }
+      [data-log-subtab-panel][hidden] { display: none !important; }
+      [data-log-subtab-panel] { display: flex; flex-direction: column; gap: 0.4rem; height: 100%; }
+      @media (min-width: 1001px) {
+        .log-subtab-shell { flex-direction: row; padding: 0.5rem 0.7rem 0.7rem; gap: 0; }
+        .log-subtab-nav {
+          flex-direction: column;
+          flex-wrap: nowrap;
+          border-bottom: none;
+          border-right: 1px solid var(--c-border);
+          padding-bottom: 0;
+          padding-right: 0.4rem;
+          min-width: 88px;
+          gap: 0.05rem;
+        }
+        .log-subtab-btn {
+          border-bottom: none;
+          border-left: 2px solid transparent;
+          border-radius: 0 3px 3px 0;
+          text-align: left;
+          padding: 0.28rem 0.5rem;
+        }
+        .log-subtab-btn.active { border-left-color: var(--c-link); border-bottom-color: transparent; background: var(--c-bg-mute); }
+        .log-subtab-panels { flex: 1; padding-left: 0.7rem; min-width: 0; overflow-y: auto; }
+      }
       .teacher-grid-shell {
         display: grid;
         gap: 0.55rem;
@@ -6601,112 +6660,110 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
             data-dashboard-tab-panel="log"
             hidden={initialTeacherDashboardTab !== 'log'}
           >
-            <div class="teacher-grid-shell teacher-grid-shell--stacked">
-              <section class="teacher-log-section">
-                <h3 class="teacher-section-title">Log de Asistencias al Room</h3>
-                <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
-                  <input
-                    type="search"
-                    class="dashboard-grid-search"
-                    data-dashboard-search="attendance-log"
-                    placeholder="Buscar en log: estudiante, email, clase, día..."
-                    aria-label="Buscar en log de asistencia"
-                  />
-                  <div class="dashboard-grid-actions">
-                    <button
-                      type="button"
-                      class="dashboard-grid-btn dashboard-grid-btn--square"
-                      data-dashboard-download="attendance-log"
-                      title="Exportar el log de asistencias como CSV."
-                      aria-label="Exportar el log de asistencias como CSV"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    </button>
+            <div class="log-subtab-shell">
+              <nav class="log-subtab-nav" aria-label="Subpestañas de log">
+                <button class="log-subtab-btn active" data-log-tab="room">room</button>
+                <button class="log-subtab-btn" data-log-tab="anotaciones">anotaciones</button>
+                <button class="log-subtab-btn" data-log-tab="ingresos">ingresos</button>
+                <button class="log-subtab-btn" data-log-tab="evals">evals</button>
+              </nav>
+              <div class="log-subtab-panels">
+                <div class="log-subtab-panel" data-log-subtab-panel="room">
+                  <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
+                    <input
+                      type="search"
+                      class="dashboard-grid-search"
+                      data-dashboard-search="attendance-log"
+                      placeholder="Buscar en log: estudiante, email, clase, día..."
+                      aria-label="Buscar en log de asistencia"
+                    />
+                    <div class="dashboard-grid-actions">
+                      <button
+                        type="button"
+                        class="dashboard-grid-btn dashboard-grid-btn--square"
+                        data-dashboard-download="attendance-log"
+                        title="Exportar el log de asistencias como CSV."
+                        aria-label="Exportar el log de asistencias como CSV"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      </button>
+                    </div>
                   </div>
+                  <div class="dashboard-tabulator" data-dashboard-grid="attendance-log"></div>
                 </div>
-                <div class="dashboard-tabulator" data-dashboard-grid="attendance-log"></div>
-              </section>
-              <section class="teacher-log-section">
-                <h3 class="teacher-section-title">Log de comentarios y anotaciones</h3>
-                <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
-                  <input
-                    type="search"
-                    class="dashboard-grid-search"
-                    data-dashboard-search="comments"
-                    placeholder="Buscar estudiante, scope, color, comentario..."
-                    aria-label="Buscar en comentarios y anotaciones"
-                  />
-                  <div class="dashboard-grid-actions">
-                    <button
-                      type="button"
-                      class="dashboard-grid-btn dashboard-grid-btn--square"
-                      data-dashboard-download="comments"
-                      title="Exportar comentarios y anotaciones como CSV."
-                      aria-label="Exportar comentarios y anotaciones como CSV"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    </button>
+                <div class="log-subtab-panel" data-log-subtab-panel="anotaciones" hidden>
+                  <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
+                    <input
+                      type="search"
+                      class="dashboard-grid-search"
+                      data-dashboard-search="comments"
+                      placeholder="Buscar estudiante, scope, color, comentario..."
+                      aria-label="Buscar en comentarios y anotaciones"
+                    />
+                    <div class="dashboard-grid-actions">
+                      <button
+                        type="button"
+                        class="dashboard-grid-btn dashboard-grid-btn--square"
+                        data-dashboard-download="comments"
+                        title="Exportar comentarios y anotaciones como CSV."
+                        aria-label="Exportar comentarios y anotaciones como CSV"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      </button>
+                    </div>
                   </div>
+                  <p class="teacher-grid-note">Observaciones operativas compartidas entre docentes del curso activo.</p>
+                  <div class="dashboard-tabulator" data-dashboard-grid="comments"></div>
                 </div>
-                <p class="teacher-grid-note">
-                  Observaciones operativas compartidas entre docentes del curso activo.
-                </p>
-                <div class="dashboard-tabulator" data-dashboard-grid="comments"></div>
-              </section>
-              <section class="teacher-log-section">
-                <h3 class="teacher-section-title">Log de ingresos a la plataforma</h3>
-                <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
-                  <input
-                    type="search"
-                    class="dashboard-grid-search"
-                    data-dashboard-search="login-log"
-                    placeholder="Buscar por nombre, email, fecha..."
-                    aria-label="Buscar en log de ingresos"
-                  />
-                  <div class="dashboard-grid-actions">
-                    <button
-                      type="button"
-                      class="dashboard-grid-btn dashboard-grid-btn--square"
-                      data-dashboard-download="login-log"
-                      title="Exportar log de ingresos como CSV."
-                      aria-label="Exportar log de ingresos como CSV"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    </button>
+                <div class="log-subtab-panel" data-log-subtab-panel="ingresos" hidden>
+                  <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
+                    <input
+                      type="search"
+                      class="dashboard-grid-search"
+                      data-dashboard-search="login-log"
+                      placeholder="Buscar por nombre, email, fecha..."
+                      aria-label="Buscar en log de ingresos"
+                    />
+                    <div class="dashboard-grid-actions">
+                      <button
+                        type="button"
+                        class="dashboard-grid-btn dashboard-grid-btn--square"
+                        data-dashboard-download="login-log"
+                        title="Exportar log de ingresos como CSV."
+                        aria-label="Exportar log de ingresos como CSV"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      </button>
+                    </div>
                   </div>
+                  <p class="teacher-grid-note">Un registro por usuario cada 4 horas.</p>
+                  <div class="dashboard-tabulator" data-dashboard-grid="login-log"></div>
                 </div>
-                <p class="teacher-grid-note">
-                  Un registro por usuario cada 4 horas. Se registra automáticamente al acceder a la plataforma.
-                </p>
-                <div class="dashboard-tabulator" data-dashboard-grid="login-log"></div>
-              </section>
-              <section class="teacher-log-section">
-                <h3 class="teacher-section-title">Log de actividad de docentes en evals</h3>
-                <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
-                  <input
-                    type="search"
-                    class="dashboard-grid-search"
-                    data-dashboard-search="teacher-eval"
-                    placeholder="Buscar docente, email, clase, comentario..."
-                    aria-label="Buscar en log de evals de docentes"
-                  />
-                  <div class="dashboard-grid-actions">
-                    <button
-                      type="button"
-                      class="dashboard-grid-btn dashboard-grid-btn--square"
-                      data-dashboard-download="teacher-eval"
-                      title="Exportar el log de evals de docentes como CSV."
-                      aria-label="Exportar el log de evals de docentes como CSV"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    </button>
+                <div class="log-subtab-panel" data-log-subtab-panel="evals" hidden>
+                  <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
+                    <input
+                      type="search"
+                      class="dashboard-grid-search"
+                      data-dashboard-search="teacher-eval"
+                      placeholder="Buscar docente, email, clase, comentario..."
+                      aria-label="Buscar en log de evals de docentes"
+                    />
+                    <div class="dashboard-grid-actions">
+                      <button
+                        type="button"
+                        class="dashboard-grid-btn dashboard-grid-btn--square"
+                        data-dashboard-download="teacher-eval"
+                        title="Exportar el log de evals de docentes como CSV."
+                        aria-label="Exportar el log de evals de docentes como CSV"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      </button>
+                    </div>
                   </div>
+                  <p class="teacher-grid-note">Registro de evals completados por docentes y administradores.</p>
+                  <div class="dashboard-tabulator" data-dashboard-grid="teacher-eval"></div>
                 </div>
-                <p class="teacher-grid-note">
-                  Registro de evals completados por docentes y administradores (usado para testing o ejemplos).
-                </p>
-                <div class="dashboard-tabulator" data-dashboard-grid="teacher-eval"></div>
-              </section>
+              </div>
             </div>
           </div>
 
@@ -7446,6 +7503,22 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       };
 
       const initializeDashboardLogPanels = () => {
+        // Sub-tabs inside the Log main tab
+        document.querySelectorAll('[data-log-tab]').forEach((btn) => {
+          if (btn.dataset.bound === 'true') return;
+          btn.dataset.bound = 'true';
+          btn.addEventListener('click', () => {
+            const tab = btn.getAttribute('data-log-tab');
+            const shell = btn.closest('.log-subtab-shell');
+            if (!shell || !tab) return;
+            shell.querySelectorAll('[data-log-tab]').forEach((b) => b.classList.remove('active'));
+            shell.querySelectorAll('[data-log-subtab-panel]').forEach((p) => { (p as HTMLElement).hidden = true; });
+            btn.classList.add('active');
+            const panel = shell.querySelector(`[data-log-subtab-panel="${tab}"]`) as HTMLElement | null;
+            if (panel) panel.hidden = false;
+          });
+        });
+
         const data = getLogData();
         document.querySelectorAll('[data-log-panel]').forEach((panel) => {
           const scope = String(panel.getAttribute('data-log-scope') || '').trim();
