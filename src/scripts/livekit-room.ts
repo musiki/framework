@@ -11588,8 +11588,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           name,
           layout,
           createdBy,
-          courseId: activeCourseId,
-          claseId: rawCourseId,
+          courseId: courseId || null,
+          claseId: recursosCurrentLessonId,
         }),
       });
       if (resp.ok) {
@@ -11602,6 +11602,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   // Load initial snapshots
   window.setTimeout(() => void syncSnapshots(), 2000);
+
+  window.addEventListener('musiki:workspace:settings', (e: Event) => {
+    const settings = (e as CustomEvent<any>).detail;
+    if (!settings) return;
+    if (settings.gridSize) {
+      applyGridSize(settings.gridSize);
+    }
+    if (typeof settings.showCircle === 'boolean') {
+      showPresentationCircle = settings.showCircle;
+      applyShowCircleState();
+    }
+  });
 
   const concepts = new ConceptsController((msg) => void publishMessage(msg));
 
