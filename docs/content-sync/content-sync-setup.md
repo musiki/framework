@@ -2,13 +2,15 @@
 
 _Última actualización: 2026-04-16_
 
+> Actualizacion estrategica 2026-05-14: este documento describe el flujo vigente basado en repos/vaults Markdown y GitHub Actions. Para el refactor de workspace, este flujo pasa a ser un mecanismo de autoría, espejo, export/import y backup. La fuente de verdad futura para recursos, snapshots y texto de cursos sera Postgres, con Markdown/YAML como mirror portable para Obsidian. Ver [Musiki Class Workspace Refactor](../architecture/class-workspace-refactor.md).
+
 Este documento describe la arquitectura de sincronización de contenido implementada en Musiki para que los repositorios de materias actualicen la producción de forma automatizada, sin pasos manuales sobre el VPS. 
 
 Este setup asegura que el entorno de despliegue principal (`framework`) orqueste los contenidos (los `cursos`) independientemente.
 
 ---
 
-## 1. El Problema Estructural y la Solución
+## 1. El Problema Estructural y la Solución Vigente
 
 Astro, por defecto, compila las colecciones de contenido durante el tiempo de construcción (`build-time`). Esto significa que:
 - El Markdown se transforma en HTML y se guarda en una base de datos interna o carpeta estática (`dist/`).
@@ -17,6 +19,13 @@ Astro, por defecto, compila las colecciones de contenido durante el tiempo de co
 
 **La Solución: Orquestación Híbrida y Cero Downtime**
 Hemos separado la **autoría** del contenido (repos de materias) del **runtime** del framework y orquestado las notificaciones a través de un bus en el servidor.
+
+Esta solucion sigue siendo valida para el contenido que todavia vive como Markdown en repositorios de materia. No debe ampliarse como fuente de verdad para el nuevo workspace. El nuevo contrato sera:
+
+- Postgres: identidad canonica, texto, metadata, permisos, versiones y relaciones.
+- R2: blobs y artifacts pesados.
+- Markdown/YAML: mirror legible para Obsidian, import/export y backup.
+- GitHub Actions: respaldo/deploy/export, no runtime live-state.
 
 **Flujo de Datos (Workflow):**
 1. **Repositorio de Materia (p.ej: i1, cym, s123):** El profesor aprueba y hace un `push` a su repositorio.

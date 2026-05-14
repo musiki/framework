@@ -1,0 +1,1762 @@
+---
+type Props = {
+  courseId: string;
+  canManage: boolean;
+  canContribute?: boolean;
+};
+
+const { courseId, canManage, canContribute = canManage } = Astro.props;
+---
+
+<section
+  class="cw-panel"
+  data-class-workspace
+  data-course-id={courseId}
+  data-can-manage={canManage ? 'true' : 'false'}
+  data-can-contribute={canContribute ? 'true' : 'false'}
+>
+  <header class="cw-toolbar">
+    <div>
+      <p class="cw-kicker">RECURSOS</p>
+      <h2>Workspace</h2>
+    </div>
+    <div class="cw-toolbar-actions">
+      <input class="cw-search" data-cw-search placeholder="Buscar" />
+      <button type="button" class="cw-btn" data-cw-refresh>Actualizar</button>
+      {canContribute && (
+        <>
+          {canManage && <button type="button" class="cw-btn cw-btn-primary" data-cw-session>Nueva sesion</button>}
+          <button type="button" class="cw-btn cw-btn-primary" data-cw-folder>Carpeta</button>
+          <button type="button" class="cw-btn cw-btn-primary" data-cw-link>Link</button>
+          <button type="button" class="cw-btn" data-cw-rename-top>Renombrar</button>
+          <label class="cw-btn cw-btn-primary">
+            Subir
+            <input type="file" data-cw-upload multiple hidden />
+          </label>
+        </>
+      )}
+    </div>
+  </header>
+
+  <div class="cw-status" data-cw-status>Listo.</div>
+  <div class="cw-bulkbar" data-cw-bulkbar hidden>
+    <span data-cw-selection-count>0 seleccionados</span>
+    <button type="button" class="cw-btn" data-cw-bulk-rename hidden>Renombrar</button>
+    <button type="button" class="cw-btn" data-cw-bulk-move>Mover</button>
+    <button type="button" class="cw-btn cw-btn-danger" data-cw-bulk-delete>Borrar</button>
+    <button type="button" class="cw-btn" data-cw-selection-clear>Limpiar</button>
+  </div>
+
+  <div class="cw-layout">
+    <aside class="cw-tree" data-cw-tree></aside>
+    <main class="cw-main">
+      <div class="cw-breadcrumb">
+        <button type="button" class="cw-breadcrumb-btn" data-cw-root>Todo</button>
+        <button type="button" class="cw-breadcrumb-btn" data-cw-up hidden>Arriba</button>
+        <span data-cw-current>Todo</span>
+      </div>
+      <div class="cw-grid" data-cw-grid></div>
+    </main>
+    <aside class="cw-preview" data-cw-preview>
+      <div class="cw-empty">Selecciona un recurso.</div>
+    </aside>
+  </div>
+
+  <div class="cw-context-menu" data-cw-context-menu hidden>
+    <button type="button" data-cw-context-action="preview">Ver</button>
+    <button type="button" data-cw-context-action="open">Abrir</button>
+    <button type="button" data-cw-context-action="rename" data-requires-edit>Renombrar</button>
+    <button type="button" data-cw-context-action="move" data-requires-edit>Mover</button>
+    <button type="button" data-cw-context-action="delete" data-requires-edit>Borrar</button>
+  </div>
+
+  <div class="cw-modal" data-cw-modal hidden>
+    <button type="button" class="cw-modal-backdrop" data-cw-modal-close aria-label="Cerrar preview"></button>
+    <div class="cw-modal-panel" role="dialog" aria-modal="true">
+      <button type="button" class="cw-modal-close" data-cw-modal-close aria-label="Cerrar">×</button>
+      <div data-cw-modal-body></div>
+    </div>
+  </div>
+</section>
+
+<style is:global>
+  .cw-panel {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0;
+    background: transparent;
+  }
+
+  .cw-panel[data-dragging-files="true"] {
+    background: color-mix(in srgb, var(--c-link) 5%, transparent);
+  }
+
+  .cw-toolbar,
+  .cw-toolbar-actions,
+  .cw-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .cw-toolbar {
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .cw-kicker {
+    margin: 0 0 0.15rem;
+    color: var(--c-fg-dim);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+  }
+
+  .cw-panel h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .cw-btn {
+    border: 0;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c-fg) 6%, transparent);
+    color: var(--c-fg);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1;
+    padding: 0.48rem 0.62rem;
+  }
+
+  .cw-search {
+    min-width: 10rem;
+    border: 0;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c-fg) 6%, transparent);
+    color: var(--c-fg);
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 0.43rem 0.55rem;
+  }
+
+  .cw-btn-primary {
+    background: color-mix(in srgb, var(--c-link) 12%, transparent);
+    color: color-mix(in srgb, var(--c-link) 84%, var(--c-fg));
+  }
+
+  .cw-btn-danger {
+    color: #b84242;
+  }
+
+  .cw-status {
+    min-height: 1rem;
+    color: var(--c-fg-dim);
+    font-size: 0.78rem;
+  }
+
+  .cw-bulkbar {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--c-link) 8%, transparent);
+    color: var(--c-fg);
+    font-size: 0.8rem;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .cw-bulkbar[hidden] {
+    display: none;
+  }
+
+  .cw-layout {
+    display: grid;
+    grid-template-columns: minmax(160px, 0.22fr) minmax(0, 1fr);
+    gap: 0.7rem;
+    min-height: 30rem;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  .cw-tree,
+  .cw-preview {
+    overflow: auto;
+    padding: 0;
+    background: transparent;
+  }
+
+  .cw-preview {
+    display: none;
+  }
+
+  .cw-tree {
+    display: grid;
+    align-content: start;
+    gap: 0.18rem;
+  }
+
+  .cw-main {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .cw-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--c-fg-dim);
+    font-size: 0.8rem;
+    padding: 0 0 0.45rem;
+  }
+
+  .cw-breadcrumb-btn {
+    border: 0;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c-fg) 6%, transparent);
+    color: var(--c-fg);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.45rem;
+  }
+
+  .cw-breadcrumb-btn[hidden] {
+    display: none;
+  }
+
+  .cw-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 100px);
+    grid-auto-rows: 100px;
+    align-content: start;
+    gap: 0.62rem;
+    justify-content: start;
+    overflow: auto;
+    padding: 0;
+  }
+
+  .cw-tree-node {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.28rem;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--c-fg);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+    min-height: 1.72rem;
+    padding: 0.15rem 0.42rem 0.15rem calc(0.42rem + (var(--depth, 0) * 0.9rem));
+    text-align: left;
+  }
+
+  .cw-tree-node[data-active="true"],
+  .cw-tree-node[data-drop-target="true"],
+  .cw-tree-node:hover {
+    background: color-mix(in srgb, var(--c-link) 10%, transparent);
+  }
+
+  .cw-tree-node[data-active="true"] {
+    color: color-mix(in srgb, var(--c-link) 84%, var(--c-fg));
+    font-weight: 650;
+  }
+
+  .cw-tree-node[data-drop-target="true"] {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-link) 36%, transparent);
+  }
+
+  .cw-tree-caret,
+  .cw-tree-icon {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--c-fg-dim);
+    line-height: 1;
+  }
+
+  .cw-tree-caret {
+    width: 0.8rem;
+    font-size: 0.72rem;
+  }
+
+  .cw-tree-icon {
+    width: 1.2rem;
+    font-size: 0.74rem;
+  }
+
+  .cw-tree-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cw-tree-count {
+    margin-left: auto;
+    color: var(--c-fg-dim);
+    font-size: 0.68rem;
+  }
+
+  .cw-card {
+    position: relative;
+    display: block;
+    width: 100px;
+    height: 100px;
+    border: 0;
+    border-radius: 7px;
+    background: #15171c;
+    min-width: 100px;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .cw-card[data-selected="true"] {
+    box-shadow:
+      0 0 0 3px #ffbf00,
+      0 0 0 6px color-mix(in srgb, #ffbf00 24%, transparent),
+      0 8px 20px rgba(0, 0, 0, 0.18);
+  }
+
+  .cw-card[data-selected="true"]::after {
+    position: absolute;
+    z-index: 3;
+    top: 0.24rem;
+    left: 0.24rem;
+    display: grid;
+    width: 1.05rem;
+    height: 1.05rem;
+    place-items: center;
+    border-radius: 999px;
+    background: #ffbf00;
+    color: #111;
+    content: "✓";
+    font-size: 0.7rem;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .cw-card[data-drop-target="true"] {
+    background: color-mix(in srgb, var(--c-link) 18%, #15171c 82%);
+  }
+
+  .cw-card-select {
+    display: none;
+  }
+
+  .cw-card-select input {
+    margin: 0;
+  }
+
+  .cw-card-more {
+    position: absolute;
+    z-index: 2;
+    top: 0.18rem;
+    right: 0.18rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 750;
+    line-height: 1;
+    mix-blend-mode: difference;
+    padding: 0;
+  }
+
+  .cw-card[draggable="true"] {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .cw-card[data-container="true"] {
+    cursor: pointer;
+  }
+
+  .cw-card-title {
+    position: absolute;
+    z-index: 1;
+    right: 0.28rem;
+    bottom: 0.26rem;
+    left: 0.28rem;
+    display: -webkit-box;
+    overflow: hidden;
+    color: #fff;
+    font-size: 0.64rem;
+    font-weight: 700;
+    line-height: 1.05;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    mix-blend-mode: difference;
+    overflow-wrap: anywhere;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .cw-thumb {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    place-items: center;
+    border-radius: 7px;
+    background: #15171c;
+    color: rgba(255, 255, 255, 0.72);
+    overflow: hidden;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .cw-thumb img,
+  .cw-thumb video,
+  .cw-thumb iframe {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    object-fit: contain;
+  }
+
+  .cw-thumb iframe {
+    border: 0;
+    background: #fff;
+    pointer-events: none;
+  }
+
+  .cw-thumb--pdf {
+    background: #f5f5f5;
+  }
+
+  .cw-thumb--folder {
+    background: linear-gradient(145deg, #182236, #101218);
+    color: rgba(220, 232, 255, 0.88);
+  }
+
+  .cw-thumb--session {
+    background: linear-gradient(145deg, #213020, #111812);
+    color: rgba(224, 245, 214, 0.9);
+  }
+
+  .cw-thumb--audio {
+    gap: 0.34rem;
+    background: linear-gradient(145deg, #1b2535, #111318);
+  }
+
+  .cw-thumb--audio audio {
+    display: none;
+  }
+
+  .cw-audio-bars {
+    display: inline-flex;
+    align-items: end;
+    gap: 0.12rem;
+    height: 1.2rem;
+  }
+
+  .cw-audio-bars span {
+    display: block;
+    width: 0.16rem;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.72;
+  }
+
+  .cw-audio-bars span:nth-child(1) {
+    height: 0.45rem;
+  }
+
+  .cw-audio-bars span:nth-child(2) {
+    height: 0.9rem;
+  }
+
+  .cw-audio-bars span:nth-child(3) {
+    height: 0.62rem;
+  }
+
+  .cw-card[data-audio-hover="true"] .cw-audio-bars span {
+    animation: cw-audio-pulse 620ms ease-in-out infinite alternate;
+  }
+
+  .cw-card[data-audio-hover="true"] .cw-audio-bars span:nth-child(2) {
+    animation-delay: 120ms;
+  }
+
+  .cw-card[data-audio-hover="true"] .cw-audio-bars span:nth-child(3) {
+    animation-delay: 240ms;
+  }
+
+  @keyframes cw-audio-pulse {
+    from {
+      transform: scaleY(0.65);
+      opacity: 0.5;
+    }
+    to {
+      transform: scaleY(1.15);
+      opacity: 1;
+    }
+  }
+
+  .cw-card-meta,
+  .cw-empty {
+    color: var(--c-fg-dim);
+    font-size: 0.75rem;
+  }
+
+  .cw-card-actions {
+    flex-wrap: wrap;
+    display: none !important;
+  }
+
+  .cw-card-meta {
+    display: none;
+  }
+
+  .cw-context-menu {
+    position: fixed;
+    z-index: 10000;
+    display: grid;
+    min-width: 9.5rem;
+    border-radius: 8px;
+    background: var(--c-bg);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+  }
+
+  .cw-context-menu[hidden] {
+    display: none;
+  }
+
+  .cw-context-menu button {
+    border: 0;
+    background: transparent;
+    color: var(--c-fg);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 0.55rem 0.7rem;
+    text-align: left;
+  }
+
+  .cw-context-menu button:hover {
+    background: color-mix(in srgb, var(--c-link) 10%, transparent);
+  }
+
+  .cw-context-menu button[hidden] {
+    display: none;
+  }
+
+  .cw-preview-frame {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .cw-preview-media {
+    width: 100%;
+    max-height: 18rem;
+    border: 0;
+    border-radius: 6px;
+    background: #15171c;
+    object-fit: contain;
+  }
+
+  .cw-preview iframe {
+    width: 100%;
+    min-height: 18rem;
+    border: 0;
+    border-radius: 6px;
+    background: white;
+  }
+
+  .cw-preview-frame--pdf {
+    min-height: min(78vh, 760px);
+  }
+
+  .cw-preview-pdf {
+    display: block;
+    width: 100%;
+    height: min(76vh, 740px);
+    min-height: min(76vh, 740px);
+    overflow: auto;
+  }
+
+  .cw-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10020;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+  }
+
+  .cw-modal[hidden] {
+    display: none;
+  }
+
+  .cw-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.55);
+    cursor: zoom-out;
+  }
+
+  .cw-modal-panel {
+    position: relative;
+    z-index: 1;
+    width: min(920px, 92vw);
+    max-height: 86vh;
+    overflow: auto;
+    border-radius: 8px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    padding: 0.85rem;
+    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.35);
+  }
+
+  .cw-modal-close {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.45rem;
+    z-index: 2;
+    border: 0;
+    background: transparent;
+    color: var(--c-fg);
+    cursor: pointer;
+    font: inherit;
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+
+  .cw-modal .cw-preview-media {
+    max-height: 74vh;
+  }
+
+  .cw-modal iframe {
+    height: 72vh;
+    min-height: 72vh;
+  }
+
+  @media (max-width: 840px) {
+    .cw-toolbar {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .cw-toolbar-actions,
+    .cw-search {
+      width: 100%;
+    }
+
+    .cw-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .cw-tree,
+    .cw-preview {
+      max-height: 14rem;
+      border: 0;
+    }
+
+    .cw-preview {
+      border-bottom: 0;
+    }
+  }
+</style>
+
+<script>
+(() => {
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[ch]));
+
+  const requestJson = async (url, options = {}) => {
+    const resp = await fetch(url, options);
+    const payload = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(payload?.error || `HTTP ${resp.status}`);
+    return payload;
+  };
+
+  const command = (courseId, roomName, commandPayload) => requestJson('/api/class-workspace/command', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ courseId, roomName, command: commandPayload }),
+  });
+
+  const byId = (items) => new Map(items.map((item) => [String(item.id), item]));
+  const assetByNode = (assets) => new Map(assets.map((asset) => [String(asset.nodeId), asset]));
+  const isContainer = (node) => ['session', 'folder', 'lesson', 'module', 'course'].includes(String(node?.kind || ''));
+  const isResourceLike = (node) => ['resource', 'r2_object', 'snapshot', 'lesson', 'assignment', 'note', 'concept', 'lily_block'].includes(String(node?.kind || ''));
+  const isR2Node = (nodeOrId) => String(typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId || '').startsWith('r2-object:');
+  const isR2Parent = (id) => String(id || '').startsWith('r2-prefix:');
+
+  function resourceTypeFromName(name, url = '') {
+    const lower = `${name || ''} ${url || ''}`.toLowerCase();
+    if (/\.(png|jpe?g|gif|webp|svg)(\?|$|\s)/.test(lower)) return 'image';
+    if (/\.(mp4|mov|webm)(\?|$|\s)/.test(lower)) return 'video';
+    if (/\.(mp3|wav|ogg|m4a|aac|flac)(\?|$|\s)/.test(lower)) return 'audio';
+    if (/\.pdf(\?|$|\s)/.test(lower)) return 'pdf';
+    if (/\.pptx(\?|$|\s)/.test(lower)) return 'pptx';
+    if (/\.(md|markdown)(\?|$|\s)/.test(lower)) return 'markdown';
+    if (/\.(ly|tex)(\?|$|\s)/.test(lower)) return 'lilypond';
+    if (/\.txt(\?|$|\s)/.test(lower)) return 'txt';
+    return url ? 'link' : 'other';
+  }
+
+  function previewMarkup(node, asset) {
+    if (!node) return '<div class="cw-empty">Selecciona un recurso.</div>';
+    const url = asset?.externalUrl || '';
+    const type = asset?.resourceType || node.kind;
+    if (url && type === 'image') {
+      return `<div class="cw-preview-frame"><strong>${esc(node.name)}</strong><img class="cw-preview-media" src="${esc(url)}" alt="${esc(node.name)}" /></div>`;
+    }
+    if (url && type === 'video') {
+      return `<div class="cw-preview-frame"><strong>${esc(node.name)}</strong><video class="cw-preview-media" src="${esc(url)}" controls playsinline></video></div>`;
+    }
+    if (url && type === 'audio') {
+      return `<div class="cw-preview-frame"><strong>${esc(node.name)}</strong><audio src="${esc(url)}" controls></audio></div>`;
+    }
+    if (url && type === 'pdf') {
+      return `<div class="cw-preview-frame cw-preview-frame--pdf"><strong>${esc(node.name)}</strong><iframe class="cw-preview-pdf" src="${esc(url)}#toolbar=0&navpanes=0&scrollbar=1" title="${esc(node.name)}"></iframe></div>`;
+    }
+    if (url && type === 'pptx') {
+      const embedUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+      return `<div class="cw-preview-frame"><strong>${esc(node.name)}</strong><iframe src="${esc(embedUrl)}" title="${esc(node.name)}"></iframe></div>`;
+    }
+    if (url) {
+      return `<div class="cw-preview-frame"><strong>${esc(node.name)}</strong><a href="${esc(url)}" target="_blank" rel="noreferrer">${esc(url)}</a></div>`;
+    }
+    return `<div class="cw-preview-frame"><strong>${esc(node.name)}</strong><span class="cw-empty">${esc(type)}</span></div>`;
+  }
+
+  function thumbMarkup(node, asset) {
+    if (!node) return '<div class="cw-thumb"></div>';
+    const url = asset?.externalUrl || '';
+    const type = String(asset?.resourceType || node.kind || '').toLowerCase();
+    if (isContainer(node)) {
+      return `<div class="cw-thumb ${node.kind === 'session' ? 'cw-thumb--session' : 'cw-thumb--folder'}"><span>${node.kind === 'session' ? 'SESION' : 'CARPETA'}</span></div>`;
+    }
+    if (url && type === 'image') {
+      return `<div class="cw-thumb"><img src="${esc(url)}" alt="${esc(node.name)}" loading="lazy" /></div>`;
+    }
+    if (url && type === 'video') {
+      return `<div class="cw-thumb"><video src="${esc(url)}" muted playsinline preload="metadata"></video></div>`;
+    }
+    if (url && type === 'pdf') {
+      return `<div class="cw-thumb cw-thumb--pdf"><iframe src="${esc(url)}#page=1&toolbar=0&navpanes=0&scrollbar=0&view=FitH" title="${esc(node.name)}"></iframe></div>`;
+    }
+    if (url && type === 'audio') {
+      return `
+        <div class="cw-thumb cw-thumb--audio">
+          <audio data-cw-audio-preview src="${esc(url)}" preload="metadata"></audio>
+          <span>AUDIO</span>
+          <span class="cw-audio-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+        </div>
+      `;
+    }
+    if (url && type === 'link') {
+      let host = 'LINK';
+      try { host = new URL(url).hostname.replace(/^www\./, '').toUpperCase(); } catch {}
+      return `<div class="cw-thumb"><span>${esc(host)}</span></div>`;
+    }
+    const label = type === 'audio' ? 'AUDIO'
+      : type === 'pdf' ? 'PDF'
+      : type === 'pptx' ? 'PPTX'
+      : type === 'markdown' ? 'MD'
+      : type === 'lilypond' ? 'LY'
+      : type ? type.toUpperCase() : 'ITEM';
+    return `<div class="cw-thumb"><span>${esc(label)}</span></div>`;
+  }
+
+  document.querySelectorAll('[data-class-workspace]').forEach((root) => {
+    if (!(root instanceof HTMLElement) || root.dataset.bound === 'true') return;
+    root.dataset.bound = 'true';
+
+    const courseId = root.dataset.courseId || '';
+    const initialCanManage = root.dataset.canManage === 'true';
+    const initialCanContribute = root.dataset.canContribute === 'true';
+    const roomName = `${courseId}-stage`;
+    const treeEl = root.querySelector('[data-cw-tree]');
+    const gridEl = root.querySelector('[data-cw-grid]');
+    const currentEl = root.querySelector('[data-cw-current]');
+    const upEl = root.querySelector('[data-cw-up]');
+    const previewEl = root.querySelector('[data-cw-preview]');
+    const statusEl = root.querySelector('[data-cw-status]');
+    const uploadEl = root.querySelector('[data-cw-upload]');
+    const bulkEl = root.querySelector('[data-cw-bulkbar]');
+    const bulkRenameEl = root.querySelector('[data-cw-bulk-rename]');
+    const selectionCountEl = root.querySelector('[data-cw-selection-count]');
+    const contextMenuEl = root.querySelector('[data-cw-context-menu]');
+    const modalEl = root.querySelector('[data-cw-modal]');
+    const modalBodyEl = root.querySelector('[data-cw-modal-body]');
+    let state = {
+      nodes: [],
+      assets: [],
+      selectedParentId: '',
+      selectedNodeId: '',
+      selectedIds: new Set(),
+      search: '',
+      hoveredNodeId: '',
+      canManage: initialCanManage,
+      canContribute: initialCanContribute,
+      currentUserId: '',
+      r2Error: '',
+    };
+    let pointerDrag = null;
+    let treeLongPress = null;
+
+    const setStatus = (message) => {
+      if (statusEl) statusEl.textContent = message || '';
+    };
+
+    const clearDropTargets = () => {
+      treeEl?.querySelectorAll('[data-drop-target="true"]').forEach((node) => {
+        if (node instanceof HTMLElement) node.dataset.dropTarget = 'false';
+      });
+      gridEl?.querySelectorAll('[data-drop-target="true"]').forEach((node) => {
+        if (node instanceof HTMLElement) node.dataset.dropTarget = 'false';
+      });
+    };
+
+    const parentTargetAtPoint = (clientX, clientY) => {
+      const target = document.elementFromPoint(clientX, clientY);
+      if (!(target instanceof HTMLElement)) return null;
+      return target.closest('[data-parent], [data-container="true"][data-node-id]');
+    };
+
+    const canEditNode = (node) => {
+      if (isR2Node(node)) return false;
+      if (state.canManage) return true;
+      if (!state.canContribute || !state.currentUserId || !node) return false;
+      return String(node.ownerUserId || '') === state.currentUserId
+        || String(node.createdByUserId || '') === state.currentUserId;
+    };
+
+    const canSelectNode = (node) => canEditNode(node) || isR2Node(node);
+
+    const renameTargetId = () => state.hoveredNodeId || state.selectedNodeId || selectedIds()[0] || '';
+
+    const getNode = (nodeId) => (state.nodes || []).find((item) => String(item.id) === String(nodeId)) || null;
+    const getAsset = (nodeId) => (state.assets || []).find((asset) => String(asset.nodeId) === String(nodeId)) || null;
+    const selectedIds = () => Array.from(state.selectedIds || []).map(String).filter(Boolean);
+
+    const dragIdsForNode = (nodeId) => {
+      const selected = selectedIds();
+      return selected.includes(String(nodeId)) ? selected : [String(nodeId)].filter(Boolean);
+    };
+
+    const parentIdFromDropTarget = (target) => {
+      if (!(target instanceof HTMLElement)) return null;
+      if (target.hasAttribute('data-parent')) return target.dataset.parent || null;
+      if (target.dataset.container === 'true') return target.dataset.nodeId || null;
+      return null;
+    };
+
+    const dragNodeIdsFromEvent = (event) => {
+      const rawMany = event.dataTransfer?.getData('application/x-cw-nodes') || '';
+      if (rawMany) {
+        try {
+          const parsed = JSON.parse(rawMany);
+          if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+        } catch {}
+      }
+      const single = event.dataTransfer?.getData('application/x-cw-node') || '';
+      return single ? [single] : [];
+    };
+
+    const r2Prefixes = () => ([
+      { id: 'r2-prefix:room/', prefix: 'room/', name: 'S2 room' },
+      { id: `r2-prefix:class-workspace/${courseId}/`, prefix: `class-workspace/${courseId}/`, name: 'S2 class-workspace' },
+    ]);
+
+    const loadR2Objects = async () => {
+      if (!state.canManage) return { nodes: [], assets: [], error: '' };
+      const linkedUrls = new Set((state.assets || []).map((asset) => String(asset.externalUrl || '')).filter(Boolean));
+      const linkedKeys = new Set((state.assets || []).map((asset) => String(asset.objectKey || '')).filter(Boolean));
+      const loaded = await Promise.all(r2Prefixes().map(async (entry) => {
+        const payload = await requestJson(`/api/live/recursos/r2?courseId=${encodeURIComponent(courseId)}&prefix=${encodeURIComponent(entry.prefix)}&flat=1&maxKeys=500`);
+        return { ...entry, objects: Array.isArray(payload.objects) ? payload.objects : [] };
+      }));
+      const nodes = [];
+      const assets = [];
+      for (const entry of loaded) {
+        for (const object of entry.objects) {
+          const key = String(object.key || '');
+          const url = String(object.url || '');
+          if (!key || linkedKeys.has(key) || (url && linkedUrls.has(url))) continue;
+          const nodeId = `r2-object:${key}`;
+          const name = String(object.name || key.split('/').filter(Boolean).pop() || key);
+          const type = resourceTypeFromName(name, url);
+          nodes.push({
+            id: nodeId,
+            courseId,
+            roomName,
+            kind: 'r2_object',
+            parentId: entry.id,
+            name,
+            slug: null,
+            sortKey: key,
+            ownerUserId: '',
+            createdByUserId: '',
+            visibility: 'class',
+            source: 'r2',
+            metadata: { key, prefix: entry.prefix, size: object.size || 0 },
+            createdAt: object.lastModified || new Date(0).toISOString(),
+            updatedAt: object.lastModified || new Date(0).toISOString(),
+            deletedAt: null,
+          });
+          assets.push({
+            id: nodeId,
+            nodeId,
+            mime: '',
+            resourceType: type,
+            objectKey: key,
+            externalUrl: url,
+            sizeBytes: object.size || null,
+            sha256: null,
+            previewStatus: 'none',
+            uploadStatus: 'ready',
+          });
+        }
+      }
+      return { nodes, assets, error: '' };
+    };
+
+    const hideContextMenu = () => {
+      if (contextMenuEl instanceof HTMLElement) contextMenuEl.hidden = true;
+    };
+
+    const hideModal = () => {
+      if (modalEl instanceof HTMLElement) modalEl.hidden = true;
+      if (modalBodyEl instanceof HTMLElement) modalBodyEl.innerHTML = '';
+    };
+
+    const stopAudioHover = (card) => {
+      if (!(card instanceof HTMLElement)) return;
+      card.dataset.audioHover = 'false';
+      const audio = card.querySelector('[data-cw-audio-preview]');
+      if (audio instanceof HTMLAudioElement) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    };
+
+    const playAudioHover = (card) => {
+      if (!(card instanceof HTMLElement)) return;
+      const audio = card.querySelector('[data-cw-audio-preview]');
+      if (!(audio instanceof HTMLAudioElement)) return;
+      gridEl?.querySelectorAll('[data-audio-hover="true"]').forEach((otherCard) => {
+        if (otherCard !== card) stopAudioHover(otherCard);
+      });
+      card.dataset.audioHover = 'true';
+      audio.volume = 0.72;
+      audio.currentTime = 0;
+      void audio.play().catch(() => {
+        card.dataset.audioHover = 'false';
+      });
+    };
+
+    const showContextMenuForNode = (nodeId, clientX, clientY) => {
+      if (!(contextMenuEl instanceof HTMLElement)) return;
+      const node = getNode(nodeId);
+      if (!node) return;
+      const canEdit = canEditNode(node);
+      const asset = getAsset(nodeId);
+      const r2Node = isR2Node(node);
+      state.selectedNodeId = nodeId;
+      if (canEdit && !state.selectedIds.has(nodeId)) state.selectedIds = new Set([nodeId]);
+      render();
+      contextMenuEl.dataset.nodeId = nodeId;
+      contextMenuEl.querySelectorAll('[data-requires-edit]').forEach((button) => {
+        if (button instanceof HTMLElement) button.hidden = !canEdit;
+      });
+      const renameButton = contextMenuEl.querySelector('[data-cw-context-action="rename"]');
+      if (renameButton instanceof HTMLElement) renameButton.hidden = !canEdit;
+      const moveButton = contextMenuEl.querySelector('[data-cw-context-action="move"]');
+      if (moveButton instanceof HTMLElement) moveButton.hidden = !(canEdit || r2Node);
+      const deleteButton = contextMenuEl.querySelector('[data-cw-context-action="delete"]');
+      if (deleteButton instanceof HTMLElement) deleteButton.hidden = !(canEdit || (r2Node && state.canManage));
+      const openButton = contextMenuEl.querySelector('[data-cw-context-action="open"]');
+      if (openButton instanceof HTMLElement) openButton.hidden = !asset?.externalUrl;
+      const previewButton = contextMenuEl.querySelector('[data-cw-context-action="preview"]');
+      if (previewButton instanceof HTMLElement) previewButton.hidden = isContainer(node);
+      contextMenuEl.style.left = `${Math.min(clientX, window.innerWidth - 170)}px`;
+      contextMenuEl.style.top = `${Math.min(clientY, window.innerHeight - 230)}px`;
+      contextMenuEl.hidden = false;
+    };
+
+    const updateBulkBar = () => {
+      const count = selectedIds().length;
+      if (bulkEl instanceof HTMLElement) bulkEl.hidden = count === 0;
+      if (bulkRenameEl instanceof HTMLButtonElement) {
+        const selected = selectedIds();
+        const node = selected.length === 1 ? getNode(selected[0]) : null;
+        bulkRenameEl.hidden = !(node && canEditNode(node));
+      }
+      if (selectionCountEl) selectionCountEl.textContent = `${count} seleccionado${count === 1 ? '' : 's'}`;
+    };
+
+    const setSingleSelection = (nodeId) => {
+      state.selectedIds = nodeId ? new Set([nodeId]) : new Set();
+      updateBulkBar();
+      render();
+    };
+
+    const toggleSelection = (nodeId, checked) => {
+      const next = new Set(state.selectedIds || []);
+      if (checked) next.add(nodeId);
+      else next.delete(nodeId);
+      state.selectedIds = next;
+      updateBulkBar();
+      render();
+    };
+
+    const clearSelection = () => {
+      state.selectedIds = new Set();
+      updateBulkBar();
+      render();
+    };
+
+    const renameHoveredOrSelected = async () => {
+      const nodeId = renameTargetId();
+      const node = nodeId ? getNode(nodeId) : null;
+      if (!node || !canEditNode(node)) return;
+      await renameNode(nodeId);
+    };
+
+    const renameTreeNode = async (nodeId) => {
+      const node = nodeId ? getNode(nodeId) : null;
+      if (!node || !canEditNode(node)) return;
+      state.selectedNodeId = nodeId;
+      await renameNode(nodeId);
+    };
+
+    const moveNodesWithPrompt = async (nodeIds) => {
+      const ids = nodeIds.map(String).filter(Boolean);
+      if (!ids.length) return;
+      const containers = (state.nodes || []).filter(isContainer);
+      const options = [{ id: '', name: 'Todo' }, ...containers.map((node) => ({
+        id: String(node.id || ''),
+        name: String(node.name || node.kind || 'Destino'),
+      }))];
+      const labels = options.map((option, index) => `${index}: ${option.name}`).join('\n');
+      const selected = prompt(`Mover a:\n${labels}`, '0');
+      if (selected === null) return;
+      const index = Number(selected);
+      const target = Number.isInteger(index) ? options[index] : null;
+      if (!target) {
+        setStatus('Destino invalido.');
+        return;
+      }
+      await moveNodesToParent(ids, target.id || null);
+    };
+
+    const moveNodeWithPrompt = async (nodeId) => moveNodesWithPrompt([nodeId]);
+
+    const moveNodesToParent = async (nodeIds, targetParentId) => {
+      if (isR2Parent(targetParentId)) {
+        setStatus('S2 es fuente de objetos; solta sobre una sesion o carpeta para vincular.');
+        return;
+      }
+      setStatus('Moviendo...');
+      const uniqueIds = Array.from(new Set(nodeIds.map(String).filter(Boolean)));
+      const r2Ids = uniqueIds.filter(isR2Node);
+      const regularIds = uniqueIds.filter((id) => !isR2Node(id));
+      for (const nodeId of r2Ids) {
+        const node = getNode(nodeId);
+        const asset = getAsset(nodeId);
+        if (!node || !asset?.externalUrl) continue;
+        await command(courseId, roomName, {
+          type: 'resource.link.create',
+          parentId: targetParentId || null,
+          url: asset.externalUrl,
+          name: node.name,
+        });
+      }
+      if (regularIds.length) {
+        await command(courseId, roomName, {
+          type: 'node.move',
+          nodeIds: regularIds,
+          targetParentId: targetParentId || null,
+        });
+      }
+      state.selectedIds = new Set();
+      await load();
+    };
+
+    const moveNodeToParent = async (nodeId, targetParentId) => moveNodesToParent([nodeId], targetParentId);
+
+    const deleteNodes = async (nodeIds) => {
+      const ids = nodeIds.map(String).filter(Boolean);
+      if (!ids.length) return;
+      const r2Ids = ids.filter(isR2Node);
+      const regularIds = ids.filter((id) => !isR2Node(id));
+      setStatus('Borrando...');
+      if (regularIds.length) {
+        await command(courseId, roomName, { type: 'node.delete', nodeIds: regularIds });
+      }
+      if (r2Ids.length) {
+        const keys = r2Ids
+          .map((nodeId) => getAsset(nodeId)?.objectKey || nodeId.replace(/^r2-object:/, ''))
+          .map(String)
+          .filter(Boolean);
+        if (keys.length) {
+          await requestJson('/api/live/recursos/r2', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courseId, keys }),
+          });
+        }
+      }
+      state.selectedNodeId = '';
+      state.selectedIds = new Set();
+      await load();
+    };
+
+    const previewNode = (nodeId) => {
+      const node = getNode(nodeId);
+      const asset = getAsset(nodeId);
+      if (!node) return;
+      state.selectedNodeId = nodeId;
+      hideContextMenu();
+      if (modalBodyEl instanceof HTMLElement) modalBodyEl.innerHTML = previewMarkup(node, asset);
+      if (modalEl instanceof HTMLElement) modalEl.hidden = false;
+      render();
+    };
+
+    const openNode = (nodeId) => {
+      const asset = getAsset(nodeId);
+      if (asset?.externalUrl) window.open(asset.externalUrl, '_blank', 'noopener,noreferrer');
+    };
+
+    const renameNode = async (nodeId) => {
+      const node = getNode(nodeId);
+      const name = prompt('Nuevo nombre', node?.name || '');
+      if (!name) return;
+      setStatus('Renombrando...');
+      await command(courseId, roomName, { type: 'node.rename', nodeId, name });
+      await load();
+    };
+
+    const handleContextAction = async (action) => {
+      const nodeId = contextMenuEl instanceof HTMLElement ? contextMenuEl.dataset.nodeId || '' : '';
+      if (!nodeId) return;
+      hideContextMenu();
+      if (action === 'preview') previewNode(nodeId);
+      if (action === 'open') openNode(nodeId);
+      if (action === 'rename') await renameNode(nodeId);
+      if (action === 'move') await moveNodeWithPrompt(nodeId);
+      if (action === 'delete') await deleteNodes([nodeId]);
+    };
+
+    const render = () => {
+      const nodes = state.nodes || [];
+      const nodeMap = byId(nodes);
+      const assets = assetByNode(state.assets || []);
+      const selectedParentId = state.selectedParentId || '';
+      const search = String(state.search || '').trim().toLowerCase();
+      const containers = nodes.filter(isContainer);
+      const visibleInParent = selectedParentId
+        ? nodes.filter((node) => String(node.parentId || '') === selectedParentId)
+        : nodes.filter((node) => isR2Node(node) || !node.parentId || node.kind === 'resource' || node.kind === 'snapshot');
+      const visible = search
+        ? visibleInParent.filter((node) => String(node.name || node.kind || '').toLowerCase().includes(search))
+        : visibleInParent;
+      const selectedParent = selectedParentId ? nodeMap.get(selectedParentId) : null;
+      const selectedNode = state.selectedNodeId ? nodeMap.get(state.selectedNodeId) : null;
+
+      if (currentEl) {
+        const r2Parent = r2Prefixes().find((entry) => entry.id === selectedParentId);
+        currentEl.textContent = selectedParent ? selectedParent.name : r2Parent ? r2Parent.name : 'Todo';
+      }
+      if (upEl instanceof HTMLElement) upEl.hidden = !selectedParent && !isR2Parent(selectedParentId);
+      if (treeEl) {
+        const childrenFor = (parentId) => containers
+          .filter((node) => String(node.parentId || '') === String(parentId || ''))
+          .sort((a, b) => String(a.sortKey || a.name || '').localeCompare(String(b.sortKey || b.name || '')));
+        const childCount = (nodeId) => nodes.filter((node) => String(node.parentId || '') === String(nodeId || '')).length;
+        const renderBranch = (parentId, depth) => childrenFor(parentId).map((node) => {
+          const count = childCount(node.id);
+          return `
+            <button type="button" class="cw-tree-node" role="treeitem" style="--depth:${depth}" data-parent="${esc(node.id)}" data-active="${String(node.id) === selectedParentId ? 'true' : 'false'}">
+              <span class="cw-tree-caret">${count ? '▾' : ''}</span>
+              <span class="cw-tree-icon">${node.kind === 'session' ? 'S' : 'F'}</span>
+              <span class="cw-tree-label" title="${esc(node.name || node.kind)}">${esc(node.name || node.kind)}</span>
+              ${count ? `<span class="cw-tree-count">${count}</span>` : ''}
+            </button>
+            ${renderBranch(node.id, depth + 1)}
+          `;
+        }).join('');
+        const r2Tree = state.canManage ? r2Prefixes().map((entry) => {
+          const count = nodes.filter((node) => String(node.parentId || '') === entry.id).length;
+          return `
+            <button type="button" class="cw-tree-node" role="treeitem" style="--depth:0" data-parent="${esc(entry.id)}" data-active="${entry.id === selectedParentId ? 'true' : 'false'}">
+              <span class="cw-tree-caret">${count ? '▾' : ''}</span>
+              <span class="cw-tree-icon">S2</span>
+              <span class="cw-tree-label">${esc(entry.name)}</span>
+              ${count ? `<span class="cw-tree-count">${count}</span>` : ''}
+            </button>
+          `;
+        }).join('') : '';
+        treeEl.innerHTML = [
+          `<button type="button" class="cw-tree-node" role="treeitem" style="--depth:0" data-parent="" data-active="${selectedParentId ? 'false' : 'true'}">
+            <span class="cw-tree-caret">▾</span>
+            <span class="cw-tree-icon">W</span>
+            <span class="cw-tree-label">Workspace</span>
+            <span class="cw-tree-count">${nodes.filter((node) => isResourceLike(node) || isContainer(node)).length}</span>
+          </button>`,
+          renderBranch('', 1),
+          r2Tree,
+        ].join('');
+      }
+
+      if (gridEl) {
+        const cards = visible.filter((node) => isResourceLike(node) || isContainer(node)).map((node) => {
+          const asset = assets.get(String(node.id));
+          const canEdit = canEditNode(node);
+          const canSelect = canSelectNode(node);
+          const isFolderCard = isContainer(node);
+          const isSelected = state.selectedIds?.has(String(node.id));
+          return `
+            <article class="cw-card" data-node-id="${esc(node.id)}" data-container="${isFolderCard ? 'true' : 'false'}" data-selected="${isSelected ? 'true' : 'false'}" draggable="${(canEdit && node.kind === 'resource') || isR2Node(node) ? 'true' : 'false'}">
+              <button type="button" class="cw-card-more" data-cw-more aria-label="Opciones">...</button>
+              ${canSelect ? `<label class="cw-card-select" title="Seleccionar"><input type="checkbox" data-cw-select ${isSelected ? 'checked' : ''} /></label>` : ''}
+              ${thumbMarkup(node, asset)}
+              <div class="cw-card-title">${esc(node.name || node.kind)}</div>
+              <div class="cw-card-meta">${isR2Node(node) ? 'S2 object' : esc(node.kind)}${asset?.uploadStatus ? ` / ${esc(asset.uploadStatus)}` : ''}</div>
+              <div class="cw-card-actions">
+                ${isFolderCard ? '<button type="button" class="cw-btn" data-cw-open-container>Abrir</button>' : ''}
+                ${asset?.externalUrl ? `<a class="cw-btn" href="${esc(asset.externalUrl)}" target="_blank" rel="noreferrer">Abrir</a>` : ''}
+                ${isFolderCard ? '' : '<button type="button" class="cw-btn" data-cw-preview-node>Ver</button>'}
+                ${canEdit ? '<button type="button" class="cw-btn" data-cw-rename>Renombrar</button>' : ''}
+                ${canEdit && node.kind === 'resource' ? '<button type="button" class="cw-btn" data-cw-move>Mover</button>' : ''}
+                ${canEdit ? '<button type="button" class="cw-btn cw-btn-danger" data-cw-delete>Borrar</button>' : ''}
+              </div>
+            </article>
+          `;
+        });
+        gridEl.innerHTML = cards.length ? cards.join('') : '<div class="cw-empty">Sin elementos en esta vista.</div>';
+      }
+
+      if (previewEl) previewEl.innerHTML = previewMarkup(selectedNode, selectedNode ? assets.get(String(selectedNode.id)) : null);
+      updateBulkBar();
+    };
+
+    const load = async () => {
+      if (!courseId) return;
+      setStatus('Cargando workspace...');
+      const payload = await requestJson(`/api/class-workspace/resources?courseId=${encodeURIComponent(courseId)}`);
+      const baseAssets = Array.isArray(payload.assets) ? payload.assets : [];
+      state = {
+        ...state,
+        nodes: Array.isArray(payload.nodes) ? payload.nodes : [],
+        assets: baseAssets,
+        canManage: Boolean(payload.canManage),
+        canContribute: Boolean(payload.canContribute),
+        currentUserId: String(payload.currentUserId || ''),
+        r2Error: '',
+      };
+      if (state.canManage) {
+        try {
+          const r2 = await loadR2Objects();
+          state.nodes = [...state.nodes, ...r2.nodes];
+          state.assets = [...state.assets, ...r2.assets];
+          state.r2Error = r2.error || '';
+        } catch (error) {
+          state.r2Error = error?.message || String(error);
+        }
+      }
+      const nodeIds = new Set(state.nodes.map((node) => String(node.id)));
+      state.selectedIds = new Set(selectedIds().filter((id) => nodeIds.has(id)));
+      setStatus(`Workspace listo: ${state.nodes.length} objetos${state.r2Error ? ` · S2: ${state.r2Error}` : ''}.`);
+      render();
+    };
+
+    const createSession = async () => {
+      if (!state.canManage) return;
+      const name = prompt('Nombre de sesion');
+      if (!name) return;
+      setStatus('Creando sesion...');
+      const payload = await command(courseId, roomName, {
+        type: 'session.create',
+        name,
+        claseId: courseId,
+      });
+      const node = payload?.result?.node;
+      if (node?.id) state.selectedParentId = node.id;
+      await load();
+    };
+
+    const createFolder = async () => {
+      const name = prompt('Nombre de carpeta');
+      if (!name) return;
+      setStatus('Creando carpeta...');
+      const payload = await command(courseId, roomName, {
+        type: 'folder.create',
+        parentId: state.selectedParentId || null,
+        name,
+      });
+      const node = payload?.result;
+      if (node?.id) state.selectedParentId = node.id;
+      await load();
+    };
+
+    const createLink = async () => {
+      const url = prompt('URL');
+      if (!url) return;
+      const name = prompt('Nombre del recurso', url.split('/').filter(Boolean).pop() || url);
+      setStatus('Creando link...');
+      const payload = await command(courseId, roomName, {
+        type: 'resource.link.create',
+        parentId: state.selectedParentId || null,
+        url,
+        name,
+      });
+      const node = payload?.result?.node;
+      if (node?.id) state.selectedNodeId = node.id;
+      await load();
+    };
+
+    const uploadFiles = async (files) => {
+      const fileList = Array.from(files || []).filter((file) => file instanceof File);
+      if (!fileList.length) return;
+      setStatus(`Preparando ${fileList.length} archivo${fileList.length === 1 ? '' : 's'}...`);
+      const prepared = await command(courseId, roomName, {
+        type: 'resource.upload.prepare',
+        parentId: state.selectedParentId || null,
+        files: fileList.map((file) => ({
+          id: crypto.randomUUID(),
+          fileName: file.name,
+          mime: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+        })),
+      });
+      const intents = Array.isArray(prepared?.result) ? prepared.result : [];
+      for (let index = 0; index < fileList.length; index += 1) {
+        const file = fileList[index];
+        const intent = intents[index];
+        if (!intent?.uploadId) continue;
+        const form = new FormData();
+        form.set('courseId', courseId);
+        form.set('prefix', `class-workspace/${courseId}/${roomName}/`);
+        form.append('file', file);
+        setStatus(`Subiendo ${file.name}...`);
+        const uploadedPayload = await requestJson('/api/live/recursos/r2', { method: 'POST', body: form });
+        const uploaded = Array.isArray(uploadedPayload.uploaded) ? uploadedPayload.uploaded[0] : null;
+        if (!uploaded?.key) throw new Error(`Upload failed for ${file.name}`);
+        await command(courseId, roomName, {
+          type: 'resource.upload.complete',
+          uploadId: intent.uploadId,
+          objectKey: uploaded.key,
+        });
+      }
+      setStatus('Upload completo.');
+      await load();
+    };
+
+    treeEl?.addEventListener('click', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-parent]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      state.selectedParentId = target.dataset.parent || '';
+      render();
+    });
+
+    treeEl?.addEventListener('dblclick', (event) => {
+      const label = event.target instanceof HTMLElement ? event.target.closest('.cw-tree-label') : null;
+      if (!(label instanceof HTMLElement)) return;
+      const row = label.closest('[data-parent]');
+      if (!(row instanceof HTMLElement)) return;
+      const nodeId = row.dataset.parent || '';
+      const node = nodeId ? getNode(nodeId) : null;
+      if (!node || !canEditNode(node)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void renameTreeNode(nodeId).catch((error) => setStatus(error.message || String(error)));
+    });
+
+    treeEl?.addEventListener('pointerdown', (event) => {
+      if (event.pointerType !== 'touch') return;
+      const label = event.target instanceof HTMLElement ? event.target.closest('.cw-tree-label') : null;
+      if (!(label instanceof HTMLElement)) return;
+      const row = label.closest('[data-parent]');
+      if (!(row instanceof HTMLElement)) return;
+      const nodeId = row.dataset.parent || '';
+      const node = nodeId ? getNode(nodeId) : null;
+      if (!node || !canEditNode(node)) return;
+      treeLongPress = {
+        nodeId,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        timer: window.setTimeout(() => {
+          treeLongPress = null;
+          void renameTreeNode(nodeId).catch((error) => setStatus(error.message || String(error)));
+        }, 620),
+      };
+    });
+
+    const clearTreeLongPress = () => {
+      if (!treeLongPress) return;
+      window.clearTimeout(treeLongPress.timer);
+      treeLongPress = null;
+    };
+
+    treeEl?.addEventListener('pointermove', (event) => {
+      if (!treeLongPress || treeLongPress.pointerId !== event.pointerId) return;
+      const dx = Math.abs(event.clientX - treeLongPress.startX);
+      const dy = Math.abs(event.clientY - treeLongPress.startY);
+      if (dx + dy > 9) clearTreeLongPress();
+    });
+    treeEl?.addEventListener('pointerup', clearTreeLongPress);
+    treeEl?.addEventListener('pointercancel', clearTreeLongPress);
+    treeEl?.addEventListener('pointerleave', clearTreeLongPress);
+
+    root.querySelector('[data-cw-root]')?.addEventListener('click', () => {
+      state.selectedParentId = '';
+      state.selectedNodeId = '';
+      render();
+    });
+
+    upEl?.addEventListener('click', () => {
+      if (isR2Parent(state.selectedParentId)) {
+        state.selectedParentId = '';
+        state.selectedNodeId = '';
+        render();
+        return;
+      }
+      const parent = getNode(state.selectedParentId);
+      state.selectedParentId = parent?.parentId ? String(parent.parentId) : '';
+      state.selectedNodeId = '';
+      render();
+    });
+
+    treeEl?.addEventListener('dragover', (event) => {
+      if (state.canContribute) event.preventDefault();
+    });
+
+    treeEl?.addEventListener('drop', async (event) => {
+      if (!state.canContribute) return;
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-parent]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      event.preventDefault();
+      clearDropTargets();
+      const nodeIds = dragNodeIdsFromEvent(event);
+      if (!nodeIds.length) return;
+      await moveNodesToParent(nodeIds, target.dataset.parent || null);
+    });
+
+    gridEl?.addEventListener('click', async (event) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!target) return;
+      const card = target.closest('[data-node-id]');
+      if (!(card instanceof HTMLElement)) return;
+      const nodeId = card.dataset.nodeId || '';
+      state.selectedNodeId = nodeId;
+
+      const clickedControl = target.closest('button, a, input, label');
+      if (target.matches('[data-cw-select]')) {
+        const input = target instanceof HTMLInputElement ? target : null;
+        toggleSelection(nodeId, Boolean(input?.checked));
+        return;
+      }
+
+      if (!clickedControl && event.shiftKey) {
+        const node = getNode(nodeId);
+        if (node && canSelectNode(node)) {
+          toggleSelection(nodeId, !state.selectedIds.has(nodeId));
+        }
+        return;
+      }
+
+      if (target.matches('[data-cw-more]')) {
+        const rect = card.getBoundingClientRect();
+        showContextMenuForNode(nodeId, rect.left + 8, rect.top + 30);
+        return;
+      }
+
+      if (target.matches('[data-cw-open-container]')) {
+        const node = state.nodes.find((item) => String(item.id) === nodeId);
+        if (node && isContainer(node)) {
+          state.selectedParentId = nodeId;
+          state.selectedNodeId = '';
+          render();
+          return;
+        }
+      }
+
+      if (!clickedControl && card.dataset.container !== 'true') {
+        previewNode(nodeId);
+        return;
+      }
+
+      if (target.matches('[data-cw-preview-node]')) {
+        previewNode(nodeId);
+        return;
+      }
+
+      if (target.matches('[data-cw-rename]')) {
+        await renameNode(nodeId);
+        return;
+      }
+
+      if (target.matches('[data-cw-move]')) {
+        await moveNodeWithPrompt(nodeId);
+        return;
+      }
+
+      if (target.matches('[data-cw-delete]')) {
+        await deleteNodes([nodeId]);
+      }
+    });
+
+    gridEl?.addEventListener('dblclick', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!target || target.closest('button, a, input, label')) return;
+      const card = target.closest('[data-node-id]');
+      if (!(card instanceof HTMLElement)) return;
+      const nodeId = card.dataset.nodeId || '';
+      const node = getNode(nodeId);
+      if (node && isContainer(node)) {
+        state.selectedParentId = nodeId;
+        state.selectedNodeId = '';
+        hideModal();
+        render();
+        return;
+      }
+      hideModal();
+      openNode(nodeId);
+    });
+
+    gridEl?.addEventListener('pointerover', (event) => {
+      if (event.pointerType === 'touch') return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const card = target?.closest('[data-node-id]');
+      if (!(card instanceof HTMLElement)) return;
+      if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
+      state.hoveredNodeId = card.dataset.nodeId || '';
+      if (!card.querySelector('[data-cw-audio-preview]')) return;
+      playAudioHover(card);
+    });
+
+    gridEl?.addEventListener('pointerout', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const card = target?.closest('[data-node-id]');
+      if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
+      if (card instanceof HTMLElement && state.hoveredNodeId === (card.dataset.nodeId || '')) state.hoveredNodeId = '';
+      if (!(card instanceof HTMLElement) || !card.querySelector('[data-cw-audio-preview]')) return;
+      stopAudioHover(card);
+    });
+
+    gridEl?.addEventListener('contextmenu', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-node-id]') : null;
+      if (!(target instanceof HTMLElement) || !(contextMenuEl instanceof HTMLElement)) return;
+      const nodeId = target.dataset.nodeId || '';
+      event.preventDefault();
+      showContextMenuForNode(nodeId, event.clientX, event.clientY);
+    });
+
+    gridEl?.addEventListener('dragstart', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-node-id]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      const ids = dragIdsForNode(target.dataset.nodeId || '');
+      event.dataTransfer?.setData('application/x-cw-node', target.dataset.nodeId || '');
+      event.dataTransfer?.setData('application/x-cw-nodes', JSON.stringify(ids));
+      if (ids.length > 1) setStatus(`Moviendo ${ids.length} seleccionados...`);
+    });
+
+    gridEl?.addEventListener('dragover', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-container="true"][data-node-id]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      event.preventDefault();
+      clearDropTargets();
+      target.dataset.dropTarget = 'true';
+    });
+
+    gridEl?.addEventListener('dragleave', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-container="true"][data-node-id]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      const related = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+      if (related && target.contains(related)) return;
+      target.dataset.dropTarget = 'false';
+    });
+
+    gridEl?.addEventListener('drop', async (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-container="true"][data-node-id]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      event.preventDefault();
+      clearDropTargets();
+      const nodeIds = dragNodeIdsFromEvent(event).filter((id) => id !== target.dataset.nodeId);
+      if (!nodeIds.length) return;
+      await moveNodesToParent(nodeIds, target.dataset.nodeId || null);
+    });
+
+    gridEl?.addEventListener('pointerdown', (event) => {
+      if (!state.canContribute || event.button !== 0) return;
+      const rawTarget = event.target instanceof HTMLElement ? event.target : null;
+      if (!rawTarget || rawTarget.closest('button, a, input, label')) return;
+      const card = rawTarget.closest('[data-node-id]');
+      if (!(card instanceof HTMLElement) || card.getAttribute('draggable') !== 'true') return;
+      pointerDrag = {
+        nodeIds: dragIdsForNode(card.dataset.nodeId || ''),
+        startX: event.clientX,
+        startY: event.clientY,
+        pointerId: event.pointerId,
+        active: false,
+        target: null,
+      };
+      card.setPointerCapture?.(event.pointerId);
+    });
+
+    gridEl?.addEventListener('pointermove', (event) => {
+      if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+      const dx = Math.abs(event.clientX - pointerDrag.startX);
+      const dy = Math.abs(event.clientY - pointerDrag.startY);
+      if (!pointerDrag.active && dx + dy < 10) return;
+      pointerDrag.active = true;
+      event.preventDefault();
+      clearDropTargets();
+      const target = parentTargetAtPoint(event.clientX, event.clientY);
+      if (target instanceof HTMLElement) {
+        target.dataset.dropTarget = 'true';
+        pointerDrag.target = target;
+      } else {
+        pointerDrag.target = null;
+      }
+      setStatus('Solta sobre una carpeta o sesion.');
+    }, { passive: false });
+
+    const finishPointerDrag = async (event) => {
+      if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+      const drag = pointerDrag;
+      pointerDrag = null;
+      clearDropTargets();
+      if (!drag.active || !(drag.target instanceof HTMLElement) || !drag.nodeIds?.length) return;
+      try {
+        const targetParentId = parentIdFromDropTarget(drag.target);
+        const nodeIds = drag.nodeIds.filter((id) => id !== targetParentId);
+        if (nodeIds.length) await moveNodesToParent(nodeIds, targetParentId);
+      } catch (error) {
+        setStatus(error?.message || String(error));
+      }
+    };
+
+    gridEl?.addEventListener('pointerup', (event) => void finishPointerDrag(event));
+    gridEl?.addEventListener('pointercancel', () => {
+      pointerDrag = null;
+      clearDropTargets();
+    });
+
+    root.querySelector('[data-cw-refresh]')?.addEventListener('click', () => void load().catch((error) => setStatus(error.message || String(error))));
+    root.querySelector('[data-cw-session]')?.addEventListener('click', () => void createSession().catch((error) => setStatus(error.message || String(error))));
+    root.querySelector('[data-cw-folder]')?.addEventListener('click', () => void createFolder().catch((error) => setStatus(error.message || String(error))));
+    root.querySelector('[data-cw-link]')?.addEventListener('click', () => void createLink().catch((error) => setStatus(error.message || String(error))));
+    root.querySelector('[data-cw-rename-top]')?.addEventListener('click', () => {
+      void renameHoveredOrSelected().catch((error) => setStatus(error.message || String(error)));
+    });
+    root.querySelector('[data-cw-bulk-rename]')?.addEventListener('click', () => {
+      const ids = selectedIds();
+      if (ids.length !== 1) return;
+      void renameNode(ids[0]).catch((error) => setStatus(error.message || String(error)));
+    });
+    root.querySelector('[data-cw-bulk-move]')?.addEventListener('click', () => void moveNodesWithPrompt(selectedIds()).catch((error) => setStatus(error.message || String(error))));
+    root.querySelector('[data-cw-bulk-delete]')?.addEventListener('click', () => void deleteNodes(selectedIds()).catch((error) => setStatus(error.message || String(error))));
+    root.querySelector('[data-cw-selection-clear]')?.addEventListener('click', clearSelection);
+    contextMenuEl?.addEventListener('click', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-cw-context-action]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      void handleContextAction(target.dataset.cwContextAction || '').catch((error) => setStatus(error.message || String(error)));
+    });
+    root.querySelectorAll('[data-cw-modal-close]').forEach((button) => {
+      button.addEventListener('click', hideModal);
+    });
+    document.addEventListener('click', (event) => {
+      if (!(contextMenuEl instanceof HTMLElement) || contextMenuEl.hidden) return;
+      if (event.target instanceof Node && contextMenuEl.contains(event.target)) return;
+      hideContextMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      const active = document.activeElement;
+      const isTyping = active instanceof HTMLInputElement
+        || active instanceof HTMLTextAreaElement
+        || active instanceof HTMLSelectElement
+        || Boolean(active?.closest?.('[contenteditable="true"]'));
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Backspace' && !isTyping) {
+        const ids = selectedIds();
+        const targetIds = ids.length ? ids : state.selectedNodeId ? [state.selectedNodeId] : [];
+        if (targetIds.length) {
+          event.preventDefault();
+          void deleteNodes(targetIds).catch((error) => setStatus(error.message || String(error)));
+        }
+        return;
+      }
+      if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !isTyping) {
+        const nodeId = state.hoveredNodeId || state.selectedNodeId || selectedIds()[0] || '';
+        const node = nodeId ? getNode(nodeId) : null;
+        if (node && canEditNode(node)) {
+          event.preventDefault();
+          void renameHoveredOrSelected().catch((error) => setStatus(error.message || String(error)));
+        }
+        return;
+      }
+      if (event.key === 'Escape') {
+        hideContextMenu();
+        hideModal();
+        gridEl?.querySelectorAll('[data-audio-hover="true"]').forEach(stopAudioHover);
+        if (selectedIds().length) clearSelection();
+      }
+    });
+    root.querySelector('[data-cw-search]')?.addEventListener('input', (event) => {
+      const target = event.target instanceof HTMLInputElement ? event.target : null;
+      state.search = target?.value || '';
+      render();
+    });
+    uploadEl?.addEventListener('change', async () => {
+      if (!(uploadEl instanceof HTMLInputElement)) return;
+      try {
+        await uploadFiles(uploadEl.files);
+      } catch (error) {
+        setStatus(error?.message || String(error));
+      } finally {
+        uploadEl.value = '';
+      }
+    });
+
+    root.addEventListener('dragenter', (event) => {
+      if (!state.canContribute || !event.dataTransfer?.types?.includes('Files')) return;
+      root.dataset.draggingFiles = 'true';
+    });
+
+    root.addEventListener('dragover', (event) => {
+      if (!state.canContribute || !event.dataTransfer?.types?.includes('Files')) return;
+      event.preventDefault();
+      root.dataset.draggingFiles = 'true';
+    });
+
+    root.addEventListener('dragleave', (event) => {
+      if (event.relatedTarget instanceof Node && root.contains(event.relatedTarget)) return;
+      root.dataset.draggingFiles = 'false';
+    });
+
+    root.addEventListener('drop', async (event) => {
+      if (!state.canContribute || !event.dataTransfer?.files?.length) return;
+      event.preventDefault();
+      root.dataset.draggingFiles = 'false';
+      try {
+        await uploadFiles(event.dataTransfer.files);
+      } catch (error) {
+        setStatus(error?.message || String(error));
+      }
+    });
+
+    void load().catch((error) => setStatus(error.message || String(error)));
+  });
+})();
+</script>

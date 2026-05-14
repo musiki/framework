@@ -3766,6 +3766,7 @@ order:
           <RecursosEditor
             courseId={canonicalCourseId || courseSlug}
             canManage={canManageLiveInteractions}
+            canContribute={Boolean(session && hasCourseEnrollment) || canManageLiveInteractions}
             classOptions={recursosClassOptions}
           />
         ) : (

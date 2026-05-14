@@ -18,6 +18,7 @@ import remarkCoverBlock from './src/plugins/remark-cover-block.mjs'
 
 import auth from 'auth-astro';
 import node from '@astrojs/node';
+import react from '@astrojs/react';
 
 const localhostUrlRe = /^https?:\/\/(?:localhost|127(?:\.\d+){3}|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i;
 
@@ -102,6 +103,7 @@ export default defineConfig({
   },
   integrations: [
     mdx(), 
+    react(),
     auth({ injectEndpoints: false })
   ],
   markdown: {

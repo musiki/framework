@@ -1,5 +1,7 @@
 # Arquitectura de Layout basado en Pods (Dockview Core)
 
+> Actualizacion 2026-05-14: este documento sigue describiendo el layout Dockview, pero la persistencia de snapshots debe ampliarse. La direccion nueva esta documentada en [Musiki Class Workspace Refactor](../architecture/class-workspace-refactor.md): un snapshot no puede guardar solo el JSON de Dockview; tambien debe guardar referencias versionadas al contenido visible de pods como SA, SV, VS, CONCEPTOS, NOTAS, LILYCODE y RECURSOS.
+
 ## Introducción
 Este documento describe la migración del sistema de layout estático de la Sala Performativa de Musiki hacia un sistema dinámico basado en mosaicos (Pods). La tecnología central utilizada es **Dockview Core**, una librería agnóstica de gestión de ventanas en TypeScript.
 
@@ -22,6 +24,17 @@ El flujo de sincronización utiliza el mensaje `session-workspace`:
 2.  **Transmisión**: Se extrae el JSON del layout y se envía via LiveKit Data Channel.
 3.  **Recepción**: Los estudiantes reciben el JSON y ejecutan `fromJSON()`.
 
+Este flujo sincroniza la geometria del workspace, no el contenido canonico de cada pod. Para snapshots confiables, cada pod persistente debe exponer un contrato similar a:
+
+```ts
+interface SnapshotAwarePod {
+  getSnapshotPayload(): unknown;
+  applySnapshotPayload(payload: unknown): Promise<void> | void;
+}
+```
+
+La restauracion de snapshots debe aplicar primero el layout y luego el payload de pods, preferentemente por referencias a documentos/assets versionados en Postgres.
+
 ## Workspaces y Presets
 Se implementa un gestor de Workspaces en el sidebar operacional (derecho) que permite:
 *   Cargar presets configurados por el sistema (ej. "Modo Debate", "Modo Taller").
@@ -38,4 +51,3 @@ Para llevar esta tecnología a otras partes de Musiki (ej. la vista de Notas gen
 1.  **Reutilización**: La clase `RoomWorkspaceManager.ts` puede generalizarse a una base `DockviewManager.ts`.
 2.  **Múltiples Pestañas**: En la vista de notas, se puede usar Dockview para abrir múltiples archivos `.md` en pestañas paralelas o mosaicos divididos, simplemente inyectando el ID del contenido de la nota en el panel.
 3.  **Persistencia**: El sistema ya está preparado para guardar el estado del layout en `localStorage`, lo que permite que el usuario recupere su "mosaico personalizado" al volver a visitar la página.
-

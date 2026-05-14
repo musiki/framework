@@ -1,5 +1,7 @@
 # Recursos Pod (Re) Implementation Plan
 
+> 2026-05-14 status: historical implementation plan. Do not use this as the target design for new work. It describes the first legacy `RECURSOS` pod with full-state LiveKit sync, debounced DB autosave, and Markdown export. Future work must follow [Musiki Class Workspace Refactor](../../architecture/class-workspace-refactor.md): Postgres authority, R2 blobs, shared `ResourceWorkspace`, operation-based LiveKit sync, mobile/touch support, snapshot-aware pods, and Markdown/YAML as an Obsidian mirror.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the Re pod — a shared class resource manager with filetree UI, R2 file uploads, auto-captured "compartidos", LiveKit real-time sync, and DB autosave that exports to a `.md` file in the clase folder.

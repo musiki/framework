@@ -1,13 +1,17 @@
 # Recursos Pod (Re) — Design Spec
 
 **Date:** 2026-05-04  
-**Status:** Approved for implementation
+**Status:** Implemented legacy design / superseded for future work
+
+> 2026-05-14 update: this document describes the first `RECURSOS` pod implementation. It remains useful as implementation history, but it is no longer the target architecture. New work should follow [Musiki Class Workspace Refactor](../../architecture/class-workspace-refactor.md): Postgres authority, R2 for blobs, shared `ResourceWorkspace` mounted in both room and normal course view, LiveKit operation sync, snapshot-aware pod state, mobile/touch support, and Markdown/YAML as an Obsidian mirror rather than runtime truth.
 
 ---
 
 ## Overview
 
-The **Re** pod aggregates class resources: uploaded files (stored in Cloudflare R2), pasted links, and auto-captured shared items from chat, External Media (ME), and SA/SV uploads. It lives in the workspace alongside other pods. Its working state is shared in real-time via LiveKit data messages, persisted to DB with autosave, and exported on demand as an ASCII-filetree `.md` file saved in the active clase's content folder.
+The **Re** pod aggregates class resources: uploaded files (stored in Cloudflare R2), pasted links, and auto-captured shared items from chat, External Media (ME), and SA/SV uploads. It lives in the workspace alongside other pods. Its first implementation shared working state in real time via LiveKit data messages, persisted to DB with autosave, and exported on demand as an ASCII-filetree `.md` file saved in the active clase's content folder.
+
+Future direction: the pod should become a host for the shared `ResourceWorkspace`. Postgres owns nodes, metadata, permissions, revisions, and snapshot references. R2 owns media/document bytes. LiveKit broadcasts idempotent operations, not full arrays. Markdown export remains a compatibility/import-export surface.
 
 If no clase is active, resources are associated with `public/recursos`.
 
@@ -37,7 +41,9 @@ content-admin publish  ──▶  recursos-<clase-slug>.md  in clase folder
 
 **Bootstrap on join:** when the pod initializes, it fetches the current session's resource list from DB (`GET /api/live/recursos?claseId=...&roomName=...`). Late joiners always get full state.
 
-**Broadcast format:** LiveKit data message `{ type: 'recursos:sync', items: ResourceItem[], allowStudents: boolean }` — full replace on every change (list stays small).
+**Legacy broadcast format:** LiveKit data message `{ type: 'recursos:sync', items: ResourceItem[], allowStudents: boolean }` — full replace on every change.
+
+**Target broadcast format:** LiveKit should transmit small domain operations with revision ids, for example `node.created`, `node.moved`, `node.renamed`, `asset.ready`, and `snapshot.restored`. The API/Postgres state is the authority, and clients patch local state in place to avoid flicker.
 
 ---
 

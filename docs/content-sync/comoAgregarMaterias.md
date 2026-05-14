@@ -1,5 +1,7 @@
 # Como agregar materias a Musiki
 
+> Actualizacion 2026-05-14: este manual describe el flujo vigente de repo/vault por materia. Sigue sirviendo para materias actuales y para compatibilidad con Obsidian. La direccion nueva es Postgres como fuente canonica y Markdown/YAML como mirror sincronizable. Ver [Musiki Class Workspace Refactor](../architecture/class-workspace-refactor.md).
+
 Manual operativo para sumar una materia nueva al circuito:
 
 - repo/vault de Obsidian por materia
@@ -79,6 +81,21 @@ public: false
 coverImage: https://...
 ---
 ```
+
+En el modelo futuro, el frontmatter YAML debe funcionar como espejo de parametros canonicos de Postgres. Todo objeto importable/exportable debera tener un identificador estable, por ejemplo:
+
+```md
+---
+musiki_id: course_i2
+kind: course
+id: i2
+title: "Instrumento II"
+version: 1
+sync_hash: "sha256:..."
+---
+```
+
+El path del archivo no debe ser identidad canonica. Si un archivo se mueve o se renombra en Obsidian, `musiki_id` conserva la correspondencia con Postgres.
 
 Reglas del contenido:
 

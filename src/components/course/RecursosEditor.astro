@@ -1,11 +1,14 @@
 ---
+import ClassWorkspacePanel from './ClassWorkspacePanel.astro';
+
 type Props = {
   courseId: string;
   canManage: boolean;
+  canContribute?: boolean;
   classOptions?: Array<{ value: string; label: string }>;
 };
 
-const { courseId, canManage, classOptions = [] } = Astro.props;
+const { courseId, canManage, canContribute = canManage, classOptions = [] } = Astro.props;
 const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 ---
 
@@ -13,21 +16,22 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
   class="recursos-editor"
   data-recursos-editor
   data-course-id={courseId}
-  data-can-manage={canManage ? 'true' : 'false'}
+  data-can-manage="false"
 >
   <header class="recursos-editor-header">
     <div>
       <p class="recursos-editor-kicker">80 RECURSOS</p>
       <h1>Editor de recursos</h1>
     </div>
-    <button type="button" class="recursos-editor-btn" data-recursos-refresh>Actualizar</button>
   </header>
 
-  {!canManage ? (
+  {!canContribute ? (
     <p class="recursos-editor-empty">No tenes permisos para editar recursos de este curso.</p>
   ) : (
     <>
-      <div class="recursos-editor-grid">
+      <ClassWorkspacePanel courseId={courseId} canManage={canManage} canContribute={canContribute} />
+
+      {false && canManage && <div class="recursos-editor-grid">
         <section class="recursos-editor-panel">
           <div class="recursos-editor-panel-head">
             <h2>Recursos vinculados</h2>
@@ -57,9 +61,9 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
             <div class="ft-explorer" data-r2-explorer></div>
           </div>
         </section>
-      </div>
+      </div>}
 
-      <section class="recursos-editor-panel recursos-attach-panel">
+      {false && canManage && <section class="recursos-editor-panel recursos-attach-panel">
         <div class="recursos-editor-panel-head">
           <h2>Vincular URL a RECURSOS</h2>
           <span data-recursos-status></span>
@@ -89,7 +93,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
           <button type="button" class="recursos-editor-btn" data-session-new>Nueva sesión</button>
           <button type="submit" class="recursos-editor-btn recursos-editor-btn--primary">Vincular</button>
         </form>
-      </section>
+      </section>}
     </>
   )}
   <datalist id="recursos-editor-class-options" data-class-options-list>
@@ -103,8 +107,8 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 <style>
   .recursos-editor {
     display: grid;
-    gap: 1rem;
-    max-width: min(1180px, 100%);
+    gap: 0.75rem;
+    max-width: min(1280px, 100%);
     margin: 0 auto;
   }
 
@@ -119,13 +123,12 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 
   .recursos-editor-header {
     justify-content: space-between;
-    border-bottom: 1px solid var(--c-border);
-    padding-bottom: 0.8rem;
+    padding-bottom: 0.2rem;
   }
 
   .recursos-editor-header h1 {
     margin: 0;
-    font-size: 1.7rem;
+    font-size: 1.35rem;
   }
 
   .recursos-editor-kicker {

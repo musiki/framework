@@ -99,6 +99,12 @@ function buildUploadKey(prefix: string, file: File, identity: string): string {
   return `${capPrefixDepth(prefix || 'room/')}${safeIdentity}-${safeName}-${crypto.randomUUID()}.${ext}`;
 }
 
+function isClassWorkspaceUploadPrefix(prefix: string, courseId: string): boolean {
+  const parts = prefixParts(prefix);
+  const coursePart = safeKeySegment(courseId, 'course');
+  return parts[0] === 'class-workspace' && safeKeySegment(parts[1], 'course') === coursePart;
+}
+
 export const GET: APIRoute = async ({ locals, url }) => {
   const session = (locals as any).session;
   const user = await ensureDbUserFromSession(session);
@@ -199,9 +205,12 @@ export const POST: APIRoute = async ({ locals, request }) => {
 
   const courseId = cleanString(form.get('courseId') ?? '', 120);
   const access = await resolveLiveManageAccess(session, courseId);
-  if (!access.canManage) return json({ error: 'Forbidden' }, 403);
-
   const prefix = capPrefixDepth(normalizePrefix(form.get('prefix') ?? 'room/') || 'room/');
+  const canContribute = Boolean(access.canManage || access.enrollmentRole);
+  if (!access.canManage && !(canContribute && isClassWorkspaceUploadPrefix(prefix, courseId))) {
+    return json({ error: 'Forbidden' }, 403);
+  }
+
   const files = form.getAll('file').filter((entry): entry is File => entry instanceof File);
   if (!files.length) return json({ error: 'No file provided.' }, 400);
 

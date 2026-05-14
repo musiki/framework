@@ -1,15 +1,18 @@
 # RECURSOS Course, Class, Session Model
 
 Date: 2026-05-10
+Updated: 2026-05-14
 
-## Goal
+> Current direction: this incremental model is now a compatibility bridge. The canonical target is the shared Class Workspace architecture documented in [Musiki Class Workspace Refactor](../architecture/class-workspace-refactor.md). New work should avoid expanding the old `.recursos-editor-panel` or the old full-state `RECURSOS` pod model unless needed as a temporary bug fix.
+
+## Compatibility Goal
 
 RECURSOS should be editable from both surfaces:
 
 - the live room `RECURSOS` pod
 - the normal course view `80 RECURSOS` / resource editor
 
-Both surfaces should operate on the same conceptual tree:
+Both surfaces should operate on the same conceptual tree. In the compatibility layer, this tree is projected from existing `ResourceSession` and `LiveClassResource` rows. In the target architecture, it becomes a first-class `WorkspaceNode` tree:
 
 ```text
 Curso
@@ -73,6 +76,14 @@ Both the room pod and normal-view editor should read/write:
 
 The room pod can remain optimized for live use, while the normal editor can be optimized for preparation and cleanup.
 
+Target contract:
+
+- The room pod and normal editor mount the same `ResourceWorkspace` implementation.
+- Postgres is the source of truth for the tree, permissions, ownership, revisions, and metadata.
+- R2 stores binary payloads and preview artifacts.
+- LiveKit transmits domain operations with revision ids, not full replacement arrays.
+- Markdown/YAML is a portable mirror for Obsidian and export/import, not the canonical runtime state.
+
 ## Implemented Surface
 
 - Normal editor lists discovered sessions for the current course and allows renaming them.
@@ -94,15 +105,20 @@ Short term:
 - Hide `roomName` in the editor.
 - Add session list/create support to the normal editor.
 - Store `sessionId` when linking resources from normal view.
-- Continue projecting resources into `80 RECURSOS` markdown for course navigation.
+- Continue projecting resources into `80 RECURSOS` markdown for course navigation while the new workspace API is built.
+- Treat PPTX, video, audio, images, docs, links, and future text documents as workspace nodes/assets rather than special one-off UI cases.
 
 Medium term:
 
-- Make room resource loading explicitly aware of `sessionId`, with an "all/current session" mode.
-- Add richer editor filtering by `Clase / capitulo`, `Sesion`, and `Carpeta`.
-- Consider using chapter identifiers consistently instead of active lesson ids for `claseId`.
+- Add canonical workspace-node and resource-asset service APIs.
+- Bridge `ResourceSession` and `LiveClassResource` into the new service layer.
+- Build the shared `ResourceWorkspace` React island for normal course `80 RECURSOS`.
+- Add mobile/touch support from the first implementation: drawer tree, long-press actions, bottom sheets, and drag fallback via `Move to...`.
 
 Long term:
 
-- Consider a schema cleanup where `courseId`, `chapterId`, and `sessionId` are first-class fields.
+- Replace room `RECURSOS` internals with the same shared `ResourceWorkspace`.
+- Make `courseId`, `chapterId`/lesson id, and `sessionId` first-class fields in the canonical model.
 - Keep `roomName` only for live transport/session compatibility.
+- Reuse the same workspace tree for lessons, assignments, snapshots, and future Postgres-backed course text.
+- Keep Obsidian Markdown/YAML as an import/export mirror keyed by stable `musiki_id`.
