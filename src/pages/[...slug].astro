@@ -36,6 +36,7 @@ import { getCoursePageHistory } from '../lib/page-history';
 
 import { getRuntimeDynamicContent } from '../lib/runtime-content';
 import { normalizeContentSlug, getContentCanonicalSlug } from '../lib/content-slug';
+import { iconFor } from '../scripts/room/recursos/icons';
 
 // Forzamos SSR dinámico puro y desactivamos caché para contenido vivo
 Astro.response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -459,6 +460,19 @@ if (session && recursosCourseId) {
   } catch (error) {
     console.error('[recursos-sidebar] failed to load resources', error);
   }
+}
+
+// Group a session's resources into root items + named folder buckets
+function groupByFolder(resources: Array<{ id: string; url: string; name: string; type: string; folder: string | null }>) {
+  const root: typeof resources = [];
+  const folders = new Map<string, typeof resources>();
+  for (const r of resources) {
+    const f = r.folder?.trim() || '';
+    if (!f) { root.push(r); continue; }
+    if (!folders.has(f)) folders.set(f, []);
+    folders.get(f)!.push(r);
+  }
+  return { root, folders };
 }
 
 // Group concepts and glossary by project and parent
@@ -1575,6 +1589,11 @@ order:
       }
 
       .sidebar--left .recursos-sidebar-session-name {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+        list-style: none;
         color: var(--c-fg-subtle);
         font-size: 0.72rem;
         font-weight: 700;
@@ -1582,6 +1601,19 @@ order:
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        user-select: none;
+      }
+      .sidebar--left .recursos-sidebar-session-name::-webkit-details-marker { display: none; }
+      .sidebar--left .recursos-sidebar-session-name::marker { display: none; }
+
+      .sidebar--left .recursos-sidebar-session-caret {
+        flex-shrink: 0;
+        font-size: 0.6rem;
+        display: inline-block;
+        transition: transform 0.15s;
+      }
+      .sidebar--left .recursos-sidebar-session[open] > .recursos-sidebar-session-name .recursos-sidebar-session-caret {
+        transform: rotate(90deg);
       }
 
       .sidebar--left .recursos-sidebar-resource-list {
@@ -1595,6 +1627,10 @@ order:
       .sidebar--left .recursos-sidebar-resource-item {
         list-style: none;
         margin: 0;
+      }
+      .sidebar--left .recursos-sidebar-resource-item::before {
+        content: none !important;
+        display: none !important;
       }
 
       .sidebar--left .recursos-sidebar-resource-link {
@@ -1615,6 +1651,13 @@ order:
         color: var(--accent);
       }
 
+      .sidebar--left .recursos-sidebar-resource-icon {
+        flex-shrink: 0;
+        font-size: 10px;
+        width: 12px;
+        text-align: center;
+      }
+
       .sidebar--left .recursos-sidebar-resource-name {
         flex: 1 1 auto;
         min-width: 0;
@@ -1628,6 +1671,46 @@ order:
         color: var(--c-fg-subtle);
         font-size: 0.66rem;
       }
+
+      .sidebar--left .recursos-sidebar-folder {
+        display: grid;
+        gap: 1px;
+        padding-left: 0.5rem;
+        border-left: 1px solid color-mix(in srgb, var(--c-border) 50%, transparent);
+      }
+      .sidebar--left .recursos-sidebar-folder-name {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+        list-style: none;
+        color: #4e6070;
+        font-size: 0.7rem;
+        font-weight: 600;
+        line-height: 1.3;
+        user-select: none;
+        padding: 0.1rem 0.25rem;
+      }
+      .sidebar--left .recursos-sidebar-folder-name::-webkit-details-marker { display: none; }
+      .sidebar--left .recursos-sidebar-folder-name::marker { display: none; }
+      .sidebar--left .recursos-sidebar-folder-caret {
+        flex-shrink: 0;
+        font-size: 0.55rem;
+        display: inline-block;
+        transition: transform 0.15s;
+      }
+      .sidebar--left .recursos-sidebar-folder[open] > .recursos-sidebar-folder-name .recursos-sidebar-folder-caret {
+        transform: rotate(90deg);
+      }
+      .sidebar--left .recursos-sidebar-folder-items {
+        display: grid;
+        gap: 1px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .sidebar--left .recursos-sidebar-folder-items li { list-style: none; margin: 0; }
+      .sidebar--left .recursos-sidebar-folder-items li::before { content: none !important; display: none !important; }
 
       .lesson-link {
         display: flex;
@@ -3514,24 +3597,55 @@ order:
                     </span>
                   </summary>
                   {recursosSidebarGroups.length > 0 && (
-                    <div class="recursos-sidebar-tree">
-                      {recursosSidebarGroups.map((group) => (
-                        <div class="recursos-sidebar-session">
-                          <div class="recursos-sidebar-session-name">
-                            {group.session?.name || 'Sin sesión'}
-                          </div>
-                          <ul class="recursos-sidebar-resource-list">
-                            {group.resources.map((resource) => (
-                              <li class="recursos-sidebar-resource-item">
-                                <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
-                                  <span class="recursos-sidebar-resource-name">{resource.name}</span>
-                                  {resource.folder && <span class="recursos-sidebar-resource-folder">{resource.folder}</span>}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
+                    <div class="recursos-sidebar-tree" data-recursos-sidebar data-room={`${recursosCourseId}-stage`} data-clase={recursosCourseId}>
+                      {recursosSidebarGroups.map((group) => {
+                        const { root, folders } = groupByFolder(group.resources);
+                        return (
+                          <details class="recursos-sidebar-session" open>
+                            <summary class="recursos-sidebar-session-name">
+                              <span class="recursos-sidebar-session-caret">▸</span>
+                              {group.session?.name || 'Sin sesión'}
+                            </summary>
+                            <ul class="recursos-sidebar-resource-list">
+                              {root.map((resource) => {
+                                const ic = iconFor(resource.type, resource.url);
+                                return (
+                                  <li class="recursos-sidebar-resource-item">
+                                    <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                      <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                      <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                    </a>
+                                  </li>
+                                );
+                              })}
+                              {[...folders.entries()].map(([folderName, items]) => (
+                                <li class="recursos-sidebar-resource-item">
+                                  <details class="recursos-sidebar-folder" open>
+                                    <summary class="recursos-sidebar-folder-name">
+                                      <span class="recursos-sidebar-folder-caret">▸</span>
+                                      <span style="color:#4e6070">⊟</span>
+                                      {folderName}
+                                    </summary>
+                                    <ul class="recursos-sidebar-folder-items">
+                                      {items.map((resource) => {
+                                        const ic = iconFor(resource.type, resource.url);
+                                        return (
+                                          <li>
+                                            <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                              <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                              <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                            </a>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  </details>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        );
+                      })}
                     </div>
                   )}
                 </details>
@@ -3572,24 +3686,55 @@ order:
                   </span>
                 </summary>
                 {isRecursosChapter && recursosSidebarGroups.length > 0 ? (
-                  <div class="recursos-sidebar-tree">
-                    {recursosSidebarGroups.map((group) => (
-                      <div class="recursos-sidebar-session">
-                        <div class="recursos-sidebar-session-name">
-                          {group.session?.name || 'Sin sesión'}
-                        </div>
-                        <ul class="recursos-sidebar-resource-list">
-                          {group.resources.map((resource) => (
-                            <li class="recursos-sidebar-resource-item">
-                              <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
-                                <span class="recursos-sidebar-resource-name">{resource.name}</span>
-                                {resource.folder && <span class="recursos-sidebar-resource-folder">{resource.folder}</span>}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
+                  <div class="recursos-sidebar-tree" data-recursos-sidebar data-room={`${recursosCourseId}-stage`} data-clase={recursosCourseId}>
+                    {recursosSidebarGroups.map((group) => {
+                      const { root, folders } = groupByFolder(group.resources);
+                      return (
+                        <details class="recursos-sidebar-session" open>
+                          <summary class="recursos-sidebar-session-name">
+                            <span class="recursos-sidebar-session-caret">▸</span>
+                            {group.session?.name || 'Sin sesión'}
+                          </summary>
+                          <ul class="recursos-sidebar-resource-list">
+                            {root.map((resource) => {
+                              const ic = iconFor(resource.type, resource.url);
+                              return (
+                                <li class="recursos-sidebar-resource-item">
+                                  <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                    <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                    <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                  </a>
+                                </li>
+                              );
+                            })}
+                            {[...folders.entries()].map(([folderName, items]) => (
+                              <li class="recursos-sidebar-resource-item">
+                                <details class="recursos-sidebar-folder" open>
+                                  <summary class="recursos-sidebar-folder-name">
+                                    <span class="recursos-sidebar-folder-caret">▸</span>
+                                    <span style="color:#4e6070">⊟</span>
+                                    {folderName}
+                                  </summary>
+                                  <ul class="recursos-sidebar-folder-items">
+                                    {items.map((resource) => {
+                                      const ic = iconFor(resource.type, resource.url);
+                                      return (
+                                        <li>
+                                          <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                            <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                            <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                          </a>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                </details>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      );
+                    })}
                   </div>
                 ) : (
                   <ul class="lesson-list">

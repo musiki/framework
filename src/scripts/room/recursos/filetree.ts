@@ -1,4 +1,5 @@
 import { type ResourceType } from './metadata';
+import { iconFor } from './icons';
 
 export type ResourceItem = {
   id: string;
@@ -12,23 +13,6 @@ export type ResourceItem = {
   createdAt: string;
   sessionId?: string | null;
 };
-
-const TYPE_ICON: Record<string, { char: string; color: string }> = {
-  pdf:   { char: '■', color: '#e06666' },
-  pptx:  { char: '▣', color: '#f6b26b' },
-  img:   { char: '▪', color: '#76d3ff' },
-  md:    { char: '■', color: '#45d384' },
-  tex:   { char: '■', color: '#f6b26b' },
-  ly:    { char: '♩', color: '#ffd966' },
-  audio: { char: '♪', color: '#93c47d' },
-  video: { char: '▶', color: '#76d3ff' },
-  link:  { char: '⬡', color: '#8e7cc3' },
-  other: { char: '·', color: '#666'    },
-};
-
-function iconFor(type: string): { char: string; color: string } {
-  return TYPE_ICON[type] ?? TYPE_ICON.other;
-}
 
 const PINNED_FOLDERS = ['DOC', 'media', 'compartidos'];
 
@@ -115,7 +99,7 @@ export function renderFiletree(
     rowEl.className = 're-folder-row';
     rowEl.innerHTML = `
       <span class="re-caret">${isCollapsed ? '▸' : '▾'}</span>
-      <span class="re-folder-icon" style="color:${isDoc ? '#e06666' : isMedia ? '#93c47d' : isAuto ? '#6fa8dc' : '#555'}">${isDoc ? '□' : isMedia ? '♪' : isAuto ? '⊕' : '⊟'}</span>
+      <span class="re-folder-icon" style="color:${isDoc ? '#e06666' : isMedia ? '#93c47d' : isAuto ? '#6fa8dc' : '#4e6070'}">${isDoc ? '□' : isMedia ? '♪' : isAuto ? '⊕' : '⊟'}</span>
       <span class="re-folder-name${isDoc || isMedia || isAuto ? ' re-folder-name--auto' : ''}" style="${isDoc ? 'color:#e06666' : isMedia ? 'color:#93c47d' : ''}">${escHtml(folder)}</span>
     `;
     rowEl.addEventListener('click', () => options.onFolderToggle(folder));
@@ -148,7 +132,7 @@ function buildItemEl(
   item: ResourceItem,
   options: Parameters<typeof renderFiletree>[4],
 ): HTMLElement {
-  const { char, color } = iconFor(item.type);
+  const { char, color } = iconFor(item.type, item.url);
   const canEdit = options.canEdit ?? true;
   const el = document.createElement('div');
   el.className = 're-item';

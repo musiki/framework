@@ -121,6 +121,16 @@ export const GET: APIRoute = async ({ locals, url }) => {
     if (!nodeMap.has(node.id)) nodeMap.set(node.id, node);
   }
 
+  // Build a set of folder keys already covered by canonical ClassWorkspaceNode folders
+  // so we don't emit a duplicate legacy-folder node alongside the canonical one.
+  const canonicalFolderKeys = new Set<string>();
+  for (const node of nodeMap.values()) {
+    if (node.kind === 'folder' && node.metadata?.legacyFolderName) {
+      const sid = String(node.metadata.legacySessionId ?? '');
+      canonicalFolderKeys.add(`${String(node.metadata.legacyFolderName)}|${sid}`);
+    }
+  }
+
   for (const row of resourceResult.data ?? []) {
     const parentId = folderParentId(row);
     const folder = String(row.folder ?? '').trim();
@@ -134,11 +144,21 @@ export const GET: APIRoute = async ({ locals, url }) => {
         parentId,
         createdAt: row.createdAt,
       });
-      if (!folderNodes.has(folderNode.id)) {
+      const folderKey = `${folder}|${String(parentId ?? '')}`;
+      if (canonicalFolderKeys.has(folderKey)) {
+        // A canonical folder covers this legacy folder — point resource to it, skip legacy node
+        const canonical = [...nodeMap.values()].find(n =>
+          n.kind === 'folder' && n.metadata?.legacyFolderName === folder &&
+          String(n.metadata.legacySessionId ?? '') === String(parentId ?? ''),
+        );
+        if (canonical) resourceParentId = canonical.id;
+      } else if (!folderNodes.has(folderNode.id)) {
         folderNodes.set(folderNode.id, folderNode);
         if (!nodeMap.has(folderNode.id)) nodeMap.set(folderNode.id, folderNode);
+        resourceParentId = folderNode.id;
+      } else {
+        resourceParentId = folderNode.id;
       }
-      resourceParentId = folderNode.id;
     }
 
     const node = legacyResourceToWorkspaceNode(row, { courseId, parentId: resourceParentId });

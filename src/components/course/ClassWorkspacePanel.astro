@@ -840,6 +840,8 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         || String(node.createdByUserId || '') === state.currentUserId;
     };
 
+    const canRenameNode = (node) => !isR2Node(node) && (state.canManage || state.canContribute);
+
     const canSelectNode = (node) => canEditNode(node) || isR2Node(node);
 
     const renameTargetId = () => state.hoveredNodeId || state.selectedNodeId || selectedIds()[0] || '';
@@ -979,7 +981,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         if (button instanceof HTMLElement) button.hidden = !canEdit;
       });
       const renameButton = contextMenuEl.querySelector('[data-cw-context-action="rename"]');
-      if (renameButton instanceof HTMLElement) renameButton.hidden = !canEdit;
+      if (renameButton instanceof HTMLElement) renameButton.hidden = !canRenameNode(node);
       const moveButton = contextMenuEl.querySelector('[data-cw-context-action="move"]');
       if (moveButton instanceof HTMLElement) moveButton.hidden = !(canEdit || r2Node);
       const deleteButton = contextMenuEl.querySelector('[data-cw-context-action="delete"]');
@@ -999,7 +1001,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       if (bulkRenameEl instanceof HTMLButtonElement) {
         const selected = selectedIds();
         const node = selected.length === 1 ? getNode(selected[0]) : null;
-        bulkRenameEl.hidden = !(node && canEditNode(node));
+        bulkRenameEl.hidden = !(node && canRenameNode(node));
       }
       if (selectionCountEl) selectionCountEl.textContent = `${count} seleccionado${count === 1 ? '' : 's'}`;
     };
@@ -1028,13 +1030,13 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     const renameHoveredOrSelected = async () => {
       const nodeId = renameTargetId();
       const node = nodeId ? getNode(nodeId) : null;
-      if (!node || !canEditNode(node)) return;
+      if (!node || !canRenameNode(node)) return;
       await renameNode(nodeId);
     };
 
     const renameTreeNode = async (nodeId) => {
       const node = nodeId ? getNode(nodeId) : null;
-      if (!node || !canEditNode(node)) return;
+      if (!node || !canRenameNode(node)) return;
       state.selectedNodeId = nodeId;
       await renameNode(nodeId);
     };
@@ -1376,21 +1378,20 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       if (!(row instanceof HTMLElement)) return;
       const nodeId = row.dataset.parent || '';
       const node = nodeId ? getNode(nodeId) : null;
-      if (!node || !canEditNode(node)) return;
+      if (!node || !canRenameNode(node)) return;
       event.preventDefault();
       event.stopPropagation();
       void renameTreeNode(nodeId).catch((error) => setStatus(error.message || String(error)));
     });
 
     treeEl?.addEventListener('pointerdown', (event) => {
-      if (event.pointerType !== 'touch') return;
       const label = event.target instanceof HTMLElement ? event.target.closest('.cw-tree-label') : null;
       if (!(label instanceof HTMLElement)) return;
       const row = label.closest('[data-parent]');
       if (!(row instanceof HTMLElement)) return;
       const nodeId = row.dataset.parent || '';
       const node = nodeId ? getNode(nodeId) : null;
-      if (!node || !canEditNode(node)) return;
+      if (!node || !canRenameNode(node)) return;
       treeLongPress = {
         nodeId,
         pointerId: event.pointerId,
@@ -1563,6 +1564,15 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       showContextMenuForNode(nodeId, event.clientX, event.clientY);
     });
 
+    treeEl?.addEventListener('contextmenu', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-parent]') : null;
+      if (!(target instanceof HTMLElement) || !(contextMenuEl instanceof HTMLElement)) return;
+      const nodeId = target.dataset.parent || '';
+      if (!nodeId) return;
+      event.preventDefault();
+      showContextMenuForNode(nodeId, event.clientX, event.clientY);
+    });
+
     gridEl?.addEventListener('dragstart', (event) => {
       const target = event.target instanceof HTMLElement ? event.target.closest('[data-node-id]') : null;
       if (!(target instanceof HTMLElement)) return;
@@ -1700,7 +1710,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !isTyping) {
         const nodeId = state.hoveredNodeId || state.selectedNodeId || selectedIds()[0] || '';
         const node = nodeId ? getNode(nodeId) : null;
-        if (node && canEditNode(node)) {
+        if (node && canRenameNode(node)) {
           event.preventDefault();
           void renameHoveredOrSelected().catch((error) => setStatus(error.message || String(error)));
         }
