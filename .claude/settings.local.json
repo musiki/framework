@@ -52,7 +52,9 @@
       "Bash(python3 -c \"import json,sys; v=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(v[-5:]\\)\\)\")",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('pg-types version:', d['version']\\); print\\('main:', d.get\\('main',''\\)\\)\")",
       "Bash(node *)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('pg version:', d['version']\\); print\\('deps:', {k:v for k,v in d.get\\('dependencies',{}\\).items\\(\\)}\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('pg version:', d['version']\\); print\\('deps:', {k:v for k,v in d.get\\('dependencies',{}\\).items\\(\\)}\\)\")",
+      "Bash(grep -n \"userId.*query\\\\|query.*userId\\\\|INSERT.*userId.*\\\\$1\\\\|WHERE.*userId.*\\\\$1\" /Users/zztt/projects/26-musiki/framework/src/lib/forum-server.ts)",
+      "Bash(grep -n \"existing.id\\\\|WHERE.*id.*=.*\\\\$\" /Users/zztt/projects/26-musiki/framework/src/lib/forum-server.ts)"
     ]
   }
 }

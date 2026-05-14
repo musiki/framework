@@ -44,7 +44,7 @@ import { buildOverviewProjection } from '../lib/dashboard/overview-projection';
 import { buildTeacherMainProjection } from '../lib/dashboard/teacher-main-projection';
 import { buildTeacherEvalProjection } from '../lib/dashboard/teacher-eval-projection';
 import { getCourseWelcomeFields, getWelcomeSubmissionAnswerText } from '../lib/dashboard/welcome-fields';
-import { toDashboardProjectionJson } from '../lib/dashboard/shared';
+import { buildSearchBlob, toDashboardProjectionJson } from '../lib/dashboard/shared';
 import { getRoleBadgeLabel } from '../lib/dashboard-role';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../lib/roles';
 import { ensureDbUserFromSession } from '../lib/forum-server';
@@ -215,6 +215,23 @@ if (isTeacher) {
     }
   } catch (error) {
     console.error('Error initializing attendance dashboard queries:', error);
+  }
+}
+
+let allPlatformLogins: any[] = [];
+if (isTeacher) {
+  try {
+    const { data: loginData } = await query(
+      `SELECT l.id, l."userId", l.email, l.name, l."createdAt",
+              u.name AS "userName", u.role AS "userRole"
+         FROM "PlatformLoginLog" l
+         LEFT JOIN "User" u ON u.id = l."userId"
+        ORDER BY l."createdAt" DESC
+        LIMIT 3000`,
+    );
+    allPlatformLogins = loginData || [];
+  } catch (e) {
+    console.warn('[dashboard] PlatformLoginLog unavailable (table may not exist yet):', (e as any)?.message);
   }
 }
 
@@ -2008,6 +2025,8 @@ const attendanceScheduleGrid = buildAttendanceScheduleColumns(
   activeAttendanceConfig.endDate,
 );
 
+const ROOM_ATTENDANCE_THRESHOLD = 0.70; // min fraction of session duration to earn 'R'
+
 const attendanceLiveValueByStudentDayKey = (() => {
   const values = new Map<string, number>();
   if (!isTeacher) return values;
@@ -2022,6 +2041,18 @@ const attendanceLiveValueByStudentDayKey = (() => {
       const dayKey = getAttendanceDayKey(session, attendance);
       if (!userId || !courseId || !year || !dayKey) return;
       if (Number(attendance?.joinCount || 0) <= 0) return;
+
+      const sessionDurationMs = Math.max(
+        0,
+        getDateTimestamp(session?.finishedAt || session?.lastEventAt)
+        - getDateTimestamp(session?.startedAt),
+      );
+      const studentDurationMs = computeAttendanceDurationMs(attendance, session);
+      // If session has no computed duration (still live or no timestamps), fall back to joinCount check only
+      const meetsThreshold = sessionDurationMs > 0
+        ? studentDurationMs / sessionDurationMs >= ROOM_ATTENDANCE_THRESHOLD
+        : true;
+      if (!meetsThreshold) return;
 
       const mapKey = `${normalizeTextLower(courseId)}::${year}::${userId}::${dayKey}`;
       values.set(mapKey, 1);
@@ -2874,6 +2905,25 @@ const teacherAdminProjection = isTeacher
     })
   : { columns: [], rows: [], emptyMessage: '' };
 
+const loginLogColumns = [
+  { title: 'Fecha / Hora', field: 'createdAtLabel', minWidth: 160 },
+  { title: 'Nombre', field: 'name', minWidth: 180 },
+  { title: 'Email', field: 'email', minWidth: 220 },
+];
+
+const loginLogRows = isTeacher
+  ? (allPlatformLogins || []).map((row: any) => ({
+      id: String(row?.id || ''),
+      userId: String(row?.userId || ''),
+      name: String(row?.userName || row?.name || row?.email || '—'),
+      email: String(row?.email || '—'),
+      createdAtLabel: formatSubmissionDate(String(row?.createdAt || '')),
+      __search: buildSearchBlob([row?.userName, row?.name, row?.email, row?.createdAt]),
+    }))
+  : [];
+
+const loginLogProjection = { columns: loginLogColumns, rows: loginLogRows, emptyMessage: 'No hay ingresos registrados.' };
+
 const teacherTabulatorMetaJson = toDashboardProjectionJson({
   userId: String(dbUser?.id || ''),
   courseId: activeCourseId,
@@ -2889,6 +2939,7 @@ const teacherCommentsProjectionJson = toDashboardProjectionJson(teacherCommentsP
 const teacherAdminProjectionJson = toDashboardProjectionJson(teacherAdminProjection);
 const teacherEvalProjectionJson = toDashboardProjectionJson(teacherEvalProjection);
 const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboardAnnotations);
+const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
 ---
 
 <html lang="es">
@@ -6603,6 +6654,33 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
                 <div class="dashboard-tabulator" data-dashboard-grid="comments"></div>
               </section>
               <section class="teacher-log-section">
+                <h3 class="teacher-section-title">Log de ingresos a la plataforma</h3>
+                <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
+                  <input
+                    type="search"
+                    class="dashboard-grid-search"
+                    data-dashboard-search="login-log"
+                    placeholder="Buscar por nombre, email, fecha..."
+                    aria-label="Buscar en log de ingresos"
+                  />
+                  <div class="dashboard-grid-actions">
+                    <button
+                      type="button"
+                      class="dashboard-grid-btn dashboard-grid-btn--square"
+                      data-dashboard-download="login-log"
+                      title="Exportar log de ingresos como CSV."
+                      aria-label="Exportar log de ingresos como CSV"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <p class="teacher-grid-note">
+                  Un registro por usuario cada 4 horas. Se registra automáticamente al acceder a la plataforma.
+                </p>
+                <div class="dashboard-tabulator" data-dashboard-grid="login-log"></div>
+              </section>
+              <section class="teacher-log-section">
                 <h3 class="teacher-section-title">Log de actividad de docentes en evals</h3>
                 <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
                   <input
@@ -6966,6 +7044,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
     <script type="application/json" id="dashboard-teacher-admin" set:html={teacherAdminProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-eval" set:html={teacherEvalProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-annotations" set:html={teacherDashboardAnnotationsJson}></script>
+    <script type="application/json" id="dashboard-login-log" set:html={loginLogProjectionJson}></script>
     <script type="application/json" id="dashboard-agenda-data" set:html={dashboardAgendaDataJson}></script>
 
     <script>

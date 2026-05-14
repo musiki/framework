@@ -135,6 +135,7 @@ export async function ensureDbUserFromSession(
       }
     }
 
+    void logPlatformAccess(existing.id, normalizedEmail, existing.name).catch(() => {});
     return normalizeDbUser(existing);
   }
 
@@ -186,10 +187,26 @@ export async function ensureDbUserFromSession(
       const { registerEmailForUser } = await import('./user-email');
       await registerEmailForUser(inserted.id, normalizedEmail, true).catch(() => undefined);
     } catch {}
+    void logPlatformAccess(inserted.id, normalizedEmail, insertPayload.name).catch(() => {});
     return normalizeDbUser(inserted);
   }
 
   return null;
+}
+
+async function logPlatformAccess(userId: string, email: string, name?: string | null): Promise<void> {
+  const { data: recent } = await query(
+    `SELECT id FROM "PlatformLoginLog"
+     WHERE "userId" = $1 AND "createdAt" > NOW() - INTERVAL '4 hours'
+     LIMIT 1`,
+    [userId],
+  );
+  if (recent && recent.length > 0) return;
+  await query(
+    `INSERT INTO "PlatformLoginLog" ("userId", email, name, "createdAt")
+     VALUES ($1, $2, $3, NOW())`,
+    [userId, email || null, name || null],
+  );
 }
 
 async function isPublicCourse(courseId: string): Promise<boolean> {

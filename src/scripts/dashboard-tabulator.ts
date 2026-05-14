@@ -39,6 +39,8 @@ type GridKind =
   | 'attendance-summary'
   | 'attendance-log'
   | 'comments'
+  | 'teacher-eval'
+  | 'login-log'
   | 'admin';
 
 type CellScopeContext = {
@@ -3859,7 +3861,7 @@ const buildTable = (
   const maxHeight =
     ['comments', 'teacher-eval'].includes(context.kind)
       ? '34vh'
-      : context.kind === 'attendance-log'
+      : ['attendance-log', 'login-log'].includes(context.kind)
         ? '50vh'
         : false;
   element.dataset.rangeSelection = isRangeTable ? 'true' : 'false';
@@ -4171,6 +4173,8 @@ const buildCsvFilename = (key: string, meta: DashboardMeta) => {
       return `musiki-attendance-log-${course}-${year}.csv`;
     case 'comments':
       return `musiki-comments-${course}-${year}.csv`;
+    case 'login-log':
+      return `musiki-login-log-${course}-${year}.csv`;
     case 'admin':
       return `musiki-admin-${course}-${year}.csv`;
     default:
@@ -5779,6 +5783,7 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
   });
   const comments = parseJsonScript<GridProjection>('dashboard-teacher-comments', { columns: [], rows: [] });
   const teacherEval = parseJsonScript<GridProjection>('dashboard-teacher-eval', { columns: [], rows: [] });
+  const loginLog = parseJsonScript<GridProjection>('dashboard-login-log', { columns: [], rows: [] });
   const admin = parseJsonScript<GridProjection>('dashboard-teacher-admin', { columns: [], rows: [] });
   const initialAnnotations = parseJsonScript<DashboardAnnotationRecord[]>('dashboard-teacher-annotations', []);
   hydrateAgendaAttendanceBullets();
@@ -5926,6 +5931,26 @@ export const mountDashboardTabulators = (root: HTMLElement) => {
     registry.set('teacher-eval', table);
     tables.push(table);
     const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="teacher-eval"]');
+    if (searchInput) installGlobalSearch([table], searchInput, persistKey);
+  }
+
+  const loginLogNode = root.querySelector<HTMLElement>('[data-dashboard-grid="login-log"]');
+  if (loginLogNode) {
+    const persistKey = buildPersistKey(meta, 'login-log');
+    const table = buildTable(
+      root,
+      loginLogNode,
+      loginLog,
+      persistKey,
+      { kind: 'login-log', meta },
+      annotationState,
+      modalRef,
+    );
+    trackTableBuilt(table, readyTables);
+    destroyers.push(bindInitialFoldState(table, 'login-log'));
+    registry.set('login-log', table);
+    tables.push(table);
+    const searchInput = root.querySelector<HTMLInputElement>('[data-dashboard-search="login-log"]');
     if (searchInput) installGlobalSearch([table], searchInput, persistKey);
   }
 
