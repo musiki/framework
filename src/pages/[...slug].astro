@@ -2,6 +2,7 @@
 export const prerender = false;
 
 import { getCollection, getEntry, render } from 'astro:content';
+import { ClientRouter } from 'astro:transitions';
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
@@ -849,6 +850,7 @@ order:
       title={isEditorActive ? `${isCreating ? 'Creando' : 'Editando'}: ${currentEntry.data.title || 'Nueva nota'}` : (currentEntry.data.title || courseIndex?.data?.title)}
       description={lessonDescription}
     />
+    <ClientRouter />
     {isEditorActive && (
       <style>
         .content-area.is-editor-active {
@@ -1576,6 +1578,13 @@ order:
       .sidebar--left .lesson-link {
         padding: 0.12rem 0.3rem;
         font-size: 0.76rem;
+      }
+
+      /* HR separator above CONTENIDOS */
+      .sidebar--left .class-toc:not([hidden]) {
+        border-top: 1px solid color-mix(in srgb, var(--c-border) 55%, transparent);
+        margin-top: 0.5rem;
+        padding-top: 0.35rem;
       }
 
       .sidebar--left .recursos-sidebar-tree {
@@ -3378,6 +3387,43 @@ order:
       display: none !important;
     }
 
+    .sidebar--left .class-toc-link {
+      font-size: 0.76rem !important;
+      padding: 0 0.3rem !important;
+      line-height: 1.0 !important;
+      color: var(--c-fg) !important;
+    }
+
+    .sidebar--left .class-toc-link.level-1,
+    .sidebar--left .class-toc-link.level-2,
+    .sidebar--left .class-toc-link.level-3,
+    .sidebar--left .class-toc-link.level-4,
+    .sidebar--left .class-toc-link.level-5,
+    .sidebar--left .class-toc-link.level-6 {
+      padding-left: 0.3rem !important;
+    }
+
+    .sidebar--left .class-toc-children {
+      margin-left: 0.4rem !important;
+      padding-left: 0.3rem !important;
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+      gap: 0 !important;
+      border-left: 1px solid color-mix(in srgb, var(--c-border) 55%, transparent) !important;
+    }
+
+    .sidebar--left .class-toc-list {
+      margin-left: 0.15rem !important;
+      margin-top: 0.05rem !important;
+      margin-bottom: 0.05rem !important;
+      padding-left: 0.3rem !important;
+      border-left: 1px solid color-mix(in srgb, var(--c-border) 55%, transparent) !important;
+    }
+
+    .sidebar--left .class-toc-item {
+      margin-bottom: 0 !important;
+    }
+
     .sidebar--left .class-toc-summary {
       list-style: none !important;
       display: block !important;
@@ -3854,7 +3900,7 @@ order:
       </aside>
 
       <!-- Main Content -->
-      <article class:list={['content-area', { 'is-editor-active': isEditorActive }]}>
+      <article class:list={['content-area', { 'is-editor-active': isEditorActive }]} transition:name="course-content" transition:animate="fade">
         {isLessonPage && currentEntryStatus === 'draft' && (
           <div class="draft-badge">Material en preparación</div>
         )}
@@ -8581,7 +8627,7 @@ order:
 
         const details = document.createElement('details');
         details.className = 'class-toc-branch';
-        details.open = false;
+        details.open = true;
 
         const summary = document.createElement('summary');
         summary.className = 'class-toc-summary';
