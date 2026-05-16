@@ -41,3 +41,4 @@ public/search-index.json
 public/vault-embeddings.json
 public/lily/*.svg
 public/lily/*.pdf
+public/lily/*.midi
