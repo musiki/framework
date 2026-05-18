@@ -10,14 +10,15 @@ const getEnv = (key: string) => {
   return undefined;
 };
 
-const SITE_URL = getEnv('SITE_URL') || 'https://musiki.org.ar';
-const AUTH_ORIGIN = SITE_URL.replace(/\/$/, '');
+// AUTH_URL is set correctly by ecosystem.config.cjs (https://musiki.org.ar) in prod,
+// and by the .env file (http://localhost:4321) in dev. SITE_URL is NOT reliable in prod
+// because the .env file has the dev value and ecosystem.config.cjs doesn't override it.
+const AUTH_URL_RAW = getEnv('AUTH_URL') || getEnv('SITE_URL') || 'https://musiki.org.ar';
+// Strip any /api/auth path suffix that may have been appended previously
+const AUTH_ORIGIN = AUTH_URL_RAW.replace(/\/api\/auth\/?$/, '').replace(/\/$/, '');
 const isDev = getEnv('NODE_ENV') !== "production";
 
-// Hard-override these for Auth.js internal base calculation
 if (typeof process !== 'undefined') {
-  process.env.AUTH_URL = `${AUTH_ORIGIN}/api/auth`;
-  process.env.NEXTAUTH_URL = `${AUTH_ORIGIN}/api/auth`;
   process.env.AUTH_TRUST_HOST = "true";
 }
 
@@ -26,8 +27,6 @@ console.log(`[AUTH-CONFIG] Mode: ${isDev ? 'DEV' : 'PROD'}, Origin: ${AUTH_ORIGI
 export default defineConfig({
   debug: isDev,
   trustHost: true,
-  // Only use redirectProxyUrl in production to handle domain normalization
-  redirectProxyUrl: isDev ? undefined : `${AUTH_ORIGIN}/api/auth`,
   basePath: "/api/auth",
   cookies: {
     sessionToken: {

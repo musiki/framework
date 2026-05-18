@@ -2,26 +2,9 @@
 import BaseHead from "../components/BaseHead.astro";
 import Header from "../components/Header.astro";
 import { SignIn } from "auth-astro/components";
-import { Auth } from "@auth/core";
-import authConfig from "auth:config";
 import { resolveRequestAuthOrigin } from "../lib/auth-origin";
 
 const session = (Astro.locals as any).session;
-
-// Robustly fetch CSRF token for the sign-in flow
-const getCsrfToken = async (req: Request) => {
-    try {
-        const url = new URL(`${authConfig.prefix || "/api/auth"}/csrf`, req.url);
-        const res = await Auth(new Request(url, { headers: req.headers }), authConfig);
-        const data = await res.json();
-        return data.csrfToken;
-    } catch (e) {
-        console.error("Failed to fetch CSRF token for login page:", e);
-        return "";
-    }
-};
-
-const csrfToken = await getCsrfToken(Astro.request);
 
 const toSafeRedirect = (value: unknown): string => {
     let text = typeof value === "string" ? value.trim() : "";
@@ -105,13 +88,13 @@ if (session?.user?.email) {
     <main class="wrap">
         <h1>Iniciar Sesión</h1>
         <div class="provider-login">
-            <SignIn provider="authentik" options={{ callbackUrl }} authParams={{ csrfToken }}>
+            <SignIn provider="authentik" options={{ callbackUrl }}>
                 <span class="btn-authentik">Entrar a Musiki</span>
             </SignIn>
 
             <div class="divider"></div>
 
-            <SignIn provider="google" options={{ callbackUrl }} authParams={{ csrfToken }}>
+            <SignIn provider="google" options={{ callbackUrl }}>
                 <span class="btn-google">Acceder con Google</span>
             </SignIn>
         </div>
