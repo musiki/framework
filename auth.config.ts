@@ -59,7 +59,7 @@ export default defineConfig({
       id: "authentik",
       name: "Authentik",
       type: "oidc",
-      issuer: (getEnv('OIDC_ISSUER_URL') || "https://auth.musiki.org.ar/application/o/musiki26/").replace(/\/$/, ""),
+      issuer: getEnv('OIDC_ISSUER_URL') || "https://auth.musiki.org.ar/application/o/musiki26/",
       clientId: getEnv('OIDC_CLIENT_ID'),
       clientSecret: getEnv('OIDC_CLIENT_SECRET'),
       allowDangerousEmailAccountLinking: true,
