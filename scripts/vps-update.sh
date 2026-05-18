@@ -39,9 +39,9 @@ git pull --rebase origin "${BRANCH}"
 # echo "--> Pushing back to origin/${BRANCH}..."
 # git push origin "${BRANCH}"
 
-# ── 4. Install deps if package-lock changed ──────────────────────────────────
-if git diff HEAD~1 --name-only 2>/dev/null | grep -q "package-lock.json"; then
-  echo "--> package-lock.json changed, running npm ci..."
+# ── 4. Install deps if package-lock is newer than node_modules ───────────────
+if [ ! -d node_modules ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+  echo "--> Dependencies out of sync, running npm ci..."
   npm ci --ignore-scripts
 fi
 

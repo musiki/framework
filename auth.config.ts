@@ -4,8 +4,10 @@ import { resolveAuthRedirectUrl } from "./src/lib/auth-origin";
 
 // Astro/Vite will inject these, but we fallback to process.env for Node contexts
 const getEnv = (key: string) => {
+  // Runtime environment variables (Node) should take precedence to avoid build-time inlining issues
+  if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key];
   if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) return import.meta.env[key];
-  return process.env[key];
+  return undefined;
 };
 
 const SITE_URL = getEnv('SITE_URL') || 'https://musiki.org.ar';
@@ -57,11 +59,15 @@ export default defineConfig({
       id: "authentik",
       name: "Authentik",
       type: "oidc",
-      issuer: getEnv('OIDC_ISSUER_URL') || "https://auth.musiki.org.ar/application/o/musiki26/",
+      issuer: (getEnv('OIDC_ISSUER_URL') || "https://auth.musiki.org.ar/application/o/musiki26/").replace(/\/$/, ""),
       clientId: getEnv('OIDC_CLIENT_ID'),
       clientSecret: getEnv('OIDC_CLIENT_SECRET'),
       allowDangerousEmailAccountLinking: true,
       authorization: { params: { scope: "openid profile email" } },
+      checks: ["pkce", "state"],
+      client: {
+        token_endpoint_auth_method: "client_secret_post",
+      },
       // Add a bit more logging for discovery
       onProfile(profile) {
         console.log(`[AUTH-AUTHENTIK] Profile received for: ${profile.email}`);
