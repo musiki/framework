@@ -8861,10 +8861,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
+  let preferredVideoDimensionsSyncTid = 0;
   const queuePreferredRemoteVideoDimensionsSync = () => {
-    window.requestAnimationFrame(() => {
+    if (preferredVideoDimensionsSyncTid) return;
+    preferredVideoDimensionsSyncTid = window.setTimeout(() => {
+      preferredVideoDimensionsSyncTid = 0;
       syncPreferredRemoteVideoDimensions();
-    });
+    }, 500);
   };
 
   const getCurrentPresentationHref = () =>
@@ -10973,6 +10976,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let lastDispatchedSonicCacheKey = '';
   let lastRemoteWorkspaceAppliedAt = 0;
   let lastRemoteWorkspaceSentAt = 0;
+  let lastAppliedWorkspaceJson = '';
+  let publishTeacherStateDebounceId = 0;
 
   const sonicCacheKey = () => {
     const sonic = mediaSession.sonic;
@@ -12776,9 +12781,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     .on(RoomEvent.ParticipantConnected, () => {
       syncAllParticipants();
       if (localRole === 'teacher') {
-        window.setTimeout(() => {
+        window.clearTimeout(publishTeacherStateDebounceId);
+        publishTeacherStateDebounceId = window.setTimeout(() => {
           void publishTeacherState();
-        }, 500);
+        }, 900);
         window.setTimeout(() => {
           recursosController?.publishCurrentState();
         }, 650);
@@ -12806,11 +12812,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     .on(RoomEvent.ParticipantDisconnected, (participant) => {
       removeParticipant(participant.identity);
       syncAllParticipants();
-      if (localRole === 'teacher') {
-        window.setTimeout(() => {
-          void publishTeacherState();
-        }, 250);
-      }
     })
     .on(RoomEvent.TrackSubscribed, (_, __, participant) => {
       syncAllParticipants();
@@ -13019,6 +13020,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       if (message.type === 'session-workspace') {
         if (message.sentAt && message.sentAt < lastRemoteWorkspaceSentAt) return;
         if (message.sentAt) lastRemoteWorkspaceSentAt = message.sentAt;
+        const incomingJson = JSON.stringify(message.layout);
+        if (incomingJson === lastAppliedWorkspaceJson) return;
+        lastAppliedWorkspaceJson = incomingJson;
         lastRemoteWorkspaceAppliedAt = Date.now();
         workspaceManager.applyLayout(message.layout);
         scheduleMediaRehydrate([140, 520, 1200]);

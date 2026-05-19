@@ -198,6 +198,5 @@ export const getStreamingProfile = (
   profileKey: StreamingProfileKey = 'auto',
 ): BandwidthProfile => {
   if (profileKey !== 'auto') return BANDWIDTH_PROFILES[profileKey];
-  // Default to High for everyone now as requested
-  return BANDWIDTH_PROFILES.high;
+  return BANDWIDTH_PROFILES.medium;
 };

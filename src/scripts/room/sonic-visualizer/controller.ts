@@ -66,6 +66,8 @@ export class SonicVisualizerController {
   private audioBuffer: AudioBuffer | null = null;
   private audioCtx: AudioContext | null = null;
   private playbackNode: AudioBufferSourceNode | null = null;
+  private outputGainNode: GainNode | null = null;
+  private outputLimiterNode: DynamicsCompressorNode | null = null;
   private isPlaying = false;
   private playOffset = 0;
   private playStartTime = 0;
@@ -697,13 +699,32 @@ export class SonicVisualizerController {
     }
   }
 
+  private ensureOutputChain(): AudioNode {
+    const ctx = this.audioCtx!;
+    if (!this.outputGainNode || !this.outputLimiterNode) {
+      const gain = ctx.createGain();
+      gain.gain.value = 0.85;
+      const limiter = ctx.createDynamicsCompressor();
+      limiter.threshold.value = -3;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.001;
+      limiter.release.value = 0.25;
+      gain.connect(limiter);
+      limiter.connect(ctx.destination);
+      this.outputGainNode = gain;
+      this.outputLimiterNode = limiter;
+    }
+    return this.outputGainNode;
+  }
+
   private startPlayback(offset = this.playOffset, options: { publishRoom?: boolean } = {}): void {
     this.stopPlayback();
     if (!this.audioBuffer) return;
     if (!this.audioCtx) this.audioCtx = new AudioContext();
     const src = this.audioCtx.createBufferSource();
     src.buffer = this.audioBuffer;
-    src.connect(this.audioCtx.destination);
+    src.connect(this.ensureOutputChain());
     this.playOffset    = Math.max(0, Math.min(offset, this.audioBuffer.duration - 0.01));
     this.playStartTime = this.audioCtx.currentTime;
     src.start(0, this.playOffset);
@@ -841,7 +862,7 @@ export class SonicVisualizerController {
             if (this.audioBuffer && this.audioCtx) {
               const src = this.audioCtx.createBufferSource();
               src.buffer = this.audioBuffer;
-              src.connect(this.audioCtx.destination);
+              src.connect(this.ensureOutputChain());
               this.playOffset    = this.loopIn;
               this.playStartTime = this.audioCtx.currentTime;
               src.start(0, this.loopIn);
@@ -1077,5 +1098,7 @@ export class SonicVisualizerController {
     window.removeEventListener('sa:file-ready', this.onFileReady);
     this.worker?.terminate();
     if (this.audioCtx) { try { this.audioCtx.close(); } catch {} this.audioCtx = null; }
+    this.outputGainNode = null;
+    this.outputLimiterNode = null;
   }
 }

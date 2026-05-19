@@ -180,6 +180,7 @@ export class RecursosController {
   }
 
   private async ensureSession(): Promise<string> {
+    if (!this.isTeacher) return '';
     if (this.sessionId) return this.sessionId;
     const roomName = this.getRoomName() ?? '';
     const claseId  = this.getCourseId();
@@ -397,10 +398,13 @@ export class RecursosController {
   // ── Session management ────────────────────────────────────────────────────────
 
   private async newSession(): Promise<void> {
+    if (!this.isTeacher) return;
     const roomName = this.getRoomName() ?? '';
     const claseId  = this.getCourseId();
     const courseId = this.getCourseRootId?.() ?? null;
-    const name = new Date().toISOString().slice(0, 10) + '-sesión';
+    const suggestedName = new Date().toISOString().slice(0, 10) + '-sesión';
+    const name = window.prompt('Nombre de la nueva sesión:', suggestedName)?.trim();
+    if (!name) return;
     try {
       const resp = await fetch('/api/live/session', {
         method: 'POST',
