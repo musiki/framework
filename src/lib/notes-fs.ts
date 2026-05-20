@@ -52,11 +52,11 @@ function resolveCourseScanDir(courseId: string): string | null {
 }
 
 export function listCourseNotes(courseId: string): NoteListItem[] {
-  const source = resolveCourseSource(courseId);
-  if (!source) return [];
-
   const baseDir = resolveCourseScanDir(courseId);
   if (!baseDir) return [];
+
+  const source = resolveCourseSource(courseId);
+  if (!source) return [];
 
   const entries = fs.readdirSync(baseDir, { withFileTypes: true });
   const notes: NoteListItem[] = [];
@@ -131,17 +131,13 @@ export function createCourseNote(courseId: string, opts: {
     throw new Error(`Note already exists: ${opts.slug}`);
   }
 
-  const content = [
-    '---',
-    `title: "${opts.title}"`,
-    `type: ${opts.type}`,
-    `chapter: "${opts.chapter}"`,
-    `status: ${opts.status}`,
-    `order: ${opts.order}`,
-    '---',
-    '',
-    '',
-  ].join('\n');
+  const content = matter.stringify('\n', {
+    title: opts.title,
+    type: opts.type,
+    chapter: opts.chapter,
+    status: opts.status,
+    order: opts.order,
+  });
 
   writeEditableLocalRepoFile(source, repoPath, content);
   return { slug: opts.slug, content, filePath: repoPath };
