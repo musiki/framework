@@ -1,0 +1,142 @@
+<h2>Editor v2 — YAML strip + EVALS</h2>
+<p class="subtitle">YAML con dropdown EVALS y carpeta teacher-only</p>
+
+<div class="mockup">
+  <div class="mockup-header">musiki.org.ar/notas-editor?course=i1 — Teacher view</div>
+  <div class="mockup-body" style="padding:0;display:flex;height:520px;font-size:12px;">
+
+    <!-- Left panel: tree -->
+    <div style="width:240px;background:#111;border-right:1px solid #2a2a2a;display:flex;flex-direction:column;flex-shrink:0;">
+      <div style="padding:.6rem .8rem;border-bottom:1px solid #222;display:flex;gap:.4rem;align-items:center;">
+        <span style="font-size:11px;opacity:.5;flex:1;">i1 · Instrumento I</span>
+        <button style="background:#2a4a2a;color:#7ec87e;border:none;border-radius:3px;padding:2px 6px;font-size:10px;">+ nota</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;padding:.4rem 0;">
+
+        <!-- Regular chapters -->
+        <div style="padding:.3rem .8rem;font-size:10px;opacity:.4;letter-spacing:.05em;text-transform:uppercase;">01 Mentes</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.6;display:flex;align-items:center;gap:.4rem;"><span>📄</span> Vibecoding</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.6;display:flex;align-items:center;gap:.4rem;"><span>📄</span> Introducción a IA</div>
+
+        <div style="padding:.3rem .8rem;font-size:10px;opacity:.4;letter-spacing:.05em;text-transform:uppercase;margin-top:.4rem;">02 Acústica</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.6;display:flex;align-items:center;gap:.4rem;"><span>📄</span> Gráficos cartesianos</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.6;display:flex;align-items:center;gap:.4rem;"><span>📄</span> Fund. Acústica 1</div>
+
+        <div style="padding:.3rem .8rem;font-size:10px;opacity:.4;letter-spacing:.05em;text-transform:uppercase;margin-top:.4rem;">03 Organología</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.6;display:flex;align-items:center;gap:.4rem;"><span>📄</span> Intro Organología</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;background:#1a2a1a;border-left:2px solid #5a9a5a;display:flex;align-items:center;gap:.4rem;">
+          <span>📝</span> <strong style="color:#7ec87e">eval-class reveal</strong>
+        </div>
+
+        <!-- Separator -->
+        <div style="margin:.6rem .8rem;border-top:1px dashed #222;"></div>
+
+        <!-- Teacher-only EVALS folder -->
+        <div style="padding:.3rem .8rem;font-size:10px;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:.4rem;">
+          <span style="color:#c8a87e;opacity:.8;">🔒 EVALS</span>
+          <span style="background:#3a2a0a;color:#c8a87e;border-radius:3px;padding:1px 5px;font-size:9px;opacity:.8;">solo teachers</span>
+        </div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.6;display:flex;align-items:center;gap:.4rem;"><span>📋</span> _template-patch-ai</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.6;display:flex;align-items:center;gap:.4rem;"><span>📋</span> _template-class-reveal</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.6;display:flex;align-items:center;gap:.4rem;"><span>📋</span> _template-written</div>
+        <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.5;display:flex;align-items:center;gap:.4rem;font-style:italic;"><span>📖</span> guía-tipos-de-eval</div>
+        <div style="padding:.2rem .8rem .2rem 1.4rem;">
+          <button style="background:#2a1a00;color:#c8a87e;border:1px solid #4a3a1a;border-radius:3px;padding:2px 6px;font-size:10px;width:100%;text-align:left;">+ template eval</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Right panel: editor -->
+    <div style="flex:1;display:flex;flex-direction:column;background:#0e0e0e;min-width:0;">
+
+      <!-- YAML strip — nota normal -->
+      <div style="padding:.45rem .8rem;background:#131313;border-bottom:1px solid #1e1e1e;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <span style="opacity:.3;font-size:10px;flex-shrink:0;">YAML</span>
+
+        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 7px;font-size:11px;display:flex;gap:.3rem;cursor:pointer;">
+          <span style="opacity:.4">type:</span><span style="color:#c8a87e">lesson ▾</span>
+        </div>
+        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 7px;font-size:11px;display:flex;gap:.3rem;cursor:pointer;">
+          <span style="opacity:.4">chapter:</span><span style="color:#7eaec8">03 Organología ▾</span>
+        </div>
+        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 7px;font-size:11px;display:flex;gap:.3rem;cursor:pointer;">
+          <span style="opacity:.4">status:</span><span style="color:#c87e7e">published ▾</span>
+        </div>
+        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 7px;font-size:11px;display:flex;gap:.3rem;cursor:pointer;">
+          <span style="opacity:.4">order:</span><span style="color:#888">1</span>
+        </div>
+        <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 7px;font-size:11px;display:flex;gap:.3rem;cursor:pointer;">
+          <span style="opacity:.4">theme:</span><span style="color:#888">zztt ▾</span>
+        </div>
+
+        <div style="margin-left:auto;display:flex;gap:.4rem;flex-shrink:0;">
+          <button style="background:transparent;color:#555;border:1px solid #2a2a2a;border-radius:3px;padding:2px 8px;font-size:10px;">↩ Descartar</button>
+          <button style="background:#2a4a2a;color:#7ec87e;border:none;border-radius:3px;padding:2px 10px;font-size:10px;">💾 Guardar</button>
+        </div>
+      </div>
+
+      <!-- YAML strip — cuando type = eval, aparece fila extra -->
+      <div style="padding:.4rem .8rem;background:#0f0d0a;border-bottom:1px solid #2a1a00;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <span style="opacity:.4;font-size:10px;flex-shrink:0;color:#c8a87e;">EVAL</span>
+
+        <div style="background:#1a1200;border:1px solid #3a2a00;border-radius:3px;padding:2px 7px;font-size:11px;display:flex;gap:.3rem;cursor:pointer;">
+          <span style="opacity:.5;color:#c8a87e;">template:</span><span style="color:#c8a87e;">_template-class-reveal ▾</span>
+        </div>
+        <div style="background:#1a1200;border:1px solid #3a2a00;border-radius:3px;padding:2px 7px;font-size:11px;display:flex;gap:.3rem;cursor:pointer;">
+          <span style="opacity:.5;color:#c8a87e;">evalType:</span><span style="color:#c8a87e;">class-reveal ▾</span>
+        </div>
+        <div style="background:#1a1200;border:1px solid #3a2a00;border-radius:3px;padding:2px 7px;font-size:11px;display:flex;gap:.3rem;cursor:pointer;">
+          <span style="opacity:.5;color:#c8a87e;">dueDate:</span><span style="color:#c8a87e;">2026-06-15</span>
+        </div>
+        <span style="opacity:.4;font-size:10px;margin-left:.4rem;">(aparece solo cuando type = eval)</span>
+      </div>
+
+      <!-- Title -->
+      <div style="padding:.5rem .8rem;border-bottom:1px solid #1a1a1a;">
+        <input value="eval-class reveal" style="background:transparent;border:none;color:#ddd;font-size:14px;font-weight:600;width:100%;outline:none;font-family:inherit;">
+      </div>
+
+      <!-- Editor body -->
+      <div style="flex:1;padding:.8rem 1rem;overflow-y:auto;font-family:monospace;font-size:12px;line-height:1.8;color:#666;">
+        <span style="color:#4a6a4a">%%cover%%</span><br>
+        <span style="color:#4a6a4a">&lt;grid drag="60 55" drop="5 10"&gt;</span><br>
+        <span style="color:#888"># eval reveal</span><br>
+        <span style="color:#666">## Organología</span><br>
+        <span style="color:#4a6a4a">&lt;/grid&gt;</span><br>
+        <br>
+        <span style="color:#4a6a4a">---</span><br>
+        <span style="color:#888">## Pregunta 1</span><br>
+        <span style="color:#666">¿Qué es un instrumento musical?</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Context menu mockup -->
+<div style="margin-top:1.2rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+
+  <div>
+    <h3 style="font-size:12px;opacity:.6;margin-bottom:.5rem;">Click derecho en nota</h3>
+    <div style="background:#1a1a1a;border:1px solid #333;border-radius:5px;padding:.3rem 0;font-size:12px;width:180px;box-shadow:0 4px 12px rgba(0,0,0,.5);">
+      <div style="padding:.4rem .8rem;display:flex;gap:.6rem;align-items:center;opacity:.8;cursor:pointer;">✏️ <span>Editar</span></div>
+      <div style="padding:.4rem .8rem;display:flex;gap:.6rem;align-items:center;opacity:.8;cursor:pointer;">📋 <span>Duplicar</span></div>
+      <div style="padding:.4rem .8rem;display:flex;gap:.6rem;align-items:center;opacity:.8;cursor:pointer;">📁 <span>Mover a chapter…</span></div>
+      <div style="padding:.4rem .8rem;display:flex;gap:.6rem;align-items:center;opacity:.8;cursor:pointer;">🔢 <span>Cambiar order…</span></div>
+      <div style="border-top:1px solid #2a2a2a;margin:.2rem 0;"></div>
+      <div style="padding:.4rem .8rem;display:flex;gap:.6rem;align-items:center;color:#c87e7e;cursor:pointer;">🗑️ <span>Borrar</span></div>
+    </div>
+  </div>
+
+  <div>
+    <h3 style="font-size:12px;opacity:.6;margin-bottom:.5rem;">Click derecho en carpeta EVALS</h3>
+    <div style="background:#1a1a1a;border:1px solid #333;border-radius:5px;padding:.3rem 0;font-size:12px;width:200px;box-shadow:0 4px 12px rgba(0,0,0,.5);">
+      <div style="padding:.4rem .8rem;display:flex;gap:.6rem;align-items:center;opacity:.8;cursor:pointer;">📋 <span>Nuevo template eval</span></div>
+      <div style="padding:.4rem .8rem;display:flex;gap:.6rem;align-items:center;opacity:.8;cursor:pointer;">📖 <span>Nueva guía</span></div>
+      <div style="padding:.4rem .8rem;display:flex;gap:.6rem;align-items:center;opacity:.8;cursor:pointer;">📤 <span>Usar como base...</span></div>
+    </div>
+  </div>
+</div>
+
+<p style="opacity:.5;font-size:11px;margin-top:1rem;">¿La fila EVAL extra en el YAML strip refleja lo que tenés en mente? ¿Qué campos debería tener? Respondé en terminal.</p>

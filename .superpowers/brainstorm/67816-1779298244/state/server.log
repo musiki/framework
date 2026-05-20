@@ -1,0 +1,7 @@
+{"type":"server-started","port":55227,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:55227","screen_dir":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/67816-1779298244/content","state_dir":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/67816-1779298244/state"}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/67816-1779298244/content/architecture.html"}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/67816-1779298244/content/phases.html"}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/67816-1779298244/content/editor-layout.html"}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/67816-1779298244/content/editor-layout-v2.html"}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/67816-1779298244/content/editor-layout-v3.html"}
+{"type":"server-stopped","reason":"owner process exited"}

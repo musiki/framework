@@ -1,0 +1,91 @@
+<h2>Arquitectura propuesta: Filesystem + Snapshots</h2>
+<p class="subtitle">¿Este modelo refleja lo que tenés en mente?</p>
+
+<div class="section" style="margin-bottom:2rem;">
+  <div class="mockup">
+    <div class="mockup-header">Flujo actual (a reemplazar)</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:2;padding:1rem;">
+      <span style="opacity:.5">Obsidian</span>
+      <span style="color:#e55"> → git push → GitHub Actions → content:pull → build</span>
+      <br>
+      <span style="color:#e55;font-size:11px;">❌ rebase conflicts, slow, engorroso</span>
+    </div>
+  </div>
+
+  <div class="mockup" style="margin-top:1rem;">
+    <div class="mockup-header">Flujo nuevo propuesto</div>
+    <div class="mockup-body" style="padding:1.5rem 1rem;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;text-align:center;font-size:13px;">
+
+        <div style="background:#1a2a1a;border:1px solid #3a6a3a;border-radius:6px;padding:1rem;">
+          <div style="font-size:20px;margin-bottom:.5rem;">📝</div>
+          <strong style="color:#7ec87e">Editor Web</strong>
+          <div style="opacity:.7;margin-top:.4rem;font-size:11px;">musiki.vercel.app/editor</div>
+          <div style="opacity:.7;font-size:11px;">crear · editar · borrar · mover</div>
+        </div>
+
+        <div style="background:#1a1a2a;border:1px solid #3a3a6a;border-radius:6px;padding:1rem;">
+          <div style="font-size:20px;margin-bottom:.5rem;">📱</div>
+          <strong style="color:#7e7ec8">Obsidian</strong>
+          <div style="opacity:.7;margin-top:.4rem;font-size:11px;">opcional, secondary</div>
+          <div style="opacity:.7;font-size:11px;">import/export vía API</div>
+        </div>
+
+        <div style="background:#2a1a1a;border:1px solid #6a3a3a;border-radius:6px;padding:1rem;">
+          <div style="font-size:20px;margin-bottom:.5rem;">🔧</div>
+          <strong style="color:#c87e7e">API REST</strong>
+          <div style="opacity:.7;margin-top:.4rem;font-size:11px">/api/notes/save</div>
+          <div style="opacity:.7;font-size:11px">/api/notes/create</div>
+          <div style="opacity:.7;font-size:11px">/api/notes/move</div>
+        </div>
+
+      </div>
+
+      <div style="text-align:center;margin:1rem 0;font-size:22px;opacity:.6">↓</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:13px;">
+
+        <div style="background:#1e1e1e;border:2px solid #5a9a5a;border-radius:6px;padding:1rem;">
+          <div style="font-size:18px;margin-bottom:.5rem;">📁</div>
+          <strong style="color:#7ec87e">Filesystem VPS</strong>
+          <div style="opacity:.7;margin-top:.4rem;font-size:11px;">/opt/musiki/framework/src/content/cursos/</div>
+          <div style="color:#7ec87e;font-size:11px;margin-top:.3rem;">✓ source of truth</div>
+          <div style="opacity:.7;font-size:11px;">Astro lo lee directo → sin build completo</div>
+        </div>
+
+        <div style="background:#1e1e1e;border:2px solid #5a5a9a;border-radius:6px;padding:1rem;">
+          <div style="font-size:18px;margin-bottom:.5rem;">🐘</div>
+          <strong style="color:#7e7ec8">PostgreSQL</strong>
+          <div style="opacity:.7;margin-top:.4rem;font-size:11px;">tabla: note_snapshots</div>
+          <div style="color:#7e7ec8;font-size:11px;margin-top:.3rem;">✓ version history</div>
+          <div style="opacity:.7;font-size:11px;">snapshot en cada save · hasta 1 mes</div>
+        </div>
+
+      </div>
+
+      <div style="text-align:center;margin:1rem 0;font-size:22px;opacity:.6">↓</div>
+
+      <div style="background:#1e1e1e;border:1px solid #555;border-radius:6px;padding:.8rem;text-align:center;font-size:13px;">
+        <strong>Astro build</strong>
+        <span style="opacity:.6;margin-left:.5rem;">lee src/content/ → genera HTML estático como siempre</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Tabla de snapshots (Postgres)</h3>
+  <div style="background:#111;border-radius:6px;padding:1rem;font-family:monospace;font-size:12px;line-height:1.8;overflow-x:auto;">
+    <span style="color:#888">CREATE TABLE</span> <span style="color:#7e7ec8">note_snapshots</span> (<br>
+    &nbsp;&nbsp;id         <span style="color:#c8a87e">SERIAL PRIMARY KEY</span>,<br>
+    &nbsp;&nbsp;course_id  <span style="color:#c8a87e">TEXT NOT NULL</span>,<br>
+    &nbsp;&nbsp;file_path  <span style="color:#c8a87e">TEXT NOT NULL</span>,  <span style="color:#555">-- relativo a src/content/</span><br>
+    &nbsp;&nbsp;content    <span style="color:#c8a87e">TEXT NOT NULL</span>,  <span style="color:#555">-- el .md completo</span><br>
+    &nbsp;&nbsp;saved_by   <span style="color:#c8a87e">TEXT NOT NULL</span>,  <span style="color:#555">-- email del teacher</span><br>
+    &nbsp;&nbsp;saved_at   <span style="color:#c8a87e">TIMESTAMPTZ DEFAULT now()</span>,<br>
+    &nbsp;&nbsp;op         <span style="color:#c8a87e">TEXT</span>           <span style="color:#555">-- 'save' | 'create' | 'delete' | 'move'</span><br>
+    );
+  </div>
+</div>
+
+<p style="opacity:.6;font-size:12px;margin-top:1.5rem;">¿Este modelo refleja lo que querés construir? Respondé en el terminal.</p>

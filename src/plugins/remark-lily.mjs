@@ -10,7 +10,7 @@ import {
 } from '../lib/lilypond-support.mjs';
 
 export default function remarkLily() {
-  return (tree) => {
+  return (tree, file) => {
     // Ensure public/lily directory exists
     const lilyDir = path.join(process.cwd(), 'public', 'lily');
     if (!fs.existsSync(lilyDir)) {
@@ -81,7 +81,8 @@ export default function remarkLily() {
         }
 
         if (!svgExists && lastRenderError) {
-          console.error(`[remark-lily] Failed to generate SVG for ${hash}:`, lastRenderError.message);
+          const src = file?.path || file?.history?.[0] || 'unknown';
+          console.error(`[remark-lily] Failed to generate SVG for ${hash} (${src}):`, lastRenderError.message);
         }
       }
 

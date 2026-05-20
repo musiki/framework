@@ -301,7 +301,7 @@ if (
           type="button"
           class="conference-layout-button"
           data-layout-choice="screenshare"
-          data-tooltip="Share Screen Ctrl + S">S</button
+          data-tooltip="Compartir pantalla Ctrl + S">S</button
         >
         <button
           type="button"
@@ -429,7 +429,7 @@ if (
             >Focus</option
           >
           <option value="screenshare" selected={defaultLayout === "screenshare"}
-            >Share</option
+            >Compartir</option
           >
           <option value="presentation" selected={defaultLayout === "presentation"}
             >Presentation</option
@@ -456,7 +456,7 @@ if (
           data-action="screen-share"
           title="Compartir pantalla"
         >
-          SHARE
+          COMPARTIR
         </button>
         <button
           type="button"
@@ -3983,6 +3983,19 @@ if (
     padding: 0 0.8rem;
   }
 
+  .conference-share-button {
+    color: #f6c177;
+    background: rgba(246, 193, 119, 0.12);
+    border: 1px solid rgba(246, 193, 119, 0.32);
+    box-shadow: 0 0 12px rgba(246, 193, 119, 0.08);
+  }
+
+  .conference-share-button:hover:not(:disabled) {
+    color: #ffe0ad;
+    background: rgba(246, 193, 119, 0.2);
+    border-color: rgba(246, 193, 119, 0.52);
+  }
+
   .conference-shortcuts-button {
     font-size: 0.92rem;
     font-weight: 700;
@@ -4553,6 +4566,12 @@ if (
   .conference-instruments-button[data-active="true"] {
     color: var(--conference-accent);
     background: rgba(255, 255, 255, 0.04);
+  }
+
+  .conference-share-button[data-enabled="true"] {
+    color: #ffe0ad;
+    background: rgba(246, 193, 119, 0.24);
+    border-color: rgba(246, 193, 119, 0.62);
   }
 
   .conference-icon-button[data-open="true"] {

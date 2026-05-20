@@ -1,0 +1,142 @@
+<h2>Layout del editor de notas</h2>
+<p class="subtitle">¿Cómo debería organizarse la pantalla?</p>
+
+<div class="options">
+  <div class="option" data-choice="split" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Split: árbol izquierda + editor derecha</h3>
+      <p>Panel fijo de árbol de notas a la izquierda, editor de markdown a la derecha. Similar al editor de Obsidian.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="notas-enhanced" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Mejorar /notas con modo edición</h3>
+      <p>La página /notas existente gana un modo "editar" que abre el editor inline. El árbol ya existe en notas.astro.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="dedicated" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Página dedicada /notas-editor</h3>
+      <p>Nueva página solo para teachers. URL: /notas-editor?course=i1. Árbol + editor completo sin distracciones.</p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:2rem;">
+  <h3>Mockup de la opción A (split layout)</h3>
+  <div class="mockup">
+    <div class="mockup-header">musiki.org.ar/notas-editor?course=i1 — Teacher view</div>
+    <div class="mockup-body" style="padding:0;display:flex;height:480px;font-size:12px;">
+
+      <!-- Left panel: tree -->
+      <div style="width:240px;background:#111;border-right:1px solid #2a2a2a;display:flex;flex-direction:column;flex-shrink:0;">
+        <div style="padding:.6rem .8rem;border-bottom:1px solid #222;display:flex;gap:.4rem;align-items:center;">
+          <span style="font-size:11px;opacity:.5;flex:1;">i1 · Instrumento I</span>
+          <button style="background:#2a4a2a;color:#7ec87e;border:none;border-radius:3px;padding:2px 6px;font-size:10px;cursor:pointer;">+ nota</button>
+        </div>
+        <div style="overflow-y:auto;flex:1;padding:.4rem 0;">
+
+          <!-- Chapter -->
+          <div style="padding:.3rem .8rem;font-size:10px;opacity:.4;letter-spacing:.05em;text-transform:uppercase;">00 Materiales</div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.7;display:flex;align-items:center;gap:.4rem;">
+            <span>📄</span> Bibliografía
+          </div>
+
+          <div style="padding:.3rem .8rem;font-size:10px;opacity:.4;letter-spacing:.05em;text-transform:uppercase;margin-top:.4rem;">01 Mentes</div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.7;display:flex;align-items:center;gap:.4rem;">
+            <span>📄</span> Vibecoding
+          </div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.7;display:flex;align-items:center;gap:.4rem;">
+            <span>📄</span> Segundo cerebro
+          </div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.7;display:flex;align-items:center;gap:.4rem;">
+            <span>📄</span> Introducción a IA
+          </div>
+
+          <div style="padding:.3rem .8rem;font-size:10px;opacity:.4;letter-spacing:.05em;text-transform:uppercase;margin-top:.4rem;">02 Acústica</div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;background:#1a2a1a;border-left:2px solid #5a9a5a;display:flex;align-items:center;gap:.4rem;">
+            <span>📄</span> <strong style="color:#7ec87e">Gráficos cartesianos</strong>
+          </div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.7;display:flex;align-items:center;gap:.4rem;">
+            <span>📄</span> Fund. Acústica 1
+          </div>
+
+          <div style="padding:.3rem .8rem;font-size:10px;opacity:.4;letter-spacing:.05em;text-transform:uppercase;margin-top:.4rem;">03 Organología</div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.7;display:flex;align-items:center;gap:.4rem;">
+            <span>📄</span> Intro Organología
+          </div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.7;display:flex;align-items:center;gap:.4rem;">
+            <span>📝</span> eval-class reveal
+          </div>
+          <div style="padding:.25rem .8rem .25rem 1.4rem;opacity:.7;display:flex;align-items:center;gap:.4rem;">
+            <span>📄</span> Instrumentalidad
+          </div>
+        </div>
+      </div>
+
+      <!-- Right panel: editor -->
+      <div style="flex:1;display:flex;flex-direction:column;background:#0e0e0e;">
+
+        <!-- YAML strip -->
+        <div style="padding:.5rem .8rem;background:#131313;border-bottom:1px solid #1e1e1e;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;">
+          <span style="opacity:.4;font-size:10px;">YAML</span>
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 6px;font-size:11px;display:flex;gap:.3rem;">
+            <span style="opacity:.4">type:</span>
+            <span style="color:#c8a87e">lesson ▾</span>
+          </div>
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 6px;font-size:11px;display:flex;gap:.3rem;">
+            <span style="opacity:.4">chapter:</span>
+            <span style="color:#7eaec8">02 Acústica ▾</span>
+          </div>
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 6px;font-size:11px;display:flex;gap:.3rem;">
+            <span style="opacity:.4">status:</span>
+            <span style="color:#c87e7e">published ▾</span>
+          </div>
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:3px;padding:2px 6px;font-size:11px;display:flex;gap:.3rem;">
+            <span style="opacity:.4">order:</span>
+            <span style="color:#888">1</span>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:.4rem;">
+            <button style="background:transparent;color:#888;border:1px solid #333;border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;">Descartar</button>
+            <button style="background:#2a4a2a;color:#7ec87e;border:none;border-radius:3px;padding:2px 10px;font-size:10px;cursor:pointer;">💾 Guardar</button>
+          </div>
+        </div>
+
+        <!-- Title -->
+        <div style="padding:.6rem 1rem;border-bottom:1px solid #1a1a1a;">
+          <input value="Introducción a los gráficos cartesianos y analógicos de señales acústicas" style="background:transparent;border:none;color:#ddd;font-size:15px;font-weight:600;width:100%;outline:none;">
+        </div>
+
+        <!-- Editor body -->
+        <div style="flex:1;padding:.8rem 1rem;overflow-y:auto;font-family:monospace;font-size:12px;line-height:1.7;color:#888;">
+          <span style="color:#5a7a5a">## descripción</span><br>
+          A lo largo de la cursada se van a plantear tanto gráficos...<br><br>
+          <span style="color:#5a7a5a"># Introducción a los gráficos cartesianos</span><br>
+          A lo largo de la cursada se van a plantear tanto gráficos...<br><br>
+          <span style="color:#5a7a5a">## Ejemplo A.1.</span><br>
+          El siguiente es un caso de representación...<br><br>
+          <span style="color:#3a5a3a">```lily</span><br>
+          <span style="color:#3a5a3a">\version "2.24.0"</span><br>
+          <span style="color:#3a5a3a">...</span><br>
+          <span style="color:#3a5a3a">```</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Context menu hint -->
+  <div style="margin-top:.8rem;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:4px;padding:.6rem 1rem;font-size:12px;opacity:.7;display:flex;gap:1rem;flex-wrap:wrap;">
+    <span>🖱️ Click derecho en nota →</span>
+    <span style="color:#c8a87e">Renombrar</span>
+    <span style="color:#7eaec8">Mover a chapter</span>
+    <span style="color:#c87e7e">Borrar</span>
+    <span style="color:#7ec87e">Duplicar</span>
+  </div>
+  <div style="margin-top:.4rem;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:4px;padding:.6rem 1rem;font-size:12px;opacity:.7;">
+    🖱️ Drag-drop entre chapters → cambia <code>chapter:</code> en el YAML automáticamente
+  </div>
+</div>

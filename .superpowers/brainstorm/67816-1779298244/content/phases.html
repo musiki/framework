@@ -1,0 +1,99 @@
+<h2>Fases del sistema de notas</h2>
+<p class="subtitle">Los docs ya decidieron la dirección. ¿En qué orden avanzamos?</p>
+
+<div class="section">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;font-size:13px;">
+
+    <div class="option" data-choice="phase1" onclick="toggleSelect(this)" style="cursor:pointer;background:#111;border:2px solid #3a6a3a;border-radius:8px;padding:1.2rem;display:block;">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.8rem;">
+        <span style="background:#3a6a3a;color:#7ec87e;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:bold;">FASE 1</span>
+        <span style="opacity:.5;font-size:11px;">~1 semana</span>
+      </div>
+      <strong style="color:#7ec87e;font-size:14px;">Drop GitHub</strong>
+      <div style="opacity:.7;margin-top:.6rem;line-height:1.6;">
+        El editor escribe <code>.md</code> directo al filesystem del VPS.<br>
+        Sin GitHub App, sin PR, sin rebase.<br><br>
+        <strong>API nueva:</strong><br>
+        • <code>POST /api/notes/save</code><br>
+        • <code>POST /api/notes/create</code><br>
+        • <code>DELETE /api/notes/delete</code><br>
+        • <code>PATCH /api/notes/move</code><br><br>
+        <span style="color:#7ec87e">✓ Valor inmediato</span><br>
+        <span style="opacity:.5">Los .md siguen siendo el source de Astro</span>
+      </div>
+    </div>
+
+    <div class="option" data-choice="phase2" onclick="toggleSelect(this)" style="cursor:pointer;background:#111;border:2px solid #3a5a7a;border-radius:8px;padding:1.2rem;display:block;">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.8rem;">
+        <span style="background:#3a5a7a;color:#7eaec8;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:bold;">FASE 2</span>
+        <span style="opacity:.5;font-size:11px;">~2 semanas</span>
+      </div>
+      <strong style="color:#7eaec8;font-size:14px;">Editor UI</strong>
+      <div style="opacity:.7;margin-top:.6rem;line-height:1.6;">
+        Mejoras al editor web:<br><br>
+        • YAML autocomplete (chapter, type, status — valores de notas existentes)<br>
+        • Crear nota nueva con modal<br>
+        • Borrar nota con confirmación<br>
+        • Tree view con drag-drop (reusar componente RECURSOS)<br>
+        • Menú contextual click derecho<br>
+        • Reordenar (edita <code>order:</code> en YAML)<br><br>
+        <span style="color:#7eaec8">✓ UX completa para teachers</span>
+      </div>
+    </div>
+
+    <div class="option" data-choice="phase3" onclick="toggleSelect(this)" style="cursor:pointer;background:#111;border:2px solid #6a5a3a;border-radius:8px;padding:1.2rem;display:block;">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.8rem;">
+        <span style="background:#6a5a3a;color:#c8b87e;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:bold;">FASE 3</span>
+        <span style="opacity:.5;font-size:11px;">~2-3 semanas</span>
+      </div>
+      <strong style="color:#c8b87e;font-size:14px;">Postgres + Version History</strong>
+      <div style="opacity:.7;margin-top:.6rem;line-height:1.6;">
+        Lo que ya dicen los docs:<br><br>
+        • Tabla <code>course_notes</code> en Postgres<br>
+        • Cada save guarda snapshot (1 mes)<br>
+        • UI para ver historial y restaurar versión<br>
+        • Astro lee desde Postgres en runtime<br>
+        • Obsidian sync: import/export vía API<br><br>
+        <span style="color:#c8b87e">✓ Alineado con class-workspace-refactor.md</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem;">
+  <div style="background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:1rem;font-size:13px;">
+    <strong>Nota de los docs:</strong>
+    <span style="opacity:.7;margin-left:.5rem;">
+      <code>class-workspace-refactor.md</code> (2026-05-14) ya establece "Postgres is the canonical authority".
+      Las fases 1 y 2 son el camino hacia eso, no contradicen la dirección.
+    </span>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1rem;">
+  <h3>¿Cuál es el scope del branch de hoy?</h3>
+  <div class="options">
+    <div class="option" data-choice="solo-fase1" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Solo Fase 1</h3>
+        <p>API de escritura directa al filesystem. Sin editor UI nuevo todavía. Funcional en días.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="fase1-y-2" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Fase 1 + inicio Fase 2</h3>
+        <p>API + tree view básico + crear/borrar notas. Sin Postgres todavía. Semana y media.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="todo" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Todo en un branch</h3>
+        <p>Las 3 fases. Más ambicioso, riesgo de quedar en un branch largo sin merge.</p>
+      </div>
+    </div>
+  </div>
+</div>
