@@ -1,6 +1,8 @@
 import type { APIRoute } from 'astro';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { formatOrfCapabilityPrompt } from '../../../lib/orf/capabilities';
+import { normalizeOrfResponse, stringifyOrfForHumans } from '../../../lib/orf/schema';
 
 const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 600000);
 const maxPromptChars = Number(import.meta.env.CORRECTION_API_MAX_PROMPT_CHARS || 50000);
@@ -191,7 +193,8 @@ const performHybridRetrieval = async (
       .map((item: any) => ({
         title: item.title,
         path: item.slug,
-        content: item.content?.slice(0, 1800) || "", 
+        content: item.content?.slice(0, 1800) || "",
+        source: item.courseId?.toLowerCase() === courseId ? 'course' : 'vault',
       }));
 
     console.log(`[orf-rag] found ${results.length} relevant blocks`);
@@ -200,6 +203,98 @@ const performHybridRetrieval = async (
     console.error("[orf-rag] retrieval failed", err.message);
     return [];
   }
+};
+
+const shouldUseWebSearch = (query: string, explicit: unknown) => {
+  if (explicit === true) return true;
+  if (explicit === false) return false;
+  return containsAny(query.toLowerCase(), [
+    /\bweb\b/,
+    /\bbusca(r)?\b/,
+    /\bactual(es|idad)?\b/,
+    /\bhoy\b/,
+    /\breciente(s)?\b/,
+    /\b[uú]ltim[oa]s?\b/,
+    /\bfresh\b/,
+    /\bnoticias?\b/,
+  ]);
+};
+
+const performWebSearch = async (query: string) => {
+  const maxResults = 4;
+  const braveKey = ensureText(import.meta.env.BRAVE_SEARCH_API_KEY);
+  const tavilyKey = ensureText(import.meta.env.TAVILY_API_KEY);
+  const customUrl = ensureText(import.meta.env.ORF_WEB_SEARCH_URL);
+
+  try {
+    if (customUrl) {
+      const url = new URL(customUrl);
+      url.searchParams.set('q', query);
+      const response = await fetch(url, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) return [];
+      const payload: any = await response.json();
+      const items = Array.isArray(payload.results) ? payload.results : Array.isArray(payload.items) ? payload.items : [];
+      return items.slice(0, maxResults).map((item: any) => ({
+        title: ensureText(item.title),
+        path: ensureText(item.url || item.link),
+        content: ensureText(item.snippet || item.description || item.content).slice(0, 900),
+        source: 'web',
+        url: ensureText(item.url || item.link),
+      })).filter((item: any) => item.path || item.content);
+    }
+
+    if (braveKey) {
+      const url = new URL('https://api.search.brave.com/res/v1/web/search');
+      url.searchParams.set('q', query);
+      url.searchParams.set('count', String(maxResults));
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          'X-Subscription-Token': braveKey,
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) return [];
+      const payload: any = await response.json();
+      return (payload.web?.results ?? []).slice(0, maxResults).map((item: any) => ({
+        title: ensureText(item.title),
+        path: ensureText(item.url),
+        content: ensureText(item.description).slice(0, 900),
+        source: 'web',
+        url: ensureText(item.url),
+      })).filter((item: any) => item.path || item.content);
+    }
+
+    if (tavilyKey) {
+      const response = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({
+          api_key: tavilyKey,
+          max_results: maxResults,
+          query,
+          search_depth: 'basic',
+        }),
+      });
+      if (!response.ok) return [];
+      const payload: any = await response.json();
+      return (payload.results ?? []).slice(0, maxResults).map((item: any) => ({
+        title: ensureText(item.title),
+        path: ensureText(item.url),
+        content: ensureText(item.content).slice(0, 900),
+        source: 'web',
+        url: ensureText(item.url),
+      })).filter((item: any) => item.path || item.content);
+    }
+  } catch (err: any) {
+    console.warn('[orf-web] search failed', err?.message || err);
+  }
+
+  return [];
 };
 
 const containsAny = (value: string, patterns: RegExp[]) => patterns.some((pattern) => pattern.test(value));
@@ -222,57 +317,73 @@ const buildOrfChatPrompt = ({
   sessionId,
   role,
   contextBlocks = [],
+  webBlocks = [],
 }: {
   message: string;
   courseId: string;
   sessionId: string;
   role: string;
   contextBlocks?: any[];
+  webBlocks?: any[];
 }) => {
-  const hasContext = contextBlocks.length > 0;
+  const agentContext = [
+    'ORF es el agente transversal de Musiki. Prioriza respuestas humanas, breves y pedagógicas.',
+    'ORF puede emitir acciones tipadas para chat, notas, pizarra, MIDI a Hyperpiano y partituras LilyPond.',
+    'La UI ejecuta acciones validadas directamente; el JSON es solo protocolo interno y nunca debe mostrarse al usuario.',
+    formatOrfCapabilityPrompt(),
+  ].join('\n');
+  const hasContext = contextBlocks.length > 0 || webBlocks.length > 0;
   const contextText = contextBlocks
-    .map((b) => `--- FUENTE: ${b.path} (${b.title}) ---\n${b.content}`)
+    .map((b) => `--- FUENTE ${String(b.source || 'vault').toUpperCase()}: ${b.path} (${b.title}) ---\n${b.content}`)
+    .join("\n\n");
+  const webText = webBlocks
+    .map((b) => `--- FUENTE WEB: ${b.url || b.path} (${b.title}) ---\n${b.content}`)
     .join("\n\n");
 
   return `Eres Orf, un asistente local, musical y pedagógico dentro del conference room de Musiki.
-TU OBJETIVO: Actuar como una herramienta de PENSAMIENTO ESPECULATIVO. No solo respondas, invita a la reflexión, sugiere conexiones inesperadas y propón experimentos prácticos.
+TU OBJETIVO: responder con humanidad, usar primero el curso activo, luego notas/vault de Musiki, luego tu contexto interno de agente, y finalmente fuentes web cuando existan.
 
 Contexto de Sesión:
 - cursoId: ${courseId || "desconocido"}
 - sessionId: ${sessionId || "sin clase activa detectada"}
 - userRole: ${role || "student"}
+- fecha: ${new Date().toISOString().slice(0, 10)}
+
+Contexto interno de ORF:
+${agentContext}
 ${
   hasContext
-    ? `\nFragmentos recuperados del Vault (Prioridad absoluta):\n${contextText}`
-    : "\n(No se encontraron fragmentos específicos en el vault. Responde basándote en tu conocimiento musical general pero aclara que no es información del curso)"
+    ? `\nFragmentos recuperados de Musiki:\n${contextText || "(sin notas locales relevantes)"}\n\nFragmentos web frescos:\n${webText || "(sin websearch o sin resultados configurados)"}`
+    : "\n(No se encontraron fragmentos específicos. Responde con conocimiento musical general y aclara cuando no sea información del curso.)"
 }
 
-EJEMPLOS DE PENSAMIENTO ESPECULATIVO:
-Usuario: "¿Qué es una escala?"
-Orf: "Según las notas, una escala es una organización de alturas. Pero podemos pensarla como un gradiente de tensiones. ¿Qué pasaría si usaras solo 3 notas pero con timbres extremos? Propongo este cluster: [Acción: HYPERPIANO]"
+Reglas:
+1. Responde en español directo, cálido y concreto. Sin saludos genéricos.
+2. No inventes fuentes. Si usas fragmentos, agrega citations con path/url.
+3. Propón acciones solo cuando el pedido lo implique naturalmente. No pidas confirmación.
+4. Para LilyPond usa source completo con \\version "2.24.0".
+5. Para MIDI usa eventos absolutos: note 0-127, startMs, durationMs, velocity 0-1.
+6. Para pizarra usa coordenadas normalizadas 0..1.
+7. Nunca escribas JSON dentro de summary.
 
-Reglas de Oro:
-1. PENSAMIENTO ESPECULATIVO: Explica conceptos pedagógicamente y lanza una pregunta que invite a imaginar variantes.
-2. ACCIONES DIRECTAS: Propón una acción siempre que sea natural.
-   - MIDI: 'send_midi_to_hyperpiano' para sonoridades. DEBES incluir en 'proposal' un array 'midiNotes' donde cada nota tenga: { "pitch": MIDI_NOTE (60=C4), "startMs": tiempo_inicio, "durationMs": duracion }.
-   - LILYPOND: 'write_to_lily_code' para partituras. Envuélvelo SIEMPRE en bloques \`\`\`lily ... \`\`\`. snippets completos con \\version \"2.24.0\".
-   - NOTAS: 'write_to_notes' para ideas.
-   - IMPORTANTE: Para patrones rítmicos complejos, DEBES calcular los 'startMs' de cada nota en el array 'midiNotes' para que suenen secuencialmente. NO uses triple comillas (\"\"\") dentro del JSON.
-3. VERACIDAD: Si hay fragmentos, úsalos como base. Cita la fuente: "Según las notas...".
-4. ESTILO: SIN saludos genéricos. Ve directo al grano. Tono de mentor experto. Español breve.
-5. NO INVENTAR: No inventes nombres de notas o autores que no existen en los fragmentos.
+Acciones disponibles:
+- chat.message: { "type": "chat.message", "markdown": "texto para el chat" }
+- notes.write: { "type": "notes.write", "target": "room", "mode": "append", "markdown": "nota markdown" }
+- lilypond.score: { "type": "lilypond.score", "title": "titulo", "source": "\\\\version \\"2.24.0\\"\\n...", "renderPreview": true }
+- midi.sequence: { "type": "midi.sequence", "target": "hyperpiano", "events": [{ "note": 60, "startMs": 0, "durationMs": 350, "velocity": 0.72 }] }
+- board.note: { "type": "board.note", "text": "texto", "x": 0.12, "y": 0.18, "color": "#ffffff", "size": "sm" }
+- board.draw: { "type": "board.draw", "strokes": [{ "color": "#ffffff", "points": [{ "x": 0.1, "y": 0.2 }, { "x": 0.2, "y": 0.3 }] }] }
 
-Estructura de respuesta (JSON estricto):
+Estructura de respuesta obligatoria, JSON estricto:
 {
-  "message": "tu respuesta pedagógica y especulativa aquí",
+  "summary": "respuesta humana para mostrar al usuario",
   "actions": [
-    {
-      "kind": "write_to_lily_code | write_to_notes | publish_to_room_chat | send_midi_to_hyperpiano",
-      "label": "Etiqueta corta del botón",
-      "content": "contenido markdown o código",
-      "proposal": { ... }
-    }
-  ]
+    { "type": "..." }
+  ],
+  "citations": [
+    { "source": "course | vault | web | agent", "title": "...", "path": "...", "url": "..." }
+  ],
+  "warnings": []
 }
 
 IMPORTANTE: Devuelve SOLO el JSON.
@@ -309,6 +420,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const correctionApiToken = import.meta.env.CORRECTION_API_TOKEN || 'local-dev-token';
 
   const contextBlocks = await performHybridRetrieval(message, { courseId, sessionId }, correctionApiToken);
+  const webBlocks = shouldUseWebSearch(message, body.context?.webSearch)
+    ? await performWebSearch(message)
+    : [];
 
   const deterministicOutput = buildDeterministicOrfOutput(message);
   if (deterministicOutput && contextBlocks.length === 0) {
@@ -331,6 +445,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     sessionId,
     role: ensureText(body.user?.role || body.scope?.role),
     contextBlocks,
+    webBlocks,
   });
 
   if (prompt.length > maxPromptChars) {
@@ -397,17 +512,26 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const parsed = parseJsonLoosely(rawOutput);
     const nested = unwrapNestedModelJson(parsed?.message);
-    const output = nested
+    const legacyOutput = nested
       ? nested
       : parsed && typeof parsed === 'object'
         ? {
-            message: ensureText(parsed.message) || rawOutput.replace(/<think>[\s\S]*?<\/think>/, '').trim(),
-            actions: normalizeActions(parsed.actions),
+            message: ensureText(parsed.message),
+            summary: ensureText(parsed.summary) || ensureText(parsed.message) || rawOutput.replace(/<think>[\s\S]*?<\/think>/, '').trim(),
+            actions: parsed.actions,
+            citations: parsed.citations,
+            warnings: parsed.warnings,
           }
         : {
-            message: rawOutput.replace(/<think>[\s\S]*?<\/think>/, '').trim(),
+            summary: rawOutput.replace(/<think>[\s\S]*?<\/think>/, '').trim(),
             actions: [],
           };
+    const normalized = normalizeOrfResponse(legacyOutput);
+    const output = {
+      ...normalized,
+      message: stringifyOrfForHumans(normalized),
+      structured: normalized,
+    };
 
     return json({
       ok: true,

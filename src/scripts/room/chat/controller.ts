@@ -191,41 +191,20 @@ const salvageHallucinatedJson = (raw: string): any => {
   }
 };
 
-const setConferenceChatBody = (container: HTMLElement, text: string, onAction?: (a: any) => void) => {
+const setConferenceChatBody = (container: HTMLElement, text: string, _onAction?: (a: any) => void) => {
   container.replaceChildren();
-  const normalizedBody = String(text || '').trim();
+  const normalizedBody = (typeof text === 'object' ? JSON.stringify(text) : String(text || '').replace(/\[object Object\]/g, '')).trim();
 
   // 1. Try to parse as Orf JSON response
   // We use a more robust check: does it contain a JSON object with "message"?
-  const jsonMatch = normalizedBody.match(/\{[\s\S]*"message"[\s\S]*\}/);
+  const jsonMatch = normalizedBody.match(/\{[\s\S]*"(summary|message)"[\s\S]*\}/);
   if (jsonMatch) {
     const parsed = salvageHallucinatedJson(jsonMatch[0]);
-    if (parsed && (parsed.message || parsed.actions)) {
-      if (parsed.message) {
-        const msgEl = document.createElement('div');
-        msgEl.className = 'conference-chat-text-inner';
-        setConferenceChatBody(msgEl, parsed.message);
-        container.appendChild(msgEl);
-      }
-
-      if (Array.isArray(parsed.actions) && parsed.actions.length > 0 && onAction) {
-        const toolbar = document.createElement('div');
-        toolbar.className = 'musiki-chat-actions-toolbar';
-        parsed.actions.forEach((action: any) => {
-          if (!action || typeof action !== 'object') return;
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'musiki-chat-action-btn';
-          btn.textContent = action.label || (action.kind || '').replace(/_/g, ' ').toUpperCase();
-          btn.addEventListener('click', (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onAction(action);
-          });
-          toolbar.appendChild(btn);
-        });
-        container.appendChild(toolbar);
-      }
+    if (parsed && (parsed.summary || parsed.message)) {
+      const msgEl = document.createElement('div');
+      msgEl.className = 'conference-chat-text-inner';
+      setConferenceChatBody(msgEl, parsed.summary || parsed.message);
+      container.appendChild(msgEl);
       return;
     }
   }

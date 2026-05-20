@@ -826,7 +826,7 @@ const submissionMachine = {
 **Duración**: 2-3 semanas
 
 **Week 1: MCQ System**
-- [ ] Fix remark plugin rendering
+- [x] Fix remark plugin rendering ✅ 2026-05-19
 - [ ] Complete MCQ component
 - [ ] Auto-grading logic
 - [ ] Submission storage
@@ -839,8 +839,8 @@ const submissionMachine = {
 - [ ] Feedback mechanism
 
 **Week 3: Dashboard**
-- [ ] Teacher dashboard
-- [ ] Student dashboard
+- [x] Teacher dashboard ✅ 2026-05-19
+- [x] Student dashboard ✅ 2026-05-19
 - [ ] Submission list view
 - [ ] Grading queue
 

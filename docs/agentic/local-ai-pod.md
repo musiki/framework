@@ -6,6 +6,8 @@ Crear Orf, un pod transversal de asistencia local para Musiki, basado inicialmen
 
 No se define como un chatbot generico. Se define como una capability del LMS con contexto controlado, permisos explicitos y adaptadores por tarea.
 
+Actualizacion 2026-05: el refurbish inicial esta documentado en `orf-runtime-refurbish.md`. La implementacion actual usa `OrfResponse` tipado (`summary`, `actions`, `citations`, `warnings`) y ejecuta acciones validadas directamente contra los pods vivos. Las propuestas confirmables de este documento quedan como antecedente historico para fases con permisos mas estrictos; el objetivo actual del room es una interaccion organica, sin JSON visible ni botones de confirmacion.
+
 ## Contexto del producto
 
 El asistente debe depender primero del curso y la clase activa. Ese contexto incluye:

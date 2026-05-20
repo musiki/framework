@@ -9,7 +9,7 @@
             <span class="conference-chat-stamp">local</span>
           </div>
           <div class="conference-chat-text">
-            Preguntame algo de la clase. Puedo preparar una propuesta para LILY-CODE, NOTAS, chat o HYPERPIANO.
+            Preguntame algo de la clase. Puedo escribir en LILY-CODE, NOTAS, chat, PIZARRA o tocar el HYPERPIANO cuando el pedido lo implique.
           </div>
         </li>
       </ul>
@@ -19,9 +19,9 @@
       <div class="conference-orf-contextbar">
         <select class="musiki-pod-input conference-orf-model" data-orf-model aria-label="Modelo Orf">
           <option value="">modelo por defecto</option>
+          <option value="nemotron-3-super:cloud">nemotron (120b)</option>
+          <option value="gemma4:31b-cloud">gemma 4 (31b)</option>
           <option value="deepseek-r1:8b">deepseek-r1:8b</option>
-          <option value="qwen2.5:7b-instruct">qwen2.5 (7b)</option>
-          <option value="llama3.2">llama3.2</option>
         </select>
         <span class="conference-orf-scope" data-orf-scope>contexto: clase</span>
       </div>
@@ -58,14 +58,6 @@
           title="Limpiar"
           disabled
         >C</button>
-
-        <button
-          type="button"
-          class="musiki-pod-btn"
-          data-action="orf-testh"
-          style="font-size: 0.5rem; opacity: 0.6;"
-          title="Test HYPERPIANO"
-        >TH</button>
 
         <div class="musiki-pod-status conference-orf-status" data-orf-status role="status" aria-live="polite"></div>
         <div class="conference-orf-reasoning" data-orf-reasoning hidden></div>
@@ -119,9 +111,14 @@
   }
 
   :global(.conference-orf-action) {
+    align-items: center;
+    background: rgba(118, 211, 255, 0.08);
+    border: 1px solid rgba(118, 211, 255, 0.2);
     border-radius: 3px;
+    color: var(--conference-accent, #76d3ff);
+    display: inline-flex;
     font-size: 0.58rem;
-    height: 1.55rem;
+    min-height: 1.55rem;
     letter-spacing: 0.06em;
     padding: 0 0.45rem;
     text-transform: uppercase;

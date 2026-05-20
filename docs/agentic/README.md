@@ -22,6 +22,9 @@ Planificacion y contratos para Orf y las capacidades IA locales de Musiki.
 6. `orf-next-steps.md`
    Secuencia inmediata: anti-alucinacion, RAG textual minimo y corpus LilyPond.
 
+7. `orf-runtime-refurbish.md`
+   Runtime actual: contratos tipados, contexto por capas, websearch opcional y ejecucion directa en pods.
+
 ## Decision actual
 
 El sistema agentic debe evolucionar desde `/api/ai/correct` hacia `/api/ai/run`, manteniendo compatibilidad con el flujo de evaluacion existente.
@@ -31,9 +34,9 @@ El primer MVP recomendado es:
 - chat contextual sin RAG;
 - panel experimental `orf` en conference room;
 - contexto minimo `courseId`, `sessionId`, `role`;
-- salidas confirmables hacia `LILY-CODE`, notas, chat compartido e HYPERPIANO;
+- acciones tipadas hacia `LILY-CODE`, notas, chat compartido, pizarra e HYPERPIANO;
 - reutilizacion de variables y clases base del chat del room;
-- sin escritura automatica en notas ni codigo.
+- ejecucion directa validada desde el pod ORF, sin JSON visible ni botones de confirmacion.
 
 Luego se suma:
 

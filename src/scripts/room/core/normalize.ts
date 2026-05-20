@@ -1,4 +1,4 @@
-export const normalizeText = (value: unknown) => String(value ?? '').trim();
+export const normalizeText = (value: unknown) => { if (typeof value === 'object' && value !== null) return JSON.stringify(value); return String(value ?? '').trim(); };
 
 export const normalizePreviewZoom = (value: unknown, fallback = 1) => {
   const parsed = Number(value);

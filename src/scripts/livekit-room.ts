@@ -3468,6 +3468,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   const isInvalidInviteMode = inviteMode === 'invalid';
 
   const elements = selectRoomElements(root);
+
   let presentationSelect = elements.presentationSelect;
 
   let {
@@ -3548,6 +3549,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     participantTemplate,
     screenTemplate,
     presentationFrame,
+
     presentationPlaceholder,
     liveActivityButton,
     liveActivityTimer,
@@ -3773,6 +3775,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     synthLimiterReleaseInput,
     synthLimiterReleaseOutput,
   } = selectRoomElements(root);
+  const getRoomName = () => normalizeText(roomInput.value);
+
 
   if (
     !(roomInput instanceof HTMLInputElement) ||
@@ -11316,6 +11320,25 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
               else ctrl.removeNote(note.note);
             });
           },
+          dispatchBoardNote: (note) => {
+            whiteboards.forEach((wb) => {
+              wb.drawText({
+                color: note.color,
+                size: note.size,
+                text: note.text,
+                x: note.x,
+                y: note.y,
+              }, true);
+            });
+          },
+          dispatchBoardStroke: (stroke) => {
+            whiteboards.forEach((wb) => {
+              wb.handleStroke(stroke, true);
+            });
+          },
+          ensurePod: (podId) => {
+            workspaceManager.togglePod(podId, true);
+          },
           reportStatus: (message) => setStatus(message),
         });
       } else {
@@ -11517,6 +11540,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onVisualizerInit,
     onRecursosInit
   );
+
 
   const syncSnapshots = async () => {
     const listEls = root.querySelectorAll('[data-snapshot-list], [data-snapshot-list-student]');
