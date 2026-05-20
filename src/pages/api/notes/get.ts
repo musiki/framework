@@ -20,8 +20,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const err = notesPreflightError(courseId);
   if (err) return json({ error: err }, 503);
 
-  const note = getCourseNote(courseId, slug);
-  if (!note) return json({ error: 'Note not found' }, 404);
-
-  return json({ slug, content: note.content, filePath: note.filePath });
+  try {
+    const note = getCourseNote(courseId, slug);
+    if (!note) return json({ error: 'Note not found' }, 404);
+    return json({ slug, content: note.content, filePath: note.filePath });
+  } catch (e: any) {
+    return json({ error: e.message }, 400);
+  }
 };

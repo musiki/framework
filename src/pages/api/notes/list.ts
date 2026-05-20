@@ -19,6 +19,10 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const err = notesPreflightError(courseId);
   if (err) return json({ error: err }, 503);
 
-  const notes = listCourseNotes(courseId);
-  return json({ notes });
+  try {
+    const notes = listCourseNotes(courseId);
+    return json({ notes });
+  } catch (e: any) {
+    return json({ error: e.message }, 400);
+  }
 };
