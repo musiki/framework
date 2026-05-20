@@ -1,0 +1,326 @@
+---
+import { resolveLiveManageAccess } from '../lib/live/access';
+
+export const prerender = false;
+
+const session = (Astro.locals as any).session;
+const courseId = Astro.url.searchParams.get('course')?.trim() || '';
+
+if (!session?.user?.email) return Astro.redirect('/');
+if (!courseId) return Astro.redirect('/');
+
+const access = await resolveLiveManageAccess(session, courseId);
+if (!access.canManage) return Astro.redirect('/');
+---
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Editor de notas — {courseId}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0e0e0e;
+      color: #ccc;
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #app-header {
+      padding: .4rem .8rem;
+      background: #111;
+      border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      font-size: 11px;
+      color: #555;
+      flex-shrink: 0;
+    }
+    #app-header strong { color: #888; }
+
+    #app-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    #tree-panel {
+      width: 220px;
+      background: #111;
+      border-right: 1px solid #2a2a2a;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    #tree-header {
+      padding: .5rem .7rem;
+      border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+    }
+    #tree-course-label { font-size: 11px; opacity: .4; flex: 1; }
+    #tree-new-btn {
+      background: #2a4a2a;
+      color: #7ec87e;
+      border: none;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    #tree-scroll { overflow-y: auto; flex: 1; padding: .3rem 0; }
+
+    #editor-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #0e0e0e;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    #yaml-strip {
+      padding: .4rem .7rem;
+      background: #131313;
+      border-bottom: 1px solid #1e1e1e;
+      display: flex;
+      gap: .45rem;
+      flex-wrap: wrap;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    #eval-strip {
+      display: none;
+      padding: .4rem .7rem;
+      background: #0f0d07;
+      border-bottom: 1px solid #2a1e00;
+      border-left: 2px solid #c8a87e;
+      flex-shrink: 0;
+      gap: .45rem;
+      align-items: center;
+      font-size: 11px;
+      color: #c8a87e;
+    }
+    #eval-strip.visible { display: flex; }
+
+    #snippet-toolbar {
+      padding: .3rem .7rem;
+      background: #0c0c0c;
+      border-bottom: 1px solid #1a1a1a;
+      display: flex;
+      gap: .35rem;
+      align-items: center;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    #title-input-row {
+      padding: .4rem .8rem;
+      border-bottom: 1px solid #181818;
+      flex-shrink: 0;
+    }
+    #title-input {
+      background: transparent;
+      border: none;
+      color: #ccc;
+      font-size: 14px;
+      font-weight: 600;
+      width: 100%;
+      outline: none;
+      font-family: inherit;
+    }
+
+    #editor-cm-wrap {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #empty-state {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #333;
+      font-size: 12px;
+    }
+
+    .fm-chip {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      gap: .3rem;
+      align-items: center;
+    }
+    .fm-chip select {
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      outline: none;
+    }
+    .fm-chip input[type="number"] {
+      background: transparent;
+      border: none;
+      color: #888;
+      font-size: 11px;
+      width: 36px;
+      outline: none;
+    }
+    .fm-label { opacity: .4; }
+
+    .snip-btn {
+      background: #1a1a2a;
+      border: 1px solid #2a2a4a;
+      border-radius: 3px;
+      padding: 2px 7px;
+      font-size: 10px;
+      cursor: pointer;
+      color: #9a9ac8;
+    }
+
+    .action-btn {
+      border: none;
+      border-radius: 3px;
+      padding: 2px 9px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .action-btn.primary { background: #2a4a2a; color: #7ec87e; }
+    .action-btn.secondary { background: transparent; color: #444; border: 1px solid #222; }
+
+    #status-bar {
+      padding: .2rem .7rem;
+      font-size: 10px;
+      color: #333;
+      border-top: 1px solid #1a1a1a;
+      flex-shrink: 0;
+    }
+    #status-bar.error { color: #c87e7e; }
+    #status-bar.ok { color: #7ec87e; }
+  </style>
+</head>
+<body data-course={courseId}>
+
+<div id="app-header">
+  <strong>musiki</strong>
+  <span>editor de notas</span>
+  <span style="opacity:.3">/</span>
+  <strong id="course-label">{courseId}</strong>
+  <a href={`/cursos/${courseId}`} style="margin-left:auto;color:#333;font-size:10px;text-decoration:none;">← volver al curso</a>
+</div>
+
+<div id="app-body">
+
+  <div id="tree-panel">
+    <div id="tree-header">
+      <span id="tree-course-label">{courseId}</span>
+      <button id="tree-new-btn">+ nota</button>
+    </div>
+    <div id="tree-scroll">
+      <div style="padding:.5rem .7rem;font-size:11px;color:#333;">Cargando...</div>
+    </div>
+  </div>
+
+  <div id="editor-panel">
+
+    <div id="yaml-strip" style="display:none">
+      <span class="fm-label" style="font-size:9px;">FM</span>
+      <div class="fm-chip">
+        <span class="fm-label">type:</span>
+        <select id="fm-type">
+          <option value="lesson">lesson</option>
+          <option value="assignment">assignment</option>
+          <option value="eval">eval</option>
+          <option value="info">info</option>
+          <option value="public-note">public-note</option>
+        </select>
+      </div>
+      <div class="fm-chip">
+        <span class="fm-label">chapter:</span>
+        <select id="fm-chapter"></select>
+      </div>
+      <div class="fm-chip">
+        <span class="fm-label">status:</span>
+        <select id="fm-status">
+          <option value="draft">draft</option>
+          <option value="published">published</option>
+          <option value="private">private</option>
+        </select>
+      </div>
+      <div class="fm-chip">
+        <span class="fm-label">order:</span>
+        <input type="number" id="fm-order" min="0" max="999" />
+      </div>
+      <div class="fm-chip">
+        <span class="fm-label">theme:</span>
+        <select id="fm-theme"><option value="">—</option></select>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:.3rem;flex-shrink:0;">
+        <button class="action-btn secondary" id="btn-discard">↩</button>
+        <button class="action-btn primary" id="btn-save">💾 Guardar</button>
+      </div>
+    </div>
+
+    <div id="eval-strip">
+      <span style="font-size:9px;opacity:.5;margin-left:4px;">EVAL</span>
+      <span style="font-size:9px;opacity:.3;font-style:italic;">cursor en bloque eval</span>
+      <div class="fm-chip" style="background:#1a1200;border-color:#3a2a00;">
+        <span class="fm-label" style="color:#c8a87e">evalType:</span>
+        <select id="eval-type" style="color:#c8a87e;background:transparent;border:none;font-size:11px;cursor:pointer;outline:none;">
+          <option value="class-reveal">class-reveal</option>
+          <option value="patch-ai">patch-ai</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="snippet-toolbar" style="display:none">
+      <span style="opacity:.2;font-size:9px;flex-shrink:0;">INSERT</span>
+      <button class="snip-btn" data-snippet="cover">🎴 COVER</button>
+      <button class="snip-btn" data-snippet="lily" style="background:#1a2a1a;border-color:#2a4a2a;color:#7ec87e;">🎵 LILY</button>
+      <button class="snip-btn" data-snippet="mermaid" style="background:#1a2a2a;border-color:#2a4a4a;color:#7ec8c8;">📊 MERMAID</button>
+      <button class="snip-btn" data-snippet="iframe" style="background:#2a1a2a;border-color:#4a2a4a;color:#c87ec8;">🖼️ IFRAME</button>
+      <button class="snip-btn" data-snippet="eval" style="background:#2a2a1a;border-color:#4a4a2a;color:#c8c87e;">🖼️ EVAL</button>
+      <div style="width:1px;background:#222;height:16px;margin:0 .1rem;"></div>
+      <button class="snip-btn" data-snippet="img" style="background:#1e1a12;border-color:#3a2a1a;color:#c8a87e;">📷 IMG <span style="opacity:.4;font-size:9px;">S3</span></button>
+    </div>
+
+    <div id="title-input-row" style="display:none">
+      <input type="text" id="title-input" placeholder="Título de la nota..." />
+    </div>
+
+    <div id="editor-cm-wrap" style="display:none"></div>
+
+    <div id="empty-state">
+      ← Seleccioná una nota para editar
+    </div>
+
+    <div id="status-bar">listo</div>
+  </div>
+
+</div>
+
+<script>
+  import '/src/scripts/notes-editor/index.ts';
+</script>
+
+</body>
+</html>
