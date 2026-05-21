@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupByChapter, computeNewOrders, noteSlugToRelPath, slugify } from './notes-sidebar-utils.mjs';
+import { groupByChapter, computeNewOrders, noteSlugToRelPath, slugify, escHtml } from './notes-sidebar-utils.mjs';
 
 describe('groupByChapter', () => {
   test('groups notes by chapter and sorts by order', () => {
@@ -67,5 +67,11 @@ describe('slugify', () => {
 
   test('strips special chars', () => {
     assert.equal(slugify('Hello, World!'), 'hello-world');
+  });
+});
+
+describe('escHtml', () => {
+  test('escapes HTML entities', () => {
+    assert.equal(escHtml('<script>&"test"</script>'), '&lt;script&gt;&amp;&quot;test&quot;&lt;/script&gt;');
   });
 });

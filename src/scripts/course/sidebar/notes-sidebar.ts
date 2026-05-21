@@ -12,7 +12,7 @@ export function groupByChapter(notes: NoteListItem[]): ChapterGroup[] {
   return Array.from(map.entries())
     .map(([name, notes]) => ({
       name,
-      notes: [...notes].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)),
+      notes: [...notes].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title ?? '')),
     }))
     .sort((a, b) => {
       const minA = Math.min(...a.notes.map(n => n.order));
