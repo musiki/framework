@@ -3415,27 +3415,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
               <span class="course-title-link-text">{courseIndex?.data?.title}</span>
             </a>
             <div class="course-title-actions">
-              {canManageLiveInteractions && (
-                <div class="course-teacher-actions" aria-label="Acciones docentes">
-                  {lessonSlug && (
-                    <button
-                      class="teacher-action-btn"
-                      title="Editar esta nota"
-                      aria-label="Editar"
-                      data-notes-action="edit"
-                      data-course-id={canonicalCourseId || courseSlug}
-                      data-slug={currentEntrySourcePath}
-                    >E</button>
-                  )}
-                  <button
-                    class="teacher-action-btn teacher-action-btn--create"
-                    title="Crear nueva nota"
-                    aria-label="Crear"
-                    data-notes-action="create"
-                    data-course-id={canonicalCourseId || courseSlug}
-                  >C</button>
-                </div>
-              )}
               <button
                 type="button"
                 class="sidebar-toggle-btn sidebar-fold-all-btn"
@@ -3473,7 +3452,9 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           )}
         </div>
 
-        {(!isPublicWikiPage || Boolean(session)) && sidebarChapterEntries.map((entry) => {
+        {canManageLiveInteractions ? (
+          <>
+            {sidebarChapterEntries.filter(e => e.kind === 'recursos').map((entry) => {
           if (entry.kind === 'recursos') {
             return (
               <div class="chapter">
@@ -3725,6 +3706,264 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             </div>
           );
         })}
+            <div
+              data-notes-sidebar
+              data-course-id={canonicalCourseId || courseSlug}
+              data-active-slug={currentEntrySourcePath || ''}
+            ></div>
+          </>
+        ) : (
+          (!isPublicWikiPage || Boolean(session)) && sidebarChapterEntries.map((entry) => {
+            if (entry.kind === 'recursos') {
+              return (
+                <div class="chapter">
+                  <details class="chapter-details" open={isRecursosEditorPage}>
+                    <summary class="chapter-title">
+                      <span class="chapter-title-main">
+                        <span class="chapter-title-text">80 RECURSOS</span>
+                        <a
+                          href={`${courseHref}/recursos`}
+                          class:list={['chapter-editor-link', { active: isRecursosEditorPage }]}
+                          title="Editor de recursos"
+                          aria-label="Editor de recursos"
+                          onclick="event.stopPropagation()"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </a>
+                      </span>
+                      <span class="chapter-caret">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      </span>
+                    </summary>
+                    {recursosSidebarGroups.length > 0 && (
+                      <div class="recursos-sidebar-tree" data-recursos-sidebar data-room={`${recursosCourseId}-stage`} data-clase={recursosCourseId}>
+                        {recursosSidebarGroups.map((group) => {
+                          const { root, folders } = groupByFolder(group.resources);
+                          return (
+                            <details class="recursos-sidebar-session" open>
+                              <summary class="recursos-sidebar-session-name">
+                                <span class="recursos-sidebar-session-caret">▸</span>
+                                {group.session?.name || 'Sin sesión'}
+                              </summary>
+                              <ul class="recursos-sidebar-resource-list">
+                                {root.map((resource) => {
+                                  const ic = iconFor(resource.type, resource.url);
+                                  return (
+                                    <li class="recursos-sidebar-resource-item">
+                                      <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                        <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                        <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                      </a>
+                                    </li>
+                                  );
+                                })}
+                                {[...folders.entries()].map(([folderName, items]) => (
+                                  <li class="recursos-sidebar-resource-item">
+                                    <details class="recursos-sidebar-folder" open>
+                                      <summary class="recursos-sidebar-folder-name">
+                                        <span class="recursos-sidebar-folder-caret">▸</span>
+                                        <span style="color:#4e6070">⊟</span>
+                                        {folderName}
+                                      </summary>
+                                      <ul class="recursos-sidebar-folder-items">
+                                        {items.map((resource) => {
+                                          const ic = iconFor(resource.type, resource.url);
+                                          return (
+                                            <li>
+                                              <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                                <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                                <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                              </a>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    </details>
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </details>
+                </div>
+              );
+            }
+            const { chapterName, lessons } = entry;
+            const isPublicFolder = /^9\d /.test(chapterName);
+            const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
+            const isTOC = chapterName === 'TOC de clase';
+            const isRecursosChapter = normalizeContentSlug(chapterName) === '80-recursos';
+
+            return (
+              <div class="chapter">
+                <details class="chapter-details" open={isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
+                  <summary class="chapter-title">
+                    <span class="chapter-title-main">
+                      <span class="chapter-title-text">{displayTitle}</span>
+                      {canManageLiveInteractions && isRecursosChapter && (
+                        <a
+                          href={`${courseHref}/recursos`}
+                          class:list={['chapter-editor-link', { active: isRecursosEditorPage }]}
+                          title="Editor de recursos"
+                          aria-label="Editor de recursos"
+                          onclick="event.stopPropagation()"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </a>
+                      )}
+                    </span>
+                    <span class="chapter-caret">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </span>
+                  </summary>
+                  {isRecursosChapter && recursosSidebarGroups.length > 0 ? (
+                    <div class="recursos-sidebar-tree" data-recursos-sidebar data-room={`${recursosCourseId}-stage`} data-clase={recursosCourseId}>
+                      {recursosSidebarGroups.map((group) => {
+                        const { root, folders } = groupByFolder(group.resources);
+                        return (
+                          <details class="recursos-sidebar-session" open>
+                            <summary class="recursos-sidebar-session-name">
+                              <span class="recursos-sidebar-session-caret">▸</span>
+                              {group.session?.name || 'Sin sesión'}
+                            </summary>
+                            <ul class="recursos-sidebar-resource-list">
+                              {root.map((resource) => {
+                                const ic = iconFor(resource.type, resource.url);
+                                return (
+                                  <li class="recursos-sidebar-resource-item">
+                                    <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                      <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                      <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                    </a>
+                                  </li>
+                                );
+                              })}
+                              {[...folders.entries()].map(([folderName, items]) => (
+                                <li class="recursos-sidebar-resource-item">
+                                  <details class="recursos-sidebar-folder" open>
+                                    <summary class="recursos-sidebar-folder-name">
+                                      <span class="recursos-sidebar-folder-caret">▸</span>
+                                      <span style="color:#4e6070">⊟</span>
+                                      {folderName}
+                                    </summary>
+                                    <ul class="recursos-sidebar-folder-items">
+                                      {items.map((resource) => {
+                                        const ic = iconFor(resource.type, resource.url);
+                                        return (
+                                          <li>
+                                            <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                              <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                              <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                            </a>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  </details>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <ul class="lesson-list">
+                      {lessons.map((lesson) => {
+                      const isContentCollection = (lesson as any).collection === 'content';
+                      const lessonType = String(lesson.data.type || '').trim().toLowerCase();
+                      const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
+
+                      let lessonHref;
+                      if (session && (isConceptGlossary || isContentCollection)) {
+                        lessonHref = buildCourseLessonHref(
+                            canonicalCourseIdToUse || '',
+                            courseData,
+                            lesson as any,
+                            lessonPathIndex,
+                          );
+                      } else if (isContentCollection || isConceptGlossary) {
+                        lessonHref = `/${getContentCanonicalSlug(lesson as any)}`;
+                      } else {
+                        lessonHref = buildCourseLessonHref(
+                            canonicalCourseIdToUse || '',
+                            courseData,
+                            lesson as any,
+                            lessonPathIndex,
+                          );
+                      }
+
+                      const lessonPageSlug = isContentCollection
+                        ? getContentCanonicalSlug(lesson as any)
+                        : (lessonPathIndex.pathByEntryId.get(lesson.id)
+                           || getCourseEntryLegacyPath(lesson as any, canonicalCourseIdToUse || ''));
+
+                      const isActive = currentEntry?.id === lesson.id;
+                      const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
+
+                      return (
+                        <li class="lesson-item">
+                          <a
+                            href={lessonHref}
+                            class:list={['lesson-link', { active: isActive }]}
+                            data-course-id={canonicalCourseIdToUse || courseSlug}
+                            data-lesson-page-slug={isContentCollection ? lessonPageSlug : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
+                          >
+                            <span class="lesson-link-text">{lesson.data.title}</span>
+                            <span class="lesson-link-trailing">
+                              {lessonType === 'info' && (
+                                <span class="lesson-type">ℹ️</span>
+                              )}
+                              {(lessonType === 'concept' || lessonType === 'glossary') && (
+                                <span class="lesson-type" title={lessonType}>{lessonType === 'concept' ? '💡' : '📖'}</span>
+                              )}
+                              {assignmentLikeTypes.has(lessonType) && (
+                                <span class="lesson-type">📝</span>
+                              )}
+                              {canManageLiveInteractions && lessonStatus === 'draft' && (
+                                <span class="lesson-status-badge lesson-status-badge--draft">
+                                  <span class="lesson-status-blob" aria-hidden="true"></span>DRAFT
+                                </span>
+                              )}
+                              {canManageLiveInteractions && lessonStatus === 'private' && (
+                                <span class="lesson-status-badge lesson-status-badge--private">
+                                  <span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE
+                                </span>
+                              )}
+                              <span class="lesson-activity-indicators">
+                                <span class="lesson-room-indicator" data-lesson-room-indicator hidden aria-hidden="true">
+                                  <span class="lesson-live-led lesson-live-led--room" aria-hidden="true"></span>
+                                </span>
+                                <span class="lesson-live-indicator" data-lesson-live-indicator hidden aria-live="polite">
+                                  <span class="lesson-live-led" aria-hidden="true"></span>
+                                  <span class="lesson-live-countdown" data-lesson-live-countdown hidden></span>
+                                </span>
+                              </span>
+                            </span>
+                          </a>
+                        </li>
+                      );
+                      })}
+                    </ul>
+                  )}
+                </details>
+              </div>
+            );
+          })
+        )}
 
         {(isLessonPage || (isPublicWikiPage && !session)) && (
           <>
@@ -4152,6 +4391,22 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         >↑</button>
       </div>
     </main>
+    {canManageLiveInteractions && (
+      <script>
+        import { initNotesSidebar } from '../scripts/course/sidebar/notes-sidebar.ts';
+
+        function bootNotesSidebar() {
+          const container = document.querySelector<HTMLElement>('[data-notes-sidebar]');
+          if (!container) return;
+          const courseId = container.dataset.courseId ?? '';
+          const activeSlug = container.dataset.activeSlug || null;
+          if (courseId) initNotesSidebar(container, courseId, activeSlug);
+        }
+
+        bootNotesSidebar();
+        document.addEventListener('astro:page-load', bootNotesSidebar);
+      </script>
+    )}
     {canManageLiveInteractions && (
       <script>
         import { mountInlineNotesEditor } from '../scripts/course/notes/inline-editor.ts';
