@@ -191,6 +191,7 @@ async function saveCurrentNote(
     await saveNote(courseId, currentSlug, fullContent);
     setStatus(statusEl, 'Guardado', 'ok');
     setTimeout(() => setStatus(statusEl, ''), 2000);
+    window.dispatchEvent(new CustomEvent('notes-sidebar-refresh'));
   } catch (err) {
     setStatus(statusEl, err instanceof Error ? err.message : 'Error al guardar', 'error');
   }
