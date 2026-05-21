@@ -22,6 +22,10 @@ export type InlineEditorOptions = {
   courseName?: string;
   slug: string | null;
   mode: 'edit' | 'create';
+  // New fields (optional for backward compatibility):
+  persistence?: import('../notes-persistence').NotesPersistence | null;
+  hideHeader?: boolean;       // hide the top header bar (we have our own in the panel)
+  overrideContent?: string | null; // pre-loaded content (e.g. recovered draft)
 };
 
 // Module-level state
@@ -58,15 +62,15 @@ function slugify(title: string): string {
     .replace(/\s+/g, '-');
 }
 
-function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: string, _slug: string | null): void {
+function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: string, _slug: string | null, hideHeader: boolean = false): void {
   const inputStyle = 'background:var(--c-bg-mute,var(--c-bg));border:1px solid var(--c-border);color:var(--c-fg);padding:1px 4px;font-size:11px;border-radius:2px;';
   mountEl.innerHTML = `
-    <div id="nie-header" style="display:flex;align-items:center;gap:.5rem;padding:.35rem .75rem;background:var(--c-bg-surface,var(--c-bg-mute));border-bottom:1px solid var(--c-border);flex-shrink:0;">
+    ${hideHeader ? '' : `<div id="nie-header" style="display:flex;align-items:center;gap:.5rem;padding:.35rem .75rem;background:var(--c-bg-surface,var(--c-bg-mute));border-bottom:1px solid var(--c-border);flex-shrink:0;">
       <span style="font-size:11px;color:var(--c-fg-subtle);flex-shrink:0;">Notas</span>
       <span id="nie-status" style="font-size:11px;color:var(--c-fg-dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
       <button id="nie-save" style="background:transparent;border:1px solid #2a4a2a;color:#7ec87e;padding:2px 10px;border-radius:3px;font-size:11px;cursor:pointer;flex-shrink:0;">Guardar</button>
       <button id="nie-close" style="background:none;border:none;color:var(--c-fg-dim);font-size:14px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0;">✕</button>
-    </div>
+    </div>`}
     <div id="nie-editor-panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
       <div style="padding:.4rem .75rem;border-bottom:1px solid var(--c-border);flex-shrink:0;">
         <input id="nie-title" type="text" placeholder="Título de la nota"
@@ -127,11 +131,19 @@ async function loadNote(
   slug: string,
   courseId: string,
   statusEl: HTMLElement,
+  overrideContent?: string | null,
+  onEditorChange?: () => void,
 ): Promise<void> {
   setStatus(statusEl, 'Cargando...');
   try {
-    const note = await getNote(courseId, slug);
-    const { data, body } = parseFrontmatter(note.content);
+    let noteContent: string;
+    if (overrideContent != null) {
+      noteContent = overrideContent;
+    } else {
+      const note = await getNote(courseId, slug);
+      noteContent = note.content;
+    }
+    const { data, body } = parseFrontmatter(noteContent);
 
     const yamlStrip = document.getElementById('nie-yaml-strip');
     const snippetToolbar = document.getElementById('nie-snippet-toolbar');
@@ -148,7 +160,7 @@ async function loadNote(
     } else {
       const wrap = document.getElementById('editor-cm-wrap');
       if (wrap) {
-        createEditor(wrap, body, () => {});
+        createEditor(wrap, body, onEditorChange ?? (() => {}));
         editorCreated = true;
         initToolbar(courseId, (msg, type) => setStatus(statusEl, msg, type));
       }
@@ -219,16 +231,24 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
   mountEl.removeAttribute('hidden');
   mountEl.style.cssText = 'display:flex;flex-direction:column;overflow:hidden;height:100%;';
 
+  const hideHeader = opts.hideHeader ?? false;
+
   // Render HTML skeleton
-  buildLayout(mountEl, courseId, courseName, slug);
+  buildLayout(mountEl, courseId, courseName, slug, hideHeader);
 
   const statusEl = document.getElementById('nie-status') as HTMLElement | null;
   const saveBtn = document.getElementById('nie-save') as HTMLButtonElement | null;
   const closeBtn = document.getElementById('nie-close') as HTMLButtonElement | null;
 
-  if (!statusEl || !saveBtn || !closeBtn) {
+  if (!hideHeader && (!statusEl || !saveBtn || !closeBtn)) {
     console.error('inline-editor: required DOM elements missing');
     return;
+  }
+
+  // If persistence is provided, hide save button and use auto-save
+  if (opts.persistence && saveBtn) {
+    saveBtn.setAttribute('hidden', '');
+    saveBtn.style.setProperty('display', 'none');
   }
 
   mounted = true;
@@ -254,43 +274,54 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     }
   }
 
-  closeBtn.addEventListener('click', closeEditor);
+  if (closeBtn) closeBtn.addEventListener('click', closeEditor);
 
-  saveBtn.addEventListener('click', () => {
-    void saveCurrentNote(courseId, statusEl);
-  });
+  if (saveBtn && !opts.persistence) {
+    saveBtn.addEventListener('click', () => {
+      void saveCurrentNote(courseId, statusEl!);
+    });
+  }
 
-  keydownHandler = (e: KeyboardEvent) => {
-    if (!mounted) return;
-    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-      e.preventDefault();
-      void saveCurrentNote(courseId, statusEl);
-    }
-  };
-  document.addEventListener('keydown', keydownHandler);
+  if (!opts.persistence) {
+    keydownHandler = (e: KeyboardEvent) => {
+      if (!mounted) return;
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        void saveCurrentNote(courseId, statusEl!);
+      }
+    };
+    document.addEventListener('keydown', keydownHandler);
+  }
 
   void (async () => {
     const myToken = ++mountToken;
 
-    setStatus(statusEl, 'Cargando notas...');
+    const activeStatusEl0 = statusEl ?? document.createElement('span');
+    setStatus(activeStatusEl0, 'Cargando notas...');
     try {
       const { notes } = await listNotes(courseId);
       if (mountToken !== myToken) return;
       notesList = notes;
     } catch (err) {
       if (mountToken !== myToken) return;
-      setStatus(statusEl, err instanceof Error ? err.message : 'Error al cargar notas', 'error');
+      setStatus(activeStatusEl0, err instanceof Error ? err.message : 'Error al cargar notas', 'error');
       return;
     }
 
+    // Build a fallback status element for headerless mode
+    const activeStatusEl = statusEl ?? document.createElement('span');
+    const persistenceOnChange = opts.persistence
+      ? () => { opts.persistence!.onChange(getEditorContent()); }
+      : undefined;
+
     if (mode === 'edit' && slug) {
-      await loadNote(slug, courseId, statusEl);
+      await loadNote(slug, courseId, activeStatusEl, opts.overrideContent ?? null, persistenceOnChange);
     } else if (mode === 'create') {
       const title = prompt('Nueva nota — Título:');
-      if (!title) { setStatus(statusEl, ''); return; }
+      if (!title) { setStatus(activeStatusEl, ''); return; }
       const newSlug = slugify(title);
-      if (!newSlug) { setStatus(statusEl, 'Título inválido', 'error'); return; }
-      setStatus(statusEl, 'Creando...');
+      if (!newSlug) { setStatus(activeStatusEl, 'Título inválido', 'error'); return; }
+      setStatus(activeStatusEl, 'Creando...');
       try {
         await createNote(courseId, { slug: newSlug, title, type: 'lesson', chapter: '', status: 'draft', order: 0 });
         if (mountToken !== myToken) return;
@@ -298,18 +329,18 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
         if (mountToken !== myToken) return;
         notesList = notes;
         const fullSlug = notes.find(n => n.slug.endsWith(`/${newSlug}.md`))?.slug || newSlug;
-        await loadNote(fullSlug, courseId, statusEl);
+        await loadNote(fullSlug, courseId, activeStatusEl, null, persistenceOnChange);
       } catch (err) {
         if (mountToken !== myToken) return;
-        setStatus(statusEl, err instanceof Error ? err.message : 'Error al crear', 'error');
+        setStatus(activeStatusEl, err instanceof Error ? err.message : 'Error al crear', 'error');
       }
     } else {
-      setStatus(statusEl, 'Seleccioná una nota del árbol');
+      setStatus(activeStatusEl, 'Seleccioná una nota del árbol');
       const wrap = document.getElementById('editor-cm-wrap');
       if (wrap && !editorCreated) {
         createEditor(wrap, '', () => {});
         editorCreated = true;
-        initToolbar(courseId, (msg, type) => setStatus(statusEl, msg, type));
+        initToolbar(courseId, (msg, type) => setStatus(activeStatusEl, msg, type));
       }
     }
   })();

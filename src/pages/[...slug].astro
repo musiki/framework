@@ -3994,7 +3994,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       </aside>
 
       <!-- Main Content -->
-      <article class="content-area" transition:name="course-content" transition:animate="fade">
+      <article class="content-area" id="cnw-root" transition:name="course-content" transition:animate="fade">
         {isLessonPage && currentEntryStatus === 'draft' && (
           <div class="draft-badge">Material en preparación</div>
         )}
@@ -4407,6 +4407,24 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         bootNotesSidebar();
         document.addEventListener('astro:page-load', bootNotesSidebar);
+      </script>
+    )}
+    {canManageLiveInteractions && (
+      <script>
+        import { initDockviewWorkspace } from '../scripts/course/dockview-workspace.ts';
+
+        function bootWorkspace() {
+          const container = document.getElementById('cnw-root');
+          if (!container) return;
+          const sidebarEl = document.querySelector<HTMLElement>('[data-notes-sidebar]');
+          const courseId = sidebarEl?.dataset.courseId ?? '';
+          if (!courseId) return;
+          const activeSlug = sidebarEl?.dataset.activeSlug || null;
+          initDockviewWorkspace(container, courseId, activeSlug, null);
+        }
+
+        bootWorkspace();
+        document.addEventListener('astro:page-load', bootWorkspace);
       </script>
     )}
     {canManageLiveInteractions && (
