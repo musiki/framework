@@ -30,6 +30,7 @@ let currentSlug: string | null = null;
 let notesList: NoteListItem[] = [];
 let editorCreated = false;
 let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+let mountToken = 0;
 
 function resetState() {
   mounted = false;
@@ -113,7 +114,7 @@ function buildLayout(mountEl: HTMLElement, courseId: string, slug: string | null
             </label>
           </form>
         </div>
-        <div id="nie-snippet-toolbar" style="display:none;padding:.25rem .5rem;border-bottom:1px solid #1a1a1a;flex-shrink:0;display:flex;gap:.25rem;flex-wrap:wrap;">
+        <div id="nie-snippet-toolbar" style="display:none;padding:.25rem .5rem;border-bottom:1px solid #1a1a1a;flex-shrink:0;gap:.25rem;flex-wrap:wrap;">
           <button class="snip-btn" data-snippet="cover" style="background:#111;border:1px solid #222;color:#aaa;padding:1px 6px;font-size:10px;border-radius:2px;cursor:pointer;">cover</button>
           <button class="snip-btn" data-snippet="lily" style="background:#111;border:1px solid #222;color:#aaa;padding:1px 6px;font-size:10px;border-radius:2px;cursor:pointer;">lily</button>
           <button class="snip-btn" data-snippet="mermaid" style="background:#111;border:1px solid #222;color:#aaa;padding:1px 6px;font-size:10px;border-radius:2px;cursor:pointer;">mermaid</button>
@@ -271,10 +272,15 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
   // Render HTML skeleton
   buildLayout(mountEl, courseId, slug);
 
-  const statusEl = document.getElementById('nie-status') as HTMLElement;
-  const saveBtn = document.getElementById('nie-save') as HTMLButtonElement;
-  const closeBtn = document.getElementById('nie-close') as HTMLButtonElement;
-  const treeScrollEl = document.getElementById('nie-tree-scroll') as HTMLElement;
+  const statusEl = document.getElementById('nie-status') as HTMLElement | null;
+  const saveBtn = document.getElementById('nie-save') as HTMLButtonElement | null;
+  const closeBtn = document.getElementById('nie-close') as HTMLButtonElement | null;
+  const treeScrollEl = document.getElementById('nie-tree-scroll') as HTMLElement | null;
+
+  if (!statusEl || !saveBtn || !closeBtn || !treeScrollEl) {
+    console.error('inline-editor: required DOM elements missing');
+    return;
+  }
 
   mounted = true;
 
@@ -313,11 +319,15 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
 
   // Load notes list then handle mode
   void (async () => {
+    const myToken = ++mountToken;
+
     setStatus(statusEl, 'Cargando notas...');
     try {
       const { notes } = await listNotes(courseId);
+      if (mountToken !== myToken) return;
       notesList = notes;
     } catch (err) {
+      if (mountToken !== myToken) return;
       setStatus(statusEl, err instanceof Error ? err.message : 'Error al cargar notas', 'error');
       return;
     }
@@ -334,6 +344,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     if (mode === 'edit' && slug) {
       // Load the note immediately
       await loadNote(slug, courseId, statusEl, treeScrollEl);
+      if (mountToken !== myToken) return;
     } else if (mode === 'create') {
       // Prompt for title and create
       const title = prompt('Nueva nota — Título:');
@@ -356,8 +367,10 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
           status: 'draft',
           order: 0,
         });
+        if (mountToken !== myToken) return;
         // Refresh list
         const { notes } = await listNotes(courseId);
+        if (mountToken !== myToken) return;
         notesList = notes;
         // Re-render tree
         renderTree(treeScrollEl, notesList, newSlug, {
@@ -368,7 +381,9 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
           onOrderChange: () => {},
         });
         await loadNote(newSlug, courseId, statusEl, treeScrollEl);
+        if (mountToken !== myToken) return;
       } catch (err) {
+        if (mountToken !== myToken) return;
         setStatus(statusEl, err instanceof Error ? err.message : 'Error al crear', 'error');
       }
     } else {
