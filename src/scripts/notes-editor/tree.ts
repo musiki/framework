@@ -48,14 +48,14 @@ function showContextMenu(
   const menu = document.createElement('div');
   menu.style.cssText = `
     position:fixed;left:${x}px;top:${y}px;
-    background:#1a1a1a;border:1px solid #333;border-radius:4px;
-    padding:3px 0;z-index:9999;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,.6);
+    background:var(--c-bg-surface,var(--c-bg-mute));border:1px solid var(--c-border);border-radius:4px;
+    padding:3px 0;z-index:9999;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,.4);
   `;
   for (const item of items) {
     const el = document.createElement('div');
     el.textContent = item.label;
-    el.style.cssText = `padding:4px 12px;font-size:11px;cursor:pointer;color:${item.danger ? '#c87e7e' : '#ccc'};`;
-    el.addEventListener('mouseenter', () => { el.style.background = '#2a2a2a'; });
+    el.style.cssText = `padding:4px 12px;font-size:11px;cursor:pointer;color:${item.danger ? '#c87e7e' : 'var(--c-fg)'};`;
+    el.addEventListener('mouseenter', () => { el.style.background = 'var(--c-bg-alt,var(--c-bg-mute))'; });
     el.addEventListener('mouseleave', () => { el.style.background = ''; });
     el.addEventListener('click', () => { closeContextMenu(); item.action(); });
     menu.appendChild(el);
@@ -78,13 +78,13 @@ export function renderTree(
 
   for (const group of groups) {
     const header = document.createElement('div');
-    header.style.cssText = 'padding:.25rem .7rem;font-size:9px;opacity:.3;text-transform:uppercase;letter-spacing:.05em;margin-top:.4rem;display:flex;align-items:center;gap:.3rem;';
+    header.style.cssText = 'padding:.25rem .7rem;font-size:9px;color:var(--c-fg-subtle);opacity:.7;text-transform:uppercase;letter-spacing:.05em;margin-top:.4rem;display:flex;align-items:center;gap:.3rem;';
     header.textContent = group.name;
 
     const newInChapter = document.createElement('button');
     newInChapter.textContent = '+';
     newInChapter.title = `Nueva nota en "${group.name}"`;
-    newInChapter.style.cssText = 'background:none;border:none;color:#3a5a3a;cursor:pointer;font-size:10px;padding:0 2px;margin-left:auto;';
+    newInChapter.style.cssText = 'background:none;border:none;color:var(--c-link);cursor:pointer;font-size:10px;padding:0 2px;margin-left:auto;opacity:.6;';
     newInChapter.addEventListener('click', e => { e.stopPropagation(); cb.onCreate(group.name); });
     header.appendChild(newInChapter);
     container.appendChild(header);
@@ -92,7 +92,7 @@ export function renderTree(
     for (const note of group.notes) {
       const row = document.createElement('div');
       const isActive = note.slug === activeSlug;
-      row.style.cssText = `padding:.2rem .7rem .2rem 1.2rem;display:flex;gap:.3rem;align-items:center;cursor:pointer;font-size:11px;${isActive ? 'background:#1a2a1a;border-left:2px solid #5a9a5a;color:#7ec87e;' : 'color:#666;border-left:2px solid transparent;'}`;
+      row.style.cssText = `padding:.2rem .7rem .2rem 1.2rem;display:flex;gap:.3rem;align-items:center;cursor:pointer;font-size:11px;${isActive ? 'background:var(--c-bg-alt,var(--c-bg-mute));border-left:2px solid var(--c-link);color:var(--c-link);' : 'color:var(--c-fg-dim);border-left:2px solid transparent;'}`;
       row.setAttribute('draggable', 'true');
       row.dataset.slug = note.slug;
 

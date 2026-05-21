@@ -1,7 +1,7 @@
 import { insertAtCursor } from './editor';
 
 const SNIPPETS: Record<string, string> = {
-  cover: '%%cover%%\n<grid drag="60 55" drop="5 10">\n# título\n</grid>\n',
+  cover: '%%cover%%\n<grid drag="60 55" drop="5 10">\n# título\n</grid>\n%%/cover%%\n',
   lily: '```lily\n\\relative c\' {\n  c d e f g a b c\n}\n```\n',
   mermaid: '```mermaid\ngraph TD\n  A --> B\n```\n',
   iframe: '<iframe src="URL" width="100%" height="400" frameborder="0" allowfullscreen></iframe>\n',

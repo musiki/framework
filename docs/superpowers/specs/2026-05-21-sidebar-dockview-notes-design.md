@@ -216,4 +216,4 @@ Behavior:
 - Dockview layout persistence across page loads
 - Right sidebar (forum) as a dockview panel
 - Note preview/edit side-by-side as a preset layout
-- Keyboard shortcut for split panel
+- `Alt+X` → split current note duplicated in preview (presentation) mode

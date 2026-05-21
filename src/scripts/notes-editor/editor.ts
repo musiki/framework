@@ -7,14 +7,15 @@ import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 let view: EditorView | null = null;
 
 const musikiTheme = EditorView.theme({
-  '&': { height: '100%', fontSize: '12px', fontFamily: '"JetBrains Mono", "Fira Code", monospace' },
+  '&': { height: '100%', fontSize: '12px', fontFamily: '"JetBrains Mono", "Fira Code", monospace', background: 'var(--c-bg)' },
   '.cm-scroller': { overflow: 'auto', lineHeight: '1.8' },
-  '.cm-content': { padding: '.6rem .9rem', caretColor: '#7ec87e' },
-  '&.cm-focused .cm-cursor': { borderLeftColor: '#7ec87e' },
-  '.cm-activeLine': { backgroundColor: '#141414' },
-  '.cm-gutters': { backgroundColor: '#111', borderRight: '1px solid #1e1e1e', color: '#333' },
-  '.cm-selectionBackground': { backgroundColor: '#2a4a2a !important' },
-}, { dark: true });
+  '.cm-content': { padding: '.6rem .9rem', caretColor: 'var(--c-link)', color: 'var(--c-fg)' },
+  '&.cm-focused .cm-cursor': { borderLeftColor: 'var(--c-link)' },
+  '.cm-activeLine': { backgroundColor: 'var(--c-bg-alt,var(--c-bg-mute))' },
+  '.cm-gutters': { backgroundColor: 'var(--c-bg-surface,var(--c-bg-mute))', borderRight: '1px solid var(--c-border)', color: 'var(--c-fg-subtle)' },
+  '.cm-lineNumbers .cm-gutterElement': { color: 'var(--c-fg-subtle)', minWidth: '2.5em' },
+  '.cm-selectionBackground': { backgroundColor: 'var(--c-bg-alt,var(--c-bg-mute)) !important' },
+});
 
 export function createEditor(container: HTMLElement, initialContent: string, onChange: () => void): EditorView {
   const state = EditorState.create({

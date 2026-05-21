@@ -22,6 +22,7 @@ import remarkDataviewLite from '../plugins/remark-dataview-lite.mjs';
 import remarkWikiLink from '../plugins/remark-wiki-link.mjs';
 import remarkLily from '../plugins/remark-lily.mjs';
 import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
+import remarkCoverBlock from '../plugins/remark-cover-block.mjs';
 
 const CONTENT_DIR = path.resolve(process.cwd(), 'src/content/cursos');
 const runtimeHighlightAliases = {
@@ -41,6 +42,7 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
     .use(remarkGfm)
     .use(slugMathRemark)
     .use(remarkMath)
+    .use(remarkCoverBlock)
     .use(remarkMermaid)
     .use(remarkEvalBlocks)
     .use(remarkDataviewLite)

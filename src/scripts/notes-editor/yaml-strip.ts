@@ -1,4 +1,3 @@
-import matter from 'gray-matter';
 import type { NoteListItem } from './types';
 
 export type FrontmatterData = {
@@ -11,48 +10,81 @@ export type FrontmatterData = {
   [key: string]: unknown;
 };
 
+// Browser-safe frontmatter parser — no gray-matter/Buffer dependency
+function parseYamlBlock(yaml: string): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+  for (const line of yaml.split('\n')) {
+    const m = /^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$/.exec(line);
+    if (!m) continue;
+    let val: unknown = m[2].trim();
+    if (/^['"][\s\S]*['"]$/.test(val as string)) {
+      val = (val as string).slice(1, -1);
+    } else if (val !== '' && !isNaN(Number(val as string))) {
+      val = Number(val);
+    } else if (val === 'true') {
+      val = true;
+    } else if (val === 'false') {
+      val = false;
+    }
+    data[m[1]] = val;
+  }
+  return data;
+}
+
+function stringifyYamlValue(v: unknown): string {
+  if (typeof v === 'string') {
+    return /[:#\[\]{}|>&!'",%@`\n]/.test(v) ? `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : v;
+  }
+  return String(v);
+}
+
 export function parseFrontmatter(content: string): { data: FrontmatterData; body: string } {
-  const parsed = matter(content);
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(content);
+  const raw = match ? parseYamlBlock(match[1]) : {};
+  const body = match ? content.slice(match[0].length) : content;
   return {
     data: {
-      title: String(parsed.data.title || ''),
-      type: String(parsed.data.type || 'lesson'),
-      chapter: String(parsed.data.chapter || ''),
-      status: String(parsed.data.status || 'draft'),
-      order: Number(parsed.data.order) || 0,
-      theme: String(parsed.data.theme || ''),
-      ...parsed.data,
+      title: String(raw.title || ''),
+      type: String(raw.type || 'lesson'),
+      chapter: String(raw.chapter || ''),
+      status: String(raw.status || 'draft'),
+      order: Number(raw.order) || 0,
+      theme: String(raw.theme || ''),
+      ...raw,
     },
-    body: parsed.content,
+    body,
   };
 }
 
 export function serializeFrontmatter(data: FrontmatterData, body: string): string {
   const fm: Record<string, unknown> = { ...data };
   if (!fm.theme) delete fm.theme;
-  return matter.stringify(body, fm);
+  const lines = ['---'];
+  for (const [k, v] of Object.entries(fm)) {
+    if (v === null || v === undefined || v === '') continue;
+    lines.push(`${k}: ${stringifyYamlValue(v)}`);
+  }
+  lines.push('---', '');
+  const trimmed = body.replace(/^\n+/, '');
+  return lines.join('\n') + trimmed;
 }
 
 export function populateYamlStrip(notes: NoteListItem[], data: FrontmatterData) {
   const typeEl = document.getElementById('fm-type') as HTMLSelectElement;
-  const chapterEl = document.getElementById('fm-chapter') as HTMLSelectElement;
+  const chapterEl = document.getElementById('fm-chapter') as HTMLInputElement;
+  const chapterList = document.getElementById('fm-chapter-list') as HTMLDataListElement | null;
   const statusEl = document.getElementById('fm-status') as HTMLSelectElement;
   const orderEl = document.getElementById('fm-order') as HTMLInputElement;
   const themeEl = document.getElementById('fm-theme') as HTMLSelectElement;
 
   const chapters = [...new Set(notes.map(n => n.chapter).filter(Boolean))].sort();
-  chapterEl.innerHTML = '';
-  for (const ch of chapters) {
-    const opt = document.createElement('option');
-    opt.value = ch;
-    opt.textContent = ch;
-    chapterEl.appendChild(opt);
-  }
-  if (data.chapter && !chapters.includes(data.chapter)) {
-    const opt = document.createElement('option');
-    opt.value = data.chapter;
-    opt.textContent = data.chapter;
-    chapterEl.insertBefore(opt, chapterEl.firstChild);
+  if (chapterList) {
+    chapterList.innerHTML = '';
+    for (const ch of chapters) {
+      const opt = document.createElement('option');
+      opt.value = ch;
+      chapterList.appendChild(opt);
+    }
   }
 
   const themes = [...new Set(notes.map(n => n.theme).filter(Boolean) as string[])].sort();
@@ -65,7 +97,7 @@ export function populateYamlStrip(notes: NoteListItem[], data: FrontmatterData) 
   }
 
   typeEl.value = data.type;
-  chapterEl.value = data.chapter;
+  chapterEl.value = data.chapter || '';
   statusEl.value = data.status;
   orderEl.value = String(data.order);
   themeEl.value = data.theme || '';
@@ -74,7 +106,7 @@ export function populateYamlStrip(notes: NoteListItem[], data: FrontmatterData) 
 export function readYamlStrip(): Partial<FrontmatterData> {
   return {
     type: (document.getElementById('fm-type') as HTMLSelectElement).value,
-    chapter: (document.getElementById('fm-chapter') as HTMLSelectElement).value,
+    chapter: ((document.getElementById('fm-chapter') as HTMLInputElement).value || '').trim(),
     status: (document.getElementById('fm-status') as HTMLSelectElement).value,
     order: Number((document.getElementById('fm-order') as HTMLInputElement).value) || 0,
     theme: (document.getElementById('fm-theme') as HTMLSelectElement).value || undefined,
