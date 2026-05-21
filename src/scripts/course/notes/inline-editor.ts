@@ -159,6 +159,7 @@ async function loadNote(
       if (wrap) {
         createEditor(wrap, body, () => {});
         editorCreated = true;
+        initToolbar(courseId, (msg, type) => setStatus(statusEl, msg, type));
       }
     }
 
@@ -310,9 +311,6 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
   };
   document.addEventListener('keydown', keydownHandler);
 
-  // Init toolbar (needs editor-cm-wrap and snip-btn elements in DOM)
-  initToolbar(courseId, (msg, type) => setStatus(statusEl, msg, type));
-
   // Load notes list then handle mode
   void (async () => {
     setStatus(statusEl, 'Cargando notas...');
@@ -381,6 +379,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
       if (wrap && !editorCreated) {
         createEditor(wrap, '', () => {});
         editorCreated = true;
+        initToolbar(courseId, (msg, type) => setStatus(statusEl, msg, type));
       }
     }
   })();
