@@ -6,7 +6,7 @@
     "dev": "astro dev",
     "dev:force": "astro dev --force",
     "start": "astro dev",
-    "test": "node --test \"src/lib/live/*.test.mjs\"",
+    "test": "node --test \"src/lib/live/*.test.mjs\" \"src/scripts/course/sidebar/*.test.mjs\"",
     "preflight": "bash scripts/preflight.sh",
     "graph:build": "node src/scripts/build-graph-data.mjs",
     "vault:sync": "node src/scripts/update-vault-index.mjs",
