@@ -3495,7 +3495,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                               {root.map((resource) => {
                                 const ic = iconFor(resource.type, resource.url);
                                 return (
-                                  <li class="recursos-sidebar-resource-item">
+                                  <li class="recursos-sidebar-resource-item" data-id={resource.id}>
                                     <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
                                       <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
                                       <span class="recursos-sidebar-resource-name">{resource.name}</span>
@@ -3515,7 +3515,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                       {items.map((resource) => {
                                         const ic = iconFor(resource.type, resource.url);
                                         return (
-                                          <li>
+                                          <li class="recursos-sidebar-resource-item" data-id={resource.id}>
                                             <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
                                               <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
                                               <span class="recursos-sidebar-resource-name">{resource.name}</span>
@@ -3709,6 +3709,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             <div
               data-notes-sidebar
               data-course-id={canonicalCourseId || courseSlug}
+              data-course-href={courseHref}
               data-active-slug={currentEntrySourcePath || ''}
             ></div>
           </>
@@ -3754,7 +3755,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                 {root.map((resource) => {
                                   const ic = iconFor(resource.type, resource.url);
                                   return (
-                                    <li class="recursos-sidebar-resource-item">
+                                    <li class="recursos-sidebar-resource-item" data-id={resource.id}>
                                       <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
                                         <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
                                         <span class="recursos-sidebar-resource-name">{resource.name}</span>
@@ -3774,7 +3775,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                         {items.map((resource) => {
                                           const ic = iconFor(resource.type, resource.url);
                                           return (
-                                            <li>
+                                            <li class="recursos-sidebar-resource-item" data-id={resource.id}>
                                               <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
                                                 <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
                                                 <span class="recursos-sidebar-resource-name">{resource.name}</span>
@@ -4399,12 +4400,144 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           const container = document.querySelector<HTMLElement>('[data-notes-sidebar]');
           if (!container) return;
           const courseId = container.dataset.courseId ?? '';
+          const courseHref = container.dataset.courseHref ?? '';
           const activeSlug = container.dataset.activeSlug || null;
-          if (courseId) initNotesSidebar(container, courseId, activeSlug);
+          if (courseId) initNotesSidebar(container, courseId, courseHref, activeSlug);
         }
 
         bootNotesSidebar();
         document.addEventListener('astro:page-load', bootNotesSidebar);
+      </script>
+    )}
+    {canManageLiveInteractions && (
+      <script>
+        // ── Recursos sidebar context menus ──────────────────────────────────
+        let _activeRecursosMenu: HTMLElement | null = null;
+
+        function closeRecursosMenu() {
+          _activeRecursosMenu?.remove();
+          _activeRecursosMenu = null;
+        }
+
+        function showRecursosMenu(
+          x: number,
+          y: number,
+          id: string,
+          courseId: string,
+          li: HTMLElement,
+        ) {
+          closeRecursosMenu();
+          const menu = document.createElement('div');
+          menu.style.cssText = [
+            `position:fixed;left:${x}px;top:${y}px;`,
+            'background:var(--c-bg-surface,var(--c-bg-mute));',
+            'border:1px solid var(--c-border);border-radius:4px;',
+            'padding:3px 0;z-index:9999;min-width:168px;',
+            'box-shadow:0 4px 12px rgba(0,0,0,.4);',
+          ].join('');
+
+          const nameEl = li.querySelector<HTMLElement>('.recursos-sidebar-resource-name');
+          const currentName = nameEl?.textContent?.trim() || '';
+
+          const items: Array<{ label: string; danger?: boolean; action: () => Promise<void> } | { sep: true }> = [
+            {
+              label: 'Renombrar',
+              action: async () => {
+                const newName = prompt('Nuevo nombre:', currentName);
+                if (!newName || newName === currentName) return;
+                const r = await fetch('/api/live/recursos/editor', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id, name: newName, courseId }),
+                });
+                if (r.ok) {
+                  if (nameEl) nameEl.textContent = newName;
+                } else {
+                  alert('Error al renombrar');
+                }
+              },
+            },
+            {
+              label: 'Mover a carpeta',
+              action: async () => {
+                const folder = prompt('Carpeta (vacío = raíz):');
+                if (folder === null) return;
+                const r = await fetch('/api/live/recursos/editor', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id, folder: folder.trim(), courseId }),
+                });
+                if (r.ok) {
+                  window.location.reload();
+                } else {
+                  alert('Error al mover');
+                }
+              },
+            },
+            { sep: true },
+            {
+              label: 'Eliminar',
+              danger: true,
+              action: async () => {
+                if (!confirm(`¿Eliminar "${currentName}"?`)) return;
+                const r = await fetch(
+                  `/api/live/recursos/editor?id=${encodeURIComponent(id)}&courseId=${encodeURIComponent(courseId)}`,
+                  { method: 'DELETE' },
+                );
+                if (r.ok) {
+                  li.remove();
+                } else {
+                  alert('Error al eliminar');
+                }
+              },
+            },
+          ];
+
+          for (const item of items) {
+            if ('sep' in item) {
+              const sep = document.createElement('hr');
+              sep.style.cssText = 'border:none;border-top:1px solid var(--c-border);margin:3px 0;';
+              menu.appendChild(sep);
+              continue;
+            }
+            const el = document.createElement('div');
+            el.textContent = item.label;
+            el.style.cssText = `padding:4px 12px;font-size:11px;cursor:pointer;color:${item.danger ? '#c87e7e' : 'var(--c-fg)'};`;
+            el.addEventListener('mouseenter', () => { el.style.background = 'var(--c-bg-alt,var(--c-bg-mute))'; });
+            el.addEventListener('mouseleave', () => { el.style.background = ''; });
+            el.addEventListener('click', () => { closeRecursosMenu(); item.action(); });
+            menu.appendChild(el);
+          }
+
+          _activeRecursosMenu = menu;
+          document.body.appendChild(menu);
+          requestAnimationFrame(() => {
+            const rect = menu.getBoundingClientRect();
+            if (rect.bottom > window.innerHeight) menu.style.top = `${y - rect.height}px`;
+            if (rect.right > window.innerWidth) menu.style.left = `${x - rect.width}px`;
+          });
+        }
+
+        document.addEventListener('click', closeRecursosMenu);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRecursosMenu(); });
+
+        function bootRecursosSidebar() {
+          document.querySelectorAll<HTMLElement>('[data-recursos-sidebar]').forEach(tree => {
+            const courseId = (tree.dataset.clase || tree.dataset.courseId || '').split('/')[0];
+            if (!courseId) return;
+            tree.querySelectorAll<HTMLElement>('.recursos-sidebar-resource-item[data-id]').forEach(li => {
+              if (li.dataset.recursosBound) return;
+              li.dataset.recursosBound = 'true';
+              li.addEventListener('contextmenu', e => {
+                e.preventDefault();
+                showRecursosMenu(e.clientX, e.clientY, li.dataset.id!, courseId, li);
+              });
+            });
+          });
+        }
+
+        bootRecursosSidebar();
+        document.addEventListener('astro:page-load', bootRecursosSidebar);
       </script>
     )}
     {canManageLiveInteractions && (

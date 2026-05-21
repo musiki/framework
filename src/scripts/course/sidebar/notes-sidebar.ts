@@ -140,6 +140,15 @@ export function renderNotesSidebar(
   courseId: string,
   courseHref: string,
 ): void {
+  // Preserve collapsed chapters across re-renders
+  const closedNames = new Set<string>();
+  container.querySelectorAll<HTMLDetailsElement>('details.chapter-details').forEach(d => {
+    if (!d.open) {
+      const name = d.querySelector('.chapter-title-text')?.textContent?.trim();
+      if (name) closedNames.add(name);
+    }
+  });
+
   container.innerHTML = '';
   const groups = groupByChapter(notes);
 
@@ -147,11 +156,7 @@ export function renderNotesSidebar(
   let activeDropTarget: HTMLElement | null = null;
 
   function clearDropState() {
-    activeDropTarget?.classList.remove('ns-drag-over');
-    container.querySelectorAll<HTMLElement>('.ns-drop-line').forEach(el => {
-      el.style.height = '0';
-      el.style.background = '';
-    });
+    activeDropTarget?.classList.remove('ns-drag-over', 'ns-drop-active');
     activeDropTarget = null;
   }
 
@@ -159,7 +164,6 @@ export function renderNotesSidebar(
   function makeDropLine(chapter: string, afterSlug: string | null): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'ns-drop-line';
-    li.style.cssText = 'height:0;list-style:none;padding:0;margin:0;transition:height 80ms,background 80ms;border-radius:1px;';
 
     li.addEventListener('dragover', e => {
       if (!draggingSlug) return;
@@ -167,14 +171,12 @@ export function renderNotesSidebar(
       if (activeDropTarget !== li) {
         clearDropState();
         activeDropTarget = li;
-        li.style.height = '3px';
-        li.style.background = 'var(--c-link, #3b82f6)';
+        li.classList.add('ns-drop-active');
       }
     });
     li.addEventListener('dragleave', () => {
       if (activeDropTarget === li) {
-        li.style.height = '0';
-        li.style.background = '';
+        li.classList.remove('ns-drop-active');
         activeDropTarget = null;
       }
     });
@@ -342,13 +344,12 @@ export function renderNotesSidebar(
     // ── Lesson list ──────────────────────────────────────────────────
     const ul = document.createElement('ul');
     ul.className = 'lesson-list';
-    ul.style.cssText = 'padding:0;margin:0;list-style:none;';
 
     ul.appendChild(makeDropLine(group.name, null));
 
     for (const note of group.notes) {
       const li = document.createElement('li');
-      li.style.cssText = 'list-style:none;padding:0;margin:0;';
+      li.className = 'lesson-item';
 
       const isActive = note.slug === activeSlug;
       const relPath = noteSlugToRelPath(note.slug, courseId);
@@ -356,9 +357,17 @@ export function renderNotesSidebar(
 
       const a = document.createElement('a');
       a.href = noteUrl;
-      a.className = 'lesson-link' + (isActive ? ' is-active-lesson' : '');
-      a.textContent = note.title || note.slug.split('/').pop()?.replace('.md', '') || note.slug;
+      a.className = 'lesson-link' + (isActive ? ' active' : '');
       a.draggable = true;
+
+      const titleText = note.title || note.slug.split('/').pop()?.replace('.md', '') || note.slug;
+      const textSpan = document.createElement('span');
+      textSpan.className = 'lesson-link-text';
+      textSpan.textContent = titleText;
+      const trailingSpan = document.createElement('span');
+      trailingSpan.className = 'lesson-link-trailing';
+      a.appendChild(textSpan);
+      a.appendChild(trailingSpan);
 
       a.addEventListener('click', e => {
         const cancelled = !window.dispatchEvent(
@@ -457,6 +466,14 @@ export function renderNotesSidebar(
     chapterEl.appendChild(details);
     container.appendChild(chapterEl);
   }
+
+  // Restore collapsed state from before the re-render
+  if (closedNames.size > 0) {
+    container.querySelectorAll<HTMLDetailsElement>('details.chapter-details').forEach(d => {
+      const name = d.querySelector('.chapter-title-text')?.textContent?.trim();
+      if (name && closedNames.has(name)) d.open = false;
+    });
+  }
 }
 
 // ── CSS injection ─────────────────────────────────────────────────────────
@@ -467,14 +484,34 @@ function injectCss() {
   cssInjected = true;
   const style = document.createElement('style');
   style.textContent = `
+    .ns-drop-line {
+      height: 0;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      transition: height 80ms;
+      overflow: visible;
+      position: relative;
+    }
+    .ns-drop-line.ns-drop-active {
+      height: 2px;
+      background: var(--c-link, #3b82f6);
+      margin: 2px 0;
+    }
+    .ns-drop-line.ns-drop-active::before {
+      content: '';
+      position: absolute;
+      left: -2px;
+      top: -3px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--c-link, #3b82f6);
+    }
     .ns-drag-over.chapter-title {
       background: var(--c-bg-alt, var(--c-bg-mute)) !important;
       outline: 1px dashed var(--c-link, #3b82f6);
       outline-offset: -2px;
-    }
-    [data-notes-sidebar] .is-active-lesson {
-      border-left-color: var(--c-link, #3b82f6) !important;
-      color: var(--c-link, #3b82f6) !important;
     }
     [data-notes-sidebar] .lesson-link[draggable="true"] {
       cursor: grab;
