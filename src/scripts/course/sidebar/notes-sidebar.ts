@@ -184,31 +184,35 @@ export function renderNotesSidebar(
       const slug = draggingSlug;
       if (!slug) return;
 
-      const chapterGroup = groups.find(g => g.name === chapter);
-      if (!chapterGroup) return;
+      try {
+        const chapterGroup = groups.find(g => g.name === chapter);
+        if (!chapterGroup) return;
 
-      const note = notes.find(n => n.slug === slug);
-      const crossChapter = note?.chapter !== chapter;
+        const note = notes.find(n => n.slug === slug);
+        const crossChapter = note?.chapter !== chapter;
 
-      const newOrders = computeNewOrders(
-        crossChapter
-          ? [...chapterGroup.notes, { ...note!, chapter, order: chapterGroup.notes.length }]
-          : chapterGroup.notes,
-        slug,
-        afterSlug,
-      );
+        const newOrders = computeNewOrders(
+          crossChapter
+            ? [...chapterGroup.notes, { ...note!, chapter, order: chapterGroup.notes.length }]
+            : chapterGroup.notes,
+          slug,
+          afterSlug,
+        );
 
-      for (const { slug: s, order } of newOrders) {
-        const existing = notes.find(n => n.slug === s);
-        if (existing && (existing.order !== order || existing.chapter !== chapter)) {
-          const nd = await getNote(courseId, s);
-          const { data: fm, body } = parseFrontmatter(nd.content);
-          (fm as any).order = order;
-          (fm as any).chapter = chapter;
-          await saveNote(courseId, s, serializeFrontmatter(fm as any, body));
+        for (const { slug: s, order } of newOrders) {
+          const existing = notes.find(n => n.slug === s);
+          if (existing && (existing.order !== order || existing.chapter !== chapter)) {
+            const nd = await getNote(courseId, s);
+            const { data: fm, body } = parseFrontmatter(nd.content);
+            (fm as any).order = order;
+            (fm as any).chapter = chapter;
+            await saveNote(courseId, s, serializeFrontmatter(fm as any, body));
+          }
         }
+        dispatchRefresh();
+      } catch (err) {
+        console.error('[notes-sidebar] drop failed:', err);
       }
-      dispatchRefresh();
     });
 
     return li;
@@ -244,42 +248,54 @@ export function renderNotesSidebar(
         {
           label: 'Nueva nota en este capítulo',
           action: async () => {
-            const title = prompt('Título:');
-            if (!title) return;
-            const maxOrder = group.notes.length ? Math.max(...group.notes.map(n => n.order)) : -1;
-            await createNote(courseId, {
-              slug: slugify(title), title, type: 'lesson',
-              chapter: group.name, status: 'draft', order: maxOrder + 1,
-            });
-            dispatchRefresh();
+            try {
+              const title = prompt('Título:');
+              if (!title) return;
+              const maxOrder = group.notes.length ? Math.max(...group.notes.map(n => n.order)) : -1;
+              await createNote(courseId, {
+                slug: slugify(title), title, type: 'lesson',
+                chapter: group.name, status: 'draft', order: maxOrder + 1,
+              });
+              dispatchRefresh();
+            } catch (err) {
+              console.error('[notes-sidebar] mutation failed:', err);
+            }
           },
         },
         {
           label: 'Renombrar capítulo',
           action: async () => {
-            const newName = prompt('Nuevo nombre:', group.name);
-            if (!newName || newName === group.name) return;
-            for (const note of group.notes) {
-              const nd = await getNote(courseId, note.slug);
-              const { data: fm, body } = parseFrontmatter(nd.content);
-              (fm as any).chapter = newName;
-              await saveNote(courseId, note.slug, serializeFrontmatter(fm as any, body));
+            try {
+              const newName = prompt('Nuevo nombre:', group.name);
+              if (!newName || newName === group.name) return;
+              for (const note of group.notes) {
+                const nd = await getNote(courseId, note.slug);
+                const { data: fm, body } = parseFrontmatter(nd.content);
+                (fm as any).chapter = newName;
+                await saveNote(courseId, note.slug, serializeFrontmatter(fm as any, body));
+              }
+              dispatchRefresh();
+            } catch (err) {
+              console.error('[notes-sidebar] mutation failed:', err);
             }
-            dispatchRefresh();
           },
         },
         {
           label: 'Nuevo subcapítulo',
           action: async () => {
-            const chapterName = prompt('Nombre del capítulo:');
-            if (!chapterName) return;
-            const title = prompt('Título de la primera nota:');
-            if (!title) return;
-            await createNote(courseId, {
-              slug: slugify(title), title, type: 'lesson',
-              chapter: chapterName, status: 'draft', order: 0,
-            });
-            dispatchRefresh();
+            try {
+              const chapterName = prompt('Nombre del capítulo:');
+              if (!chapterName) return;
+              const title = prompt('Título de la primera nota:');
+              if (!title) return;
+              await createNote(courseId, {
+                slug: slugify(title), title, type: 'lesson',
+                chapter: chapterName, status: 'draft', order: 0,
+              });
+              dispatchRefresh();
+            } catch (err) {
+              console.error('[notes-sidebar] mutation failed:', err);
+            }
           },
         },
       ]);
@@ -306,15 +322,19 @@ export function renderNotesSidebar(
       clearDropState();
       const slug = draggingSlug;
       if (!slug) return;
-      const note = notes.find(n => n.slug === slug);
-      if (!note || note.chapter === group.name) return;
-      const maxOrder = group.notes.length ? Math.max(...group.notes.map(n => n.order)) : -1;
-      const nd = await getNote(courseId, slug);
-      const { data: fm, body } = parseFrontmatter(nd.content);
-      (fm as any).chapter = group.name;
-      (fm as any).order = maxOrder + 1;
-      await saveNote(courseId, slug, serializeFrontmatter(fm as any, body));
-      dispatchRefresh();
+      try {
+        const note = notes.find(n => n.slug === slug);
+        if (!note || note.chapter === group.name) return;
+        const maxOrder = group.notes.length ? Math.max(...group.notes.map(n => n.order)) : -1;
+        const nd = await getNote(courseId, slug);
+        const { data: fm, body } = parseFrontmatter(nd.content);
+        (fm as any).chapter = group.name;
+        (fm as any).order = maxOrder + 1;
+        await saveNote(courseId, slug, serializeFrontmatter(fm as any, body));
+        dispatchRefresh();
+      } catch (err) {
+        console.error('[notes-sidebar] drop failed:', err);
+      }
     });
 
     details.appendChild(summary);
@@ -383,34 +403,46 @@ export function renderNotesSidebar(
           {
             label: 'Renombrar slug',
             action: async () => {
-              const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
-              const newBare = prompt('Nuevo slug (sin extensión):', bare);
-              if (!newBare || newBare === bare) return;
-              await moveNote(courseId, bare, newBare);
-              dispatchRefresh();
+              try {
+                const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
+                const newBare = prompt('Nuevo slug (sin extensión):', bare);
+                if (!newBare || newBare === bare) return;
+                await moveNote(courseId, bare, newBare);
+                dispatchRefresh();
+              } catch (err) {
+                console.error('[notes-sidebar] mutation failed:', err);
+              }
             },
           },
           {
             label: 'Eliminar',
             danger: true,
             action: async () => {
-              if (!confirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`)) return;
-              const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
-              await deleteNote(courseId, bare);
-              dispatchRefresh();
+              try {
+                if (!confirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`)) return;
+                const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
+                await deleteNote(courseId, bare);
+                dispatchRefresh();
+              } catch (err) {
+                console.error('[notes-sidebar] mutation failed:', err);
+              }
             },
           },
           { separator: true },
           {
             label: 'Nueva nota aquí',
             action: async () => {
-              const title = prompt('Título:');
-              if (!title) return;
-              await createNote(courseId, {
-                slug: slugify(title), title, type: 'lesson',
-                chapter: note.chapter, status: 'draft', order: note.order + 0.5,
-              });
-              dispatchRefresh();
+              try {
+                const title = prompt('Título:');
+                if (!title) return;
+                await createNote(courseId, {
+                  slug: slugify(title), title, type: 'lesson',
+                  chapter: note.chapter, status: 'draft', order: note.order + 0.5,
+                });
+                dispatchRefresh();
+              } catch (err) {
+                console.error('[notes-sidebar] mutation failed:', err);
+              }
             },
           },
         ]);
