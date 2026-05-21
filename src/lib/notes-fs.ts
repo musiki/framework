@@ -58,38 +58,49 @@ export function listCourseNotes(courseId: string): NoteListItem[] {
   const source = resolveCourseSource(courseId);
   if (!source) return [];
 
-  const entries = fs.readdirSync(baseDir, { withFileTypes: true });
   const notes: NoteListItem[] = [];
 
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.md') || entry.name === '_index.md') continue;
+  const scanDir = (dir: string, relDir: string) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        scanDir(path.join(dir, entry.name), relDir ? `${relDir}/${entry.name}` : entry.name);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.md') || entry.name === '_index.md') continue;
 
-    const slug = entry.name.slice(0, -3);
-    const repoPath = `cursos/${courseId}/${entry.name}`;
-    const file = getEditableLocalRepoFile(source, repoPath);
-    if (!file) continue;
+      const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
+      const repoPath = `cursos/${courseId}/${relPath}`;
+      const file = getEditableLocalRepoFile(source, repoPath);
+      if (!file) continue;
 
-    const { data } = matter(file.content);
-    notes.push({
-      slug,
-      title: String(data.title || slug),
-      type: String(data.type || 'lesson'),
-      chapter: String(data.chapter || ''),
-      status: String(data.status || 'draft'),
-      order: Number(data.order) || 0,
-      theme: data.theme ? String(data.theme) : undefined,
-      filePath: repoPath,
-    });
-  }
+      const { data } = matter(file.content);
+      const chapter = String(data.chapter || relDir || '');
+      notes.push({
+        slug: repoPath,
+        title: String(data.title || entry.name.slice(0, -3)),
+        type: String(data.type || 'lesson'),
+        chapter,
+        status: String(data.status || 'draft'),
+        order: Number(data.order) || 0,
+        theme: data.theme ? String(data.theme) : undefined,
+        filePath: repoPath,
+      });
+    }
+  };
 
+  scanDir(baseDir, '');
   return notes.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
 }
 
-export function getCourseNote(courseId: string, slug: string): { content: string; filePath: string } | null {
+export function getCourseNote(courseId: string, slugOrPath: string): { content: string; filePath: string } | null {
   const source = resolveCourseSource(courseId);
   if (!source) return null;
 
-  const repoPath = sanitizeRepoMarkdownPath(`cursos/${courseId}/${slug}.md`);
+  // Accept full repoPath (cursos/s123/chapter/file.md) or bare slug
+  const repoPath = slugOrPath.startsWith(`cursos/${courseId}/`)
+    ? slugOrPath
+    : sanitizeRepoMarkdownPath(`cursos/${courseId}/${slugOrPath}.md`);
   if (!repoPath) return null;
 
   const file = getEditableLocalRepoFile(source, repoPath);
@@ -98,15 +109,17 @@ export function getCourseNote(courseId: string, slug: string): { content: string
   return { content: file.content, filePath: repoPath };
 }
 
-export function saveCourseNote(courseId: string, slug: string, content: string): { filePath: string } {
+export function saveCourseNote(courseId: string, slugOrPath: string, content: string): { filePath: string } {
   const source = resolveCourseSource(courseId);
   if (!source) throw new Error(`Course not found: ${courseId}`);
 
-  const repoPath = sanitizeRepoMarkdownPath(`cursos/${courseId}/${slug}.md`);
+  const repoPath = slugOrPath.startsWith(`cursos/${courseId}/`)
+    ? slugOrPath
+    : sanitizeRepoMarkdownPath(`cursos/${courseId}/${slugOrPath}.md`);
   if (!repoPath) throw new Error('Invalid slug');
 
   if (!getEditableLocalRepoFile(source, repoPath)) {
-    throw new Error(`Note not found: ${slug}`);
+    throw new Error(`Note not found: ${slugOrPath}`);
   }
 
   writeEditableLocalRepoFile(source, repoPath, content);
