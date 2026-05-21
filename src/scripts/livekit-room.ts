@@ -11708,6 +11708,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       updateActiveHyperpianoAudio();
 
+      syncPresentationComboboxes(true);
       syncAllParticipants();
     }, 100);
   });
@@ -11885,14 +11886,123 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     return presentationSelect;
   };
 
+  type PresentationComboboxOption = {
+    label: string;
+    searchText: string;
+    value: string;
+  };
+
+  const readPresentationComboboxOptions = (select: HTMLSelectElement): PresentationComboboxOption[] =>
+    Array.from(select.options).map((option) => {
+      const label = normalizeText(option.textContent || option.label || option.value);
+      const value = option.value;
+      const searchText = [
+        label,
+        value,
+        option.dataset.courseId,
+        option.dataset.lessonId,
+      ]
+        .map((part) => normalizeText(part || '').toLowerCase())
+        .filter(Boolean)
+        .join(' ');
+      return { label, searchText, value };
+    });
+
+  const getPresentationComboboxParts = (input: HTMLInputElement) => {
+    const combo = input.closest<HTMLElement>('[data-presentation-combobox]');
+    if (!combo || combo.closest('#musiki-pod-templates')) return null;
+    const menu = combo.querySelector<HTMLElement>('[data-presentation-combobox-menu]');
+    const pod = combo.closest<HTMLElement>('[data-pod="presentation"]');
+    const select = pod?.querySelector<HTMLSelectElement>('[data-presentation-select]') || getPresentationSelect();
+    if (!(menu instanceof HTMLElement) || !(select instanceof HTMLSelectElement)) return null;
+    return { combo, input, menu, select };
+  };
+
+  const syncPresentationComboboxInput = (input: HTMLInputElement, force = false) => {
+    const parts = getPresentationComboboxParts(input);
+    if (!parts) return;
+    const { menu, select } = parts;
+    const selectedOption = Array.from(select.options).find((option) => option.value === select.value);
+    input.disabled = select.disabled;
+    if (force || document.activeElement !== input) {
+      input.value = select.value && selectedOption
+        ? normalizeText(selectedOption.textContent || selectedOption.label || selectedOption.value)
+        : '';
+    }
+    if (select.disabled) {
+      menu.hidden = true;
+    }
+  };
+
+  const syncPresentationComboboxes = (force = false) => {
+    root.querySelectorAll<HTMLInputElement>('[data-presentation-combobox-input]').forEach((input) => {
+      if (input.closest('#musiki-pod-templates')) return;
+      syncPresentationComboboxInput(input, force);
+    });
+  };
+
+  const selectPresentationComboboxValue = (input: HTMLInputElement, value: string) => {
+    const parts = getPresentationComboboxParts(input);
+    if (!parts || parts.select.disabled) return;
+    const values = new Set(Array.from(parts.select.options).map((option) => option.value));
+    if (!values.has(value)) return;
+    parts.select.value = value;
+    syncPresentationComboboxInput(input, true);
+    parts.menu.hidden = true;
+    parts.select.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  const renderPresentationComboboxMenu = (input: HTMLInputElement) => {
+    const parts = getPresentationComboboxParts(input);
+    if (!parts) return;
+    const { menu, select } = parts;
+    input.disabled = select.disabled;
+    if (select.disabled) {
+      menu.hidden = true;
+      return;
+    }
+
+    const tokens = normalizeText(input.value).toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = readPresentationComboboxOptions(select)
+      .filter((option) => tokens.every((token) => option.searchText.includes(token)));
+
+    menu.innerHTML = '';
+
+    if (matches.length === 0) {
+      const item = document.createElement('li');
+      item.className = 'conference-presentation-combobox-empty';
+      item.textContent = 'Sin coincidencias.';
+      menu.appendChild(item);
+    } else {
+      for (const option of matches) {
+        const item = document.createElement('li');
+        item.className = 'conference-presentation-combobox-item';
+        item.dataset.presentationComboboxItem = 'true';
+        item.dataset.value = option.value;
+        item.tabIndex = 0;
+        item.setAttribute('role', 'option');
+        item.title = option.label;
+        item.textContent = option.label;
+        if (option.value === select.value) {
+          item.classList.add('conference-presentation-combobox-item--active');
+        }
+        menu.appendChild(item);
+      }
+    }
+
+    menu.hidden = false;
+  };
+
   const syncPresentationSelection = (href: string | null) => {
     const sel = getPresentationSelect();
     if (!(sel instanceof HTMLSelectElement)) return;
     if (href && Array.from(sel.options).some((option) => option.value === href)) {
       sel.value = href;
+      syncPresentationComboboxes(true);
       return;
     }
     sel.value = '';
+    syncPresentationComboboxes(true);
   };
 
   const refreshDeviceOptions = async (requestPermissions = false) => {
@@ -12166,6 +12276,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         (connected && localRole !== 'teacher') ||
         (!presentation.getHref() && !normalizeText(presentationSelect.value));
     }
+    syncPresentationComboboxes();
     chatController.syncControlState();
     void refreshMidiOptions();
     root.querySelectorAll<HTMLButtonElement>('[data-action="raise-hand"]').forEach((button) => {
@@ -15332,12 +15443,63 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         successMessage: selectedHref ? 'Escena Reveal cargada.' : 'Escena limpia.',
       });
       setControlState();
+      syncPresentationComboboxes(true);
     }
+  });
+
+  root.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!target.matches('[data-presentation-combobox-input]')) return;
+    renderPresentationComboboxMenu(target);
+  });
+
+  root.addEventListener('focusin', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!target.matches('[data-presentation-combobox-input]')) return;
+    renderPresentationComboboxMenu(target);
+  });
+
+  root.addEventListener('keydown', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.matches('[data-presentation-combobox-input]')) {
+      if (event.key === 'Escape') {
+        const parts = getPresentationComboboxParts(target);
+        if (parts) parts.menu.hidden = true;
+        syncPresentationComboboxInput(target, true);
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const parts = getPresentationComboboxParts(target);
+        if (!parts) return;
+        if (parts.menu.hidden) renderPresentationComboboxMenu(target);
+        const firstItem = parts.menu.querySelector<HTMLElement>('[data-presentation-combobox-item]');
+        if (firstItem) {
+          selectPresentationComboboxValue(target, firstItem.dataset.value || '');
+        } else {
+          parts.menu.hidden = true;
+        }
+      }
+      return;
+    }
+
+    const item = target instanceof HTMLElement
+      ? target.closest<HTMLElement>('[data-presentation-combobox-item]')
+      : null;
+    if (!item || (event.key !== 'Enter' && event.key !== ' ')) return;
+    const combo = item.closest<HTMLElement>('[data-presentation-combobox]');
+    const input = combo?.querySelector<HTMLInputElement>('[data-presentation-combobox-input]');
+    if (!input) return;
+    event.preventDefault();
+    selectPresentationComboboxValue(input, item.dataset.value || '');
   });
 
   if (presentationClearButton instanceof HTMLButtonElement) {
     presentationClearButton.addEventListener('click', () => {
       presentationSelect.value = '';
+      syncPresentationComboboxes(true);
       schedulePresentationLoad({
         broadcast: canLeadSession(),
         href: null,
@@ -15349,6 +15511,28 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   root.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+
+    const presentationItem = target.closest<HTMLElement>('[data-presentation-combobox-item]');
+    if (presentationItem && root.contains(presentationItem)) {
+      const combo = presentationItem.closest<HTMLElement>('[data-presentation-combobox]');
+      const input = combo?.querySelector<HTMLInputElement>('[data-presentation-combobox-input]');
+      if (input) {
+        event.preventDefault();
+        selectPresentationComboboxValue(input, presentationItem.dataset.value || '');
+      }
+      return;
+    }
+
+    if (!target.closest('[data-presentation-combobox]')) {
+      root.querySelectorAll<HTMLElement>('[data-presentation-combobox-menu]').forEach((menu) => {
+        menu.hidden = true;
+      });
+      root.querySelectorAll<HTMLInputElement>('[data-presentation-combobox-input]').forEach((input) => {
+        if (input.closest('#musiki-pod-templates')) return;
+        if (document.activeElement === input) return;
+        syncPresentationComboboxInput(input, true);
+      });
+    }
 
     const handButton = target.closest<HTMLButtonElement>('[data-action="raise-hand"]');
     if (handButton && root.contains(handButton)) {

@@ -61,9 +61,19 @@ const { presentationOptions = [] } = Astro.props;
         </div>
       </div>
       <div class="musiki-pod-toolbar" data-teacher-only style="margin-top: auto;">
+        <div class="conference-presentation-combobox" data-presentation-combobox>
+          <input
+            type="text"
+            class="conference-presentation-combobox-input"
+            data-presentation-combobox-input
+            placeholder="Buscar presentación..."
+            autocomplete="off"
+          />
+          <ul class="conference-presentation-combobox-menu" data-presentation-combobox-menu hidden></ul>
+        </div>
         <select
           name="presentation"
-          class="musiki-pod-input"
+          class="sr-only"
           data-presentation-select
         >
           <option value="">Cerrar diapositivas</option>
