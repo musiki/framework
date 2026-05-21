@@ -458,3 +458,61 @@ export function renderNotesSidebar(
     container.appendChild(chapterEl);
   }
 }
+
+// ── CSS injection ─────────────────────────────────────────────────────────
+
+let cssInjected = false;
+function injectCss() {
+  if (cssInjected || typeof document === 'undefined') return;
+  cssInjected = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    .ns-drag-over.chapter-title {
+      background: var(--c-bg-alt, var(--c-bg-mute)) !important;
+      outline: 1px dashed var(--c-link, #3b82f6);
+      outline-offset: -2px;
+    }
+    [data-notes-sidebar] .is-active-lesson {
+      border-left-color: var(--c-link, #3b82f6) !important;
+      color: var(--c-link, #3b82f6) !important;
+    }
+    [data-notes-sidebar] .lesson-link[draggable="true"] {
+      cursor: grab;
+    }
+    [data-notes-sidebar] .lesson-link[draggable="true"]:active {
+      cursor: grabbing;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+
+export function initNotesSidebar(
+  container: HTMLElement,
+  courseId: string,
+  courseHref: string,
+  activeSlug: string | null,
+): void {
+  injectCss();
+
+  let currentActive = activeSlug;
+
+  async function refresh() {
+    try {
+      const { notes } = await listNotes(courseId);
+      renderNotesSidebar(container, notes, currentActive, courseId, courseHref);
+    } catch (err) {
+      console.error('[notes-sidebar] failed to load notes:', err);
+    }
+  }
+
+  window.addEventListener('notes-sidebar-refresh', () => { void refresh(); });
+
+  window.addEventListener('note-open', (e: Event) => {
+    const detail = (e as CustomEvent<{ slug?: string }>).detail;
+    if (detail?.slug) currentActive = detail.slug;
+  });
+
+  void refresh();
+}
