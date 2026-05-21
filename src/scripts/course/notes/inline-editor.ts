@@ -265,6 +265,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
 
   // Show mount element, hide content
   contentEl.style.display = 'none';
+  mountEl.removeAttribute('hidden');
   mountEl.style.display = 'flex';
   mountEl.style.flexDirection = 'column';
   mountEl.style.overflow = 'hidden';
@@ -296,6 +297,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     currentSlug = null;
     notesList = [];
     mountEl.style.display = 'none';
+    mountEl.setAttribute('hidden', '');
     mountEl.innerHTML = '';
     contentEl.style.display = '';
   }
