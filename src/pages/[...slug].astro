@@ -665,18 +665,6 @@ const hasPageHistoryInfo =
 const currentEntrySourceDir = currentEntrySourcePath.includes('/')
   ? currentEntrySourcePath.split('/').slice(0, -1).join('/')
   : `cursos/${canonicalCourseId}`;
-const teacherCreateHref = canManageLiveInteractions
-  ? `${Astro.url.pathname}?mode=create&dir=${encodeURIComponent(currentEntrySourceDir)}`
-  : '';
-const teacherEditHref =
-  canManageLiveInteractions && currentEntrySourcePath
-    ? `${Astro.url.pathname}?mode=edit`
-    : '';
-const cleanEditorSearchParams = new URLSearchParams(Astro.url.searchParams);
-cleanEditorSearchParams.delete('mode');
-cleanEditorSearchParams.delete('path');
-cleanEditorSearchParams.delete('dir');
-const cleanEditorHref = `${Astro.url.pathname}${cleanEditorSearchParams.toString() ? `?${cleanEditorSearchParams.toString()}` : ''}`;
 const courseForumHref = `${courseHref}/foro`;
 const forumShellHref = Astro.url.pathname;
 const lessonForumHref = isLessonPage
@@ -782,159 +770,16 @@ const forumThreadPrompt = sessionFirstName
   : '¿Qué pensás?';
 const localContentAdminEnabled = isLocalContentAdminEnabled();
 
-// Integrated Editor Logic
-const editorMode = String(Astro.url.searchParams.get('mode') || '').trim().toLowerCase();
-const isEditing = canManageLiveInteractions && editorMode === 'edit';
-const isCreating = canManageLiveInteractions && editorMode === 'create';
-const isEditorActive = isEditing || isCreating;
-
-let editorInitialContent = '';
-let editorInitialSha = '';
-let editorError = '';
-let editorTargetPath = isEditing ? currentEntrySourcePath : (sanitizeRepoMarkdownPath(Astro.url.searchParams.get('path') || '') || buildDefaultCreatePath(canonicalCourseId, currentEntrySourceDir));
-
-if (isEditorActive) {
-  if (isEditing) {
-    try {
-      const source = resolveCourseSource(canonicalCourseId);
-
-      if (!source?.repo) {
-        editorError = `No hay repo fuente configurado para ${canonicalCourseId}.`;
-      } else {
-        const localFile = getEditableLocalRepoFile(source, currentEntrySourcePath);
-        const githubAppConfigured = localContentAdminEnabled || isGitHubAppConfigured();
-        const remoteFile = localFile
-          ? localFile
-          : (!githubAppConfigured
-              ? null
-              : await getRepoFile({
-                  repoFullName: source.repo,
-                  path: currentEntrySourcePath,
-                  ref: source.branch || 'main',
-                }));
-
-        if (!remoteFile) {
-          editorError = githubAppConfigured
-            ? 'La nota no existe ni en local ni en GitHub, o no pudo resolverse.'
-            : 'La nota no existe en local y la GitHub App no está configurada en el server.';
-        } else {
-          editorTargetPath = remoteFile.path || currentEntrySourcePath;
-          editorInitialContent = remoteFile.content || '';
-          editorInitialSha = remoteFile.sha || '';
-        }
-      }
-    } catch (err: any) {
-      editorError = err?.message || 'Error al cargar datos para el editor.';
-    }
-  } else {
-    // Mode Create
-    editorInitialContent = `---
-type: lesson
-title: ""
-chapter: ""
-status:
-order:
----
-
-# Nueva nota
-
-`;
-  }
-}
 ---
 
 <!doctype html>
 <html lang="es">
   <head>
     <BaseHead
-      title={isEditorActive ? `${isCreating ? 'Creando' : 'Editando'}: ${currentEntry.data.title || 'Nueva nota'}` : (currentEntry.data.title || courseIndex?.data?.title)}
+      title={currentEntry.data.title || courseIndex?.data?.title}
       description={lessonDescription}
     />
     <ClientRouter />
-    {isEditorActive && (
-      <style>
-        .content-area.is-editor-active {
-          position: relative;
-        }
-        .class-content[hidden] {
-          display: none !important;
-        }
-        .integrated-editor-shell {
-          max-width: 76ch;
-          margin: 0 auto;
-        }
-        .integrated-editor {
-          display: grid;
-          gap: 1.2rem;
-        }
-        .editor-card {
-          border: 1px solid var(--c-border);
-          border-radius: 14px;
-          background: var(--c-bg);
-          padding: 1.2rem;
-        }
-        .editor-field {
-          display: grid;
-          gap: 0.4rem;
-          margin-bottom: 1rem;
-        }
-        .editor-label {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: var(--c-fg-dim);
-          font-weight: 700;
-        }
-        .editor-input, .editor-textarea {
-          width: 100%;
-          border: 1px solid var(--c-border);
-          border-radius: 10px;
-          background: var(--c-bg-mute);
-          color: var(--c-fg);
-          font: inherit;
-          padding: 0.7rem 0.8rem;
-        }
-        .editor-textarea {
-          min-height: 65dvh;
-          font-family: 'Dank Mono', 'SFMono-Regular', monospace;
-          font-size: 0.95rem;
-          line-height: 1.5;
-          resize: vertical;
-        }
-        .editor-actions {
-          display: flex;
-          align-items: center;
-          gap: 0.8rem;
-          margin-top: 1rem;
-        }
-        .editor-btn {
-          height: 2.4rem;
-          padding: 0 1.2rem;
-          border-radius: 8px;
-          border: 1px solid var(--c-border);
-          background: var(--c-bg-mute);
-          color: var(--c-fg);
-          font-weight: 700;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          text-decoration: none;
-        }
-        .editor-btn--primary {
-          background: var(--c-fg);
-          color: var(--c-bg);
-          border-color: var(--c-fg);
-        }
-        .editor-status {
-          font-size: 0.9rem;
-          color: var(--c-fg-dim);
-          min-height: 1.4rem;
-        }
-        .editor-status[data-tone='success'] { color: #14713e; }
-        .editor-status[data-tone='error'] { color: #b3261e; }
-      </style>
-    )}
     <style is:global>
       html, body {
         overflow: hidden !important;
@@ -3518,14 +3363,12 @@ order:
   </head>
   <body>
     <Header
-      showPageInfoToggle={!isEditorActive}
+      showPageInfoToggle={true}
       courseId={canonicalCourseId || courseSlug}
       activeCourseId={canonicalCourseId || courseSlug}
       activeCourseCode={activeCourseCode}
       presentationHref={presentationHref}
       performativeRoomHref={performativeRoomHref}
-      teacherCreateHref={teacherCreateHref}
-      teacherEditHref={teacherEditHref}
     />
 
     <main
@@ -3572,14 +3415,25 @@ order:
               <span class="course-title-link-text">{courseIndex?.data?.title}</span>
             </a>
             <div class="course-title-actions">
-              {(teacherEditHref || teacherCreateHref) && (
+              {canManageLiveInteractions && (
                 <div class="course-teacher-actions" aria-label="Acciones docentes">
-                  {teacherEditHref && (
-                    <a href={teacherEditHref} class="teacher-action-btn" title="Editar esta nota" aria-label="Editar">E</a>
+                  {lessonSlug && (
+                    <button
+                      class="teacher-action-btn"
+                      title="Editar esta nota"
+                      aria-label="Editar"
+                      data-notes-action="edit"
+                      data-course-id={canonicalCourseId || courseSlug}
+                      data-slug={lessonSlug}
+                    >E</button>
                   )}
-                  {teacherCreateHref && (
-                    <a href={teacherCreateHref} class="teacher-action-btn teacher-action-btn--create" title="Crear nueva nota" aria-label="Crear">C</a>
-                  )}
+                  <button
+                    class="teacher-action-btn teacher-action-btn--create"
+                    title="Crear nueva nota"
+                    aria-label="Crear"
+                    data-notes-action="create"
+                    data-course-id={canonicalCourseId || courseSlug}
+                  >C</button>
                 </div>
               )}
               <button
@@ -3900,7 +3754,7 @@ order:
       </aside>
 
       <!-- Main Content -->
-      <article class:list={['content-area', { 'is-editor-active': isEditorActive }]} transition:name="course-content" transition:animate="fade">
+      <article class="content-area" transition:name="course-content" transition:animate="fade">
         {isLessonPage && currentEntryStatus === 'draft' && (
           <div class="draft-badge">Material en preparación</div>
         )}
@@ -3910,53 +3764,7 @@ order:
           </div>
         )}
 
-        {isEditorActive && (
-          <section class="integrated-editor-shell" data-inline-editor>
-            <div class="integrated-editor">
-              <section class="editor-card">
-                <h1 style="margin:0; font-size: 1.4rem;">{isCreating ? 'Crear nota' : `Editor: ${currentEntry.data.title}`}</h1>
-                <p style="margin: 0.4rem 0 0; color: var(--c-fg-dim); font-size: 0.9rem;">
-                  {isCreating ? `Creando nueva nota en ${activeCourseCode}.` : `Editando ${editorTargetPath} en ${activeCourseCode}.`}
-                </p>
-              </section>
-
-              <section class="editor-card">
-                <form
-                  id="integrated-content-editor-form"
-                  data-clean-href={cleanEditorHref}
-                  data-mode={isCreating ? 'create' : 'edit'}
-                >
-                  <input type="hidden" name="courseId" value={canonicalCourseId} />
-                  <input type="hidden" name="mode" value={isCreating ? 'create' : 'edit'} />
-                  <input type="hidden" name="sha" value={editorInitialSha} />
-                  <input type="hidden" name="targetPath" value={editorTargetPath} />
-
-                  <div class="editor-field">
-                    <label class="editor-label">Resumen de cambios</label>
-                    <input class="editor-input" type="text" name="editSummary" placeholder="¿Qué cambiaste?" autocomplete="off" />
-                  </div>
-
-                  <div class="editor-field">
-                    <label class="editor-label">Markdown</label>
-                    <textarea class="editor-textarea" name="content" spellcheck="false">{editorInitialContent}</textarea>
-                  </div>
-
-                  <div class="editor-actions">
-                    <button type="submit" class="editor-btn editor-btn--primary" disabled={Boolean(editorError)}>
-                      {isCreating ? 'Crear nota' : 'Guardar cambios'}
-                    </button>
-                    <a href={cleanEditorHref} class="editor-btn">Cancelar</a>
-                    <span id="integrated-editor-status" class="editor-status" data-tone={editorError ? 'error' : 'idle'}>
-                      {editorError}
-                    </span>
-                  </div>
-                </form>
-              </section>
-            </div>
-          </section>
-        )}
-
-      <div class="class-content" data-class-content data-entry-type={isRecursosEditorPage ? 'recursos-editor' : currentEntryType} hidden={isEditorActive}>
+      <div class="class-content" data-class-content data-entry-type={isRecursosEditorPage ? 'recursos-editor' : currentEntryType}>
         {isRecursosEditorPage ? (
           <RecursosEditor
             courseId={canonicalCourseId || courseSlug}
@@ -3968,6 +3776,7 @@ order:
           dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />
         )}
       </div>
+      <div id="notes-editor-mount" hidden style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;"></div>
 
         {isAssignment && (
           <div style="margin-top: 2rem; padding: 1.5rem; background: var(--c-bg-mute); border-radius: 8px;">
@@ -4343,14 +4152,29 @@ order:
         >↑</button>
       </div>
     </main>
-    {isEditorActive && (
+    {canManageLiveInteractions && (
       <script>
-        import { mountIntegratedCourseNotesEditor } from '../scripts/course/notes/index.ts';
+        import { mountInlineNotesEditor } from '../scripts/course/notes/inline-editor.ts';
 
-        mountIntegratedCourseNotesEditor();
-        document.addEventListener('astro:page-load', () => {
-          mountIntegratedCourseNotesEditor();
-        });
+        function bootInlineEditor() {
+          const mountEl = document.getElementById('notes-editor-mount') as HTMLElement | null;
+          const contentEl = document.querySelector<HTMLElement>('[data-class-content]');
+          if (!mountEl || !contentEl) return;
+
+          document.querySelectorAll<HTMLElement>('[data-notes-action]').forEach(btn => {
+            if (btn.dataset.notesBound) return;
+            btn.dataset.notesBound = 'true';
+            btn.addEventListener('click', () => {
+              const mode = (btn.dataset.notesAction || 'edit') as 'edit' | 'create';
+              const courseId = btn.dataset.courseId || '';
+              const slug = btn.dataset.slug || null;
+              mountInlineNotesEditor({ mountEl: mountEl!, contentEl: contentEl!, courseId, slug, mode });
+            });
+          });
+        }
+
+        bootInlineEditor();
+        document.addEventListener('astro:page-load', bootInlineEditor);
       </script>
     )}
     <div id="forum-media-modal" class="forum-media-modal" hidden aria-hidden="true">
