@@ -1,5 +1,5 @@
 // src/scripts/course/dockview-workspace.ts
-import { DockviewComponent } from 'dockview-core';
+import { DockviewComponent, positionToDirection } from 'dockview-core';
 import { marked, type Renderer } from 'marked';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -233,7 +233,7 @@ function injectWorkspaceCss(containerId: string) {
 
     /* Note title — subtle but always visible */
     .cnw-title {
-      font-size: 9px;
+      font-size: 11px;
       color: var(--c-fg-subtle, var(--c-fg-dim));
       opacity: 0.5;
       flex: 1;
@@ -683,20 +683,16 @@ export function initDockviewWorkspace(
     dockview.addPanel({ id: pid, component: 'note-panel' });
   }
 
-  function openNote(slug: string, mode: NoteMode = 'preview', split = false): void {
+  function openNote(slug: string, mode: NoteMode = 'preview', split = false, direction: 'left' | 'right' | 'above' | 'below' | 'within' = 'right'): void {
     const panelId = `note-${slug}`;
     const existing = dockview.getGroupPanel(panelId);
 
     if (existing && !split) {
-      // Navigate existing panel to new slug (same panel, new content)
       const state = panelStates.get(panelId);
       if (!state) return;
       state.slug = slug;
       if (state.mode === 'preview') renderPreview(state.bodyEl, courseId, slug);
-      else {
-        state.persistence?.destroy();
-        enterEditMode(state);
-      }
+      else { state.persistence?.destroy(); enterEditMode(state); }
       return;
     }
 
@@ -710,7 +706,7 @@ export function initDockviewWorkspace(
       id: newId,
       component: 'note-panel',
       position: referencePanel
-        ? { referencePanel: referencePanel.id, direction: 'right' }
+        ? { referencePanel: referencePanel.id, direction }
         : undefined,
     });
   }
@@ -747,7 +743,11 @@ export function initDockviewWorkspace(
     const slug = event.nativeEvent.dataTransfer?.getData('text/plain')?.trim();
     if (slug && slug.startsWith('cursos/')) {
       try {
-        openNote(slug, 'preview', dockview.panels.length > 0);
+        const split = dockview.panels.length > 0;
+        const dir = split && event.position
+          ? positionToDirection(event.position as any)
+          : 'right';
+        openNote(slug, 'preview', split, dir as any);
       } catch (err) {
         console.error('[cnw] drop openNote failed:', err);
       }
