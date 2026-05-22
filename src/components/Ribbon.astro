@@ -77,31 +77,33 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </svg>
   </button>
 
-  <!-- Vivo (sala performativa) — always shown, disabled when no room -->
+  <!-- Vivo (sala performativa) — camera icon, accent color, always shown -->
   {hasVivo ? (
     <a
       href={performativeRoomHref}
-      class="ribbon-item ribbon-item--mobile-visible"
+      class="ribbon-item ribbon-item--vivo ribbon-item--mobile-visible"
       aria-label="Sala vivo"
       title="Sala vivo"
     >
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-        <path d="M8 3l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="12" cy="14" r="3" stroke="currentColor" stroke-width="2"/>
+        <rect x="1" y="7" width="14" height="10" rx="2" fill="currentColor" opacity="0.18"/>
+        <rect x="1" y="7" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M15 10l6.5-3.5v11L15 14V10Z" fill="currentColor"/>
+        <circle cx="8" cy="12" r="2" fill="currentColor"/>
       </svg>
     </a>
   ) : (
     <span
-      class="ribbon-item ribbon-item--mobile-visible ribbon-item--disabled"
+      class="ribbon-item ribbon-item--vivo ribbon-item--vivo--off ribbon-item--mobile-visible"
       aria-label="Sala vivo (no disponible)"
       title="Sala vivo (no disponible)"
       aria-disabled="true"
     >
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-        <path d="M8 3l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="12" cy="14" r="3" stroke="currentColor" stroke-width="2"/>
+        <rect x="1" y="7" width="14" height="10" rx="2" fill="currentColor" opacity="0.18"/>
+        <rect x="1" y="7" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M15 10l6.5-3.5v11L15 14V10Z" fill="currentColor"/>
+        <circle cx="8" cy="12" r="2" fill="currentColor"/>
       </svg>
     </span>
   )}
@@ -277,19 +279,21 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     )}
     <!-- Vivo -->
     {hasVivo ? (
-      <a href={performativeRoomHref} class="ribbon-mas-icon" aria-label="Sala vivo" title="Sala vivo">
+      <a href={performativeRoomHref} class="ribbon-mas-icon ribbon-mas-icon--vivo" aria-label="Sala vivo" title="Sala vivo">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-          <path d="M8 3l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="12" cy="14" r="3" stroke="currentColor" stroke-width="2"/>
+          <rect x="1" y="7" width="14" height="10" rx="2" fill="currentColor" opacity="0.18"/>
+          <rect x="1" y="7" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M15 10l6.5-3.5v11L15 14V10Z" fill="currentColor"/>
+          <circle cx="8" cy="12" r="2" fill="currentColor"/>
         </svg>
       </a>
     ) : (
-      <span class="ribbon-mas-icon ribbon-mas-icon--disabled" aria-label="Sala vivo (no disponible)" aria-disabled="true">
+      <span class="ribbon-mas-icon ribbon-mas-icon--vivo ribbon-mas-icon--disabled" aria-label="Sala vivo (no disponible)" aria-disabled="true">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-          <path d="M8 3l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="12" cy="14" r="3" stroke="currentColor" stroke-width="2"/>
+          <rect x="1" y="7" width="14" height="10" rx="2" fill="currentColor" opacity="0.18"/>
+          <rect x="1" y="7" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M15 10l6.5-3.5v11L15 14V10Z" fill="currentColor"/>
+          <circle cx="8" cy="12" r="2" fill="currentColor"/>
         </svg>
       </span>
     )}
@@ -362,6 +366,27 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     opacity: 0.35;
     cursor: default;
     pointer-events: none;
+  }
+
+  /* Vivo — live camera, red accent so it pops */
+  .ribbon-item--vivo {
+    color: #e53e3e;
+  }
+  .ribbon-item--vivo:hover {
+    color: #fc4444;
+    background: color-mix(in srgb, #e53e3e 12%, transparent);
+  }
+  .ribbon-item--vivo--off {
+    color: color-mix(in srgb, var(--c-fg) 25%, transparent);
+    pointer-events: none;
+    cursor: default;
+  }
+  .ribbon-mas-icon--vivo {
+    color: #e53e3e;
+    background: color-mix(in srgb, #e53e3e 10%, transparent) !important;
+  }
+  .ribbon-mas-icon--vivo:active {
+    background: color-mix(in srgb, #e53e3e 20%, transparent) !important;
   }
 
   /* Reveal icon — accent color hint */
