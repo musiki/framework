@@ -149,8 +149,8 @@ export function renderNotesSidebar(
     }
   });
 
-  container.innerHTML = '';
   const groups = groupByChapter(notes);
+  const newChapterEls: HTMLElement[] = [];
 
   let draggingSlug: string | null = null;
   let activeDropTarget: HTMLElement | null = null;
@@ -464,16 +464,21 @@ export function renderNotesSidebar(
 
     details.appendChild(ul);
     chapterEl.appendChild(details);
-    container.appendChild(chapterEl);
+    newChapterEls.push(chapterEl);
   }
 
-  // Restore collapsed state from before the re-render
+  // Restore collapsed state on new elements before inserting into DOM
   if (closedNames.size > 0) {
-    container.querySelectorAll<HTMLDetailsElement>('details.chapter-details').forEach(d => {
-      const name = d.querySelector('.chapter-title-text')?.textContent?.trim();
-      if (name && closedNames.has(name)) d.open = false;
-    });
+    for (const el of newChapterEls) {
+      el.querySelectorAll<HTMLDetailsElement>('details.chapter-details').forEach(d => {
+        const name = d.querySelector('.chapter-title-text')?.textContent?.trim();
+        if (name && closedNames.has(name)) d.open = false;
+      });
+    }
   }
+
+  // Atomic swap — no blank flash between teardown and rebuild
+  container.replaceChildren(...newChapterEls);
 }
 
 // ── CSS injection ─────────────────────────────────────────────────────────
@@ -525,12 +530,25 @@ function injectCss() {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 
+// Module-level lifecycle — prevents stale refresh/note-open listeners across navigations
+let _sidebarCtrl: AbortController | null = null;
+let _sidebarContainer: HTMLElement | null = null;
+
 export function initNotesSidebar(
   container: HTMLElement,
   courseId: string,
   courseHref: string,
   activeSlug: string | null,
 ): void {
+  // Idempotency: same container is already initialized
+  if (_sidebarContainer === container) return;
+
+  // Abort previous global listeners
+  _sidebarCtrl?.abort();
+  _sidebarContainer = container;
+  _sidebarCtrl = new AbortController();
+  const { signal } = _sidebarCtrl;
+
   injectCss();
 
   let currentActive = activeSlug;
@@ -544,12 +562,12 @@ export function initNotesSidebar(
     }
   }
 
-  window.addEventListener('notes-sidebar-refresh', () => { void refresh(); });
+  window.addEventListener('notes-sidebar-refresh', () => { void refresh(); }, { signal });
 
   window.addEventListener('note-open', (e: Event) => {
     const detail = (e as CustomEvent<{ slug?: string }>).detail;
     if (detail?.slug) currentActive = detail.slug;
-  });
+  }, { signal });
 
   void refresh();
 }

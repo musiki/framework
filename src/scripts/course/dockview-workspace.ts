@@ -34,6 +34,11 @@ type PanelState = {
 
 const panelStates = new Map<string, PanelState>();
 
+// Module-level lifecycle — prevents double-init and stale window listeners across navigations
+let _activeCtrl: AbortController | null = null;
+let _activeContainer: HTMLElement | null = null;
+let _activeWorkspace: CourseNotesWorkspace | null = null;
+
 // ── Inject CSS ────────────────────────────────────────────────────────────
 
 let cssInjected = false;
@@ -239,7 +244,7 @@ function buildShell(
     const tgtPanel = dockview.getGroupPanel(panelId);
     if (srcPanel && tgtPanel) {
       dockview.moveGroupOrPanel({
-        from: { panelId: srcId },
+        from: { groupId: srcPanel.group.id, panelId: srcId },
         to: { group: tgtPanel.group, position: 'right' },
       });
     }
@@ -365,6 +370,25 @@ export function initDockviewWorkspace(
   initialSlug: string | null,
   initialContent: string | null,
 ): CourseNotesWorkspace {
+  // Idempotency: same container already has an active workspace — skip
+  if (_activeContainer === container && _activeWorkspace) return _activeWorkspace;
+
+  // Teardown previous instance (different container = new navigation)
+  _activeCtrl?.abort();
+  _activeCtrl = null;
+  if (_activeWorkspace) {
+    const prev = _activeWorkspace;
+    _activeWorkspace = null;
+    _activeContainer = null;
+    prev.destroy();
+  }
+  _activeContainer = container;
+  panelStates.clear();
+
+  const ctrl = new AbortController();
+  _activeCtrl = ctrl;
+  const { signal } = ctrl;
+
   const containerId = container.id || 'cnw-root';
   container.id = containerId;
   container.classList.add('dockview-theme-light'); // or dark — matched by CSS vars
@@ -414,8 +438,8 @@ export function initDockviewWorkspace(
         }
       }
 
-      // dockview expects the component to implement { element }
-      return { element: shell };
+      // dockview IContentRenderer requires element + init
+      return { element: shell, init: () => {} };
     },
   });
 
@@ -467,12 +491,16 @@ export function initDockviewWorkspace(
     });
   }
 
-  // Listen for sidebar note-open events
+  // Listen for sidebar note-open events — signal is aborted on next initDockviewWorkspace call
   window.addEventListener('note-open', (e: Event) => {
     const ev = e as CustomEvent<{ slug: string; courseId: string; mode: NoteMode; split?: boolean }>;
     e.preventDefault();
-    openNote(ev.detail.slug, ev.detail.mode ?? 'preview', ev.detail.split ?? false);
-  });
+    try {
+      openNote(ev.detail.slug, ev.detail.mode ?? 'preview', ev.detail.split ?? false);
+    } catch (err) {
+      console.error('[cnw] openNote failed:', err);
+    }
+  }, { signal });
 
   // Cleanup on panel removal
   dockview.onDidRemovePanel(event => {
@@ -483,13 +511,23 @@ export function initDockviewWorkspace(
     panelStates.delete(event.id);
   });
 
-  return {
+  const workspace: CourseNotesWorkspace = {
     openNote,
     destroy: () => {
       ro.disconnect();
       panelStates.forEach(s => s.persistence?.destroy());
       panelStates.clear();
       dockview.dispose();
+      // Clear module-level refs only if this is still the active workspace
+      if (_activeWorkspace === workspace) {
+        _activeCtrl?.abort();
+        _activeCtrl = null;
+        _activeContainer = null;
+        _activeWorkspace = null;
+      }
     },
   };
+
+  _activeWorkspace = workspace;
+  return workspace;
 }
