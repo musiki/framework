@@ -11,8 +11,7 @@
 .ribbon {
   width: var(--ribbon-width);
   height: 100%;
-  background: var(--ribbon-bg);
-  border-right: 1px solid var(--ribbon-border);
+  background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -80,6 +79,7 @@
 .ribbon-item--circle {
   border-radius: 50%;
   border: 1.5px solid color-mix(in srgb, var(--c-fg) 15%, transparent);
+  margin-left: 2px;
 }
 .ribbon-item--circle:hover,
 .ribbon-item--circle.is-active {
@@ -89,9 +89,9 @@
 
 /* brand logo */
 .ribbon-item--logo {
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   margin-bottom: 4px;
   overflow: hidden;
   border: none;
@@ -180,6 +180,7 @@
     overflow: hidden;
     overflow-x: auto;
   }
+  background: var(--ribbon-bg);
   /* show only mobile-visible items */
   .ribbon-item { display: none; }
   .ribbon-item--mobile-visible { display: flex; }
@@ -194,61 +195,10 @@
     border-radius: 8px;
   }
 
-  /* "más" upward sheet */
-  .ribbon-mas-sheet {
-    position: fixed;
-    bottom: var(--ribbon-bottom-height);
-    right: 0;
-    min-width: 180px;
-    background: color-mix(in srgb, var(--c-bg) 96%, var(--c-fg) 4%);
-    border: 1px solid var(--ribbon-border);
-    border-bottom: none;
-    border-radius: 10px 10px 0 0;
-    padding: 8px 0;
-    z-index: 101;
-    box-shadow: -2px -4px 16px rgba(0,0,0,0.18);
-    transform: translateY(100%);
-    transition: transform 200ms ease;
-  }
-  .ribbon-mas-sheet.is-open {
-    transform: translateY(0);
-  }
-  .ribbon-mas-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    font-size: 13px;
-    color: var(--c-fg);
-    text-decoration: none;
-    background: none;
-    border: none;
-    width: 100%;
-    cursor: pointer;
-    min-height: 44px;
-  }
-  .ribbon-mas-item:hover {
-    background: color-mix(in srgb, var(--c-fg) 6%, transparent);
-  }
-  .ribbon-mas-item svg {
-    width: 20px;
-    height: 20px;
-    flex-shrink: 0;
-    opacity: 0.7;
-  }
-  .ribbon-mas-divider {
-    height: 1px;
-    background: var(--ribbon-border);
-    margin: 4px 0;
-  }
-  .ribbon-mas-item--disabled {
-    opacity: 0.3;
-    pointer-events: none;
-  }
 }
 
 /* ── Desktop: hide mobile-only elements ─────────────────────────────────── */
 @media (min-width: 501px) {
   .ribbon-mas-sheet { display: none; }
-  .ribbon-mas-toggle { display: none; } /* "···" button only on mobile */
+  .ribbon-mas-toggle { display: none; }
 }

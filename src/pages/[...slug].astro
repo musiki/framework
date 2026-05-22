@@ -650,6 +650,7 @@ const hasForumSidebar = Boolean(canonicalCourseId || courseSlug);
 const activeCourseCode = String(
   courseData?.id ||
   courseData?.code ||
+  canonicalCourseIdToUse ||
   '',
 ).trim().toUpperCase();
 const currentEntrySourcePath =
@@ -3122,6 +3123,55 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         }
       }
 
+      /* Issue 7: keep ribbon fixed-left at tablet widths so content doesn't stack below it */
+      @media (min-width: 501px) and (max-width: 1024px) {
+        .ribbon {
+          position: fixed;
+          top: 0;
+          left: 0;
+          height: 100dvh;
+          width: var(--ribbon-width);
+          z-index: 40;
+          background: var(--ribbon-bg, color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%));
+          border-right: 1px solid var(--ribbon-border, var(--c-border));
+        }
+        .course-container {
+          padding-left: var(--ribbon-width);
+        }
+      }
+
+      /* Issues 4+6: right sidebar slides up from bottom on mobile */
+      @media (max-width: 500px) {
+        .sidebar--right {
+          bottom: var(--ribbon-bottom-height, 60px) !important;
+          top: auto !important;
+          left: 0 !important;
+          right: 0 !important;
+          width: 100% !important;
+          height: 60dvh;
+          border-radius: 12px 12px 0 0;
+          transform: translateY(110%) !important;
+          box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
+          transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        .sidebar--right::before {
+          content: '';
+          display: block;
+          width: 36px;
+          height: 4px;
+          background: color-mix(in srgb, var(--c-fg) 25%, transparent);
+          border-radius: 2px;
+          margin: 10px auto 2px;
+          flex-shrink: 0;
+        }
+        .course-container[data-right-open='true'] .sidebar--right {
+          transform: translateY(0) !important;
+        }
+        .course-container[data-right-open='false'] .sidebar--right {
+          transform: translateY(110%) !important;
+        }
+      }
+
       :global(html.course-sidebars-open),
       :global(body.course-sidebars-open) {
         overflow: hidden;
@@ -3286,6 +3336,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         performativeRoomHref={performativeRoomHref}
         activeCourseCode={activeCourseCode}
         session={session}
+        revealHref={presentationHref || undefined}
       />
       <div class="course-sidebar-overlay" data-course-sidebar-overlay></div>
 
@@ -3294,7 +3345,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         <div class="course-title">
           <div class="course-title-row">
             <a href={courseHref} class="course-title-link">
-              <span class="course-title-link-text">{courseIndex?.data?.title}</span>
+              <span class="course-title-link-text">{courseIndex?.data?.title && courseIndex.data.title !== '_index' ? courseIndex.data.title : (canonicalCourseIdToUse || courseSlug)}</span>
             </a>
             <div class="course-title-actions">
               <button

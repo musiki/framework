@@ -7,6 +7,7 @@ interface Props {
   performativeRoomHref?: string;
   activeCourseCode?: string;
   session?: { user?: { name?: string; email?: string; image?: string } } | null;
+  revealHref?: string;
 }
 
 const {
@@ -15,6 +16,7 @@ const {
   performativeRoomHref = '',
   activeCourseCode = '',
   session = null,
+  revealHref = '',
 } = Astro.props;
 
 const userInitial = (session?.user?.name || session?.user?.email || '?')
@@ -75,8 +77,8 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </svg>
   </button>
 
-  <!-- Vivo (sala performativa) — only when available -->
-  {hasVivo && (
+  <!-- Vivo (sala performativa) — always shown, disabled when no room -->
+  {hasVivo ? (
     <a
       href={performativeRoomHref}
       class="ribbon-item ribbon-item--mobile-visible"
@@ -89,26 +91,40 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
         <circle cx="12" cy="14" r="3" stroke="currentColor" stroke-width="2"/>
       </svg>
     </a>
+  ) : (
+    <span
+      class="ribbon-item ribbon-item--mobile-visible ribbon-item--disabled"
+      aria-label="Sala vivo (no disponible)"
+      title="Sala vivo (no disponible)"
+      aria-disabled="true"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+        <path d="M8 3l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="12" cy="14" r="3" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </span>
   )}
 
-  <!-- Foro -->
-  <a
-    href="/foro"
+  <!-- Foro — opens right sidebar (on mobile: sweeps up from bottom) -->
+  <button
+    type="button"
     class="ribbon-item"
+    data-sidebar-toggle="right"
     aria-label="Foro"
     title="Foro"
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-  </a>
+  </button>
 
-  <!-- Actividad / Dashboard -->
-  <a
-    href="/dashboard"
-    class="ribbon-item"
-    aria-label="Actividad"
-    title="Actividad"
+  <!-- Actividad — placeholder, not yet linked -->
+  <span
+    class="ribbon-item ribbon-item--inactive"
+    aria-label="Actividad (próximamente)"
+    title="Actividad (próximamente)"
+    aria-disabled="true"
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
@@ -116,7 +132,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
       <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
     </svg>
-  </a>
+  </span>
 
   <!-- Theme toggle -->
   <button
@@ -136,7 +152,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </svg>
   </button>
 
-  <!-- Info / right sidebar toggle (was .course-sidebar-handle--right) -->
+  <!-- Info / right sidebar toggle -->
   <button
     type="button"
     class="ribbon-item ribbon-item--circle"
@@ -149,6 +165,22 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       <path d="M12 8v.01M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
   </button>
+
+  <!-- Reveal / Slides — only when this note has a presentation theme -->
+  {revealHref && (
+    <a
+      href={revealHref}
+      class="ribbon-item ribbon-item--reveal"
+      aria-label="Presentación (Reveal)"
+      title="Ver presentación"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="2" y="4" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+        <path d="M8 20h8M12 18v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M10 9l5 3-5 3V9Z" fill="currentColor"/>
+      </svg>
+    </a>
+  )}
 
   <div class="ribbon-spacer"></div>
   <div class="ribbon-divider"></div>
@@ -232,69 +264,78 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
 
 </nav>
 
-<!-- Mobile "más" sheet -->
+<!-- Mobile "más" sheet — icon-only grid -->
 <div class="ribbon-mas-sheet" id="ribbon-mas-sheet" aria-hidden="true">
-  {session?.user && (
-    <a href="/dashboard" class="ribbon-mas-item">
+  <div class="ribbon-mas-grid">
+    {session?.user && (
+      <a href="/dashboard" class="ribbon-mas-icon" aria-label="Perfil" title="Perfil">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+          <path d="M4 20c0-4 3.582-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </a>
+    )}
+    <!-- Vivo -->
+    {hasVivo ? (
+      <a href={performativeRoomHref} class="ribbon-mas-icon" aria-label="Sala vivo" title="Sala vivo">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+          <path d="M8 3l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="12" cy="14" r="3" stroke="currentColor" stroke-width="2"/>
+        </svg>
+      </a>
+    ) : (
+      <span class="ribbon-mas-icon ribbon-mas-icon--disabled" aria-label="Sala vivo (no disponible)" aria-disabled="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+          <path d="M8 3l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="12" cy="14" r="3" stroke="currentColor" stroke-width="2"/>
+        </svg>
+      </span>
+    )}
+    <!-- Foro -->
+    <button type="button" class="ribbon-mas-icon" data-sidebar-toggle="right" aria-label="Foro" title="Foro">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
-        <path d="M4 20c0-4 3.582-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      Perfil
-    </a>
-  )}
-  <a href="/foro" class="ribbon-mas-item">
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    Foro
-  </a>
-  <a href="/dashboard" class="ribbon-mas-item">
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-      <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-      <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-      <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-    </svg>
-    Actividad
-  </a>
-  <button type="button" class="ribbon-mas-item" id="ribbon-mas-theme">
-    <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" clip-rule="evenodd"/>
-    </svg>
-    Tema
-  </button>
-  <button type="button" class="ribbon-mas-item" data-sidebar-toggle="right" id="ribbon-mas-info">
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
-      <path d="M12 8v.01M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-    Info
-  </button>
-  <div class="ribbon-mas-divider"></div>
-  <button type="button" class="ribbon-mas-item" id="ribbon-mas-graph">
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="2"/>
-      <circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-      <circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="2"/>
-      <path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98" stroke="currentColor" stroke-width="2"/>
-    </svg>
-    Graph
-  </button>
-  <button type="button" class="ribbon-mas-item" id="ribbon-mas-notas">
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-    Notas
-  </button>
-  <button type="button" class="ribbon-mas-item ribbon-mas-item--disabled" aria-disabled="true" tabindex="-1">
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-      <path d="M7 6v6M10 6v4M14 6v6M17 6v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-    Hyperpiano
-  </button>
+    </button>
+    <!-- Theme -->
+    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-theme" aria-label="Cambiar tema" title="Cambiar tema">
+      <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 0 1 .162.819A8.97 8.97 0 0 0 9 6a9 9 0 0 0 9 9 8.97 8.97 0 0 0 3.463-.69.75.75 0 0 1 .981.98 10.503 10.503 0 0 1-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 0 1 .818.162Z" clip-rule="evenodd"/>
+      </svg>
+    </button>
+    <!-- Info -->
+    <button type="button" class="ribbon-mas-icon" data-sidebar-toggle="right" id="ribbon-mas-info" aria-label="Info" title="Info">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+        <path d="M12 8v.01M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <!-- Graph -->
+    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-graph" aria-label="Graph" title="Graph">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="2"/>
+        <circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+        <circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="2"/>
+        <path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </button>
+    <!-- Notas -->
+    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-notas" aria-label="Notas" title="Notas">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <!-- Hyperpiano (disabled) -->
+    <button type="button" class="ribbon-mas-icon ribbon-mas-icon--disabled" aria-disabled="true" tabindex="-1" aria-label="Hyperpiano (próximamente)" title="Hyperpiano (próximamente)">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+        <path d="M7 6v6M10 6v4M14 6v6M17 6v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
 </div>
 
 <style>
@@ -314,6 +355,80 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   /* Mobile body padding so content isn't hidden under bottom bar */
   @media (max-width: 500px) {
     body { padding-bottom: var(--ribbon-bottom-height, 60px); }
+  }
+
+  /* Inactive (unlinked) ribbon item */
+  .ribbon-item--inactive {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  /* Reveal icon — accent color hint */
+  .ribbon-item--reveal {
+    color: color-mix(in srgb, var(--c-fg) 55%, var(--c-accent, #7c6ff7) 45%);
+  }
+  .ribbon-item--reveal:hover {
+    color: var(--c-accent, #7c6ff7);
+  }
+
+  /* Mobile más sheet */
+  @media (max-width: 500px) {
+    .ribbon-mas-sheet {
+      position: fixed;
+      bottom: var(--ribbon-bottom-height);
+      right: 0;
+      left: 0;
+      background: color-mix(in srgb, var(--c-bg) 96%, var(--c-fg) 4%);
+      border: 1px solid var(--ribbon-border);
+      border-bottom: none;
+      border-radius: 10px 10px 0 0;
+      padding: 14px 10px;
+      z-index: 101;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.18);
+      transform: translateY(100%);
+      transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .ribbon-mas-sheet.is-open {
+      transform: translateY(0);
+    }
+    .ribbon-mas-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+    .ribbon-mas-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 12px;
+      color: var(--c-fg);
+      background: color-mix(in srgb, var(--c-fg) 6%, transparent);
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ribbon-mas-icon:active {
+      background: color-mix(in srgb, var(--c-fg) 14%, transparent);
+    }
+    .ribbon-mas-icon svg {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+    .ribbon-mas-icon--disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+  }
+  /* Hide sheet on desktop */
+  @media (min-width: 501px) {
+    .ribbon-mas-sheet { display: none; }
+    .ribbon-mas-toggle { display: none; }
   }
 </style>
 
@@ -336,13 +451,26 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       }
     });
 
-    // Search: trigger existing search modal shortcut dispatcher
+    // Search: dispatch to document (Search.astro listens on document, not window)
     const searchBtn = document.getElementById('ribbon-search-btn');
     if (searchBtn && !searchBtn.dataset.bound) {
       searchBtn.dataset.bound = 'true';
       searchBtn.addEventListener('click', () => {
-        // Fire the same keydown that shift+? would — Search component listens for this
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true }));
+      });
+    }
+
+    // Haptic feedback when toggling sidebars on mobile
+    if (typeof navigator.vibrate === 'function') {
+      document.querySelectorAll('[data-sidebar-toggle]').forEach((btn) => {
+        if (btn instanceof HTMLElement && !btn.dataset.hapticBound) {
+          btn.dataset.hapticBound = 'true';
+          btn.addEventListener('click', () => {
+            if (window.matchMedia('(max-width: 500px)').matches) {
+              navigator.vibrate(10);
+            }
+          });
+        }
       });
     }
 
@@ -383,10 +511,10 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
         });
       }
     });
-    // Close sheet when a mas-item is tapped
+    // Close sheet when a mas icon is tapped
     if (masSheet && !masSheet.dataset.masItemsBound) {
       masSheet.dataset.masItemsBound = 'true';
-      masSheet.querySelectorAll('.ribbon-mas-item').forEach((item) => {
+      masSheet.querySelectorAll('.ribbon-mas-icon').forEach((item) => {
         item.addEventListener('click', () => setTimeout(closeMas, 80));
       });
     }

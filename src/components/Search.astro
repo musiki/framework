@@ -247,7 +247,7 @@
 
     const target = e.target;
     const isEditable = target instanceof Element && target.matches('input, textarea, [contenteditable]');
-    if (e.key === '?' && !isEditable) {
+    if ((e.key === '?' || (e.key === 'S' && e.shiftKey)) && !isEditable) {
       e.preventDefault();
       void searchWindow.openSearch?.();
     }

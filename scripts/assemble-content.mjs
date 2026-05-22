@@ -183,7 +183,11 @@ const main = () => {
         const { data, content } = matter(raw);
         let modified = false;
         if (!data.title) {
-          data.title = path.basename(sourceAbs, path.extname(sourceAbs));
+          const basename = path.basename(sourceAbs, path.extname(sourceAbs));
+          // For index files, use the parent directory name (course/folder id) as title
+          data.title = (basename === '_index' || basename === 'index')
+            ? path.basename(path.dirname(sourceAbs))
+            : basename;
           modified = true;
         }
         if (injectFrontmatter) {
