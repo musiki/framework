@@ -1,6 +1,8 @@
 // src/scripts/course/dockview-workspace.ts
 import { DockviewComponent } from 'dockview-core';
 import { marked, type Renderer } from 'marked';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { NotesPersistence } from './notes-persistence';
 import { getNote } from '../notes-editor/api';
 import { parseFrontmatter } from '../notes-editor/yaml-strip';
@@ -48,6 +50,41 @@ let markedConfigured = false;
 function configureMarked() {
   if (markedConfigured) return;
   markedConfigured = true;
+
+  // Math extensions — block ($$) before inline ($)
+  marked.use({
+    extensions: [
+      {
+        name: 'mathBlock',
+        level: 'block',
+        start(src) { return src.indexOf('$$'); },
+        tokenizer(src) {
+          const match = src.match(/^\$\$([^$]*(?:\$(?!\$)[^$]*)*)\$\$/s);
+          if (match) return { type: 'mathBlock', raw: match[0], text: match[1].trim() };
+        },
+        renderer(token) {
+          try {
+            return `<div class="cnw-math-block">${katex.renderToString(token.text, { displayMode: true, throwOnError: false })}</div>`;
+          } catch { return `<pre class="cnw-math-err">${escHtmlInline(token.text)}</pre>`; }
+        },
+      },
+      {
+        name: 'mathInline',
+        level: 'inline',
+        start(src) { return src.indexOf('$'); },
+        tokenizer(src) {
+          const match = src.match(/^\$([^$\n]+?)\$/);
+          if (match) return { type: 'mathInline', raw: match[0], text: match[1].trim() };
+        },
+        renderer(token) {
+          try {
+            return katex.renderToString(token.text, { displayMode: false, throwOnError: false });
+          } catch { return `<code>${escHtmlInline(token.text)}</code>`; }
+        },
+      },
+    ],
+  });
+
   const renderer: Partial<Renderer> = {
     code({ text, lang }) {
       if (lang === 'mermaid') {
