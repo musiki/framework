@@ -15,8 +15,11 @@ export interface CourseNotesWorkspace {
   destroy(): void;
 }
 
-// Panel params stored in dockview panel params map
 type PanelParams = { slug: string; courseId: string; mode: NoteMode };
+
+// Side-channel map: populated just before addPanel(), consumed in createComponent()
+// because dockview v5 createComponent() does NOT receive panel params directly.
+const pendingParams = new Map<string, PanelParams>();
 
 // Per-panel live state (not in dockview)
 type PanelState = {
@@ -370,8 +373,10 @@ export function initDockviewWorkspace(
 
   const dockview = new DockviewComponent(container, {
     createComponent: options => {
-      const params = options.params as PanelParams;
       const panelId = options.id;
+      const params = pendingParams.get(panelId);
+      pendingParams.delete(panelId);
+      if (!params) throw new Error(`[cnw] no params for panel ${panelId}`);
 
       const { shell, bodyEl, statusDot, pencilBtn } = buildShell(
         panelId,
@@ -425,11 +430,9 @@ export function initDockviewWorkspace(
 
   // Open initial panel
   if (initialSlug) {
-    dockview.addPanel({
-      id: `note-${initialSlug}`,
-      component: 'note-panel',
-      params: { slug: initialSlug, courseId, mode: 'preview' } satisfies PanelParams,
-    });
+    const pid = `note-${initialSlug}`;
+    pendingParams.set(pid, { slug: initialSlug, courseId, mode: 'preview' });
+    dockview.addPanel({ id: pid, component: 'note-panel' });
   }
 
   function openNote(slug: string, mode: NoteMode = 'preview', split = false): void {
@@ -453,10 +456,11 @@ export function initDockviewWorkspace(
       ? (dockview.panels[dockview.panels.length - 1] ?? undefined)
       : undefined;
 
+    const newId = panelId + (split ? `-split-${Date.now()}` : '');
+    pendingParams.set(newId, { slug, courseId, mode });
     dockview.addPanel({
-      id: panelId + (split ? `-split-${Date.now()}` : ''),
+      id: newId,
       component: 'note-panel',
-      params: { slug, courseId, mode } satisfies PanelParams,
       position: referencePanel
         ? { referencePanel: referencePanel.id, direction: 'right' }
         : undefined,
