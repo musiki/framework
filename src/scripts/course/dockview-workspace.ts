@@ -765,6 +765,15 @@ export function initDockviewWorkspace(
     }
   }, { signal });
 
+  // Ribbon "Notas" button — open/activate notes workspace
+  window.addEventListener('musiki:open-notas', () => {
+    if (dockview.panels.length > 0) {
+      dockview.panels[0].api.setActive();
+    } else if (initialSlug) {
+      openNote(initialSlug, 'preview');
+    }
+  }, { signal });
+
   // Cleanup on panel removal
   dockview.onDidRemovePanel(event => {
     const state = panelStates.get(event.id);
