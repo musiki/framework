@@ -58,7 +58,7 @@ const cursos = defineCollection({
 	schema: z.object({
 			// Course index fields
 			type: z.enum(courseNoteTypes).optional(),
-			title: z.string(),
+			title: z.string().optional().nullable(),
 			subtitle: z.string().optional().nullable(),
 			description: z.string().optional().nullable(),
 			summary: z.string().optional().nullable(),
