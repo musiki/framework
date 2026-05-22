@@ -10,28 +10,46 @@ export type FrontmatterData = {
   [key: string]: unknown;
 };
 
-// Browser-safe frontmatter parser — no gray-matter/Buffer dependency
+// Browser-safe frontmatter parser — handles scalars and simple arrays
 function parseYamlBlock(yaml: string): Record<string, unknown> {
   const data: Record<string, unknown> = {};
+  let currentKey: string | null = null;
   for (const line of yaml.split('\n')) {
+    // YAML array item under a previous key: "  - value"
+    const arrItem = /^[ \t]+-\s+(.*)$/.exec(line);
+    if (arrItem && currentKey) {
+      const existing = data[currentKey];
+      const item = arrItem[1].trim();
+      data[currentKey] = Array.isArray(existing) ? [...existing, item] : [item];
+      continue;
+    }
     const m = /^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$/.exec(line);
-    if (!m) continue;
+    if (!m) { currentKey = null; continue; }
+    currentKey = m[1];
     let val: unknown = m[2].trim();
+    if (val === '') {
+      // empty value — may be followed by array items
+      data[currentKey] = '';
+      continue;
+    }
     if (/^['"][\s\S]*['"]$/.test(val as string)) {
       val = (val as string).slice(1, -1);
-    } else if (val !== '' && !isNaN(Number(val as string))) {
+    } else if (!isNaN(Number(val as string))) {
       val = Number(val);
     } else if (val === 'true') {
       val = true;
     } else if (val === 'false') {
       val = false;
     }
-    data[m[1]] = val;
+    data[currentKey] = val;
   }
   return data;
 }
 
 function stringifyYamlValue(v: unknown): string {
+  if (Array.isArray(v)) {
+    return '\n' + v.map(item => `  - ${stringifyYamlValue(item)}`).join('\n');
+  }
   if (typeof v === 'string') {
     return /[:#\[\]{}|>&!'",%@`\n]/.test(v) ? `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : v;
   }
