@@ -62,7 +62,38 @@ function slugify(title: string): string {
     .replace(/\s+/g, '-');
 }
 
+let _nieCssInjected = false;
+function injectNieCss() {
+  if (_nieCssInjected || typeof document === 'undefined') return;
+  _nieCssInjected = true;
+  const s = document.createElement('style');
+  s.textContent = `
+    #nie-toolbar .snip-btn { position:relative; }
+    #nie-toolbar .snip-btn:hover { color:var(--c-fg); background:var(--c-bg-mute,rgba(128,128,128,.1)); }
+    #nie-toolbar .snip-btn::after {
+      content:attr(title);
+      position:absolute;
+      bottom:calc(100% + 4px);
+      left:50%;
+      transform:translateX(-50%);
+      background:var(--c-bg-surface,var(--c-bg-mute));
+      color:var(--c-fg);
+      font-size:10px;
+      padding:2px 6px;
+      border-radius:3px;
+      white-space:nowrap;
+      pointer-events:none;
+      opacity:0;
+      z-index:200;
+      box-shadow:0 1px 4px rgba(0,0,0,.15);
+    }
+    #nie-toolbar .snip-btn:hover::after { opacity:1; }
+  `;
+  document.head.appendChild(s);
+}
+
 function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: string, _slug: string | null, hideHeader: boolean = false): void {
+  injectNieCss();
   const inputStyle = 'background:var(--c-bg-mute,var(--c-bg));border:1px solid var(--c-border);color:var(--c-fg);padding:1px 4px;font-size:11px;border-radius:2px;';
   mountEl.innerHTML = `
     ${hideHeader ? '' : `<div id="nie-header" style="display:flex;align-items:center;gap:.5rem;padding:.35rem .75rem;background:var(--c-bg-surface,var(--c-bg-mute));border-bottom:1px solid var(--c-border);flex-shrink:0;">
@@ -76,51 +107,51 @@ function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: strin
         <input id="nie-title" type="text" placeholder="Título de la nota"
           style="width:100%;background:transparent;border:none;outline:none;color:var(--c-fg);font-size:13px;font-family:inherit;" />
       </div>
-      <div id="nie-yaml-strip" style="display:none;padding:.3rem .75rem;border-bottom:1px solid var(--c-border);flex-shrink:0;font-size:11px;color:var(--c-fg-dim);">
-        <form id="nie-yaml-form" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
-          <label style="display:flex;gap:.25rem;align-items:center;">
-            Tipo
-            <select id="fm-type" style="${inputStyle}">
-              <option value="lesson">lesson</option>
-              <option value="eval">eval</option>
-              <option value="assignment">assignment</option>
-              <option value="info">info</option>
-              <option value="public-note">public-note</option>
-            </select>
-          </label>
-          <label style="display:flex;gap:.25rem;align-items:center;">
-            Capítulo
-            <input id="fm-chapter" list="fm-chapter-list" placeholder="nuevo…" style="${inputStyle}width:100px;" />
-            <datalist id="fm-chapter-list"></datalist>
-          </label>
-          <label style="display:flex;gap:.25rem;align-items:center;">
-            Estado
-            <select id="fm-status" style="${inputStyle}">
-              <option value="draft">draft</option>
-              <option value="published">published</option>
-              <option value="archived">archived</option>
-            </select>
-          </label>
-          <label style="display:flex;gap:.25rem;align-items:center;">
-            Orden
-            <input id="fm-order" type="number" value="0"
-              style="${inputStyle}width:50px;" />
-          </label>
-          <label style="display:flex;gap:.25rem;align-items:center;">
-            Tema
-            <select id="fm-theme" style="${inputStyle}">
-              <option value="">—</option>
-            </select>
-          </label>
-        </form>
-      </div>
-      <div id="nie-snippet-toolbar" style="display:none;padding:.25rem .5rem;border-bottom:1px solid var(--c-border);flex-shrink:0;gap:.25rem;flex-wrap:wrap;">
-        <button class="snip-btn" data-snippet="cover" style="${inputStyle}cursor:pointer;">cover</button>
-        <button class="snip-btn" data-snippet="lily" style="${inputStyle}cursor:pointer;">lily</button>
-        <button class="snip-btn" data-snippet="mermaid" style="${inputStyle}cursor:pointer;">mermaid</button>
-        <button class="snip-btn" data-snippet="iframe" style="${inputStyle}cursor:pointer;">iframe</button>
-        <button class="snip-btn" data-snippet="eval" style="${inputStyle}cursor:pointer;">eval</button>
-        <button class="snip-btn" data-snippet="img" style="${inputStyle}cursor:pointer;">img</button>
+      <div id="nie-toolbar" style="display:none;flex-shrink:0;border-bottom:1px solid var(--c-border);padding:.25rem .5rem;font-size:11px;color:var(--c-fg-dim);">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;">
+          <form id="nie-yaml-form" style="display:contents;">
+            <label style="display:flex;gap:.25rem;align-items:center;">
+              Tipo
+              <select id="fm-type" style="${inputStyle}">
+                <option value="lesson">lesson</option>
+                <option value="eval">eval</option>
+                <option value="assignment">assignment</option>
+                <option value="info">info</option>
+                <option value="public-note">public-note</option>
+              </select>
+            </label>
+            <label style="display:flex;gap:.25rem;align-items:center;">
+              Capítulo
+              <input id="fm-chapter" list="fm-chapter-list" placeholder="nuevo…" style="${inputStyle}width:100px;" />
+              <datalist id="fm-chapter-list"></datalist>
+            </label>
+            <label style="display:flex;gap:.25rem;align-items:center;">
+              Estado
+              <select id="fm-status" style="${inputStyle}">
+                <option value="draft">draft</option>
+                <option value="published">published</option>
+                <option value="archived">archived</option>
+              </select>
+            </label>
+            <label style="display:flex;gap:.25rem;align-items:center;">
+              Orden
+              <input id="fm-order" type="number" value="0" style="${inputStyle}width:50px;" />
+            </label>
+            <label style="display:flex;gap:.25rem;align-items:center;">
+              Tema
+              <select id="fm-theme" style="${inputStyle}">
+                <option value="">—</option>
+              </select>
+            </label>
+          </form>
+          <span style="display:block;width:1px;height:14px;background:var(--c-border);flex-shrink:0;"></span>
+          <button class="snip-btn" data-snippet="cover" title="Insertar portada" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">cover</button>
+          <button class="snip-btn" data-snippet="lily" title="Insertar bloque LilyPond" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">lily</button>
+          <button class="snip-btn" data-snippet="mermaid" title="Insertar diagrama Mermaid" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">mermaid</button>
+          <button class="snip-btn" data-snippet="iframe" title="Insertar iframe" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">iframe</button>
+          <button class="snip-btn" data-snippet="eval" title="Insertar bloque eval" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">eval</button>
+          <button class="snip-btn" data-snippet="img" title="Subir imagen" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">img</button>
+        </div>
       </div>
       <div id="editor-cm-wrap" style="flex:1;overflow:hidden;min-height:0;"></div>
     </div>
@@ -145,10 +176,8 @@ async function loadNote(
     }
     const { data, body } = parseFrontmatter(noteContent);
 
-    const yamlStrip = document.getElementById('nie-yaml-strip');
-    const snippetToolbar = document.getElementById('nie-snippet-toolbar');
-    if (yamlStrip) yamlStrip.style.display = '';
-    if (snippetToolbar) snippetToolbar.style.display = 'flex';
+    const toolbar = document.getElementById('nie-toolbar');
+    if (toolbar) toolbar.style.display = '';
 
     const titleEl = document.getElementById('nie-title') as HTMLInputElement | null;
     if (titleEl) titleEl.value = data.title || '';

@@ -3456,6 +3456,12 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         {canManageLiveInteractions ? (
           <>
+            <div
+              data-notes-sidebar
+              data-course-id={canonicalCourseId || courseSlug}
+              data-course-href={courseHref}
+              data-active-slug={currentEntrySourcePath || ''}
+            ></div>
             {sidebarChapterEntries.filter(e => e.kind === 'recursos').map((entry) => {
           if (entry.kind === 'recursos') {
             return (
@@ -3708,12 +3714,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             </div>
           );
         })}
-            <div
-              data-notes-sidebar
-              data-course-id={canonicalCourseId || courseSlug}
-              data-course-href={courseHref}
-              data-active-slug={currentEntrySourcePath || ''}
-            ></div>
           </>
         ) : (
           (!isPublicWikiPage || Boolean(session)) && sidebarChapterEntries.map((entry) => {
@@ -4423,6 +4423,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           if (!courseId) return;
           const activeSlug = sidebarEl?.dataset.activeSlug || null;
           initDockviewWorkspace(container, courseId, activeSlug, null);
+          const classContent = container.querySelector<HTMLElement>('[data-class-content]');
+          if (classContent) classContent.style.display = 'none';
         }
 
         bootWorkspace();
@@ -4971,12 +4973,12 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             foldAllBtn.title = allOpen ? 'Colapsar todas las secciones' : 'Desplegar todas las secciones';
           };
 
-          foldAllBtn.addEventListener('click', () => {
+          foldAllBtn.onclick = () => {
             const details = getSidebarDetails();
             const anyOpen = details.some((d) => (d as HTMLDetailsElement).open);
             details.forEach((d) => { (d as HTMLDetailsElement).open = !anyOpen; });
             syncFoldBtn();
-          });
+          };
 
           getSidebarDetails().forEach((d) => {
             d.addEventListener('toggle', syncFoldBtn);

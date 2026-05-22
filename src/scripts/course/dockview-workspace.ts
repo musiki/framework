@@ -295,8 +295,8 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
   try {
     const note = await getNote(courseId, slug);
     const { body } = parseFrontmatter(note.content);
-    // Render as pre for now — full markdown render would require server round-trip
-    bodyEl.innerHTML = `<div style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72;color:var(--c-fg)"><pre style="white-space:pre-wrap;font-family:inherit">${escHtml(body)}</pre></div>`;
+    const displayBody = body.replace(/^#\s[^\n]*\n?/, '').trim();
+    bodyEl.innerHTML = `<div style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72;color:var(--c-fg)"><pre style="white-space:pre-wrap;font-family:inherit">${escHtml(displayBody)}</pre></div>`;
     return note.content;
   } catch {
     bodyEl.innerHTML = `<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar la nota</p>`;

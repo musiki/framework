@@ -2,10 +2,13 @@ import type { NoteListItem } from '../../notes-editor/types';
 
 export type ChapterGroup = { name: string; notes: NoteListItem[] };
 
+const FAKE_CHAPTER_RE = /^80\s*RECURSOS/i;
+
 export function groupByChapter(notes: NoteListItem[]): ChapterGroup[] {
   const map = new Map<string, NoteListItem[]>();
   for (const note of notes) {
     const ch = note.chapter || '(sin capítulo)';
+    if (FAKE_CHAPTER_RE.test(ch)) continue;
     if (!map.has(ch)) map.set(ch, []);
     map.get(ch)!.push(note);
   }
@@ -497,6 +500,11 @@ function injectCss() {
       letter-spacing: 0.08em !important;
       text-transform: uppercase !important;
       color: var(--c-fg-subtle, #888) !important;
+    }
+    /* Suppress list-item ::before markers injected by global stylesheet */
+    [data-notes-sidebar] .lesson-item::before {
+      content: none !important;
+      display: none !important;
     }
     /* Note items: smaller, no blue, black/white hierarchy */
     [data-notes-sidebar] .lesson-link {
