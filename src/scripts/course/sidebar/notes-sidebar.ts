@@ -537,16 +537,7 @@ function injectCss() {
       background: var(--c-link, #3b82f6);
       margin: 2px 0;
     }
-    .ns-drop-line.ns-drop-active::before {
-      content: '';
-      position: absolute;
-      left: -2px;
-      top: -3px;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--c-link, #3b82f6);
-    }
+    .ns-drop-line::before { content: none !important; display: none !important; }
     .ns-drag-over.chapter-title {
       background: var(--c-bg-alt, var(--c-bg-mute)) !important;
       outline: 1px dashed var(--c-link, #3b82f6);

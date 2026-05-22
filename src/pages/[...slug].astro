@@ -4422,13 +4422,26 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           const courseId = sidebarEl?.dataset.courseId ?? '';
           if (!courseId) return;
           const activeSlug = sidebarEl?.dataset.activeSlug || null;
-          initDockviewWorkspace(container, courseId, activeSlug, null);
+          const ws = initDockviewWorkspace(container, courseId, activeSlug, null);
+          (window as any).__cnwWorkspace = ws;
           const classContent = container.querySelector<HTMLElement>('[data-class-content]');
           if (classContent) classContent.style.display = 'none';
         }
 
         bootWorkspace();
         document.addEventListener('astro:page-load', bootWorkspace);
+
+        // Open recursos media items in bottom dockview pod
+        document.addEventListener('click', (e) => {
+          const link = (e.target as Element)?.closest<HTMLAnchorElement>('.recursos-sidebar-resource-link');
+          if (!link) return;
+          const ws = (window as any).__cnwWorkspace;
+          if (!ws) return;
+          const url = link.href;
+          const name = link.querySelector('.recursos-sidebar-resource-name')?.textContent?.trim() || url;
+          e.preventDefault();
+          ws.openMedia(url, name, 'bottom');
+        });
       </script>
     )}
     {canManageLiveInteractions && (

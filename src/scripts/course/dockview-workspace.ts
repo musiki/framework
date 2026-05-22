@@ -1,5 +1,6 @@
 // src/scripts/course/dockview-workspace.ts
 import { DockviewComponent } from 'dockview-core';
+import { marked } from 'marked';
 import { NotesPersistence } from './notes-persistence';
 import { getNote } from '../notes-editor/api';
 import { parseFrontmatter } from '../notes-editor/yaml-strip';
@@ -12,10 +13,13 @@ export type NoteMode = 'preview' | 'edit';
 
 export interface CourseNotesWorkspace {
   openNote(slug: string, mode: NoteMode, split?: boolean): void;
+  openMedia(url: string, title: string, position?: 'bottom' | 'right'): void;
   destroy(): void;
 }
 
-type PanelParams = { slug: string; courseId: string; mode: NoteMode };
+type PanelParams =
+  | { kind?: 'note'; slug: string; courseId: string; mode: NoteMode }
+  | { kind: 'media'; url: string; title: string };
 
 // Side-channel map: populated just before addPanel(), consumed in createComponent()
 // because dockview v5 createComponent() does NOT receive panel params directly.
@@ -47,6 +51,8 @@ function injectWorkspaceCss(containerId: string) {
   cssInjected = true;
   const style = document.createElement('style');
   style.textContent = `
+    /* Zero out content-area padding when dockview takes over */
+    #${containerId}.content-area { padding: 0 !important; }
     /* Hide ALL native dockview tabs — scoped to our container */
     #${containerId} .dv-header,
     #${containerId} .dv-tab-container,
@@ -291,12 +297,13 @@ function buildShell(
 // ── Preview renderer ──────────────────────────────────────────────────────
 
 async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string): Promise<string> {
+  injectMdCss();
   bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
   try {
     const note = await getNote(courseId, slug);
     const { body } = parseFrontmatter(note.content);
-    const displayBody = body.replace(/^#\s[^\n]*\n?/, '').trim();
-    bodyEl.innerHTML = `<div style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72;color:var(--c-fg)"><pre style="white-space:pre-wrap;font-family:inherit">${escHtml(displayBody)}</pre></div>`;
+    const html = await marked.parse(body, { async: false });
+    bodyEl.innerHTML = `<div class="cnw-md" style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72;color:var(--c-fg)">${html}</div>`;
     return note.content;
   } catch {
     bodyEl.innerHTML = `<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar la nota</p>`;
@@ -306,6 +313,63 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
 
 function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Markdown preview CSS (injected once) ─────────────────────────────────
+let mdCssInjected = false;
+function injectMdCss() {
+  if (mdCssInjected || typeof document === 'undefined') return;
+  mdCssInjected = true;
+  const s = document.createElement('style');
+  s.textContent = `
+    .cnw-md h1,.cnw-md h2,.cnw-md h3,.cnw-md h4 { margin:.9em 0 .4em; font-weight:700; line-height:1.25; }
+    .cnw-md h1 { font-size:1.4em; } .cnw-md h2 { font-size:1.2em; } .cnw-md h3 { font-size:1.05em; }
+    .cnw-md p { margin:.55em 0; }
+    .cnw-md ul,.cnw-md ol { margin:.5em 0; padding-left:1.4em; }
+    .cnw-md li { margin:.2em 0; }
+    .cnw-md code { background:var(--c-bg-mute); padding:.1em .35em; border-radius:3px; font-size:.88em; }
+    .cnw-md pre { background:var(--c-bg-mute); padding:.75rem 1rem; border-radius:5px; overflow-x:auto; margin:.6em 0; }
+    .cnw-md pre code { background:none; padding:0; }
+    .cnw-md blockquote { border-left:3px solid var(--c-border); margin:.5em 0; padding:.1em .8em; opacity:.75; }
+    .cnw-md a { color:var(--c-link,#3b82f6); }
+    .cnw-md hr { border:none; border-top:1px solid var(--c-border); margin:.8em 0; }
+    .cnw-md table { border-collapse:collapse; width:100%; margin:.6em 0; font-size:.9em; }
+    .cnw-md th,.cnw-md td { border:1px solid var(--c-border); padding:.25em .5em; }
+    .cnw-md img { max-width:100%; }
+  `;
+  document.head.appendChild(s);
+}
+
+// ── Media panel ────────────────────────────────────────────────────────────
+function buildMediaShell(url: string, title: string): HTMLElement {
+  const shell = document.createElement('div');
+  shell.style.cssText = 'display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden;background:var(--c-bg);';
+  const header = document.createElement('div');
+  header.style.cssText = 'height:22px;flex-shrink:0;display:flex;align-items:center;padding:0 8px;gap:6px;cursor:default;';
+  const titleEl = document.createElement('span');
+  titleEl.style.cssText = 'font-size:10px;color:var(--c-fg-subtle);opacity:.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;';
+  titleEl.textContent = title;
+  header.appendChild(titleEl);
+  shell.appendChild(header);
+  const body = document.createElement('div');
+  body.style.cssText = 'flex:1;overflow:hidden;min-height:0;';
+  const isAudio = /\.(mp3|ogg|wav|flac|m4a)(\?|$)/i.test(url);
+  if (isAudio) {
+    body.style.cssText += 'display:flex;align-items:center;justify-content:center;padding:1rem;';
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.src = url;
+    audio.style.width = '100%';
+    body.appendChild(audio);
+  } else {
+    const iframe = document.createElement('iframe');
+    iframe.src = url;
+    iframe.style.cssText = 'width:100%;height:100%;border:none;';
+    iframe.allow = 'autoplay; fullscreen; encrypted-media';
+    body.appendChild(iframe);
+  }
+  shell.appendChild(body);
+  return shell;
 }
 
 // ── Mode switching ────────────────────────────────────────────────────────
@@ -431,6 +495,11 @@ export function initDockviewWorkspace(
       pendingParams.delete(panelId);
       if (!params) throw new Error(`[cnw] no params for panel ${panelId}`);
 
+      // Media panel — iframe/audio, no note state
+      if (params.kind === 'media') {
+        return { element: buildMediaShell(params.url, params.title), init: () => {} };
+      }
+
       const { shell, bodyEl, statusDot, pencilBtn } = buildShell(
         panelId,
         params.slug,
@@ -449,25 +518,21 @@ export function initDockviewWorkspace(
       };
       panelStates.set(panelId, state);
 
-      // Mode toggle
       pencilBtn.addEventListener('click', () => {
         if (state.mode === 'preview') enterEditMode(state);
         else enterPreviewMode(state);
       });
 
-      // Render initial mode
       if (params.mode === 'edit') {
         enterEditMode(state);
       } else {
         if (initialContent && params.slug === initialSlug) {
-          // Use server-rendered content for the initial panel
           bodyEl.innerHTML = initialContent;
         } else {
           renderPreview(bodyEl, params.courseId, params.slug);
         }
       }
 
-      // dockview IContentRenderer requires element + init
       return { element: shell, init: () => {} };
     },
   });
@@ -520,6 +585,34 @@ export function initDockviewWorkspace(
     });
   }
 
+  function openMedia(url: string, title: string, position: 'bottom' | 'right' = 'bottom'): void {
+    const mediaId = `media-${encodeURIComponent(url).slice(0, 40)}-${Date.now()}`;
+    const referencePanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
+    pendingParams.set(mediaId, { kind: 'media', url, title });
+    dockview.addPanel({
+      id: mediaId,
+      component: 'note-panel',
+      position: referencePanel
+        ? { referencePanel: referencePanel.id, direction: position }
+        : undefined,
+    });
+  }
+
+  // External DnD: sidebar notes dragged into workspace show drop overlay
+  dockview.onUnhandledDragOverEvent(event => {
+    event.accept();
+  });
+  dockview.onDidDrop(event => {
+    const slug = event.nativeEvent.dataTransfer?.getData('text/plain')?.trim();
+    if (slug && slug.startsWith('cursos/')) {
+      try {
+        openNote(slug, 'preview', dockview.panels.length > 0);
+      } catch (err) {
+        console.error('[cnw] drop openNote failed:', err);
+      }
+    }
+  });
+
   // Listen for sidebar note-open events — signal is aborted on next initDockviewWorkspace call
   window.addEventListener('note-open', (e: Event) => {
     const ev = e as CustomEvent<{ slug: string; courseId: string; mode: NoteMode; split?: boolean }>;
@@ -542,6 +635,7 @@ export function initDockviewWorkspace(
 
   const workspace: CourseNotesWorkspace = {
     openNote,
+    openMedia,
     destroy: () => {
       ro.disconnect();
       panelStates.forEach(s => s.persistence?.destroy());
