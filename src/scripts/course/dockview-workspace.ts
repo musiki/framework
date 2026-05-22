@@ -82,6 +82,9 @@ function injectWorkspaceCss(containerId: string) {
       overflow: hidden;
       background: var(--c-bg);
       position: relative;
+      border: 1px solid var(--c-border, rgba(120,120,140,0.18));
+      border-radius: 4px;
+      box-sizing: border-box;
     }
 
     /* Transparent header — the drag zone */
@@ -103,19 +106,36 @@ function injectWorkspaceCss(containerId: string) {
     .cnw-header:active { cursor: grabbing; }
     .cnw-header.is-dragging { opacity: .4; }
 
-    /* Note title — invisible at rest, shows on hover */
+    /* Drag handle — six dots grid */
+    .cnw-handle {
+      display: inline-grid;
+      grid-template-columns: repeat(2, 3px);
+      grid-template-rows: repeat(3, 3px);
+      gap: 2px;
+      opacity: 0.7;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .cnw-handle span {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--c-fg-dim, currentColor);
+      display: block;
+    }
+
+    /* Note title — subtle but always visible */
     .cnw-title {
-      font-size: 10px;
+      font-size: 9px;
       color: var(--c-fg-subtle, var(--c-fg-dim));
-      opacity: 0;
+      opacity: 0.5;
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      transition: opacity 160ms;
+      letter-spacing: 0.02em;
       pointer-events: none;
     }
-    .cnw-shell:hover .cnw-title { opacity: 0.45; }
 
     /* Status dot */
     .cnw-status {
@@ -199,6 +219,15 @@ function buildShell(
   // Header
   const header = document.createElement('div');
   header.className = 'cnw-header';
+
+  // 6-dot drag handle
+  const handle = document.createElement('span');
+  handle.className = 'cnw-handle';
+  for (let i = 0; i < 6; i++) {
+    const dot = document.createElement('span');
+    handle.appendChild(dot);
+  }
+  header.appendChild(handle);
 
   const titleEl = document.createElement('span');
   titleEl.className = 'cnw-title';

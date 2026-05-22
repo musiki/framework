@@ -489,6 +489,32 @@ function injectCss() {
   cssInjected = true;
   const style = document.createElement('style');
   style.textContent = `
+    /* ── Notes sidebar overrides ─────────────────────────────── */
+    /* Chapter titles: small, grey, bold, uppercase */
+    [data-notes-sidebar] .chapter-title {
+      font-size: 0.68rem !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.08em !important;
+      text-transform: uppercase !important;
+      color: var(--c-fg-subtle, #888) !important;
+    }
+    /* Note items: smaller, no blue, black/white hierarchy */
+    [data-notes-sidebar] .lesson-link {
+      font-size: 0.8rem !important;
+      color: var(--c-fg-dim) !important;
+      padding: 0.25rem 0.45rem !important;
+    }
+    [data-notes-sidebar] .lesson-link:hover {
+      color: var(--c-fg) !important;
+      background: var(--c-bg-mute) !important;
+    }
+    [data-notes-sidebar] .lesson-link.active {
+      color: var(--c-fg) !important;
+      font-weight: 600 !important;
+      background: var(--c-bg-alt, var(--c-bg-mute)) !important;
+      box-shadow: inset 0 0 0 1px var(--c-border, rgba(120,120,140,0.25)) !important;
+    }
+    /* ── Drop lines ──────────────────────────────────────────── */
     .ns-drop-line {
       height: 0;
       list-style: none;

@@ -371,13 +371,15 @@ const sidebarChapterEntries: Array<
 let insertedRecursosSidebarEntry = false;
 const hasRecursosSidebarChapter = sortedChapters.some(([chapterName]) => normalizeContentSlug(chapterName) === '80-recursos');
 for (const [chapterName, lessons] of sortedChapters) {
-  if (canManageLiveInteractions && !hasRecursosSidebarChapter && !insertedRecursosSidebarEntry && /^9\d/.test(chapterName)) {
+  if (canManageLiveInteractions && !insertedRecursosSidebarEntry && /^9\d/.test(chapterName)) {
     sidebarChapterEntries.push({ kind: 'recursos' });
     insertedRecursosSidebarEntry = true;
   }
+  // Skip the "80 RECURSOS" content chapter for teachers — recursos section handles it
+  if (canManageLiveInteractions && normalizeContentSlug(chapterName) === '80-recursos') continue;
   sidebarChapterEntries.push({ kind: 'chapter', chapterName, lessons });
 }
-if (canManageLiveInteractions && !hasRecursosSidebarChapter && !insertedRecursosSidebarEntry) {
+if (canManageLiveInteractions && !insertedRecursosSidebarEntry) {
   sidebarChapterEntries.push({ kind: 'recursos' });
 }
 
