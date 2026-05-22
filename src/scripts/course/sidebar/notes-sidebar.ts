@@ -507,10 +507,11 @@ function injectCss() {
       display: none !important;
     }
     /* Note items: smaller, no blue, black/white hierarchy */
+    [data-notes-sidebar] .lesson-list { gap: 0 !important; margin-top: 0.1rem !important; margin-bottom: 0.15rem !important; }
     [data-notes-sidebar] .lesson-link {
       font-size: 0.8rem !important;
       color: var(--c-fg-dim) !important;
-      padding: 0.25rem 0.45rem !important;
+      padding: 0.18rem 0.45rem !important;
     }
     [data-notes-sidebar] .lesson-link:hover {
       color: var(--c-fg) !important;

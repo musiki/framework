@@ -1,6 +1,6 @@
 // src/scripts/course/dockview-workspace.ts
 import { DockviewComponent } from 'dockview-core';
-import { marked } from 'marked';
+import { marked, type Renderer } from 'marked';
 import { NotesPersistence } from './notes-persistence';
 import { getNote } from '../notes-editor/api';
 import { parseFrontmatter } from '../notes-editor/yaml-strip';
@@ -43,6 +43,28 @@ let _activeCtrl: AbortController | null = null;
 let _activeContainer: HTMLElement | null = null;
 let _activeWorkspace: CourseNotesWorkspace | null = null;
 
+// ── marked setup (once) ────────────────────────────────────────────────────
+let markedConfigured = false;
+function configureMarked() {
+  if (markedConfigured) return;
+  markedConfigured = true;
+  const renderer: Partial<Renderer> = {
+    code({ text, lang }) {
+      if (lang === 'mermaid') {
+        return `<div class="cnw-mermaid mermaid">${escHtmlInline(text)}</div>`;
+      }
+      if (lang === 'lily' || lang === 'lilypond') {
+        return `<pre class="cnw-lily-code"><code class="language-lilypond">${escHtmlInline(text)}</code></pre>`;
+      }
+      return `<pre><code>${escHtmlInline(text)}</code></pre>`;
+    },
+  };
+  marked.use({ renderer });
+}
+function escHtmlInline(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // ── Inject CSS ────────────────────────────────────────────────────────────
 
 let cssInjected = false;
@@ -51,8 +73,13 @@ function injectWorkspaceCss(containerId: string) {
   cssInjected = true;
   const style = document.createElement('style');
   style.textContent = `
-    /* Zero out content-area padding when dockview takes over */
-    #${containerId}.content-area { padding: 0 !important; }
+    /* Zero out content-area padding/overflow when dockview takes over */
+    #${containerId}.content-area {
+      padding: 0 !important;
+      overflow: hidden !important;
+      --dv-sash-color: var(--c-border, rgba(120,120,140,0.35));
+      --dv-active-sash-color: var(--c-link, #3b82f6);
+    }
     /* Hide ALL native dockview tabs — scoped to our container */
     #${containerId} .dv-header,
     #${containerId} .dv-tab-container,
@@ -298,12 +325,27 @@ function buildShell(
 
 async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string): Promise<string> {
   injectMdCss();
+  configureMarked();
   bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
   try {
     const note = await getNote(courseId, slug);
     const { body } = parseFrontmatter(note.content);
-    const html = await marked.parse(body, { async: false });
+    // Strip %%cover%%...%%/cover%% presentation blocks and eval fences
+    const cleanBody = body
+      .replace(/%%cover%%[\s\S]*?%%\/cover%%/gi, '')
+      .replace(/```eval[\s\S]*?```/gi, '')
+      .trim();
+    const html = String(marked.parse(cleanBody, { async: false }));
     bodyEl.innerHTML = `<div class="cnw-md" style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72;color:var(--c-fg)">${html}</div>`;
+    // Lazy-load mermaid if any diagrams present
+    if (bodyEl.querySelector('.cnw-mermaid') && !('mermaid' in window)) {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+      s.onload = () => (window as any).mermaid?.run({ nodes: bodyEl.querySelectorAll('.cnw-mermaid') });
+      document.head.appendChild(s);
+    } else if (bodyEl.querySelector('.cnw-mermaid')) {
+      (window as any).mermaid?.run({ nodes: bodyEl.querySelectorAll('.cnw-mermaid') });
+    }
     return note.content;
   } catch {
     bodyEl.innerHTML = `<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar la nota</p>`;
@@ -341,7 +383,13 @@ function injectMdCss() {
 }
 
 // ── Media panel ────────────────────────────────────────────────────────────
+function toEmbedUrl(url: string): string {
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  return url;
+}
 function buildMediaShell(url: string, title: string): HTMLElement {
+  url = toEmbedUrl(url);
   const shell = document.createElement('div');
   shell.style.cssText = 'display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden;background:var(--c-bg);';
   const header = document.createElement('div');
@@ -597,6 +645,17 @@ export function initDockviewWorkspace(
         : undefined,
     });
   }
+
+  // Cmd/Ctrl+E — toggle edit/preview on active pod
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+      const state = panelStates.get(dockview.activePanel?.id ?? '');
+      if (!state) return;
+      e.preventDefault();
+      if (state.mode === 'preview') enterEditMode(state);
+      else void enterPreviewMode(state);
+    }
+  }, { signal });
 
   // External DnD: sidebar notes dragged into workspace show drop overlay
   dockview.onUnhandledDragOverEvent(event => {
