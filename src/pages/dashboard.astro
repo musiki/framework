@@ -309,8 +309,8 @@ const courseFiles = import.meta.glob('/src/content/cursos/**/_index.{md,mdx}', {
 const courseEntries = Object.entries(courseFiles).map(([filepath, module]: any) => {
   const fm = module.frontmatter;
   
-  // Only process files explicitly marked as courses
-  if (fm.type !== 'course') return null;
+  // Exclude files explicitly marked as a non-course type
+  if (fm.type && fm.type !== 'course') return null;
 
   // Extract courseId from path (e.g., /src/content/cursos/my-course/_index.md -> my-course)
   const parts = filepath.split('/');
