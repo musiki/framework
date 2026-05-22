@@ -1,0 +1,254 @@
+/* ── Ribbon variables ──────────────────────────────────────────────────── */
+:root {
+  --ribbon-width: 44px;
+  --ribbon-bg: color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%);
+  --ribbon-border: var(--c-border);
+  --ribbon-item-size: 32px;
+  --ribbon-bottom-height: 60px; /* mobile */
+}
+
+/* ── Desktop ribbon ────────────────────────────────────────────────────── */
+.ribbon {
+  width: var(--ribbon-width);
+  height: 100%;
+  background: var(--ribbon-bg);
+  border-right: 1px solid var(--ribbon-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 2px;
+  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+  z-index: 40;
+}
+.ribbon::-webkit-scrollbar { display: none; }
+
+/* ── Groups ────────────────────────────────────────────────────────────── */
+.ribbon-spacer {
+  flex: 1;
+  min-height: 4px;
+}
+.ribbon-divider {
+  width: 28px;
+  height: 1px;
+  background: var(--ribbon-border);
+  margin: 4px 0;
+  flex-shrink: 0;
+}
+.ribbon-label {
+  font-size: 7px;
+  color: color-mix(in srgb, var(--c-fg) 30%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  user-select: none;
+  margin-bottom: 2px;
+}
+
+/* ── Items ─────────────────────────────────────────────────────────────── */
+.ribbon-item {
+  width: var(--ribbon-item-size);
+  height: var(--ribbon-item-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--c-fg) 60%, transparent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 120ms, color 120ms;
+  flex-shrink: 0;
+  padding: 0;
+  font-size: inherit;
+}
+.ribbon-item:hover,
+.ribbon-item.is-active {
+  background: color-mix(in srgb, var(--c-fg) 8%, transparent);
+  color: var(--c-fg);
+}
+.ribbon-item svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* circle variant — for sidebar handles */
+.ribbon-item--circle {
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--c-fg) 15%, transparent);
+}
+.ribbon-item--circle:hover,
+.ribbon-item--circle.is-active {
+  border-color: color-mix(in srgb, var(--c-fg) 30%, transparent);
+  background: color-mix(in srgb, var(--c-fg) 8%, transparent);
+}
+
+/* brand logo */
+.ribbon-item--logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  border: none;
+}
+.ribbon-item--logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* profile avatar */
+.ribbon-item--avatar {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c-fg) 12%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-fg);
+}
+
+/* course badge */
+.ribbon-item--badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--c-fg) 20%, transparent);
+  color: color-mix(in srgb, var(--c-fg) 55%, transparent);
+  background: color-mix(in srgb, var(--c-fg) 5%, transparent);
+}
+.ribbon-item--badge:hover {
+  color: var(--c-fg);
+  border-color: color-mix(in srgb, var(--c-fg) 35%, transparent);
+}
+
+/* disabled / future items */
+.ribbon-item--disabled {
+  opacity: 0.28;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* about link */
+.ribbon-about {
+  font-size: 8px;
+  color: color-mix(in srgb, var(--c-fg) 20%, transparent);
+  text-decoration: none;
+  padding: 2px 4px;
+}
+.ribbon-about:hover {
+  color: color-mix(in srgb, var(--c-fg) 45%, transparent);
+}
+
+/* beacon dot (placeholder) */
+.ribbon-beacon {
+  display: none; /* shown via JS when update available */
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e55;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+.ribbon-item--logo {
+  position: relative;
+}
+
+/* ── Mobile ≤500px: bottom bar ─────────────────────────────────────────── */
+@media (max-width: 500px) {
+  .ribbon {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100%;
+    height: var(--ribbon-bottom-height);
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 8px;
+    border-right: none;
+    border-top: 1px solid var(--ribbon-border);
+    z-index: 100;
+    gap: 0;
+    overflow: hidden;
+    overflow-x: auto;
+  }
+  /* show only mobile-visible items */
+  .ribbon-item { display: none; }
+  .ribbon-item--mobile-visible { display: flex; }
+  .ribbon-divider,
+  .ribbon-spacer,
+  .ribbon-label,
+  .ribbon-about { display: none; }
+  /* all mobile items need comfortable touch targets */
+  .ribbon-item--mobile-visible {
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 8px;
+  }
+
+  /* "más" upward sheet */
+  .ribbon-mas-sheet {
+    position: fixed;
+    bottom: var(--ribbon-bottom-height);
+    right: 0;
+    min-width: 180px;
+    background: color-mix(in srgb, var(--c-bg) 96%, var(--c-fg) 4%);
+    border: 1px solid var(--ribbon-border);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    padding: 8px 0;
+    z-index: 101;
+    box-shadow: -2px -4px 16px rgba(0,0,0,0.18);
+    transform: translateY(100%);
+    transition: transform 200ms ease;
+  }
+  .ribbon-mas-sheet.is-open {
+    transform: translateY(0);
+  }
+  .ribbon-mas-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--c-fg);
+    text-decoration: none;
+    background: none;
+    border: none;
+    width: 100%;
+    cursor: pointer;
+    min-height: 44px;
+  }
+  .ribbon-mas-item:hover {
+    background: color-mix(in srgb, var(--c-fg) 6%, transparent);
+  }
+  .ribbon-mas-item svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+  .ribbon-mas-divider {
+    height: 1px;
+    background: var(--ribbon-border);
+    margin: 4px 0;
+  }
+  .ribbon-mas-item--disabled {
+    opacity: 0.3;
+    pointer-events: none;
+  }
+}
+
+/* ── Desktop: hide mobile-only elements ─────────────────────────────────── */
+@media (min-width: 501px) {
+  .ribbon-mas-sheet { display: none; }
+  .ribbon-mas-toggle { display: none; } /* "···" button only on mobile */
+}
