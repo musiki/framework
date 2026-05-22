@@ -3268,14 +3268,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
     </style>
   </head>
   <body>
-    <Ribbon
-      courseId={canonicalCourseId || courseSlug}
-      courseHref={courseHref}
-      performativeRoomHref={performativeRoomHref}
-      activeCourseCode={activeCourseCode}
-      session={session}
-    />
-
     <main
       class="course-container"
       data-course-layout-root
@@ -3288,6 +3280,13 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       data-live-course-id={canonicalCourseId || courseSlug}
       data-live-page-slug={livePageSlug}
     >
+      <Ribbon
+        courseId={canonicalCourseId || courseSlug}
+        courseHref={courseHref}
+        performativeRoomHref={performativeRoomHref}
+        activeCourseCode={activeCourseCode}
+        session={session}
+      />
       <div class="course-sidebar-overlay" data-course-sidebar-overlay></div>
 
       <!-- Sidebar Navigation -->
