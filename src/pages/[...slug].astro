@@ -868,71 +868,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         pointer-events: auto;
       }
 
-      .course-sidebar-handle {
-        position: fixed;
-        top: calc(var(--musiki-header-height, 4.5rem) + 0.5rem);
-        z-index: 46;
-        width: 2.25rem;
-        height: 4.5rem;
-        border: 1px solid var(--c-border);
-        background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%);
-        color: var(--c-fg);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 180ms ease;
-      }
-
-      .course-sidebar-handle--left {
-        left: 0;
-        border-left: none;
-        border-radius: 0 99px 99px 0;
-        padding-right: 0.2rem;
-      }
-
-      .course-sidebar-handle--right {
-        right: 0;
-        border-right: none;
-        border-radius: 99px 0 0 99px;
-        padding-left: 0.2rem;
-      }
-
-      .course-sidebar-handle:hover {
-        width: 2.5rem;
-        background: color-mix(in srgb, var(--c-bg) 90%, var(--c-fg) 10%);
-      }
-
-      .course-sidebar-handle svg {
-        width: 1.6rem;
-        height: 1.6rem;
-        transition: transform 0.2s;
-      }
-
-      .course-sidebar-handle--left svg {
-        /* No rotation needed for list icon */
-      }
-
-      .course-sidebar-handle--left:hover svg {
-        transform: scale(1.1) translateX(2px);
-      }
-
-      .course-sidebar-handle--right:hover svg {
-        transform: scale(1.1) translateX(-2px);
-      }
-
-      .course-container[data-has-right-sidebar='false'] .course-sidebar-handle--right {
-        display: none;
-      }
-
-      .course-container[data-left-open='false'] .course-sidebar-handle--left {
-        display: inline-flex;
-      }
-
-      .course-container[data-right-open='false'][data-has-right-sidebar='true'] .course-sidebar-handle--right {
-        display: inline-flex;
-      }
 
       .sidebar {
         --course-sidebar-pad-top: 0.75rem;
@@ -2988,33 +2923,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           grid-template-columns: minmax(0, 1fr);
         }
 
-        .course-sidebar-handle {
-          display: none;
-          top: auto;
-          bottom: 5%;
-          width: 2.5rem;
-          height: 5rem;
-          background: var(--c-bg);
-          border: 1px solid var(--c-border);
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-        }
-
-        .course-sidebar-handle--left {
-          left: 0;
-          border-left: none;
-          border-radius: 0 99px 99px 0;
-        }
-
-        .course-sidebar-handle--right {
-          right: 0;
-          border-right: none;
-          border-radius: 99px 0 0 99px;
-        }
-
-        .course-container[data-left-open='false'] .course-sidebar-handle--left,
-        .course-container[data-right-open='false'][data-has-right-sidebar='true'] .course-sidebar-handle--right {
-          display: inline-flex;
-        }
 
         .sidebar {
           --course-sidebar-pad-top: 1rem;
@@ -3114,11 +3022,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
 
       @media (max-width: 640px) {
-        .course-sidebar-handle {
-          width: 2.25rem;
-          height: 4rem;
-        }
-
         .sidebar {
           width: min(88vw, 308px);
         }
@@ -3132,11 +3035,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
 
       @media (max-width: 500px) {
-        .course-sidebar-handle {
-          width: 2rem;
-          height: 3.5rem;
-        }
-
         .sidebar {
           --course-sidebar-pad-top: 0.9rem;
           --course-sidebar-pad-x: 0.9rem;
