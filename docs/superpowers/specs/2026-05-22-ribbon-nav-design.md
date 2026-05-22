@@ -130,7 +130,7 @@ All ribbon styles live in `ribbon.css` using the existing CSS variable system (`
 
 ## Out of scope (future specs)
 
-- Forum panel content redesign (thread/TikTok style, mobile modal)
+- **Forum panel redesign** — the 💬 ribbon item links to `/foro` for now. Future spec should cover: right panel mode "foro" (thread-style, no heavy borders), list structure (nota-foro · general · created forums · + create), mobile bottom sheet at 70% height. Style direction: transparent/threads-like, numbers for message/reply counts, no Discord-style channel clutter.
 - Info panel content (page history, YAML metadata, version history)
 - Graph drag-to-pod implementation (drag API wiring to dockview)
 - Hyperpiano pod activation
