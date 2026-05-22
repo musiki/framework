@@ -54,7 +54,8 @@ function configureMarked() {
         return `<div class="cnw-mermaid mermaid">${escHtmlInline(text)}</div>`;
       }
       if (lang === 'lily' || lang === 'lilypond') {
-        return `<pre class="cnw-lily-code"><code class="language-lilypond">${escHtmlInline(text)}</code></pre>`;
+        // Placeholder replaced async by hydrateLilyPlaceholders after render
+        return `<div class="cnw-lily-pending" data-lily-source="${escAttr(text)}" style="padding:.75rem 1rem;background:var(--c-bg-mute);border-radius:4px;text-align:center;font-size:.8rem;color:var(--c-fg-dim);margin:.6em 0;">♩ cargando partitura…</div>`;
       }
       return `<pre><code>${escHtmlInline(text)}</code></pre>`;
     },
@@ -63,6 +64,43 @@ function configureMarked() {
 }
 function escHtmlInline(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escAttr(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── Async LilyPond hydration ──────────────────────────────────────────────
+async function hydrateLilyPlaceholders(bodyEl: HTMLElement, slug: string) {
+  const pending = Array.from(bodyEl.querySelectorAll<HTMLElement>('.cnw-lily-pending'));
+  if (!pending.length) return;
+  await Promise.all(pending.map(async (el) => {
+    if (bodyEl.dataset.renderedSlug !== slug || !el.isConnected) return;
+    const src = el.dataset.lilySource;
+    if (!src) return;
+    try {
+      const res = await fetch('/api/lily/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: src }),
+      });
+      if (!res.ok) { el.textContent = '⚠ No se pudo renderizar'; return; }
+      const data = await res.json() as { success?: boolean; url?: string; midiUrl?: string };
+      if (!data.success || !data.url) { el.textContent = '⚠ Error al renderizar'; return; }
+      if (bodyEl.dataset.renderedSlug !== slug || !el.isConnected) return;
+      const figure = document.createElement('figure');
+      figure.className = 'lilypond-block lily-score';
+      figure.dataset.lilyUrl = data.url;
+      if (data.midiUrl) figure.dataset.midiUrl = data.midiUrl;
+      const img = document.createElement('img');
+      img.src = data.url;
+      img.alt = 'LilyPond notation';
+      img.loading = 'lazy';
+      img.style.cssText = 'max-width:100%;height:auto;display:block;';
+      figure.appendChild(img);
+      el.replaceWith(figure);
+      // lilypond-player MutationObserver detects .lilypond-block and auto-hydrates
+    } catch { el.textContent = '⚠ Error al renderizar'; }
+  }));
 }
 
 // ── Inject CSS ────────────────────────────────────────────────────────────
@@ -349,6 +387,8 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
     }
     bodyEl.dataset.renderedSlug = slug;
     bodyEl.dataset.lastContent = note.content;
+    // Async passes: lily API render + mermaid (don't block return)
+    void hydrateLilyPlaceholders(bodyEl, slug);
     return note.content;
   } catch {
     bodyEl.innerHTML = `<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar la nota</p>`;
