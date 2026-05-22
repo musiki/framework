@@ -4,7 +4,7 @@ export const prerender = false;
 import { getCollection, getEntry, render } from 'astro:content';
 import { ClientRouter } from 'astro:transitions';
 import BaseHead from '../components/BaseHead.astro';
-import Header from '../components/Header.astro';
+import Ribbon from '../components/Ribbon.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
@@ -807,12 +807,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 10 26 22H6Z' fill='%23000000'/%3E%3C/svg%3E") 16 16,
           n-resize;
         display: grid;
+        --ribbon-width: 44px;
         grid-template-columns:
+          var(--ribbon-width)
           minmax(0, var(--left-sidebar-width))
           minmax(0, 1fr)
           minmax(0, var(--right-sidebar-width));
         gap: 0;
-        height: calc(100dvh - var(--musiki-header-height, 4.5rem));
+        height: 100dvh;
         overflow: hidden;
         align-items: stretch;
         position: relative;
@@ -829,6 +831,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       .course-container[data-left-open='false'] {
         grid-template-columns:
+          var(--ribbon-width)
           0
           minmax(0, 1fr)
           minmax(0, var(--right-sidebar-width));
@@ -836,6 +839,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       .course-container[data-right-open='false'] {
         grid-template-columns:
+          var(--ribbon-width)
           minmax(0, var(--left-sidebar-width))
           minmax(0, 1fr)
           0;
@@ -843,6 +847,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       .course-container[data-left-open='false'][data-right-open='false'] {
         grid-template-columns:
+          var(--ribbon-width)
           0
           minmax(0, 1fr)
           0;
@@ -1795,6 +1800,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       .course-container[data-right-maximized='true'] .sidebar--right {
         position: fixed;
         left: calc(
+          var(--ribbon-width) +
           clamp(0.7rem, 1.5vw, 1.4rem) +
           var(--left-sidebar-width) +
           clamp(0.9rem, 1.35vw, 1.3rem)
@@ -3364,13 +3370,12 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
     </style>
   </head>
   <body>
-    <Header
-      showPageInfoToggle={true}
+    <Ribbon
       courseId={canonicalCourseId || courseSlug}
-      activeCourseId={canonicalCourseId || courseSlug}
-      activeCourseCode={activeCourseCode}
-      presentationHref={presentationHref}
+      courseHref={courseHref}
       performativeRoomHref={performativeRoomHref}
+      activeCourseCode={activeCourseCode}
+      session={session}
     />
 
     <main
@@ -3385,28 +3390,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       data-live-course-id={canonicalCourseId || courseSlug}
       data-live-page-slug={livePageSlug}
     >
-      <button
-        type="button"
-        class="course-sidebar-handle course-sidebar-handle--left"
-        data-sidebar-handle="left"
-        aria-label="Mostrar navegación del curso"
-        title="Mostrar navegación del curso (⌘/Ctrl + \\)"
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M8 6.00067L21 6.00139M8 12.0007L21 12.0015M8 18.0007L21 18.0015M3.5 6H3.51M3.5 12H3.51M3.5 18H3.51M4 6C4 6.27614 3.77614 6.5 3.5 6.5C3.22386 6.5 3 6.27614 3 6C3 5.72386 3.22386 5.5 3.5 5.5C3.77614 5.5 4 5.72386 4 6ZM4 12C4 12.2761 3.77614 12.5 3.5 12.5C3.22386 12.5 3 12.2761 3 12C3 11.7239 3.22386 11.5 3.5 11.5C3.77614 11.5 4 11.7239 4 12ZM4 18C4 18.2761 3.77614 18.5 3.5 18.5C3.22386 18.5 3 18.2761 3 18C3 17.7239 3.22386 17.5 3.5 17.5C3.77614 17.5 4 17.7239 4 18Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-      <button
-        type="button"
-        class="course-sidebar-handle course-sidebar-handle--right"
-        data-sidebar-handle="right"
-        aria-label="Mostrar foros"
-        title="Mostrar foros (⌘/Ctrl + Shift + \\)"
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M16.1795 3.26875C15.7889 2.87823 15.1558 2.87823 14.7652 3.26875L8.12078 9.91322C6.94952 11.0845 6.94916 12.9833 8.11996 14.155L14.6903 20.7304C15.0808 21.121 15.714 21.121 16.1045 20.7304C16.495 20.3399 16.495 19.7067 16.1045 19.3162L9.53246 12.7442C9.14194 12.3536 9.14194 11.7205 9.53246 11.33L16.1795 4.68297C16.57 4.29244 16.57 3.65928 16.1795 3.26875Z" fill="currentColor"/>
-        </svg>
-      </button>
       <div class="course-sidebar-overlay" data-course-sidebar-overlay></div>
 
       <!-- Sidebar Navigation -->
