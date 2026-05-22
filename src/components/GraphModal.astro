@@ -588,6 +588,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   window.addEventListener('graph:set', handleGraphSetRequest);
   window.addEventListener('graph:open', handleGraphOpenRequest);
   window.addEventListener('graph:close', handleGraphCloseRequest);
+  window.addEventListener('musiki:open-graph', handleGraphOpenRequest);
 
   document.getElementById('graph-close')?.addEventListener('click', () => {
     void setModalOpen(false, 'local');
@@ -614,6 +615,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       window.removeEventListener('graph:set', handleGraphSetRequest);
       window.removeEventListener('graph:open', handleGraphOpenRequest);
       window.removeEventListener('graph:close', handleGraphCloseRequest);
+      window.removeEventListener('musiki:open-graph', handleGraphOpenRequest);
     },
     { once: true }
   );
