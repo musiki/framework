@@ -486,11 +486,10 @@ export function renderNotesSidebar(
 
 // ── CSS injection ─────────────────────────────────────────────────────────
 
-let cssInjected = false;
 function injectCss() {
-  if (cssInjected || typeof document === 'undefined') return;
-  cssInjected = true;
+  if (typeof document === 'undefined' || document.querySelector('[data-cnw-ns-css]')) return;
   const style = document.createElement('style');
+  style.setAttribute('data-cnw-ns-css', '1');
   style.textContent = `
     /* ── Notes sidebar overrides ─────────────────────────────── */
     /* Chapter titles: small, grey, bold, uppercase */
@@ -566,8 +565,9 @@ export function initNotesSidebar(
   courseHref: string,
   activeSlug: string | null,
 ): void {
-  // Idempotency: same container is already initialized
-  if (_sidebarContainer === container) return;
+  // Idempotency: same container + same course is already initialized
+  if (_sidebarContainer === container && container.dataset.cnwCourseId === courseId) return;
+  container.dataset.cnwCourseId = courseId;
 
   // Abort previous global listeners
   _sidebarCtrl?.abort();

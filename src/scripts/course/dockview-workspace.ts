@@ -67,11 +67,10 @@ function escHtmlInline(s: string) {
 
 // ── Inject CSS ────────────────────────────────────────────────────────────
 
-let cssInjected = false;
 function injectWorkspaceCss(containerId: string) {
-  if (cssInjected) return;
-  cssInjected = true;
+  if (document.querySelector('[data-cnw-ws-css]')) return;
   const style = document.createElement('style');
+  style.setAttribute('data-cnw-ws-css', '1');
   style.textContent = `
     /* Zero out content-area padding/overflow when dockview takes over */
     #${containerId}.content-area {
@@ -324,6 +323,8 @@ function buildShell(
 // ── Preview renderer ──────────────────────────────────────────────────────
 
 async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string): Promise<string> {
+  // Skip re-render if we already rendered this slug into this element
+  if (bodyEl.dataset.renderedSlug === slug) return bodyEl.dataset.lastContent ?? '';
   injectMdCss();
   configureMarked();
   bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
@@ -346,6 +347,8 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
     } else if (bodyEl.querySelector('.cnw-mermaid')) {
       (window as any).mermaid?.run({ nodes: bodyEl.querySelectorAll('.cnw-mermaid') });
     }
+    bodyEl.dataset.renderedSlug = slug;
+    bodyEl.dataset.lastContent = note.content;
     return note.content;
   } catch {
     bodyEl.innerHTML = `<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar la nota</p>`;
@@ -358,11 +361,10 @@ function escHtml(s: string): string {
 }
 
 // ── Markdown preview CSS (injected once) ─────────────────────────────────
-let mdCssInjected = false;
 function injectMdCss() {
-  if (mdCssInjected || typeof document === 'undefined') return;
-  mdCssInjected = true;
+  if (typeof document === 'undefined' || document.querySelector('[data-cnw-md-css]')) return;
   const s = document.createElement('style');
+  s.setAttribute('data-cnw-md-css', '1');
   s.textContent = `
     .cnw-md h1,.cnw-md h2,.cnw-md h3,.cnw-md h4 { margin:.9em 0 .4em; font-weight:700; line-height:1.25; }
     .cnw-md h1 { font-size:1.4em; } .cnw-md h2 { font-size:1.2em; } .cnw-md h3 { font-size:1.05em; }
@@ -425,6 +427,8 @@ function buildMediaShell(url: string, title: string): HTMLElement {
 async function enterEditMode(state: PanelState) {
   state.mode = 'edit';
   state.bodyEl.innerHTML = '';
+  delete state.bodyEl.dataset.renderedSlug;
+  delete state.bodyEl.dataset.lastContent;
   state.pencilBtn.title = 'Vista previa';
   state.pencilBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
@@ -511,8 +515,9 @@ export function initDockviewWorkspace(
   initialSlug: string | null,
   initialContent: string | null,
 ): CourseNotesWorkspace {
-  // Idempotency: same container already has an active workspace — skip
-  if (_activeContainer === container && _activeWorkspace) return _activeWorkspace;
+  // Idempotency: same container + same course already has an active workspace — skip
+  if (_activeContainer === container && _activeWorkspace && container.dataset.cnwCourseId === courseId) return _activeWorkspace;
+  container.dataset.cnwCourseId = courseId;
 
   // Teardown previous instance (different container = new navigation)
   _activeCtrl?.abort();

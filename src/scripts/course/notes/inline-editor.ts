@@ -62,11 +62,10 @@ function slugify(title: string): string {
     .replace(/\s+/g, '-');
 }
 
-let _nieCssInjected = false;
 function injectNieCss() {
-  if (_nieCssInjected || typeof document === 'undefined') return;
-  _nieCssInjected = true;
+  if (typeof document === 'undefined' || document.querySelector('[data-cnw-nie-css]')) return;
   const s = document.createElement('style');
+  s.setAttribute('data-cnw-nie-css', '1');
   s.textContent = `
     #nie-toolbar .snip-btn { position:relative; }
     #nie-toolbar .snip-btn:hover { color:var(--c-fg); background:var(--c-bg-mute,rgba(128,128,128,.1)); }
