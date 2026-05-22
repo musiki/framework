@@ -378,16 +378,22 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       }
     });
     // Close sheet when a mas-item is tapped
-    masSheet?.querySelectorAll('.ribbon-mas-item').forEach((item) => {
-      item.addEventListener('click', () => setTimeout(closeMas, 80));
-    });
+    if (masSheet && !masSheet.dataset.masItemsBound) {
+      masSheet.dataset.masItemsBound = 'true';
+      masSheet.querySelectorAll('.ribbon-mas-item').forEach((item) => {
+        item.addEventListener('click', () => setTimeout(closeMas, 80));
+      });
+    }
     // Close on outside tap
-    document.addEventListener('click', (e) => {
-      if (masSheet?.classList.contains('is-open') && !masSheet.contains(e.target as Node)) {
-        const masToggle = document.querySelector('[data-ribbon-mas-toggle]');
-        if (!masToggle?.contains(e.target as Node)) closeMas();
-      }
-    });
+    if (!document.documentElement.dataset.ribbonOutsideClickBound) {
+      document.documentElement.dataset.ribbonOutsideClickBound = 'true';
+      document.addEventListener('click', (e) => {
+        if (masSheet?.classList.contains('is-open') && !masSheet.contains(e.target as Node)) {
+          const masToggle = document.querySelector('[data-ribbon-mas-toggle]');
+          if (!masToggle?.contains(e.target as Node)) closeMas();
+        }
+      });
+    }
   };
 
   setupRibbon();
