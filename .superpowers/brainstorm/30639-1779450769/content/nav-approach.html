@@ -1,0 +1,87 @@
+<h2>¿Qué patrón de navegación de pods?</h2>
+<p class="subtitle">Cómo se accede y organiza la galería de pods (hyperpiano, notas, ORF, graph, foro…) en la vista del curso</p>
+
+<div class="cards">
+
+  <!-- A: Right Activity Bar -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0d;padding:12px;font-family:monospace;font-size:11px;color:#aaa;border-radius:6px;min-height:160px;">
+      <div style="display:flex;height:150px;gap:4px;">
+        <div style="width:44px;background:#1a1a1a;border-radius:4px;display:flex;flex-direction:column;align-items:center;padding:6px 0;gap:6px;font-size:16px;">
+          <span title="notas">📝</span>
+          <span title="hyperpiano">🎹</span>
+          <span title="ORF">🎼</span>
+          <span title="graph">🕸</span>
+          <span title="foro">💬</span>
+          <div style="flex:1"></div>
+          <span title="sala performativa">🎭</span>
+          <span title="settings">⚙️</span>
+        </div>
+        <div style="flex:1;background:#111;border-radius:4px;padding:6px;font-size:10px;color:#555;">contenido del curso</div>
+        <div style="width:220px;background:#161616;border-radius:4px;border-left:1px solid #2a2a2a;padding:8px;font-size:10px;">
+          <div style="color:#888;margin-bottom:4px;font-size:9px;text-transform:uppercase;letter-spacing:.05em;">🎹 Hyperpiano</div>
+          <div style="background:#1e1e1e;height:100px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#444;">pod activo</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Activity Bar lateral derecha</h3>
+      <p>Franja vertical de iconos (estilo VS Code / TikTok). Click = abre el pod en panel derecho. El panel puede dividirse horizontalmente con dockview ya existente.</p>
+    </div>
+    <div class="pros-cons">
+      <div class="pros"><h4>A favor</h4><ul><li>Muy compacto, siempre visible</li><li>Fácil agregar pods nuevos</li><li>Compatible con dockview actual</li></ul></div>
+      <div class="cons"><h4>En contra</h4><ul><li>Iconos sin label = curva de aprendizaje</li><li>Cambia layout del curso (agrega 44px)</li></ul></div>
+    </div>
+  </div>
+
+  <!-- B: Top Tab Bar (pods section) -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0d;padding:12px;font-family:monospace;font-size:11px;color:#aaa;border-radius:6px;min-height:160px;">
+      <div style="display:flex;height:150px;gap:4px;flex-direction:column;">
+        <div style="height:30px;background:#1a1a1a;border-radius:4px;display:flex;align-items:center;padding:0 8px;gap:10px;font-size:11px;">
+          <span style="color:#fff;border-bottom:2px solid #6c8;">📝 Notas</span>
+          <span>🎹 Piano</span>
+          <span>🎼 ORF</span>
+          <span>🕸 Graph</span>
+          <span>💬 Foro</span>
+          <div style="flex:1"></div>
+          <span style="color:#aaa;font-size:10px;">🎭 Sala</span>
+          <span style="color:#aaa;font-size:10px;">⚙️</span>
+        </div>
+        <div style="flex:1;background:#111;border-radius:4px;padding:6px;font-size:10px;color:#555;">pod activo ocupa área completa o split con contenido</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Tab bar horizontal (sobre el área derecha)</h3>
+      <p>Barra de tabs encima del área de pods (reemplaza el panel dockview actual). Los pods aparecen como tabs; "Sala" y "Settings" van al extremo derecho.</p>
+    </div>
+    <div class="pros-cons">
+      <div class="pros"><h4>A favor</h4><ul><li>Labels siempre visibles</li><li>Familiar (tabs de navegador)</li><li>Fácil manejar "página activa"</li></ul></div>
+      <div class="cons"><h4>En contra</h4><ul><li>Ocupa espacio vertical</li><li>Con muchos pods se satura</li></ul></div>
+    </div>
+  </div>
+
+  <!-- C: Floating launcher -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d0d0d;padding:12px;font-family:monospace;font-size:11px;color:#aaa;border-radius:6px;min-height:160px;position:relative;">
+      <div style="display:flex;height:150px;gap:4px;">
+        <div style="flex:1;background:#111;border-radius:4px;padding:6px;font-size:10px;color:#555;">contenido del curso</div>
+      </div>
+      <!-- floating pill -->
+      <div style="position:absolute;bottom:20px;right:20px;background:#1e1e1e;border:1px solid #333;border-radius:24px;padding:6px 10px;display:flex;gap:8px;font-size:15px;box-shadow:0 4px 16px #000a;">
+        <span>📝</span><span>🎹</span><span>🎼</span><span>🕸</span><span>💬</span>
+        <div style="width:1px;background:#333;margin:0 2px;"></div>
+        <span>🎭</span><span>⚙️</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Pill / dock flotante (bottom-right)</h3>
+      <p>Un dock pequeño flotante, siempre visible sobre el contenido. Click en ícono abre el pod en panel lateral o modal. Inspirado en "floating action bar".</p>
+    </div>
+    <div class="pros-cons">
+      <div class="pros"><h4>A favor</h4><ul><li>No altera el layout existente</li><li>Muy visual y moderno</li></ul></div>
+      <div class="cons"><h4>En contra</h4><ul><li>Puede tapar contenido</li><li>Complejo gestionar z-index / scroll</li></ul></div>
+    </div>
+  </div>
+
+</div>

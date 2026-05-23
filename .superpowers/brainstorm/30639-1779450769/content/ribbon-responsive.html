@@ -1,0 +1,159 @@
+<h2>Ribbon bar — desktop vs mobile</h2>
+<p class="subtitle">Desktop: ribbon vertical izquierdo (estilo Obsidian). Mobile: bottom bar que sube + course nav desliza desde la izquierda.</p>
+
+<div class="split" style="gap:24px;align-items:flex-start;">
+
+  <!-- DESKTOP -->
+  <div class="mockup">
+    <div class="mockup-header">🖥 Desktop — Ribbon izquierdo</div>
+    <div class="mockup-body" style="background:#0d0d0d;padding:0;border-radius:6px;overflow:hidden;">
+      <div style="display:flex;height:480px;font-family:monospace;font-size:10px;color:#aaa;">
+
+        <!-- Ribbon -->
+        <div style="width:44px;background:#161616;border-right:1px solid #222;display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:1px;">
+          <!-- Brand logo -->
+          <div style="width:30px;height:30px;background:#1e1e1e;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:2px;" title="Home + beacon">🎵</div>
+
+          <!-- course sidebar toggle (was .course-sidebar-handle) -->
+          <div style="width:28px;height:28px;background:#1a2a1a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;margin:3px 0;border:1.5px solid #2a4a2a;" title="Navegación del curso">☰</div>
+
+          <div style="width:28px;height:1px;background:#222;margin:4px 0;"></div>
+
+          <!-- profile -->
+          <div style="width:26px;height:26px;background:#2a2a2a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;" title="Perfil / dashboard">👤</div>
+          <!-- search -->
+          <div style="padding:5px;border-radius:5px;" title="Buscar (shift+?)">🔍</div>
+          <!-- vivo -->
+          <div style="padding:5px;border-radius:5px;" title="Sala vivo">📺</div>
+          <!-- foro -->
+          <div style="padding:5px;border-radius:5px;" title="Foro">💬</div>
+          <!-- actividad -->
+          <div style="padding:5px;border-radius:5px;" title="Actividad">📊</div>
+          <!-- theme -->
+          <div style="padding:5px;border-radius:5px;" title="Tema">🌙</div>
+          <!-- info / right sidebar toggle -->
+          <div style="width:28px;height:28px;background:#1a1a2a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;margin:3px 0;border:1.5px solid #2a2a4a;" title="Info / sidebar derecho">ℹ️</div>
+
+          <div style="flex:1"></div>
+          <div style="width:28px;height:1px;background:#222;margin:4px 0;"></div>
+
+          <!-- pods label -->
+          <div style="font-size:7px;color:#444;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;">pods</div>
+          <div style="padding:5px;border-radius:5px;" title="Graph (click=modal, drag=pod)">🕸</div>
+          <div style="padding:5px;border-radius:5px;background:#1a2a1a;border-radius:5px;" title="Notas">📝</div>
+          <div style="padding:5px;border-radius:5px;opacity:.35;" title="Hyperpiano (próx.)">🎹</div>
+
+          <div style="flex:1"></div>
+          <div style="width:28px;height:1px;background:#222;margin:4px 0;"></div>
+
+          <!-- bottom -->
+          <div style="width:26px;height:26px;background:#1e2030;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#88a;border:1px solid #333;margin-bottom:2px;" title="Cambiar curso">S1</div>
+          <div style="font-size:8px;color:#2a2a2a;padding:2px;" title="About">·</div>
+        </div>
+
+        <!-- Course nav panel (open) -->
+        <div style="width:160px;background:#141414;border-right:1px solid #222;padding:8px 10px;font-size:9px;color:#555;display:flex;flex-direction:column;gap:3px;">
+          <div style="color:#666;font-size:8px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">S1 — Música Ritual</div>
+          <div style="color:#777;">Cap 1 — Pulso</div>
+          <div style="color:#5a7;background:#1a2a1a;padding:2px 5px;border-radius:2px;">• Clase 3 — Sínc.</div>
+          <div style="color:#555;">Clase 4</div>
+          <div style="color:#444;margin-top:2px;">Cap 2 — Ritmo</div>
+          <div style="color:#555;padding-left:6px;">Clase 5</div>
+          <div style="color:#555;padding-left:6px;">Clase 6</div>
+          <div style="flex:1;border-top:1px solid #1e1e1e;margin-top:8px;"></div>
+          <div style="font-size:8px;color:#333;">RECURSOS</div>
+        </div>
+
+        <!-- Content -->
+        <div style="flex:1;background:#111;padding:12px 16px;">
+          <div style="color:#888;font-size:11px;margin-bottom:8px;">Clase 3 — Síncopas</div>
+          <div style="height:7px;background:#1e1e1e;border-radius:3px;width:72%;margin-bottom:5px;"></div>
+          <div style="height:7px;background:#1e1e1e;border-radius:3px;width:90%;margin-bottom:5px;"></div>
+          <div style="height:50px;background:#181818;border-radius:4px;margin:10px 0;display:flex;align-items:center;justify-content:center;color:#333;font-size:9px;">lilypond</div>
+          <div style="height:7px;background:#1e1e1e;border-radius:3px;width:65%;margin-bottom:5px;"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE -->
+  <div class="mockup">
+    <div class="mockup-header">📱 iPhone vertical — Bottom bar + course drawer</div>
+    <div class="mockup-body" style="background:#0d0d0d;padding:0;border-radius:6px;overflow:hidden;">
+      <!-- phone frame -->
+      <div style="width:200px;height:420px;background:#111;margin:0 auto;border-radius:28px;border:2px solid #2a2a2a;overflow:hidden;position:relative;">
+
+        <!-- content area -->
+        <div style="padding:24px 14px 10px;height:calc(100% - 64px);overflow:hidden;">
+          <div style="color:#888;font-size:9px;margin-bottom:6px;">Clase 3 — Síncopas</div>
+          <div style="height:6px;background:#1e1e1e;border-radius:3px;width:80%;margin-bottom:4px;"></div>
+          <div style="height:6px;background:#1e1e1e;border-radius:3px;width:95%;margin-bottom:4px;"></div>
+          <div style="height:40px;background:#181818;border-radius:4px;margin:8px 0;display:flex;align-items:center;justify-content:center;color:#333;font-size:8px;">lilypond</div>
+          <div style="height:6px;background:#1e1e1e;border-radius:3px;width:70%;margin-bottom:4px;"></div>
+          <div style="height:6px;background:#1e1e1e;border-radius:3px;width:60%;"></div>
+        </div>
+
+        <!-- Course drawer sliding from left (semi-open state) -->
+        <div style="position:absolute;left:0;top:0;width:130px;height:calc(100% - 60px);background:#141414;border-right:1px solid #2a2a2a;padding:20px 8px 8px;font-size:8px;color:#555;box-shadow:4px 0 12px #000;">
+          <div style="color:#5a7;background:#1a2a1a;padding:2px 4px;border-radius:2px;margin-bottom:3px;">• Clase 3</div>
+          <div>Clase 4</div>
+          <div style="color:#444;margin-top:4px;">Cap 2</div>
+          <div style="padding-left:4px;">Clase 5</div>
+          <div style="padding-left:4px;">Clase 6</div>
+          <!-- drag handle indicator -->
+          <div style="position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:4px;height:40px;background:#2a4a2a;border-radius:2px;"></div>
+        </div>
+
+        <!-- Bottom bar (touch-friendly, 60px tall) -->
+        <div style="position:absolute;bottom:0;left:0;right:0;height:60px;background:#161616;border-top:1px solid #222;display:flex;align-items:center;justify-content:space-around;padding:0 4px;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <div style="font-size:18px;">🎵</div>
+            <div style="font-size:6px;color:#444;">home</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <div style="font-size:18px;">☰</div>
+            <div style="font-size:6px;color:#5a7;">curso</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <div style="font-size:18px;">🔍</div>
+            <div style="font-size:6px;color:#444;">buscar</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <div style="font-size:18px;">📺</div>
+            <div style="font-size:6px;color:#444;">vivo</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;position:relative;">
+            <div style="font-size:18px;">···</div>
+            <div style="font-size:6px;color:#444;">más</div>
+            <!-- "más" abre el resto hacia arriba -->
+          </div>
+        </div>
+
+        <!-- "Más" panel opening upward (shown as overlay) -->
+        <div style="position:absolute;bottom:60px;right:0;width:120px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px 8px 0 0;padding:8px 6px;font-size:8px;color:#aaa;box-shadow:-2px -4px 12px #000a;">
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 4px;border-radius:3px;"><span>💬</span> Foro</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 4px;border-radius:3px;"><span>📊</span> Actividad</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 4px;border-radius:3px;"><span>🌙</span> Tema</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 4px;border-radius:3px;"><span>ℹ️</span> Info</div>
+          <div style="height:1px;background:#2a2a2a;margin:4px 0;"></div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 4px;border-radius:3px;"><span>🕸</span> Graph</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 4px;background:#1a2a1a;border-radius:3px;"><span>📝</span> Notas</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 4px;border-radius:3px;opacity:.4;"><span>🎹</span> Piano</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:20px;background:#181818;border-radius:8px;padding:14px;border:1px solid #2a2a2a;">
+  <p class="label">Resumen del comportamiento</p>
+  <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7;color:#aaa;">
+    <li><strong>Desktop:</strong> Ribbon 44px fijo a la izquierda. Los handle buttons actuales (☰ y ℹ️) pasan a ser íconos circulares dentro del ribbon.</li>
+    <li><strong>Mobile ≤ 500px:</strong> El ribbon se convierte en bottom bar horizontal con ~5 ítems priorizados. El resto aparece en un panel "Más" que sube desde el borde.</li>
+    <li><strong>Course nav (mobile):</strong> Desliza desde la izquierda como Obsidian — tap en ☰ del bottom bar o swipe desde el borde.</li>
+    <li><strong>Touch targets:</strong> Mínimo 44×44px (iOS HIG) en todos los íconos del bottom bar.</li>
+  </ul>
+</div>

@@ -72,7 +72,17 @@
       "Read(//Users/zztt/projects/26-musiki/**)",
       "Read(//Users/zztt/projects/26-musiki/s123/**)",
       "Skill(gsd-pause-work)",
-      "Read(//Users/zztt/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/subagent-driven-development/**)"
+      "Read(//Users/zztt/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/subagent-driven-development/**)",
+      "Bash(awk '/\\\\.content-area/,/^}/' src/pages/\\\\[...slug\\\\].astro)",
+      "Bash(xargs cat)",
+      "Bash(tee /tmp/test-output.txt)",
+      "Bash(awk NR>=3538 && NR<=3548 *)",
+      "Bash(perl *)",
+      "Bash(xxd \"/Users/zztt/projects/26-musiki/framework/src/content/cursos/s123/_index.md\")",
+      "Bash(bash *)",
+      "Bash(awk NR>=4195 && NR<=4220 *)",
+      "Bash(PGPASSWORD=\"3bce519832b81f101ebc5bc80af7f501\" psql *)",
+      "Bash(xargs kill -9)"
     ]
   }
 }

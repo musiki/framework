@@ -1,0 +1,7 @@
+{"type":"server-started","port":62444,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:62444","screen_dir":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/30639-1779450769/content","state_dir":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/30639-1779450769/state"}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/30639-1779450769/content/nav-approach.html"}
+{"source":"user-event","type":"click","text":"contenido del curso\n      \n      \n      \n        📝🎹🎼🕸💬\n        \n        🎭⚙️\n      \n    \n    \n      C — Pill / dock flotante (bottom-right)\n      Un dock pequeño flotante, siempre visible sobre el contenido. Click en ícono abre el pod en panel lateral o modal. Inspirado en \"floating action bar\".\n    \n    \n      A favorNo altera el layout existenteMuy visual y moderno\n      En contraPuede tapar contenidoComplejo gestionar z-index / scroll","choice":"c","id":null,"timestamp":1779451035927}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/30639-1779450769/content/activity-bar-v1.html"}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/30639-1779450769/content/ribbon-responsive.html"}
+{"type":"screen-added","file":"/Users/zztt/projects/26-musiki/framework/.superpowers/brainstorm/30639-1779450769/content/waiting-1.html"}
+{"type":"server-stopped","reason":"idle timeout"}
