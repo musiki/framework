@@ -245,6 +245,20 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </svg>
   </button>
 
+  <!-- SV — Sonic Visualizer (audio file analysis) -->
+  <button
+    type="button"
+    class="ribbon-item"
+    id="ribbon-sv-btn"
+    aria-label="Sonic Visualizer"
+    title="Sonic Visualizer"
+  >
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M7 16l4-6 4 4 3-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+
   <div class="ribbon-spacer"></div>
   <div class="ribbon-divider"></div>
 
@@ -355,6 +369,13 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     <button type="button" class="ribbon-mas-icon" id="ribbon-mas-sa" aria-label="Sonic Analyzer" title="Sonic Analyzer">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M2 12h2M6 8v8M10 5v14M14 9v6M18 7v10M22 12h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <!-- SV -->
+    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-sv" aria-label="Sonic Visualizer" title="Sonic Visualizer">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M7 16l4-6 4 4 3-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </button>
   </div>
@@ -551,6 +572,13 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     const openSA = () => window.dispatchEvent(new CustomEvent('musiki:open-sa'));
     if (saBtn && !saBtn.dataset.bound) { saBtn.dataset.bound = 'true'; saBtn.addEventListener('click', openSA); }
     if (masSaBtn && !masSaBtn.dataset.bound) { masSaBtn.dataset.bound = 'true'; masSaBtn.addEventListener('click', openSA); }
+
+    // SV: open CoursePodWorkspace with sonic-visualizer pod (file-based)
+    const svBtn = document.getElementById('ribbon-sv-btn');
+    const masSvBtn = document.getElementById('ribbon-mas-sv');
+    const openSV = () => window.dispatchEvent(new CustomEvent('musiki:open-sv'));
+    if (svBtn && !svBtn.dataset.bound) { svBtn.dataset.bound = 'true'; svBtn.addEventListener('click', openSV); }
+    if (masSvBtn && !masSvBtn.dataset.bound) { masSvBtn.dataset.bound = 'true'; masSvBtn.addEventListener('click', openSV); }
 
     // Page info toggle: dispatch event; slug.astro handles opening the right sidebar + info panel
     document.querySelectorAll('[data-page-info-toggle]').forEach((btn) => {

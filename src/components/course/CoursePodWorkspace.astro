@@ -81,6 +81,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
   import { RoomWorkspaceManager } from '../../scripts/room/workspace/RoomWorkspaceManager';
   import { HyperpianoController } from '../../scripts/room/hyperpiano/HyperpianoController';
   import { SonicAnalyzerController } from '../../scripts/room/sonic-analyzer';
+  import { SonicVisualizerController } from '../../scripts/room/sonic-visualizer';
 
   function boot() {
     const overlay = document.getElementById('course-pod-workspace') as HTMLElement | null;
@@ -151,6 +152,11 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
       return { dispose: () => controller.dispose() };
     };
 
+    const onSonicVisualizerInit = (container: HTMLElement) => {
+      const controller = new SonicVisualizerController({ container });
+      return { dispose: () => controller.dispose() };
+    };
+
     function ensureInit() {
       if (manager) return;
       manager = new RoomWorkspaceManager(
@@ -159,6 +165,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
         undefined, undefined, undefined, undefined,  // whiteboard, lily, concept, media
         undefined, undefined, undefined, undefined,  // clase, chat, orf, score
         onSonicAnalyzerInit,
+        onSonicVisualizerInit,
       );
       manager.init();
       // RoomWorkspaceManager.init() defers 200ms; give extra buffer
@@ -191,6 +198,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
 
     window.addEventListener('musiki:open-hyperpiano', () => open('hyperpiano'));
     window.addEventListener('musiki:open-sa', () => open('sonic-analyzer'));
+    window.addEventListener('musiki:open-sv', () => open('sonic-visualizer'));
 
     // Close on Escape
     window.addEventListener('keydown', (e) => {
