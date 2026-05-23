@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-23T09:20:56Z",
+  "phase": null,
+  "phase_name": "notas-dockview-db-integration",
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Ribbon tablet/mobile layout + media pod drag + notas routing", "status": "done", "commit": "9b9063b"},
+    {"id": 2, "name": "CoursePodWorkspace overlay + ribbon/layout fixes", "status": "done", "commit": "06346ef"},
+    {"id": 3, "name": "Revert bad notas fallback that caused navigation to course home", "status": "done", "commit": "00d4c93"},
+    {"id": 4, "name": "Ribbon layout — tablet gap, mobile safe-area, graph modal", "status": "done", "commit": "4429070"}
+  ],
+  "remaining_tasks": [
+    {
+      "id": 5,
+      "name": "notas.astro DB notes as dockview pods",
+      "status": "not_started",
+      "description": "LiveClassNote records from DB (fetched in notas.astro) should each open as pods in the dockview workspace, not just list items. Need a new 'db-note' pod type that loads from the DB list rather than the course file tree."
+    },
+    {
+      "id": 6,
+      "name": "musiki:open-notas fallback handler",
+      "status": "not_started",
+      "description": "dockview-workspace.ts:783 — when no panels are open AND no initialSlug, the handler does nothing. Should open a new blank note OR show a notes list. Current dead-end: `if (dockview.panels.length > 0) setActive; else if (initialSlug) openNote(initialSlug)`."
+    }
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "notas.astro LiveClassNote records should become dockview pods, not just sidebar list items",
+      "rationale": "Consistent with pod-centric workspace model already used by CoursePodWorkspace",
+      "phase": "notas-dockview-db-integration"
+    }
+  ],
+  "uncommitted_files": [
+    ".claude/settings.local.json",
+    ".planning/STATE.md",
+    "package-lock.json",
+    "package.json",
+    "src/pages/dashboard.astro"
+  ],
+  "next_action": "Implement the musiki:open-notas fallback in dockview-workspace.ts:783 — when no panels open and no initialSlug, open a blank note or a notes-list panel. Then tackle the DB-backed note pod type for notas.astro.",
+  "context_notes": "GSD milestone 100% complete. All current work is ad-hoc feature work outside GSD phases. The dockview workspace already handles course file-tree notes; DB notes (LiveClassNote) are a separate data source not yet wired into the pod system."
+}
