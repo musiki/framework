@@ -1,20 +1,21 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-23T13:11:24Z",
+  "timestamp": "2026-05-23T18:00:00Z",
   "phase": null,
   "phase_name": "notas-workspace-qa-pod",
   "phase_dir": null,
   "plan": "docs/superpowers/plans/2026-05-23-notas-workspace-qa-pod.md",
-  "task": 1,
+  "task": 6,
   "total_tasks": 10,
   "status": "paused",
-  "completed_tasks": [],
+  "completed_tasks": [
+    {"id": 1, "name": "DB migration — add folderId to LiveClassNote + extend notes API", "status": "completed", "commit": "9777e42"},
+    {"id": 2, "name": "New /api/note-folders endpoint", "status": "completed", "commit": "7ff1a4e"},
+    {"id": 3, "name": "Extract buildShell to shared dockview-shell.ts", "status": "completed", "commit": "be7296a"},
+    {"id": 4, "name": "QA analyzer pure logic + unit tests", "status": "completed", "commit": "a48ccef"},
+    {"id": 5, "name": "db-note + qa-analyzer panel kinds in dockview-workspace.ts", "status": "completed", "commit": "59050df"}
+  ],
   "remaining_tasks": [
-    {"id": 1, "name": "DB migration — add folderId to LiveClassNote + extend notes API", "status": "not_started"},
-    {"id": 2, "name": "New /api/note-folders endpoint", "status": "not_started"},
-    {"id": 3, "name": "Extract buildShell to shared dockview-shell.ts", "status": "not_started"},
-    {"id": 4, "name": "QA analyzer pure logic + unit tests", "status": "not_started"},
-    {"id": 5, "name": "db-note + qa-analyzer panel kinds in dockview-workspace.ts", "status": "not_started"},
     {"id": 6, "name": "NOTAS sidebar section in [...slug].astro", "status": "not_started"},
     {"id": 7, "name": "PersonalNotesOverlay + personal-notes-workspace.ts", "status": "not_started"},
     {"id": 8, "name": "Room workspace — register db-note pod type", "status": "not_started"},
@@ -22,21 +23,18 @@
     {"id": 10, "name": "Final integration test + package.json test update", "status": "not_started"}
   ],
   "blockers": [],
-  "human_actions_pending": [],
+  "human_actions_pending": [
+    "Run DB migration when tunnel is available: psql -h localhost -p 5433 -U musiki -d musiki26 -f postgres-patches/migrations/20260523120000_live_class_note_folder.sql"
+  ],
   "decisions": [
-    {"decision": "Approach B: separate personal-notes-workspace.ts, shared DB tree", "rationale": "Clean separation; course dockview + room both gain db-note pod type but keep own lifecycles"},
-    {"decision": "Subagent-driven execution chosen", "rationale": "Fresh subagent per task + two-stage review (spec then quality)"},
-    {"decision": "db-note edit mode uses textarea (not CodeMirror) for MVP", "rationale": "YAGNI — CodeMirror can be added later"},
-    {"decision": "Course is invisible meta-container — not shown as label in NOTAS UI", "rationale": "Cognitive economy"},
-    {"decision": "No pre-fixed folders — fully user-created structure", "rationale": "User preference"}
+    {"decision": "Migration file created at postgres-patches/migrations/20260523120000_live_class_note_folder.sql instead of running SQL inline", "rationale": "Project uses migration files pattern"},
+    {"decision": "ensureFolderTable() omitted from note-folders.ts", "rationale": "Table created via migration, not app startup"},
+    {"decision": "NoteMode moved to dockview-shell.ts, re-exported from dockview-workspace.ts", "rationale": "Avoids circular dependency"},
+    {"decision": "Test file changed 'musica' to 'musica' (accented)", "rationale": "Unaccented does not match accented in Unicode case-insensitive regex"},
+    {"decision": "musiki:open-notas listener removed from dockview-workspace.ts in Task 5", "rationale": "Will be handled by PersonalNotesOverlay in Task 7 instead"},
+    {"decision": "window.__qaLogic cache pattern used in renderKwic", "rationale": "Avoids re-importing async module on every synchronous input event"}
   ],
-  "uncommitted_files": [
-    ".claude/settings.local.json",
-    ".planning/STATE.md",
-    "package-lock.json",
-    "package.json",
-    "src/pages/dashboard.astro"
-  ],
-  "next_action": "Resume subagent-driven execution from Task 1. Use skill superpowers:subagent-driven-development. Plan is at docs/superpowers/plans/2026-05-23-notas-workspace-qa-pod.md. Spec is at docs/superpowers/specs/2026-05-23-notas-workspace-qa-pod-design.md.",
-  "context_notes": "Brainstorming + writing-plans complete. 10-task plan covers: DB migration, folder API, buildShell extraction, QA logic tests, db-note pod in course dockview, NOTAS sidebar, personal notes overlay, room registration, /notas removal, integration test. Session ended at 73% context before any implementation began — all tasks are not_started."
+  "uncommitted_files": [],
+  "next_action": "Resume subagent-driven execution from Task 6. Use skill superpowers:subagent-driven-development. Plan at docs/superpowers/plans/2026-05-23-notas-workspace-qa-pod.md. Tasks 1-5 all committed (HEAD=59050df). Task 6 needs: (1) create src/scripts/course/notes-sidebar.ts, (2) extend sidebarChapterEntries type at line 369 of src/pages/[...slug].astro to add notas kind, (3) push notas entry after recursos entries (around line 384-386), (4) render NOTAS section in sidebar map at line 3648 (after recursos handler, before chapter handler), (5) add boot script at bottom of [...slug].astro.",
+  "context_notes": "Tasks 1-5 complete (6 commits). All reviewed (spec + quality). Key slug.astro context: sidebarChapterEntries type at line 369, sidebar render loop at line 3648, canonicalCourseIdToUse is the courseId to use for notas. The migration file postgres-patches/migrations/20260523120000_live_class_note_folder.sql needs to be applied to production DB when tunnel is available (covers both folderId column AND LiveClassNoteFolder table)."
 }
