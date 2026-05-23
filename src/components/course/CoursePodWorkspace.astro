@@ -3,6 +3,13 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
 ---
 
 <div class="course-pod-workspace" id="course-pod-workspace" aria-hidden="true">
+  <button
+    type="button"
+    class="course-pod-workspace-close"
+    id="course-pod-workspace-close"
+    aria-label="Cerrar workspace (Esc)"
+    title="Cerrar (Esc)"
+  >×</button>
   <div
     id="course-pod-workspace-root"
     class="dockview-theme-dark"
@@ -48,6 +55,28 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
     flex: 1;
     min-height: 0;
   }
+
+  .course-pod-workspace-close {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    z-index: 10;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--c-border);
+    border-radius: 4px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.55;
+    transition: opacity 0.15s;
+  }
+  .course-pod-workspace-close:hover { opacity: 1; }
 
   /* Override hardcoded dark colors from conference components */
   .course-pod-workspace .pod-diy-shell { background: var(--c-bg) !important; }
@@ -199,6 +228,12 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
     window.addEventListener('musiki:open-hyperpiano', () => open('hyperpiano'));
     window.addEventListener('musiki:open-sa', () => open('sonic-analyzer'));
     window.addEventListener('musiki:open-sv', () => open('sonic-visualizer'));
+
+    const closeBtn = document.getElementById('course-pod-workspace-close');
+    if (closeBtn && !closeBtn.dataset.bound) {
+      closeBtn.dataset.bound = 'true';
+      closeBtn.addEventListener('click', close);
+    }
 
     // Close on Escape
     window.addEventListener('keydown', (e) => {
