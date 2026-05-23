@@ -80,6 +80,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
 <script>
   import { RoomWorkspaceManager } from '../../scripts/room/workspace/RoomWorkspaceManager';
   import { HyperpianoController } from '../../scripts/room/hyperpiano/HyperpianoController';
+  import { SonicAnalyzerController } from '../../scripts/room/sonic-analyzer';
 
   function boot() {
     const overlay = document.getElementById('course-pod-workspace') as HTMLElement | null;
@@ -95,6 +96,25 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
     // Shared audio context for standalone Hyperpiano (lazy-created on first user gesture)
     let courseAudioCtx: AudioContext | null = null;
     let courseOutputGain: GainNode | null = null;
+
+    // Mic audio tap for standalone SA (lazy-created on first SA interaction)
+    let micCtx: AudioContext | null = null;
+    let micAnalyser: AnalyserNode | null = null;
+    let micStream: MediaStream | null = null;
+
+    const startMic = async () => {
+      if (micCtx && micAnalyser) return;
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        micCtx = new AudioContext();
+        const source = micCtx.createMediaStreamSource(micStream);
+        micAnalyser = micCtx.createAnalyser();
+        micAnalyser.fftSize = 2048;
+        source.connect(micAnalyser);
+      } catch {
+        // mic denied — SA will remain in idle state
+      }
+    };
 
     const onHyperpianoInit = (container: HTMLElement) => {
       const hp = new HyperpianoController({
@@ -119,9 +139,27 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
       return hp;
     };
 
+    const onSonicAnalyzerInit = (container: HTMLElement) => {
+      const controller = new SonicAnalyzerController({
+        container,
+        getAudioTap: () => micCtx && micAnalyser
+          ? { context: micCtx, masterAnalyser: micAnalyser }
+          : null,
+      });
+      // Request mic on first container interaction
+      container.addEventListener('pointerdown', () => void startMic(), { once: true });
+      return { dispose: () => controller.dispose() };
+    };
+
     function ensureInit() {
       if (manager) return;
-      manager = new RoomWorkspaceManager(root!, () => false, () => {}, onHyperpianoInit);
+      manager = new RoomWorkspaceManager(
+        root!, () => false, () => {},
+        onHyperpianoInit,
+        undefined, undefined, undefined, undefined,  // whiteboard, lily, concept, media
+        undefined, undefined, undefined, undefined,  // clase, chat, orf, score
+        onSonicAnalyzerInit,
+      );
       manager.init();
       // RoomWorkspaceManager.init() defers 200ms; give extra buffer
       setTimeout(() => {
@@ -152,6 +190,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
     }
 
     window.addEventListener('musiki:open-hyperpiano', () => open('hyperpiano'));
+    window.addEventListener('musiki:open-sa', () => open('sonic-analyzer'));
 
     // Close on Escape
     window.addEventListener('keydown', (e) => {

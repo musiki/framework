@@ -232,6 +232,19 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </svg>
   </button>
 
+  <!-- SA — Sonic Analyzer with mic input -->
+  <button
+    type="button"
+    class="ribbon-item"
+    id="ribbon-sa-btn"
+    aria-label="Sonic Analyzer"
+    title="Sonic Analyzer"
+  >
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M2 12h2M6 8v8M10 5v14M14 9v6M18 7v10M22 12h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+
   <div class="ribbon-spacer"></div>
   <div class="ribbon-divider"></div>
 
@@ -336,6 +349,12 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
         <path d="M7 6v6M10 6v4M14 6v6M17 6v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <!-- SA -->
+    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-sa" aria-label="Sonic Analyzer" title="Sonic Analyzer">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M2 12h2M6 8v8M10 5v14M14 9v6M18 7v10M22 12h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
     </button>
   </div>
@@ -525,6 +544,13 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     const openHyperpiano = () => window.dispatchEvent(new CustomEvent('musiki:open-hyperpiano'));
     if (hpBtn && !hpBtn.dataset.bound) { hpBtn.dataset.bound = 'true'; hpBtn.addEventListener('click', openHyperpiano); }
     if (masHpBtn && !masHpBtn.dataset.bound) { masHpBtn.dataset.bound = 'true'; masHpBtn.addEventListener('click', openHyperpiano); }
+
+    // SA: open CoursePodWorkspace with sonic-analyzer pod (mic input)
+    const saBtn = document.getElementById('ribbon-sa-btn');
+    const masSaBtn = document.getElementById('ribbon-mas-sa');
+    const openSA = () => window.dispatchEvent(new CustomEvent('musiki:open-sa'));
+    if (saBtn && !saBtn.dataset.bound) { saBtn.dataset.bound = 'true'; saBtn.addEventListener('click', openSA); }
+    if (masSaBtn && !masSaBtn.dataset.bound) { masSaBtn.dataset.bound = 'true'; masSaBtn.addEventListener('click', openSA); }
 
     // Page info toggle: dispatch event; slug.astro handles opening the right sidebar + info panel
     document.querySelectorAll('[data-page-info-toggle]').forEach((btn) => {
