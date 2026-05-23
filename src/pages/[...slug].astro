@@ -369,6 +369,7 @@ const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapt
 const sidebarChapterEntries: Array<
   | { kind: 'chapter'; chapterName: string; lessons: typeof allLessons }
   | { kind: 'recursos' }
+  | { kind: 'notas'; courseId: string }
 > = [];
 let insertedRecursosSidebarEntry = false;
 const hasRecursosSidebarChapter = sortedChapters.some(([chapterName]) => normalizeContentSlug(chapterName) === '80-recursos');
@@ -383,6 +384,9 @@ for (const [chapterName, lessons] of sortedChapters) {
 }
 if (canManageLiveInteractions && !insertedRecursosSidebarEntry) {
   sidebarChapterEntries.push({ kind: 'recursos' });
+}
+if (session?.user && canonicalCourseIdToUse) {
+  sidebarChapterEntries.push({ kind: 'notas', courseId: canonicalCourseIdToUse });
 }
 
 const recursosCourseId = canonicalCourseIdToUse || courseSlug || '';
@@ -3724,6 +3728,32 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                         })}
                       </div>
                     )}
+                  </details>
+                </div>
+              );
+            }
+            if (entry.kind === 'notas') {
+              return (
+                <div class="chapter" data-notas-sidebar data-notas-course-id={entry.courseId}>
+                  <details class="chapter-details">
+                    <summary class="chapter-title">
+                      <span class="chapter-title-main">
+                        <span class="chapter-title-text">NOTAS</span>
+                        <button
+                          type="button"
+                          class="chapter-editor-link notas-sb-new-btn"
+                          title="Nueva nota"
+                          onclick="event.stopPropagation()"
+                          style="border:none;background:none;cursor:pointer;padding:0 2px;opacity:.6;font-size:.8rem"
+                        >+</button>
+                      </span>
+                      <span class="chapter-caret">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      </span>
+                    </summary>
+                    <div class="notas-sb-tree" style="padding:.3rem 0"></div>
                   </details>
                 </div>
               );
@@ -13262,5 +13292,46 @@ a[node] -->|edge| b[hub]
     </style>
     <CoursePodWorkspace />
     <GraphModal />
+    {session?.user && canonicalCourseIdToUse && (
+      <script>
+        import { loadNotesTree, renderNotesTree } from '../scripts/course/notes-sidebar';
+
+        async function bootNotasSidebar() {
+          const sidebarEl = document.querySelector<HTMLElement>('[data-notas-sidebar]');
+          if (!sidebarEl) return;
+          const courseId = sidebarEl.dataset.notasCourseId ?? '';
+          if (!courseId) return;
+
+          const treeEl = sidebarEl.querySelector<HTMLElement>('.notas-sb-tree');
+          if (!treeEl) return;
+
+          const details = sidebarEl.querySelector('details');
+          let loaded = false;
+          details?.addEventListener('toggle', async () => {
+            if (!details.open || loaded) return;
+            loaded = true;
+            const { folders, notes } = await loadNotesTree(courseId);
+            renderNotesTree(treeEl, folders, notes, courseId);
+          });
+
+          sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-btn')?.addEventListener('click', async () => {
+            const title = prompt('Nombre de la nueva nota:');
+            if (!title?.trim()) return;
+            const res = await fetch('/api/live/notes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: title.trim(), body: '', courseId }),
+            });
+            if (!res.ok) return;
+            if (!details?.open) { details!.open = true; return; }
+            const { folders, notes } = await loadNotesTree(courseId);
+            renderNotesTree(treeEl, folders, notes, courseId);
+          });
+        }
+
+        bootNotasSidebar();
+        document.addEventListener('astro:page-load', bootNotasSidebar);
+      </script>
+    )}
   </body>
 </html>
