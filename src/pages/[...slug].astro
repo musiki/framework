@@ -4421,6 +4421,18 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           e.preventDefault();
           ws.openMedia(url, name, 'bottom');
         });
+
+        // Open lesson/concept/note sidebar links inside dockview (not full navigation)
+        document.addEventListener('click', (e) => {
+          const link = (e.target as Element)?.closest<HTMLAnchorElement>('.lesson-link');
+          if (!link) return;
+          const ws = (window as any).__cnwWorkspace;
+          if (!ws) return;
+          const slug = link.dataset.lessonPageSlug;
+          if (!slug) return;
+          e.preventDefault();
+          ws.openNote(slug, 'preview');
+        });
       </script>
     )}
     {canManageLiveInteractions && (
