@@ -6,6 +6,7 @@ import { ClientRouter } from 'astro:transitions';
 import BaseHead from '../components/BaseHead.astro';
 import Ribbon from '../components/Ribbon.astro';
 import GraphModal from '../components/GraphModal.astro';
+import CoursePodWorkspace from '../components/course/CoursePodWorkspace.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
@@ -2914,7 +2915,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       @media (max-width: 1024px) {
         .course-container {
-          grid-template-columns: minmax(0, 1fr);
+          grid-template-columns: var(--ribbon-width) minmax(0, 1fr);
           min-height: auto;
           padding: 0;
         }
@@ -2922,7 +2923,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         .course-container[data-left-open='false'],
         .course-container[data-right-open='false'],
         .course-container[data-left-open='false'][data-right-open='false'] {
-          grid-template-columns: minmax(0, 1fr);
+          grid-template-columns: var(--ribbon-width) minmax(0, 1fr);
         }
 
 
@@ -2950,7 +2951,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         }
 
         .sidebar--left {
-          left: 0;
+          left: var(--ribbon-width);
           transform: translateX(-100%);
         }
 
@@ -3080,6 +3081,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           margin: 0;
           padding: 0;
           gap: 0;
+          grid-template-columns: minmax(0, 1fr);
         }
 
         .sidebar {
@@ -4116,8 +4118,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           </div>
         </div>
 
-        {hasPageHistoryInfo && (
-          <section
+        <section
             class="page-info-sidebar-panel"
             id="page-info-sidebar"
             aria-label="Información de la página"
@@ -4202,7 +4203,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
               )}
             </section>
           </section>
-        )}
 
         {hasForumSidebar ? (
           <section
@@ -4740,6 +4740,32 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           document.removeEventListener('keydown', window.__musikiCourseLayoutKeyHandler);
         }
 
+        // Page info panel helpers
+        const openPageInfo = () => {
+          if (hasRightSidebar && !rightOpen) {
+            rightOpen = true;
+            persistLayoutState();
+          }
+          root.dataset.pageInfoOpen = 'true';
+          const panel = document.getElementById('page-info-sidebar');
+          if (panel) panel.removeAttribute('aria-hidden');
+          syncLayoutState();
+        };
+        const closePageInfo = () => {
+          root.dataset.pageInfoOpen = 'false';
+          const panel = document.getElementById('page-info-sidebar');
+          if (panel) panel.setAttribute('aria-hidden', 'true');
+        };
+
+        document.querySelectorAll('[data-page-info-close]').forEach((btn) => {
+          if (btn instanceof HTMLElement && !btn.dataset.boundPageInfo) {
+            btn.dataset.boundPageInfo = 'true';
+            btn.addEventListener('click', closePageInfo);
+          }
+        });
+
+        window.addEventListener('musiki:open-page-info', openPageInfo);
+
         const keyHandler = (event: KeyboardEvent) => {
           if (event.defaultPrevented) return;
           if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
@@ -4752,7 +4778,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           if (isEditable) return;
 
           event.preventDefault();
-          toggleSidebar('left');
+          if (event.shiftKey) {
+            openPageInfo();
+          } else {
+            toggleSidebar('left');
+          }
         };
 
         document.addEventListener('keydown', keyHandler);
@@ -13241,6 +13271,7 @@ a[node] -->|edge| b[hub]
         font-size: 0.82rem;
       }
     </style>
+    <CoursePodWorkspace />
     <GraphModal />
   </body>
 </html>

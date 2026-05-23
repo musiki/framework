@@ -453,7 +453,7 @@ export class RoomWorkspaceManager {
         resizeObserver.observe(this.container);
 
         this.setupUI();
-        this.setupDefaultLayout();
+        if (!this.container.dataset.noDefaultLayout) this.setupDefaultLayout();
         this.bindBottomBarButtons();
         this.initPodGallery();
       } catch (err) {

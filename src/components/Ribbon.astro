@@ -154,11 +154,11 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </svg>
   </button>
 
-  <!-- Info / right sidebar toggle -->
+  <!-- Info / metadata panel -->
   <button
     type="button"
     class="ribbon-item ribbon-item--circle"
-    data-sidebar-toggle="right"
+    data-page-info-toggle
     aria-label="Info y metadatos"
     title="Info (⌘/Ctrl + Shift + \)"
   >
@@ -310,7 +310,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       </svg>
     </button>
     <!-- Info -->
-    <button type="button" class="ribbon-mas-icon" data-sidebar-toggle="right" id="ribbon-mas-info" aria-label="Info" title="Info">
+    <button type="button" class="ribbon-mas-icon" data-page-info-toggle id="ribbon-mas-info" aria-label="Info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
         <path d="M12 8v.01M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -519,6 +519,14 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     const openNotas = () => window.dispatchEvent(new CustomEvent('musiki:open-notas'));
     if (notasBtn && !notasBtn.dataset.bound) { notasBtn.dataset.bound = 'true'; notasBtn.addEventListener('click', openNotas); }
     if (masNotasBtn && !masNotasBtn.dataset.bound) { masNotasBtn.dataset.bound = 'true'; masNotasBtn.addEventListener('click', openNotas); }
+
+    // Page info toggle: dispatch event; slug.astro handles opening the right sidebar + info panel
+    document.querySelectorAll('[data-page-info-toggle]').forEach((btn) => {
+      if (btn instanceof HTMLElement && !btn.dataset.bound) {
+        btn.dataset.bound = 'true';
+        btn.addEventListener('click', () => window.dispatchEvent(new CustomEvent('musiki:open-page-info')));
+      }
+    });
 
     // Mobile "más" toggle
     const masSheet = document.getElementById('ribbon-mas-sheet');

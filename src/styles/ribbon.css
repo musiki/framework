@@ -173,8 +173,7 @@
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    /* top padding keeps items centered in the visible 60px area */
-    padding: 0 16px env(safe-area-inset-bottom, 0px);
+    padding: 6px 20px calc(8px + env(safe-area-inset-bottom, 0px));
     border-right: none;
     border-top: 1px solid var(--ribbon-border);
     z-index: 100;
@@ -190,18 +189,17 @@
   .ribbon-spacer,
   .ribbon-label,
   .ribbon-about { display: none; }
-  /* 15% smaller than 44px ≈ 37px */
   .ribbon-item--mobile-visible {
-    width: 37px;
-    height: 37px;
-    min-width: 37px;
-    min-height: 37px;
-    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: 7px;
     flex-shrink: 0;
   }
   .ribbon-item--mobile-visible svg {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
   }
 }
 

@@ -1,0 +1,136 @@
+---
+import PodTemplates from '../room/workspace/PodTemplates.astro';
+---
+
+<div class="course-pod-workspace" id="course-pod-workspace" aria-hidden="true">
+  <div
+    id="course-pod-workspace-root"
+    class="dockview-theme-dark"
+    data-workspace-root
+    data-no-default-layout
+  ></div>
+  <PodTemplates />
+</div>
+
+<style>
+  .course-pod-workspace {
+    /* Bridge conference CSS vars to site theme */
+    --conference-fg: var(--c-fg);
+    --conference-muted: color-mix(in srgb, var(--c-fg) 58%, transparent);
+    --conference-dim: color-mix(in srgb, var(--c-fg) 32%, transparent);
+    --conference-line: var(--c-border);
+    --conference-line-soft: color-mix(in srgb, var(--c-fg) 6%, transparent);
+    --conference-accent: var(--c-link, #2a87ff);
+    --conference-accent-hi: #76d3ff;
+    --conference-green: #25cf6b;
+    --conference-red: #ff4d4d;
+    --conference-font-ui: inherit;
+    --conference-font-body: inherit;
+    --conference-font-caption: inherit;
+
+    position: fixed;
+    inset: 0 0 0 var(--ribbon-width, 44px);
+    z-index: 30;
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    background: var(--c-bg);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .course-pod-workspace.is-open {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  #course-pod-workspace-root {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Override hardcoded dark colors from conference components */
+  .course-pod-workspace .pod-diy-shell { background: var(--c-bg) !important; }
+  .course-pod-workspace .pod-diy-header { color: var(--c-fg) !important; }
+  .course-pod-workspace .pod-diy-btn { color: var(--c-fg) !important; }
+  .course-pod-workspace .pod-diy-handle-dot { background: var(--c-fg) !important; }
+  .course-pod-workspace .musiki-pod { background: var(--c-bg) !important; color: var(--c-fg) !important; }
+  .course-pod-workspace .dv-separator { background: var(--c-border) !important; }
+  .course-pod-workspace .conference-notes-body {
+    background: var(--c-bg) !important;
+    color: var(--c-fg) !important;
+  }
+  .course-pod-workspace .conference-sidebar-panel-body {
+    background: var(--c-bg) !important;
+    color: var(--c-fg) !important;
+  }
+  .course-pod-workspace .musiki-pod-btn {
+    background: color-mix(in srgb, var(--c-fg) 8%, transparent) !important;
+    color: var(--c-fg) !important;
+  }
+
+  /* Mobile: slide from bottom, account for ribbon at bottom */
+  @media (max-width: 500px) {
+    .course-pod-workspace {
+      inset: 0 0 var(--ribbon-bottom-height, 60px) 0;
+    }
+  }
+</style>
+
+<script>
+  import { RoomWorkspaceManager } from '../../scripts/room/workspace/RoomWorkspaceManager';
+
+  function boot() {
+    const overlay = document.getElementById('course-pod-workspace') as HTMLElement | null;
+    if (!overlay) return;
+
+    const root = document.getElementById('course-pod-workspace-root') as HTMLElement | null;
+    if (!root) return;
+
+    let manager: RoomWorkspaceManager | null = null;
+    let isReady = false;
+    let openPending = false;
+
+    function ensureInit() {
+      if (manager) return;
+      manager = new RoomWorkspaceManager(root!, () => false, () => {});
+      manager.init();
+      // RoomWorkspaceManager.init() defers 200ms; give extra buffer
+      setTimeout(() => {
+        isReady = true;
+        if (openPending) {
+          openPending = false;
+          manager?.togglePod('notes', true);
+        }
+      }, 320);
+    }
+
+    function open() {
+      overlay!.classList.add('is-open');
+      overlay!.setAttribute('aria-hidden', 'false');
+      if (!manager) {
+        openPending = true;
+        ensureInit();
+      } else if (isReady) {
+        manager.togglePod('notes', true);
+      } else {
+        openPending = true;
+      }
+    }
+
+    function close() {
+      overlay!.classList.remove('is-open');
+      overlay!.setAttribute('aria-hidden', 'true');
+    }
+
+    window.addEventListener('musiki:open-notas', open);
+
+    // Close on Escape
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && overlay!.classList.contains('is-open')) close();
+    });
+  }
+
+  boot();
+  document.addEventListener('astro:page-load', boot);
+</script>
