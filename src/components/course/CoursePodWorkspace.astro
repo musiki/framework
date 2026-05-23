@@ -79,6 +79,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
 
 <script>
   import { RoomWorkspaceManager } from '../../scripts/room/workspace/RoomWorkspaceManager';
+  import { HyperpianoController } from '../../scripts/room/hyperpiano/HyperpianoController';
 
   function boot() {
     const overlay = document.getElementById('course-pod-workspace') as HTMLElement | null;
@@ -89,32 +90,59 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
 
     let manager: RoomWorkspaceManager | null = null;
     let isReady = false;
-    let openPending = false;
+    let pendingPod: string | null = null;
+
+    // Shared audio context for standalone Hyperpiano (lazy-created on first user gesture)
+    let courseAudioCtx: AudioContext | null = null;
+    let courseOutputGain: GainNode | null = null;
+
+    const onHyperpianoInit = (container: HTMLElement) => {
+      const hp = new HyperpianoController({
+        audioContext: null,
+        container,
+        outputNode: null,
+        getMidiInputId: () => null,
+      });
+      hp.init();
+
+      // Defer AudioContext creation to first interaction (browser autoplay policy)
+      container.addEventListener('pointerdown', async () => {
+        if (!courseAudioCtx) {
+          courseAudioCtx = new AudioContext();
+          courseOutputGain = courseAudioCtx.createGain();
+          courseOutputGain!.connect(courseAudioCtx.destination);
+        }
+        if (courseAudioCtx.state === 'suspended') await courseAudioCtx.resume();
+        hp.setAudio(courseAudioCtx, courseOutputGain!);
+      }, { once: true });
+
+      return hp;
+    };
 
     function ensureInit() {
       if (manager) return;
-      manager = new RoomWorkspaceManager(root!, () => false, () => {});
+      manager = new RoomWorkspaceManager(root!, () => false, () => {}, onHyperpianoInit);
       manager.init();
       // RoomWorkspaceManager.init() defers 200ms; give extra buffer
       setTimeout(() => {
         isReady = true;
-        if (openPending) {
-          openPending = false;
-          manager?.togglePod('notes', true);
+        if (pendingPod) {
+          manager?.togglePod(pendingPod, true);
+          pendingPod = null;
         }
       }, 320);
     }
 
-    function open() {
+    function open(podType: string) {
       overlay!.classList.add('is-open');
       overlay!.setAttribute('aria-hidden', 'false');
       if (!manager) {
-        openPending = true;
+        pendingPod = podType;
         ensureInit();
       } else if (isReady) {
-        manager.togglePod('notes', true);
+        manager.togglePod(podType, true);
       } else {
-        openPending = true;
+        pendingPod = podType;
       }
     }
 
@@ -123,7 +151,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
       overlay!.setAttribute('aria-hidden', 'true');
     }
 
-    // musiki:open-notas is handled by dockview-workspace.ts on the course page
+    window.addEventListener('musiki:open-hyperpiano', () => open('hyperpiano'));
 
     // Close on Escape
     window.addEventListener('keydown', (e) => {

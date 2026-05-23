@@ -218,14 +218,13 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </svg>
   </button>
 
-  <!-- Hyperpiano (disabled, future) -->
+  <!-- Hyperpiano — opens course pod workspace -->
   <button
     type="button"
-    class="ribbon-item ribbon-item--disabled"
-    aria-label="Hyperpiano (próximamente)"
-    title="Hyperpiano (próximamente)"
-    aria-disabled="true"
-    tabindex="-1"
+    class="ribbon-item"
+    id="ribbon-hyperpiano-btn"
+    aria-label="Hyperpiano"
+    title="Hyperpiano"
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
@@ -332,8 +331,8 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
         <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
     </button>
-    <!-- Hyperpiano (disabled) -->
-    <button type="button" class="ribbon-mas-icon ribbon-mas-icon--disabled" aria-disabled="true" tabindex="-1" aria-label="Hyperpiano (próximamente)" title="Hyperpiano (próximamente)">
+    <!-- Hyperpiano -->
+    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-hyperpiano" aria-label="Hyperpiano" title="Hyperpiano">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
         <path d="M7 6v6M10 6v4M14 6v6M17 6v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -519,6 +518,13 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     const openNotas = () => window.dispatchEvent(new CustomEvent('musiki:open-notas'));
     if (notasBtn && !notasBtn.dataset.bound) { notasBtn.dataset.bound = 'true'; notasBtn.addEventListener('click', openNotas); }
     if (masNotasBtn && !masNotasBtn.dataset.bound) { masNotasBtn.dataset.bound = 'true'; masNotasBtn.addEventListener('click', openNotas); }
+
+    // Hyperpiano: open CoursePodWorkspace with hyperpiano pod
+    const hpBtn = document.getElementById('ribbon-hyperpiano-btn');
+    const masHpBtn = document.getElementById('ribbon-mas-hyperpiano');
+    const openHyperpiano = () => window.dispatchEvent(new CustomEvent('musiki:open-hyperpiano'));
+    if (hpBtn && !hpBtn.dataset.bound) { hpBtn.dataset.bound = 'true'; hpBtn.addEventListener('click', openHyperpiano); }
+    if (masHpBtn && !masHpBtn.dataset.bound) { masHpBtn.dataset.bound = 'true'; masHpBtn.addEventListener('click', openHyperpiano); }
 
     // Page info toggle: dispatch event; slug.astro handles opening the right sidebar + info panel
     document.querySelectorAll('[data-page-info-toggle]').forEach((btn) => {
