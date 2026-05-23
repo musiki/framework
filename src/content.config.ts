@@ -101,6 +101,8 @@ const cursos = defineCollection({
 		theme: z.string().optional().nullable(),
 		slideTheme: z.string().optional().nullable(),
 		revealTheme: z.string().optional().nullable(),
+		reveal: z.union([z.boolean(), z.string()]).optional().nullable(),
+		live: z.boolean().optional().nullable(),
 	}).passthrough(),
 });
 

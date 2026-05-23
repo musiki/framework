@@ -623,7 +623,9 @@ const rawPresentationTheme =
   (currentEntry?.data as Record<string, unknown>).theme ||
   (currentEntry?.data as Record<string, unknown>).slideTheme ||
   (currentEntry?.data as Record<string, unknown>).revealTheme;
-const hasPresentationTheme = typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0;
+const rawRevealFlag = (currentEntry?.data as Record<string, unknown>).reveal;
+const hasPresentationTheme = (typeof rawPresentationTheme === 'string' && rawPresentationTheme.trim().length > 0)
+  || rawRevealFlag === true || rawRevealFlag === 'true';
 const presentationHref =
   (hasPresentationTheme ? `/slides${Astro.url.pathname}` : '') || publicPresentationHref;
 const isLiveEnabled =
@@ -3390,12 +3392,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         {canManageLiveInteractions ? (
           <>
-            <div
-              data-notes-sidebar
-              data-course-id={canonicalCourseId || courseSlug}
-              data-course-href={courseHref}
-              data-active-slug={currentEntrySourcePath || ''}
-            ></div>
             {sidebarChapterEntries.filter(e => e.kind === 'recursos').map((entry) => {
           if (entry.kind === 'recursos') {
             return (
@@ -3648,6 +3644,24 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             </div>
           );
         })}
+            {sidebarChapterEntries.filter(e => e.kind === 'notas').map((entry) => {
+              if (entry.kind !== 'notas') return null;
+              return (
+                <div class="chapter" data-notas-sidebar data-notas-course-id={entry.courseId}>
+                  <details class="chapter-details">
+                    <summary class="chapter-title">
+                      <span class="chapter-title-main">
+                        <span class="chapter-title-text">90 NOTAS</span>
+                        <button type="button" class="chapter-editor-link notas-sb-new-btn" title="Nueva nota" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.85rem;line-height:1">+</button>
+                        <button type="button" class="chapter-editor-link notas-sb-new-folder-btn" title="Nueva carpeta" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.75rem;line-height:1">⊟+</button>
+                      </span>
+                      <span class="chapter-caret"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                    </summary>
+                    <div class="notas-sb-tree" style="padding:.3rem 0"></div>
+                  </details>
+                </div>
+              );
+            })}
           </>
         ) : (
           (!isPublicWikiPage || Boolean(session)) && sidebarChapterEntries.map((entry) => {
