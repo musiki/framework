@@ -31,10 +31,11 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
   const noteId   = cleanString(url.searchParams.get('id') ?? '', 36) || null;
   const courseId = cleanString(url.searchParams.get('courseId') ?? '', 120) || null;
   const roomName = cleanString(url.searchParams.get('roomName') ?? '', 120) || null;
+  const folderId = cleanString(url.searchParams.get('folderId') ?? '', 36) || null;
   const limit    = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || '40')));
 
   const params: any[] = [user.id];
-  let sql = `SELECT id, title, body, "renderedHtml", "noteDate", "createdAt", "updatedAt" 
+  let sql = `SELECT id, title, body, "renderedHtml", "noteDate", "courseId", "folderId", "createdAt", "updatedAt"
              FROM "LiveClassNote" WHERE "userId" = $1`;
 
   if (noteId) {
@@ -48,6 +49,10 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
   if (roomName) {
     params.push(roomName);
     sql += ` AND "roomName" = $${params.length}`;
+  }
+  if (folderId) {
+    params.push(folderId);
+    sql += ` AND "folderId" = $${params.length}`;
   }
 
   sql += ` ORDER BY "noteDate" DESC, "updatedAt" DESC LIMIT $${params.length + 1}`;
@@ -71,15 +76,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const title    = cleanString(body?.title ?? '', TITLE_MAX) || deriveLiveNoteTitle(noteBody);
   const courseId = cleanString(body?.courseId ?? '', 120) || null;
   const roomName = cleanString(body?.roomName ?? '', 120) || null;
+  const folderId = cleanString(String(body?.folderId ?? ''), 36) || null;
   const noteDate = cleanString(body?.noteDate ?? '', 10) || new Date().toISOString().slice(0, 10);
 
-  const row = { 
-    userId: user.id, 
-    title, 
-    body: noteBody, 
-    renderedHtml: null as string | null, 
-    courseId, 
-    roomName, 
+  const row = {
+    userId: user.id,
+    title,
+    body: noteBody,
+    renderedHtml: null as string | null,
+    courseId,
+    folderId,
+    roomName,
     noteDate,
     updatedAt: new Date().toISOString()
   };
