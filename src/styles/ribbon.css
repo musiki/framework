@@ -159,6 +159,20 @@
   position: relative;
 }
 
+/* ── Tablet 501–1024px: fixed left column ───────────────────────────────── */
+@media (min-width: 501px) and (max-width: 1024px) {
+  .ribbon {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    width: var(--ribbon-width);
+    z-index: 40;
+    background: var(--ribbon-bg);
+    border-right: 1px solid var(--ribbon-border);
+  }
+}
+
 /* ── Mobile ≤500px: bottom bar ─────────────────────────────────────────── */
 @media (max-width: 500px) {
   .ribbon {
@@ -168,12 +182,11 @@
     right: 0;
     top: auto;
     width: 100%;
-    /* extend height to cover the safe-area inset on notched phones */
     height: calc(var(--ribbon-bottom-height) + env(safe-area-inset-bottom, 0px));
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 20px calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
     border-right: none;
     border-top: 1px solid var(--ribbon-border);
     z-index: 100;
@@ -190,16 +203,16 @@
   .ribbon-label,
   .ribbon-about { display: none; }
   .ribbon-item--mobile-visible {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
-    border-radius: 7px;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    border-radius: 6px;
     flex-shrink: 0;
   }
   .ribbon-item--mobile-visible svg {
-    width: 15px;
-    height: 15px;
+    width: 13px;
+    height: 13px;
   }
 }
 

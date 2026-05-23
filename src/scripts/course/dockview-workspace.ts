@@ -465,38 +465,46 @@ function injectMdCss() {
 function toEmbedUrl(url: string): string {
   const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/);
   if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+  const sc = url.match(/soundcloud\.com\/.+/);
+  if (sc) return `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&color=%23ff5500&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false`;
   return url;
 }
-function buildMediaShell(url: string, title: string): HTMLElement {
-  url = toEmbedUrl(url);
-  const shell = document.createElement('div');
-  shell.style.cssText = 'display:flex;flex-direction:column;height:100%;width:100%;overflow:hidden;background:var(--c-bg);';
-  const header = document.createElement('div');
-  header.style.cssText = 'height:22px;flex-shrink:0;display:flex;align-items:center;padding:0 8px;gap:6px;cursor:default;';
-  const titleEl = document.createElement('span');
-  titleEl.style.cssText = 'font-size:10px;color:var(--c-fg-subtle);opacity:.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;';
-  titleEl.textContent = title;
-  header.appendChild(titleEl);
-  shell.appendChild(header);
-  const body = document.createElement('div');
-  body.style.cssText = 'flex:1;overflow:hidden;min-height:0;';
-  const isAudio = /\.(mp3|ogg|wav|flac|m4a)(\?|$)/i.test(url);
-  if (isAudio) {
-    body.style.cssText += 'display:flex;align-items:center;justify-content:center;padding:1rem;';
+
+function mountMediaBody(bodyEl: HTMLElement, rawUrl: string) {
+  const url = toEmbedUrl(rawUrl);
+  const isAudio = /\.(mp3|ogg|wav|flac|m4a)(\?|$)/i.test(rawUrl);
+  const isVideo = /\.(mp4|webm|mov|ogv)(\?|$)/i.test(rawUrl);
+  const isImage = /\.(png|jpe?g|gif|svg|webp|avif)(\?|$)/i.test(rawUrl);
+
+  if (isImage) {
+    Object.assign(bodyEl.style, { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.5rem', overflow: 'auto' });
+    const img = document.createElement('img');
+    img.src = rawUrl;
+    img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:2px;';
+    img.alt = '';
+    bodyEl.appendChild(img);
+  } else if (isAudio) {
+    Object.assign(bodyEl.style, { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' });
     const audio = document.createElement('audio');
     audio.controls = true;
-    audio.src = url;
+    audio.src = rawUrl;
     audio.style.width = '100%';
-    body.appendChild(audio);
+    bodyEl.appendChild(audio);
+  } else if (isVideo) {
+    const video = document.createElement('video');
+    video.controls = true;
+    video.src = rawUrl;
+    video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000;';
+    bodyEl.appendChild(video);
   } else {
     const iframe = document.createElement('iframe');
     iframe.src = url;
     iframe.style.cssText = 'width:100%;height:100%;border:none;';
     iframe.allow = 'autoplay; fullscreen; encrypted-media';
-    body.appendChild(iframe);
+    bodyEl.appendChild(iframe);
   }
-  shell.appendChild(body);
-  return shell;
 }
 
 // ── Mode switching ────────────────────────────────────────────────────────
@@ -625,9 +633,12 @@ export function initDockviewWorkspace(
       pendingParams.delete(panelId);
       if (!params) throw new Error(`[cnw] no params for panel ${panelId}`);
 
-      // Media panel — iframe/audio, no note state
+      // Media panel — reuse buildShell for drag/drop infra, mount media into bodyEl
       if (params.kind === 'media') {
-        return { element: buildMediaShell(params.url, params.title), init: () => {} };
+        const { shell, bodyEl, pencilBtn } = buildShell(panelId, params.url, params.title, dockview);
+        pencilBtn.style.display = 'none';
+        mountMediaBody(bodyEl, params.url);
+        return { element: shell, init: () => {} };
       }
 
       const { shell, bodyEl, statusDot, pencilBtn } = buildShell(
@@ -713,13 +724,16 @@ export function initDockviewWorkspace(
 
   function openMedia(url: string, title: string, position: 'bottom' | 'right' = 'bottom'): void {
     const mediaId = `media-${encodeURIComponent(url).slice(0, 40)}-${Date.now()}`;
-    const referencePanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
+    // First media goes below last note; subsequent media tiles right of the last media pod
+    const lastMediaPanel = [...dockview.panels].reverse().find(p => p.id.startsWith('media-'));
+    const referencePanel = lastMediaPanel ?? (dockview.panels[dockview.panels.length - 1] ?? undefined);
+    const direction = lastMediaPanel ? 'right' : position;
     pendingParams.set(mediaId, { kind: 'media', url, title });
     dockview.addPanel({
       id: mediaId,
       component: 'note-panel',
       position: referencePanel
-        ? { referencePanel: referencePanel.id, direction: position }
+        ? { referencePanel: referencePanel.id, direction }
         : undefined,
     });
   }

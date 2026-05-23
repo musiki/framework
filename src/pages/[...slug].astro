@@ -3126,22 +3126,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         }
       }
 
-      /* keep ribbon fixed-left at tablet widths so content doesn't stack below it */
+      /* Tablet 501–1024px: ribbon is fixed in ribbon.css; offset content-area */
       @media (min-width: 501px) and (max-width: 1024px) {
-        .ribbon {
-          position: fixed;
-          top: 0;
-          left: 0;
-          height: 100dvh;
-          width: var(--ribbon-width);
-          z-index: 40;
-          background: var(--ribbon-bg, color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%));
-          border-right: 1px solid var(--ribbon-border, var(--c-border));
-        }
         .course-container {
           padding-left: var(--ribbon-width);
         }
-        /* fixed grid items still occupy auto-placed rows; force content-area to row 1 */
         .content-area {
           grid-column: 1;
           grid-row: 1;

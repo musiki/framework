@@ -123,7 +123,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
       overlay!.setAttribute('aria-hidden', 'true');
     }
 
-    window.addEventListener('musiki:open-notas', open);
+    // musiki:open-notas is handled by dockview-workspace.ts on the course page
 
     // Close on Escape
     window.addEventListener('keydown', (e) => {
