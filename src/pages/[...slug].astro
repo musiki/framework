@@ -6,6 +6,7 @@ import { ClientRouter } from 'astro:transitions';
 import BaseHead from '../components/BaseHead.astro';
 import Ribbon from '../components/Ribbon.astro';
 import GraphModal from '../components/GraphModal.astro';
+import Search from '../components/Search.astro';
 import CoursePodWorkspace from '../components/course/CoursePodWorkspace.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
@@ -343,7 +344,12 @@ conceptsAndGlossary.forEach((lesson) => {
       chapter = folderName ? `70 ${folderName.toUpperCase()}` : '70 CONCEPTOS';
     } else {
       const type = String(lesson.data.type || '').trim().toLowerCase();
-      if (type === 'concept') chapter = '70 CONCEPTOS';
+      // For cursos entries inside public/{subfolder}/, group by that subfolder name
+      const entryId = String((lesson as any).id || '');
+      const publicSubMatch = entryId.match(/\/public\/([^/]+)\//);
+      if (publicSubMatch) {
+        chapter = `70 ${publicSubMatch[1].toUpperCase()}`;
+      } else if (type === 'concept') chapter = '70 CONCEPTOS';
       else if (type === 'glossary') chapter = '71 GLOSARIO';
       else if (type === 'public-note' || type === 'notes') chapter = '72 NOTAS PÚBLICAS';
       else chapter = '79 OTROS';
@@ -631,7 +637,7 @@ const presentationHref =
 const isLiveEnabled =
   Boolean(courseData?.live) ||
   Boolean((currentEntry?.data as Record<string, unknown>)?.live);
-const performativeRoomHref = (presentationHref || isLiveEnabled)
+const performativeRoomHref = (canonicalCourseId && (canManageLiveInteractions || presentationHref || isLiveEnabled))
   ? `/room?room=${encodeURIComponent(`${canonicalCourseId || courseSlug}-stage`)}&course=${encodeURIComponent(canonicalCourseId || courseSlug)}${presentationHref ? `&slides=${encodeURIComponent(presentationHref)}` : ''}`
   : '';
 const hasSessionUser = Boolean(session?.user?.email);
@@ -4397,11 +4403,10 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         function bootWorkspace() {
           const container = document.getElementById('cnw-root');
           if (!container) return;
-          const sidebarEl = document.querySelector<HTMLElement>('[data-notes-sidebar]');
-          const courseId = sidebarEl?.dataset.courseId ?? '';
+          const layoutRoot = document.querySelector<HTMLElement>('[data-course-layout-root]');
+          const courseId = layoutRoot?.dataset.liveCourseId ?? '';
           if (!courseId) return;
-          const activeSlug = sidebarEl?.dataset.activeSlug || null;
-          const ws = initDockviewWorkspace(container, courseId, activeSlug, null);
+          const ws = initDockviewWorkspace(container, courseId, null, null);
           (window as any).__cnwWorkspace = ws;
           const classContent = container.querySelector<HTMLElement>('[data-class-content]');
           if (classContent) classContent.style.display = 'none';
@@ -13326,6 +13331,7 @@ a[node] -->|edge| b[hub]
     </style>
     <CoursePodWorkspace />
     <GraphModal />
+    <Search />
     {session?.user && canonicalCourseIdToUse && (
       <script>
         import { loadNotesTree, renderNotesTree, createFolder } from '../scripts/course/notes-sidebar';
