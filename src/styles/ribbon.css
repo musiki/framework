@@ -168,19 +168,21 @@
     right: 0;
     top: auto;
     width: 100%;
-    height: var(--ribbon-bottom-height);
+    /* extend height to cover the safe-area inset on notched phones */
+    height: calc(var(--ribbon-bottom-height) + env(safe-area-inset-bottom, 0px));
     flex-direction: row;
-    justify-content: space-around;
+    justify-content: space-between;
     align-items: center;
-    padding: 0 8px;
+    /* top padding keeps items centered in the visible 60px area */
+    padding: 0 16px env(safe-area-inset-bottom, 0px);
     border-right: none;
     border-top: 1px solid var(--ribbon-border);
     z-index: 100;
     gap: 0;
     overflow: hidden;
     overflow-x: auto;
+    background: var(--ribbon-bg);
   }
-  background: var(--ribbon-bg);
   /* show only mobile-visible items */
   .ribbon-item { display: none; }
   .ribbon-item--mobile-visible { display: flex; }
@@ -188,13 +190,19 @@
   .ribbon-spacer,
   .ribbon-label,
   .ribbon-about { display: none; }
-  /* all mobile items need comfortable touch targets */
+  /* 15% smaller than 44px ≈ 37px */
   .ribbon-item--mobile-visible {
-    min-width: 44px;
-    min-height: 44px;
+    width: 37px;
+    height: 37px;
+    min-width: 37px;
+    min-height: 37px;
     border-radius: 8px;
+    flex-shrink: 0;
   }
-
+  .ribbon-item--mobile-visible svg {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 /* ── Desktop: hide mobile-only elements ─────────────────────────────────── */

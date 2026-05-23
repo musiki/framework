@@ -5,6 +5,7 @@ import { getCollection, getEntry, render } from 'astro:content';
 import { ClientRouter } from 'astro:transitions';
 import BaseHead from '../components/BaseHead.astro';
 import Ribbon from '../components/Ribbon.astro';
+import GraphModal from '../components/GraphModal.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
@@ -3123,7 +3124,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         }
       }
 
-      /* Issue 7: keep ribbon fixed-left at tablet widths so content doesn't stack below it */
+      /* keep ribbon fixed-left at tablet widths so content doesn't stack below it */
       @media (min-width: 501px) and (max-width: 1024px) {
         .ribbon {
           position: fixed;
@@ -3137,6 +3138,12 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         }
         .course-container {
           padding-left: var(--ribbon-width);
+        }
+        /* fixed grid items still occupy auto-placed rows; force content-area to row 1 */
+        .content-area {
+          grid-column: 1;
+          grid-row: 1;
+          height: 100dvh;
         }
       }
 
@@ -13234,5 +13241,6 @@ a[node] -->|edge| b[hub]
         font-size: 0.82rem;
       }
     </style>
+    <GraphModal />
   </body>
 </html>

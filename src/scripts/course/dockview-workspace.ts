@@ -769,8 +769,15 @@ export function initDockviewWorkspace(
   window.addEventListener('musiki:open-notas', () => {
     if (dockview.panels.length > 0) {
       dockview.panels[0].api.setActive();
+      dockview.panels[0].focus();
     } else if (initialSlug) {
       openNote(initialSlug, 'preview');
+    } else {
+      // Fall back to path-derived slug when no initial note was provided
+      const pathSlug = window.location.pathname
+        .replace(/^\//, '').replace(/\/$/, '')
+        .split('/').slice(1).join('/');
+      if (pathSlug) openNote(pathSlug, 'preview');
     }
   }, { signal });
 
