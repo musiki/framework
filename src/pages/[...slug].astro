@@ -7,6 +7,7 @@ import BaseHead from '../components/BaseHead.astro';
 import Ribbon from '../components/Ribbon.astro';
 import GraphModal from '../components/GraphModal.astro';
 import CoursePodWorkspace from '../components/course/CoursePodWorkspace.astro';
+import PersonalNotesOverlay from '../components/notas/PersonalNotesOverlay.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
@@ -13292,6 +13293,7 @@ a[node] -->|edge| b[hub]
     </style>
     <CoursePodWorkspace />
     <GraphModal />
+    {session?.user && <PersonalNotesOverlay />}
     {session?.user && canonicalCourseIdToUse && (
       <script>
         import { loadNotesTree, renderNotesTree } from '../scripts/course/notes-sidebar';

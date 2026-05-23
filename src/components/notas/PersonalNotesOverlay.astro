@@ -1,0 +1,65 @@
+---
+// src/components/notas/PersonalNotesOverlay.astro
+---
+
+<div class="pnw-overlay" id="personal-notes-overlay" aria-hidden="true">
+  <div id="pnw-root" class="dockview-theme-light"></div>
+</div>
+
+<style>
+  .pnw-overlay {
+    position: fixed;
+    inset: 0 0 0 var(--ribbon-width, 44px);
+    z-index: 30;
+    background: var(--c-bg);
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  .pnw-overlay.is-open {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  #pnw-root {
+    flex: 1;
+    min-height: 0;
+    --dv-sash-color: var(--c-border, rgba(120,120,140,.35));
+  }
+  @media (max-width: 500px) {
+    .pnw-overlay { inset: 0 0 var(--ribbon-bottom-height, 60px) 0; }
+  }
+</style>
+
+<script>
+  import { initPersonalNotesWorkspace } from '../../scripts/notas/personal-notes-workspace';
+
+  let workspace: ReturnType<typeof initPersonalNotesWorkspace> | null = null;
+
+  function boot() {
+    const overlay = document.getElementById('personal-notes-overlay');
+    const root = document.getElementById('pnw-root') as HTMLElement | null;
+    if (!overlay || !root) return;
+
+    let open = false;
+
+    window.addEventListener('musiki:open-notas', () => {
+      open = !open;
+      overlay.classList.toggle('is-open', open);
+      overlay.setAttribute('aria-hidden', String(!open));
+      if (open && !workspace) workspace = initPersonalNotesWorkspace(root!);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && open) {
+        open = false;
+        overlay.classList.remove('is-open');
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+    });
+  }
+
+  boot();
+  document.addEventListener('astro:page-load', boot);
+</script>
