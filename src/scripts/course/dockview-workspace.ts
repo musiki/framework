@@ -593,7 +593,7 @@ export function initDockviewWorkspace(
 
       if (params.kind === 'db-note') {
         const { shell, bodyEl, pencilBtn, statusDot } = buildShell(
-          panelId, params.noteId, params.title, dockview,
+          panelId, params.noteId, params.title, dockview, true,
         );
         const state: DbNotePanelState = {
           noteId: params.noteId,
@@ -759,6 +759,19 @@ export function initDockviewWorkspace(
       }
     }
   });
+
+  // Open a personal note as a db-note pod (fired by notes sidebar click/context menu)
+  window.addEventListener('musiki:open-db-note', (e: Event) => {
+    const ev = e as CustomEvent<{ noteId: string; title: string }>;
+    const { noteId, title } = ev.detail;
+    const newId = `db-note-${noteId}-${Date.now()}`;
+    pendingParams.set(newId, { kind: 'db-note', noteId, title });
+    const refPanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
+    dockview.addPanel({
+      id: newId, component: 'note-panel',
+      position: refPanel ? { referencePanel: refPanel.id, direction: 'right' } : undefined,
+    });
+  }, { signal });
 
   // Listen for sidebar note-open events — signal is aborted on next initDockviewWorkspace call
   window.addEventListener('note-open', (e: Event) => {

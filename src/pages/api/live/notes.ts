@@ -136,6 +136,32 @@ export const POST: APIRoute = async ({ request, locals }) => {
   return json({ note: savedNote });
 };
 
+// PATCH /api/live/notes — partial update: only folderId (for drag-to-folder)
+export const PATCH: APIRoute = async ({ request, locals }) => {
+  const session = (locals as any).session;
+  const user = await ensureDbUserFromSession(session);
+  if (!user) return json({ error: 'Not authenticated' }, 401);
+
+  const body = await request.json().catch(() => ({}));
+  const id = cleanString(body?.id ?? '', 36);
+  if (!id) return json({ error: 'id required' }, 400);
+
+  // null means "remove from folder"; missing key means "don't change"
+  const folderId = 'folderId' in body
+    ? (body.folderId === null ? null : cleanString(String(body.folderId ?? ''), 36) || null)
+    : undefined;
+
+  if (folderId === undefined) return json({ error: 'nothing to update' }, 400);
+
+  const { error } = await query(
+    `UPDATE "LiveClassNote" SET "folderId" = $1, "updatedAt" = now() WHERE "id" = $2 AND "userId" = $3`,
+    [folderId, id, user.id]
+  );
+
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true });
+};
+
 // DELETE /api/live/notes?id=...
 export const DELETE: APIRoute = async ({ url, locals }) => {
   const session = (locals as any).session;

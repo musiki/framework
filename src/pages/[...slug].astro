@@ -7,7 +7,6 @@ import BaseHead from '../components/BaseHead.astro';
 import Ribbon from '../components/Ribbon.astro';
 import GraphModal from '../components/GraphModal.astro';
 import CoursePodWorkspace from '../components/course/CoursePodWorkspace.astro';
-import PersonalNotesOverlay from '../components/notas/PersonalNotesOverlay.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
@@ -341,13 +340,13 @@ conceptsAndGlossary.forEach((lesson) => {
       // Derive chapter from folder path in the entry ID: public/{folderName}/filename
       const idParts = String((lesson as any).id || '').split('/');
       const folderName = idParts.length >= 2 ? idParts[idParts.length - 2] : '';
-      chapter = folderName ? `90 ${folderName.toUpperCase()}` : '90 CONCEPTOS';
+      chapter = folderName ? `70 ${folderName.toUpperCase()}` : '70 CONCEPTOS';
     } else {
       const type = String(lesson.data.type || '').trim().toLowerCase();
-      if (type === 'concept') chapter = '90 CONCEPTOS';
-      else if (type === 'glossary') chapter = '91 GLOSARIO';
-      else if (type === 'public-note' || type === 'notes') chapter = '92 NOTAS PÚBLICAS';
-      else chapter = '99 OTROS';
+      if (type === 'concept') chapter = '70 CONCEPTOS';
+      else if (type === 'glossary') chapter = '71 GLOSARIO';
+      else if (type === 'public-note' || type === 'notes') chapter = '72 NOTAS PÚBLICAS';
+      else chapter = '79 OTROS';
     }
   }
 
@@ -375,7 +374,8 @@ const sidebarChapterEntries: Array<
 let insertedRecursosSidebarEntry = false;
 const hasRecursosSidebarChapter = sortedChapters.some(([chapterName]) => normalizeContentSlug(chapterName) === '80-recursos');
 for (const [chapterName, lessons] of sortedChapters) {
-  if (canManageLiveInteractions && !insertedRecursosSidebarEntry && /^9\d/.test(chapterName)) {
+  if (canManageLiveInteractions && !insertedRecursosSidebarEntry &&
+      (/^9\d/.test(chapterName) || normalizeContentSlug(chapterName) === '80-recursos')) {
     sidebarChapterEntries.push({ kind: 'recursos' });
     insertedRecursosSidebarEntry = true;
   }
@@ -3480,7 +3480,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             );
           }
           const { chapterName, lessons } = entry;
-          const isPublicFolder = /^9\d /.test(chapterName);
+          const isPublicFolder = /^[79]\d /.test(chapterName);
           const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
           const isTOC = chapterName === 'TOC de clase';
           const isRecursosChapter = normalizeContentSlug(chapterName) === '80-recursos';
@@ -3739,14 +3739,21 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                   <details class="chapter-details">
                     <summary class="chapter-title">
                       <span class="chapter-title-main">
-                        <span class="chapter-title-text">NOTAS</span>
+                        <span class="chapter-title-text">90 NOTAS</span>
                         <button
                           type="button"
                           class="chapter-editor-link notas-sb-new-btn"
                           title="Nueva nota"
                           onclick="event.stopPropagation()"
-                          style="border:none;background:none;cursor:pointer;padding:0 2px;opacity:.6;font-size:.8rem"
+                          style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.85rem;line-height:1"
                         >+</button>
+                        <button
+                          type="button"
+                          class="chapter-editor-link notas-sb-new-folder-btn"
+                          title="Nueva carpeta"
+                          onclick="event.stopPropagation()"
+                          style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.75rem;line-height:1"
+                        >⊟+</button>
                       </span>
                       <span class="chapter-caret">
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -13293,10 +13300,9 @@ a[node] -->|edge| b[hub]
     </style>
     <CoursePodWorkspace />
     <GraphModal />
-    {session?.user && <PersonalNotesOverlay />}
     {session?.user && canonicalCourseIdToUse && (
       <script>
-        import { loadNotesTree, renderNotesTree } from '../scripts/course/notes-sidebar';
+        import { loadNotesTree, renderNotesTree, createFolder } from '../scripts/course/notes-sidebar';
 
         async function bootNotasSidebar() {
           const sidebarEl = document.querySelector<HTMLElement>('[data-notas-sidebar]');
@@ -13307,27 +13313,46 @@ a[node] -->|edge| b[hub]
           const treeEl = sidebarEl.querySelector<HTMLElement>('.notas-sb-tree');
           if (!treeEl) return;
 
-          const details = sidebarEl.querySelector('details');
+          const details = sidebarEl.querySelector<HTMLDetailsElement>('details');
+
+          const reload = async () => {
+            const { folders, notes } = await loadNotesTree(courseId);
+            renderNotesTree(treeEl, folders, notes, courseId);
+          };
+
           let loaded = false;
           details?.addEventListener('toggle', async () => {
             if (!details.open || loaded) return;
             loaded = true;
-            const { folders, notes } = await loadNotesTree(courseId);
-            renderNotesTree(treeEl, folders, notes, courseId);
+            await reload();
           });
 
+          // New note button
           sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-btn')?.addEventListener('click', async () => {
             const title = prompt('Nombre de la nueva nota:');
             if (!title?.trim()) return;
-            const res = await fetch('/api/live/notes', {
+            await fetch('/api/live/notes', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ title: title.trim(), body: '', courseId }),
             });
-            if (!res.ok) return;
-            if (!details?.open) { details!.open = true; return; }
-            const { folders, notes } = await loadNotesTree(courseId);
-            renderNotesTree(treeEl, folders, notes, courseId);
+            if (!details?.open) { details!.open = true; loaded = false; }
+            await reload();
+          });
+
+          // New folder button
+          sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-folder-btn')?.addEventListener('click', async () => {
+            const name = prompt('Nombre de la carpeta:');
+            if (!name?.trim()) return;
+            await createFolder(courseId, name.trim(), null);
+            if (!details?.open) { details!.open = true; loaded = false; }
+            await reload();
+          });
+
+          // Ribbon NOTAS button: focus/open this section
+          window.addEventListener('musiki:open-notas', () => {
+            if (!details?.open) details!.open = true;
+            sidebarEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           });
         }
 

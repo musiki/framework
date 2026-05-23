@@ -94,6 +94,7 @@ export class RoomWorkspaceManager {
       atomic: 8,
       color: "#93C47D",
       cat: "comm",
+      hidden: true,
     },
     {
       id: "whiteboard",
@@ -205,14 +206,6 @@ export class RoomWorkspaceManager {
       icon: "Re",
       atomic: 22,
       color: "#6fa8dc",
-      cat: "comm",
-    },
-    {
-      id: "db-note",
-      title: "NOTA",
-      icon: "No",
-      atomic: 23,
-      color: "#93C47D",
       cat: "comm",
     },
   ];
@@ -407,23 +400,6 @@ export class RoomWorkspaceManager {
                   this.onRecursosInit(element),
                 );
               }
-              if (id === "db-note") {
-                const noteId = element?.dataset?.noteId ?? '';
-                if (noteId && element) {
-                  element.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
-                  fetch(`/api/live/notes?id=${noteId}`)
-                    .then(r => r.json())
-                    .then((d: any) => {
-                      const note = d?.notes?.[0];
-                      if (note && element) {
-                        import('marked').then(({ marked }) => {
-                          element.innerHTML = `<div style="padding:1rem;font-size:.9rem;line-height:1.7;overflow-y:auto;height:100%">${String(marked.parse(note.body ?? '', { async: false }))}</div>`;
-                        });
-                      }
-                    })
-                    .catch(() => { if (element) element.innerHTML = '<p style="padding:1rem;color:#c87e7e">Error al cargar</p>'; });
-                }
-              }
               if (id === "graph") {
                 delete element.dataset.graphPodReady;
                 window.setTimeout(() => {
@@ -531,7 +507,7 @@ export class RoomWorkspaceManager {
     const gallery = document.querySelector("[data-pod-gallery-list]");
     if (!gallery) return;
     gallery.innerHTML = "";
-    this.POD_TYPES.forEach((type) => {
+    this.POD_TYPES.filter(t => !(t as any).hidden).forEach((type) => {
       const item = document.createElement("div");
       item.className = "pod-gallery-item";
       item.draggable = true;
@@ -725,7 +701,7 @@ export class RoomWorkspaceManager {
     if (existing) existing.remove();
     const menu = document.createElement("div");
     menu.className = "pod-picker-menu";
-    this.POD_TYPES.forEach((type) => {
+    this.POD_TYPES.filter(t => !(t as any).hidden).forEach((type) => {
       const item = document.createElement("button");
       item.className = "pod-picker-item";
       if (type.id === targetPanel.id) item.classList.add("active");
