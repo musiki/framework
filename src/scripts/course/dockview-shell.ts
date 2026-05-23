@@ -251,5 +251,23 @@ export function buildShell(
   body.className = 'cnw-body';
   shell.appendChild(body);
 
+  const hud = document.createElement('div');
+  hud.className = 'cnw-hud';
+  hud.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0 .6rem;height:20px;flex-shrink:0';
+
+  const stats = document.createElement('span');
+  stats.className = 'cnw-hud-stats';
+  stats.style.cssText = 'font-size:.62rem;opacity:.4;font-family:var(--font-mono,monospace)';
+  hud.appendChild(stats);
+
+  const qaBtn = document.createElement('button');
+  qaBtn.className = 'cnw-hud-qa-btn';
+  qaBtn.title = 'Enviar al QA Analyzer';
+  qaBtn.style.cssText = 'border:none;background:none;font-size:.62rem;opacity:.55;cursor:pointer;padding:0;color:inherit;display:none';
+  qaBtn.textContent = 'QA ↗';
+  hud.appendChild(qaBtn);
+
+  shell.appendChild(hud);
+
   return { shell, bodyEl: body, statusDot, pencilBtn };
 }

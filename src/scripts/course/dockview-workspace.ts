@@ -22,7 +22,9 @@ export interface CourseNotesWorkspace {
 
 type PanelParams =
   | { kind?: 'note'; slug: string; courseId: string; mode: NoteMode }
-  | { kind: 'media'; url: string; title: string };
+  | { kind: 'media'; url: string; title: string }
+  | { kind: 'db-note'; noteId: string; title: string; courseId?: string }
+  | { kind: 'qa-analyzer'; noteId?: string; noteTitle?: string };
 
 // Side-channel map: populated just before addPanel(), consumed in createComponent()
 // because dockview v5 createComponent() does NOT receive panel params directly.
@@ -40,6 +42,27 @@ type PanelState = {
 };
 
 const panelStates = new Map<string, PanelState>();
+
+type DbNotePanelState = {
+  noteId: string;
+  mode: NoteMode;
+  bodyEl: HTMLElement;
+  statusDot: HTMLElement;
+  pencilBtn: HTMLButtonElement;
+};
+
+type QaShell = {
+  root: HTMLElement;
+  titleEl: HTMLSpanElement;
+  freqList: HTMLElement;
+  kwicInput: HTMLInputElement;
+  kwicList: HTMLElement;
+  activeText: string;
+};
+
+const dbNotePanelStates = new Map<string, DbNotePanelState>();
+const qaShells = new Map<string, QaShell>();
+let _activeQaPanelId: string | null = null;
 
 // Module-level lifecycle — prevents double-init and stale window listeners across navigations
 let _activeCtrl: AbortController | null = null;
@@ -338,6 +361,187 @@ async function enterPreviewMode(state: PanelState) {
   await renderPreview(state.bodyEl, state.courseId, state.slug);
 }
 
+// ── DB-note panel helpers ─────────────────────────────────────────────────
+
+async function loadDbNotePreview(state: DbNotePanelState) {
+  state.mode = 'preview';
+  state.bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
+  try {
+    const r = await fetch(`/api/live/notes?id=${state.noteId}`);
+    if (!r.ok) throw new Error('fetch failed');
+    const d = await r.json() as { notes?: any[] };
+    const note = d.notes?.[0];
+    if (!note) { state.bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;">Nota no encontrada</p>'; return; }
+    configureMarked();
+    injectMdCss();
+    const html = String(marked.parse(note.body ?? '', { async: false }));
+    state.bodyEl.innerHTML = `<div class="cnw-md" style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72">${html}</div>`;
+    updateDbNoteHud(state, note.body ?? '');
+
+    const qaBtn = state.bodyEl.closest('.cnw-shell')?.querySelector<HTMLButtonElement>('.cnw-hud-qa-btn');
+    if (qaBtn) {
+      qaBtn.style.display = 'inline';
+      qaBtn.onclick = () => window.dispatchEvent(new CustomEvent('musiki:send-to-qa', {
+        detail: { noteId: state.noteId, content: note.body ?? '', title: note.title ?? '' },
+      }));
+    }
+  } catch {
+    state.bodyEl.innerHTML = '<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar</p>';
+  }
+}
+
+function enterDbNoteEditMode(state: DbNotePanelState) {
+  state.mode = 'edit';
+  state.pencilBtn.title = 'Vista previa';
+  state.bodyEl.innerHTML = '';
+
+  const form = document.createElement('div');
+  form.style.cssText = 'display:flex;flex-direction:column;height:100%;padding:.6rem;gap:.4rem;box-sizing:border-box';
+
+  const ta = document.createElement('textarea');
+  ta.style.cssText = 'flex:1;font-family:var(--font-mono,monospace);font-size:.9rem;padding:.5rem;border:1px solid var(--c-border,rgba(120,120,140,.2));border-radius:3px;background:transparent;color:inherit;resize:none;line-height:1.6';
+  form.appendChild(ta);
+  state.bodyEl.appendChild(form);
+
+  fetch(`/api/live/notes?id=${state.noteId}`)
+    .then(r => r.json())
+    .then((d: any) => { ta.value = d.notes?.[0]?.body ?? ''; ta.focus(); })
+    .catch(() => {});
+
+  const saveNote = async () => {
+    state.statusDot.className = 'cnw-status saving';
+    const res = await fetch('/api/live/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: state.noteId, body: ta.value }),
+    }).catch(() => null);
+    state.statusDot.className = res?.ok ? 'cnw-status saved' : 'cnw-status error';
+    setTimeout(() => { state.statusDot.className = 'cnw-status'; }, 2000);
+    updateDbNoteHud(state, ta.value);
+  };
+
+  ta.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); void saveNote(); }
+  });
+  ta.addEventListener('blur', () => void saveNote());
+}
+
+async function enterDbNotePreviewMode(state: DbNotePanelState) {
+  state.pencilBtn.title = 'Editar';
+  await loadDbNotePreview(state);
+}
+
+function updateDbNoteHud(state: DbNotePanelState, text: string) {
+  const hud = state.bodyEl.closest('.cnw-shell')?.querySelector<HTMLElement>('.cnw-hud-stats');
+  if (!hud) return;
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const chars = text.length;
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim()).length;
+  hud.textContent = `${words} palabras · ${chars.toLocaleString()} caracteres · ${sentences} oraciones`;
+}
+
+// ── QA Analyzer panel helpers ─────────────────────────────────────────────
+
+function buildQaShell(panelId: string, initialTitle: string, dockview: DockviewComponent): QaShell {
+  const { shell } = buildShell(panelId, 'qa', 'QA', dockview);
+  shell.querySelector<HTMLElement>('.cnw-title')!.textContent = 'QA';
+
+  const titleEl = document.createElement('span') as HTMLSpanElement;
+  titleEl.className = 'cnw-qa-source';
+  titleEl.style.cssText = 'font-size:.7rem;opacity:.5;padding-left:.4rem;';
+  titleEl.textContent = initialTitle;
+  const modeBtn = shell.querySelector('.cnw-mode-btn');
+  if (modeBtn) shell.querySelector('.cnw-header')!.insertBefore(titleEl, modeBtn);
+
+  const body = shell.querySelector<HTMLElement>('.cnw-body')!;
+  body.style.cssText = 'display:flex;height:100%;overflow:hidden;position:relative';
+
+  const freqPane = document.createElement('div');
+  freqPane.style.cssText = 'width:200px;flex-shrink:0;overflow-y:auto;padding:.5rem;border-right:1px solid var(--c-border,rgba(120,120,140,.15))';
+  const freqLabel = document.createElement('div');
+  freqLabel.style.cssText = 'font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;opacity:.4;margin-bottom:.4rem';
+  freqLabel.textContent = 'Frecuencia';
+  freqPane.appendChild(freqLabel);
+  const freqList = document.createElement('div');
+  freqPane.appendChild(freqList);
+
+  const kwicPane = document.createElement('div');
+  kwicPane.style.cssText = 'flex:1;overflow-y:auto;padding:.5rem;display:flex;flex-direction:column;gap:.4rem';
+  const kwicLabel = document.createElement('div');
+  kwicLabel.style.cssText = 'font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;opacity:.4;margin-bottom:.2rem';
+  kwicLabel.textContent = 'Concordancia';
+  const kwicInput = document.createElement('input') as HTMLInputElement;
+  kwicInput.type = 'text';
+  kwicInput.placeholder = 'Buscar palabra…';
+  kwicInput.style.cssText = 'font:inherit;font-size:.8rem;padding:.2rem .4rem;border:1px solid var(--c-border,rgba(120,120,140,.2));border-radius:2px;background:transparent;color:inherit;width:100%;box-sizing:border-box;margin-bottom:.3rem';
+  const kwicList = document.createElement('div');
+  kwicPane.appendChild(kwicLabel);
+  kwicPane.appendChild(kwicInput);
+  kwicPane.appendChild(kwicList);
+
+  body.appendChild(freqPane);
+  body.appendChild(kwicPane);
+
+  const empty = document.createElement('div');
+  empty.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.3;font-size:.85rem;pointer-events:none';
+  empty.textContent = 'Arrastra una nota aquí para analizar';
+  empty.className = 'cnw-qa-empty';
+  body.appendChild(empty);
+
+  return { root: shell, titleEl, freqList, kwicList, kwicInput, activeText: '' };
+}
+
+async function activateQaNote(qa: QaShell, noteId: string, title: string, textOverride?: string) {
+  let text = textOverride ?? '';
+  if (!text) {
+    const r = await fetch(`/api/live/notes?id=${noteId}`).catch(() => null);
+    const d = r ? await r.json().catch(() => null) : null;
+    text = d?.notes?.[0]?.body ?? '';
+  }
+  qa.activeText = text;
+  qa.titleEl.textContent = title;
+  const emptyEl = qa.root.querySelector<HTMLElement>('.cnw-qa-empty');
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  const { computeFrequency, computeKwic } = await import('../notas/qa-analyzer-logic');
+  (window as any).__qaLogic = { computeFrequency, computeKwic };
+
+  const freq = computeFrequency(text, 20);
+  qa.freqList.innerHTML = '';
+  for (const { word, count, pct } of freq) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:.3rem;margin-bottom:.18rem;cursor:pointer';
+    row.addEventListener('click', () => { qa.kwicInput.value = word; renderKwic(qa, word); });
+    const bar = document.createElement('div');
+    bar.style.cssText = `height:8px;border-radius:2px;background:var(--c-link,#2337ff);opacity:.55;width:${pct}%;flex-shrink:0;min-width:4px;max-width:80px`;
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:.7rem;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px';
+    label.textContent = `${word} (${count})`;
+    row.appendChild(bar);
+    row.appendChild(label);
+    qa.freqList.appendChild(row);
+  }
+
+  qa.kwicInput.oninput = () => renderKwic(qa, qa.kwicInput.value);
+  if (freq[0]) renderKwic(qa, freq[0].word);
+}
+
+function renderKwic(qa: QaShell, word: string) {
+  const logic = (window as any).__qaLogic as typeof import('../notas/qa-analyzer-logic') | undefined;
+  if (!logic) return;
+  const lines = logic.computeKwic(qa.activeText, word, 40);
+  qa.kwicList.innerHTML = '';
+  for (const { before, match, after } of lines) {
+    const row = document.createElement('div');
+    row.style.cssText = 'font-size:.78rem;line-height:1.5;padding:.15rem 0;opacity:.8;font-family:var(--font-mono,monospace)';
+    row.innerHTML = `<span style="opacity:.5">${escHtml(before)}</span><mark style="background:rgba(255,200,0,.3);border-radius:1px">${escHtml(match)}</mark><span style="opacity:.5">${escHtml(after)}</span>`;
+    qa.kwicList.appendChild(row);
+  }
+  if (!lines.length) {
+    qa.kwicList.innerHTML = `<div style="opacity:.3;font-size:.78rem">Sin resultados</div>`;
+  }
+}
+
 // ── Main init ─────────────────────────────────────────────────────────────
 
 export function initDockviewWorkspace(
@@ -385,6 +589,37 @@ export function initDockviewWorkspace(
         pencilBtn.style.display = 'none';
         mountMediaBody(bodyEl, params.url);
         return { element: shell, init: () => {} };
+      }
+
+      if (params.kind === 'db-note') {
+        const { shell, bodyEl, pencilBtn, statusDot } = buildShell(
+          panelId, params.noteId, params.title, dockview,
+        );
+        const state: DbNotePanelState = {
+          noteId: params.noteId,
+          mode: 'preview',
+          bodyEl,
+          statusDot,
+          pencilBtn,
+        };
+        dbNotePanelStates.set(panelId, state);
+        pencilBtn.addEventListener('click', () => {
+          if (state.mode === 'preview') enterDbNoteEditMode(state);
+          else void enterDbNotePreviewMode(state);
+        });
+        void loadDbNotePreview(state);
+        return { element: shell, init: () => {} };
+      }
+
+      if (params.kind === 'qa-analyzer') {
+        const qa = buildQaShell(panelId, params.noteTitle ?? '', dockview);
+        qaShells.set(panelId, qa);
+        _activeQaPanelId = panelId;
+        if (params.noteId) {
+          const noteState = [...dbNotePanelStates.values()].find(s => s.noteId === params.noteId);
+          void activateQaNote(qa, params.noteId, params.noteTitle ?? '', noteState?.bodyEl.textContent ?? undefined);
+        }
+        return { element: qa.root, init: () => {} };
       }
 
       const { shell, bodyEl, statusDot, pencilBtn } = buildShell(
@@ -500,7 +735,18 @@ export function initDockviewWorkspace(
     event.accept();
   });
   dockview.onDidDrop(event => {
+    const noteId = event.nativeEvent.dataTransfer?.getData('text/x-musiki-note')?.trim();
     const slug = event.nativeEvent.dataTransfer?.getData('text/plain')?.trim();
+
+    if (noteId) {
+      const title = event.nativeEvent.dataTransfer?.getData('text/x-musiki-note-title') ?? noteId;
+      const newId = `db-note-${noteId}-${Date.now()}`;
+      pendingParams.set(newId, { kind: 'db-note', noteId, title });
+      const referencePanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
+      dockview.addPanel({ id: newId, component: 'note-panel', position: referencePanel ? { referencePanel: referencePanel.id, direction: 'right' } : undefined });
+      return;
+    }
+
     if (slug && slug.startsWith('cursos/')) {
       try {
         const split = dockview.panels.length > 0;
@@ -525,12 +771,18 @@ export function initDockviewWorkspace(
     }
   }, { signal });
 
-  // Ribbon "Notas" button — open/activate notes workspace
-  window.addEventListener('musiki:open-notas', () => {
-    if (dockview.panels.length > 0) {
-      dockview.panels[0].api.setActive();
-    } else if (initialSlug) {
-      openNote(initialSlug, 'preview');
+  window.addEventListener('musiki:send-to-qa', async (e: Event) => {
+    const ev = e as CustomEvent<{ noteId: string; content: string; title: string }>;
+    const existingQaId = _activeQaPanelId ?? [...qaShells.keys()][0];
+    const qa = existingQaId ? qaShells.get(existingQaId) : null;
+
+    if (qa) {
+      await activateQaNote(qa, ev.detail.noteId, ev.detail.title, ev.detail.content);
+    } else {
+      const newId = `qa-${Date.now()}`;
+      pendingParams.set(newId, { kind: 'qa-analyzer', noteId: ev.detail.noteId, noteTitle: ev.detail.title });
+      const refPanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
+      dockview.addPanel({ id: newId, component: 'note-panel', position: refPanel ? { referencePanel: refPanel.id, direction: 'right' } : undefined });
     }
   }, { signal });
 
@@ -541,6 +793,9 @@ export function initDockviewWorkspace(
       state.persistence.flush().then(() => state.persistence?.destroy());
     }
     panelStates.delete(event.id);
+    dbNotePanelStates.delete(event.id);
+    qaShells.delete(event.id);
+    if (_activeQaPanelId === event.id) _activeQaPanelId = null;
   });
 
   const workspace: CourseNotesWorkspace = {
