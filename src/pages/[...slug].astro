@@ -3392,7 +3392,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         {canManageLiveInteractions ? (
           <>
-            {sidebarChapterEntries.filter(e => e.kind === 'recursos').map((entry) => {
+            {sidebarChapterEntries.filter(e => e.kind === 'recursos' || e.kind === 'chapter').map((entry) => {
           if (entry.kind === 'recursos') {
             return (
               <div class="chapter">
