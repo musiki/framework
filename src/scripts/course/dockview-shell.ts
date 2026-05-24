@@ -143,6 +143,7 @@ export function injectWorkspaceCss(containerId: string) {
     .cnw-shell:hover .cnw-mode-btn { opacity: 0.6; }
     .cnw-mode-btn:hover { opacity: 1 !important; color: var(--c-fg); }
     .cnw-close-btn:hover { color: #c87e7e !important; }
+    .cnw-mode-btn.is-active { opacity: 1 !important; color: var(--c-link, #3b82f6) !important; }
 
     /* Panel body */
     .cnw-body {
@@ -195,7 +196,7 @@ export function buildShell(
   title: string,
   dockview: DockviewComponent,
   showHud = false,
-): { shell: HTMLElement; bodyEl: HTMLElement; statusDot: HTMLElement; pencilBtn: HTMLButtonElement; splitRightBtn: HTMLButtonElement; splitBelowBtn: HTMLButtonElement } {
+): { shell: HTMLElement; bodyEl: HTMLElement; statusDot: HTMLElement; pencilBtn: HTMLButtonElement; splitRightBtn: HTMLButtonElement; splitBelowBtn: HTMLButtonElement; traceBtn: HTMLButtonElement } {
   const shell = document.createElement('div');
   shell.className = 'cnw-shell';
   shell.dataset.panelId = panelId;
@@ -239,6 +240,13 @@ export function buildShell(
   splitBelowBtn.title = 'Dividir abajo';
   splitBelowBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="12" x2="21" y2="12"/></svg>`;
   header.appendChild(splitBelowBtn);
+
+  const traceBtn = document.createElement('button');
+  traceBtn.className = 'cnw-mode-btn';
+  traceBtn.title = 'Trace Codes';
+  traceBtn.textContent = '⊕';
+  traceBtn.style.fontSize = '13px';
+  header.appendChild(traceBtn);
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'cnw-mode-btn cnw-close-btn';
@@ -321,5 +329,5 @@ export function buildShell(
     shell.appendChild(hud);
   }
 
-  return { shell, bodyEl: body, statusDot, pencilBtn, splitRightBtn, splitBelowBtn };
+  return { shell, bodyEl: body, statusDot, pencilBtn, splitRightBtn, splitBelowBtn, traceBtn };
 }
