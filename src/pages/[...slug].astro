@@ -4427,7 +4427,9 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           ws.openMedia(url, name, 'bottom');
         });
 
-        // Open lesson/concept/note sidebar links inside dockview (not full navigation)
+        // Open course lesson/note sidebar links inside dockview (not full navigation).
+        // Content-collection entries (global concepts, glossary) don't have a courseId
+        // prefix in their slug, so we let those navigate normally.
         document.addEventListener('click', (e) => {
           const link = (e.target as Element)?.closest<HTMLAnchorElement>('.lesson-link');
           if (!link) return;
@@ -4435,8 +4437,12 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           if (!ws) return;
           const slug = link.dataset.lessonPageSlug;
           if (!slug) return;
+          const cid = link.dataset.courseId || '';
+          // Only intercept cursos-collection entries (slug starts with courseId/)
+          if (!cid || !slug.startsWith(cid + '/')) return;
           e.preventDefault();
-          ws.openNote(slug, 'preview');
+          // Strip the courseId prefix: "s123/01-notas/class" → "01-notas/class"
+          ws.openNote(slug.slice(cid.length + 1), 'preview');
         });
       </script>
     )}
