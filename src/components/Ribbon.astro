@@ -368,8 +368,8 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   html:not(.dark) .ribbon-theme-sun { display: none; }
   html.dark .ribbon-theme-moon { display: none; }
   /* Mobile body padding so content isn't hidden under bottom bar */
-  @media (max-width: 500px) {
-    body { padding-bottom: var(--ribbon-bottom-height, 54px); }
+  @media (max-width: 560px) {
+    body { padding-bottom: calc(var(--ribbon-bottom-height, 58px) + 8px + env(safe-area-inset-bottom, 0px)); }
   }
 
   /* Inactive (unlinked) ribbon item */
@@ -409,7 +409,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   }
 
   /* Mobile más sheet */
-  @media (max-width: 500px) {
+  @media (max-width: 560px) {
     .ribbon-mas-sheet {
       position: fixed;
       bottom: var(--ribbon-bottom-height);
@@ -462,7 +462,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     }
   }
   /* Hide sheet on desktop */
-  @media (min-width: 501px) {
+  @media (min-width: 561px) {
     .ribbon-mas-sheet { display: none; }
     .ribbon-mas-toggle { display: none; }
   }
@@ -516,7 +516,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
         if (btn instanceof HTMLElement && !btn.dataset.hapticBound) {
           btn.dataset.hapticBound = 'true';
           btn.addEventListener('click', () => {
-            if (window.matchMedia('(max-width: 500px)').matches) {
+            if (window.matchMedia('(max-width: 560px)').matches) {
               navigator.vibrate(10);
             }
           });

@@ -361,6 +361,7 @@ export function renderNotesSidebar(
       const a = document.createElement('a');
       a.href = noteUrl;
       a.className = 'lesson-link' + (isActive ? ' active' : '');
+      a.dataset.astroPrefetch = 'false';
       a.draggable = true;
 
       const titleText = note.title || note.slug.split('/').pop()?.replace('.md', '') || note.slug;

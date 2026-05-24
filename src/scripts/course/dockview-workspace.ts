@@ -213,17 +213,41 @@ function toCourseContentPath(courseId: string, slug: string): string {
   return `${courseId}/${slug}`;
 }
 
-async function loadPreviewContent(courseId: string, slug: string): Promise<string> {
-  try {
-    const note = await getNote(courseId, slug);
-    return note.content;
-  } catch (primaryError) {
-    const path = toCourseContentPath(courseId, slug);
-    const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}`);
-    if (!res.ok) throw primaryError;
-    const data = await res.json() as { body?: string };
-    return data.body ?? '';
+const previewContentRequests = new Map<string, Promise<string>>();
+
+function rememberPreviewContentRequest(key: string, request: Promise<string>) {
+  previewContentRequests.set(key, request);
+  request.catch(() => {
+    if (previewContentRequests.get(key) === request) previewContentRequests.delete(key);
+  });
+
+  while (previewContentRequests.size > 40) {
+    const oldestKey = previewContentRequests.keys().next().value;
+    if (!oldestKey) break;
+    previewContentRequests.delete(oldestKey);
   }
+}
+
+function loadPreviewContent(courseId: string, slug: string): Promise<string> {
+  const cacheKey = `${courseId}::${slug}`;
+  const cachedRequest = previewContentRequests.get(cacheKey);
+  if (cachedRequest) return cachedRequest;
+
+  const request = (async () => {
+    try {
+      const note = await getNote(courseId, slug);
+      return note.content;
+    } catch (primaryError) {
+      const path = toCourseContentPath(courseId, slug);
+      const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}`);
+      if (!res.ok) throw primaryError;
+      const data = await res.json() as { body?: string };
+      return data.body ?? '';
+    }
+  })();
+
+  rememberPreviewContentRequest(cacheKey, request);
+  return request;
 }
 
 function runMermaidIn(bodyEl: HTMLElement) {

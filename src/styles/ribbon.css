@@ -4,7 +4,7 @@
   --ribbon-bg: color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%);
   --ribbon-border: var(--c-border);
   --ribbon-item-size: 32px;
-  --ribbon-bottom-height: 54px; /* mobile */
+  --ribbon-bottom-height: 58px; /* mobile */
 }
 
 /* ── Desktop ribbon ────────────────────────────────────────────────────── */
@@ -159,8 +159,8 @@
   position: relative;
 }
 
-/* ── Tablet 501–1024px: fixed left column ───────────────────────────────── */
-@media (min-width: 501px) and (max-width: 1024px) {
+/* ── Tablet 561–1024px: fixed left column ───────────────────────────────── */
+@media (min-width: 561px) and (max-width: 1024px) {
   .ribbon {
     position: fixed;
     top: 0;
@@ -173,8 +173,8 @@
   }
 }
 
-/* ── Mobile ≤500px: bottom bar ─────────────────────────────────────────── */
-@media (max-width: 500px) {
+/* ── Mobile: bottom bar ─────────────────────────────────────────────────── */
+@media (max-width: 560px) {
   .ribbon {
     position: fixed;
     bottom: 0;
@@ -185,38 +185,41 @@
     height: calc(var(--ribbon-bottom-height) + env(safe-area-inset-bottom, 0px));
     box-sizing: border-box;
     flex-direction: row;
-    justify-content: space-evenly;
+    justify-content: center;
     align-items: center;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     padding:
-      4px
-      env(safe-area-inset-right, 0px)
-      calc(4px + env(safe-area-inset-bottom, 0px))
-      env(safe-area-inset-left, 0px);
+      5px
+      max(8px, env(safe-area-inset-right, 0px))
+      calc(10px + env(safe-area-inset-bottom, 0px))
+      max(8px, env(safe-area-inset-left, 0px));
     border-right: none;
     border-top: 1px solid var(--ribbon-border);
     z-index: 100;
     gap: 0;
-    overflow: visible;
+    overflow: hidden;
     background: var(--ribbon-bg);
   }
   /* show only mobile-visible items */
-  .ribbon-item { display: none; }
-  .ribbon-item--mobile-visible { display: flex; }
+  .ribbon > .ribbon-item { display: none; }
+  .ribbon > .ribbon-item--mobile-visible { display: flex; }
   .ribbon-divider,
   .ribbon-spacer,
   .ribbon-label,
   .ribbon-about { display: none; }
-  .ribbon-item--mobile-visible {
-    width: 42px;
-    height: 42px;
-    min-width: 42px;
-    min-height: 42px;
+  .ribbon > .ribbon-item--mobile-visible {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
     border-radius: 8px;
-    flex-shrink: 0;
+    justify-self: center;
+    align-self: center;
   }
-  .ribbon-item--mobile-visible svg {
-    width: 20px;
-    height: 20px;
+  .ribbon > .ribbon-item--mobile-visible svg {
+    width: 16px;
+    height: 16px;
   }
   .ribbon-mobile-primary--toc { order: 1; }
   .ribbon-mobile-primary--live { order: 2; }
@@ -227,7 +230,7 @@
 }
 
 /* ── Desktop: hide mobile-only elements ─────────────────────────────────── */
-@media (min-width: 501px) {
+@media (min-width: 561px) {
   .ribbon-mas-sheet { display: none; }
   .ribbon-mas-toggle { display: none; }
   .ribbon-item--mobile-only { display: none; }
