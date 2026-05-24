@@ -51,12 +51,13 @@ export function buildAdminProjection({
         .filter(Boolean) as [string, { courseId: string; label: string }][],
     ).values(),
   ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
-  const userIds = Array.from(
-    new Set([
-      ...(allUsers || []).map((user: any) => String(user?.id || '')).filter(Boolean),
-      ...Array.from(enrollmentsByUserId.keys()),
-    ]),
-  );
+  const userIdsFromUsers = (allUsers || [])
+    .map((user: any) => String(user?.id || ''))
+    .filter(Boolean);
+  const userIdsFromEnrollments = Array.from(enrollmentsByUserId.keys())
+    .map((userId) => String(userId || ''))
+    .filter(Boolean);
+  const userIds = Array.from(new Set([...userIdsFromUsers, ...userIdsFromEnrollments]));
 
   const rows = userIds
     .map((userId) => {
@@ -135,8 +136,8 @@ export function buildAdminProjection({
       {
         title: '',
         field: '__rowSelect',
-        width: 44,
-        minWidth: 44,
+        width: 30,
+        minWidth: 30,
         headerSort: false,
         hozAlign: 'center',
         headerHozAlign: 'center',
@@ -145,10 +146,10 @@ export function buildAdminProjection({
       },
       { title: 'Nombre', field: 'name', frozen: true, minWidth: 180, kind: 'editable-text' },
       { title: 'Email', field: 'email', minWidth: 220, kind: 'editable-text' },
-      { title: 'Rol global', field: 'globalRole', width: 110, hozAlign: 'center', headerHozAlign: 'center', kind: 'role' },
-      { title: 'Inscripción', field: 'enrollmentSummary', minWidth: 220, kind: 'enrollment-courses' },
-      { title: 'Última actividad', field: 'lastActivityAt', minWidth: 170, kind: 'relative-datetime' },
-      { title: 'Acciones', field: '__adminActions', width: 72, hozAlign: 'center', headerHozAlign: 'center', headerSort: false, kind: 'admin-actions' },
+      { title: 'Rol global', field: 'globalRole', width: 200, minWidth: 200, maxWidth: 200, hozAlign: 'center', headerHozAlign: 'center', kind: 'role' },
+      { title: 'Inscripción', field: 'enrollmentSummary', width: 500, minWidth: 500, maxWidth: 500, kind: 'enrollment-courses' },
+      { title: 'Última actividad', field: 'lastActivityAt', width: 250, minWidth: 250, maxWidth: 250, kind: 'relative-datetime' },
+      { title: 'Acciones', field: '__adminActions', width: 250, minWidth: 250, maxWidth: 250, hozAlign: 'center', headerHozAlign: 'center', headerSort: false, kind: 'admin-actions' },
     ],
     rows,
     emptyMessage: 'No hay usuarios para mostrar en Admin.',

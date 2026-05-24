@@ -76,7 +76,8 @@ type DashboardSheet = {
 };
 
 const VALID_TEACHER_TABS = ['main', 'log', 'admin', 'agenda'];
-const TINY_COLUMN_WIDTH = 25;
+const TINY_COLUMN_WIDTH = 30;
+const ROW_SELECT_COLUMN_WIDTH = 30;
 const DASHBOARD_ROW_HEIGHT = 25;
 const normalizeText = (value: unknown) => String(value ?? '').trim();
 const normalizeTextLower = (value: unknown) => normalizeText(value).toLowerCase();
@@ -135,14 +136,17 @@ const showToast = (message: string, type: 'loading' | 'success' | 'error' = 'loa
 
 const flattenColumns = (columns: DashboardColumn[], path: string[] = [], leaves: LeafColumn[] = []) => {
   (columns || []).forEach((column) => {
-    const nextPath = [...path, normalizeText(column.title || column.field || '')];
+    const columnTitle = column.title === undefined || column.title === null
+      ? normalizeText(column.field || '')
+      : normalizeText(column.title);
+    const nextPath = [...path, columnTitle];
     if (Array.isArray(column.columns) && column.columns.length > 0) {
       flattenColumns(column.columns, nextPath, leaves);
       return;
     }
     const field = normalizeText(column.field);
     if (!field) return;
-    leaves.push({ ...column, field, title: normalizeText(column.title || field), sourcePath: nextPath });
+    leaves.push({ ...column, field, title: columnTitle || (normalizeText(column.kind) === 'row-select' ? '' : field), sourcePath: nextPath });
   });
   return leaves;
 };
@@ -335,8 +339,10 @@ const inferColumnWidth = (column: LeafColumn) => {
   const field = normalizeText(column.field);
   const title = normalizeText(column.title);
   const kind = normalizeText(column.kind);
-  if (kind === 'row-select') return 32;
+  const explicitWidth = column.width || column.minWidth;
+  if (kind === 'row-select') return ROW_SELECT_COLUMN_WIDTH;
   if (isTinyDashboardColumn(column)) return TINY_COLUMN_WIDTH;
+  if (explicitWidth) return explicitWidth;
   if (field === 'average' || field.startsWith('__avg_') || field.startsWith('teacherMainGradebookSummary_')) return 42;
   if (field.startsWith('eval__')) return 42;
   if (kind === 'score' || kind === 'grade-score' || kind === 'metric' || kind === 'percent') return 46;
@@ -354,7 +360,7 @@ const inferColumnWidth = (column: LeafColumn) => {
   if (field === 'notesValue' || kind === 'notes') return 150;
   if (title.length > 0 && title.length <= 4) return 38;
   if (title.length > 0 && title.length <= 6) return 44;
-  return column.width || column.minWidth || undefined;
+  return undefined;
 };
 
 const resolveColumnWidth = (
@@ -362,6 +368,7 @@ const resolveColumnWidth = (
   compactWidths?: Map<string, number>,
   userWidths?: Map<string, number>,
 ) => {
+  if (normalizeText(column.kind) === 'row-select') return ROW_SELECT_COLUMN_WIDTH;
   if (isTinyDashboardColumn(column)) return TINY_COLUMN_WIDTH;
   return compactWidths?.get(column.field)
     || userWidths?.get(column.field)
@@ -378,6 +385,27 @@ const resolveVisualColumnWidth = (
   const sourceCol = hot ? hot.toPhysicalColumn(visualCol) : visualCol;
   const leaf = leafColumns[sourceCol] || leafColumns[visualCol];
   return leaf ? resolveColumnWidth(leaf, compactWidths, userWidths) : undefined;
+};
+
+const isAdminAdaptiveColumn = (column: LeafColumn | undefined) =>
+  ['name', 'email'].includes(normalizeText(column?.field));
+
+const resolveForcedVisualColumnWidth = (
+  leafColumns: LeafColumn[],
+  visualCol: number,
+  gridKind: GridKind,
+  compactWidths?: Map<string, number>,
+  userWidths?: Map<string, number>,
+  hot?: Handsontable,
+) => {
+  const sourceCol = hot ? hot.toPhysicalColumn(visualCol) : visualCol;
+  const leaf = leafColumns[sourceCol] || leafColumns[visualCol];
+  if (!leaf) return undefined;
+  const width = resolveColumnWidth(leaf, compactWidths, userWidths);
+  if (!width) return undefined;
+  if (width === TINY_COLUMN_WIDTH || width === ROW_SELECT_COLUMN_WIDTH) return width;
+  if (gridKind === 'admin' && !isAdminAdaptiveColumn(leaf)) return width;
+  return undefined;
 };
 
 const shouldUseVerticalHeader = (column: LeafColumn, width: number | undefined) => {
@@ -424,6 +452,14 @@ const formatAbsence = (value: unknown) => {
   const parsed = Number(value || 0);
   if (!Number.isFinite(parsed) || parsed <= 0) return '0';
   return String(Math.round(parsed * 10) / 10).replace('.', ',');
+};
+
+const getAbsenceSeverity = (value: unknown) => {
+  const parsed = Number(normalizeText(value).replace(',', '.') || 0);
+  if (!Number.isFinite(parsed) || parsed < 1) return '';
+  if (parsed >= 4) return 'critical';
+  if (parsed >= 2) return 'warning';
+  return 'notice';
 };
 
 const attendanceSymbol = (value: unknown, blankWhenZero = false) => {
@@ -1167,6 +1203,7 @@ const dashboardRenderer = (instance: Handsontable, td: HTMLTableCellElement, row
   const isTinyCell = isTinyDashboardColumn(leaf);
   const rowData = sheet?.activeRows[instance.toPhysicalRow(row)] || {};
   td.className = `${td.className || ''} dashboard-hot-cell ${leaf?.cssClass || ''}`.trim();
+  td.classList.remove('dashboard-absence-cell--notice', 'dashboard-absence-cell--warning', 'dashboard-absence-cell--critical');
   td.classList.toggle('dashboard-hot-cell--tiny', isTinyDashboardColumn(leaf));
   td.dataset.field = normalizeText(prop);
   td.dataset.kind = kind;
@@ -1182,10 +1219,13 @@ const dashboardRenderer = (instance: Handsontable, td: HTMLTableCellElement, row
   }
 
   let html = '';
-  if (isTinyCell && kind !== 'attendance-day') html = renderTinyValue(value, kind);
+  if (kind === 'absence') {
+    const severity = getAbsenceSeverity(value);
+    if (severity) td.classList.add(`dashboard-absence-cell--${severity}`);
+    html = `<span class="dashboard-absence-count">${escapeHtml(formatAbsence(value))}</span>`;
+  } else if (isTinyCell && kind !== 'attendance-day') html = renderTinyValue(value, kind);
   else if (kind === 'score' || kind === 'grade-score') html = renderScore(value);
   else if (kind === 'attendance-progress') html = renderProgress(value);
-  else if (kind === 'absence') html = `<span>${escapeHtml(formatAbsence(value))}</span>`;
   else if (kind === 'percent') html = `${Number(value || 0).toFixed(1)}%`;
   else if (kind === 'datetime') html = escapeHtml(formatSubmissionDate(value));
   else if (kind === 'relative-datetime') html = `<span title="${escapeHtml(formatSubmissionDate(value))}">${escapeHtml(formatRelativeDate(value))}</span>`;
@@ -1273,7 +1313,7 @@ const createSheet = (
     columnHeaderHeight: 28,
     height: ['comments', 'teacher-eval'].includes(kind) ? '34vh' : '100%',
     width: '100%',
-    stretchH: ['teacher-main', 'gradebook'].includes(kind) ? 'none' : 'all',
+    stretchH: ['teacher-main', 'gradebook', 'admin'].includes(kind) ? 'none' : 'all',
     autoColumnSize: false,
     autoRowSize: false,
     colWidths: (visualCol) => {
@@ -1286,12 +1326,10 @@ const createSheet = (
       );
     },
     modifyColWidth: (width, visualCol) => {
-      const forced = resolveVisualColumnWidth(leafColumns, visualCol, compactWidths, userWidths);
-      return forced === TINY_COLUMN_WIDTH ? TINY_COLUMN_WIDTH : width;
+      return resolveForcedVisualColumnWidth(leafColumns, visualCol, kind, compactWidths, userWidths) || width;
     },
     beforeStretchingColumnWidth: (width, visualCol) => {
-      const forced = resolveVisualColumnWidth(leafColumns, visualCol, compactWidths, userWidths);
-      return forced === TINY_COLUMN_WIDTH ? TINY_COLUMN_WIDTH : width;
+      return resolveForcedVisualColumnWidth(leafColumns, visualCol, kind, compactWidths, userWidths) || width;
     },
     modifyRowHeaderWidth: () => rowHeaderWidth,
     modifyRowHeight: () => DASHBOARD_ROW_HEIGHT,
@@ -1323,6 +1361,12 @@ const createSheet = (
       const sourceCol = sheetRef?.hot.toPhysicalColumn(visualCol) ?? visualCol;
       const leaf = leafColumns[sourceCol] || leafColumns[visualCol];
       if (!leaf) return;
+      if (normalizeText(leaf.kind) === 'row-select') {
+        th.dataset.field = leaf.field;
+        th.title = '';
+        th.querySelector('.colHeader')?.replaceChildren();
+        return;
+      }
       const width = resolveColumnWidth(leaf, sheetRef?.compactWidths || compactWidths, sheetRef?.userWidths || userWidths);
       const headerText = normalizeText(th.textContent);
       const isLeafHeader = headerText === normalizeText(getShortHeaderLabel(leaf, leaf.sourcePath.length - 1))
@@ -1373,12 +1417,10 @@ const createSheet = (
   (hot as any).__musikiSheet = sheet;
   (element as any).__handsontableInstance = hot;
   hot.addHook('modifyColWidth', (width: number | undefined, visualCol: number) => {
-    const forced = resolveVisualColumnWidth(leafColumns, visualCol, sheet.compactWidths, sheet.userWidths, hot);
-    return forced === TINY_COLUMN_WIDTH ? TINY_COLUMN_WIDTH : width;
+    return resolveForcedVisualColumnWidth(leafColumns, visualCol, kind, sheet.compactWidths, sheet.userWidths, hot) || width;
   }, 100);
   hot.addHook('beforeStretchingColumnWidth', (width: number | undefined, visualCol: number) => {
-    const forced = resolveVisualColumnWidth(leafColumns, visualCol, sheet.compactWidths, sheet.userWidths, hot);
-    return forced === TINY_COLUMN_WIDTH ? TINY_COLUMN_WIDTH : width;
+    return resolveForcedVisualColumnWidth(leafColumns, visualCol, kind, sheet.compactWidths, sheet.userWidths, hot) || width;
   }, 100);
   hot.addHook('modifyRowHeaderWidth', () => rowHeaderWidth, 100);
   hot.addHook('modifyRowHeight', () => DASHBOARD_ROW_HEIGHT, 100);

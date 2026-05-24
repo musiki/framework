@@ -4642,6 +4642,12 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         padding: 0 0.25rem !important;
         line-height: 1.05;
       }
+      .dashboard-sheet .handsontable thead tr:last-child th .changeType {
+        display: none !important;
+      }
+      .dashboard-sheet .handsontable thead tr:last-child th .relative {
+        gap: 0 !important;
+      }
       .dashboard-sheet .handsontable th.ht__row_header,
       .dashboard-sheet .handsontable th .rowHeader {
         width: var(--dashboard-row-header-width, 34px) !important;
@@ -4656,6 +4662,20 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       }
       .dashboard-sheet .handsontable th .rowHeader {
         display: block;
+        width: 100% !important;
+        text-align: center !important;
+        font-size: 12px !important;
+        line-height: 25px !important;
+      }
+      .dashboard-sheet .handsontable tbody th {
+        text-align: center !important;
+        font-size: 12px !important;
+      }
+      .dashboard-sheet .handsontable tbody th .relative {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
       }
       .dashboard-sheet .handsontable td {
         height: 25px !important;
@@ -4682,6 +4702,18 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         font-size: 10px;
         overflow: hidden;
         white-space: nowrap;
+      }
+      .dashboard-sheet .handsontable th.dashboard-hot-header--tiny .relative {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        justify-content: center !important;
+      }
+      .dashboard-sheet .handsontable th.dashboard-hot-header--tiny .colHeader {
+        flex: 0 1 auto;
+        min-width: 0;
+        font-size: 10px;
+        line-height: 1;
+        text-align: center;
       }
       .dashboard-sheet .handsontable .ht_clone_top th.dashboard-hot-header--vertical,
       .dashboard-sheet .handsontable th.dashboard-hot-header--vertical {
@@ -4718,6 +4750,26 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       .dashboard-sheet .dashboard-attendance-cell--present .dashboard-attendance-chip { color: #047857; }
       .dashboard-sheet .dashboard-attendance-cell--late .dashboard-attendance-chip { color: #b45309; }
       .dashboard-sheet .dashboard-attendance-cell--absent .dashboard-attendance-chip { color: #dc2626; }
+      .dashboard-sheet .dashboard-absence-count {
+        display: inline-grid;
+        place-items: center;
+        min-width: 23px;
+        height: 23px;
+        border-radius: 2px;
+        font-weight: 750;
+      }
+      .dashboard-sheet .dashboard-absence-cell--notice {
+        background: rgba(234, 179, 8, 0.18) !important;
+        color: #854d0e;
+      }
+      .dashboard-sheet .dashboard-absence-cell--warning {
+        background: rgba(249, 115, 22, 0.20) !important;
+        color: #9a3412;
+      }
+      .dashboard-sheet .dashboard-absence-cell--critical {
+        background: rgba(239, 68, 68, 0.22) !important;
+        color: #991b1b;
+      }
       .dashboard-sheet .dashboard-admin-actions {
         display: inline-flex;
         gap: 0.25rem;
@@ -6380,6 +6432,18 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         color: #fca5a5;
       }
       :root.dark .dashboard-pill--absence {
+        color: #fecaca;
+      }
+      :root.dark .dashboard-sheet .dashboard-absence-cell--notice {
+        background: rgba(250, 204, 21, 0.20) !important;
+        color: #fde68a;
+      }
+      :root.dark .dashboard-sheet .dashboard-absence-cell--warning {
+        background: rgba(251, 146, 60, 0.22) !important;
+        color: #fed7aa;
+      }
+      :root.dark .dashboard-sheet .dashboard-absence-cell--critical {
+        background: rgba(248, 113, 113, 0.24) !important;
         color: #fecaca;
       }
       :root.dark .dashboard-pill--risk-bajo {
