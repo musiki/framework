@@ -4411,9 +4411,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           try {
             const ws = initDockviewWorkspace(container, courseId, null, null);
             (window as any).__cnwWorkspace = ws;
-            const classContent = container.querySelector<HTMLElement>('[data-class-content]');
-            console.log('[dockview] classContent:', classContent);
-            if (classContent) classContent.style.display = 'none';
             console.log('[dockview] initialized OK, ws:', ws);
           } catch (e) {
             console.error('[dockview] initDockviewWorkspace threw:', e);
@@ -4450,7 +4447,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           if (!cid || !slug.startsWith(cid + '/')) return;
           e.preventDefault();
           // Strip the courseId prefix: "s123/01-notas/class" → "01-notas/class"
-          ws.openNote(slug.slice(cid.length + 1), 'preview');
+          // Alt+click = split; plain click = replace current panel
+          ws.openNote(slug.slice(cid.length + 1), 'preview', (e as MouseEvent).altKey);
         });
       </script>
     )}

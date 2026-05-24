@@ -327,15 +327,19 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     const myToken = ++mountToken;
 
     const activeStatusEl0 = statusEl ?? document.createElement('span');
-    setStatus(activeStatusEl0, 'Cargando notas...');
-    try {
-      const { notes } = await listNotes(courseId);
-      if (mountToken !== myToken) return;
-      notesList = notes;
-    } catch (err) {
-      if (mountToken !== myToken) return;
-      setStatus(activeStatusEl0, err instanceof Error ? err.message : 'Error al cargar notas', 'error');
-      return;
+    // In pod mode (hideHeader) the notes list is only needed for the YAML-strip chapter autocomplete
+    // which isn't rendered — skip the fetch to avoid a ~2s network round-trip before loading the note.
+    if (!opts.hideHeader) {
+      setStatus(activeStatusEl0, 'Cargando notas...');
+      try {
+        const { notes } = await listNotes(courseId);
+        if (mountToken !== myToken) return;
+        notesList = notes;
+      } catch (err) {
+        if (mountToken !== myToken) return;
+        setStatus(activeStatusEl0, err instanceof Error ? err.message : 'Error al cargar notas', 'error');
+        return;
+      }
     }
 
     // Build a fallback status element for headerless mode

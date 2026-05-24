@@ -652,11 +652,11 @@ export function initDockviewWorkspace(
       });
       splitRightBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openNote(state.slug, 'preview', true, 'right');
+        openNote(state.slug, 'preview', true, 'right', panelId);
       });
       splitBelowBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openNote(state.slug, 'preview', true, 'below');
+        openNote(state.slug, 'preview', true, 'below', panelId);
       });
 
       if (params.mode === 'edit') {
@@ -682,6 +682,15 @@ export function initDockviewWorkspace(
   });
   ro.observe(container);
 
+  // Keep class-content (course overview) visible until first panel; hide dockview until then
+  const classContent = container.querySelector<HTMLElement>('[data-class-content]');
+  const dvRoot = container.querySelector<HTMLElement>('.dv-dockview');
+  if (dvRoot) dvRoot.style.display = 'none';
+  dockview.onDidAddPanel(() => {
+    if (classContent) classContent.style.display = 'none';
+    if (dvRoot) dvRoot.style.display = '';
+  });
+
   // Open initial panel
   if (initialSlug) {
     const pid = `note-${initialSlug}`;
@@ -689,12 +698,13 @@ export function initDockviewWorkspace(
     dockview.addPanel({ id: pid, component: 'note-panel' });
   }
 
-  function openNote(slug: string, mode: NoteMode = 'preview', split = false, direction: 'left' | 'right' | 'above' | 'below' | 'within' = 'right'): void {
+  function openNote(slug: string, mode: NoteMode = 'preview', split = false, direction: 'left' | 'right' | 'above' | 'below' | 'within' = 'right', refPanelId?: string): void {
     const panelId = `note-${slug}`;
     const existing = dockview.getGroupPanel(panelId);
 
     if (existing && !split) {
-      const state = panelStates.get(panelId);
+      // Panel for this slug exists — update it in-place
+      const state = panelStates.get(existing.id);
       if (!state) return;
       state.slug = slug;
       if (state.mode === 'preview') renderPreview(state.bodyEl, courseId, slug);
@@ -702,8 +712,24 @@ export function initDockviewWorkspace(
       return;
     }
 
+    if (!split && dockview.panels.length > 0) {
+      // No dedicated panel for this slug yet — reuse the active/last panel (no unwanted split)
+      const target = dockview.activePanel ?? dockview.panels[dockview.panels.length - 1];
+      const state = panelStates.get(target.id);
+      if (state) {
+        state.slug = slug;
+        state.mode = mode;
+        if (state.persistence) { state.persistence.destroy(); state.persistence = null; }
+        const titleEl = state.bodyEl.parentElement?.querySelector('.cnw-title');
+        if (titleEl) titleEl.textContent = slug.split('/').pop()?.replace('.md', '') ?? slug;
+        if (mode === 'preview') renderPreview(state.bodyEl, courseId, slug);
+        else void enterEditMode(state);
+        return;
+      }
+    }
+
     const referencePanel = split
-      ? (dockview.panels[dockview.panels.length - 1] ?? undefined)
+      ? ((refPanelId ? dockview.getGroupPanel(refPanelId) : null) ?? dockview.panels[dockview.panels.length - 1] ?? undefined)
       : undefined;
 
     const newId = panelId + (split ? `-split-${Date.now()}` : '');

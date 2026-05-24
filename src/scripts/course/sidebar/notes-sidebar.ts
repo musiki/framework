@@ -375,7 +375,7 @@ export function renderNotesSidebar(
       a.addEventListener('click', e => {
         const cancelled = !window.dispatchEvent(
           new CustomEvent('note-open', {
-            detail: { slug: note.slug, courseId, mode: 'preview' },
+            detail: { slug: note.slug, courseId, mode: 'preview', split: e.altKey },
             cancelable: true,
             bubbles: false,
           }),
