@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-24T04:40:20.070Z",
+  "phase": null,
+  "phase_name": "ad-hoc regression fixes",
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Fix dockview bootWorkspace courseId (removed [data-notes-sidebar] element)", "status": "done", "commit": "6bb1730"},
+    {"id": 2, "name": "Fix 70 CONCEPTS subfolder grouping for cursos collection", "status": "done", "commit": "6bb1730"},
+    {"id": 3, "name": "Add Search.astro to slug.astro (search icon was broken)", "status": "done", "commit": "6bb1730"},
+    {"id": 4, "name": "Fix camera icon for teachers (performativeRoomHref now includes canManageLiveInteractions)", "status": "done", "commit": "6bb1730"},
+    {"id": 5, "name": "Fix /api/note-folders 500 — LiveClassNoteFolder.userId was integer, must be uuid", "status": "done", "commit": "374837e"},
+    {"id": 6, "name": "Fix /api/notes/get 404 — content-collection entries now navigate normally, strip courseId prefix from openNote", "status": "done", "commit": "374837e"}
+  ],
+  "remaining_tasks": [
+    {"id": 7, "name": "Debug dockview still not showing despite bootWorkspace fix — need console.log diagnostics", "status": "not_started"},
+    {"id": 8, "name": "Restore NOTAS pod functionality (create/edit notes in dockview)", "status": "blocked_by_7"},
+    {"id": 9, "name": "Apply LiveClassNoteFolder userId migration on VPS production", "status": "human_action"}
+  ],
+  "blockers": [
+    {
+      "description": "Dockview still not rendering on course pages despite bootWorkspace using correct courseId source. Exact failure point unknown — no console output captured. User confirmed it was briefly working then lost again.",
+      "type": "technical",
+      "workaround": "Add console.log at each guard in bootWorkspace to identify which early return fires, and wrap initDockviewWorkspace in try/catch to surface any thrown errors."
+    }
+  ],
+  "human_actions_pending": [
+    {
+      "action": "Apply LiveClassNoteFolder userId type fix on VPS production DB",
+      "context": "Migration file at postgres-patches/migrations/20260523130000_fix_note_folder_userid_type.sql — ALTER TABLE LiveClassNoteFolder ALTER COLUMN userId TYPE uuid USING userId::text::uuid",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {"decision": "bootWorkspace reads courseId from [data-course-layout-root] data-live-course-id instead of removed [data-notes-sidebar] element", "rationale": "The notes-sidebar div was removed in commit 44beefb but the script still queried it", "phase": null},
+    {"decision": "Content-collection sidebar entries (global concepts/glossary) navigate normally rather than opening in dockview", "rationale": "/api/notes/get only serves cursos/ filesystem files, not content collection entries", "phase": null},
+    {"decision": "Strip courseId prefix from slug before ws.openNote — data-lesson-page-slug is ${courseId}/${path} but getCourseNote expects bare path", "rationale": "Prevented duplicate courseId in filesystem path", "phase": null}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Add diagnostic console.log inside bootWorkspace (lines ~4403-4413 in [...slug].astro) to find which guard causes early return. Then wrap initDockviewWorkspace in try/catch. Open browser devtools, navigate to a course page, and read the output.",
+  "context_notes": "The code in bootWorkspace looks correct. Suspect either: (1) initDockviewWorkspace throws silently (DockviewComponent not loaded due to Vite chunk 504 on first load after cache clear), (2) classContent never gets display:none because the throw happens first, (3) canManageLiveInteractions is somehow false. The user confirmed notes and RECURSOS media pods were briefly working smooth, which means the dockview DID work at some point — this is a regression, not a never-worked."
+}
