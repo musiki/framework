@@ -7,7 +7,6 @@ import BaseHead from '../components/BaseHead.astro';
 import Ribbon from '../components/Ribbon.astro';
 import GraphModal from '../components/GraphModal.astro';
 import Search from '../components/Search.astro';
-import CoursePodWorkspace from '../components/course/CoursePodWorkspace.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
@@ -4401,15 +4400,24 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         import { initDockviewWorkspace } from '../scripts/course/dockview-workspace.ts';
 
         function bootWorkspace() {
+          console.log('[dockview] bootWorkspace called');
           const container = document.getElementById('cnw-root');
+          console.log('[dockview] container:', container);
           if (!container) return;
           const layoutRoot = document.querySelector<HTMLElement>('[data-course-layout-root]');
           const courseId = layoutRoot?.dataset.liveCourseId ?? '';
+          console.log('[dockview] layoutRoot:', layoutRoot, 'courseId:', JSON.stringify(courseId));
           if (!courseId) return;
-          const ws = initDockviewWorkspace(container, courseId, null, null);
-          (window as any).__cnwWorkspace = ws;
-          const classContent = container.querySelector<HTMLElement>('[data-class-content]');
-          if (classContent) classContent.style.display = 'none';
+          try {
+            const ws = initDockviewWorkspace(container, courseId, null, null);
+            (window as any).__cnwWorkspace = ws;
+            const classContent = container.querySelector<HTMLElement>('[data-class-content]');
+            console.log('[dockview] classContent:', classContent);
+            if (classContent) classContent.style.display = 'none';
+            console.log('[dockview] initialized OK, ws:', ws);
+          } catch (e) {
+            console.error('[dockview] initDockviewWorkspace threw:', e);
+          }
         }
 
         bootWorkspace();
@@ -13335,7 +13343,6 @@ a[node] -->|edge| b[hub]
         font-size: 0.82rem;
       }
     </style>
-    <CoursePodWorkspace />
     <GraphModal />
     <Search />
     {session?.user && canonicalCourseIdToUse && (

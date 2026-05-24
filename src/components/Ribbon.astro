@@ -218,46 +218,18 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </svg>
   </button>
 
-  <!-- Hyperpiano — opens course pod workspace -->
-  <button
-    type="button"
-    class="ribbon-item"
-    id="ribbon-hyperpiano-btn"
-    aria-label="Hyperpiano"
-    title="Hyperpiano"
+  <!-- Hyperpiano — future, disabled -->
+  <span
+    class="ribbon-item ribbon-item--inactive"
+    aria-label="Hyperpiano (próximamente)"
+    title="Hyperpiano (próximamente)"
+    aria-disabled="true"
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
       <path d="M7 6v6M10 6v4M14 6v6M17 6v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
-  </button>
-
-  <!-- SA — Sonic Analyzer with mic input -->
-  <button
-    type="button"
-    class="ribbon-item"
-    id="ribbon-sa-btn"
-    aria-label="Sonic Analyzer"
-    title="Sonic Analyzer"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M2 12h2M6 8v8M10 5v14M14 9v6M18 7v10M22 12h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-  </button>
-
-  <!-- SV — Sonic Visualizer (audio file analysis) -->
-  <button
-    type="button"
-    class="ribbon-item"
-    id="ribbon-sv-btn"
-    aria-label="Sonic Visualizer"
-    title="Sonic Visualizer"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M7 16l4-6 4 4 3-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </button>
+  </span>
 
   <div class="ribbon-spacer"></div>
   <div class="ribbon-divider"></div>
@@ -358,26 +330,13 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
         <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
     </button>
-    <!-- Hyperpiano -->
-    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-hyperpiano" aria-label="Hyperpiano" title="Hyperpiano">
+    <!-- Hyperpiano — future, disabled -->
+    <span class="ribbon-mas-icon ribbon-mas-icon--disabled" aria-label="Hyperpiano (próximamente)" aria-disabled="true">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
         <path d="M7 6v6M10 6v4M14 6v6M17 6v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
-    </button>
-    <!-- SA -->
-    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-sa" aria-label="Sonic Analyzer" title="Sonic Analyzer">
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M2 12h2M6 8v8M10 5v14M14 9v6M18 7v10M22 12h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-    </button>
-    <!-- SV -->
-    <button type="button" class="ribbon-mas-icon" id="ribbon-mas-sv" aria-label="Sonic Visualizer" title="Sonic Visualizer">
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M7 16l4-6 4 4 3-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
+    </span>
   </div>
 </div>
 
@@ -559,26 +518,6 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     if (notasBtn && !notasBtn.dataset.bound) { notasBtn.dataset.bound = 'true'; notasBtn.addEventListener('click', openNotas); }
     if (masNotasBtn && !masNotasBtn.dataset.bound) { masNotasBtn.dataset.bound = 'true'; masNotasBtn.addEventListener('click', openNotas); }
 
-    // Hyperpiano: open CoursePodWorkspace with hyperpiano pod
-    const hpBtn = document.getElementById('ribbon-hyperpiano-btn');
-    const masHpBtn = document.getElementById('ribbon-mas-hyperpiano');
-    const openHyperpiano = () => window.dispatchEvent(new CustomEvent('musiki:open-hyperpiano'));
-    if (hpBtn && !hpBtn.dataset.bound) { hpBtn.dataset.bound = 'true'; hpBtn.addEventListener('click', openHyperpiano); }
-    if (masHpBtn && !masHpBtn.dataset.bound) { masHpBtn.dataset.bound = 'true'; masHpBtn.addEventListener('click', openHyperpiano); }
-
-    // SA: open CoursePodWorkspace with sonic-analyzer pod (mic input)
-    const saBtn = document.getElementById('ribbon-sa-btn');
-    const masSaBtn = document.getElementById('ribbon-mas-sa');
-    const openSA = () => window.dispatchEvent(new CustomEvent('musiki:open-sa'));
-    if (saBtn && !saBtn.dataset.bound) { saBtn.dataset.bound = 'true'; saBtn.addEventListener('click', openSA); }
-    if (masSaBtn && !masSaBtn.dataset.bound) { masSaBtn.dataset.bound = 'true'; masSaBtn.addEventListener('click', openSA); }
-
-    // SV: open CoursePodWorkspace with sonic-visualizer pod (file-based)
-    const svBtn = document.getElementById('ribbon-sv-btn');
-    const masSvBtn = document.getElementById('ribbon-mas-sv');
-    const openSV = () => window.dispatchEvent(new CustomEvent('musiki:open-sv'));
-    if (svBtn && !svBtn.dataset.bound) { svBtn.dataset.bound = 'true'; svBtn.addEventListener('click', openSV); }
-    if (masSvBtn && !masSvBtn.dataset.bound) { masSvBtn.dataset.bound = 'true'; masSvBtn.addEventListener('click', openSV); }
 
     // Page info toggle: dispatch event; slug.astro handles opening the right sidebar + info panel
     document.querySelectorAll('[data-page-info-toggle]').forEach((btn) => {
