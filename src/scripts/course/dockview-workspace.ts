@@ -11,6 +11,7 @@ import {
   type InlineEditorOptions,
 } from './notes/inline-editor';
 import { buildShell, injectWorkspaceCss, type NoteMode } from './dockview-shell';
+import { createLiveMdEditor, type LiveMdEditor } from './notes/live-md-editor';
 import { deferYouTubeEmbeds, hydrateLazyYouTubeEmbeds } from './lazy-youtube';
 
 export type { NoteMode } from './dockview-shell';
@@ -50,6 +51,7 @@ type DbNotePanelState = {
   bodyEl: HTMLElement;
   statusDot: HTMLElement;
   pencilBtn: HTMLButtonElement;
+  liveEditor: LiveMdEditor | null;
 };
 
 type QaShell = {
@@ -580,42 +582,44 @@ async function loadDbNotePreview(state: DbNotePanelState) {
 }
 
 function enterDbNoteEditMode(state: DbNotePanelState) {
+  state.liveEditor?.destroy();
+  state.liveEditor = null;
   state.mode = 'edit';
   state.pencilBtn.title = 'Vista previa';
   state.bodyEl.innerHTML = '';
 
-  const form = document.createElement('div');
-  form.style.cssText = 'display:flex;flex-direction:column;height:100%;padding:.6rem;gap:.4rem;box-sizing:border-box';
-
-  const ta = document.createElement('textarea');
-  ta.style.cssText = 'flex:1;font-family:var(--font-mono,monospace);font-size:.9rem;padding:.5rem;border:1px solid var(--c-border,rgba(120,120,140,.2));border-radius:3px;background:transparent;color:inherit;resize:none;line-height:1.6';
-  form.appendChild(ta);
-  state.bodyEl.appendChild(form);
+  const mount = document.createElement('div');
+  mount.style.cssText = 'height:100%;overflow:hidden;';
+  state.bodyEl.appendChild(mount);
 
   fetch(`/api/live/notes?id=${state.noteId}`)
     .then(r => r.json())
-    .then((d: any) => { ta.value = d.notes?.[0]?.body ?? ''; ta.focus(); })
+    .then((d: any) => {
+      if (!mount.isConnected) return;
+      const content: string = d.notes?.[0]?.body ?? '';
+
+      const save = async (text: string) => {
+        state.statusDot.className = 'cnw-status saving';
+        const res = await fetch('/api/live/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: state.noteId, body: text }),
+        }).catch(() => null);
+        state.statusDot.className = res?.ok ? 'cnw-status saved' : 'cnw-status error';
+        setTimeout(() => { state.statusDot.className = 'cnw-status'; }, 2000);
+        updateDbNoteHud(state, text);
+      };
+
+      state.liveEditor = createLiveMdEditor(mount, content, save);
+      updateDbNoteHud(state, content);
+      state.liveEditor.focus();
+    })
     .catch(() => {});
-
-  const saveNote = async () => {
-    state.statusDot.className = 'cnw-status saving';
-    const res = await fetch('/api/live/notes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: state.noteId, body: ta.value }),
-    }).catch(() => null);
-    state.statusDot.className = res?.ok ? 'cnw-status saved' : 'cnw-status error';
-    setTimeout(() => { state.statusDot.className = 'cnw-status'; }, 2000);
-    updateDbNoteHud(state, ta.value);
-  };
-
-  ta.addEventListener('keydown', e => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); void saveNote(); }
-  });
-  ta.addEventListener('blur', () => void saveNote());
 }
 
 async function enterDbNotePreviewMode(state: DbNotePanelState) {
+  state.liveEditor?.destroy();
+  state.liveEditor = null;
   state.pencilBtn.title = 'Editar';
   await loadDbNotePreview(state);
 }
@@ -798,6 +802,7 @@ export function initDockviewWorkspace(
           bodyEl,
           statusDot,
           pencilBtn,
+          liveEditor: null,
         };
         dbNotePanelStates.set(panelId, state);
         pencilBtn.addEventListener('click', () => {
@@ -1126,6 +1131,7 @@ export function initDockviewWorkspace(
     if (state?.persistence) {
       state.persistence.flush().then(() => state.persistence?.destroy());
     }
+    dbNotePanelStates.get(event.id)?.liveEditor?.destroy();
     panelStates.delete(event.id);
     dbNotePanelStates.delete(event.id);
     qaShells.delete(event.id);
