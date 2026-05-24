@@ -19,6 +19,7 @@ import {
   placeholder as codeMirrorPlaceholder,
 } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
+import { cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
 
 type EditorTokenSpan = {
   from: number;
@@ -809,6 +810,22 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
             {
               key: 'Mod-/',
               run: toggleLilyLineComment,
+            },
+            {
+              key: 'Mod-ArrowUp',
+              run: cursorDocStart,
+            },
+            {
+              key: 'Mod-ArrowDown',
+              run: cursorDocEnd,
+            },
+            {
+              key: 'Shift-Mod-ArrowUp',
+              run: selectDocStart,
+            },
+            {
+              key: 'Shift-Mod-ArrowDown',
+              run: selectDocEnd,
             },
           ]),
         ),

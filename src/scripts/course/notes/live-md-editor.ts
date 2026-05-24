@@ -14,7 +14,7 @@ import {
 import { EditorState, RangeSetBuilder } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { markdown } from '@codemirror/lang-markdown';
-import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
+import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -153,6 +153,10 @@ export function createLiveMdEditor(
     extensions: [
       history(),
       keymap.of([
+        { key: 'Mod-ArrowUp', run: cursorDocStart },
+        { key: 'Mod-ArrowDown', run: cursorDocEnd },
+        { key: 'Shift-Mod-ArrowUp', run: selectDocStart },
+        { key: 'Shift-Mod-ArrowDown', run: selectDocEnd },
         ...defaultKeymap,
         ...historyKeymap,
         { key: 'Mod-s', run: v => { void onSave(v.state.doc.toString()); return true; } },

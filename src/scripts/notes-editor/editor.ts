@@ -1,6 +1,6 @@
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
-import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
+import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 
@@ -23,7 +23,14 @@ export function createEditor(container: HTMLElement, initialContent: string, onC
     extensions: [
       lineNumbers(),
       history(),
-      keymap.of([...defaultKeymap, ...historyKeymap]),
+      keymap.of([
+        { key: 'Mod-ArrowUp', run: cursorDocStart },
+        { key: 'Mod-ArrowDown', run: cursorDocEnd },
+        { key: 'Shift-Mod-ArrowUp', run: selectDocStart },
+        { key: 'Shift-Mod-ArrowDown', run: selectDocEnd },
+        ...defaultKeymap, 
+        ...historyKeymap,
+      ]),
       markdown(),
       syntaxHighlighting(defaultHighlightStyle),
       EditorView.lineWrapping,
