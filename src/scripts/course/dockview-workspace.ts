@@ -826,23 +826,24 @@ export function initDockviewWorkspace(
         params.slug,
         noteTitle,
         dockview,
-        true,  // showHud — QA button
       );
       bindExternalNoteDrop(shell, panelId);
-
-      // Unified mode: always-edit, no pencil toggle
-      pencilBtn.style.display = 'none';
 
       const state: PanelState = {
         slug: params.slug,
         courseId: params.courseId,
-        mode: 'edit',
+        mode: 'preview',
         persistence: null,
         bodyEl,
         statusDot,
         pencilBtn,
       };
       panelStates.set(panelId, state);
+
+      pencilBtn.addEventListener('click', () => {
+        if (state.mode === 'preview') enterEditMode(state);
+        else void enterPreviewMode(state);
+      });
 
       splitRightBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -853,21 +854,7 @@ export function initDockviewWorkspace(
         openNote(state.slug, 'preview', true, 'below', panelId);
       });
 
-      // QA button — send current note content to analyzer
-      const qaBtn = shell.querySelector<HTMLButtonElement>('.cnw-hud-qa-btn');
-      if (qaBtn) {
-        qaBtn.style.display = 'inline';
-        qaBtn.onclick = () => {
-          void getNote(state.courseId, state.slug).then(n => {
-            const { body } = parseFrontmatter(n.content);
-            window.dispatchEvent(new CustomEvent('musiki:send-to-qa', {
-              detail: { noteId: state.slug, content: body, title: noteTitle },
-            }));
-          }).catch(() => {});
-        };
-      }
-
-      enterEditMode(state);
+      void renderPreview(state.bodyEl, state.courseId, state.slug);
 
       return { element: shell, init: () => {} };
     },
@@ -903,12 +890,11 @@ export function initDockviewWorkspace(
     const existing = dockview.getGroupPanel(panelId);
 
     if (existing && !split) {
-      // Panel for this slug exists — reload it in unified edit mode
+      // Panel for this slug exists — reload it in preview
       const state = panelStates.get(existing.id);
       if (!state) return;
       state.slug = slug;
-      state.persistence?.destroy();
-      void enterEditMode(state);
+      void enterPreviewMode(state);
       return;
     }
 
@@ -918,11 +904,9 @@ export function initDockviewWorkspace(
       const state = panelStates.get(target.id);
       if (state) {
         state.slug = slug;
-        state.mode = 'edit';
-        if (state.persistence) { state.persistence.destroy(); state.persistence = null; }
         const titleEl = state.bodyEl.parentElement?.querySelector('.cnw-title');
         if (titleEl) titleEl.textContent = slug.split('/').pop()?.replace('.md', '') ?? slug;
-        void enterEditMode(state);
+        void enterPreviewMode(state);
         return;
       }
     }
