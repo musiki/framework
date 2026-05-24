@@ -386,6 +386,7 @@ export function renderNotesSidebar(
 
       a.addEventListener('dragstart', e => {
         draggingSlug = note.slug;
+        e.dataTransfer!.setData('text/x-musiki-course-note', note.slug);
         e.dataTransfer!.setData('text/plain', note.slug);
         e.dataTransfer!.effectAllowed = 'move';
         setTimeout(() => { a.style.opacity = '.35'; }, 0);

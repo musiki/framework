@@ -2964,6 +2964,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           border-radius: 0;
           padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
           overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-y;
           scrollbar-gutter: auto;
           background: var(--c-bg);
           box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18);
@@ -3064,14 +3066,17 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         .sidebar {
           --course-sidebar-pad-top: 0.9rem;
           --course-sidebar-pad-x: 0.9rem;
-          --course-sidebar-pad-bottom: 1.1rem;
+          --course-sidebar-pad-bottom: calc(1.1rem + max(9px, env(safe-area-inset-bottom, 0px)));
           top: 0;
-          bottom: 0;
+          bottom: calc(var(--ribbon-bottom-height, 52px) + env(safe-area-inset-bottom, 0px));
           width: 95vw;
           width: 95dvw;
           max-width: none;
-          height: 100dvh;
+          height: auto;
+          max-height: calc(100dvh - var(--ribbon-bottom-height, 52px) - env(safe-area-inset-bottom, 0px));
           padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
           background: var(--c-bg);
           box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
         }
@@ -3110,7 +3115,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         .sidebar {
           --course-sidebar-pad-top: 0.9rem;
           --course-sidebar-pad-x: 0.85rem;
-          --course-sidebar-pad-bottom: 1rem;
+          --course-sidebar-pad-bottom: calc(1rem + max(9px, env(safe-area-inset-bottom, 0px)));
           padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
         }
 
@@ -3164,7 +3169,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       /* Issues 4+6: right sidebar slides up from bottom on mobile */
       @media (max-width: 560px) {
         .sidebar--right {
-          bottom: var(--ribbon-bottom-height, 58px) !important;
+          bottom: calc(var(--ribbon-bottom-height, 52px) + env(safe-area-inset-bottom, 0px)) !important;
           top: auto !important;
           left: 0 !important;
           right: 0 !important;
@@ -3196,14 +3201,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           display: block;
           position: fixed;
           top: 0;
-          bottom: calc(var(--ribbon-bottom-height, 58px) + env(safe-area-inset-bottom, 0px));
-          width: 32px;
+          bottom: calc(var(--ribbon-bottom-height, 52px) + env(safe-area-inset-bottom, 0px));
+          width: 34px;
           border: 0;
           padding: 0;
           margin: 0;
           background: transparent;
           -webkit-tap-highlight-color: transparent;
-          z-index: 39;
+          z-index: 60;
           cursor: pointer;
         }
 
@@ -3212,7 +3217,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         }
 
         .course-container[data-left-open='true'] .course-sidebar-edge-toggle--left {
-          display: none;
+          display: block;
         }
       }
 
@@ -4882,8 +4887,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             if (!isMobileViewport()) return;
             const target = event.target;
             if (!(target instanceof Element)) return;
-            const navigationLink = target.closest('.lesson-link, .class-toc-link, .course-title-link');
-            if (!(navigationLink instanceof HTMLAnchorElement)) return;
+            const navigationLink = target.closest('.lesson-link, .class-toc-link, .course-title-link, .recursos-sidebar-resource-link, .notas-sb-item');
+            if (!(navigationLink instanceof HTMLElement)) return;
             applySidebarState('left', false);
           });
         }

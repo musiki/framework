@@ -64,6 +64,7 @@ type QaShell = {
 const dbNotePanelStates = new Map<string, DbNotePanelState>();
 const qaShells = new Map<string, QaShell>();
 let _activeQaPanelId: string | null = null;
+type SplitDirection = 'left' | 'right' | 'above' | 'below' | 'within';
 
 // Module-level lifecycle — prevents double-init and stale window listeners across navigations
 let _activeCtrl: AbortController | null = null;
@@ -236,6 +237,14 @@ function loadPreviewContent(courseId: string, slug: string): Promise<string> {
   if (cachedRequest) return cachedRequest;
 
   const request = (async () => {
+    if (slug.startsWith('public/')) {
+      const path = toCourseContentPath(courseId, slug);
+      const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}`);
+      if (!res.ok) throw new Error('Note not found');
+      const data = await res.json() as { body?: string };
+      return data.body ?? '';
+    }
+
     try {
       const note = await getNote(courseId, slug);
       return note.content;
@@ -772,6 +781,7 @@ export function initDockviewWorkspace(
       // Media panel — reuse buildShell for drag/drop infra, mount media into bodyEl
       if (params.kind === 'media') {
         const { shell, bodyEl, pencilBtn } = buildShell(panelId, params.url, params.title, dockview);
+        bindExternalNoteDrop(shell, panelId);
         pencilBtn.style.display = 'none';
         mountMediaBody(bodyEl, params.url);
         return { element: shell, init: () => {} };
@@ -781,6 +791,7 @@ export function initDockviewWorkspace(
         const { shell, bodyEl, pencilBtn, statusDot } = buildShell(
           panelId, params.noteId, params.title, dockview, true,
         );
+        bindExternalNoteDrop(shell, panelId);
         const state: DbNotePanelState = {
           noteId: params.noteId,
           mode: 'preview',
@@ -799,6 +810,7 @@ export function initDockviewWorkspace(
 
       if (params.kind === 'qa-analyzer') {
         const qa = buildQaShell(panelId, params.noteTitle ?? '', dockview);
+        bindExternalNoteDrop(qa.root, panelId);
         qaShells.set(panelId, qa);
         _activeQaPanelId = panelId;
         if (params.noteId) {
@@ -808,17 +820,23 @@ export function initDockviewWorkspace(
         return { element: qa.root, init: () => {} };
       }
 
+      const noteTitle = params.slug.split('/').pop()?.replace('.md', '') ?? params.slug;
       const { shell, bodyEl, statusDot, pencilBtn, splitRightBtn, splitBelowBtn } = buildShell(
         panelId,
         params.slug,
-        params.slug.split('/').pop()?.replace('.md', '') ?? params.slug,
+        noteTitle,
         dockview,
+        true,  // showHud — QA button
       );
+      bindExternalNoteDrop(shell, panelId);
+
+      // Unified mode: always-edit, no pencil toggle
+      pencilBtn.style.display = 'none';
 
       const state: PanelState = {
         slug: params.slug,
         courseId: params.courseId,
-        mode: params.mode,
+        mode: 'edit',
         persistence: null,
         bodyEl,
         statusDot,
@@ -826,10 +844,6 @@ export function initDockviewWorkspace(
       };
       panelStates.set(panelId, state);
 
-      pencilBtn.addEventListener('click', () => {
-        if (state.mode === 'preview') enterEditMode(state);
-        else enterPreviewMode(state);
-      });
       splitRightBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         openNote(state.slug, 'preview', true, 'right', panelId);
@@ -839,15 +853,21 @@ export function initDockviewWorkspace(
         openNote(state.slug, 'preview', true, 'below', panelId);
       });
 
-      if (params.mode === 'edit') {
-        enterEditMode(state);
-      } else {
-        if (initialContent && params.slug === initialSlug) {
-          bodyEl.innerHTML = initialContent;
-        } else {
-          renderPreview(bodyEl, params.courseId, params.slug);
-        }
+      // QA button — send current note content to analyzer
+      const qaBtn = shell.querySelector<HTMLButtonElement>('.cnw-hud-qa-btn');
+      if (qaBtn) {
+        qaBtn.style.display = 'inline';
+        qaBtn.onclick = () => {
+          void getNote(state.courseId, state.slug).then(n => {
+            const { body } = parseFrontmatter(n.content);
+            window.dispatchEvent(new CustomEvent('musiki:send-to-qa', {
+              detail: { noteId: state.slug, content: body, title: noteTitle },
+            }));
+          }).catch(() => {});
+        };
       }
+
+      enterEditMode(state);
 
       return { element: shell, init: () => {} };
     },
@@ -878,17 +898,17 @@ export function initDockviewWorkspace(
     dockview.addPanel({ id: pid, component: 'note-panel' });
   }
 
-  function openNote(slug: string, mode: NoteMode = 'preview', split = false, direction: 'left' | 'right' | 'above' | 'below' | 'within' = 'right', refPanelId?: string): void {
+  function openNote(slug: string, mode: NoteMode = 'preview', split = false, direction: SplitDirection = 'right', refPanelId?: string): void {
     const panelId = `note-${slug}`;
     const existing = dockview.getGroupPanel(panelId);
 
     if (existing && !split) {
-      // Panel for this slug exists — update it in-place
+      // Panel for this slug exists — reload it in unified edit mode
       const state = panelStates.get(existing.id);
       if (!state) return;
       state.slug = slug;
-      if (state.mode === 'preview') renderPreview(state.bodyEl, courseId, slug);
-      else { state.persistence?.destroy(); enterEditMode(state); }
+      state.persistence?.destroy();
+      void enterEditMode(state);
       return;
     }
 
@@ -898,12 +918,11 @@ export function initDockviewWorkspace(
       const state = panelStates.get(target.id);
       if (state) {
         state.slug = slug;
-        state.mode = mode;
+        state.mode = 'edit';
         if (state.persistence) { state.persistence.destroy(); state.persistence = null; }
         const titleEl = state.bodyEl.parentElement?.querySelector('.cnw-title');
         if (titleEl) titleEl.textContent = slug.split('/').pop()?.replace('.md', '') ?? slug;
-        if (mode === 'preview') renderPreview(state.bodyEl, courseId, slug);
-        else void enterEditMode(state);
+        void enterEditMode(state);
         return;
       }
     }
@@ -939,6 +958,117 @@ export function initDockviewWorkspace(
     });
   }
 
+  function normalizeDropDirection(position: unknown): SplitDirection {
+    const dir = position ? String(positionToDirection(position as any)) : 'right';
+    if (dir === 'top') return 'above';
+    if (dir === 'bottom') return 'below';
+    if (dir === 'left' || dir === 'right' || dir === 'above' || dir === 'below' || dir === 'within') return dir;
+    return 'right';
+  }
+
+  function resolveNativeDropDirection(target: HTMLElement, e: DragEvent): SplitDirection {
+    const rect = target.getBoundingClientRect();
+    const xRatio = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0.5;
+    const yRatio = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0.5;
+    if (yRatio < 0.32) return 'above';
+    if (yRatio > 0.68) return 'below';
+    return xRatio < 0.5 ? 'left' : 'right';
+  }
+
+  function getExternalNoteDropPayload(e: DragEvent): { kind: 'db-note'; noteId: string; title: string } | { kind: 'course-note'; slug: string } | null {
+    const dt = e.dataTransfer;
+    if (!dt || dt.types.includes('musiki/panel-id')) return null;
+
+    const noteId = dt.getData('text/x-musiki-note')?.trim();
+    if (noteId) {
+      return {
+        kind: 'db-note',
+        noteId,
+        title: dt.getData('text/x-musiki-note-title') || noteId,
+      };
+    }
+
+    const explicitSlug = dt.getData('text/x-musiki-course-note')?.trim();
+    const fallbackSlug = dt.types.includes('text/x-musiki-course-note')
+      ? ''
+      : dt.getData('text/plain')?.trim();
+    const slug = explicitSlug || fallbackSlug;
+    if (!slug || slug.startsWith('http://') || slug.startsWith('https://')) return null;
+    return { kind: 'course-note', slug };
+  }
+
+  function openDbNotePanel(noteId: string, title: string, direction: SplitDirection = 'right', refPanelId?: string): void {
+    const newId = `db-note-${noteId}-${Date.now()}`;
+    pendingParams.set(newId, { kind: 'db-note', noteId, title });
+    const referencePanel = (refPanelId ? dockview.getGroupPanel(refPanelId) : null)
+      ?? dockview.activePanel
+      ?? dockview.panels[dockview.panels.length - 1]
+      ?? undefined;
+    dockview.addPanel({
+      id: newId,
+      component: 'note-panel',
+      position: referencePanel ? { referencePanel: referencePanel.id, direction } : undefined,
+    });
+  }
+
+  let lastExternalDropKey = '';
+  let lastExternalDropAt = 0;
+  function openExternalDropPayload(payload: NonNullable<ReturnType<typeof getExternalNoteDropPayload>>, direction: SplitDirection, refPanelId?: string): void {
+    const key = `${payload.kind}:${payload.kind === 'db-note' ? payload.noteId : payload.slug}:${direction}:${refPanelId ?? ''}`;
+    const now = performance.now();
+    if (key === lastExternalDropKey && now - lastExternalDropAt < 250) return;
+    lastExternalDropKey = key;
+    lastExternalDropAt = now;
+
+    if (payload.kind === 'db-note') {
+      openDbNotePanel(payload.noteId, payload.title, direction, refPanelId);
+      return;
+    }
+    openNote(payload.slug, 'preview', dockview.panels.length > 0, direction, refPanelId);
+  }
+
+  function bindExternalNoteDrop(shell: HTMLElement, panelId: string): void {
+    shell.addEventListener('dragover', e => {
+      const payload = getExternalNoteDropPayload(e);
+      if (!payload) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = payload.kind === 'db-note' ? 'copy' : 'move';
+      shell.classList.add('cnw-external-drag-over');
+    }, { signal });
+
+    shell.addEventListener('dragleave', e => {
+      if (!shell.contains(e.relatedTarget as Node)) shell.classList.remove('cnw-external-drag-over');
+    }, { signal });
+
+    shell.addEventListener('drop', e => {
+      const payload = getExternalNoteDropPayload(e);
+      if (!payload) return;
+      e.preventDefault();
+      e.stopPropagation();
+      shell.classList.remove('cnw-external-drag-over');
+      openExternalDropPayload(payload, resolveNativeDropDirection(shell, e), panelId);
+    }, { signal });
+  }
+
+  function bindWorkspaceExternalDrop(): void {
+    container.addEventListener('dragover', e => {
+      const payload = getExternalNoteDropPayload(e);
+      if (!payload) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = payload.kind === 'db-note' ? 'copy' : 'move';
+    }, { signal });
+
+    container.addEventListener('drop', e => {
+      if ((e.target as HTMLElement | null)?.closest?.('.cnw-shell')) return;
+      const payload = getExternalNoteDropPayload(e);
+      if (!payload) return;
+      e.preventDefault();
+      const referencePanel = dockview.activePanel ?? dockview.panels[dockview.panels.length - 1] ?? undefined;
+      openExternalDropPayload(payload, resolveNativeDropDirection(container, e), referencePanel?.id);
+    }, { signal });
+  }
+
   // Cmd/Ctrl+E — toggle edit/preview on active pod
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
@@ -955,37 +1085,17 @@ export function initDockviewWorkspace(
     event.accept();
   });
   dockview.onDidDrop(event => {
-    const noteId = event.nativeEvent.dataTransfer?.getData('text/x-musiki-note')?.trim();
-    const slug = event.nativeEvent.dataTransfer?.getData('text/plain')?.trim();
-
-    if (noteId) {
-      const title = event.nativeEvent.dataTransfer?.getData('text/x-musiki-note-title') ?? noteId;
-      const newId = `db-note-${noteId}-${Date.now()}`;
-      pendingParams.set(newId, { kind: 'db-note', noteId, title });
-      const referencePanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
-      const direction = referencePanel && event.position
-        ? positionToDirection(event.position as any)
-        : 'right';
-      dockview.addPanel({
-        id: newId,
-        component: 'note-panel',
-        position: referencePanel ? { referencePanel: referencePanel.id, direction: direction as any } : undefined,
-      });
-      return;
-    }
-
-    if (slug && slug.startsWith('cursos/')) {
+    const payload = getExternalNoteDropPayload(event.nativeEvent);
+    if (payload) {
       try {
-        const split = dockview.panels.length > 0;
-        const dir = split && event.position
-          ? positionToDirection(event.position as any)
-          : 'right';
-        openNote(slug, 'preview', split, dir as any);
+        openExternalDropPayload(payload, normalizeDropDirection(event.position));
       } catch (err) {
         console.error('[cnw] drop openNote failed:', err);
       }
     }
   });
+
+  bindWorkspaceExternalDrop();
 
   // Open a personal note as a db-note pod (fired by notes sidebar click/context menu)
   window.addEventListener('musiki:open-db-note', (e: Event) => {

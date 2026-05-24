@@ -5,6 +5,55 @@ import { getCourseNote, notesPreflightError } from '../../../lib/notes-fs';
 
 export const prerender = false;
 
+async function readContentCollectionFallback(courseId: string, slug: string): Promise<{ content: string; filePath: string } | null> {
+  const cleanSlug = String(slug || '').replace(/^\/+/, '');
+  const slugParts = cleanSlug.split('/').filter(Boolean);
+  const requestedTail = slugParts[slugParts.length - 1] || cleanSlug;
+
+  const { getCollection, getEntry } = await import('astro:content');
+  const {
+    getContentCanonicalSlug,
+    getContentFilenameSlug,
+    getContentFrontmatterSlug,
+    getContentTitleSlug,
+    normalizeContentSlug,
+  } = await import('../../../lib/content-slug');
+
+  const direct = await getEntry('content', cleanSlug as any);
+  if (direct) {
+    return {
+      content: typeof direct.body === 'string' ? direct.body : '',
+      filePath: direct.id,
+    };
+  }
+
+  const normalizedTargets = [
+    normalizeContentSlug(cleanSlug),
+    normalizeContentSlug(requestedTail),
+  ].filter(Boolean);
+  const content = await getCollection('content');
+  const match = content.find((item) => {
+    const project = String(item.data?.project || '').trim().toLowerCase();
+    if (project && project !== 'general' && project !== courseId.toLowerCase()) return false;
+
+    const candidates = [
+      getContentCanonicalSlug(item),
+      getContentFrontmatterSlug(item),
+      getContentFilenameSlug(item),
+      getContentTitleSlug(item),
+      normalizeContentSlug(item.id),
+      normalizeContentSlug(String(item.id || '').split('/').pop()),
+    ].filter(Boolean);
+    return candidates.some((candidate) => normalizedTargets.includes(candidate));
+  });
+
+  if (!match) return null;
+  return {
+    content: typeof match.body === 'string' ? match.body : '',
+    filePath: match.id,
+  };
+}
+
 export const GET: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
   if (!session?.user?.email) return json({ error: 'Not authenticated' }, 401);
@@ -22,7 +71,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
   try {
     const note = getCourseNote(courseId, slug);
-    if (!note) return json({ error: 'Note not found' }, 404);
+    if (!note) {
+      const fallback = await readContentCollectionFallback(courseId, slug);
+      if (fallback) return json({ slug, content: fallback.content, filePath: fallback.filePath });
+      return json({ error: 'Note not found' }, 404);
+    }
     return json({ slug, content: note.content, filePath: note.filePath });
   } catch (e: any) {
     return json({ error: e.message }, 400);

@@ -25,6 +25,7 @@ const userInitial = (session?.user?.name || session?.user?.email || '?')
   .toUpperCase();
 const hasVivo = Boolean(performativeRoomHref);
 const badgeLabel = activeCourseCode.slice(0, 4) || '···';
+const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseId)}` : '/dashboard';
 ---
 
 <!-- Desktop ribbon / Mobile bottom bar -->
@@ -54,7 +55,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   <!-- Profile -->
   {session?.user && (
     <a
-      href="/dashboard"
+      href={dashboardHref}
       class="ribbon-item ribbon-item--avatar"
       aria-label="Mi perfil"
       title="Mi perfil / Dashboard"
@@ -76,6 +77,21 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       <path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
   </button>
+
+  <!-- Dashboard — mobile primary action -->
+  <a
+    href={dashboardHref}
+    class="ribbon-item ribbon-item--mobile-visible ribbon-item--mobile-only ribbon-mobile-primary ribbon-mobile-primary--dashboard"
+    aria-label="Dashboard"
+    title="Dashboard"
+  >
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
+      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
+      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
+      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
+    </svg>
+  </a>
 
   <!-- Vivo (sala performativa) — camera icon, accent color, always shown -->
   {hasVivo ? (
@@ -281,7 +297,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
 <div class="ribbon-mas-sheet" id="ribbon-mas-sheet" aria-hidden="true">
   <div class="ribbon-mas-grid">
     {session?.user && (
-      <a href="/dashboard" class="ribbon-mas-icon" aria-label="Perfil" title="Perfil">
+      <a href={dashboardHref} class="ribbon-mas-icon" aria-label="Perfil" title="Perfil">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
           <path d="M4 20c0-4 3.582-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -369,7 +385,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   html.dark .ribbon-theme-moon { display: none; }
   /* Mobile body padding so content isn't hidden under bottom bar */
   @media (max-width: 560px) {
-    body { padding-bottom: calc(var(--ribbon-bottom-height, 58px) + 8px + env(safe-area-inset-bottom, 0px)); }
+    body { padding-bottom: calc(var(--ribbon-bottom-height, 52px) + 8px + env(safe-area-inset-bottom, 0px)); }
   }
 
   /* Inactive (unlinked) ribbon item */

@@ -54,6 +54,12 @@ export function injectWorkspaceCss(containerId: string) {
       border-radius: 4px;
       box-sizing: border-box;
     }
+    .cnw-shell.cnw-drag-over,
+    .cnw-shell.cnw-external-drag-over {
+      outline: 2px solid color-mix(in srgb, var(--c-link, #3b82f6) 62%, transparent);
+      outline-offset: -2px;
+      background: color-mix(in srgb, var(--c-link, #3b82f6) 7%, var(--c-bg));
+    }
 
     /* Transparent header — the drag zone */
     .cnw-header {
@@ -169,6 +175,16 @@ export function injectWorkspaceCss(containerId: string) {
       color: var(--c-fg);
       cursor: pointer;
     }
+
+    /* Unified prose-editor — no border box, CM looks like a document */
+    .cnw-body .cm-editor { background: transparent !important; height: 100%; }
+    .cnw-body .cm-scroller { padding: 1.2rem 1.5rem !important; font-size: var(--font-size-base, 1rem); line-height: 1.72; overflow: auto; }
+    .cnw-body .cm-content { caret-color: var(--c-link, #3b82f6) !important; }
+    .cnw-body .cm-focused { outline: none !important; }
+    /* Hide the title-input row and toolbar from inline-editor — we use cnw-title in the header */
+    .cnw-body #nie-editor-panel > div:first-child { display: none !important; }
+    .cnw-body #nie-toolbar { display: none !important; }
+    .cnw-body #nie-editor-panel { flex: 1; height: 100%; }
   `;
   document.head.appendChild(style);
 }
@@ -298,7 +314,7 @@ export function buildShell(
     const qaBtn = document.createElement('button');
     qaBtn.className = 'cnw-hud-qa-btn';
     qaBtn.title = 'Enviar al QA Analyzer';
-    qaBtn.style.cssText = 'border:none;background:none;font-size:.62rem;opacity:.55;cursor:pointer;padding:0;color:inherit;display:none';
+    qaBtn.style.cssText = 'border:none;background:none;font-size:.71rem;opacity:.55;cursor:pointer;padding:0 2px;color:inherit;display:none';
     qaBtn.textContent = 'QA ↗';
     hud.appendChild(qaBtn);
 

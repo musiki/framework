@@ -4,7 +4,7 @@
   --ribbon-bg: color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%);
   --ribbon-border: var(--c-border);
   --ribbon-item-size: 32px;
-  --ribbon-bottom-height: 58px; /* mobile */
+  --ribbon-bottom-height: 52px; /* mobile */
 }
 
 /* ── Desktop ribbon ────────────────────────────────────────────────────── */
@@ -188,11 +188,11 @@
     justify-content: center;
     align-items: center;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     padding:
-      5px
+      4px
       max(8px, env(safe-area-inset-right, 0px))
-      calc(10px + env(safe-area-inset-bottom, 0px))
+      max(9px, env(safe-area-inset-bottom, 0px))
       max(8px, env(safe-area-inset-left, 0px));
     border-right: none;
     border-top: 1px solid var(--ribbon-border);
@@ -210,9 +210,9 @@
   .ribbon-about { display: none; }
   .ribbon > .ribbon-item--mobile-visible {
     width: 32px;
-    height: 32px;
+    height: 30px;
     min-width: 32px;
-    min-height: 32px;
+    min-height: 30px;
     border-radius: 8px;
     justify-self: center;
     align-self: center;
@@ -227,6 +227,7 @@
   .ribbon-mobile-primary--new-note { order: 4; }
   .ribbon-mobile-primary--forum { order: 5; }
   .ribbon-mobile-primary--graph { order: 6; }
+  .ribbon-mobile-primary--dashboard { order: 7; }
 }
 
 /* ── Desktop: hide mobile-only elements ─────────────────────────────────── */
