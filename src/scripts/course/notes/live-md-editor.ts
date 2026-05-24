@@ -139,6 +139,7 @@ export interface LiveMdEditor {
   setContent(content: string): void;
   focus(): void;
   destroy(): void;
+  getView(): EditorView;
 }
 
 export function createLiveMdEditor(
@@ -179,5 +180,6 @@ export function createLiveMdEditor(
     setContent: (c) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: c } }),
     focus:      () => view.focus(),
     destroy:    () => view.destroy(),
+    getView:    () => view,
   };
 }
