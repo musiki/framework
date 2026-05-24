@@ -4644,14 +4644,18 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       }
       .dashboard-sheet .handsontable th.ht__row_header,
       .dashboard-sheet .handsontable th .rowHeader {
-        width: 25px !important;
-        min-width: 25px !important;
-        max-width: 25px !important;
+        width: var(--dashboard-row-header-width, 34px) !important;
+        min-width: var(--dashboard-row-header-width, 34px) !important;
+        max-width: var(--dashboard-row-header-width, 34px) !important;
         padding-left: 0 !important;
         padding-right: 0 !important;
         text-align: center;
-        font-size: 9px;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
         overflow: hidden;
+      }
+      .dashboard-sheet .handsontable th .rowHeader {
+        display: block;
       }
       .dashboard-sheet .handsontable td {
         height: 25px !important;

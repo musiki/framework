@@ -116,8 +116,8 @@ function findNoteBySlug(courseId: string, bareSlug: string): string | null {
       } else if (e.isFile() && e.name.endsWith('.md')) {
         const fileSlug = slugifyFilename(e.name.replace(/\.md$/i, ''));
         if (fileSlug === targetSlug) {
-          const rel = path.relative(path.dirname(baseDir), path.join(dir, e.name));
-          return rel.replace(/\\/g, '/');
+          const relWithinCourse = path.relative(baseDir, path.join(dir, e.name));
+          return `cursos/${courseId}/${relWithinCourse.replace(/\\/g, '/')}`;
         }
       }
     }

@@ -554,6 +554,12 @@ export function initDockviewWorkspace(
   if (_activeContainer === container && _activeWorkspace && container.dataset.cnwCourseId === courseId) return _activeWorkspace;
   container.dataset.cnwCourseId = courseId;
 
+  // Capture open slugs before teardown so we can restore them if same course (Astro view transition swaps the DOM element)
+  const previousCourseId = _activeContainer?.dataset.cnwCourseId ?? '';
+  const slugsToRestore = (_activeWorkspace && previousCourseId === courseId)
+    ? [...panelStates.values()].map(s => s.slug)
+    : [];
+
   // Teardown previous instance (different container = new navigation)
   _activeCtrl?.abort();
   _activeCtrl = null;
@@ -622,7 +628,7 @@ export function initDockviewWorkspace(
         return { element: qa.root, init: () => {} };
       }
 
-      const { shell, bodyEl, statusDot, pencilBtn } = buildShell(
+      const { shell, bodyEl, statusDot, pencilBtn, splitRightBtn, splitBelowBtn } = buildShell(
         panelId,
         params.slug,
         params.slug.split('/').pop()?.replace('.md', '') ?? params.slug,
@@ -643,6 +649,14 @@ export function initDockviewWorkspace(
       pencilBtn.addEventListener('click', () => {
         if (state.mode === 'preview') enterEditMode(state);
         else enterPreviewMode(state);
+      });
+      splitRightBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openNote(state.slug, 'preview', true, 'right');
+      });
+      splitBelowBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openNote(state.slug, 'preview', true, 'below');
       });
 
       if (params.mode === 'edit') {
@@ -830,5 +844,11 @@ export function initDockviewWorkspace(
   };
 
   _activeWorkspace = workspace;
+
+  // Restore panels that were open before a same-course Astro view transition swapped the container
+  for (let i = 0; i < slugsToRestore.length; i++) {
+    openNote(slugsToRestore[i], 'preview', i > 0);
+  }
+
   return workspace;
 }

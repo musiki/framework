@@ -1,0 +1,62 @@
+---
+---
+
+<main class="dashboard-shell" data-dashboard-shell>
+  <section data-dashboard-tab="main">
+    <div id="teacher-main-grid" data-dashboard-grid="teacher-main" style="height: 280px;"></div>
+  </section>
+  <section data-dashboard-tab="admin">
+    <div id="admin-grid" data-dashboard-grid="admin" style="height: 220px;"></div>
+  </section>
+</main>
+
+<script type="application/json" id="dashboard-teacher-tabulator-meta">
+  {"userId":"smoke","courseId":"demo","year":"2026"}
+</script>
+<script type="application/json" id="dashboard-teacher-annotations">[]</script>
+<script type="application/json" id="dashboard-teacher-attendance">{"summary":{"columns":[],"rows":[]},"log":{"columns":[],"rows":[]}}</script>
+<script type="application/json" id="dashboard-teacher-overview">{"columns":[],"rows":[]}</script>
+<script type="application/json" id="dashboard-teacher-gradebook">{"columns":[],"rows":[]}</script>
+<script type="application/json" id="dashboard-teacher-comments">{"columns":[],"rows":[]}</script>
+<script type="application/json" id="dashboard-teacher-eval">{"columns":[],"rows":[]}</script>
+<script type="application/json" id="dashboard-login-log">{"columns":[],"rows":[]}</script>
+<script type="application/json" id="dashboard-teacher-main">
+  {
+    "columns": [
+      {"title":"PROFILE","columns":[
+        {"title":"Apellido","field":"lastName"},
+        {"title":"Turno","field":"turno","kind":"turno"},
+        {"title":"Grupo","field":"grupo","kind":"grupo"}
+      ]},
+      {"title":"ASISTENCIA","columns":[
+        {"title":"Mayo","columns":[
+          {"title":"23","field":"day_2026-05-23","kind":"attendance-day"},
+          {"title":"24","field":"day_2026-05-24","kind":"attendance-day"}
+        ]},
+        {"title":"Inasistencias","field":"absenceUnits","kind":"absence"}
+      ]},
+      {"title":"GRADEBOOK","columns":[
+        {"title":"Promedio total","field":"average"},
+        {"title":"Concepto","field":"conceptValue","kind":"concepto"},
+        {"title":"Notas","field":"notes"}
+      ]}
+    ],
+    "rows": [{"lastName":"Ada","turno":"T","grupo":"A","day_2026-05-23":"P","day_2026-05-24":"A","absenceUnits":1,"average":8,"conceptValue":"B","notes":"ok"}]
+  }
+</script>
+<script type="application/json" id="dashboard-teacher-admin">
+  {
+    "columns": [
+      {"title":"Activo","field":"active"},
+      {"title":"Nombre","field":"name"},
+      {"title":"Email","field":"email"}
+    ],
+    "rows": [{"active":"1","name":"Ada","email":"ada@example.com"}]
+  }
+</script>
+
+<script>
+  import { mountDashboardSheets } from '../../scripts/dashboard-handsontable';
+
+  mountDashboardSheets(document.querySelector('[data-dashboard-shell]'));
+</script>

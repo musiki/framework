@@ -163,7 +163,7 @@ async function loadNote(
   statusEl: HTMLElement,
   overrideContent?: string | null,
   onEditorChange?: () => void,
-): Promise<void> {
+): Promise<FrontmatterData | null> {
   setStatus(statusEl, 'Cargando...');
   try {
     let noteContent: string;
@@ -196,8 +196,10 @@ async function loadNote(
 
     currentSlug = slug;
     setStatus(statusEl, '');
+    return data as FrontmatterData;
   } catch (err) {
     setStatus(statusEl, err instanceof Error ? err.message : 'Error al cargar', 'error');
+    return null;
   }
 }
 
@@ -338,12 +340,36 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
 
     // Build a fallback status element for headerless mode
     const activeStatusEl = statusEl ?? document.createElement('span');
+
+    // Mutable ref captures frontmatter after loadNote so persistenceOnChange can re-serialize it
+    const fmRef: { data: FrontmatterData | null } = { data: null };
     const persistenceOnChange = opts.persistence
-      ? () => { opts.persistence!.onChange(getEditorContent()); }
+      ? () => {
+        const body = getEditorContent();
+        if (opts.hideHeader && fmRef.data) {
+          // Pod mode: frontmatter is not editable — preserve it, only update body
+          opts.persistence!.onChange(serializeFrontmatter(fmRef.data, body));
+        } else if (!opts.hideHeader) {
+          // Full editor: read live values from title + yaml strip UI
+          const titleEl = document.getElementById('nie-title') as HTMLInputElement | null;
+          const yamlFields = readYamlStrip();
+          const fmData: FrontmatterData = {
+            title: titleEl?.value || fmRef.data?.title || '',
+            type: yamlFields.type || fmRef.data?.type || 'lesson',
+            chapter: yamlFields.chapter || fmRef.data?.chapter || '',
+            status: yamlFields.status || fmRef.data?.status || 'draft',
+            order: yamlFields.order ?? fmRef.data?.order ?? 0,
+            theme: yamlFields.theme || fmRef.data?.theme || '',
+          };
+          opts.persistence!.onChange(serializeFrontmatter(fmData, body));
+        } else {
+          opts.persistence!.onChange(body);
+        }
+      }
       : undefined;
 
     if (mode === 'edit' && slug) {
-      await loadNote(slug, courseId, activeStatusEl, opts.overrideContent ?? null, persistenceOnChange);
+      fmRef.data = await loadNote(slug, courseId, activeStatusEl, opts.overrideContent ?? null, persistenceOnChange);
     } else if (mode === 'create') {
       const title = prompt('Nueva nota — Título:');
       if (!title) { setStatus(activeStatusEl, ''); return; }
@@ -357,7 +383,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
         if (mountToken !== myToken) return;
         notesList = notes;
         const fullSlug = notes.find(n => n.slug.endsWith(`/${newSlug}.md`))?.slug || newSlug;
-        await loadNote(fullSlug, courseId, activeStatusEl, null, persistenceOnChange);
+        fmRef.data = await loadNote(fullSlug, courseId, activeStatusEl, null, persistenceOnChange);
       } catch (err) {
         if (mountToken !== myToken) return;
         setStatus(activeStatusEl, err instanceof Error ? err.message : 'Error al crear', 'error');

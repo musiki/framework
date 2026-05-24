@@ -119,7 +119,7 @@ export function injectWorkspaceCss(containerId: string) {
     .cnw-status.error   { background: #c87e7e; opacity: 1; }
     @keyframes cnw-pulse { 0%,100%{opacity:.6} 50%{opacity:1} }
 
-    /* Pencil / eye icon button */
+    /* Header icon buttons: pencil, split, close */
     .cnw-mode-btn {
       background: none;
       border: none;
@@ -136,6 +136,7 @@ export function injectWorkspaceCss(containerId: string) {
     }
     .cnw-shell:hover .cnw-mode-btn { opacity: 0.6; }
     .cnw-mode-btn:hover { opacity: 1 !important; color: var(--c-fg); }
+    .cnw-close-btn:hover { color: #c87e7e !important; }
 
     /* Panel body */
     .cnw-body {
@@ -178,7 +179,7 @@ export function buildShell(
   title: string,
   dockview: DockviewComponent,
   showHud = false,
-): { shell: HTMLElement; bodyEl: HTMLElement; statusDot: HTMLElement; pencilBtn: HTMLButtonElement } {
+): { shell: HTMLElement; bodyEl: HTMLElement; statusDot: HTMLElement; pencilBtn: HTMLButtonElement; splitRightBtn: HTMLButtonElement; splitBelowBtn: HTMLButtonElement } {
   const shell = document.createElement('div');
   shell.className = 'cnw-shell';
   shell.dataset.panelId = panelId;
@@ -210,6 +211,29 @@ export function buildShell(
   pencilBtn.title = 'Alternar modo edición / vista previa';
   pencilBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
   header.appendChild(pencilBtn);
+
+  const splitRightBtn = document.createElement('button');
+  splitRightBtn.className = 'cnw-mode-btn';
+  splitRightBtn.title = 'Dividir a la derecha';
+  splitRightBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="12" y1="3" x2="12" y2="21"/></svg>`;
+  header.appendChild(splitRightBtn);
+
+  const splitBelowBtn = document.createElement('button');
+  splitBelowBtn.className = 'cnw-mode-btn';
+  splitBelowBtn.title = 'Dividir abajo';
+  splitBelowBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="12" x2="21" y2="12"/></svg>`;
+  header.appendChild(splitBelowBtn);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'cnw-mode-btn cnw-close-btn';
+  closeBtn.title = 'Cerrar panel';
+  closeBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const panel = dockview.getGroupPanel(panelId);
+    if (panel) dockview.removePanel(panel);
+  });
+  header.appendChild(closeBtn);
 
   // Drag behaviour on header
   header.draggable = true;
@@ -272,5 +296,5 @@ export function buildShell(
     shell.appendChild(hud);
   }
 
-  return { shell, bodyEl: body, statusDot, pencilBtn };
+  return { shell, bodyEl: body, statusDot, pencilBtn, splitRightBtn, splitBelowBtn };
 }

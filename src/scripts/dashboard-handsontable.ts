@@ -190,28 +190,66 @@ const buildHeaderLabel = (leaf: LeafColumn, level: number) => {
   return escapeHtml(getShortHeaderLabel(leaf, level) || fullLabel);
 };
 
-const buildNestedHeaders = (leaves: LeafColumn[]) => {
-  const depth = Math.max(1, ...leaves.map((leaf) => leaf.sourcePath.length));
+const getThreeLevelHeaderPath = (leaf: LeafColumn) => {
+  const topLabel = normalizeText(leaf.sourcePath[0] || '');
+  const finalLevel = Math.max(0, leaf.sourcePath.length - 1);
+  let groupLabel = '';
+
+  if (leaf.sourcePath.length > 2) {
+    if (normalizeTextLower(topLabel) === 'gradebook' && leaf.sourcePath.length > 3) {
+      groupLabel = normalizeText(leaf.sourcePath[leaf.sourcePath.length - 2] || leaf.sourcePath[1] || '');
+    } else {
+      groupLabel = normalizeText(leaf.sourcePath[leaf.sourcePath.length - 2] || '');
+    }
+  }
+
+  return [
+    { raw: topLabel, label: escapeHtml(topLabel) },
+    { raw: groupLabel, label: groupLabel ? escapeHtml(getShortHeaderLabel(leaf, leaf.sourcePath.length - 2) || groupLabel) : '' },
+    { raw: normalizeText(leaf.sourcePath[finalLevel] || leaf.title || leaf.field), label: buildHeaderLabel(leaf, finalLevel) },
+  ];
+};
+
+type HeaderPathEntry = { raw: string; label: string };
+
+const buildHeaderRowsFromPaths = (headerPaths: HeaderPathEntry[][]) => {
+  const depth = Math.max(1, ...headerPaths.map((path) => path.length));
   const rows: any[][] = Array.from({ length: depth }, () => []);
   for (let level = 0; level < depth; level += 1) {
     let index = 0;
-    while (index < leaves.length) {
-      const rawLabel = leaves[index].sourcePath[level] || '';
-      const label = buildHeaderLabel(leaves[index], level);
-      const prefix = leaves[index].sourcePath.slice(0, level).join('\u0000');
+    while (index < headerPaths.length) {
+      const current = headerPaths[index][level] || { raw: '', label: '' };
+      const rawLabel = current.raw;
+      const label = current.label;
+      const prefix = headerPaths[index].slice(0, level).map((entry) => entry.raw).join('\u0000');
       let colspan = 1;
       while (
-        index + colspan < leaves.length
-        && (leaves[index + colspan].sourcePath[level] || '') === rawLabel
-        && leaves[index + colspan].sourcePath.slice(0, level).join('\u0000') === prefix
+        index + colspan < headerPaths.length
+        && (headerPaths[index + colspan][level]?.raw || '') === rawLabel
+        && headerPaths[index + colspan].slice(0, level).map((entry) => entry.raw).join('\u0000') === prefix
       ) {
         colspan += 1;
       }
-      rows[level].push(colspan > 1 ? { label: escapeHtml(label), colspan } : escapeHtml(label));
+      rows[level].push(colspan > 1 ? { label, colspan } : label);
       index += colspan;
     }
   }
   return rows;
+};
+
+const getNaturalHeaderPath = (leaf: LeafColumn): HeaderPathEntry[] => {
+  const sourcePath = leaf.sourcePath.length ? leaf.sourcePath : [leaf.title || leaf.field];
+  return sourcePath.map((part) => {
+    const label = normalizeText(part);
+    return { raw: label, label: escapeHtml(label) };
+  });
+};
+
+const buildNestedHeaders = (leaves: LeafColumn[], kind: GridKind) => {
+  const headerPaths = kind === 'teacher-main'
+    ? leaves.map(getThreeLevelHeaderPath)
+    : leaves.map(getNaturalHeaderPath);
+  return buildHeaderRowsFromPaths(headerPaths);
 };
 
 const getFoldMeta = (column: DashboardColumn | undefined) => {
@@ -1216,19 +1254,21 @@ const createSheet = (
   const compactWidths = new Map<string, number>();
   const columnWidthKey = getColumnPersistKey(meta, kind);
   const userWidths = readColumnWidths(columnWidthKey);
+  const rowHeaderWidth = kind === 'teacher-main' ? TINY_COLUMN_WIDTH : 34;
   let sheetRef: DashboardSheet | null = null;
 
   element.classList.add('dashboard-sheet', 'ht-theme-main');
   element.dataset.rangeSelection = ['teacher-main', 'overview', 'gradebook', 'attendance-summary'].includes(kind) ? 'true' : 'false';
+  element.style.setProperty('--dashboard-row-header-width', `${rowHeaderWidth}px`);
   element.style.setProperty('--ht-cell-vertical-padding', '0px');
   element.style.setProperty('--ht-line-height', `${DASHBOARD_ROW_HEIGHT - 4}px`);
 
   const hot = new Handsontable(element, {
     data: activeRows,
     columns: buildHotColumns(leafColumns, compactWidths, userWidths),
-    nestedHeaders: buildNestedHeaders(leafColumns),
+    nestedHeaders: buildNestedHeaders(leafColumns, kind),
     rowHeaders: true,
-    rowHeaderWidth: TINY_COLUMN_WIDTH,
+    rowHeaderWidth,
     rowHeights: DASHBOARD_ROW_HEIGHT - 5,
     columnHeaderHeight: 28,
     height: ['comments', 'teacher-eval'].includes(kind) ? '34vh' : '100%',
@@ -1253,7 +1293,7 @@ const createSheet = (
       const forced = resolveVisualColumnWidth(leafColumns, visualCol, compactWidths, userWidths);
       return forced === TINY_COLUMN_WIDTH ? TINY_COLUMN_WIDTH : width;
     },
-    modifyRowHeaderWidth: () => TINY_COLUMN_WIDTH,
+    modifyRowHeaderWidth: () => rowHeaderWidth,
     modifyRowHeight: () => DASHBOARD_ROW_HEIGHT,
     licenseKey: 'non-commercial-and-evaluation',
     contextMenu: isAnnotationGridKind(kind)
@@ -1340,7 +1380,7 @@ const createSheet = (
     const forced = resolveVisualColumnWidth(leafColumns, visualCol, sheet.compactWidths, sheet.userWidths, hot);
     return forced === TINY_COLUMN_WIDTH ? TINY_COLUMN_WIDTH : width;
   }, 100);
-  hot.addHook('modifyRowHeaderWidth', () => TINY_COLUMN_WIDTH, 100);
+  hot.addHook('modifyRowHeaderWidth', () => rowHeaderWidth, 100);
   hot.addHook('modifyRowHeight', () => DASHBOARD_ROW_HEIGHT, 100);
   hot.render();
   return sheet;
