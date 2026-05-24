@@ -33,6 +33,7 @@ else
 fi
 
 export CONTENT_SOURCE_STRATEGY
+export CONTENT_ADMIN_LOCAL_WRITE="${CONTENT_ADMIN_LOCAL_WRITE:-true}"
 # Ensure targeted sync variables are exported if they were passed by Content Bus
 export CONTENT_SOURCE_TARGET_REPO="${CONTENT_SOURCE_TARGET_REPO:-}"
 export CONTENT_SOURCE_TARGET_SHA="${CONTENT_SOURCE_TARGET_SHA:-}"

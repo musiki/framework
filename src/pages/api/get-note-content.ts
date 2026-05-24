@@ -16,6 +16,13 @@ async function readEntryBody(note: any): Promise<string> {
   }
 }
 
+const legacyCourseSlugAliases: Record<string, Record<string, string>> = {
+  s123: {
+    'introduccion-a-seminario-i': 'clase-inaugural-seminarios',
+    'materiales-de-seminario': 'materiales',
+  },
+};
+
 export const GET: APIRoute = async ({ request }) => {
   const url = new URL(request.url);
   const slug = url.searchParams.get('slug');
@@ -27,15 +34,28 @@ export const GET: APIRoute = async ({ request }) => {
   // Slug from search index might be like "public/conceptos/name"
   // Collection 'content' is based in src/content
   const cleanSlug = slug.startsWith('/') ? slug.slice(1) : slug;
+  const cleanSlugParts = cleanSlug.split('/').filter(Boolean);
+  const requestedCourseId = cleanSlugParts.length > 1 ? cleanSlugParts[0] : '';
+  const requestedTail = cleanSlugParts[cleanSlugParts.length - 1] || cleanSlug;
+  const aliasTail = requestedCourseId
+    ? legacyCourseSlugAliases[requestedCourseId]?.[requestedTail]
+    : '';
+  const targetSlugs = [requestedTail, aliasTail].filter(Boolean);
   
   let note = await getEntry('content', cleanSlug as any);
 
   if (!note) {
     // Try finding by canonical slug or path match in content collection
     const { getCollection } = await import('astro:content');
-    const { getContentCanonicalSlug, normalizeContentSlug } = await import('../../lib/content-slug');
+    const {
+      getContentCanonicalSlug,
+      getContentFilenameSlug,
+      getContentFrontmatterSlug,
+      getContentTitleSlug,
+      normalizeContentSlug,
+    } = await import('../../lib/content-slug');
     const content = await getCollection('content');
-    const normalizedTarget = normalizeContentSlug(cleanSlug.split('/').pop());
+    const normalizedTargets = targetSlugs.map((target) => normalizeContentSlug(target)).filter(Boolean);
     
     note = content.find(item => {
         // Direct ID match (case insensitive or path match)
@@ -45,10 +65,18 @@ export const GET: APIRoute = async ({ request }) => {
         // Canonical slug match
         const canonical = getContentCanonicalSlug(item);
         if (canonical === cleanSlug) return true;
+        if (normalizedTargets.includes(canonical)) return true;
+
+        const candidates = [
+          getContentFrontmatterSlug(item),
+          getContentFilenameSlug(item),
+          getContentTitleSlug(item),
+        ].filter(Boolean);
+        if (candidates.some((candidate) => normalizedTargets.includes(candidate))) return true;
         
         // Normalized filename match (handles spaces -> dashes)
         const filenameNormalized = normalizeContentSlug(item.id.split('/').pop()?.replace(/\.md$/, ''));
-        if (filenameNormalized === normalizedTarget && item.id.startsWith(cleanSlug.split('/')[0])) return true;
+        if (normalizedTargets.includes(filenameNormalized) && item.id.startsWith(cleanSlugParts[0] || '')) return true;
 
         return false;
     });
@@ -57,17 +85,33 @@ export const GET: APIRoute = async ({ request }) => {
   if (!note) {
     // Try cursos collection as well
     const { getCollection } = await import('astro:content');
-    const { getContentCanonicalSlug, normalizeContentSlug } = await import('../../lib/content-slug');
+    const {
+      getContentCanonicalSlug,
+      getContentFilenameSlug,
+      getContentFrontmatterSlug,
+      getContentTitleSlug,
+      normalizeContentSlug,
+    } = await import('../../lib/content-slug');
     const cursos = await getCollection('cursos');
-    const normalizedTarget = normalizeContentSlug(cleanSlug.split('/').pop());
+    const normalizedTargets = targetSlugs.map((target) => normalizeContentSlug(target)).filter(Boolean);
 
     note = cursos.find(item => {
+        if (requestedCourseId && !String(item.id || '').startsWith(`${requestedCourseId}/`)) {
+          return false;
+        }
+        if (item.id.toLowerCase() === cleanSlug.toLowerCase()) return true;
+        if (item.id.toLowerCase() === (cleanSlug + '.md').toLowerCase()) return true;
+
         const canonical = getContentCanonicalSlug(item);
-        if (canonical === cleanSlug) return true;
+        if (canonical === cleanSlug || normalizedTargets.includes(canonical)) return true;
         
-        // Try matching by normalized tail of the slug
-        const canonicalTail = canonical.split('/').pop();
-        if (canonicalTail === normalizedTarget) return true;
+        const candidates = [
+          getContentFrontmatterSlug(item),
+          getContentFilenameSlug(item),
+          getContentTitleSlug(item),
+          normalizeContentSlug(String(item.id || '').split('/').pop()),
+        ].filter(Boolean);
+        if (candidates.some((candidate) => normalizedTargets.includes(candidate))) return true;
 
         return false;
     });

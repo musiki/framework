@@ -101,10 +101,19 @@ function slugifyFilename(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+const legacyCourseSlugAliases: Record<string, Record<string, string>> = {
+  s123: {
+    'introduccion-a-seminario-i': 'clase-inaugural-seminarios',
+    'materiales-de-seminario': 'materiales',
+  },
+};
+
 function findNoteBySlug(courseId: string, bareSlug: string): string | null {
   const baseDir = resolveCourseScanDir(courseId);
   if (!baseDir) return null;
   const targetSlug = slugifyFilename(bareSlug.replace(/\.md$/i, ''));
+  const aliasSlug = legacyCourseSlugAliases[courseId]?.[targetSlug] || '';
+  const targetSlugs = new Set([targetSlug, aliasSlug].filter(Boolean));
 
   const walk = (dir: string): string | null => {
     let entries: fs.Dirent[];
@@ -114,9 +123,24 @@ function findNoteBySlug(courseId: string, bareSlug: string): string | null {
         const found = walk(path.join(dir, e.name));
         if (found) return found;
       } else if (e.isFile() && e.name.endsWith('.md')) {
+        const absPath = path.join(dir, e.name);
+        const relWithinCourse = path.relative(baseDir, absPath).replace(/\\/g, '/');
         const fileSlug = slugifyFilename(e.name.replace(/\.md$/i, ''));
-        if (fileSlug === targetSlug) {
-          const relWithinCourse = path.relative(baseDir, path.join(dir, e.name));
+        const pathSlug = slugifyFilename(relWithinCourse.replace(/\.md$/i, ''));
+        let data: Record<string, unknown> = {};
+        try {
+          data = matter(fs.readFileSync(absPath, 'utf8')).data || {};
+        } catch {
+          data = {};
+        }
+        const candidates = [
+          fileSlug,
+          pathSlug,
+          slugifyFilename(String(data.slug || '')),
+          slugifyFilename(String(data.shortSlug || '')),
+          slugifyFilename(String(data.title || '')),
+        ].filter(Boolean);
+        if (candidates.some((candidate) => targetSlugs.has(candidate))) {
           return `cursos/${courseId}/${relWithinCourse.replace(/\\/g, '/')}`;
         }
       }
