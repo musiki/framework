@@ -23,6 +23,7 @@ import remarkWikiLink from '../plugins/remark-wiki-link.mjs';
 import remarkLily from '../plugins/remark-lily.mjs';
 import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 import remarkCoverBlock from '../plugins/remark-cover-block.mjs';
+import rehypeLazyYouTube from '../plugins/rehype-lazy-youtube.mjs';
 
 const CONTENT_DIR = path.resolve(process.cwd(), 'src/content/cursos');
 const runtimeHighlightAliases = {
@@ -53,11 +54,12 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
     .use(rehypeObsidianCallouts)
     .use(rehypeRaw)
     .use(rehypeKatex, { strict: false })
-    .use(rehypeHighlight, {
+    .use(rehypeHighlight as any, {
       languages: lowlightAll,
       aliases: runtimeHighlightAliases,
       ignoreMissing: true,
     })
+    .use(rehypeLazyYouTube)
     .use(rehypeCodeSyntax)
     .use(rehypeStringify);
 

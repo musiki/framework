@@ -1,6 +1,21 @@
 import type { APIRoute } from 'astro';
 import { getEntry } from 'astro:content';
 
+async function readEntryBody(note: any): Promise<string> {
+  const body = typeof note?.body === 'string' ? note.body : '';
+  if (body.trim()) return body;
+
+  const filePath = typeof note?.filePath === 'string' ? note.filePath : '';
+  if (!filePath) return body;
+
+  try {
+    const { readFile } = await import('node:fs/promises');
+    return await readFile(filePath, 'utf8');
+  } catch {
+    return body;
+  }
+}
+
 export const GET: APIRoute = async ({ request }) => {
   const url = new URL(request.url);
   const slug = url.searchParams.get('slug');
@@ -71,7 +86,7 @@ export const GET: APIRoute = async ({ request }) => {
   );
 
   return new Response(JSON.stringify({
-    body: note.body,
+    body: await readEntryBody(note),
     reveal,
     title: note.data.title || cleanSlug
   }), {

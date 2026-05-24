@@ -11,6 +11,7 @@ import {
   type InlineEditorOptions,
 } from './notes/inline-editor';
 import { buildShell, injectWorkspaceCss, type NoteMode } from './dockview-shell';
+import { deferYouTubeEmbeds, hydrateLazyYouTubeEmbeds } from './lazy-youtube';
 
 export type { NoteMode } from './dockview-shell';
 
@@ -207,6 +208,7 @@ async function hydrateLilyPlaceholders(bodyEl: HTMLElement, slug: string) {
 // ── Preview renderer ──────────────────────────────────────────────────────
 
 function toCourseContentPath(courseId: string, slug: string): string {
+  if (slug.startsWith('public/')) return slug;
   const repoPrefix = `cursos/${courseId}/`;
   if (slug.startsWith(repoPrefix)) return `${courseId}/${slug.slice(repoPrefix.length)}`;
   if (slug.startsWith(`${courseId}/`)) return slug;
@@ -277,8 +279,9 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
       .replace(/%%cover%%[\s\S]*?%%\/cover%%/gi, '')
       .replace(/```eval[\s\S]*?```/gi, '')
       .trim();
-    const html = String(marked.parse(cleanBody, { async: false }));
-    bodyEl.innerHTML = `<div class="cnw-md" style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72;color:var(--c-fg)">${html}</div>`;
+    const html = deferYouTubeEmbeds(String(marked.parse(cleanBody, { async: false })));
+    bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
+    hydrateLazyYouTubeEmbeds(bodyEl);
     // Lazy-load mermaid if any diagrams present
     if (bodyEl.querySelector('.cnw-mermaid') && !('mermaid' in window)) {
       const s = document.createElement('script');
@@ -310,6 +313,16 @@ function injectMdCss() {
   s.setAttribute('data-cnw-md-css', '1');
   s.textContent = `
     .cnw-md h1,.cnw-md h2,.cnw-md h3,.cnw-md h4 { margin:.9em 0 .4em; font-weight:700; line-height:1.25; }
+    .cnw-md {
+      box-sizing:border-box;
+      width:100%;
+      max-width:min(100%, 86ch);
+      margin-inline:auto;
+      padding:clamp(1rem, 2vw, 1.8rem) clamp(1rem, 3vw, 2.4rem);
+      font-size:var(--font-size-base, 1rem);
+      line-height:1.72;
+      color:var(--c-fg);
+    }
     .cnw-md h1 { font-size:1.4em; } .cnw-md h2 { font-size:1.2em; } .cnw-md h3 { font-size:1.05em; }
     .cnw-md p { margin:.55em 0; }
     .cnw-md ul,.cnw-md ol { margin:.5em 0; padding-left:1.4em; }
@@ -323,6 +336,59 @@ function injectMdCss() {
     .cnw-md table { border-collapse:collapse; width:100%; margin:.6em 0; font-size:.9em; }
     .cnw-md th,.cnw-md td { border:1px solid var(--c-border); padding:.25em .5em; }
     .cnw-md img { max-width:100%; }
+    .cnw-md .cnw-lazy-embed {
+      width:100%;
+      min-height:180px;
+      margin:.8em 0;
+      border:1px solid var(--c-border);
+      border-radius:6px;
+      overflow:hidden;
+      background:
+        linear-gradient(135deg, rgba(220,38,38,.16), rgba(15,23,42,.04)),
+        var(--c-bg-mute);
+      display:grid;
+      place-items:center;
+    }
+    .cnw-md .cnw-lazy-embed iframe {
+      width:100%;
+      height:100%;
+      border:0;
+      display:block;
+      background:#000;
+    }
+    .cnw-md .cnw-lazy-embed-btn {
+      width:100%;
+      height:100%;
+      min-height:180px;
+      border:0;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:.55rem;
+      cursor:pointer;
+      color:var(--c-fg);
+      background:transparent;
+      font:inherit;
+    }
+    .cnw-md .cnw-lazy-embed-btn:hover {
+      background:rgba(220,38,38,.08);
+    }
+    .cnw-md .cnw-lazy-embed-play {
+      width:48px;
+      height:48px;
+      border-radius:999px;
+      display:grid;
+      place-items:center;
+      padding-left:3px;
+      background:#dc2626;
+      color:white;
+      box-shadow:0 8px 24px rgba(0,0,0,.22);
+    }
+    .cnw-md .cnw-lazy-embed-label {
+      font-size:.82rem;
+      opacity:.72;
+    }
     /* Callout extra variants not covered by global.css */
     .cnw-md .callout[data-callout="book"] { --c-accent:#92400e;--c-border:rgba(146,64,14,.32);--c-bg:rgba(146,64,14,.1);--c-icon:"📖";--c-icon-bg:rgba(146,64,14,.18);--c-icon-border:rgba(146,64,14,.3); }
     .cnw-md .callout[data-callout="author"],.cnw-md .callout[data-callout="bio"],.cnw-md .callout[data-callout="cv"] { --c-accent:#7c3aed;--c-border:rgba(124,58,237,.32);--c-bg:rgba(124,58,237,.1);--c-icon:"✍";--c-icon-bg:rgba(124,58,237,.18);--c-icon-border:rgba(124,58,237,.3); }
@@ -333,6 +399,12 @@ function injectMdCss() {
     .cnw-md .callout[data-callout="yellow"] { --c-accent:#ca8a04;--c-border:rgba(202,138,4,.32);--c-bg:rgba(202,138,4,.1);--c-icon:"●";--c-icon-bg:rgba(202,138,4,.18);--c-icon-border:rgba(202,138,4,.3); }
     .cnw-md .callout[data-callout="violet"] { --c-accent:#7c3aed;--c-border:rgba(124,58,237,.35);--c-bg:rgba(124,58,237,.1);--c-icon:"●";--c-icon-bg:rgba(124,58,237,.18);--c-icon-border:rgba(124,58,237,.3); }
     .cnw-md .callout[data-callout="orange"] { --c-accent:#ea580c;--c-border:rgba(234,88,12,.32);--c-bg:rgba(234,88,12,.1);--c-icon:"●";--c-icon-bg:rgba(234,88,12,.18);--c-icon-border:rgba(234,88,12,.3); }
+    @media (max-width:720px) {
+      .cnw-md {
+        max-width:100%;
+        padding:.9rem 1rem;
+      }
+    }
   `;
   document.head.appendChild(s);
 }
@@ -481,8 +553,9 @@ async function loadDbNotePreview(state: DbNotePanelState) {
     if (!note) { state.bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;">Nota no encontrada</p>'; return; }
     configureMarked();
     injectMdCss();
-    const html = String(marked.parse(note.body ?? '', { async: false }));
-    state.bodyEl.innerHTML = `<div class="cnw-md" style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72">${html}</div>`;
+    const html = deferYouTubeEmbeds(String(marked.parse(note.body ?? '', { async: false })));
+    state.bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
+    hydrateLazyYouTubeEmbeds(state.bodyEl);
     updateDbNoteHud(state, note.body ?? '');
 
     const qaBtn = state.bodyEl.closest('.cnw-shell')?.querySelector<HTMLButtonElement>('.cnw-hud-qa-btn');

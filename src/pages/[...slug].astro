@@ -1981,6 +1981,13 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         max-width: 100%;
       }
 
+      .content-area > .class-content:not([data-entry-type='recursos-editor']) {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: min(100%, 86ch);
+        margin-inline: auto;
+      }
+
       .content-area .eval-block-wrapper,
       .content-area .eval-block {
         display: none !important;
@@ -3641,7 +3648,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           class:list={['lesson-link', { active: isActive }]}
                           data-astro-prefetch="false"
                           data-course-id={canonicalCourseIdToUse || courseSlug}
-                          data-lesson-page-slug={isContentCollection ? lessonPageSlug : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
+                          data-lesson-page-slug={isContentCollection ? ((lesson as any).id || lessonPageSlug) : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
                         >
                           <span class="lesson-link-text">{lesson.data.title}</span>
                           <span class="lesson-link-trailing">
@@ -3945,7 +3952,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                             class:list={['lesson-link', { active: isActive }]}
                             data-astro-prefetch="false"
                             data-course-id={canonicalCourseIdToUse || courseSlug}
-                            data-lesson-page-slug={isContentCollection ? lessonPageSlug : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
+                            data-lesson-page-slug={isContentCollection ? ((lesson as any).id || lessonPageSlug) : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
                           >
                             <span class="lesson-link-text">{lesson.data.title}</span>
                             <span class="lesson-link-trailing">
@@ -4414,6 +4421,20 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         >↑</button>
       </div>
     </main>
+    <script>
+      import { hydrateLazyYouTubeEmbeds } from '../scripts/course/lazy-youtube.ts';
+
+      const win = window as any;
+      function bootLazyYouTubeEmbeds() {
+        hydrateLazyYouTubeEmbeds(document);
+      }
+
+      bootLazyYouTubeEmbeds();
+      if (win.__musikiLazyYouTubeBootBound !== true) {
+        win.__musikiLazyYouTubeBootBound = true;
+        document.addEventListener('astro:page-load', bootLazyYouTubeEmbeds);
+      }
+    </script>
     {canManageLiveInteractions && (
       <script>
         import { initNotesSidebar } from '../scripts/course/sidebar/notes-sidebar.ts';
@@ -4472,8 +4493,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         document.addEventListener('click', win.__musikiCourseResourceClickHandler, true);
 
         // Open course lesson/note sidebar links inside dockview (not full navigation).
-        // Content-collection entries (global concepts, glossary) don't have a courseId
-        // prefix in their slug, so we let those navigate normally.
+        // Global concepts can live in src/content/public, so they arrive without the
+        // courseId prefix and still need to open as preview pods.
         if (typeof win.__musikiCourseLessonClickHandler === 'function') {
           document.removeEventListener('click', win.__musikiCourseLessonClickHandler, true);
         }
@@ -4487,14 +4508,15 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           const slug = link.dataset.lessonPageSlug;
           if (!slug) return;
           const cid = link.dataset.courseId || '';
-          // Only intercept cursos-collection entries (slug starts with courseId/)
-          if (!cid || !slug.startsWith(cid + '/')) return;
+          const noteSlug = cid && slug.startsWith(cid + '/')
+            ? slug.slice(cid.length + 1)
+            : slug;
+          if (!noteSlug) return;
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
-          // Strip the courseId prefix: "s123/01-notas/class" → "01-notas/class"
           // Alt+click = split; plain click = replace current panel
-          ws.openNote(slug.slice(cid.length + 1), 'preview', e.altKey);
+          ws.openNote(noteSlug, 'preview', e.altKey);
         };
         document.addEventListener('click', win.__musikiCourseLessonClickHandler, true);
       </script>

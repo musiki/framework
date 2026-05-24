@@ -15,6 +15,7 @@ import remarkDataviewLite from './src/plugins/remark-dataview-lite.mjs'
 import remarkWikiLink from './src/plugins/remark-wiki-link.mjs'
 import remarkLily from './src/plugins/remark-lily.mjs'
 import remarkCoverBlock from './src/plugins/remark-cover-block.mjs'
+import rehypeLazyYouTube from './src/plugins/rehype-lazy-youtube.mjs'
 
 import auth from 'auth-astro';
 import node from '@astrojs/node';
@@ -139,6 +140,7 @@ export default defineConfig({
       rehypeObsidianCallouts, // detecta y transforma callouts tipo GitHub/Obsidian
       rehypeRaw,              // permite inyectar HTML desde remark
       [rehypeKatex, { strict: false }], // Render math even if there are minor LaTeX errors
+      rehypeLazyYouTube,
     ]
   }
 })
