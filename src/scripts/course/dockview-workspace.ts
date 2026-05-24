@@ -12,6 +12,7 @@ import {
 } from './notes/inline-editor';
 import { buildShell, injectWorkspaceCss, type NoteMode } from './dockview-shell';
 import { createLiveMdEditor, type LiveMdEditor } from './notes/live-md-editor';
+import type { TraceMarginHandle } from './notes/trace-margin';
 import { deferYouTubeEmbeds, hydrateLazyYouTubeEmbeds } from './lazy-youtube';
 
 export type { NoteMode } from './dockview-shell';
@@ -51,7 +52,9 @@ type DbNotePanelState = {
   bodyEl: HTMLElement;
   statusDot: HTMLElement;
   pencilBtn: HTMLButtonElement;
+  traceBtn: HTMLButtonElement;
   liveEditor: LiveMdEditor | null;
+  traceHandle: TraceMarginHandle | null;
 };
 
 type QaShell = {
@@ -584,6 +587,11 @@ async function loadDbNotePreview(state: DbNotePanelState) {
 function enterDbNoteEditMode(state: DbNotePanelState) {
   state.liveEditor?.destroy();
   state.liveEditor = null;
+  if (state.traceHandle) {
+    state.traceHandle.destroy();
+    state.traceHandle = null;
+    state.traceBtn.classList.remove('is-active');
+  }
   state.mode = 'edit';
   state.pencilBtn.title = 'Vista previa';
   state.bodyEl.innerHTML = '';
@@ -620,6 +628,11 @@ function enterDbNoteEditMode(state: DbNotePanelState) {
 async function enterDbNotePreviewMode(state: DbNotePanelState) {
   state.liveEditor?.destroy();
   state.liveEditor = null;
+  if (state.traceHandle) {
+    state.traceHandle.destroy();
+    state.traceHandle = null;
+    state.traceBtn.classList.remove('is-active');
+  }
   state.pencilBtn.title = 'Editar';
   await loadDbNotePreview(state);
 }
@@ -792,7 +805,7 @@ export function initDockviewWorkspace(
       }
 
       if (params.kind === 'db-note') {
-        const { shell, bodyEl, pencilBtn, statusDot } = buildShell(
+        const { shell, bodyEl, pencilBtn, statusDot, traceBtn } = buildShell(
           panelId, params.noteId, params.title, dockview, true,
         );
         bindExternalNoteDrop(shell, panelId);
@@ -802,12 +815,38 @@ export function initDockviewWorkspace(
           bodyEl,
           statusDot,
           pencilBtn,
+          traceBtn,
           liveEditor: null,
+          traceHandle: null,
         };
         dbNotePanelStates.set(panelId, state);
         pencilBtn.addEventListener('click', () => {
           if (state.mode === 'preview') enterDbNoteEditMode(state);
           else void enterDbNotePreviewMode(state);
+        });
+        traceBtn.addEventListener('click', async () => {
+          if (state.traceHandle) {
+            state.traceHandle.destroy();
+            state.traceHandle = null;
+            traceBtn.classList.remove('is-active');
+            return;
+          }
+          if (!state.liveEditor || state.mode !== 'edit') {
+            pencilBtn.click();
+            return;
+          }
+          traceBtn.disabled = true;
+          try {
+            const { mountTraceMargin } = await import('./notes/trace-margin');
+            state.traceHandle = await mountTraceMargin(
+              state.liveEditor.getView(),
+              state.noteId,
+              state.bodyEl,
+            );
+            traceBtn.classList.add('is-active');
+          } finally {
+            traceBtn.disabled = false;
+          }
         });
         void loadDbNotePreview(state);
         return { element: shell, init: () => {} };
