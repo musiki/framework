@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
-import { getEntry } from 'astro:content';
+import { getCollection, getEntry } from 'astro:content';
+import { getContentCanonicalSlug, normalizeContentSlug } from '../../lib/content-slug';
 import { getEditableLocalRepoFile, resolveCourseSource, sourcePathFromFrameworkFilePath } from '../../lib/content-admin';
 
 export const prerender = false;
@@ -13,7 +14,27 @@ export const GET: APIRoute = async ({ request }) => {
     return new Response('Missing path', { status: 400 });
   }
 
-  const lesson = await getEntry('cursos', path);
+  let lesson = await getEntry('cursos', path);
+
+  if (!lesson) {
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    const normalizedTarget = normalizeContentSlug(cleanPath.split('/').pop());
+    const cursos = await getCollection('cursos');
+    lesson = cursos.find((item) => {
+      if (courseId && !item.id.startsWith(`${courseId}/`)) return false;
+
+      const canonical = getContentCanonicalSlug(item);
+      if (canonical === cleanPath) return true;
+      if (item.id.toLowerCase() === cleanPath.toLowerCase()) return true;
+      if (item.id.toLowerCase() === `${cleanPath}.md`.toLowerCase()) return true;
+
+      const canonicalTail = canonical.split('/').pop();
+      if (canonicalTail === normalizedTarget) return true;
+
+      const filenameNormalized = normalizeContentSlug(item.id.split('/').pop()?.replace(/\.md$/, ''));
+      return filenameNormalized === normalizedTarget;
+    });
+  }
 
   if (!lesson) {
     return new Response('Lesson not found', { status: 404 });

@@ -246,6 +246,15 @@ export function buildShell(
   });
   header.addEventListener('dragend', () => header.classList.remove('is-dragging'));
 
+  const resolveShellDropPosition = (e: DragEvent): 'left' | 'right' | 'top' | 'bottom' => {
+    const rect = shell.getBoundingClientRect();
+    const xRatio = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0.5;
+    const yRatio = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0.5;
+    if (yRatio < 0.32) return 'top';
+    if (yRatio > 0.68) return 'bottom';
+    return xRatio < 0.5 ? 'left' : 'right';
+  };
+
   // Drop target on shell (same pattern as room workspace)
   shell.addEventListener('dragover', e => {
     if (!e.dataTransfer?.types.includes('musiki/panel-id')) return;
@@ -265,7 +274,7 @@ export function buildShell(
     if (srcPanel && tgtPanel) {
       dockview.moveGroupOrPanel({
         from: { groupId: srcPanel.group.id, panelId: srcId },
-        to: { group: tgtPanel.group, position: 'right' },
+        to: { group: tgtPanel.group, position: resolveShellDropPosition(e) },
       });
     }
   });

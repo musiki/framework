@@ -62,6 +62,13 @@ function slugify(title: string): string {
     .replace(/\s+/g, '-');
 }
 
+function toCourseContentPath(courseId: string, slug: string): string {
+  const repoPrefix = `cursos/${courseId}/`;
+  if (slug.startsWith(repoPrefix)) return `${courseId}/${slug.slice(repoPrefix.length)}`;
+  if (slug.startsWith(`${courseId}/`)) return slug;
+  return `${courseId}/${slug}`;
+}
+
 function injectNieCss() {
   if (typeof document === 'undefined' || document.querySelector('[data-cnw-nie-css]')) return;
   const s = document.createElement('style');
@@ -170,8 +177,17 @@ async function loadNote(
     if (overrideContent != null) {
       noteContent = overrideContent;
     } else {
-      const note = await getNote(courseId, slug);
-      noteContent = note.content;
+      try {
+        const note = await getNote(courseId, slug);
+        noteContent = note.content;
+      } catch (primaryError) {
+        const path = toCourseContentPath(courseId, slug);
+        const res = await fetch(
+          `/api/get-lesson-content?courseId=${encodeURIComponent(courseId)}&path=${encodeURIComponent(path)}`,
+        );
+        if (!res.ok) throw primaryError;
+        noteContent = await res.text();
+      }
     }
     const { data, body } = parseFrontmatter(noteContent);
 

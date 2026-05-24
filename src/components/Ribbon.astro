@@ -39,7 +39,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   <!-- Course nav toggle (was .course-sidebar-handle--left) -->
   <button
     type="button"
-    class="ribbon-item ribbon-item--circle ribbon-item--mobile-visible"
+    class="ribbon-item ribbon-item--circle ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--toc"
     data-sidebar-toggle="left"
     aria-label="Navegación del curso"
     title="Navegación del curso (⌘/Ctrl + \)"
@@ -66,7 +66,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   <!-- Search -->
   <button
     type="button"
-    class="ribbon-item ribbon-item--mobile-visible"
+    class="ribbon-item ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--search"
     id="ribbon-search-btn"
     aria-label="Buscar (Shift + ?)"
     title="Buscar (Shift + ?)"
@@ -81,7 +81,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   {hasVivo ? (
     <a
       href={performativeRoomHref}
-      class="ribbon-item ribbon-item--vivo ribbon-item--mobile-visible"
+      class="ribbon-item ribbon-item--vivo ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--live"
       aria-label="Sala vivo"
       title="Sala vivo"
     >
@@ -94,7 +94,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
     </a>
   ) : (
     <span
-      class="ribbon-item ribbon-item--vivo ribbon-item--vivo--off ribbon-item--mobile-visible"
+      class="ribbon-item ribbon-item--vivo ribbon-item--vivo--off ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--live"
       aria-label="Sala vivo (no disponible)"
       title="Sala vivo (no disponible)"
       aria-disabled="true"
@@ -111,7 +111,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   <!-- Foro — opens right sidebar (on mobile: sweeps up from bottom) -->
   <button
     type="button"
-    class="ribbon-item"
+    class="ribbon-item ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--forum"
     data-sidebar-toggle="right"
     aria-label="Foro"
     title="Foro"
@@ -191,7 +191,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   <!-- Graph -->
   <button
     type="button"
-    class="ribbon-item"
+    class="ribbon-item ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--graph"
     id="ribbon-graph-btn"
     aria-label="Graph"
     title="Graph (click = modal)"
@@ -201,6 +201,19 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       <circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
       <circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="2"/>
       <path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98" stroke="currentColor" stroke-width="2"/>
+    </svg>
+  </button>
+
+  <!-- Nueva nota — mobile primary action -->
+  <button
+    type="button"
+    class="ribbon-item ribbon-item--mobile-visible ribbon-item--mobile-only ribbon-mobile-primary ribbon-mobile-primary--new-note"
+    id="ribbon-new-note-btn"
+    aria-label="Nueva nota"
+    title="Nueva nota"
+  >
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
     </svg>
   </button>
 
@@ -250,7 +263,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   <!-- Mobile "···más" toggle — only visible on mobile -->
   <button
     type="button"
-    class="ribbon-item ribbon-item--mobile-visible"
+    class="ribbon-item"
     data-ribbon-mas-toggle
     aria-label="Más opciones"
     title="Más opciones"
@@ -356,7 +369,7 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
   html.dark .ribbon-theme-moon { display: none; }
   /* Mobile body padding so content isn't hidden under bottom bar */
   @media (max-width: 500px) {
-    body { padding-bottom: var(--ribbon-bottom-height, 60px); }
+    body { padding-bottom: var(--ribbon-bottom-height, 54px); }
   }
 
   /* Inactive (unlinked) ribbon item */
@@ -480,6 +493,20 @@ const badgeLabel = activeCourseCode.slice(0, 4) || '···';
       searchBtn.dataset.bound = 'true';
       searchBtn.addEventListener('click', () => {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true }));
+      });
+    }
+
+    // New note: reuse the course notes sidebar create action.
+    const newNoteBtn = document.getElementById('ribbon-new-note-btn');
+    if (newNoteBtn && !newNoteBtn.dataset.bound) {
+      newNoteBtn.dataset.bound = 'true';
+      newNoteBtn.addEventListener('click', () => {
+        const createButton = document.querySelector('.notas-sb-new-btn');
+        if (createButton instanceof HTMLElement) {
+          createButton.click();
+          return;
+        }
+        window.dispatchEvent(new CustomEvent('musiki:create-note'));
       });
     }
 

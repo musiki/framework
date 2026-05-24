@@ -126,23 +126,40 @@ function findNoteBySlug(courseId: string, bareSlug: string): string | null {
   return walk(baseDir);
 }
 
+function normalizeCourseSlugOrPath(courseId: string, slugOrPath: string): { repoPath: string | null; bareSlug: string } {
+  let value = String(slugOrPath || '').trim().replace(/^\/+/, '');
+  const repoPrefix = `cursos/${courseId}/`;
+
+  if (value.startsWith(repoPrefix)) {
+    return {
+      repoPath: value,
+      bareSlug: value.slice(repoPrefix.length),
+    };
+  }
+
+  if (value.startsWith(`${courseId}/`)) {
+    value = value.slice(courseId.length + 1);
+  }
+
+  const bareSlug = value.replace(/\.md$/i, '');
+  return {
+    repoPath: sanitizeRepoMarkdownPath(`cursos/${courseId}/${bareSlug}.md`),
+    bareSlug,
+  };
+}
+
 export function getCourseNote(courseId: string, slugOrPath: string): { content: string; filePath: string } | null {
   const source = resolveCourseSource(courseId);
   if (!source) return null;
 
   // Accept full repoPath (cursos/s123/chapter/file.md) or bare slug
-  const repoPath = slugOrPath.startsWith(`cursos/${courseId}/`)
-    ? slugOrPath
-    : sanitizeRepoMarkdownPath(`cursos/${courseId}/${slugOrPath}.md`);
+  const { repoPath, bareSlug } = normalizeCourseSlugOrPath(courseId, slugOrPath);
   if (!repoPath) return null;
 
   const file = getEditableLocalRepoFile(source, repoPath);
   if (file) return { content: file.content, filePath: repoPath };
 
   // Exact path not found — Obsidian filenames use spaces/accents; try fuzzy slug match
-  const bareSlug = slugOrPath.startsWith(`cursos/${courseId}/`)
-    ? slugOrPath.slice(`cursos/${courseId}/`.length)
-    : slugOrPath;
   const fuzzyRepoPath = findNoteBySlug(courseId, bareSlug);
   if (!fuzzyRepoPath) return null;
 
@@ -156,13 +173,15 @@ export function saveCourseNote(courseId: string, slugOrPath: string, content: st
   const source = resolveCourseSource(courseId);
   if (!source) throw new Error(`Course not found: ${courseId}`);
 
-  const repoPath = slugOrPath.startsWith(`cursos/${courseId}/`)
-    ? slugOrPath
-    : sanitizeRepoMarkdownPath(`cursos/${courseId}/${slugOrPath}.md`);
+  let { repoPath, bareSlug } = normalizeCourseSlugOrPath(courseId, slugOrPath);
   if (!repoPath) throw new Error('Invalid slug');
 
   if (!getEditableLocalRepoFile(source, repoPath)) {
-    throw new Error(`Note not found: ${slugOrPath}`);
+    const fuzzyRepoPath = findNoteBySlug(courseId, bareSlug);
+    if (!fuzzyRepoPath || !getEditableLocalRepoFile(source, fuzzyRepoPath)) {
+      throw new Error(`Note not found: ${slugOrPath}`);
+    }
+    repoPath = fuzzyRepoPath;
   }
 
   writeEditableLocalRepoFile(source, repoPath, content);

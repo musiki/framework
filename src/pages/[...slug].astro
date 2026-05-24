@@ -2927,7 +2927,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       @media (max-width: 1024px) {
         .course-container {
-          grid-template-columns: var(--ribbon-width) minmax(0, 1fr);
+          grid-template-columns: minmax(0, 1fr);
           min-height: auto;
           padding: 0;
         }
@@ -2935,7 +2935,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         .course-container[data-left-open='false'],
         .course-container[data-right-open='false'],
         .course-container[data-left-open='false'][data-right-open='false'] {
-          grid-template-columns: var(--ribbon-width) minmax(0, 1fr);
+          grid-template-columns: minmax(0, 1fr);
         }
 
 
@@ -3141,7 +3141,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       /* Tablet 501–1024px: ribbon is fixed in ribbon.css; offset content-area */
       @media (min-width: 501px) and (max-width: 1024px) {
         .course-container {
-          padding-left: var(--ribbon-width);
+          padding-left: var(--ribbon-width) !important;
         }
         .content-area {
           grid-column: 1;
@@ -3153,7 +3153,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       /* Issues 4+6: right sidebar slides up from bottom on mobile */
       @media (max-width: 500px) {
         .sidebar--right {
-          bottom: var(--ribbon-bottom-height, 60px) !important;
+          bottom: var(--ribbon-bottom-height, 54px) !important;
           top: auto !important;
           left: 0 !important;
           right: 0 !important;
@@ -4395,7 +4395,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         document.addEventListener('astro:page-load', bootNotesSidebar);
       </script>
     )}
-    {canManageLiveInteractions && (
+    {canonicalCourseIdToUse && (
       <script>
         import { initDockviewWorkspace } from '../scripts/course/dockview-workspace.ts';
 
@@ -4882,7 +4882,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           document.removeEventListener('touchcancel', window.__musikiCourseLayoutTouchCancelHandler);
         }
 
-        const EDGE_SWIPE_ZONE_PX = 28;
+        const getEdgeSwipeZonePx = () => window.matchMedia('(max-width: 500px)').matches ? 56 : 28;
         const SWIPE_TRIGGER_DISTANCE_PX = 58;
         const SWIPE_MAX_VERTICAL_DRIFT_PX = 48;
         const SWIPE_HORIZONTAL_RATIO = 1.2;
@@ -4901,25 +4901,27 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           target instanceof HTMLElement &&
           (
             target.isContentEditable ||
-            Boolean(target.closest('input, textarea, select, option, button, a, [contenteditable="true"]'))
+            Boolean(target.closest('input, textarea, select, option, [contenteditable="true"]'))
           );
 
         const resolveSwipeIntent = (target: EventTarget | null, startX: number) => {
           if (!isMobileViewport()) return null;
-          if (isEditableTouchTarget(target)) return null;
 
           const viewportWidth = window.innerWidth;
           const targetNode = target instanceof Node ? target : null;
+          const edgeSwipeZonePx = getEdgeSwipeZonePx();
 
-          if (!leftOpen && startX <= EDGE_SWIPE_ZONE_PX) {
+          if (!leftOpen && startX <= edgeSwipeZonePx) {
             return { side: 'left' as const, action: 'open' as const };
           }
+
+          if (isEditableTouchTarget(target)) return null;
 
           if (leftOpen && leftSidebar instanceof HTMLElement && targetNode && leftSidebar.contains(targetNode)) {
             return { side: 'left' as const, action: 'close' as const };
           }
 
-          if (hasRightSidebar && !rightOpen && startX >= viewportWidth - EDGE_SWIPE_ZONE_PX) {
+          if (hasRightSidebar && !rightOpen && startX >= viewportWidth - edgeSwipeZonePx) {
             return { side: 'right' as const, action: 'open' as const };
           }
 

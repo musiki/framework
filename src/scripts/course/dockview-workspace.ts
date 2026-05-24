@@ -75,6 +75,46 @@ function configureMarked() {
   if (markedConfigured) return;
   markedConfigured = true;
 
+  // Obsidian callout extension — must come first (block-level, before default blockquote)
+  marked.use({
+    extensions: [
+      {
+        name: 'callout',
+        level: 'block',
+        start(src: string) {
+          const idx = src.indexOf('> [!');
+          return idx === -1 ? src.length : idx;
+        },
+        tokenizer(src: string): any {
+          if (!src.startsWith('> [!')) return undefined;
+          // Collect all consecutive > lines in this block
+          const blockMatch = src.match(/^((?:>[^\n]*\n?)+)/);
+          if (!blockMatch) return undefined;
+          const raw = blockMatch[1];
+          const lines = raw.split('\n').map((l: string) => l.replace(/^>[ ]?/, ''));
+          // Strip trailing empty lines (end of block)
+          while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+          const firstLine = lines[0] ?? '';
+          const typeMatch = firstLine.match(/^\[!(\w[\w-]*)\](.*)/);
+          if (!typeMatch) return undefined;
+          return {
+            type: 'callout',
+            raw,
+            calloutType: typeMatch[1].toLowerCase(),
+            title: typeMatch[2].trim(),
+            body: lines.slice(1).join('\n'),
+          };
+        },
+        renderer(token: any): string {
+          const type = (token.calloutType as string) || 'note';
+          const titleText = (token.title as string) || type;
+          const bodyHtml = String(marked.parse((token.body as string) || '', { async: false }));
+          return `<div class="callout callout-${escAttr(type)}" data-callout="${escAttr(type)}"><div class="callout-title">${escHtmlInline(titleText)}</div><div class="callout-body">${bodyHtml}</div></div>\n`;
+        },
+      },
+    ],
+  });
+
   // Math extensions — block ($$) before inline ($)
   marked.use({
     extensions: [
@@ -166,6 +206,39 @@ async function hydrateLilyPlaceholders(bodyEl: HTMLElement, slug: string) {
 
 // ── Preview renderer ──────────────────────────────────────────────────────
 
+function toCourseContentPath(courseId: string, slug: string): string {
+  const repoPrefix = `cursos/${courseId}/`;
+  if (slug.startsWith(repoPrefix)) return `${courseId}/${slug.slice(repoPrefix.length)}`;
+  if (slug.startsWith(`${courseId}/`)) return slug;
+  return `${courseId}/${slug}`;
+}
+
+async function loadPreviewContent(courseId: string, slug: string): Promise<string> {
+  try {
+    const note = await getNote(courseId, slug);
+    return note.content;
+  } catch (primaryError) {
+    const path = toCourseContentPath(courseId, slug);
+    const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}`);
+    if (!res.ok) throw primaryError;
+    const data = await res.json() as { body?: string };
+    return data.body ?? '';
+  }
+}
+
+function runMermaidIn(bodyEl: HTMLElement) {
+  const nodes = bodyEl.querySelectorAll('.cnw-mermaid');
+  if (!nodes.length) return;
+  try {
+    const result = (window as any).mermaid?.run({ nodes });
+    if (result && typeof result.catch === 'function') {
+      result.catch((err: unknown) => console.warn('[cnw] Mermaid render skipped:', err));
+    }
+  } catch (err) {
+    console.warn('[cnw] Mermaid render skipped:', err);
+  }
+}
+
 async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string): Promise<string> {
   // Skip re-render if we already rendered this slug into this element
   if (bodyEl.dataset.renderedSlug === slug) return bodyEl.dataset.lastContent ?? '';
@@ -173,8 +246,8 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
   configureMarked();
   bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
   try {
-    const note = await getNote(courseId, slug);
-    const { body } = parseFrontmatter(note.content);
+    const content = await loadPreviewContent(courseId, slug);
+    const { body } = parseFrontmatter(content);
     // Strip %%cover%%...%%/cover%% presentation blocks and eval fences
     const cleanBody = body
       .replace(/%%cover%%[\s\S]*?%%\/cover%%/gi, '')
@@ -186,16 +259,16 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
     if (bodyEl.querySelector('.cnw-mermaid') && !('mermaid' in window)) {
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-      s.onload = () => (window as any).mermaid?.run({ nodes: bodyEl.querySelectorAll('.cnw-mermaid') });
+      s.onload = () => runMermaidIn(bodyEl);
       document.head.appendChild(s);
     } else if (bodyEl.querySelector('.cnw-mermaid')) {
-      (window as any).mermaid?.run({ nodes: bodyEl.querySelectorAll('.cnw-mermaid') });
+      runMermaidIn(bodyEl);
     }
     bodyEl.dataset.renderedSlug = slug;
-    bodyEl.dataset.lastContent = note.content;
+    bodyEl.dataset.lastContent = content;
     // Async passes: lily API render + mermaid (don't block return)
     void hydrateLilyPlaceholders(bodyEl, slug);
-    return note.content;
+    return content;
   } catch {
     bodyEl.innerHTML = `<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar la nota</p>`;
     return '';
@@ -226,6 +299,16 @@ function injectMdCss() {
     .cnw-md table { border-collapse:collapse; width:100%; margin:.6em 0; font-size:.9em; }
     .cnw-md th,.cnw-md td { border:1px solid var(--c-border); padding:.25em .5em; }
     .cnw-md img { max-width:100%; }
+    /* Callout extra variants not covered by global.css */
+    .cnw-md .callout[data-callout="book"] { --c-accent:#92400e;--c-border:rgba(146,64,14,.32);--c-bg:rgba(146,64,14,.1);--c-icon:"📖";--c-icon-bg:rgba(146,64,14,.18);--c-icon-border:rgba(146,64,14,.3); }
+    .cnw-md .callout[data-callout="author"],.cnw-md .callout[data-callout="bio"],.cnw-md .callout[data-callout="cv"] { --c-accent:#7c3aed;--c-border:rgba(124,58,237,.32);--c-bg:rgba(124,58,237,.1);--c-icon:"✍";--c-icon-bg:rgba(124,58,237,.18);--c-icon-border:rgba(124,58,237,.3); }
+    .cnw-md .callout[data-callout="oblique"] { --c-accent:#64748b;--c-border:rgba(100,116,139,.2);--c-bg:rgba(100,116,139,.07);font-style:italic; }
+    .cnw-md .callout[data-callout="red"] { --c-accent:#dc2626;--c-border:rgba(220,38,38,.32);--c-bg:rgba(220,38,38,.1);--c-icon:"●";--c-icon-bg:rgba(220,38,38,.18);--c-icon-border:rgba(220,38,38,.3); }
+    .cnw-md .callout[data-callout="green"] { --c-accent:#16a34a;--c-border:rgba(22,163,74,.32);--c-bg:rgba(22,163,74,.1);--c-icon:"●";--c-icon-bg:rgba(22,163,74,.18);--c-icon-border:rgba(22,163,74,.3); }
+    .cnw-md .callout[data-callout="blue"] { --c-accent:#2563eb;--c-border:rgba(37,99,235,.32);--c-bg:rgba(37,99,235,.1);--c-icon:"●";--c-icon-bg:rgba(37,99,235,.18);--c-icon-border:rgba(37,99,235,.3); }
+    .cnw-md .callout[data-callout="yellow"] { --c-accent:#ca8a04;--c-border:rgba(202,138,4,.32);--c-bg:rgba(202,138,4,.1);--c-icon:"●";--c-icon-bg:rgba(202,138,4,.18);--c-icon-border:rgba(202,138,4,.3); }
+    .cnw-md .callout[data-callout="violet"] { --c-accent:#7c3aed;--c-border:rgba(124,58,237,.35);--c-bg:rgba(124,58,237,.1);--c-icon:"●";--c-icon-bg:rgba(124,58,237,.18);--c-icon-border:rgba(124,58,237,.3); }
+    .cnw-md .callout[data-callout="orange"] { --c-accent:#ea580c;--c-border:rgba(234,88,12,.32);--c-bg:rgba(234,88,12,.1);--c-icon:"●";--c-icon-bg:rgba(234,88,12,.18);--c-icon-border:rgba(234,88,12,.3); }
   `;
   document.head.appendChild(s);
 }
@@ -783,7 +866,14 @@ export function initDockviewWorkspace(
       const newId = `db-note-${noteId}-${Date.now()}`;
       pendingParams.set(newId, { kind: 'db-note', noteId, title });
       const referencePanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
-      dockview.addPanel({ id: newId, component: 'note-panel', position: referencePanel ? { referencePanel: referencePanel.id, direction: 'right' } : undefined });
+      const direction = referencePanel && event.position
+        ? positionToDirection(event.position as any)
+        : 'right';
+      dockview.addPanel({
+        id: newId,
+        component: 'note-panel',
+        position: referencePanel ? { referencePanel: referencePanel.id, direction: direction as any } : undefined,
+      });
       return;
     }
 

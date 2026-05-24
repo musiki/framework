@@ -4,7 +4,7 @@
   --ribbon-bg: color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%);
   --ribbon-border: var(--c-border);
   --ribbon-item-size: 32px;
-  --ribbon-bottom-height: 60px; /* mobile */
+  --ribbon-bottom-height: 54px; /* mobile */
 }
 
 /* ── Desktop ribbon ────────────────────────────────────────────────────── */
@@ -183,16 +183,20 @@
     top: auto;
     width: 100%;
     height: calc(var(--ribbon-bottom-height) + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
     flex-direction: row;
-    justify-content: space-between;
+    justify-content: space-evenly;
     align-items: center;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    padding:
+      4px
+      env(safe-area-inset-right, 0px)
+      calc(4px + env(safe-area-inset-bottom, 0px))
+      env(safe-area-inset-left, 0px);
     border-right: none;
     border-top: 1px solid var(--ribbon-border);
     z-index: 100;
     gap: 0;
-    overflow: hidden;
-    overflow-x: auto;
+    overflow: visible;
     background: var(--ribbon-bg);
   }
   /* show only mobile-visible items */
@@ -203,21 +207,28 @@
   .ribbon-label,
   .ribbon-about { display: none; }
   .ribbon-item--mobile-visible {
-    width: 28px;
-    height: 28px;
-    min-width: 28px;
-    min-height: 28px;
-    border-radius: 6px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    border-radius: 8px;
     flex-shrink: 0;
   }
   .ribbon-item--mobile-visible svg {
-    width: 13px;
-    height: 13px;
+    width: 20px;
+    height: 20px;
   }
+  .ribbon-mobile-primary--toc { order: 1; }
+  .ribbon-mobile-primary--live { order: 2; }
+  .ribbon-mobile-primary--search { order: 3; }
+  .ribbon-mobile-primary--new-note { order: 4; }
+  .ribbon-mobile-primary--forum { order: 5; }
+  .ribbon-mobile-primary--graph { order: 6; }
 }
 
 /* ── Desktop: hide mobile-only elements ─────────────────────────────────── */
 @media (min-width: 501px) {
   .ribbon-mas-sheet { display: none; }
   .ribbon-mas-toggle { display: none; }
+  .ribbon-item--mobile-only { display: none; }
 }
