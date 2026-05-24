@@ -93,6 +93,39 @@ export function listCourseNotes(courseId: string): NoteListItem[] {
   return notes.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
 }
 
+function slugifyFilename(name: string): string {
+  return name
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function findNoteBySlug(courseId: string, bareSlug: string): string | null {
+  const baseDir = resolveCourseScanDir(courseId);
+  if (!baseDir) return null;
+  const targetSlug = slugifyFilename(bareSlug.replace(/\.md$/i, ''));
+
+  const walk = (dir: string): string | null => {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return null; }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        const found = walk(path.join(dir, e.name));
+        if (found) return found;
+      } else if (e.isFile() && e.name.endsWith('.md')) {
+        const fileSlug = slugifyFilename(e.name.replace(/\.md$/i, ''));
+        if (fileSlug === targetSlug) {
+          const rel = path.relative(path.dirname(baseDir), path.join(dir, e.name));
+          return rel.replace(/\\/g, '/');
+        }
+      }
+    }
+    return null;
+  };
+  return walk(baseDir);
+}
+
 export function getCourseNote(courseId: string, slugOrPath: string): { content: string; filePath: string } | null {
   const source = resolveCourseSource(courseId);
   if (!source) return null;
@@ -104,9 +137,19 @@ export function getCourseNote(courseId: string, slugOrPath: string): { content: 
   if (!repoPath) return null;
 
   const file = getEditableLocalRepoFile(source, repoPath);
-  if (!file) return null;
+  if (file) return { content: file.content, filePath: repoPath };
 
-  return { content: file.content, filePath: repoPath };
+  // Exact path not found — Obsidian filenames use spaces/accents; try fuzzy slug match
+  const bareSlug = slugOrPath.startsWith(`cursos/${courseId}/`)
+    ? slugOrPath.slice(`cursos/${courseId}/`.length)
+    : slugOrPath;
+  const fuzzyRepoPath = findNoteBySlug(courseId, bareSlug);
+  if (!fuzzyRepoPath) return null;
+
+  const fuzzyFile = getEditableLocalRepoFile(source, fuzzyRepoPath);
+  if (!fuzzyFile) return null;
+
+  return { content: fuzzyFile.content, filePath: fuzzyRepoPath };
 }
 
 export function saveCourseNote(courseId: string, slugOrPath: string, content: string): { filePath: string } {
