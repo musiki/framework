@@ -55,6 +55,7 @@ type DbNotePanelState = {
   traceBtn: HTMLButtonElement;
   liveEditor: LiveMdEditor | null;
   traceHandle: TraceMarginHandle | null;
+  traceOnEnterEdit: boolean;
 };
 
 type QaShell = {
@@ -621,6 +622,10 @@ function enterDbNoteEditMode(state: DbNotePanelState) {
       state.liveEditor = createLiveMdEditor(mount, content, save);
       updateDbNoteHud(state, content);
       state.liveEditor.focus();
+      if (state.traceOnEnterEdit) {
+        state.traceOnEnterEdit = false;
+        state.traceBtn.click();
+      }
     })
     .catch(() => {});
 }
@@ -628,6 +633,7 @@ function enterDbNoteEditMode(state: DbNotePanelState) {
 async function enterDbNotePreviewMode(state: DbNotePanelState) {
   state.liveEditor?.destroy();
   state.liveEditor = null;
+  state.traceOnEnterEdit = false;
   if (state.traceHandle) {
     state.traceHandle.destroy();
     state.traceHandle = null;
@@ -818,6 +824,7 @@ export function initDockviewWorkspace(
           traceBtn,
           liveEditor: null,
           traceHandle: null,
+          traceOnEnterEdit: false,
         };
         dbNotePanelStates.set(panelId, state);
         pencilBtn.addEventListener('click', () => {
@@ -831,10 +838,12 @@ export function initDockviewWorkspace(
             traceBtn.classList.remove('is-active');
             return;
           }
-          if (!state.liveEditor || state.mode !== 'edit') {
+          if (state.mode !== 'edit') {
+            state.traceOnEnterEdit = true;
             pencilBtn.click();
             return;
           }
+          if (!state.liveEditor) return; // editor still loading — auto-mount will fire
           traceBtn.disabled = true;
           try {
             const { mountTraceMargin } = await import('./notes/trace-margin');
@@ -844,6 +853,8 @@ export function initDockviewWorkspace(
               state.bodyEl,
             );
             traceBtn.classList.add('is-active');
+          } catch (err) {
+            console.error('[trace] mount failed', err);
           } finally {
             traceBtn.disabled = false;
           }
