@@ -817,7 +817,7 @@ export function initDockviewWorkspace(
         bindExternalNoteDrop(shell, panelId);
         const state: DbNotePanelState = {
           noteId: params.noteId,
-          mode: 'preview',
+          mode: 'edit',
           bodyEl,
           statusDot,
           pencilBtn,
@@ -859,7 +859,7 @@ export function initDockviewWorkspace(
             traceBtn.disabled = false;
           }
         });
-        void loadDbNotePreview(state);
+        enterDbNoteEditMode(state);
         return { element: shell, init: () => {} };
       }
 
