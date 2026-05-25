@@ -144,6 +144,8 @@ export function injectWorkspaceCss(containerId: string) {
     .cnw-mode-btn:hover { opacity: 1 !important; color: var(--c-fg); }
     .cnw-close-btn:hover { color: #c87e7e !important; }
     .cnw-mode-btn.is-active { opacity: 1 !important; color: var(--c-link, #3b82f6) !important; }
+    .cnw-hud-trace-btn.is-active { opacity: 1 !important; color: var(--c-link, #3b82f6) !important; }
+    .cnw-hud-trace-btn:hover { opacity: 1 !important; }
 
     /* Panel body */
     .cnw-body {
@@ -242,11 +244,10 @@ export function buildShell(
   header.appendChild(splitBelowBtn);
 
   const traceBtn = document.createElement('button');
-  traceBtn.className = 'cnw-mode-btn';
+  traceBtn.className = 'cnw-hud-trace-btn';
   traceBtn.title = 'Trace Codes';
-  traceBtn.textContent = '⊕';
-  traceBtn.style.fontSize = '13px';
-  header.appendChild(traceBtn);
+  traceBtn.textContent = 'TC ⊕';
+  traceBtn.style.cssText = 'border:none;background:none;font-size:.71rem;opacity:.55;cursor:pointer;padding:0 2px;color:inherit';
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'cnw-mode-btn cnw-close-btn';
@@ -312,12 +313,13 @@ export function buildShell(
   if (showHud) {
     const hud = document.createElement('div');
     hud.className = 'cnw-hud';
-    hud.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0 .6rem;height:20px;flex-shrink:0';
+    hud.style.cssText = 'display:flex;align-items:center;padding:0 .6rem;height:20px;flex-shrink:0';
 
     const stats = document.createElement('span');
     stats.className = 'cnw-hud-stats';
-    stats.style.cssText = 'font-size:.62rem;opacity:.4;font-family:var(--font-mono,monospace)';
+    stats.style.cssText = 'font-size:.682rem;opacity:.7;font-family:var(--font-mono,monospace);flex:1';
     hud.appendChild(stats);
+    hud.appendChild(traceBtn);
 
     const qaBtn = document.createElement('button');
     qaBtn.className = 'cnw-hud-qa-btn';
