@@ -89,6 +89,7 @@ jobs:
             --exclude '.content-sources' \
             --exclude 'node_modules' \
             --exclude '.tmp' \
+            --exclude 'src/content' \
             --exclude 'dist' \
             --exclude 'dist_tmp' \
             --exclude 'dist_old' \

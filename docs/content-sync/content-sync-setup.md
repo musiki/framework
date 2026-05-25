@@ -92,7 +92,7 @@ Debe inyectar como mínimo tu secret `CONTENT_BUS_SECRET`.
 - `CONTENT_SOURCE_READ_TOKEN`: Token (Fine-grained PAT) con lectura sobre los repositorios de las materias.
 - `VPS_FRAMEWORK_DIR`, `VPS_INSTALL_COMMAND`, `VPS_CONTENT_SOURCE_STRATEGY`.
 
-Este workflow (disparado con un Action de Push al framework) tampoco modifica `src/content`: el runner self-hosted sincroniza el checkout por `rsync`. En el VPS, `CONTENT_SOURCE_STRATEGY` en `remote-only` se asegura de que descarguemos directo desde Github sin buscar rutas locales (`../i1`).
+Este workflow (disparado con un Action de Push al framework) excluye `src/content` del `rsync`: esa carpeta es output ensamblado en el VPS y se reemplaza después mediante `npm run content:assemble`. El runner self-hosted debe ser dueño de `src/content` para poder reconstruirla. En el VPS, `CONTENT_SOURCE_STRATEGY` en `remote-only` asegura que descarguemos directo desde Github sin buscar rutas locales (`../i1`).
 
 ### Comandos Locales / Modo Desarrollo
 Cuando escribas notas localmente, no tenes que esperar al Github Action.
