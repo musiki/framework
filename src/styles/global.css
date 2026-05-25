@@ -1106,7 +1106,11 @@ ol ol ol ol > li::marker {
   background: var(--forum-bg-panel, var(--c-bg-mute));
   color: var(--forum-text-primary, var(--c-fg));
   font-size: 0.91rem;
-  min-height: 84px;
+  min-height: calc(1.6em + 1.16rem);
+}
+
+.musiki-codemirror-host--forum .cm-lineNumbers {
+  display: none;
 }
 
 .musiki-codemirror-host--forum:focus-within {

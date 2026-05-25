@@ -1522,21 +1522,22 @@ if (activeCourse) {
         padding: 0.8rem 0.75rem 0.5rem;
       }
 
-      /* ── New-thread bottom bar ── */
+      /* ── New-thread bottom bar / reply bar ── */
       .forum-new-thread-bar {
         flex-shrink: 0;
         display: flex;
-        align-items: flex-end;
+        align-items: center;
         gap: 0.4rem;
         padding: 0.5rem 0.65rem 0.6rem;
         background: color-mix(in srgb, var(--c-bg) 94%, var(--c-bg-mute) 6%);
         border-top: 1px solid color-mix(in srgb, var(--c-border) 28%, transparent);
       }
+      .forum-reply-bar { border-top: none; padding: 0.35rem 0.5rem 0.45rem; }
 
       .forum-new-thread-form {
         flex: 1;
         display: flex;
-        align-items: flex-end;
+        align-items: center;
         gap: 0.4rem;
         min-width: 0;
       }
@@ -1546,6 +1547,7 @@ if (activeCourse) {
         min-width: 0;
         position: relative;
       }
+      .forum-reply-editor { flex: 1; min-width: 0; position: relative; }
 
       /* ── + button & popup ── */
       .forum-plus-wrap {
@@ -1580,6 +1582,7 @@ if (activeCourse) {
         box-shadow: 0 4px 20px rgba(0,0,0,0.18);
         z-index: 52;
         min-width: 2.8rem;
+        overflow: visible;
       }
 
       .forum-plus-popup-actions {
@@ -1587,6 +1590,20 @@ if (activeCourse) {
         flex-direction: column;
         gap: 0.25rem;
         align-items: center;
+      }
+
+      /* tooltips for popup actions emerge to the right, not above (avoids vertical clipping) */
+      .forum-plus-popup-actions .forum-action-btn::after {
+        left: calc(100% + 0.5rem) !important;
+        right: auto !important;
+        bottom: auto !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+      }
+      .forum-plus-popup-actions .forum-action-btn:hover::after,
+      .forum-plus-popup-actions .forum-action-btn:focus-visible::after {
+        opacity: 1 !important;
+        transform: translateY(-50%) !important;
       }
 
       /* ── Template / upload buttons — no border, icon-only ── */
@@ -1632,7 +1649,7 @@ if (activeCourse) {
         pointer-events: auto;
       }
 
-      /* ── Send button — blue airplane ── */
+      /* ── Send button — violet/lila airplane ── */
       .forum-send-btn {
         flex-shrink: 0;
         width: 2.1rem;
@@ -1640,7 +1657,7 @@ if (activeCourse) {
         min-width: 2.1rem;
         border: none;
         border-radius: 50%;
-        background: #2f6fff;
+        background: rgba(139, 92, 246, 0.5);
         color: #fff;
         display: inline-flex;
         align-items: center;
@@ -1649,8 +1666,8 @@ if (activeCourse) {
         transition: background 120ms;
         padding: 0;
       }
-      .forum-send-btn:hover { background: #1a5ce8; }
-      .forum-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+      .forum-send-btn:hover { background: rgba(139, 92, 246, 0.82); }
+      .forum-send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
       /* ── Auto-grow textarea ── */
       .forum-textarea--autogrow {
@@ -1663,31 +1680,41 @@ if (activeCourse) {
         padding: 0.45rem 0.6rem;
       }
 
-      /* ── Reply form ── */
-      .forum-reply-form {
-        padding: 0.5rem 0;
-        display: grid;
-        gap: 0.35rem;
-      }
+      /* ── Reply form (legacy kept for safety) ── */
+      .forum-reply-form { padding: 0; }
+      .forum-reply-form[hidden] { display: none; }
 
-      .forum-reply-editor {
-        position: relative;
-      }
+      /* ── input shell — flex column so bar sticks below both columns ── */
+      .forum-input-shell { display: flex; flex-direction: column; }
+      .forum-input-shell > .forum-grid { flex: 1 1 auto; min-height: 0; }
 
-      .forum-reply-footer {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 0.4rem;
+      /* ── reply indicator strip ── */
+      .forum-reply-indicator {
+        flex-shrink: 0;
+        display: flex; align-items: center; gap: 0.45rem;
+        padding: 0.2rem 0.6rem;
+        background: color-mix(in srgb, var(--accent, #2f6fff) 8%, var(--c-bg, #fff));
+        border-top: 1px solid color-mix(in srgb, var(--accent, #2f6fff) 18%, transparent);
+        font-size: 0.8rem; color: var(--forum-text-secondary, #6b7480);
       }
+      .forum-reply-indicator[hidden] { display: none; }
+      .forum-reply-indicator-cancel {
+        flex-shrink: 0; border: none; background: none;
+        color: var(--forum-text-secondary, #6b7480);
+        cursor: pointer; padding: 0.1rem 0.3rem;
+        border-radius: 4px; font-size: 0.72rem; line-height: 1;
+      }
+      .forum-reply-indicator-cancel:hover { background: rgba(0,0,0,0.06); color: var(--forum-text-primary, #1c1f23); }
+      .forum-reply-indicator-label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
       .forum-cancel-btn {
+        flex-shrink: 0;
         border: none;
         background: none;
         color: var(--c-fg-dim);
         font-size: 0.88rem;
         cursor: pointer;
-        padding: 0.3rem 0.45rem;
+        padding: 0.25rem 0.4rem;
         border-radius: 6px;
         line-height: 1;
         transition: background 100ms, color 100ms;
@@ -1939,75 +1966,68 @@ if (activeCourse) {
             data-initial-thread-id={requestedThreadId}
           >
             <p id="forum-status" class="forum-status" hidden></p>
-            <div class="forum-grid">
-              <section class="forum-panel forum-thread-column">
-                <div id="forum-thread-list" class="forum-thread-list">
-                  <p class="forum-empty">Cargando hilos...</p>
-                </div>
-
-                {activeForumView === 'board' && (
-                  <details id="forum-new-board-details" class="forum-fold" hidden>
-                    <summary class="forum-fold-summary">Crear foro</summary>
-                    <form id="forum-new-board-form" class="forum-form">
-                      <input id="forum-board-title" class="forum-field" type="text" maxlength="90" placeholder="Título" required />
-                      <input id="forum-board-description" class="forum-field" type="text" maxlength="260" placeholder="Descripción opcional" />
-                      <div class="forum-form-actions">
-                        <button
-                          type="submit"
-                          class="forum-secondary-btn forum-action-btn forum-action-f"
-                          data-tooltip="Crear foro alternativo"
-                          aria-label="Crear foro alternativo"
-                          title="Crear foro alternativo"
-                        >F</button>
-                      </div>
-                    </form>
-                  </details>
-                )}
-
-                <div id="forum-new-thread" class="forum-new-thread-bar" hidden>
-                  <div class="forum-plus-wrap">
-                    <button type="button" id="forum-plus-btn" class="forum-plus-btn" title="Plantillas y archivos" aria-label="Plantillas y archivos" aria-expanded="false">
-                      <svg viewBox="0 0 16 16" aria-hidden="true" width="18" height="18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><path d="M8 2v12M2 8h12"/></svg>
-                    </button>
-                    <div id="forum-plus-popup" class="forum-plus-popup" hidden aria-label="Plantillas y archivos">
-                      <div class="forum-form-actions forum-plus-popup-actions" id="forum-thread-plus-actions"></div>
-                    </div>
+            <div class="forum-input-shell">
+              <div class="forum-grid">
+                <section class="forum-panel forum-thread-column">
+                  <div id="forum-thread-list" class="forum-thread-list">
+                    <p class="forum-empty">Cargando hilos...</p>
                   </div>
-                  <form id="forum-new-thread-form" class="forum-new-thread-form">
-                    <div class="forum-editor-dropzone forum-new-thread-editor">
-                      <textarea id="forum-thread-body" class="forum-textarea forum-textarea--autogrow" maxlength="4000" placeholder="Nuevo hilo… (primera línea = título)" required rows="1"></textarea>
-                    </div>
-                    <button type="submit" class="forum-send-btn" title="Publicar hilo" aria-label="Publicar hilo">
-                      <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z" fill="currentColor"/></svg>
-                    </button>
-                  </form>
-                </div>
-              </section>
 
-              <section id="forum-thread-stage" class="forum-panel forum-thread-stage">
-                <div class="forum-thread-stage-head">
-                  <h2 id="forum-thread-heading" class="forum-panel-title">Mensajes</h2>
-                  <p id="forum-thread-summary" class="forum-thread-panel-copy">Selecciona un hilo para leerlo y responder desde esta misma página.</p>
-                </div>
-                <div id="forum-post-list" class="forum-post-list">
-                  <p class="forum-empty">Selecciona un hilo para ver los mensajes.</p>
-                </div>
+                  {activeForumView === 'board' && (
+                    <details id="forum-new-board-details" class="forum-fold" hidden>
+                      <summary class="forum-fold-summary">Crear foro</summary>
+                      <form id="forum-new-board-form" class="forum-form">
+                        <input id="forum-board-title" class="forum-field" type="text" maxlength="90" placeholder="Título" required />
+                        <input id="forum-board-description" class="forum-field" type="text" maxlength="260" placeholder="Descripción opcional" />
+                        <div class="forum-form-actions">
+                          <button
+                            type="submit"
+                            class="forum-secondary-btn forum-action-btn forum-action-f"
+                            data-tooltip="Crear foro alternativo"
+                            aria-label="Crear foro alternativo"
+                            title="Crear foro alternativo"
+                          >F</button>
+                        </div>
+                      </form>
+                    </details>
+                  )}
+                </section>
 
-                <form id="forum-reply-form" class="forum-reply-form" hidden>
-                  <p id="forum-reply-target" class="forum-reply-target" hidden></p>
-                  <input id="forum-parent-post-id" type="hidden" />
-                  <div class="forum-editor-dropzone forum-reply-editor">
-                    <textarea id="forum-reply-body" class="forum-textarea forum-textarea--autogrow" maxlength="4000" placeholder="Responder al hilo..." required rows="1"></textarea>
-                    <div class="forum-form-actions forum-overlay-actions" id="forum-reply-overlay-actions"></div>
+                <section id="forum-thread-stage" class="forum-panel forum-thread-stage">
+                  <div class="forum-thread-stage-head">
+                    <h2 id="forum-thread-heading" class="forum-panel-title">Mensajes</h2>
+                    <p id="forum-thread-summary" class="forum-thread-panel-copy">Selecciona un hilo para leerlo y responder desde esta misma página.</p>
                   </div>
-                  <div class="forum-reply-footer">
-                    <button type="button" id="forum-cancel-reply" class="forum-cancel-btn" aria-label="Cancelar respuesta" title="Cancelar">✕</button>
-                    <button type="submit" class="forum-send-btn" title="Publicar respuesta" aria-label="Publicar respuesta">
-                      <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z" fill="currentColor"/></svg>
-                    </button>
+                  <div id="forum-post-list" class="forum-post-list">
+                    <p class="forum-empty">Selecciona un hilo para ver los mensajes.</p>
                   </div>
+                </section>
+              </div>
+
+              <div id="forum-reply-indicator" class="forum-reply-indicator" hidden>
+                <button type="button" id="forum-cancel-reply" class="forum-reply-indicator-cancel" aria-label="Cancelar respuesta" title="Cancelar">✕</button>
+                <span class="forum-reply-indicator-label">↩ Respondiendo a <strong id="forum-reply-author-name"></strong></span>
+              </div>
+
+              <div id="forum-new-thread" class="forum-new-thread-bar" hidden>
+                <input id="forum-parent-post-id" type="hidden" />
+                <div class="forum-plus-wrap">
+                  <button type="button" id="forum-plus-btn" class="forum-plus-btn" title="Plantillas y archivos" aria-label="Plantillas y archivos" aria-expanded="false">
+                    <svg viewBox="0 0 16 16" aria-hidden="true" width="18" height="18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><path d="M8 2v12M2 8h12"/></svg>
+                  </button>
+                  <div id="forum-plus-popup" class="forum-plus-popup" hidden aria-label="Plantillas y archivos">
+                    <div class="forum-form-actions forum-plus-popup-actions" id="forum-thread-plus-actions"></div>
+                  </div>
+                </div>
+                <form id="forum-new-thread-form" class="forum-new-thread-form">
+                  <div class="forum-editor-dropzone forum-new-thread-editor">
+                    <textarea id="forum-thread-body" class="forum-textarea forum-textarea--autogrow" maxlength="4000" placeholder="Nuevo hilo… (primera línea = título)" required rows="1"></textarea>
+                  </div>
+                  <button type="submit" class="forum-send-btn" title="Publicar" aria-label="Publicar">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z" fill="currentColor"/></svg>
+                  </button>
                 </form>
-              </section>
+              </div>
             </div>
           </section>
         )}
@@ -2301,10 +2321,9 @@ if (activeCourse) {
         const threadHeading = document.getElementById('forum-thread-heading');
         const threadSummary = document.getElementById('forum-thread-summary');
         const postListEl = document.getElementById('forum-post-list');
-        const replyForm = document.getElementById('forum-reply-form');
-        const replyBodyInput = document.getElementById('forum-reply-body');
         const parentPostInput = document.getElementById('forum-parent-post-id');
-        const replyTargetEl = document.getElementById('forum-reply-target');
+        const replyIndicatorEl = document.getElementById('forum-reply-indicator');
+        const replyAuthorNameEl = document.getElementById('forum-reply-author-name');
         const cancelReplyBtn = document.getElementById('forum-cancel-reply');
         const newBoardDetails = document.getElementById('forum-new-board-details');
         const newBoardForm = document.getElementById('forum-new-board-form');
@@ -2323,10 +2342,8 @@ if (activeCourse) {
           !threadHeading ||
           !threadSummary ||
           !postListEl ||
-          !replyForm ||
-          !replyBodyInput ||
           !parentPostInput ||
-          !replyTargetEl ||
+          !replyIndicatorEl ||
           !cancelReplyBtn ||
           !courseId ||
           !scope
@@ -2572,28 +2589,23 @@ if (activeCourse) {
 
         const clearReplyTarget = () => {
           parentPostInput.value = '';
-          replyTargetEl.textContent = '';
-          replyTargetEl.hidden = true;
-          cancelReplyBtn.hidden = true;
-          replyBodyInput.placeholder = 'Responder al hilo...';
+          replyIndicatorEl.hidden = true;
+          if (replyAuthorNameEl) replyAuthorNameEl.textContent = '';
+          threadBodyInput.placeholder = 'Nuevo hilo… (primera línea = título)';
         };
 
         const setReplyTarget = (postId, authorName) => {
           parentPostInput.value = postId;
-          replyTargetEl.hidden = false;
-          replyTargetEl.textContent = `Responder a ${authorName || 'usuario'}`;
-          cancelReplyBtn.hidden = false;
-          replyBodyInput.placeholder = `Responder a ${authorName || 'usuario'}...`;
-          replyForm.hidden = false;
-          replyBodyInput.focus();
+          if (replyAuthorNameEl) replyAuthorNameEl.textContent = authorName || 'usuario';
+          replyIndicatorEl.hidden = false;
+          threadBodyInput.placeholder = `Responder a ${authorName || 'usuario'}...`;
+          threadBodyInput.focus();
         };
 
         const updateReplyFormVisibility = (canReply) => {
           if (!forumState.selectedThreadId || !canReply) {
-            replyForm.hidden = true;
             clearReplyTarget();
           }
-          // form stays hidden until R is pressed
         };
 
         const buildScopeUrl = (nextView, nextScope, threadId = '') => {
@@ -3313,7 +3325,7 @@ a[node] -->|edge| b[hub]
                   if (isOpen) closeSiblingQuickMenus();
                   card.classList.toggle('is-quick-open', Boolean(isOpen));
                 };
-                const canOpenQuickMenu = canVotePost || canEditPost || canDeletePost;
+                const canOpenQuickMenu = canVotePost || canEditPost || canDeletePost || canReply;
 
                 if (canOpenQuickMenu) {
                   quickActions = document.createElement('div');
@@ -3370,12 +3382,13 @@ a[node] -->|edge| b[hub]
                 if (canReply) {
                   replyButton = document.createElement('button');
                   replyButton.type = 'button';
-                  replyButton.className = 'forum-post-reply-btn forum-action-btn forum-action-r';
-                  replyButton.textContent = 'R';
+                  replyButton.className = 'forum-post-reply-btn forum-action-btn';
+                  replyButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3L1 7.5l4.5 4.5"/><path d="M1 7.5H10a5 5 0 0 1 5 5"/></svg>';
                   replyButton.dataset.tooltip = 'Responder';
                   replyButton.title = 'Responder';
                   replyButton.setAttribute('aria-label', 'Responder');
                   replyButton.addEventListener('click', () => {
+                    setQuickMenuOpen(false);
                     setReplyTarget(post.id, post.authorName || 'usuario');
                   });
                 }
@@ -3539,9 +3552,8 @@ a[node] -->|edge| b[hub]
                   });
 
                   applyReactionState();
-                  if (replyButton) {
-                    actions.appendChild(replyButton);
-                    actions.hidden = false;
+                  if (replyButton && quickTray) {
+                    quickTray.insertBefore(replyButton, quickTray.firstChild);
                   }
                   actions.appendChild(reactionGroup);
                   actions.appendChild(reactionMoreButton);
@@ -3560,8 +3572,6 @@ a[node] -->|edge| b[hub]
                   editContainer.hidden = !isEditing;
                   body.hidden = isEditing;
                   editButton.hidden = isEditing;
-                  if (saveEditButton) saveEditButton.hidden = !isEditing;
-                  if (cancelEditButton) cancelEditButton.hidden = !isEditing;
                   if (replyButton) replyButton.disabled = isEditing;
                   reactionButtons.forEach((button) => {
                     button.disabled = isEditing;
@@ -3624,7 +3634,6 @@ a[node] -->|edge| b[hub]
                   saveEditButton.dataset.tooltip = 'Guardar cambios';
                   saveEditButton.title = 'Guardar cambios';
                   saveEditButton.setAttribute('aria-label', 'Guardar cambios');
-                  saveEditButton.hidden = true;
                   saveEditButton.addEventListener('click', async () => {
                     if (!editTextarea) return;
                     const nextBody = editTextarea.value.trim();
@@ -3657,11 +3666,7 @@ a[node] -->|edge| b[hub]
                       if (cancelEditButton) cancelEditButton.disabled = false;
                     }
                   });
-                  if (replyButton && replyButton.parentElement === actions) {
-                    actions.insertBefore(saveEditButton, replyButton);
-                  } else {
-                    actions.prepend(saveEditButton);
-                  }
+                  editActions.appendChild(saveEditButton);
 
                   cancelEditButton = document.createElement('button');
                   cancelEditButton.type = 'button';
@@ -3670,15 +3675,10 @@ a[node] -->|edge| b[hub]
                   cancelEditButton.dataset.tooltip = 'Cancelar edición';
                   cancelEditButton.title = 'Cancelar edición';
                   cancelEditButton.setAttribute('aria-label', 'Cancelar edición');
-                  cancelEditButton.hidden = true;
                   cancelEditButton.addEventListener('click', () => {
                     setEditMode(false);
                   });
-                  if (replyButton && replyButton.parentElement === actions) {
-                    actions.insertBefore(cancelEditButton, replyButton);
-                  } else {
-                    actions.appendChild(cancelEditButton);
-                  }
+                  editActions.appendChild(cancelEditButton);
                   editContainer.appendChild(editActions);
                   attachForumEditor(editTextarea);
                   syncPostActionsVisibility();
@@ -3719,8 +3719,12 @@ a[node] -->|edge| b[hub]
                 }
 
                 if (replyButton && !replyButton.isConnected) {
-                  actions.appendChild(replyButton);
-                  actions.hidden = false;
+                  if (quickTray) {
+                    quickTray.insertBefore(replyButton, quickTray.firstChild);
+                  } else {
+                    actions.appendChild(replyButton);
+                    actions.hidden = false;
+                  }
                 }
                 main.appendChild(actions);
                 if (editContainer) {
@@ -4157,27 +4161,22 @@ a[node] -->|edge| b[hub]
         };
 
         const threadPlusActions = document.getElementById('forum-thread-plus-actions');
-        const replyOverlayActions = document.getElementById('forum-reply-overlay-actions');
         attachForumEditor(threadBodyInput, threadPlusActions);
-        attachForumEditor(replyBodyInput, replyOverlayActions);
 
         // Auto-grow for autogrow textareas (fallback for browsers without field-sizing:content)
-        const initAutoGrow = (ta) => {
-          if (!(ta instanceof HTMLTextAreaElement)) return;
-          const lh = parseFloat(getComputedStyle(ta).lineHeight) || 25.6;
+        if (threadBodyInput instanceof HTMLTextAreaElement) {
+          const lh = parseFloat(getComputedStyle(threadBodyInput).lineHeight) || 25.6;
           const maxH = 12 * lh;
           const grow = () => {
-            ta.style.height = 'auto';
-            ta.style.height = Math.min(ta.scrollHeight, maxH) + 'px';
-            ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden';
+            threadBodyInput.style.height = 'auto';
+            threadBodyInput.style.height = Math.min(threadBodyInput.scrollHeight, maxH) + 'px';
+            threadBodyInput.style.overflowY = threadBodyInput.scrollHeight > maxH ? 'auto' : 'hidden';
           };
-          ta.addEventListener('input', grow);
+          threadBodyInput.addEventListener('input', grow);
           grow();
-        };
-        initAutoGrow(threadBodyInput);
-        initAutoGrow(replyBodyInput);
+        }
 
-        // + button popup toggle
+        // + button popup toggle (new-thread)
         const plusBtn = document.getElementById('forum-plus-btn');
         const plusPopup = document.getElementById('forum-plus-popup');
         if (plusBtn && plusPopup) {
@@ -4233,8 +4232,6 @@ a[node] -->|edge| b[hub]
           document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) popup.hidden = true; });
           overlayEl.appendChild(wrap);
         };
-        addMobileEmojiTrigger(replyOverlayActions, replyBodyInput);
-
         const bindSubmitShortcut = (input, form) => {
           if (!input || !form) return;
           input.addEventListener('keydown', (event) => {
@@ -4246,7 +4243,6 @@ a[node] -->|edge| b[hub]
         };
 
         bindSubmitShortcut(threadBodyInput, newThreadForm);
-        bindSubmitShortcut(replyBodyInput, replyForm);
 
         if (postListEl instanceof HTMLElement && postListEl.dataset.mediaPreviewBound !== 'true') {
           postListEl.dataset.mediaPreviewBound = 'true';
@@ -4363,92 +4359,78 @@ a[node] -->|edge| b[hub]
           event.preventDefault();
           if (!forumState.canWrite) return;
 
-          const fullText = threadBodyInput.value.trim();
-          const nlIdx = fullText.indexOf('\n');
-          const title = (nlIdx > -1 ? fullText.slice(0, nlIdx) : fullText).trim();
-          const body = (nlIdx > -1 ? fullText.slice(nlIdx + 1).trim() : '') || title;
-          if (title.length < 3) {
-            setForumStatus('La primera línea (título) debe tener al menos 3 caracteres.', 'error');
-            return;
-          }
-
           const submitButton = newThreadForm.querySelector('button[type="submit"]');
-          if (submitButton) submitButton.disabled = true;
 
-          try {
-            const response = await fetch('/api/forum/threads', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                courseId: forumState.courseId,
-                ...getForumScopePayload(),
-                title,
-                body,
-              }),
-            });
-
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) {
-              throw new Error(payload?.error || 'No se pudo crear el hilo.');
+          if (forumState.selectedThreadId) {
+            // Reply to selected thread (or to specific post when parentPostInput.value is set)
+            const replyBody = threadBodyInput.value.trim();
+            if (!replyBody) {
+              setForumStatus('Escribe una respuesta antes de publicar.', 'error');
+              return;
             }
-
-            threadBodyInput.value = '';
-            if (newThreadContainer instanceof HTMLDetailsElement) {
-              newThreadContainer.open = false;
+            if (submitButton) submitButton.disabled = true;
+            try {
+              const response = await fetch(`/api/forum/threads/${encodeURIComponent(forumState.selectedThreadId)}/posts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  body: replyBody,
+                  parentPostId: parentPostInput.value || null,
+                }),
+              });
+              const payload = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(payload?.error || 'No se pudo publicar la respuesta.');
+              threadBodyInput.value = '';
+              clearReplyTarget();
+              setForumStatus('Respuesta publicada.', 'info');
+              await loadThreads({ preserveSelection: true });
+            } catch (error) {
+              console.error('Forum create post error:', error);
+              setForumStatus(error?.message || 'No se pudo publicar la respuesta.', 'error');
+            } finally {
+              if (submitButton) submitButton.disabled = false;
             }
-            setForumStatus('Hilo publicado.', 'info');
-            await loadThreads({ preserveSelection: false });
-          } catch (error) {
-            console.error('Forum create thread error:', error);
-            setForumStatus(error?.message || 'No se pudo crear el hilo.', 'error');
-          } finally {
-            if (submitButton) submitButton.disabled = false;
+          } else {
+            // New thread
+            const fullText = threadBodyInput.value.trim();
+            const nlIdx = fullText.indexOf('\n');
+            const title = (nlIdx > -1 ? fullText.slice(0, nlIdx) : fullText).trim();
+            const body = (nlIdx > -1 ? fullText.slice(nlIdx + 1).trim() : '') || title;
+            if (title.length < 3) {
+              setForumStatus('La primera línea (título) debe tener al menos 3 caracteres.', 'error');
+              return;
+            }
+            if (submitButton) submitButton.disabled = true;
+            try {
+              const response = await fetch('/api/forum/threads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  courseId: forumState.courseId,
+                  ...getForumScopePayload(),
+                  title,
+                  body,
+                }),
+              });
+              const payload = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(payload?.error || 'No se pudo crear el hilo.');
+              threadBodyInput.value = '';
+              if (newThreadContainer instanceof HTMLDetailsElement) {
+                newThreadContainer.open = false;
+              }
+              setForumStatus('Hilo publicado.', 'info');
+              await loadThreads({ preserveSelection: false });
+            } catch (error) {
+              console.error('Forum create thread error:', error);
+              setForumStatus(error?.message || 'No se pudo crear el hilo.', 'error');
+            } finally {
+              if (submitButton) submitButton.disabled = false;
+            }
           }
         });
 
         cancelReplyBtn.addEventListener('click', () => {
           clearReplyTarget();
-          replyForm.hidden = true;
-        });
-
-        replyForm.addEventListener('submit', async (event) => {
-          event.preventDefault();
-          if (!forumState.selectedThreadId) return;
-
-          const replyBody = replyBodyInput.value.trim();
-          if (!replyBody) {
-            setForumStatus('Escribe una respuesta antes de publicar.', 'error');
-            return;
-          }
-
-          const submitButton = replyForm.querySelector('button[type="submit"]');
-          if (submitButton) submitButton.disabled = true;
-
-          try {
-            const response = await fetch(`/api/forum/threads/${encodeURIComponent(forumState.selectedThreadId)}/posts`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                body: replyBody,
-                parentPostId: parentPostInput.value || null,
-              }),
-            });
-
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) {
-              throw new Error(payload?.error || 'No se pudo publicar la respuesta.');
-            }
-
-            replyBodyInput.value = '';
-            clearReplyTarget();
-            setForumStatus('Respuesta publicada.', 'info');
-            await loadThreads({ preserveSelection: true });
-          } catch (error) {
-            console.error('Forum create post error:', error);
-            setForumStatus(error?.message || 'No se pudo publicar la respuesta.', 'error');
-          } finally {
-            if (submitButton) submitButton.disabled = false;
-          }
         });
 
         if (forumState.mode === 'board') {
