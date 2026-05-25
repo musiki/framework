@@ -178,20 +178,20 @@
 /* ── Mobile: bottom bar ─────────────────────────────────────────────────── */
 @media (max-width: 500px) {
   .ribbon {
-    position: fixed;
-    bottom: var(--ribbon-mobile-edge-gap);
-    left: max(8px, env(safe-area-inset-left, 0px));
-    right: max(8px, env(safe-area-inset-right, 0px));
-    top: auto;
-    width: auto;
-    height: var(--ribbon-bottom-height);
+    position: fixed !important;
+    bottom: var(--ribbon-mobile-edge-gap) !important;
+    left: max(8px, env(safe-area-inset-left, 0px)) !important;
+    right: max(8px, env(safe-area-inset-right, 0px)) !important;
+    top: auto !important;
+    width: auto !important;
+    height: var(--ribbon-bottom-height) !important;
     box-sizing: border-box;
     flex-direction: row;
     justify-content: center;
     align-items: center;
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    padding: 5px 4px;
+    padding: 5px 4px !important;
     border: 1px solid var(--ribbon-border);
     border-radius: 14px;
     z-index: 100;
@@ -201,8 +201,8 @@
     box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.12);
   }
   /* show only mobile-visible items */
-  .ribbon > .ribbon-item { display: none; }
-  .ribbon > .ribbon-item--mobile-visible { display: flex; }
+  .ribbon > .ribbon-item { display: none !important; }
+  .ribbon > .ribbon-item--mobile-visible { display: flex !important; }
   .ribbon-divider,
   .ribbon-spacer,
   .ribbon-label,
@@ -232,7 +232,5 @@
 
 /* ── Desktop: hide mobile-only elements ─────────────────────────────────── */
 @media (min-width: 501px) {
-  .ribbon-mas-sheet { display: none; }
-  .ribbon-mas-toggle { display: none; }
   .ribbon-item--mobile-only { display: none; }
 }
