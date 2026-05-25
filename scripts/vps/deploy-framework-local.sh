@@ -2,8 +2,11 @@
 
 set -euo pipefail
 
-# Ensure PM2 and node are in PATH
-export PATH="/Users/zztt/.local/share/nvm/v24.14.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+# Ensure PM2 and node are in PATH; source NVM if available
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# shellcheck source=/dev/null
+[[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh" --no-use
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 FRAMEWORK_DIR="${VPS_FRAMEWORK_DIR:-/opt/musiki/framework}"
 INSTALL_COMMAND="${VPS_INSTALL_COMMAND-npm ci}"
