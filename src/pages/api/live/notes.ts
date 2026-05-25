@@ -11,6 +11,31 @@ import { query } from '../../../lib/db/pool';
 const TITLE_MAX = 160;
 const BODY_MAX  = 8_000;
 
+async function validateOwnedFolderScope(
+  folderId: string | null,
+  userId: string,
+  courseId: string | null,
+): Promise<string | null> {
+  if (!folderId) return null;
+  const { data, error } = await query(
+    `SELECT id FROM "LiveClassNoteFolder"
+     WHERE id = $1 AND "userId" = $2 AND "courseId" IS NOT DISTINCT FROM $3
+     LIMIT 1`,
+    [folderId, userId, courseId],
+  );
+  if (error) return error.message;
+  return data?.length ? null : 'Folder does not belong to this note scope';
+}
+
+async function findOwnedNoteCourseId(id: string, userId: string): Promise<string | null | undefined> {
+  const { data, error } = await query(
+    `SELECT "courseId" FROM "LiveClassNote" WHERE id = $1 AND "userId" = $2 LIMIT 1`,
+    [id, userId],
+  );
+  if (error) throw error;
+  return data?.length ? (data[0].courseId ?? null) : undefined;
+}
+
 const deriveLiveNoteTitle = (body: string, fallbackTitle = '') => {
   const firstLine = String(body || '')
     .split(/\r?\n/)
@@ -78,6 +103,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const roomName = cleanString(body?.roomName ?? '', 120) || null;
   const folderId = cleanString(String(body?.folderId ?? ''), 36) || null;
   const noteDate = cleanString(body?.noteDate ?? '', 10) || new Date().toISOString().slice(0, 10);
+
+  if (folderId) {
+    let folderCourseId = courseId;
+    if (id && !('courseId' in body)) {
+      const existingCourseId = await findOwnedNoteCourseId(id, user.id);
+      if (existingCourseId === undefined) return json({ error: 'Not found' }, 404);
+      folderCourseId = existingCourseId;
+    }
+    const folderError = await validateOwnedFolderScope(folderId, user.id, folderCourseId);
+    if (folderError) return json({ error: folderError }, 400);
+  }
 
   const row = {
     userId: user.id,
@@ -165,6 +201,10 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   // null means "remove from folder"; missing key means "don't change"
   if ('folderId' in body) {
     const folderId = body.folderId === null ? null : cleanString(String(body.folderId ?? ''), 36) || null;
+    const noteCourseId = await findOwnedNoteCourseId(id, user.id);
+    if (noteCourseId === undefined) return json({ error: 'Not found' }, 404);
+    const folderError = await validateOwnedFolderScope(folderId, user.id, noteCourseId);
+    if (folderError) return json({ error: folderError }, 400);
     params.push(folderId);
     sets.push(`"folderId" = $${params.length}`);
   }

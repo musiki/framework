@@ -2,6 +2,22 @@ import type { APIRoute } from 'astro';
 import { cleanString, ensureDbUserFromSession, json } from '../../lib/forum-server';
 import { query } from '../../lib/db/pool';
 
+async function validateOwnedParent(
+  parentId: string | null,
+  userId: string,
+  courseId: string | null,
+): Promise<string | null> {
+  if (!parentId) return null;
+  const { data, error } = await query(
+    `SELECT id FROM "LiveClassNoteFolder"
+     WHERE id = $1 AND "userId" = $2 AND "courseId" IS NOT DISTINCT FROM $3
+     LIMIT 1`,
+    [parentId, userId, courseId],
+  );
+  if (error) return error.message;
+  return data?.length ? null : 'Parent folder does not belong to this scope';
+}
+
 export const GET: APIRoute = async ({ locals, url }) => {
   const user = await ensureDbUserFromSession((locals as any).session);
   if (!user) return json({ error: 'Not authenticated' }, 401);
@@ -29,6 +45,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const courseId = cleanString(String(body?.courseId ?? ''), 120) || null;
 
   if (!name) return json({ error: 'name required' }, 400);
+  const parentError = await validateOwnedParent(parentId, user.id, courseId);
+  if (parentError) return json({ error: parentError }, 400);
 
   const { data, error } = await query(
     `INSERT INTO "LiveClassNoteFolder" (name, "parentId", "userId", "courseId")
@@ -51,6 +69,18 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     : undefined;
 
   if (!id) return json({ error: 'id required' }, 400);
+
+  if (parentId !== undefined) {
+    if (parentId === id) return json({ error: 'A folder cannot contain itself' }, 400);
+    const { data: ownFolder, error: ownFolderError } = await query(
+      `SELECT "courseId" FROM "LiveClassNoteFolder" WHERE id = $1 AND "userId" = $2 LIMIT 1`,
+      [id, user.id],
+    );
+    if (ownFolderError) return json({ error: ownFolderError.message }, 500);
+    if (!ownFolder?.length) return json({ error: 'Not found' }, 404);
+    const parentError = await validateOwnedParent(parentId, user.id, ownFolder[0].courseId ?? null);
+    if (parentError) return json({ error: parentError }, 400);
+  }
 
   const sets: string[] = [];
   const params: any[] = [];

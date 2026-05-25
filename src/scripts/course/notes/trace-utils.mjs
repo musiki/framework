@@ -43,7 +43,7 @@ export function segmentParagraphs(markdown) {
     const leadingSpace = rawPart.indexOf(trimmed);
     const from = partFrom + leadingSpace;
     const to = from + trimmed.length;
-    const id = btoa(`${index}:${trimmed.slice(0, 40)}`).replace(/=/g, '');
+    const id = `p-${index}`;
     result.push({ index, text: trimmed, id, from, to });
     index++;
   };
@@ -88,6 +88,7 @@ export function extractKeywords(text, stopwords = STOPWORDS) {
     .toLowerCase()
     .replace(/[^\p{L}\s]/gu, ' ')
     .split(/\s+/)
+    .map(lemmatizeToken)
     .filter(t => t.length >= MIN_KEYWORD_LEN && !stopwords.has(t));
 
   const freq = new Map();
@@ -97,6 +98,14 @@ export function extractKeywords(text, stopwords = STOPWORDS) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, TOP_KEYWORDS_PER_PARA)
     .map(([word]) => word);
+}
+
+export function lemmatizeToken(token) {
+  const word = String(token || '').toLowerCase();
+  if (word.length > 8 && word.endsWith('ciones')) return `${word.slice(0, -6)}ción`;
+  if (word.length > 8 && word.endsWith('idades')) return `${word.slice(0, -6)}idad`;
+  if (word.length > 6 && !word.endsWith('sis') && /[aeiouáéíóú]s$/u.test(word)) return word.slice(0, -1);
+  return word;
 }
 
 export function detectChains(paragraphsWithKeywords) {
@@ -133,4 +142,57 @@ export function computeSuggestions(paras, codes) {
     }
   }
   return results;
+}
+
+export function analyzeLocalTraces(paras, roleByParagraph = new Map(), mode = 'borrador') {
+  const keywordsByParagraph = paras.map(para => ({
+    index: para.index,
+    keywords: extractKeywords(para.text),
+  }));
+  const occurrences = new Map();
+  for (const para of keywordsByParagraph) {
+    for (const keyword of para.keywords) {
+      if (!occurrences.has(keyword)) occurrences.set(keyword, []);
+      occurrences.get(keyword).push(para.index);
+    }
+  }
+
+  return paras.map((para, offset) => {
+    const keywords = keywordsByParagraph[offset].keywords;
+    const concepts = keywords.map(label => {
+      const positions = occurrences.get(label) ?? [];
+      const status = positions[0] === para.index ? 'introducido' : 'reutilizado';
+      return { etiqueta: label, estado: status, confianza: positions.length > 1 ? 0.72 : 0.45 };
+    });
+    const relationsByTarget = new Map();
+    for (const label of keywords) {
+      const previous = (occurrences.get(label) ?? []).filter(index => index < para.index).pop();
+      if (previous === undefined) continue;
+      const evidence = relationsByTarget.get(previous)?.evidencia;
+      relationsByTarget.set(previous, {
+        indiceObjetivo: previous,
+        tipo: 'retoma',
+        evidencia: evidence ? `${evidence}, ${label}` : label,
+        confianza: 0.68,
+      });
+    }
+    const diagnostics = mode === 'artistico'
+      ? []
+      : keywords
+        .filter(label => (occurrences.get(label) ?? []).length === 1)
+        .map(label => ({
+          severidad: 'baja',
+          tipo: 'concepto_huerfano',
+          mensaje: `"${label}" aparece aquí y no vuelve a retomarse.`,
+        }));
+    return {
+      paraIndex: para.index,
+      temaPrincipal: keywords[0] ?? null,
+      conceptos: concepts,
+      rolRetorico: roleByParagraph.get(para.index) ?? null,
+      relaciones: [...relationsByTarget.values()],
+      diagnosticos: diagnostics,
+      modo: mode,
+    };
+  });
 }

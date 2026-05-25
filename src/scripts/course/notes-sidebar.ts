@@ -12,8 +12,12 @@ export async function loadNotesTree(courseId: string): Promise<{ folders: NoteFo
     fetch(`/api/note-folders?courseId=${encodeURIComponent(courseId)}`),
     fetch(`/api/live/notes?courseId=${encodeURIComponent(courseId)}&limit=200`),
   ]);
+  if (!nRes.ok) {
+    const data = await nRes.json().catch(() => null);
+    throw new Error(data?.error || 'No se pudieron cargar las notas.');
+  }
   const fData = fRes.ok ? await fRes.json() : { folders: [] };
-  const nData = nRes.ok ? await nRes.json() : { notes: [] };
+  const nData = await nRes.json();
   return { folders: fData.folders ?? [], notes: nData.notes ?? [] };
 }
 
@@ -77,8 +81,12 @@ export function renderNotesTree(
   container.innerHTML = '';
 
   const reload = async () => {
-    const { folders: f, notes: n } = await loadNotesTree(courseId);
-    renderNotesTree(container, f, n, courseId);
+    try {
+      const { folders: f, notes: n } = await loadNotesTree(courseId);
+      renderNotesTree(container, f, n, courseId);
+    } catch (error) {
+      renderNotesTreeError(container, error);
+    }
   };
 
   const children = new Map<string | null, NoteFolder[]>();
@@ -92,8 +100,10 @@ export function renderNotesTree(
   }
 
   const notesByFolder = new Map<string | null, NoteItem[]>();
+  const visibleFolderIds = new Set(folders.map(folder => folder.id));
   for (const n of notes) {
-    const key = n.folderId ?? null;
+    // Never hide a stored note merely because its folder is unavailable in this scope.
+    const key = n.folderId && visibleFolderIds.has(n.folderId) ? n.folderId : null;
     if (!notesByFolder.has(key)) notesByFolder.set(key, []);
     notesByFolder.get(key)!.push(n);
   }
@@ -364,7 +374,11 @@ async function createNoteInFolder(folderId: string | null, courseId: string, rel
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: defaultTitle, body: '', courseId, folderId }),
   });
-  if (!res.ok) return;
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    if (container) renderNotesTreeError(container, new Error(data?.error || 'No se pudo crear la nota.'));
+    return;
+  }
   const data = await res.json();
   const newId = data.note?.id;
   await reload();
@@ -401,4 +415,14 @@ function startInlineRename(titleSpan: HTMLElement, noteId: string, item: HTMLEle
 
 function escHtml(s: string) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+export function renderNotesTreeError(container: HTMLElement, error: unknown) {
+  container.querySelector('[data-notas-error]')?.remove();
+  const message = error instanceof Error ? error.message : 'Error al cargar notas.';
+  const row = document.createElement('div');
+  row.dataset.notasError = 'true';
+  row.style.cssText = 'padding:5px 8px;color:#c87e7e;font-size:11px;';
+  row.textContent = message;
+  container.prepend(row);
 }

@@ -163,13 +163,24 @@ export function renderNotesSidebar(
     activeDropTarget = null;
   }
 
+  function canAcceptDraggedNote(e: DragEvent): boolean {
+    return Boolean(draggingSlug || Array.from(e.dataTransfer?.types ?? []).includes('text/x-musiki-course-note'));
+  }
+
+  function getDraggedSlug(e: DragEvent): string | null {
+    if (draggingSlug) return draggingSlug;
+    if (!Array.from(e.dataTransfer?.types ?? []).includes('text/x-musiki-course-note')) return null;
+    const slug = e.dataTransfer?.getData('text/x-musiki-course-note')?.trim() || null;
+    return slug && notes.some(note => note.slug === slug) ? slug : null;
+  }
+
   // ── Drop line factory ──────────────────────────────────────────────────
   function makeDropLine(chapter: string, afterSlug: string | null): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'ns-drop-line';
 
     li.addEventListener('dragover', e => {
-      if (!draggingSlug) return;
+      if (!canAcceptDraggedNote(e)) return;
       e.preventDefault();
       if (activeDropTarget !== li) {
         clearDropState();
@@ -186,7 +197,7 @@ export function renderNotesSidebar(
     li.addEventListener('drop', async e => {
       e.preventDefault();
       clearDropState();
-      const slug = draggingSlug;
+      const slug = getDraggedSlug(e);
       if (!slug) return;
 
       try {
@@ -308,7 +319,7 @@ export function renderNotesSidebar(
 
     // Chapter as cross-chapter drop target
     summary.addEventListener('dragover', e => {
-      if (!draggingSlug) return;
+      if (!canAcceptDraggedNote(e)) return;
       e.preventDefault();
       if (activeDropTarget !== summary) {
         clearDropState();
@@ -325,7 +336,7 @@ export function renderNotesSidebar(
     summary.addEventListener('drop', async e => {
       e.preventDefault();
       clearDropState();
-      const slug = draggingSlug;
+      const slug = getDraggedSlug(e);
       if (!slug) return;
       try {
         const note = notes.find(n => n.slug === slug);
@@ -526,16 +537,16 @@ function injectCss() {
     }
     /* ── Drop lines ──────────────────────────────────────────── */
     .ns-drop-line {
-      height: 0;
+      height: 8px;
       list-style: none;
       padding: 0;
-      margin: 0;
-      transition: height 80ms;
+      margin: -4px 0;
+      transition: height 80ms, margin 80ms;
       overflow: visible;
       position: relative;
     }
     .ns-drop-line.ns-drop-active {
-      height: 2px;
+      height: 3px;
       background: var(--c-link, #3b82f6);
       margin: 2px 0;
     }

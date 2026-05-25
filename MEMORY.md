@@ -1,5 +1,13 @@
 # MEMORY.md — Project Activity Log
 
+<2026-05-25 notas-p0-trazas-locales> <br>
+P0 de análisis local y anotación manual de NOTAS (worktree actual, sin commit).
+- Agregada persistencia `"LiveClassNoteTrace"` en PostgreSQL para trazas por párrafo y versión (`note_id + para_index + text_hash`), con conceptos, relaciones, diagnósticos y modo.
+- El panel Estructura calcula cadenas léxicas localmente, usa lematización ligera en castellano, muestra roles manuales/rails verticales y un DAG de relaciones `retoma`.
+- Los códigos `local_nlp` preexistentes sin `text_hash` quedan preservados pero fuera del render; la emergencia automática ahora vive únicamente en trazas versionadas.
+- Incorporados modos en español; `artistico` mantiene cadenas visibles pero suspende indicios de progresión lineal.
+- Sin integración LLM: P1 queda explícitamente separado del pase local determinista.
+
 <2026-05-24 shortcuts-for-notes> <br>
 Global shortcuts for CodeMirror notes editors.
 - Added `Mod-ArrowUp` (Cmd+Up on Mac, Ctrl+Up on Win/Linux) to go to start of document.

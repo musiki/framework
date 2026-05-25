@@ -220,9 +220,8 @@ export function injectWorkspaceCss(containerId: string) {
     .cnw-body .cm-scroller { padding: 1.2rem 1.5rem !important; font-size: var(--font-size-base, 1rem); line-height: 1.72; overflow: auto; }
     .cnw-body .cm-content { caret-color: var(--c-link, #3b82f6) !important; }
     .cnw-body .cm-focused { outline: none !important; }
-    /* Hide the title-input row and toolbar from inline-editor — we use cnw-title in the header */
+    /* The shell owns the title row; the YAML strip remains available below it. */
     .cnw-body #nie-editor-panel > div:first-child { display: none !important; }
-    .cnw-body #nie-toolbar { display: none !important; }
     .cnw-body #nie-editor-panel { flex: 1; height: 100%; }
   `;
   document.head.appendChild(style);

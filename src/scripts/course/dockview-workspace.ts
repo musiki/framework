@@ -535,6 +535,7 @@ function mountEditor(state: PanelState, overrideContent: string | null) {
     persistence: state.persistence!,
     overrideContent,
     hideHeader: true,  // no header row needed — we have our own
+    showMetadata: true,
   };
 
   mountInlineNotesEditor(opts);

@@ -25,6 +25,7 @@ export type InlineEditorOptions = {
   // New fields (optional for backward compatibility):
   persistence?: import('../notes-persistence').NotesPersistence | null;
   hideHeader?: boolean;       // hide the top header bar (we have our own in the panel)
+  showMetadata?: boolean;     // keep the YAML property strip available in headerless pods
   overrideContent?: string | null; // pre-loaded content (e.g. recovered draft)
 };
 
@@ -167,6 +168,8 @@ function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: strin
 async function loadNote(
   slug: string,
   courseId: string,
+  mountEl: HTMLElement,
+  showMetadata: boolean,
   statusEl: HTMLElement,
   overrideContent?: string | null,
   onEditorChange?: () => void,
@@ -190,29 +193,36 @@ async function loadNote(
       }
     }
     const { data, body } = parseFrontmatter(noteContent);
+    const listed = notesList.find(note => note.slug === slug || note.filePath === slug);
+    const effectiveData: FrontmatterData = {
+      ...data,
+      title: data.title || listed?.title || '',
+      chapter: data.chapter || listed?.chapter || '',
+      theme: data.theme || listed?.theme || '',
+    };
 
-    const toolbar = document.getElementById('nie-toolbar');
-    if (toolbar) toolbar.style.display = '';
+    const toolbar = mountEl.querySelector<HTMLElement>('#nie-toolbar');
+    if (toolbar && showMetadata) toolbar.style.display = '';
 
-    const titleEl = document.getElementById('nie-title') as HTMLInputElement | null;
-    if (titleEl) titleEl.value = data.title || '';
+    const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
+    if (titleEl) titleEl.value = effectiveData.title || '';
 
-    populateYamlStrip(notesList, data);
+    if (showMetadata) populateYamlStrip(notesList, effectiveData, mountEl);
 
     if (editorCreated) {
       setEditorContent(body);
     } else {
-      const wrap = document.getElementById('editor-cm-wrap');
+      const wrap = mountEl.querySelector<HTMLElement>('#editor-cm-wrap');
       if (wrap) {
         createEditor(wrap, body, onEditorChange ?? (() => {}));
         editorCreated = true;
-        initToolbar(courseId, (msg, type) => setStatus(statusEl, msg, type));
+        initToolbar(courseId, (msg, type) => setStatus(statusEl, msg, type), mountEl);
       }
     }
 
     currentSlug = slug;
     setStatus(statusEl, '');
-    return data as FrontmatterData;
+    return effectiveData;
   } catch (err) {
     setStatus(statusEl, err instanceof Error ? err.message : 'Error al cargar', 'error');
     return null;
@@ -222,6 +232,7 @@ async function loadNote(
 
 async function saveCurrentNote(
   courseId: string,
+  mountEl: HTMLElement,
   statusEl: HTMLElement,
 ): Promise<void> {
   if (!currentSlug) {
@@ -232,10 +243,10 @@ async function saveCurrentNote(
   setStatus(statusEl, 'Guardando...');
   try {
     const body = getEditorContent();
-    const titleEl = document.getElementById('nie-title') as HTMLInputElement | null;
+    const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
     const title = titleEl?.value || '';
 
-    const yamlFields = readYamlStrip();
+    const yamlFields = readYamlStrip(mountEl);
     const fmData: FrontmatterData = {
       title,
       type: yamlFields.type || 'lesson',
@@ -278,13 +289,14 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
   mountEl.style.cssText = 'display:flex;flex-direction:column;overflow:hidden;height:100%;';
 
   const hideHeader = opts.hideHeader ?? false;
+  const showMetadata = opts.showMetadata ?? !hideHeader;
 
   // Render HTML skeleton
   buildLayout(mountEl, courseId, courseName, slug, hideHeader);
 
-  const statusEl = document.getElementById('nie-status') as HTMLElement | null;
-  const saveBtn = document.getElementById('nie-save') as HTMLButtonElement | null;
-  const closeBtn = document.getElementById('nie-close') as HTMLButtonElement | null;
+  const statusEl = mountEl.querySelector<HTMLElement>('#nie-status');
+  const saveBtn = mountEl.querySelector<HTMLButtonElement>('#nie-save');
+  const closeBtn = mountEl.querySelector<HTMLButtonElement>('#nie-close');
 
   if (!hideHeader && (!statusEl || !saveBtn || !closeBtn)) {
     console.error('inline-editor: required DOM elements missing');
@@ -324,7 +336,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
 
   if (saveBtn && !opts.persistence) {
     saveBtn.addEventListener('click', () => {
-      void saveCurrentNote(courseId, statusEl!);
+      void saveCurrentNote(courseId, mountEl, statusEl!);
     });
   }
 
@@ -333,7 +345,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
       if (!mounted) return;
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        void saveCurrentNote(courseId, statusEl!);
+        void saveCurrentNote(courseId, mountEl, statusEl!);
       }
     };
     document.addEventListener('keydown', keydownHandler);
@@ -343,9 +355,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     const myToken = ++mountToken;
 
     const activeStatusEl0 = statusEl ?? document.createElement('span');
-    // In pod mode (hideHeader) the notes list is only needed for the YAML-strip chapter autocomplete
-    // which isn't rendered — skip the fetch to avoid a ~2s network round-trip before loading the note.
-    if (!opts.hideHeader) {
+    if (showMetadata) {
       setStatus(activeStatusEl0, 'Cargando notas...');
       try {
         const { notes } = await listNotes(courseId);
@@ -354,7 +364,6 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
       } catch (err) {
         if (mountToken !== myToken) return;
         setStatus(activeStatusEl0, err instanceof Error ? err.message : 'Error al cargar notas', 'error');
-        return;
       }
     }
 
@@ -366,13 +375,9 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     const persistenceOnChange = opts.persistence
       ? () => {
         const body = getEditorContent();
-        if (opts.hideHeader && fmRef.data) {
-          // Pod mode: frontmatter is not editable — preserve it, only update body
-          opts.persistence!.onChange(serializeFrontmatter(fmRef.data, body));
-        } else if (!opts.hideHeader) {
-          // Full editor: read live values from title + yaml strip UI
-          const titleEl = document.getElementById('nie-title') as HTMLInputElement | null;
-          const yamlFields = readYamlStrip();
+        if (showMetadata && fmRef.data) {
+          const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
+          const yamlFields = readYamlStrip(mountEl);
           const fmData: FrontmatterData = {
             title: titleEl?.value || fmRef.data?.title || '',
             type: yamlFields.type || fmRef.data?.type || 'lesson',
@@ -382,14 +387,22 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
             theme: yamlFields.theme || fmRef.data?.theme || '',
           };
           opts.persistence!.onChange(serializeFrontmatter(fmData, body));
+        } else if (fmRef.data) {
+          opts.persistence!.onChange(serializeFrontmatter(fmRef.data, body));
         } else {
           opts.persistence!.onChange(body);
         }
       }
       : undefined;
 
+    if (persistenceOnChange && showMetadata) {
+      const yamlForm = mountEl.querySelector<HTMLFormElement>('#nie-yaml-form');
+      yamlForm?.addEventListener('change', persistenceOnChange);
+      yamlForm?.addEventListener('input', persistenceOnChange);
+    }
+
     if (mode === 'edit' && slug) {
-      fmRef.data = await loadNote(slug, courseId, activeStatusEl, opts.overrideContent ?? null, persistenceOnChange);
+      fmRef.data = await loadNote(slug, courseId, mountEl, showMetadata, activeStatusEl, opts.overrideContent ?? null, persistenceOnChange);
     } else if (mode === 'create') {
       const title = prompt('Nueva nota — Título:');
       if (!title) { setStatus(activeStatusEl, ''); return; }
@@ -403,18 +416,18 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
         if (mountToken !== myToken) return;
         notesList = notes;
         const fullSlug = notes.find(n => n.slug.endsWith(`/${newSlug}.md`))?.slug || newSlug;
-        fmRef.data = await loadNote(fullSlug, courseId, activeStatusEl, null, persistenceOnChange);
+        fmRef.data = await loadNote(fullSlug, courseId, mountEl, showMetadata, activeStatusEl, null, persistenceOnChange);
       } catch (err) {
         if (mountToken !== myToken) return;
         setStatus(activeStatusEl, err instanceof Error ? err.message : 'Error al crear', 'error');
       }
     } else {
       setStatus(activeStatusEl, 'Seleccioná una nota del árbol');
-      const wrap = document.getElementById('editor-cm-wrap');
+      const wrap = mountEl.querySelector<HTMLElement>('#editor-cm-wrap');
       if (wrap && !editorCreated) {
         createEditor(wrap, '', () => {});
         editorCreated = true;
-        initToolbar(courseId, (msg, type) => setStatus(activeStatusEl, msg, type));
+        initToolbar(courseId, (msg, type) => setStatus(activeStatusEl, msg, type), mountEl);
       }
     }
   })();

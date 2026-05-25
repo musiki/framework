@@ -57,9 +57,10 @@ function stringifyYamlValue(v: unknown): string {
 }
 
 export function parseFrontmatter(content: string): { data: FrontmatterData; body: string } {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(content);
+  const normalized = content.replace(/^\uFEFF/, '');
+  const match = /^(?:[ \t]*\r?\n)*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/.exec(normalized);
   const raw = match ? parseYamlBlock(match[1]) : {};
-  const body = match ? content.slice(match[0].length) : content;
+  const body = match ? normalized.slice(match[0].length) : normalized;
   return {
     data: {
       title: String(raw.title || ''),
@@ -87,13 +88,14 @@ export function serializeFrontmatter(data: FrontmatterData, body: string): strin
   return lines.join('\n') + trimmed;
 }
 
-export function populateYamlStrip(notes: NoteListItem[], data: FrontmatterData) {
-  const typeEl = document.getElementById('fm-type') as HTMLSelectElement;
-  const chapterEl = document.getElementById('fm-chapter') as HTMLInputElement;
-  const chapterList = document.getElementById('fm-chapter-list') as HTMLDataListElement | null;
-  const statusEl = document.getElementById('fm-status') as HTMLSelectElement;
-  const orderEl = document.getElementById('fm-order') as HTMLInputElement;
-  const themeEl = document.getElementById('fm-theme') as HTMLSelectElement;
+export function populateYamlStrip(notes: NoteListItem[], data: FrontmatterData, root: ParentNode = document) {
+  const typeEl = root.querySelector<HTMLSelectElement>('#fm-type');
+  const chapterEl = root.querySelector<HTMLInputElement>('#fm-chapter');
+  const chapterList = root.querySelector<HTMLDataListElement>('#fm-chapter-list');
+  const statusEl = root.querySelector<HTMLSelectElement>('#fm-status');
+  const orderEl = root.querySelector<HTMLInputElement>('#fm-order');
+  const themeEl = root.querySelector<HTMLSelectElement>('#fm-theme');
+  if (!typeEl || !chapterEl || !statusEl || !orderEl || !themeEl) return;
 
   const chapters = [...new Set(notes.map(n => n.chapter).filter(Boolean))].sort();
   if (chapterList) {
@@ -121,12 +123,17 @@ export function populateYamlStrip(notes: NoteListItem[], data: FrontmatterData) 
   themeEl.value = data.theme || '';
 }
 
-export function readYamlStrip(): Partial<FrontmatterData> {
+export function readYamlStrip(root: ParentNode = document): Partial<FrontmatterData> {
+  const typeEl = root.querySelector<HTMLSelectElement>('#fm-type');
+  const chapterEl = root.querySelector<HTMLInputElement>('#fm-chapter');
+  const statusEl = root.querySelector<HTMLSelectElement>('#fm-status');
+  const orderEl = root.querySelector<HTMLInputElement>('#fm-order');
+  const themeEl = root.querySelector<HTMLSelectElement>('#fm-theme');
   return {
-    type: (document.getElementById('fm-type') as HTMLSelectElement).value,
-    chapter: ((document.getElementById('fm-chapter') as HTMLInputElement).value || '').trim(),
-    status: (document.getElementById('fm-status') as HTMLSelectElement).value,
-    order: Number((document.getElementById('fm-order') as HTMLInputElement).value) || 0,
-    theme: (document.getElementById('fm-theme') as HTMLSelectElement).value || undefined,
+    type: typeEl?.value,
+    chapter: (chapterEl?.value || '').trim(),
+    status: statusEl?.value,
+    order: Number(orderEl?.value) || 0,
+    theme: themeEl?.value || undefined,
   };
 }

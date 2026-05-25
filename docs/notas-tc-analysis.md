@@ -23,50 +23,53 @@ The lens comes from **thematic progression** (Daneš 1974), **RST** (Mann & Thom
 Every paragraph gets a **trace record**:
 
 ```typescript
-type ParagraphTrace = {
+type TrazaParrafo = {
   id: string;
-  documentId: string;   // noteId
-  index: number;        // paragraph order (0-based)
-  textHash: string;     // sha1 of paragraph text — used to skip re-analysis
-  mainTheme: string | null;
-  concepts: ConceptMention[];
-  rhetoricalRole: RhetoricalRole | null;
-  relations: ParagraphRelation[];
-  diagnostics: Diagnostic[];
+  noteId: string;
+  paraIndex: number;    // orden del párrafo (base 0)
+  textHash: string;     // sha1 del texto: identifica la versión analizada
+  temaPrincipal: string | null;
+  conceptos: MencionConceptual[];
+  rolRetorico: RolRetorico | null;
+  relaciones: RelacionParrafo[];
+  diagnosticos: Diagnostico[];
+  modo: ModoTraza;
   updatedAt: string;
 };
 
-type ConceptMention = {
-  label: string;
-  status: 'introduced' | 'reused' | 'transformed' | 'dropped' | 'synthesized';
-  confidence: number;
+type MencionConceptual = {
+  etiqueta: string;
+  estado: 'introducido' | 'reutilizado' | 'transformado' | 'abandonado' | 'sintetizado';
+  confianza: number;
 };
 
-type ParagraphRelation = {
-  targetIndex: number;
-  type:
-    | 'extends' | 'contrasts' | 'exemplifies'
-    | 'returns_to' | 'synthesizes' | 'problematizes'
-    | 'supports' | 'transitions' | 'defines';
-  evidence: string;
-  confidence: number;
+type RelacionParrafo = {
+  indiceObjetivo: number;
+  tipo:
+    | 'extiende' | 'contrasta' | 'ejemplifica'
+    | 'retoma' | 'sintetiza' | 'problematiza'
+    | 'sostiene' | 'transiciona' | 'define';
+  evidencia: string;
+  confianza: number;
 };
 
-type RhetoricalRole =
-  | 'claim' | 'definition' | 'context' | 'literature'
-  | 'example' | 'analysis' | 'contrast' | 'transition'
-  | 'synthesis' | 'method' | 'reflection' | 'conclusion';
+type RolRetorico =
+  | 'afirmacion' | 'definicion' | 'contexto' | 'literatura'
+  | 'ejemplo' | 'analisis' | 'contraste' | 'transicion'
+  | 'sintesis' | 'metodo' | 'reflexion' | 'conclusion';
 
-type Diagnostic = {
-  severity: 'low' | 'medium' | 'high';
-  type:
-    | 'orphan_concept'      // introduced, never returned to
-    | 'unclosed_synthesis'  // promised synthesis not delivered
-    | 'abrupt_transition'   // incompatible rhetorical roles adjacent
-    | 'concept_drift'       // concept reused with shifted meaning
-    | 'needs_bridge';       // synthesis without transition
-  message: string;
+type Diagnostico = {
+  severidad: 'baja' | 'media' | 'alta';
+  tipo:
+    | 'concepto_huerfano'
+    | 'sintesis_abierta'
+    | 'transicion_abrupta'
+    | 'deriva_conceptual'
+    | 'necesita_puente';
+  mensaje: string;
 };
+
+type ModoTraza = 'borrador' | 'seminario' | 'tesis' | 'artistico' | 'entrega';
 ```
 
 ---
@@ -146,14 +149,21 @@ A **graph view** (collapsible) shows the paragraph DAG: nodes are paragraphs, ed
 
 ## 5. Implementation phases
 
-### P0 — Local analysis + manual annotation (no AI)
+### P0 — Análisis local + anotación manual (sin IA)
 - Segment note body by blank lines → paragraphs
 - Extract top-N lemmatized keywords per paragraph (simple frequency, stopword filter)
 - Detect lexical chains: keywords appearing in ≥2 paragraphs
 - Detect orphan concepts: introduced in one paragraph, absent in all following
 - Render margin panel with role dropdown (manual), concept badges
-- Persist traces in `live_note_traces` DB table (keyed by `noteId + paraIndex + textHash`)
+- Persist traces in `"LiveClassNoteTrace"` DB table (keyed by `noteId + paraIndex + textHash`)
 - Graph view: basic SVG DAG
+
+Implementado el 2026-05-25: el pase local usa lematización ligera en castellano,
+conceptos/retomas/indicios persistidos, selección manual de rol, modo de análisis y
+un DAG SVG. `LiveClassNoteCode` permanece como vocabulario de códigos confirmados
+por el usuario; `LiveClassNoteTrace` guarda la lectura estructural versionada. Los
+conceptos emergentes aparecen directamente desde la traza con hash, para que una
+reescritura no deje etiquetas automáticas obsoletas pegadas a un índice.
 
 ### P1 — LLM-assisted classification
 - "Analyze structure" button → sends current note to LLM
@@ -173,18 +183,20 @@ A **graph view** (collapsible) shows the paragraph DAG: nodes are paragraphs, ed
 ## 6. DB schema (minimal P0)
 
 ```sql
-CREATE TABLE live_note_traces (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  note_id     UUID NOT NULL REFERENCES live_notes(id) ON DELETE CASCADE,
-  para_index  INTEGER NOT NULL,
-  text_hash   CHAR(40) NOT NULL,
-  main_theme  TEXT,
-  role        TEXT,
-  concepts    JSONB DEFAULT '[]',
-  relations   JSONB DEFAULT '[]',
-  diagnostics JSONB DEFAULT '[]',
-  updated_at  TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (note_id, para_index)
+CREATE TABLE "LiveClassNoteTrace" (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  note_id          UUID NOT NULL REFERENCES "LiveClassNote"(id) ON DELETE CASCADE,
+  para_index       INTEGER NOT NULL,
+  text_hash        CHAR(40) NOT NULL,
+  main_theme       TEXT,
+  rhetorical_role  TEXT,
+  concepts         JSONB NOT NULL DEFAULT '[]',
+  relations        JSONB NOT NULL DEFAULT '[]',
+  diagnostics      JSONB NOT NULL DEFAULT '[]',
+  analysis_mode    TEXT NOT NULL DEFAULT 'borrador',
+  source           TEXT NOT NULL DEFAULT 'local_nlp',
+  updated_at       TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (note_id, para_index, text_hash)
 );
 ```
 
@@ -202,11 +214,27 @@ The save pipeline (`/api/live/notes`) remains unchanged. Traces are written to a
 
 | Mode | Behaviour |
 |---|---|
-| `draft` | Analysis private, non-evaluative, no submission link |
-| `seminar` | Trace visible to instructor on request |
-| `thesis` | Full diagnostic report, version comparison |
-| `artistic` | Disables linear-progression warnings, allows montage |
-| `submission` | Snapshot of trace frozen with submission; no re-analysis |
+| `borrador` | Análisis privado, no evaluativo, sin vínculo de entrega |
+| `seminario` | Traza visible al docente cuando se solicite |
+| `tesis` | Informe diagnóstico completo y comparación de versiones |
+| `artistico` | Desactiva alertas de progresión lineal; permite montaje/fragmento |
+| `entrega` | Instantánea congelada con la entrega; sin reanálisis |
+
+### Instrumento siguiente: mapa de progresión y cohesión
+
+Antes de P1 puede sumarse una vista manual basada directamente en la bibliografía:
+
+- **Daneš**: carriles por párrafo para marcar `tema nuevo`, `tema retomado` y
+  `progresión derivada`.
+- **Halliday y Hasan**: las cadenas léxicas actuales se convierten en enlaces
+  visibles de recurrencia, sustitución o elipsis anotada manualmente.
+- **Mann y Thompson**: cada arista del DAG puede recibir una relación manual
+  (`contrasta`, `ejemplifica`, `sostiene`, `sintetiza`) sin atribuirla a una IA.
+
+La herramienta sería un **Mapa de continuidad discursiva**: una segunda lectura
+del mismo DAG, útil para docentes porque permite preguntar dónde vuelve una idea,
+qué párrafo la sostiene y qué enlace quedó implícito. El análisis local sugiere
+recurrencias; la interpretación retórica permanece en manos del usuario.
 
 ---
 

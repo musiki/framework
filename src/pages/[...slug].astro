@@ -3443,7 +3443,18 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         {canManageLiveInteractions ? (
           <>
-            {sidebarChapterEntries.filter(e => e.kind === 'recursos' || e.kind === 'chapter').map((entry) => {
+            {localContentAdminEnabled && (
+              <div
+                data-notes-sidebar
+                data-course-id={canonicalCourseId || courseSlug}
+                data-course-href={courseHref}
+                data-active-slug={currentEntrySourcePath || ''}
+              ></div>
+            )}
+            {sidebarChapterEntries.filter(e =>
+              e.kind === 'recursos'
+              || (e.kind === 'chapter' && (!localContentAdminEnabled || e.lessons.some((lesson) => (lesson as any).collection === 'content')))
+            ).map((entry) => {
           if (entry.kind === 'recursos') {
             return (
               <div class="chapter">
@@ -3526,7 +3537,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
               </div>
             );
           }
-          const { chapterName, lessons } = entry;
+          const { chapterName } = entry;
+          const lessons = localContentAdminEnabled
+            ? entry.lessons.filter((lesson) => (lesson as any).collection === 'content')
+            : entry.lessons;
+          if (lessons.length === 0) return null;
           const isPublicFolder = /^[79]\d /.test(chapterName);
           const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
           const isTOC = chapterName === 'TOC de clase';
@@ -13485,7 +13500,7 @@ a[node] -->|edge| b[hub]
     <Search />
     {session?.user && canonicalCourseIdToUse && (
       <script>
-        import { loadNotesTree, renderNotesTree, beginRootNoteCreation, beginInlineFolderCreation } from '../scripts/course/notes-sidebar';
+        import { loadNotesTree, renderNotesTree, renderNotesTreeError, beginRootNoteCreation, beginInlineFolderCreation } from '../scripts/course/notes-sidebar';
 
         async function bootNotasSidebar() {
           const sidebarEl = document.querySelector<HTMLElement>('[data-notas-sidebar]');
@@ -13499,8 +13514,12 @@ a[node] -->|edge| b[hub]
           const details = sidebarEl.querySelector<HTMLDetailsElement>('details');
 
           const reload = async () => {
-            const { folders, notes } = await loadNotesTree(courseId);
-            renderNotesTree(treeEl, folders, notes, courseId);
+            try {
+              const { folders, notes } = await loadNotesTree(courseId);
+              renderNotesTree(treeEl, folders, notes, courseId);
+            } catch (error) {
+              renderNotesTreeError(treeEl, error);
+            }
           };
 
           let loaded = false;

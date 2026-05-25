@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   segmentParagraphs, computeOrphanLabels,
   resolveParagraphIndex, collectParagraphIndicesInRange,
-  extractKeywords, detectChains, computeSuggestions,
+  extractKeywords, lemmatizeToken, detectChains, computeSuggestions, analyzeLocalTraces,
 } from './trace-utils.mjs';
 
 describe('segmentParagraphs', () => {
@@ -40,6 +40,11 @@ describe('segmentParagraphs', () => {
     const [a, b] = segmentParagraphs('Hello world\n\nFoo bar');
     assert.equal(typeof a.id, 'string');
     assert.notEqual(a.id, b.id);
+  });
+
+  test('accepts accented Spanish paragraph text when building identifiers', () => {
+    const [paragraph] = segmentParagraphs('Síntesis y transformación melódica.');
+    assert.equal(paragraph.id, 'p-0');
   });
 
   test('returns empty array for empty string', () => {
@@ -115,6 +120,12 @@ describe('extractKeywords', () => {
     assert.ok(kws.includes('armonía'));
     assert.ok(kws.includes('tonalidad'));
   });
+
+  test('uses lightweight Spanish lemmatization before counting', () => {
+    assert.equal(lemmatizeToken('melodías'), 'melodía');
+    assert.equal(lemmatizeToken('transformaciones'), 'transformación');
+    assert.deepEqual(extractKeywords('melodías melodía transformaciones transformación'), ['melodía', 'transformación']);
+  });
 });
 
 describe('detectChains', () => {
@@ -167,5 +178,34 @@ describe('computeSuggestions', () => {
   test('returns empty array for single paragraph (no chains possible)', () => {
     const paras = [{ index: 0, text: 'contrapunto melodía armonía síntesis' }];
     assert.deepEqual(computeSuggestions(paras, []), []);
+  });
+});
+
+describe('analyzeLocalTraces', () => {
+  const paras = segmentParagraphs(
+    'La melodía presenta una textura clara.\n\nLa melodía regresa como contraste.\n\nAparece únicamente timbre.',
+  );
+
+  test('creates concepts and relations for lexical chains', () => {
+    const traces = analyzeLocalTraces(paras);
+    assert.equal(traces[0].conceptos.find(c => c.etiqueta === 'melodía')?.estado, 'introducido');
+    assert.equal(traces[1].conceptos.find(c => c.etiqueta === 'melodía')?.estado, 'reutilizado');
+    assert.equal(traces[1].relaciones[0].indiceObjetivo, 0);
+    assert.equal(traces[1].relaciones[0].tipo, 'retoma');
+  });
+
+  test('marks concepts not resumed later as low-severity diagnostics', () => {
+    const traces = analyzeLocalTraces(paras);
+    assert.ok(traces[2].diagnosticos.some(d => d.tipo === 'concepto_huerfano'));
+  });
+
+  test('artistic mode suppresses linear-progression diagnostics', () => {
+    const traces = analyzeLocalTraces(paras, new Map(), 'artistico');
+    assert.ok(traces.every(trace => trace.diagnosticos.length === 0));
+  });
+
+  test('keeps manually assigned rhetorical roles', () => {
+    const traces = analyzeLocalTraces(paras, new Map([[1, 'contraste']]));
+    assert.equal(traces[1].rolRetorico, 'contraste');
   });
 });

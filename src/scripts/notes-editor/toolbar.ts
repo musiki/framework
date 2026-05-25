@@ -30,8 +30,12 @@ function detectVideoEmbed(url: string): string | null {
   return null;
 }
 
-export function initToolbar(courseId: string, statusFn: (msg: string, type?: 'ok' | 'error') => void) {
-  document.querySelectorAll<HTMLButtonElement>('.snip-btn[data-snippet]').forEach(btn => {
+export function initToolbar(
+  courseId: string,
+  statusFn: (msg: string, type?: 'ok' | 'error') => void,
+  root: ParentNode = document,
+) {
+  root.querySelectorAll<HTMLButtonElement>('.snip-btn[data-snippet]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const key = btn.dataset.snippet!;
 
@@ -60,7 +64,7 @@ export function initToolbar(courseId: string, statusFn: (msg: string, type?: 'ok
     });
   });
 
-  const editorWrap = document.getElementById('editor-cm-wrap');
+  const editorWrap = root.querySelector<HTMLElement>('#editor-cm-wrap');
   if (!editorWrap) return;
 
   editorWrap.addEventListener('dragover', e => {

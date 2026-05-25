@@ -27,6 +27,41 @@ type Paragraph = {
   to: number;
 };
 
+type TraceMode = 'borrador' | 'seminario' | 'tesis' | 'artistico' | 'entrega';
+type RhetoricalRole =
+  | 'afirmacion' | 'definicion' | 'contexto' | 'literatura'
+  | 'ejemplo' | 'analisis' | 'contraste' | 'transicion'
+  | 'sintesis' | 'metodo' | 'reflexion' | 'conclusion';
+type ConceptMention = {
+  etiqueta: string;
+  estado: 'introducido' | 'reutilizado' | 'transformado' | 'abandonado' | 'sintetizado';
+  confianza: number;
+};
+type ParagraphRelation = {
+  indiceObjetivo: number;
+  tipo: 'retoma';
+  evidencia: string;
+  confianza: number;
+};
+type Diagnostic = {
+  severidad: 'baja' | 'media' | 'alta';
+  tipo: 'concepto_huerfano';
+  mensaje: string;
+};
+type ParagraphTrace = {
+  id?: string;
+  noteId?: string;
+  paraIndex: number;
+  textHash: string;
+  temaPrincipal: string | null;
+  conceptos: ConceptMention[];
+  rolRetorico: RhetoricalRole | null;
+  relaciones: ParagraphRelation[];
+  diagnosticos: Diagnostic[];
+  modo: TraceMode;
+  updatedAt?: string;
+};
+
 export interface TraceMarginHandle {
   destroy(): void;
 }
@@ -38,7 +73,47 @@ type MonitorState = {
   lexicalQuery: string;
   activeParagraph: number | null;
   visibleParagraphs: Set<number>;
+  mode: TraceMode;
 };
+
+const ROLE_PRESENTATION: Record<RhetoricalRole, { label: string; short: string; hue: number }> = {
+  afirmacion: { label: 'afirmación', short: 'AFI', hue: 15 },
+  definicion: { label: 'definición', short: 'DEF', hue: 205 },
+  contexto: { label: 'contexto', short: 'CTX', hue: 220 },
+  literatura: { label: 'literatura', short: 'LIT', hue: 275 },
+  ejemplo: { label: 'ejemplo', short: 'EJE', hue: 142 },
+  analisis: { label: 'análisis', short: 'ANA', hue: 185 },
+  contraste: { label: 'contraste', short: 'CON', hue: 2 },
+  transicion: { label: 'transición', short: 'TRA', hue: 38 },
+  sintesis: { label: 'síntesis', short: 'SIN', hue: 300 },
+  metodo: { label: 'método', short: 'MET', hue: 170 },
+  reflexion: { label: 'reflexión', short: 'REF', hue: 258 },
+  conclusion: { label: 'conclusión', short: 'CIE', hue: 330 },
+};
+const RHETORICAL_ROLES = Object.keys(ROLE_PRESENTATION) as RhetoricalRole[];
+const MODE_LABELS: Record<TraceMode, string> = {
+  borrador: 'Borrador',
+  seminario: 'Seminario',
+  tesis: 'Tesis',
+  artistico: 'Artístico',
+  entrega: 'Entrega',
+};
+const LEGACY_ROLES: Record<string, RhetoricalRole> = {
+  claim: 'afirmacion', definition: 'definicion', context: 'contexto', literature: 'literatura',
+  example: 'ejemplo', analysis: 'analisis', contrast: 'contraste', transition: 'transicion',
+  synthesis: 'sintesis', method: 'metodo', reflection: 'reflexion', conclusion: 'conclusion',
+};
+
+function analyticalCodes(codes: TraceCode[]): TraceCode[] {
+  // Older Stage 1 builds materialized local NLP as index-only codes. They are
+  // intentionally ignored now: derived concepts live in hash-keyed traces.
+  return codes.filter(code => code.dimension !== 'rhetorical' && code.source !== 'local_nlp');
+}
+
+function roleValue(code: TraceCode | undefined): RhetoricalRole | '' {
+  const value = code?.label.replace(/^(role|rol):/, '') ?? '';
+  return (LEGACY_ROLES[value] ?? value) as RhetoricalRole | '';
+}
 
 // ── Pure functions (mirrored in trace-utils.mjs for testing) ───────────────
 
@@ -55,7 +130,7 @@ export function segmentParagraphs(markdown: string): Paragraph[] {
     const leadingSpace = rawPart.indexOf(trimmed);
     const from = partFrom + leadingSpace;
     const to = from + trimmed.length;
-    const id = btoa(`${index}:${trimmed.slice(0, 40)}`).replace(/=/g, '');
+    const id = `p-${index}`;
     result.push({ index, text: trimmed, id, from, to });
     index++;
   };
@@ -132,6 +207,7 @@ function extractKeywords(text: string): string[] {
     .toLowerCase()
     .replace(/[^\p{L}]/gu, ' ')
     .split(/\s+/)
+    .map(lemmatizeToken)
     .filter(t => t.length >= MIN_KEYWORD_LEN && !STOPWORDS.has(t));
   const freq = new Map<string, number>();
   for (const t of tokens) freq.set(t, (freq.get(t) ?? 0) + 1);
@@ -139,6 +215,13 @@ function extractKeywords(text: string): string[] {
     .sort((a, b) => b[1] - a[1])
     .slice(0, TOP_KEYWORDS_PER_PARA)
     .map(([t]) => t);
+}
+
+function lemmatizeToken(token: string): string {
+  if (token.length > 8 && token.endsWith('ciones')) return `${token.slice(0, -6)}ción`;
+  if (token.length > 8 && token.endsWith('idades')) return `${token.slice(0, -6)}idad`;
+  if (token.length > 6 && !token.endsWith('sis') && /[aeiouáéíóú]s$/u.test(token)) return token.slice(0, -1);
+  return token;
 }
 
 function detectChains(paragraphsWithKeywords: { index: number; keywords: string[] }[]): Map<string, number[]> {
@@ -167,33 +250,89 @@ export function computeSuggestions(paras: Paragraph[], codes: TraceCode[]): Trac
   return suggestions;
 }
 
-async function materializeEmergentCodes(paras: Paragraph[], codes: TraceCode[], noteId: string): Promise<TraceCode[]> {
-  const created = await Promise.all(computeSuggestions(paras, codes).map(async suggestion => {
-    try {
-      const res = await fetch('/api/live/notes/trace', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          noteId,
-          paraIndex: suggestion.paraIndex,
-          label: suggestion.label,
-          dimension: 'emergent',
-          source: 'local_nlp',
-          confidence: 0.65,
-        }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json() as { code?: TraceCode };
-      return data.code ?? null;
-    } catch {
-      return null;
-    }
+async function paragraphTextHash(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-1', bytes);
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function computeLocalTraces(
+  paras: Paragraph[],
+  codes: TraceCode[],
+  mode: TraceMode,
+): Promise<ParagraphTrace[]> {
+  const keywordsByParagraph = paras.map(para => ({
+    index: para.index,
+    keywords: extractKeywords(para.text),
   }));
-  const byId = new Map(codes.map(code => [code.id, code]));
-  for (const code of created) {
-    if (code) byId.set(code.id, code);
+  const occurrences = new Map<string, number[]>();
+  for (const para of keywordsByParagraph) {
+    for (const keyword of para.keywords) {
+      const positions = occurrences.get(keyword) ?? [];
+      positions.push(para.index);
+      occurrences.set(keyword, positions);
+    }
   }
-  return [...byId.values()];
+  const hashValues = await Promise.all(paras.map(para => paragraphTextHash(para.text)));
+  return paras.map((para, offset) => {
+    const keywords = keywordsByParagraph[offset].keywords;
+    const role = roleValue(codes.find(code => code.paraIndex === para.index && code.dimension === 'rhetorical')) || null;
+    const conceptos: ConceptMention[] = keywords.map(etiqueta => {
+      const positions = occurrences.get(etiqueta) ?? [];
+      return {
+        etiqueta,
+        estado: positions[0] === para.index ? 'introducido' : 'reutilizado',
+        confianza: positions.length > 1 ? 0.72 : 0.45,
+      };
+    });
+    const relationTargets = new Map<number, string[]>();
+    for (const keyword of keywords) {
+      const previous = (occurrences.get(keyword) ?? []).filter(index => index < para.index).pop();
+      if (previous === undefined) continue;
+      relationTargets.set(previous, [...(relationTargets.get(previous) ?? []), keyword]);
+    }
+    const relaciones: ParagraphRelation[] = [...relationTargets.entries()].map(([indiceObjetivo, labels]) => ({
+      indiceObjetivo,
+      tipo: 'retoma',
+      evidencia: labels.join(', '),
+      confianza: 0.68,
+    }));
+    const diagnosticos: Diagnostic[] = mode === 'artistico'
+      ? []
+      : keywords
+        .filter(keyword => (occurrences.get(keyword) ?? []).length === 1)
+        .map(keyword => ({
+          severidad: 'baja',
+          tipo: 'concepto_huerfano',
+          mensaje: `"${keyword}" aparece aquí y no vuelve a retomarse.`,
+        }));
+    return {
+      paraIndex: para.index,
+      textHash: hashValues[offset],
+      temaPrincipal: keywords[0] ?? null,
+      conceptos,
+      rolRetorico: role,
+      relaciones,
+      diagnosticos,
+      modo: mode,
+    };
+  });
+}
+
+async function persistLocalTraces(noteId: string, traces: ParagraphTrace[]): Promise<ParagraphTrace[]> {
+  if (!traces.length) return [];
+  try {
+    const res = await fetch('/api/live/notes/trace', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ noteId, traces }),
+    });
+    if (!res.ok) return traces;
+    const data = await res.json() as { traces?: ParagraphTrace[] };
+    return data.traces ?? traces;
+  } catch {
+    return traces;
+  }
 }
 
 // ── Label color utility ────────────────────────────────────────────────────
@@ -264,7 +403,7 @@ export const codeBarField = StateField.define<TraceCode[]>({
 });
 
 function buildCodeBarDecos(view: EditorView, paras: Paragraph[]): DecorationSet {
-  const codes = view.state.field(codeBarField, false);
+  const codes = analyticalCodes(view.state.field(codeBarField, false) ?? []);
   if (!codes?.length) return Decoration.none;
   const doc = view.state.doc;
   const builder = new RangeSetBuilder<Decoration>();
@@ -400,7 +539,9 @@ export function injectTraceCss() {
     }
     .tc-list { padding: 4px 0; }
     .tc-row {
+      position: relative;
       padding: 4px 8px;
+      padding-left: 20px;
       border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.08));
       transition: background 140ms ease, opacity 140ms ease;
     }
@@ -412,6 +553,22 @@ export function injectTraceCss() {
       100% { background: color-mix(in srgb, var(--c-link, #3b82f6) 11%, transparent); }
     }
     .tc-row-head { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; }
+    .tc-role-rail {
+      position: absolute;
+      top: 5px;
+      bottom: 5px;
+      left: 5px;
+      width: 10px;
+      border-left: 3px solid var(--tc-role-color, transparent);
+      color: var(--tc-role-color, transparent);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      font: 7px/1 var(--font-mono, monospace);
+      letter-spacing: .08em;
+      writing-mode: vertical-rl;
+      opacity: .78;
+    }
     .tc-para-label {
       border: none;
       background: transparent;
@@ -424,10 +581,37 @@ export function injectTraceCss() {
       flex-shrink: 0;
     }
     .tc-para-label:hover, .tc-row.is-active .tc-para-label { color: var(--c-link, #3b82f6); opacity: 1; }
-    .tc-role-chip { font-size: 9px; opacity: 0.35; flex: 1; }
+    .tc-role-select {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      color: var(--c-fg-dim, currentColor);
+      font: inherit;
+      font-size: 9px;
+      opacity: .62;
+      outline: none;
+    }
+    .tc-role-select:focus, .tc-role-select:hover { opacity: 1; color: var(--c-fg); }
+    .tc-role-select.is-error { color: #c87e7e; }
     .tc-add-btn { background: none; border: none; cursor: pointer; font-size: 13px; line-height: 1; color: var(--c-fg-dim); opacity: 0.4; padding: 0 2px; flex-shrink: 0; }
     .tc-add-btn:hover { opacity: 1; color: var(--c-link, #3b82f6); }
     .tc-codes { display: flex; flex-wrap: wrap; gap: 3px; min-height: 4px; }
+    .tc-concepts { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 3px; }
+    .tc-concept {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 10px;
+      color: var(--c-fg-dim, currentColor);
+      border: 1px dashed color-mix(in srgb, var(--c-link, #3b82f6) 28%, transparent);
+    }
+    .tc-concept.is-reused {
+      border-style: solid;
+      color: var(--c-fg, currentColor);
+      background: color-mix(in srgb, var(--c-link, #3b82f6) 8%, transparent);
+    }
+    .tc-diagnostic-list { margin: 3px 0 0; padding: 0; list-style: none; color: #c87e7e; font-size: 9px; opacity: .78; }
+    .tc-diagnostic-list li::before { content: "· "; }
     .tc-chip { display: inline-flex; align-items: center; gap: 2px; background: var(--c-bg-mute); border-radius: 10px; padding: 1px 4px 1px 6px; cursor: pointer; transition: background 120ms; }
     .tc-chip.is-emergent { outline: 1px dashed color-mix(in srgb, var(--c-link, #3b82f6) 34%, transparent); }
     .tc-chip:hover { background: color-mix(in srgb, var(--c-link, #3b82f6) 15%, var(--c-bg-mute)); }
@@ -437,6 +621,8 @@ export function injectTraceCss() {
     .tc-chip-del:hover { opacity: 1; color: #c87e7e; }
     .tc-orphan-badge { font-size: 9px; color: #c87e7e; opacity: 0.75; margin-left: auto; }
     .tc-add-input { width: 100%; font-size: 10px; border: 1px solid var(--c-link, #3b82f6); background: var(--c-bg); color: var(--c-fg); border-radius: 3px; padding: 2px 4px; margin-top: 3px; box-sizing: border-box; outline: none; }
+    .tc-mode-row { display:flex; align-items:center; gap:6px; padding: 1px 8px 6px; font-size:9px; opacity:.76; }
+    .tc-mode-select { margin-left:auto; min-width:88px; border:1px solid var(--c-border, rgba(120,120,140,.22)); border-radius:3px; background:transparent; color:inherit; font:inherit; }
     .tc-graph { border-top: 1px solid var(--c-border, rgba(120,120,140,0.15)); flex-shrink: 0; padding-top: 4px; }
     .tc-subhead { font-size: 9px; opacity: .42; padding: 2px 8px 5px; letter-spacing: .09em; text-transform: uppercase; }
     .tc-svg { display: block; margin: 0 auto; padding-bottom: 8px; }
@@ -507,7 +693,7 @@ export function injectTraceCss() {
 
 function renderTraceGraph(
   paras: Paragraph[],
-  codes: TraceCode[],
+  traces: ParagraphTrace[],
   onJumpToParagraph: (para: Paragraph) => void,
   onHoverParagraph: (paraIndex: number | null) => void,
 ): SVGSVGElement {
@@ -523,23 +709,15 @@ function renderTraceGraph(
   svg.setAttribute('height', String(h));
   svg.className.baseVal = 'tc-svg';
 
-  // Arcs: paragraphs sharing a code label are related
-  const labelToParagraphs = new Map<string, Set<number>>();
-  for (const code of codes) {
-    if (!labelToParagraphs.has(code.label)) labelToParagraphs.set(code.label, new Set());
-    labelToParagraphs.get(code.label)!.add(code.paraIndex);
-  }
   const drawnPairs = new Set<string>();
-  for (const [, paraSet] of labelToParagraphs) {
-    const arr = [...paraSet].sort((a, b) => a - b);
-    for (let i = 0; i < arr.length; i++) {
-      for (let j = i + 1; j < arr.length; j++) {
-        const key = `${arr[i]},${arr[j]}`;
+  for (const trace of traces) {
+    for (const relation of trace.relaciones) {
+        const key = `${relation.indiceObjetivo},${trace.paraIndex}`;
         if (drawnPairs.has(key)) continue;
         drawnPairs.add(key);
-        const y1 = 10 + arr[i] * SPACING;
-        const y2 = 10 + arr[j] * SPACING;
-        const dist = arr[j] - arr[i];
+        const y1 = 10 + relation.indiceObjetivo * SPACING;
+        const y2 = 10 + trace.paraIndex * SPACING;
+        const dist = trace.paraIndex - relation.indiceObjetivo;
         const ctrl = Math.min(10 + dist * 6, 30);
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', `M ${CX + R} ${y1} C ${CX + R + ctrl} ${y1}, ${CX + R + ctrl} ${y2}, ${CX + R} ${y2}`);
@@ -547,23 +725,27 @@ function renderTraceGraph(
         path.setAttribute('stroke', 'var(--c-link, #3b82f6)');
         path.setAttribute('stroke-width', '1.2');
         path.setAttribute('opacity', '0.3');
+        path.setAttribute('aria-label', `P${trace.paraIndex} retoma P${relation.indiceObjetivo}: ${relation.evidencia}`);
         path.classList.add('tc-graph-link');
-        path.dataset.from = String(arr[i]);
-        path.dataset.to = String(arr[j]);
+        path.dataset.from = String(relation.indiceObjetivo);
+        path.dataset.to = String(trace.paraIndex);
         svg.appendChild(path);
-      }
     }
   }
 
   for (const para of paras) {
     const cy = 10 + para.index * SPACING;
-    const pct = Math.min(80, codes.filter(c => c.paraIndex === para.index).length * 20);
+    const trace = traces.find(item => item.paraIndex === para.index);
+    const role = trace?.rolRetorico ? ROLE_PRESENTATION[trace.rolRetorico] : null;
+    const fill = role
+      ? `hsl(${role.hue}, 48%, 62%)`
+      : `color-mix(in srgb, var(--c-link, #3b82f6) ${Math.min(80, (trace?.conceptos.length ?? 0) * 12)}%, var(--c-bg-mute, #f0f0f0))`;
 
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     circle.setAttribute('cx', String(CX));
     circle.setAttribute('cy', String(cy));
     circle.setAttribute('r', String(R));
-    circle.setAttribute('fill', `color-mix(in srgb, var(--c-link, #3b82f6) ${pct}%, var(--c-bg-mute, #f0f0f0))`);
+    circle.setAttribute('fill', fill);
     circle.setAttribute('stroke', 'var(--c-border, rgba(120,120,140,0.3))');
     circle.setAttribute('stroke-width', '1');
     circle.setAttribute('role', 'button');
@@ -794,15 +976,22 @@ function appendZipfSection(monitor: HTMLElement, text: string, state: MonitorSta
   }
 }
 
-function appendQaSection(monitor: HTMLElement, codes: TraceCode[], state: MonitorState) {
+function appendQaSection(monitor: HTMLElement, codes: TraceCode[], traces: ParagraphTrace[], state: MonitorState) {
   const body = createMonitorSection(monitor, 'qa', 'QA', state);
+  const traceCodes = analyticalCodes(codes);
   const metrics = document.createElement('div');
   metrics.className = 'tc-qa-metrics';
-  const emergent = codes.filter(code => code.source === 'local_nlp').length;
+  const emergent = traces.reduce(
+    (total, trace) => total + trace.conceptos.filter(concept => concept.estado === 'reutilizado').length,
+    0,
+  );
+  const roles = traces.filter(trace => trace.rolRetorico).length;
+  const warnings = traces.reduce((total, trace) => total + trace.diagnosticos.length, 0);
   const values = [
-    `${codes.length} códigos`,
+    `${traceCodes.length} códigos`,
     `${emergent} emergentes`,
-    `${computeOrphanLabels(codes).size} aislados`,
+    `${roles} roles`,
+    `${warnings} indicios`,
   ];
   for (const value of values) {
     const metric = document.createElement('span');
@@ -812,7 +1001,9 @@ function appendQaSection(monitor: HTMLElement, codes: TraceCode[], state: Monito
   }
   const copy = document.createElement('div');
   copy.className = 'tc-qa-copy';
-  copy.textContent = 'Capa cualitativa en preparación: memo analítico, categorías y revisión transversal.';
+  copy.textContent = state.mode === 'artistico'
+    ? 'Modo artístico: cadenas visibles, sin alertas de progresión lineal.'
+    : 'Indicios locales de cohesión: no califican la calidad del argumento.';
   body.append(metrics, copy);
 }
 
@@ -820,17 +1011,36 @@ function renderMargin(
   traceCol: HTMLElement,
   paras: Paragraph[],
   codes: TraceCode[],
+  traces: ParagraphTrace[],
   noteId: string,
   editorView: EditorView,
   onCodesChange: (codes: TraceCode[]) => void,
+  onModeChange: (mode: TraceMode) => void,
   state: MonitorState,
 ) {
   traceCol.innerHTML = '';
-  const orphans = computeOrphanLabels(codes);
+  const traceCodes = analyticalCodes(codes);
+  const orphans = computeOrphanLabels(traceCodes);
   const monitor = document.createElement('div');
   monitor.className = 'tc-monitor';
   traceCol.appendChild(monitor);
   const traceBody = createMonitorSection(monitor, 'trace', 'Trace', state);
+  const modeRow = document.createElement('label');
+  modeRow.className = 'tc-mode-row';
+  modeRow.textContent = 'Modo';
+  const modeSelect = document.createElement('select');
+  modeSelect.className = 'tc-mode-select';
+  modeSelect.title = 'Modo del análisis estructural';
+  for (const [value, label] of Object.entries(MODE_LABELS) as [TraceMode, string][]) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    modeSelect.appendChild(option);
+  }
+  modeSelect.value = state.mode;
+  modeSelect.addEventListener('change', () => onModeChange(modeSelect.value as TraceMode));
+  modeRow.appendChild(modeSelect);
+  traceBody.appendChild(modeRow);
   const jumpToParagraph = (para: Paragraph) => {
     editorView.dispatch({
       selection: { anchor: Math.min(para.from, editorView.state.doc.length) },
@@ -851,12 +1061,25 @@ function renderMargin(
   }
 
   for (const para of paras) {
-    const paraCodes = codes.filter(c => c.paraIndex === para.index);
+    const paraCodes = traceCodes.filter(c => c.paraIndex === para.index);
+    const rhetoricalCode = codes.find(c => c.paraIndex === para.index && c.dimension === 'rhetorical');
+    const localTrace = traces.find(trace => trace.paraIndex === para.index);
+    const currentRole = localTrace?.rolRetorico ?? (roleValue(rhetoricalCode) || null);
     const row = document.createElement('div');
     row.className = 'tc-row';
     row.dataset.paraIndex = String(para.index);
     row.addEventListener('mouseenter', () => hoverParagraph(para.index));
     row.addEventListener('mouseleave', () => hoverParagraph(null));
+
+    const roleRail = document.createElement('span');
+    roleRail.className = 'tc-role-rail';
+    if (currentRole) {
+      const roleStyle = ROLE_PRESENTATION[currentRole];
+      roleRail.textContent = roleStyle.short;
+      roleRail.style.setProperty('--tc-role-color', `hsl(${roleStyle.hue}, 55%, 55%)`);
+      roleRail.title = roleStyle.label;
+    }
+    row.appendChild(roleRail);
 
     const head = document.createElement('div');
     head.className = 'tc-row-head';
@@ -869,16 +1092,67 @@ function renderMargin(
     paraLabel.addEventListener('click', () => jumpToParagraph(para));
     head.appendChild(paraLabel);
 
-    const roleChip = document.createElement('span');
-    roleChip.className = 'tc-role-chip';
-    roleChip.textContent = '—';
-    head.appendChild(roleChip);
+    const roleSelect = document.createElement('select');
+    roleSelect.className = 'tc-role-select';
+    roleSelect.title = 'Rol retórico del párrafo';
+    roleSelect.setAttribute('aria-label', `Rol retórico de P${para.index}`);
+    const emptyRole = document.createElement('option');
+    emptyRole.value = '';
+    emptyRole.textContent = '— rol';
+    roleSelect.appendChild(emptyRole);
+    for (const role of RHETORICAL_ROLES) {
+      const option = document.createElement('option');
+      option.value = role;
+      option.textContent = ROLE_PRESENTATION[role].label;
+      roleSelect.appendChild(option);
+    }
+    roleSelect.value = currentRole ?? '';
+    roleSelect.addEventListener('change', async () => {
+      const previousValue = currentRole ?? '';
+      const nextValue = roleSelect.value;
+      roleSelect.disabled = true;
+      try {
+        if (!nextValue) {
+          if (!rhetoricalCode) return;
+          const res = await fetch(`/api/live/notes/trace?id=${rhetoricalCode.id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('delete failed');
+          onCodesChange(codes.filter(code => code.id !== rhetoricalCode.id));
+          return;
+        }
+        const res = await fetch('/api/live/notes/trace', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            noteId,
+            paraIndex: para.index,
+            label: `rol:${nextValue}`,
+            dimension: 'rhetorical',
+          }),
+        });
+        if (!res.ok) throw new Error('save failed');
+        const data = await res.json() as { code?: TraceCode };
+        if (data.code) {
+          onCodesChange([
+            ...codes.filter(code => !(code.paraIndex === para.index && code.dimension === 'rhetorical')),
+            data.code,
+          ]);
+        }
+      } catch {
+        roleSelect.value = previousValue;
+        roleSelect.classList.add('is-error');
+        setTimeout(() => roleSelect.classList.remove('is-error'), 1500);
+      } finally {
+        roleSelect.disabled = false;
+      }
+    });
+    head.appendChild(roleSelect);
 
     const orphanParaCodes = paraCodes.filter(c => orphans.has(c.label));
-    if (orphanParaCodes.length > 0) {
+    if (orphanParaCodes.length > 0 || (localTrace?.diagnosticos.length ?? 0) > 0) {
       const badge = document.createElement('span');
       badge.className = 'tc-orphan-badge';
-      badge.title = orphanParaCodes.map(c => `'${c.label}' solo aparece aquí`).join('; ');
+      badge.title = localTrace?.diagnosticos.map(item => item.mensaje).join('; ')
+        || orphanParaCodes.map(c => `'${c.label}' solo aparece aquí`).join('; ');
       badge.textContent = '⚠';
       head.appendChild(badge);
     }
@@ -890,6 +1164,18 @@ function renderMargin(
     head.appendChild(addBtn);
 
     row.appendChild(head);
+
+    const conceptsEl = document.createElement('div');
+    conceptsEl.className = 'tc-concepts';
+    for (const concept of localTrace?.conceptos ?? []) {
+      const chip = document.createElement('span');
+      chip.className = 'tc-concept';
+      if (concept.estado === 'reutilizado') chip.classList.add('is-reused');
+      chip.textContent = concept.etiqueta;
+      chip.title = `${concept.estado} · confianza local ${Math.round(concept.confianza * 100)}%`;
+      conceptsEl.appendChild(chip);
+    }
+    row.appendChild(conceptsEl);
 
     const codesEl = document.createElement('div');
     codesEl.className = 'tc-codes';
@@ -919,7 +1205,7 @@ function renderMargin(
 
       chip.addEventListener('click', (e) => {
         if ((e.target as HTMLElement).closest('.tc-chip-del')) return;
-        const matchingParas = codes.filter(c => c.label === code.label).map(c => c.paraIndex);
+        const matchingParas = traceCodes.filter(c => c.label === code.label).map(c => c.paraIndex);
         const newSet = new Set(matchingParas);
         const current = editorView.state.field(highlightField, false) ?? new Set<number>();
         const alreadyOn = matchingParas.length > 0 && matchingParas.every(p => current.has(p)) && current.size === newSet.size;
@@ -945,22 +1231,6 @@ function renderMargin(
       codesEl.appendChild(chip);
     }
 
-    // Unsaved suggestions remain visible only when automatic persistence failed.
-    const suggestions = computeSuggestions(paras, codes);
-    const paraSuggestions = suggestions.filter(s => s.paraIndex === para.index);
-    for (const suggestion of paraSuggestions) {
-      const chip = document.createElement('span');
-      chip.className = 'tc-chip tc-chip-suggestion';
-      chip.title = 'Código emergente pendiente de guardar';
-
-      const labelEl = document.createElement('span');
-      labelEl.className = 'tc-chip-label';
-      labelEl.textContent = suggestion.label;
-      chip.appendChild(labelEl);
-
-      codesEl.appendChild(chip);
-    }
-
     row.appendChild(codesEl);
 
     const input = document.createElement('input');
@@ -969,6 +1239,17 @@ function renderMargin(
     input.placeholder = 'nombre del código…';
     input.style.display = 'none';
     row.appendChild(input);
+
+    if ((localTrace?.diagnosticos.length ?? 0) > 0) {
+      const diagnostics = document.createElement('ul');
+      diagnostics.className = 'tc-diagnostic-list';
+      for (const diagnostic of localTrace!.diagnosticos.slice(0, 2)) {
+        const item = document.createElement('li');
+        item.textContent = diagnostic.mensaje;
+        diagnostics.appendChild(item);
+      }
+      row.appendChild(diagnostics);
+    }
 
     addBtn.addEventListener('click', () => {
       input.style.display = 'block';
@@ -1011,13 +1292,13 @@ function renderMargin(
   graphTitle.className = 'tc-subhead';
   graphTitle.textContent = 'Estructura';
   graph.appendChild(graphTitle);
-  if (paras.length > 0) graph.appendChild(renderTraceGraph(paras, codes, jumpToParagraph, hoverParagraph));
+  if (paras.length > 0) graph.appendChild(renderTraceGraph(paras, traces, jumpToParagraph, hoverParagraph));
   traceBody.appendChild(graph);
 
   const text = editorView.state.doc.toString();
   appendLexicalSection(monitor, text, state);
   appendZipfSection(monitor, text, state);
-  appendQaSection(monitor, codes, state);
+  appendQaSection(monitor, codes, traces, state);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -1030,17 +1311,19 @@ export async function mountTraceMargin(
   injectTraceCss();
 
   let codes: TraceCode[] = [];
+  let loadedTraces: ParagraphTrace[] = [];
   try {
     const res = await fetch(`/api/live/notes/trace?noteId=${encodeURIComponent(noteId)}`);
     if (res.ok) {
-      const data = await res.json() as { codes?: TraceCode[] };
+      const data = await res.json() as { codes?: TraceCode[]; traces?: ParagraphTrace[] };
       codes = data.codes ?? [];
+      loadedTraces = data.traces ?? [];
     }
   } catch { /* render empty margin */ }
 
   const paras = segmentParagraphs(editorView.state.doc.toString());
-  codes = await materializeEmergentCodes(paras, codes, noteId);
   let currentCodes = codes;
+  let currentTraces = loadedTraces;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let pulseTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshVersion = 0;
@@ -1050,6 +1333,7 @@ export async function mountTraceMargin(
     lexicalQuery: '',
     activeParagraph: null,
     visibleParagraphs: new Set<number>(),
+    mode: loadedTraces[0]?.modo ?? 'borrador',
   };
 
   const refreshFromDocument = () => {
@@ -1059,9 +1343,8 @@ export async function mountTraceMargin(
       if (!active || version !== refreshVersion) return;
       const nextParas = segmentParagraphs(editorView.state.doc.toString());
       paras.splice(0, paras.length, ...nextParas);
-      const nextCodes = await materializeEmergentCodes(paras, currentCodes, noteId);
       if (!active || version !== refreshVersion) return;
-      rerender(nextCodes);
+      await analyzeAndRender(currentCodes);
     }, 700);
   };
 
@@ -1094,10 +1377,24 @@ export async function mountTraceMargin(
     }
   };
 
-  const rerender = (newCodes: TraceCode[]) => {
+  const rerender = (newCodes: TraceCode[], newTraces: ParagraphTrace[]) => {
     currentCodes = newCodes;
+    currentTraces = newTraces;
     editorView.dispatch({ effects: setCodeBars.of(currentCodes) });
-    renderMargin(traceCol, paras, currentCodes, noteId, editorView, rerender, monitorState);
+    renderMargin(
+      traceCol,
+      paras,
+      currentCodes,
+      currentTraces,
+      noteId,
+      editorView,
+      nextCodes => { void analyzeAndRender(nextCodes); },
+      nextMode => {
+        monitorState.mode = nextMode;
+        void analyzeAndRender(currentCodes);
+      },
+      monitorState,
+    );
     syncEditorActivity(editorView, false);
     const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
     if (traceSection) {
@@ -1107,6 +1404,14 @@ export async function mountTraceMargin(
       if (pulseTimer) clearTimeout(pulseTimer);
       pulseTimer = setTimeout(() => traceSection.classList.remove('is-updating'), 430);
     }
+  };
+
+  const analyzeAndRender = async (nextCodes: TraceCode[]) => {
+    const locallyAnalyzed = await computeLocalTraces(paras, nextCodes, monitorState.mode);
+    if (!active) return;
+    const storedTraces = await persistLocalTraces(noteId, locallyAnalyzed);
+    if (!active) return;
+    rerender(nextCodes, storedTraces);
   };
 
   const traceExtensions = new Compartment();
@@ -1119,7 +1424,7 @@ export async function mountTraceMargin(
     ])),
   });
 
-  rerender(currentCodes);
+  await analyzeAndRender(currentCodes);
 
   return {
     destroy() {
