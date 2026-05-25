@@ -136,7 +136,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   return json({ note: savedNote });
 };
 
-// PATCH /api/live/notes — partial update: only folderId (for drag-to-folder)
+// PATCH /api/live/notes — partial update: folderId and/or title
 export const PATCH: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
   const user = await ensureDbUserFromSession(session);
@@ -146,16 +146,28 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   const id = cleanString(body?.id ?? '', 36);
   if (!id) return json({ error: 'id required' }, 400);
 
+  const sets: string[] = [];
+  const params: (string | null)[] = [];
+
   // null means "remove from folder"; missing key means "don't change"
-  const folderId = 'folderId' in body
-    ? (body.folderId === null ? null : cleanString(String(body.folderId ?? ''), 36) || null)
-    : undefined;
+  if ('folderId' in body) {
+    const folderId = body.folderId === null ? null : cleanString(String(body.folderId ?? ''), 36) || null;
+    params.push(folderId);
+    sets.push(`"folderId" = $${params.length}`);
+  }
 
-  if (folderId === undefined) return json({ error: 'nothing to update' }, 400);
+  if ('title' in body) {
+    const title = cleanString(String(body.title ?? ''), TITLE_MAX) || null;
+    params.push(title);
+    sets.push(`"title" = $${params.length}`);
+  }
 
+  if (sets.length === 0) return json({ error: 'nothing to update' }, 400);
+
+  params.push(id, user.id);
   const { error } = await query(
-    `UPDATE "LiveClassNote" SET "folderId" = $1, "updatedAt" = now() WHERE "id" = $2 AND "userId" = $3`,
-    [folderId, id, user.id]
+    `UPDATE "LiveClassNote" SET ${sets.join(', ')}, "updatedAt" = now() WHERE "id" = $${params.length - 1} AND "userId" = $${params.length}`,
+    params
   );
 
   if (error) return json({ error: error.message }, 500);

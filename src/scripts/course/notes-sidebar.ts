@@ -113,7 +113,7 @@ export function renderNotesTree(
         await reload();
       });
 
-      summary.addEventListener('contextmenu', e => { e.preventDefault(); showFolderMenu(e, folder, reload, courseId); });
+      summary.addEventListener('contextmenu', e => { e.preventDefault(); showFolderMenu(e, folder, reload, courseId, summary); });
 
       details.appendChild(summary);
       details.appendChild(renderLevel(folder.id, indent + 1));
@@ -177,12 +177,12 @@ function showNoteMenu(e: MouseEvent, note: NoteItem, el: HTMLElement, reload: ()
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
 }
 
-function showFolderMenu(e: MouseEvent, folder: NoteFolder, reload: () => Promise<void>, courseId: string) {
+function showFolderMenu(e: MouseEvent, folder: NoteFolder, reload: () => Promise<void>, courseId: string, summaryEl: HTMLElement) {
   document.querySelector('.notas-sb-ctx')?.remove();
   const menu = buildCtxMenu(e.clientX, e.clientY, [
-    ['Nueva nota aquí', () => createNoteInFolder(folder.id, courseId, reload, container)],
+    ['Nueva nota aquí', () => createNoteInFolder(folder.id, courseId, reload, summaryEl.closest<HTMLElement>('.notas-sb-tree') ?? undefined)],
     ['Nueva subcarpeta', () => createSubfolder(folder.id, courseId, reload)],
-    ['Renombrar', () => renameFolder(folder, reload)],
+    ['Renombrar', () => renameFolder(folder, summaryEl)],
     ['Eliminar', () => deleteFolder(folder, reload)],
   ]);
   document.body.appendChild(menu);
@@ -205,17 +205,10 @@ function buildCtxMenu(x: number, y: number, items: [string, () => void][]): HTML
   return menu;
 }
 
-async function renameNote(note: NoteItem, el: HTMLElement) {
-  const name = prompt('Nuevo nombre:', note.title);
-  if (!name?.trim() || name === note.title) return;
-  await fetch('/api/live/notes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: note.id, title: name.trim(), body: '' }),
-  });
-  const span = el.querySelector('span:last-child');
-  if (span) span.textContent = name.trim();
-  note.title = name.trim();
+function renameNote(note: NoteItem, el: HTMLElement) {
+  const titleSpan = el.querySelector<HTMLElement>('.notas-sb-note-title');
+  if (!titleSpan) return;
+  startInlineRename(titleSpan, note.id, el);
 }
 
 async function deleteNote(note: NoteItem, reload: () => Promise<void>) {
@@ -224,15 +217,39 @@ async function deleteNote(note: NoteItem, reload: () => Promise<void>) {
   await reload();
 }
 
-async function renameFolder(folder: NoteFolder, reload: () => Promise<void>) {
-  const name = prompt('Nuevo nombre:', folder.name);
-  if (!name?.trim() || name === folder.name) return;
-  await fetch('/api/note-folders', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: folder.id, name: name.trim() }),
+function renameFolder(folder: NoteFolder, summaryEl: HTMLElement) {
+  const nameSpan = summaryEl.querySelector<HTMLElement>('.notas-sb-folder-name');
+  if (!nameSpan) return;
+  startInlineFolderRename(nameSpan, folder);
+}
+
+function startInlineFolderRename(nameSpan: HTMLElement, folder: NoteFolder) {
+  const prev = nameSpan.textContent ?? '';
+  const input = document.createElement('input');
+  input.value = prev;
+  input.placeholder = 'Nombre de la carpeta…';
+  input.style.cssText = 'font:inherit;font-size:inherit;border:none;border-bottom:1px solid var(--c-link,#3b82f6);background:transparent;color:inherit;width:7rem;outline:none;padding:0';
+  nameSpan.replaceWith(input);
+  input.focus();
+  input.select();
+  const commit = async () => {
+    const val = input.value.trim() || prev;
+    input.replaceWith(nameSpan);
+    nameSpan.textContent = val;
+    if (val !== prev) {
+      folder.name = val;
+      await fetch('/api/note-folders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: folder.id, name: val }),
+      });
+    }
+  };
+  input.addEventListener('blur', commit, { once: true });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = prev; input.blur(); }
   });
-  await reload();
 }
 
 async function deleteFolder(folder: NoteFolder, reload: () => Promise<void>) {
@@ -273,9 +290,9 @@ function startInlineRename(titleSpan: HTMLElement, noteId: string, item: HTMLEle
     titleSpan.textContent = val;
     item.title = val;
     await fetch('/api/live/notes', {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: noteId, title: val, body: '' }),
+      body: JSON.stringify({ id: noteId, title: val }),
     });
   };
   input.addEventListener('blur', commit, { once: true });
