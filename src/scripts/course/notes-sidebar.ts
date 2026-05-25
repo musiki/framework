@@ -90,7 +90,7 @@ export function renderNotesTree(
       const summary = document.createElement('summary');
       summary.className = 'notas-sb-folder';
       summary.style.cssText = 'font-size:.72rem;cursor:pointer;list-style:none;padding:.15rem .3rem;display:flex;align-items:center;gap:.25rem;opacity:.7;border-radius:3px;transition:background 120ms';
-      summary.innerHTML = `<span>⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
+      summary.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
 
       // Folder drop zone
       summary.addEventListener('dragover', e => {
@@ -100,10 +100,11 @@ export function renderNotesTree(
       });
       summary.addEventListener('dragleave', () => { summary.style.background = ''; });
       summary.addEventListener('drop', async e => {
+        e.preventDefault();
+        e.stopPropagation();
         summary.style.background = '';
         const noteId = e.dataTransfer?.getData('text/x-musiki-note');
         if (!noteId) return;
-        e.preventDefault();
         await fetch('/api/live/notes', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -119,7 +120,8 @@ export function renderNotesTree(
       frag.appendChild(details);
     }
 
-    for (const note of (notesByFolder.get(parentId) ?? [])) {
+    const notesHere = [...(notesByFolder.get(parentId) ?? [])].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    for (const note of notesHere) {
       frag.appendChild(makeNoteItem(note, indent, reload));
     }
 
@@ -136,7 +138,8 @@ function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void
   el.dataset.noteId = note.id;
   el.style.cssText = `padding:.18rem .4rem .18rem ${indent * 8 + 4}px;font-size:.73rem;cursor:pointer;display:flex;align-items:center;gap:.25rem;border-left:2px solid transparent;opacity:.75;transition:opacity 100ms,border-color 100ms,background 100ms;border-radius:3px`;
   el.title = note.title || '(sin título)';
-  el.innerHTML = `<span style="opacity:.5;flex-shrink:0">🗒</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(note.title || '(sin título)')}</span>`;
+  el.dataset.noteId = note.id;
+  el.innerHTML = `<span style="opacity:.5;flex-shrink:0">🗒</span><span class="notas-sb-note-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(note.title || '(sin título)')}</span>`;
 
   el.addEventListener('mouseenter', () => { el.style.opacity = '1'; el.style.background = 'rgba(0,0,0,.04)'; });
   el.addEventListener('mouseleave', () => { el.style.opacity = '.75'; el.style.background = ''; });
@@ -177,7 +180,7 @@ function showNoteMenu(e: MouseEvent, note: NoteItem, el: HTMLElement, reload: ()
 function showFolderMenu(e: MouseEvent, folder: NoteFolder, reload: () => Promise<void>, courseId: string) {
   document.querySelector('.notas-sb-ctx')?.remove();
   const menu = buildCtxMenu(e.clientX, e.clientY, [
-    ['Nueva nota aquí', () => createNoteInFolder(folder.id, courseId, reload)],
+    ['Nueva nota aquí', () => createNoteInFolder(folder.id, courseId, reload, container)],
     ['Nueva subcarpeta', () => createSubfolder(folder.id, courseId, reload)],
     ['Renombrar', () => renameFolder(folder, reload)],
     ['Eliminar', () => deleteFolder(folder, reload)],
@@ -238,15 +241,45 @@ async function deleteFolder(folder: NoteFolder, reload: () => Promise<void>) {
   await reload();
 }
 
-async function createNoteInFolder(folderId: string, courseId: string, reload: () => Promise<void>) {
-  const title = prompt('Nombre de la nueva nota:');
-  if (!title?.trim()) return;
-  await fetch('/api/live/notes', {
+async function createNoteInFolder(folderId: string, courseId: string, reload: () => Promise<void>, container?: HTMLElement) {
+  const res = await fetch('/api/live/notes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: title.trim(), body: '', courseId, folderId }),
+    body: JSON.stringify({ title: 'Nueva nota', body: '', courseId, folderId }),
   });
+  if (!res.ok) return;
+  const data = await res.json();
+  const newId = data.note?.id;
   await reload();
+  if (!newId || !container) return;
+  const item = container.querySelector<HTMLElement>(`[data-note-id="${newId}"]`);
+  const titleSpan = item?.querySelector<HTMLElement>('.notas-sb-note-title');
+  if (!titleSpan || !item) return;
+  startInlineRename(titleSpan, newId, item);
+}
+
+function startInlineRename(titleSpan: HTMLElement, noteId: string, item: HTMLElement) {
+  const prev = titleSpan.textContent ?? '';
+  const input = document.createElement('input');
+  input.value = prev === '(sin título)' ? '' : prev;
+  input.placeholder = 'Nombre de la nota…';
+  input.style.cssText = 'font:inherit;font-size:inherit;border:none;border-bottom:1px solid var(--c-link,#3b82f6);background:transparent;color:inherit;width:100%;outline:none;padding:0';
+  titleSpan.replaceWith(input);
+  input.focus();
+  input.select();
+  const commit = async () => {
+    const val = input.value.trim() || prev;
+    input.replaceWith(titleSpan);
+    titleSpan.textContent = val;
+    item.title = val;
+    await fetch('/api/live/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: noteId, title: val, body: '' }),
+    });
+  };
+  input.addEventListener('blur', commit, { once: true });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } if (e.key === 'Escape') { input.value = prev; input.blur(); } });
 }
 
 async function createSubfolder(parentId: string, courseId: string, reload: () => Promise<void>) {

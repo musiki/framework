@@ -308,14 +308,44 @@ export function injectTraceCss() {
 function renderTraceGraph(paras: Paragraph[], codes: TraceCode[]): SVGSVGElement {
   const SPACING = 38;
   const R = 9;
-  const CX = 20;
+  const CX = 16;
+  const W = 52;
   const h = paras.length * SPACING + 20;
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', `0 0 40 ${h}`);
-  svg.setAttribute('width', '40');
+  svg.setAttribute('viewBox', `0 0 ${W} ${h}`);
+  svg.setAttribute('width', String(W));
   svg.setAttribute('height', String(h));
   svg.className.baseVal = 'tc-svg';
+
+  // Arcs: paragraphs sharing a code label are related
+  const labelToParagraphs = new Map<string, Set<number>>();
+  for (const code of codes) {
+    if (!labelToParagraphs.has(code.label)) labelToParagraphs.set(code.label, new Set());
+    labelToParagraphs.get(code.label)!.add(code.paraIndex);
+  }
+  const drawnPairs = new Set<string>();
+  for (const [, paraSet] of labelToParagraphs) {
+    const arr = [...paraSet].sort((a, b) => a - b);
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        const key = `${arr[i]},${arr[j]}`;
+        if (drawnPairs.has(key)) continue;
+        drawnPairs.add(key);
+        const y1 = 10 + arr[i] * SPACING;
+        const y2 = 10 + arr[j] * SPACING;
+        const dist = arr[j] - arr[i];
+        const ctrl = Math.min(10 + dist * 6, 30);
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${CX + R} ${y1} C ${CX + R + ctrl} ${y1}, ${CX + R + ctrl} ${y2}, ${CX + R} ${y2}`);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', 'var(--c-link, #3b82f6)');
+        path.setAttribute('stroke-width', '1.2');
+        path.setAttribute('opacity', '0.3');
+        svg.appendChild(path);
+      }
+    }
+  }
 
   for (const para of paras) {
     const cy = 10 + para.index * SPACING;
@@ -537,6 +567,7 @@ function renderMargin(
 
   const graph = document.createElement('details');
   graph.className = 'tc-graph';
+  graph.open = true;
   const summary = document.createElement('summary');
   summary.textContent = 'estructura';
   graph.appendChild(summary);

@@ -105,6 +105,7 @@ function buildBrowserPanel(panelId: string, dockview: DockviewComponent): HTMLEl
     for (const note of filtered) {
       const item = document.createElement('div');
       item.style.cssText = 'padding:.22rem .7rem;font-size:.75rem;cursor:pointer;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity 100ms';
+      item.dataset.noteId = note.id;
       item.title = note.title || '(sin título)';
       item.textContent = note.title || '(sin título)';
       item.addEventListener('mouseenter', () => { item.style.opacity = '1'; });
@@ -117,15 +118,18 @@ function buildBrowserPanel(panelId: string, dockview: DockviewComponent): HTMLEl
   search.addEventListener('input', () => render(search.value));
 
   newBtn.addEventListener('click', async () => {
-    const title = prompt('Nombre de la nueva nota:');
-    if (!title?.trim()) return;
     const res = await fetch('/api/live/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: title.trim(), body: '' }),
+      body: JSON.stringify({ title: 'Nueva nota', body: '' }),
     });
     if (!res.ok) return;
+    const data = await res.json();
+    const newId = data.note?.id;
     await loadAll();
+    if (!newId) return;
+    const item = tree.querySelector<HTMLElement>(`[data-note-id="${newId}"]`);
+    if (item) { item.setAttribute('contenteditable', 'true'); item.focus(); const sel = window.getSelection(); sel?.selectAllChildren(item); }
   });
 
   void loadAll();
