@@ -451,6 +451,46 @@ function renderMargin(
 
       codesEl.appendChild(chip);
     }
+
+    // NLP suggestion chips
+    const suggestions = computeSuggestions(paras, codes);
+    const paraSuggestions = suggestions.filter(s => s.paraIndex === para.index);
+    for (const suggestion of paraSuggestions) {
+      const chip = document.createElement('span');
+      chip.className = 'tc-chip tc-chip-suggestion';
+      chip.title = `Sugerencia automática (aparece en múltiples párrafos)`;
+
+      const labelEl = document.createElement('span');
+      labelEl.className = 'tc-chip-label';
+      labelEl.textContent = suggestion.label;
+      chip.appendChild(labelEl);
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.className = 'tc-chip-suggest-btn';
+      confirmBtn.title = 'Confirmar como código';
+      confirmBtn.textContent = '+';
+      chip.appendChild(confirmBtn);
+
+      confirmBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const res = await fetch('/api/live/notes/trace', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ noteId, paraIndex: para.index, label: suggestion.label }),
+          });
+          if (!res.ok) throw new Error('save failed');
+          const data = await res.json() as { code?: TraceCode };
+          if (data.code) onCodesChange([...codes, data.code]);
+        } catch {
+          chip.style.outline = '1px solid #c87e7e';
+          setTimeout(() => { chip.style.outline = ''; }, 1500);
+        }
+      });
+
+      codesEl.appendChild(chip);
+    }
+
     row.appendChild(codesEl);
 
     const input = document.createElement('input');
@@ -525,7 +565,10 @@ export async function mountTraceMargin(
   const paras = segmentParagraphs(editorView.state.doc.toString());
 
   editorView.dispatch({
-    effects: StateEffect.appendConfig.of([highlightField, makeHighlightPlugin(paras)]),
+    effects: StateEffect.appendConfig.of([
+      highlightField, makeHighlightPlugin(paras),
+      codeBarField,   makeCodeBarPlugin(paras),
+    ]),
   });
 
   const editorContainer = panelBodyEl.firstElementChild as HTMLElement | null;
@@ -545,6 +588,7 @@ export async function mountTraceMargin(
 
   const rerender = (newCodes: TraceCode[]) => {
     currentCodes = newCodes;
+    editorView.dispatch({ effects: setCodeBars.of(currentCodes) });
     renderMargin(traceCol, paras, currentCodes, noteId, editorView, rerender);
   };
 
@@ -553,6 +597,7 @@ export async function mountTraceMargin(
   return {
     destroy() {
       editorView.dispatch({ effects: setHighlight.of(new Set<number>()) });
+      editorView.dispatch({ effects: setCodeBars.of([]) });
       traceCol.remove();
       if (editorContainer) {
         editorContainer.style.flex = '';
