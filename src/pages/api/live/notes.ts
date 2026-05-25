@@ -91,15 +91,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
     updatedAt: new Date().toISOString()
   };
 
-  // Insert/update first (fast) — render markdown in background so response is immediate
+  // Insert/update first (fast) - omitted fields on updates must remain untouched.
   let result;
   if (id) {
-    const cols = Object.keys(row);
-    const vals = Object.values(row);
+    const updateRow: Record<string, unknown> = { updatedAt: row.updatedAt };
+    if ('title' in body) updateRow.title = title;
+    if ('body' in body) {
+      updateRow.body = noteBody;
+      updateRow.renderedHtml = null;
+    }
+    if ('courseId' in body) updateRow.courseId = courseId;
+    if ('folderId' in body) updateRow.folderId = folderId;
+    if ('roomName' in body) updateRow.roomName = roomName;
+    if ('noteDate' in body) updateRow.noteDate = noteDate;
+    const cols = Object.keys(updateRow);
+    const vals = Object.values(updateRow);
     const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
     result = await query(
       `UPDATE "LiveClassNote" SET ${setSql} WHERE "id" = $${cols.length + 1} AND "userId" = $${cols.length + 2} 
-       RETURNING id, title, "noteDate", "updatedAt"`,
+       RETURNING id, title, "noteDate", "updatedAt", "courseId", "folderId"`,
       [...vals, id, user.id]
     );
   } else {
@@ -120,23 +130,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!savedNote) return json({ error: 'Failed to save note' }, 500);
 
   // Background render: fire-and-forget; updates renderedHtml once complete
-  const savedId = savedNote.id;
-  (async () => {
-    try {
-      const renderedHtml = await renderForumMarkdown(noteBody, { remoteLilypond: true });
-      await query(
-        `UPDATE "LiveClassNote" SET "renderedHtml" = $1 WHERE "id" = $2 AND "userId" = $3`,
-        [renderedHtml, savedId, user.id]
-      );
-    } catch {
-      // non-fatal: rendered HTML stays null
-    }
-  })();
+  if (!id || 'body' in body) {
+    const savedId = savedNote.id;
+    void (async () => {
+      try {
+        const renderedHtml = await renderForumMarkdown(noteBody, { remoteLilypond: true });
+        await query(
+          `UPDATE "LiveClassNote" SET "renderedHtml" = $1 WHERE "id" = $2 AND "userId" = $3`,
+          [renderedHtml, savedId, user.id]
+        );
+      } catch {
+        // non-fatal: rendered HTML stays null
+      }
+    })();
+  }
 
   return json({ note: savedNote });
 };
 
-// PATCH /api/live/notes — partial update: folderId and/or title
+// PATCH /api/live/notes - partial edits must preserve note scope/folder metadata.
 export const PATCH: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
   const user = await ensureDbUserFromSession(session);
@@ -148,6 +160,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
 
   const sets: string[] = [];
   const params: (string | null)[] = [];
+  let updatedBody: string | undefined;
 
   // null means "remove from folder"; missing key means "don't change"
   if ('folderId' in body) {
@@ -157,20 +170,44 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   }
 
   if ('title' in body) {
-    const title = cleanString(String(body.title ?? ''), TITLE_MAX) || null;
+    const title = cleanString(String(body.title ?? ''), TITLE_MAX) || 'nota';
     params.push(title);
     sets.push(`"title" = $${params.length}`);
+  }
+
+  if ('body' in body) {
+    updatedBody = cleanBody(body.body ?? '', BODY_MAX);
+    params.push(updatedBody);
+    sets.push(`body = $${params.length}`);
   }
 
   if (sets.length === 0) return json({ error: 'nothing to update' }, 400);
 
   params.push(id, user.id);
-  const { error } = await query(
-    `UPDATE "LiveClassNote" SET ${sets.join(', ')}, "updatedAt" = now() WHERE "id" = $${params.length - 1} AND "userId" = $${params.length}`,
+  const { data, error } = await query(
+    `UPDATE "LiveClassNote" SET ${sets.join(', ')}, "updatedAt" = now()
+     WHERE "id" = $${params.length - 1} AND "userId" = $${params.length}
+     RETURNING id`,
     params
   );
 
   if (error) return json({ error: error.message }, 500);
+  if (!data?.length) return json({ error: 'Not found' }, 404);
+
+  if (updatedBody !== undefined) {
+    void (async () => {
+      try {
+        const renderedHtml = await renderForumMarkdown(updatedBody, { remoteLilypond: true });
+        await query(
+          `UPDATE "LiveClassNote" SET "renderedHtml" = $1 WHERE "id" = $2 AND "userId" = $3`,
+          [renderedHtml, id, user.id],
+        );
+      } catch {
+        // A failed preview render must not invalidate an already-saved draft.
+      }
+    })();
+  }
+
   return json({ ok: true });
 };
 

@@ -40,7 +40,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const noteId    = cleanString(body?.noteId ?? '', 36);
   const paraIndex = parseInt(String(body?.paraIndex ?? '-1'), 10);
   const label     = cleanString(String(body?.label ?? '').trim(), LABEL_MAX);
-  const dimension = VALID_DIMENSIONS.has(body?.dimension) ? String(body.dimension) : 'manual';
+  const isLocalNlp = body?.source === 'local_nlp';
+  const source = isLocalNlp ? 'local_nlp' : 'manual';
+  const dimension = isLocalNlp
+    ? 'emergent'
+    : (VALID_DIMENSIONS.has(body?.dimension) ? String(body.dimension) : 'manual');
+  const confidence = isLocalNlp
+    ? Math.max(0, Math.min(1, Number(body?.confidence) || 0.65))
+    : 1;
 
   if (!noteId || !label || paraIndex < 0) return json({ error: 'noteId, paraIndex ≥ 0, label required' }, 400);
 
@@ -52,11 +59,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const { data, error } = await query(
     `INSERT INTO "LiveClassNoteCode" (id, note_id, para_index, label, dimension, source, confidence)
-     VALUES ($1, $2, $3, $4, $5, 'manual', 1.0)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (note_id, para_index, label) DO UPDATE SET created_at = now()
      RETURNING id, note_id AS "noteId", para_index AS "paraIndex",
                label, dimension, source, confidence`,
-    [crypto.randomUUID(), noteId, paraIndex, label, dimension],
+    [crypto.randomUUID(), noteId, paraIndex, label, dimension, source, confidence],
   );
   if (error) return json({ error: error.message }, 500);
   return json({ code: data?.[0] });

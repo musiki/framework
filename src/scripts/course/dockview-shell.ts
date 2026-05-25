@@ -281,8 +281,8 @@ export function buildShell(
 
   const traceBtn = document.createElement('button');
   traceBtn.className = 'cnw-hud-icon-btn cnw-hud-trace-btn';
-  traceBtn.title = 'Trace Codes';
-  traceBtn.dataset.tooltip = 'Trace Codes — anotar y codificar fragmentos del texto';
+  traceBtn.title = 'Monitor de análisis';
+  traceBtn.dataset.tooltip = 'Monitor — Trace, Léxico, Zipf y QA';
   traceBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.3" fill="currentColor" stroke="none"/></svg>`;
 
   const closeBtn = document.createElement('button');
@@ -356,14 +356,6 @@ export function buildShell(
     stats.style.cssText = 'font-size:.682rem;opacity:.7;font-family:var(--font-mono,monospace);flex:1';
     hud.appendChild(stats);
     hud.appendChild(traceBtn);
-
-    const qaBtn = document.createElement('button');
-    qaBtn.className = 'cnw-hud-icon-btn cnw-hud-qa-btn';
-    qaBtn.title = 'QA Analyzer';
-    qaBtn.dataset.tooltip = 'QA Analyzer — analizar calidad del texto';
-    qaBtn.style.display = 'none';
-    qaBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h2l2-9 2 18 2-12 2 6 2-3 2 3h2"/></svg>`;
-    hud.appendChild(qaBtn);
 
     shell.appendChild(hud);
   }

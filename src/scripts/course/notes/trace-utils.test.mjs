@@ -2,6 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   segmentParagraphs, computeOrphanLabels,
+  resolveParagraphIndex, collectParagraphIndicesInRange,
   extractKeywords, detectChains, computeSuggestions,
 } from './trace-utils.mjs';
 
@@ -65,6 +66,21 @@ describe('computeOrphanLabels', () => {
 
   test('returns empty set for no codes', () => {
     assert.equal(computeOrphanLabels([]).size, 0);
+  });
+});
+
+describe('live monitor paragraph tracking', () => {
+  const paras = segmentParagraphs('Primero\n\nSegundo largo\n\nTercero');
+
+  test('resolves the paragraph under the cursor and nearest paragraph in gaps', () => {
+    assert.equal(resolveParagraphIndex(paras, paras[1].from + 2), 1);
+    assert.equal(resolveParagraphIndex(paras, paras[1].to + 1), 1);
+    assert.equal(resolveParagraphIndex([], 0), null);
+  });
+
+  test('collects paragraphs intersecting the viewport', () => {
+    const visible = collectParagraphIndicesInRange(paras, paras[0].from, paras[1].from + 2);
+    assert.deepEqual([...visible], [0, 1]);
   });
 });
 

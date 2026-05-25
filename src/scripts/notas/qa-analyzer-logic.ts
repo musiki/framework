@@ -29,6 +29,20 @@ export interface FrequencyEntry {
   pct: number; // count / maxCount * 100
 }
 
+export interface ZipfPoint {
+  rank: number;
+  word: string;
+  count: number;
+  expected: number;
+}
+
+export interface ZipfProfile {
+  points: ZipfPoint[];
+  tokenCount: number;
+  vocabularySize: number;
+  slope: number | null;
+}
+
 /** Returns top-N words by frequency, excluding stopwords and short tokens. */
 export function computeFrequency(text: string, topN = 20): FrequencyEntry[] {
   const tokens = text
@@ -46,6 +60,33 @@ export function computeFrequency(text: string, topN = 20): FrequencyEntry[] {
 
   const max = sorted[0]?.[1] ?? 1;
   return sorted.map(([word, count]) => ({ word, count, pct: (count / max) * 100 }));
+}
+
+/** Builds a compact rank-frequency profile for a Zipf lens. */
+export function computeZipfProfile(text: string, topN = 16): ZipfProfile {
+  const frequencies = computeFrequency(text, Number.MAX_SAFE_INTEGER);
+  const tokenCount = frequencies.reduce((sum, entry) => sum + entry.count, 0);
+  const points = frequencies.slice(0, topN).map((entry, index) => ({
+    rank: index + 1,
+    word: entry.word,
+    count: entry.count,
+    expected: (frequencies[0]?.count ?? 0) / (index + 1),
+  }));
+
+  let slope: number | null = null;
+  if (frequencies.length > 1) {
+    const samples = frequencies.map((entry, index) => ({
+      x: Math.log(index + 1),
+      y: Math.log(entry.count),
+    }));
+    const meanX = samples.reduce((sum, sample) => sum + sample.x, 0) / samples.length;
+    const meanY = samples.reduce((sum, sample) => sum + sample.y, 0) / samples.length;
+    const numerator = samples.reduce((sum, sample) => sum + ((sample.x - meanX) * (sample.y - meanY)), 0);
+    const denominator = samples.reduce((sum, sample) => sum + ((sample.x - meanX) ** 2), 0);
+    if (denominator > 0) slope = numerator / denominator;
+  }
+
+  return { points, tokenCount, vocabularySize: frequencies.length, slope };
 }
 
 export interface KwicLine {

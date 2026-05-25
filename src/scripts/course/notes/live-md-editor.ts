@@ -148,6 +148,23 @@ export function createLiveMdEditor(
   onSave: (content: string) => void | Promise<void>,
 ): LiveMdEditor {
   injectCss();
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flushSave = (content: string) => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    void onSave(content);
+  };
+
+  const scheduleSave = (content: string) => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      void onSave(content);
+    }, 900);
+  };
 
   const state = EditorState.create({
     doc: initialContent,
@@ -160,7 +177,7 @@ export function createLiveMdEditor(
         { key: 'Shift-Mod-ArrowDown', run: selectDocEnd },
         ...defaultKeymap,
         ...historyKeymap,
-        { key: 'Mod-s', run: v => { void onSave(v.state.doc.toString()); return true; } },
+        { key: 'Mod-s', run: v => { flushSave(v.state.doc.toString()); return true; } },
       ]),
       markdown(),
       EditorView.lineWrapping,
@@ -168,7 +185,8 @@ export function createLiveMdEditor(
       inlinePlugin,
       liveMdTheme,
       EditorView.updateListener.of(u => {
-        if (u.focusChanged && !u.view.hasFocus) void onSave(u.view.state.doc.toString());
+        if (u.docChanged) scheduleSave(u.view.state.doc.toString());
+        if (u.focusChanged && !u.view.hasFocus) flushSave(u.view.state.doc.toString());
       }),
     ],
   });
@@ -179,7 +197,10 @@ export function createLiveMdEditor(
     getContent:  () => view.state.doc.toString(),
     setContent: (c) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: c } }),
     focus:      () => view.focus(),
-    destroy:    () => view.destroy(),
+    destroy:    () => {
+      if (saveTimer) flushSave(view.state.doc.toString());
+      view.destroy();
+    },
     getView:    () => view,
   };
 }

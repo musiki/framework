@@ -75,8 +75,19 @@ export const DELETE: APIRoute = async ({ locals, url }) => {
   const id = cleanString(url.searchParams.get('id') ?? '', 36);
   if (!id) return json({ error: 'id required' }, 400);
 
-  // Nullify notes inside this folder before deleting
-  await query(`UPDATE "LiveClassNote" SET "folderId" = NULL WHERE "folderId" = $1 AND "userId" = $2`, [id, user.id]);
+  // Deleting a parent cascades its folders; lift notes from every descendant first.
+  await query(
+    `WITH RECURSIVE descendants AS (
+       SELECT id FROM "LiveClassNoteFolder" WHERE id = $1 AND "userId" = $2
+       UNION ALL
+       SELECT f.id FROM "LiveClassNoteFolder" f
+       JOIN descendants d ON f."parentId" = d.id
+       WHERE f."userId" = $2
+     )
+     UPDATE "LiveClassNote" SET "folderId" = NULL
+     WHERE "folderId" IN (SELECT id FROM descendants) AND "userId" = $2`,
+    [id, user.id],
+  );
   const { error } = await query(`DELETE FROM "LiveClassNoteFolder" WHERE "id" = $1 AND "userId" = $2`, [id, user.id]);
   if (error) return json({ error: error.message }, 500);
   return json({ ok: true });

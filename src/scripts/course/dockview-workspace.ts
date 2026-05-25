@@ -572,14 +572,6 @@ async function loadDbNotePreview(state: DbNotePanelState) {
     state.bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
     hydrateLazyYouTubeEmbeds(state.bodyEl);
     updateDbNoteHud(state, note.body ?? '');
-
-    const qaBtn = state.bodyEl.closest('.cnw-shell')?.querySelector<HTMLButtonElement>('.cnw-hud-qa-btn');
-    if (qaBtn) {
-      qaBtn.style.display = 'flex';
-      qaBtn.onclick = () => window.dispatchEvent(new CustomEvent('musiki:send-to-qa', {
-        detail: { noteId: state.noteId, content: note.body ?? '', title: note.title ?? '' },
-      }));
-    }
   } catch {
     state.bodyEl.innerHTML = '<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar</p>';
   }
@@ -610,7 +602,7 @@ function enterDbNoteEditMode(state: DbNotePanelState) {
       const save = async (text: string) => {
         state.statusDot.className = 'cnw-status saving';
         const res = await fetch('/api/live/notes', {
-          method: 'POST',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: state.noteId, body: text }),
         }).catch(() => null);
@@ -824,7 +816,7 @@ export function initDockviewWorkspace(
           traceBtn,
           liveEditor: null,
           traceHandle: null,
-          traceOnEnterEdit: false,
+          traceOnEnterEdit: true,
         };
         dbNotePanelStates.set(panelId, state);
         pencilBtn.addEventListener('click', () => {

@@ -28,6 +28,46 @@ export async function createFolder(courseId: string, name: string, parentId: str
   return data.folder ?? null;
 }
 
+export function beginRootNoteCreation(container: HTMLElement): void {
+  container.querySelector<HTMLButtonElement>('[data-notas-new-placeholder]')?.click();
+}
+
+export function beginInlineFolderCreation(
+  container: HTMLElement,
+  courseId: string,
+  parentId: string | null = null,
+  indent = 0,
+): void {
+  if (container.querySelector('[data-notas-folder-input]')) return;
+  const row = document.createElement('div');
+  row.dataset.notasFolderInput = 'true';
+  row.style.cssText = `padding:3px 8px 3px ${indent * 20 + 20}px;display:flex;align-items:center;gap:4px;font-size:11px;color:#aaa`;
+  row.innerHTML = '<span style="color:#4e6070;font-size:11px">⊟</span>';
+  const input = document.createElement('input');
+  input.placeholder = 'nombre de carpeta...';
+  input.style.cssText = 'font:inherit;border:none;border-bottom:1px solid var(--c-link,#3b82f6);background:transparent;color:inherit;width:9rem;outline:none;padding:0';
+  row.appendChild(input);
+  container.appendChild(row);
+  input.focus();
+
+  let committing = false;
+  const commit = async () => {
+    if (committing) return;
+    committing = true;
+    const name = input.value.trim();
+    row.remove();
+    if (!name) return;
+    await createFolder(courseId, name, parentId);
+    const tree = await loadNotesTree(courseId);
+    renderNotesTree(container, tree.folders, tree.notes, courseId);
+  };
+  input.addEventListener('blur', () => { void commit(); }, { once: true });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); input.value = ''; input.blur(); }
+  });
+}
+
 export function renderNotesTree(
   container: HTMLElement,
   folders: NoteFolder[],
@@ -46,6 +86,9 @@ export function renderNotesTree(
     const key = f.parentId ?? null;
     if (!children.has(key)) children.set(key, []);
     children.get(key)!.push(f);
+  }
+  for (const level of children.values()) {
+    level.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
   }
 
   const notesByFolder = new Map<string | null, NoteItem[]>();
@@ -81,6 +124,7 @@ export function renderNotesTree(
 
   function renderLevel(parentId: string | null, indent: number): HTMLElement {
     const frag = document.createElement('div');
+    frag.className = 'notas-sb-level';
 
     for (const folder of (children.get(parentId) ?? [])) {
       const details = document.createElement('details');
@@ -89,8 +133,8 @@ export function renderNotesTree(
 
       const summary = document.createElement('summary');
       summary.className = 'notas-sb-folder';
-      summary.style.cssText = 'font-size:.72rem;cursor:pointer;list-style:none;padding:.15rem .3rem;display:flex;align-items:center;gap:.25rem;opacity:.7;border-radius:3px;transition:background 120ms';
-      summary.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:.7"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
+      summary.style.cssText = 'font-size:11px;cursor:pointer;list-style:none;padding:3px 8px;display:flex;align-items:center;gap:4px;color:#aaa;border-radius:2px;transition:background 120ms';
+      summary.innerHTML = `<span class="notas-sb-folder-caret" style="color:#555;font-size:9px;width:8px">▸</span><span class="notas-sb-folder-icon" style="color:#4e6070;font-size:11px">⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
 
       // Folder drop zone
       summary.addEventListener('dragover', e => {
@@ -113,10 +157,16 @@ export function renderNotesTree(
         await reload();
       });
 
-      summary.addEventListener('contextmenu', e => { e.preventDefault(); showFolderMenu(e, folder, reload, courseId, summary); });
+      summary.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showFolderMenu(e, folder, notes, reload, courseId, summary, container, indent); });
 
       details.appendChild(summary);
       details.appendChild(renderLevel(folder.id, indent + 1));
+      details.addEventListener('toggle', () => {
+        const caret = summary.querySelector<HTMLElement>('.notas-sb-folder-caret');
+        if (caret) caret.textContent = details.open ? '▾' : '▸';
+      });
+      const caret = summary.querySelector<HTMLElement>('.notas-sb-folder-caret');
+      if (caret) caret.textContent = details.open ? '▾' : '▸';
       frag.appendChild(details);
     }
 
@@ -129,6 +179,39 @@ export function renderNotesTree(
   }
 
   container.appendChild(renderLevel(null, 0));
+  const placeholder = document.createElement('button');
+  placeholder.type = 'button';
+  placeholder.dataset.notasNewPlaceholder = 'true';
+  placeholder.style.cssText = 'display:flex;align-items:center;gap:5px;width:100%;padding:3px 8px;border:none;background:none;color:#888;cursor:pointer;font:inherit;font-size:11px;text-align:left';
+  placeholder.innerHTML = '<span style="color:#45d384;font-size:12px;width:17px;text-align:center">+</span><span>nueva nota...</span>';
+  placeholder.addEventListener('click', () => {
+    void createNoteInFolder(null, courseId, reload, container, nextDefaultNoteTitle(notes));
+  });
+  placeholder.addEventListener('dragover', e => {
+    if (!e.dataTransfer?.types.includes('text/x-musiki-note')) return;
+    e.preventDefault();
+    placeholder.style.background = 'rgba(69,211,132,.12)';
+  });
+  placeholder.addEventListener('dragleave', () => { placeholder.style.background = ''; });
+  placeholder.addEventListener('drop', async e => {
+    const noteId = e.dataTransfer?.getData('text/x-musiki-note');
+    if (!noteId) return;
+    e.preventDefault();
+    placeholder.style.background = '';
+    await fetch('/api/live/notes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: noteId, folderId: null }),
+    });
+    await reload();
+  });
+  container.appendChild(placeholder);
+
+  container.oncontextmenu = e => {
+    if ((e.target as HTMLElement).closest('.notas-sb-item,.notas-sb-folder')) return;
+    e.preventDefault();
+    showRootMenu(e, container, courseId);
+  };
 }
 
 function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void>): HTMLElement {
@@ -136,10 +219,10 @@ function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void
   el.className = 'notas-sb-item';
   el.draggable = true;
   el.dataset.noteId = note.id;
-  el.style.cssText = `padding:.18rem .4rem .18rem ${indent * 8 + 4}px;font-size:.73rem;cursor:pointer;display:flex;align-items:center;gap:.25rem;border-left:2px solid transparent;opacity:.75;transition:opacity 100ms,border-color 100ms,background 100ms;border-radius:3px`;
+  el.style.cssText = `padding:2px 8px 2px ${indent * 20 + 8}px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;border-left:2px solid transparent;opacity:.82;transition:opacity 100ms,border-color 100ms,background 100ms;border-radius:2px`;
   el.title = note.title || '(sin título)';
   el.dataset.noteId = note.id;
-  el.innerHTML = `<span style="opacity:.5;flex-shrink:0">🗒</span><span class="notas-sb-note-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(note.title || '(sin título)')}</span>`;
+  el.innerHTML = `<span style="color:#45d384;font-size:12px;width:17px;text-align:center;flex-shrink:0">■</span><span class="notas-sb-note-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d0d0d0">${escHtml(note.title || '(sin título)')}</span>`;
 
   el.addEventListener('mouseenter', () => { el.style.opacity = '1'; el.style.background = 'rgba(0,0,0,.04)'; });
   el.addEventListener('mouseleave', () => { el.style.opacity = '.75'; el.style.background = ''; });
@@ -155,7 +238,7 @@ function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void
     if (!e.dataTransfer) return;
     e.dataTransfer.setData('text/x-musiki-note', note.id);
     e.dataTransfer.setData('text/x-musiki-note-title', note.title || '');
-    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.effectAllowed = 'move';
   });
 
   el.addEventListener('contextmenu', e => { e.preventDefault(); showNoteMenu(e, note, el, reload); });
@@ -177,13 +260,23 @@ function showNoteMenu(e: MouseEvent, note: NoteItem, el: HTMLElement, reload: ()
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
 }
 
-function showFolderMenu(e: MouseEvent, folder: NoteFolder, reload: () => Promise<void>, courseId: string, summaryEl: HTMLElement) {
+function showFolderMenu(e: MouseEvent, folder: NoteFolder, notes: NoteItem[], reload: () => Promise<void>, courseId: string, summaryEl: HTMLElement, container: HTMLElement, indent: number) {
   document.querySelector('.notas-sb-ctx')?.remove();
   const menu = buildCtxMenu(e.clientX, e.clientY, [
-    ['Nueva nota aquí', () => createNoteInFolder(folder.id, courseId, reload, summaryEl.closest<HTMLElement>('.notas-sb-tree') ?? undefined)],
-    ['Nueva subcarpeta', () => createSubfolder(folder.id, courseId, reload)],
+    ['Nueva nota aquí', () => createNoteInFolder(folder.id, courseId, reload, container, nextDefaultNoteTitle(notes))],
+    ['Nueva carpeta aquí', () => beginInlineFolderCreation(container, courseId, folder.id, indent + 1)],
     ['Renombrar', () => renameFolder(folder, summaryEl)],
     ['Eliminar', () => deleteFolder(folder, reload)],
+  ]);
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+}
+
+function showRootMenu(e: MouseEvent, container: HTMLElement, courseId: string) {
+  document.querySelector('.notas-sb-ctx')?.remove();
+  const menu = buildCtxMenu(e.clientX, e.clientY, [
+    ['Nueva nota', () => beginRootNoteCreation(container)],
+    ['Nueva carpeta', () => beginInlineFolderCreation(container, courseId)],
   ]);
   document.body.appendChild(menu);
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
@@ -258,11 +351,18 @@ async function deleteFolder(folder: NoteFolder, reload: () => Promise<void>) {
   await reload();
 }
 
-async function createNoteInFolder(folderId: string, courseId: string, reload: () => Promise<void>, container?: HTMLElement) {
+function nextDefaultNoteTitle(notes: NoteItem[]): string {
+  const existing = new Set(notes.map(note => note.title.toLowerCase()));
+  let index = 1;
+  while (existing.has(`note-${String(index).padStart(2, '0')}`)) index++;
+  return `note-${String(index).padStart(2, '0')}`;
+}
+
+async function createNoteInFolder(folderId: string | null, courseId: string, reload: () => Promise<void>, container?: HTMLElement, defaultTitle = 'note-01') {
   const res = await fetch('/api/live/notes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'Nueva nota', body: '', courseId, folderId }),
+    body: JSON.stringify({ title: defaultTitle, body: '', courseId, folderId }),
   });
   if (!res.ok) return;
   const data = await res.json();
@@ -297,13 +397,6 @@ function startInlineRename(titleSpan: HTMLElement, noteId: string, item: HTMLEle
   };
   input.addEventListener('blur', commit, { once: true });
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } if (e.key === 'Escape') { input.value = prev; input.blur(); } });
-}
-
-async function createSubfolder(parentId: string, courseId: string, reload: () => Promise<void>) {
-  const name = prompt('Nombre de la subcarpeta:');
-  if (!name?.trim()) return;
-  await createFolder(courseId, name.trim(), parentId);
-  await reload();
 }
 
 function escHtml(s: string) {

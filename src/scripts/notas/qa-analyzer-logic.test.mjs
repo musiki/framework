@@ -1,7 +1,7 @@
 // src/scripts/notas/qa-analyzer-logic.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeFrequency, computeKwic, STOPWORDS } from './qa-analyzer-logic.ts';
+import { computeFrequency, computeKwic, computeZipfProfile, STOPWORDS } from './qa-analyzer-logic.ts';
 
 test('computeFrequency returns top words excluding stopwords', () => {
   const text = 'música ritmo música tiempo ritmo música la la la el el';
@@ -39,4 +39,22 @@ test('computeKwic returns empty for missing word', () => {
 test('computeKwic is case-insensitive', () => {
   const lines = computeKwic('Música y música y MÚSICA', 'música');
   assert.equal(lines.length, 3);
+});
+
+test('computeZipfProfile exposes rank-frequency observations and ideal expectation', () => {
+  const profile = computeZipfProfile('ritmo ritmo ritmo ritmo tono tono voz eco', 3);
+  assert.equal(profile.tokenCount, 8);
+  assert.equal(profile.vocabularySize, 4);
+  assert.deepEqual(profile.points.map(point => point.rank), [1, 2, 3]);
+  assert.equal(profile.points[1].expected, 2);
+  assert.ok(profile.slope !== null && profile.slope < 0);
+});
+
+test('computeZipfProfile handles an empty text', () => {
+  assert.deepEqual(computeZipfProfile('la el y'), {
+    points: [],
+    tokenCount: 0,
+    vocabularySize: 0,
+    slope: null,
+  });
 });

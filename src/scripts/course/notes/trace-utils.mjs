@@ -62,6 +62,27 @@ export function computeOrphanLabels(codes) {
   return new Set([...counts.entries()].filter(([, n]) => n === 1).map(([l]) => l));
 }
 
+export function resolveParagraphIndex(paras, position) {
+  if (!paras.length) return null;
+  let nearest = paras[0];
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const para of paras) {
+    if (position >= para.from && position <= para.to) return para.index;
+    const distance = position < para.from ? para.from - position : position - para.to;
+    if (distance < nearestDistance) {
+      nearest = para;
+      nearestDistance = distance;
+    }
+  }
+  return nearest.index;
+}
+
+export function collectParagraphIndicesInRange(paras, from, to) {
+  return new Set(paras
+    .filter(para => para.to >= from && para.from <= to)
+    .map(para => para.index));
+}
+
 export function extractKeywords(text, stopwords = STOPWORDS) {
   const tokens = text
     .toLowerCase()

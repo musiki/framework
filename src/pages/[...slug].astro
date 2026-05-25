@@ -13485,7 +13485,7 @@ a[node] -->|edge| b[hub]
     <Search />
     {session?.user && canonicalCourseIdToUse && (
       <script>
-        import { loadNotesTree, renderNotesTree, createFolder } from '../scripts/course/notes-sidebar';
+        import { loadNotesTree, renderNotesTree, beginRootNoteCreation, beginInlineFolderCreation } from '../scripts/course/notes-sidebar';
 
         async function bootNotasSidebar() {
           const sidebarEl = document.querySelector<HTMLElement>('[data-notas-sidebar]');
@@ -13512,24 +13512,16 @@ a[node] -->|edge| b[hub]
 
           // New note button
           sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-btn')?.addEventListener('click', async () => {
-            const title = prompt('Nombre de la nueva nota:');
-            if (!title?.trim()) return;
-            await fetch('/api/live/notes', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ title: title.trim(), body: '', courseId }),
-            });
             if (!details?.open) { details!.open = true; loaded = false; }
             await reload();
+            beginRootNoteCreation(treeEl);
           });
 
           // New folder button
           sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-folder-btn')?.addEventListener('click', async () => {
-            const name = prompt('Nombre de la carpeta:');
-            if (!name?.trim()) return;
-            await createFolder(courseId, name.trim(), null);
             if (!details?.open) { details!.open = true; loaded = false; }
             await reload();
+            beginInlineFolderCreation(treeEl, courseId);
           });
 
           // Ribbon NOTAS button: focus/open this section

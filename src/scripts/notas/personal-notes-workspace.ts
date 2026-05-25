@@ -1,6 +1,8 @@
 // src/scripts/notas/personal-notes-workspace.ts
 import { DockviewComponent } from 'dockview-core';
 import { buildShell, injectWorkspaceCss } from '../course/dockview-shell';
+import { createLiveMdEditor } from '../course/notes/live-md-editor';
+import type { TraceMarginHandle } from '../course/notes/trace-margin';
 
 export interface PersonalNotesWorkspace {
   destroy(): void;
@@ -9,6 +11,7 @@ export interface PersonalNotesWorkspace {
 const pendingParams = new Map<string, any>();
 let _workspace: PersonalNotesWorkspace | null = null;
 let _ctrl: AbortController | null = null;
+let _editorCleanups: Array<() => void> = [];
 
 export function initPersonalNotesWorkspace(container: HTMLElement): PersonalNotesWorkspace {
   if (_workspace) { _ctrl?.abort(); _workspace = null; }
@@ -28,9 +31,13 @@ export function initPersonalNotesWorkspace(container: HTMLElement): PersonalNote
       }
 
       if (params.kind === 'db-note') {
-        const { shell, bodyEl, pencilBtn } = buildShell(options.id, params.noteId, params.title, dockview);
+        const { shell, bodyEl, pencilBtn, statusDot, splitRightBtn, splitBelowBtn, traceBtn } = buildShell(
+          options.id, params.noteId, params.title, dockview, true,
+        );
         pencilBtn.style.display = 'none';
-        void loadDbNoteContent(bodyEl, params.noteId);
+        splitRightBtn.style.display = 'none';
+        splitBelowBtn.style.display = 'none';
+        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId);
         return { element: shell, init: () => {} };
       }
 
@@ -49,6 +56,8 @@ export function initPersonalNotesWorkspace(container: HTMLElement): PersonalNote
   _workspace = {
     destroy: () => {
       _ctrl?.abort();
+      for (const cleanup of _editorCleanups) cleanup();
+      _editorCleanups = [];
       ro.disconnect();
       dockview.dispose();
       _workspace = null;
@@ -118,10 +127,14 @@ function buildBrowserPanel(panelId: string, dockview: DockviewComponent): HTMLEl
   search.addEventListener('input', () => render(search.value));
 
   newBtn.addEventListener('click', async () => {
+    const existing = new Set(allNotes.map(note => String(note.title ?? '').toLowerCase()));
+    let number = 1;
+    while (existing.has(`note-${String(number).padStart(2, '0')}`)) number++;
+    const defaultTitle = `note-${String(number).padStart(2, '0')}`;
     const res = await fetch('/api/live/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Nueva nota', body: '' }),
+      body: JSON.stringify({ title: defaultTitle, body: '' }),
     });
     if (!res.ok) return;
     const data = await res.json();
@@ -129,7 +142,7 @@ function buildBrowserPanel(panelId: string, dockview: DockviewComponent): HTMLEl
     await loadAll();
     if (!newId) return;
     const item = tree.querySelector<HTMLElement>(`[data-note-id="${newId}"]`);
-    if (item) { item.setAttribute('contenteditable', 'true'); item.focus(); const sel = window.getSelection(); sel?.selectAllChildren(item); }
+    if (item) startInlineNoteRename(item, newId, defaultTitle);
   });
 
   void loadAll();
@@ -145,13 +158,79 @@ function openNotePanel(noteId: string, title: string, dockview: DockviewComponen
   dockview.addPanel({ id: newId, component: 'note-panel', position: refPanel ? { referencePanel: refPanel.id, direction: 'right' } : undefined });
 }
 
-async function loadDbNoteContent(bodyEl: HTMLElement, noteId: string) {
+function startInlineNoteRename(item: HTMLElement, noteId: string, initialTitle: string) {
+  const input = document.createElement('input');
+  input.value = initialTitle;
+  input.style.cssText = 'width:100%;font:inherit;color:inherit;background:transparent;border:none;border-bottom:1px solid var(--c-link,#3b82f6);outline:none';
+  item.textContent = '';
+  item.appendChild(input);
+  input.focus();
+  input.select();
+  const commit = async () => {
+    const title = input.value.trim() || initialTitle;
+    item.textContent = title;
+    item.title = title;
+    await fetch('/api/live/notes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: noteId, title }),
+    });
+  };
+  input.addEventListener('blur', () => { void commit(); }, { once: true });
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
+    if (event.key === 'Escape') { event.preventDefault(); input.value = initialTitle; input.blur(); }
+  });
+}
+
+function updateHud(bodyEl: HTMLElement, content: string) {
+  const hud = bodyEl.closest('.cnw-shell')?.querySelector<HTMLElement>('.cnw-hud-stats');
+  if (!hud) return;
+  const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const sentences = content.split(/[.!?]+/).filter(sentence => sentence.trim()).length;
+  hud.textContent = `${words} palabras · ${content.length.toLocaleString()} caracteres · ${sentences} oraciones`;
+}
+
+async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, traceBtn: HTMLButtonElement, noteId: string) {
   bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
   const r = await fetch(`/api/live/notes?id=${noteId}`).catch(() => null);
   const d = r ? await r.json().catch(() => null) : null;
   const note = d?.notes?.[0];
   if (!note) { bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4">Nota no encontrada</p>'; return; }
-  const { marked } = await import('marked');
-  const html = String(marked.parse(note.body ?? '', { async: false }));
-  bodyEl.innerHTML = `<div style="padding:1.2rem 1.5rem;font-size:var(--font-size-base,1rem);line-height:1.72">${html}</div>`;
+  if (!bodyEl.isConnected) return;
+  bodyEl.innerHTML = '';
+  const mount = document.createElement('div');
+  mount.style.cssText = 'height:100%;overflow:hidden;';
+  bodyEl.appendChild(mount);
+  const editor = createLiveMdEditor(mount, note.body ?? '', async content => {
+    statusDot.className = 'cnw-status saving';
+    const result = await fetch('/api/live/notes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: noteId, body: content }),
+    }).catch(() => null);
+    statusDot.className = result?.ok ? 'cnw-status saved' : 'cnw-status error';
+    updateHud(bodyEl, content);
+  });
+  updateHud(bodyEl, note.body ?? '');
+  editor.focus();
+
+  let traceHandle: TraceMarginHandle | null = null;
+  const toggleTrace = async () => {
+    if (traceHandle) {
+      traceHandle.destroy();
+      traceHandle = null;
+      traceBtn.classList.remove('is-active');
+      return;
+    }
+    const { mountTraceMargin } = await import('../course/notes/trace-margin');
+    traceHandle = await mountTraceMargin(editor.getView(), noteId, bodyEl);
+    traceBtn.classList.add('is-active');
+  };
+  traceBtn.addEventListener('click', () => { void toggleTrace(); });
+  await toggleTrace();
+  _editorCleanups.push(() => {
+    traceHandle?.destroy();
+    editor.destroy();
+  });
 }

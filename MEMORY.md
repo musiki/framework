@@ -1,5 +1,14 @@
 # MEMORY.md — Project Activity Log
 
+<2026-05-24 shortcuts-for-notes> <br>
+Global shortcuts for CodeMirror notes editors.
+- Added `Mod-ArrowUp` (Cmd+Up on Mac, Ctrl+Up on Win/Linux) to go to start of document.
+- Added `Mod-ArrowDown` to go to end of document.
+- Added `Shift-Mod-ArrowUp` to select to start of document.
+- Added `Shift-Mod-ArrowDown` to select to end of document.
+- Implemented in `src/scripts/markdown-codemirror.ts`, `src/scripts/notes-editor/editor.ts`, and `src/scripts/course/notes/live-md-editor.ts`.
+- Precedence set to high to ensure they work even if default keymaps are present.
+
 <2026-05-08 re-sa-sessions-postgres-patches> <br>
 ResourceSession architecture for RE pod, SV/SA interaction fixes, supabase→postgres-patches rename.
 - RE: New `ResourceSession` table (distinct from LiveKit attendance `LiveClassSession`). `LiveClassResource` gains `sessionId` FK. Migration applied to production.
