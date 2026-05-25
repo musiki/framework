@@ -1,5 +1,34 @@
 // Pure functions mirrored from trace-margin.ts for Node test runner.
 
+export const MIN_KEYWORD_LEN = 4;
+export const TOP_KEYWORDS_PER_PARA = 5;
+export const STOPWORDS = new Set([
+  // Spanish
+  'para', 'como', 'pero', 'más', 'con', 'que', 'una', 'uno', 'los', 'las',
+  'del', 'este', 'esta', 'esto', 'desde', 'hasta', 'sobre', 'entre', 'cuando',
+  'donde', 'puede', 'tiene', 'también', 'además', 'porque', 'aunque', 'según',
+  'todos', 'todas', 'todo', 'bien', 'hacer', 'tener', 'haber', 'siendo', 'están',
+  'estar', 'había', 'será', 'mismo', 'misma', 'mismos', 'mismas', 'ante', 'bajo',
+  'cada', 'casi', 'cierto', 'contra', 'cual', 'cuya', 'dado', 'debe', 'deben',
+  'ella', 'ellas', 'ellos', 'embargo', 'esas', 'esos', 'gran', 'hacia', 'incluso',
+  'junto', 'lado', 'largo', 'lugar', 'manera', 'mayor', 'mediante', 'mejor',
+  'menor', 'menos', 'mientras', 'modo', 'ninguna', 'ninguno', 'otras', 'otros',
+  'otra', 'otro', 'pues', 'parte', 'poco', 'primer', 'primera', 'propio', 'propia',
+  'sino', 'solo', 'sola', 'tanto', 'tipo', 'toda', 'tras', 'unos', 'unas',
+  'varios', 'veces', 'forma', 'nivel', 'dicho', 'dicha', 'aquí', 'allí', 'ahora',
+  'antes', 'después', 'siempre', 'nunca', 'algo', 'algún', 'alguna', 'algunos',
+  'algunas', 'nada', 'nadie', 'mucho', 'bastante', 'demasiado', 'través',
+  // English
+  'that', 'with', 'this', 'have', 'from', 'they', 'will', 'been', 'were',
+  'said', 'each', 'which', 'their', 'there', 'when', 'what', 'make', 'like',
+  'time', 'just', 'know', 'take', 'into', 'year', 'your', 'good', 'some',
+  'could', 'them', 'then', 'than', 'more', 'only', 'come', 'over', 'also',
+  'back', 'after', 'first', 'well', 'most', 'about', 'would', 'very', 'these',
+  'those', 'such', 'other', 'being', 'both', 'here', 'many', 'does', 'where',
+  'through', 'because', 'between', 'without', 'during', 'before', 'should',
+  'might', 'while', 'since', 'until', 'whether',
+]);
+
 export function segmentParagraphs(markdown) {
   const text = typeof markdown === 'string' ? markdown : '';
   const result = [];
@@ -31,4 +60,56 @@ export function computeOrphanLabels(codes) {
   const counts = new Map();
   for (const c of codes) counts.set(c.label, (counts.get(c.label) ?? 0) + 1);
   return new Set([...counts.entries()].filter(([, n]) => n === 1).map(([l]) => l));
+}
+
+export function extractKeywords(text, stopwords = STOPWORDS) {
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^\p{L}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= MIN_KEYWORD_LEN && !stopwords.has(t));
+
+  const freq = new Map();
+  for (const t of tokens) freq.set(t, (freq.get(t) ?? 0) + 1);
+
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOP_KEYWORDS_PER_PARA)
+    .map(([word]) => word);
+}
+
+export function detectChains(paragraphsWithKeywords) {
+  const labelToIndices = new Map();
+  for (const { index, keywords } of paragraphsWithKeywords) {
+    for (const kw of keywords) {
+      if (!labelToIndices.has(kw)) labelToIndices.set(kw, []);
+      labelToIndices.get(kw).push(index);
+    }
+  }
+  const result = new Map();
+  for (const [label, indices] of labelToIndices) {
+    if (indices.length >= 2) result.set(label, indices);
+  }
+  return result;
+}
+
+export function computeSuggestions(paras, codes) {
+  const existingSet = new Set(codes.map(c => `${c.paraIndex}:${c.label}`));
+
+  const parasWithKeywords = paras.map(p => ({
+    index: p.index,
+    keywords: extractKeywords(p.text),
+  }));
+
+  const chains = detectChains(parasWithKeywords);
+  const results = [];
+
+  for (const [label, indices] of chains) {
+    for (const paraIndex of indices) {
+      if (!existingSet.has(`${paraIndex}:${label}`)) {
+        results.push({ label, paraIndex });
+      }
+    }
+  }
+  return results;
 }
