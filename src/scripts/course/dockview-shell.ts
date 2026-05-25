@@ -144,8 +144,44 @@ export function injectWorkspaceCss(containerId: string) {
     .cnw-mode-btn:hover { opacity: 1 !important; color: var(--c-fg); }
     .cnw-close-btn:hover { color: #c87e7e !important; }
     .cnw-mode-btn.is-active { opacity: 1 !important; color: var(--c-link, #3b82f6) !important; }
-    .cnw-hud-trace-btn.is-active { opacity: 1 !important; color: var(--c-link, #3b82f6) !important; }
-    .cnw-hud-trace-btn:hover { opacity: 1 !important; }
+
+    /* HUD icon buttons — cohesive with ribbon flat style */
+    .cnw-hud-icon-btn {
+      border: none;
+      background: none;
+      cursor: pointer;
+      padding: 0 3px;
+      color: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
+      flex-shrink: 0;
+      position: relative;
+      transition: color 120ms;
+    }
+    .cnw-hud-icon-btn:hover { color: var(--c-fg); }
+    .cnw-hud-icon-btn.is-active { color: var(--c-link, #3b82f6) !important; }
+    /* CSS tooltip — floats above the button, inside panel bounds */
+    .cnw-hud-icon-btn::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      right: 0;
+      background: color-mix(in srgb, var(--c-bg, #111) 93%, var(--c-fg) 7%);
+      border: 1px solid var(--c-border, rgba(120,120,140,.3));
+      color: var(--c-fg, #e5e5e5);
+      font-size: .62rem;
+      white-space: nowrap;
+      padding: 3px 7px;
+      border-radius: 4px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 140ms 180ms;
+      z-index: 200;
+      font-family: var(--font-ui, system-ui, sans-serif);
+    }
+    .cnw-hud-icon-btn:hover::after { opacity: 1; }
 
     /* Panel body */
     .cnw-body {
@@ -244,10 +280,10 @@ export function buildShell(
   header.appendChild(splitBelowBtn);
 
   const traceBtn = document.createElement('button');
-  traceBtn.className = 'cnw-hud-trace-btn';
+  traceBtn.className = 'cnw-hud-icon-btn cnw-hud-trace-btn';
   traceBtn.title = 'Trace Codes';
-  traceBtn.textContent = 'TC ⊕';
-  traceBtn.style.cssText = 'border:none;background:none;font-size:.71rem;opacity:.55;cursor:pointer;padding:0 2px;color:inherit';
+  traceBtn.dataset.tooltip = 'Trace Codes — anotar y codificar fragmentos del texto';
+  traceBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.3" fill="currentColor" stroke="none"/></svg>`;
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'cnw-mode-btn cnw-close-btn';
@@ -322,10 +358,11 @@ export function buildShell(
     hud.appendChild(traceBtn);
 
     const qaBtn = document.createElement('button');
-    qaBtn.className = 'cnw-hud-qa-btn';
-    qaBtn.title = 'Enviar al QA Analyzer';
-    qaBtn.style.cssText = 'border:none;background:none;font-size:.71rem;opacity:.55;cursor:pointer;padding:0 2px;color:inherit;display:none';
-    qaBtn.textContent = 'QA ↗';
+    qaBtn.className = 'cnw-hud-icon-btn cnw-hud-qa-btn';
+    qaBtn.title = 'QA Analyzer';
+    qaBtn.dataset.tooltip = 'QA Analyzer — analizar calidad del texto';
+    qaBtn.style.display = 'none';
+    qaBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h2l2-9 2 18 2-12 2 6 2-3 2 3h2"/></svg>`;
     hud.appendChild(qaBtn);
 
     shell.appendChild(hud);

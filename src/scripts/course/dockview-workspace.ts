@@ -575,7 +575,7 @@ async function loadDbNotePreview(state: DbNotePanelState) {
 
     const qaBtn = state.bodyEl.closest('.cnw-shell')?.querySelector<HTMLButtonElement>('.cnw-hud-qa-btn');
     if (qaBtn) {
-      qaBtn.style.display = 'inline';
+      qaBtn.style.display = 'flex';
       qaBtn.onclick = () => window.dispatchEvent(new CustomEvent('musiki:send-to-qa', {
         detail: { noteId: state.noteId, content: note.body ?? '', title: note.title ?? '' },
       }));
