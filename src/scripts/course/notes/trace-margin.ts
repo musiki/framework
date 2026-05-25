@@ -64,6 +64,86 @@ export function computeOrphanLabels(codes: TraceCode[]): Set<string> {
   return new Set([...counts.entries()].filter(([, n]) => n === 1).map(([l]) => l));
 }
 
+// ── NLP auto-suggestions ───────────────────────────────────────────────────
+
+export type TraceSuggestion = { label: string; paraIndex: number };
+
+const MIN_KEYWORD_LEN = 4;
+const TOP_KEYWORDS_PER_PARA = 5;
+
+const STOPWORDS = new Set([
+  'para', 'como', 'pero', 'más', 'con', 'que', 'una', 'uno', 'los', 'las',
+  'del', 'este', 'esta', 'esto', 'desde', 'hasta', 'sobre', 'entre', 'cuando',
+  'donde', 'puede', 'tiene', 'también', 'además', 'porque', 'aunque', 'según',
+  'todos', 'todas', 'todo', 'bien', 'hacer', 'tener', 'haber', 'siendo', 'están',
+  'estar', 'había', 'será', 'mismo', 'misma', 'mismos', 'mismas', 'ante', 'bajo',
+  'cada', 'casi', 'cierto', 'contra', 'cual', 'cuya', 'dado', 'debe', 'deben',
+  'ella', 'ellas', 'ellos', 'embargo', 'esas', 'esos', 'gran', 'hacia', 'incluso',
+  'junto', 'lado', 'largo', 'lugar', 'manera', 'mayor', 'mediante', 'mejor',
+  'menor', 'menos', 'mientras', 'modo', 'ninguna', 'ninguno', 'otras', 'otros',
+  'otra', 'otro', 'pues', 'parte', 'poco', 'primer', 'primera', 'propio', 'propia',
+  'sino', 'solo', 'sola', 'tanto', 'tipo', 'toda', 'tras', 'unos', 'unas',
+  'varios', 'veces', 'forma', 'nivel', 'dicho', 'dicha', 'aquí', 'allí', 'ahora',
+  'antes', 'después', 'siempre', 'nunca', 'algo', 'algún', 'alguna', 'algunos',
+  'algunas', 'nada', 'nadie', 'mucho', 'bastante', 'demasiado', 'través',
+  'that', 'with', 'this', 'have', 'from', 'they', 'will', 'been', 'were',
+  'said', 'each', 'which', 'their', 'there', 'when', 'what', 'make', 'like',
+  'time', 'just', 'know', 'take', 'into', 'year', 'your', 'good', 'some',
+  'could', 'them', 'then', 'than', 'more', 'only', 'come', 'over', 'also',
+  'back', 'after', 'first', 'well', 'most', 'about', 'would', 'very', 'these',
+  'those', 'such', 'other', 'being', 'both', 'here', 'many', 'does', 'where',
+  'through', 'because', 'between', 'without', 'during', 'before', 'should',
+  'might', 'while', 'since', 'until', 'whether',
+]);
+
+function extractKeywords(text: string): string[] {
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^\p{L}]/gu, ' ')
+    .split(/\s+/)
+    .filter(t => t.length >= MIN_KEYWORD_LEN && !STOPWORDS.has(t));
+  const freq = new Map<string, number>();
+  for (const t of tokens) freq.set(t, (freq.get(t) ?? 0) + 1);
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOP_KEYWORDS_PER_PARA)
+    .map(([t]) => t);
+}
+
+function detectChains(paragraphsWithKeywords: { index: number; keywords: string[] }[]): Map<string, number[]> {
+  const labelToParas = new Map<string, number[]>();
+  for (const { index, keywords } of paragraphsWithKeywords) {
+    for (const kw of keywords) {
+      if (!labelToParas.has(kw)) labelToParas.set(kw, []);
+      if (!labelToParas.get(kw)!.includes(index)) labelToParas.get(kw)!.push(index);
+    }
+  }
+  return new Map([...labelToParas.entries()].filter(([, indices]) => indices.length >= 2));
+}
+
+export function computeSuggestions(paras: Paragraph[], codes: TraceCode[]): TraceSuggestion[] {
+  const withKeywords = paras.map(p => ({ index: p.index, keywords: extractKeywords(p.text) }));
+  const chains = detectChains(withKeywords);
+  const existingSet = new Set(codes.map(c => `${c.paraIndex}:${c.label}`));
+  const suggestions: TraceSuggestion[] = [];
+  for (const [label, paraIndices] of chains) {
+    for (const paraIndex of paraIndices) {
+      if (!existingSet.has(`${paraIndex}:${label}`)) {
+        suggestions.push({ label, paraIndex });
+      }
+    }
+  }
+  return suggestions;
+}
+
+// ── Label color utility ────────────────────────────────────────────────────
+
+function labelHue(label: string): number {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) & 0x7fffffff;
+  return h % 360;
+}
+
 // ── CM6 chain highlight extension ──────────────────────────────────────────
 
 export const setHighlight = StateEffect.define<Set<number>>();
@@ -111,6 +191,62 @@ export function makeHighlightPlugin(paras: Paragraph[]) {
   );
 }
 
+// ── CM6 code bar extension (permanent colored left borders per paragraph) ──
+
+export const setCodeBars = StateEffect.define<TraceCode[]>();
+
+export const codeBarField = StateField.define<TraceCode[]>({
+  create: () => [],
+  update: (val, tr) => {
+    for (const e of tr.effects) if (e.is(setCodeBars)) return e.value;
+    return val;
+  },
+});
+
+function buildCodeBarDecos(view: EditorView, paras: Paragraph[]): DecorationSet {
+  const codes = view.state.field(codeBarField, false);
+  if (!codes?.length) return Decoration.none;
+  const doc = view.state.doc;
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const para of paras) {
+    const paraCodes = codes.filter(c => c.paraIndex === para.index);
+    if (!paraCodes.length) continue;
+    const hue = labelHue(paraCodes[0].label);
+    const safeFrom = Math.min(para.from, doc.length);
+    const safeTo   = Math.max(0, Math.min(para.to - 1, doc.length - 1));
+    if (safeFrom > doc.length) continue;
+    const startLine = doc.lineAt(safeFrom);
+    const endLine   = doc.lineAt(safeTo);
+    for (let n = startLine.number; n <= endLine.number; n++) {
+      const line = doc.line(n);
+      builder.add(
+        line.from, line.from,
+        Decoration.line({
+          attributes: {
+            style: `border-left: 3px solid hsl(${hue}, 55%, 55%); padding-left: 4px; box-sizing: border-box;`,
+          },
+        }),
+      );
+    }
+  }
+  return builder.finish();
+}
+
+export function makeCodeBarPlugin(paras: Paragraph[]) {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(v: EditorView) { this.decorations = buildCodeBarDecos(v, paras); }
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.transactions.some(t => t.effects.some(e => e.is(setCodeBars)))) {
+          this.decorations = buildCodeBarDecos(u.view, paras);
+        }
+      }
+    },
+    { decorations: v => v.decorations },
+  );
+}
+
 // ── CSS ────────────────────────────────────────────────────────────────────
 
 export function injectTraceCss() {
@@ -150,6 +286,19 @@ export function injectTraceCss() {
     .tc-graph { border-top: 1px solid var(--c-border, rgba(120,120,140,0.15)); flex-shrink: 0; }
     .tc-graph summary { font-size: 9px; opacity: 0.4; padding: 4px 8px; cursor: pointer; user-select: none; letter-spacing: 0.05em; text-transform: uppercase; }
     .tc-svg { display: block; margin: 0 auto; padding-bottom: 8px; }
+    .tc-chip-suggestion {
+      opacity: 0.55;
+      border: 1px dashed color-mix(in srgb, var(--c-link, #3b82f6) 60%, transparent);
+      background: transparent;
+    }
+    .tc-chip-suggestion:hover { opacity: 0.9; background: color-mix(in srgb, var(--c-link, #3b82f6) 8%, var(--c-bg)); }
+    .tc-chip-suggest-btn {
+      background: none; border: none; cursor: pointer;
+      font-size: 12px; line-height: 1;
+      color: var(--c-link, #3b82f6);
+      padding: 0 1px; opacity: 0.8;
+    }
+    .tc-chip-suggest-btn:hover { opacity: 1; }
   `;
   document.head.appendChild(s);
 }
