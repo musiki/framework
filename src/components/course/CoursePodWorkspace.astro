@@ -99,9 +99,9 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
   }
 
   /* Mobile: slide from bottom, account for ribbon at bottom */
-  @media (max-width: 560px) {
+  @media (max-width: 500px) {
     .course-pod-workspace {
-      inset: 0 0 var(--ribbon-bottom-height, 58px) 0;
+      inset: 0 0 var(--ribbon-mobile-clearance, 64px) 0;
     }
   }
 </style>

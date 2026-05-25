@@ -293,4 +293,73 @@ const { isTeacher = false, isExternal = false } = Astro.props;
   .welcome-join-button:active {
     transform: translateY(0);
   }
+
+  @media (max-width: 500px) {
+    .conference-welcome-modal {
+      align-items: flex-start;
+      padding:
+        max(0.5rem, env(safe-area-inset-top, 0px))
+        0.5rem
+        max(0.5rem, env(safe-area-inset-bottom, 0px));
+      overflow-y: auto;
+    }
+
+    .conference-welcome-dialog {
+      width: min(100%, calc(100vw - 1rem));
+      max-height: calc(
+        100dvh - 1rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+      );
+      margin: auto 0;
+      overflow-y: auto;
+      border-radius: 10px;
+    }
+
+    .conference-welcome-header {
+      padding: 0.7rem 0.8rem 0.55rem;
+    }
+
+    .welcome-logo {
+      height: 22px;
+      margin-bottom: 0.35rem;
+    }
+
+    .conference-welcome-header h2 {
+      font-size: 1rem;
+    }
+
+    .conference-welcome-layout {
+      padding: 0.65rem;
+      gap: 0.65rem;
+    }
+
+    .welcome-preview-side,
+    .welcome-controls-side {
+      gap: 0.6rem;
+    }
+
+    .welcome-video-container {
+      max-height: min(27dvh, 150px);
+    }
+
+    .welcome-audio-container {
+      padding: 0.15rem 0;
+    }
+
+    .welcome-test-row {
+      margin-top: 0;
+    }
+
+    .welcome-hint {
+      font-size: 0.68rem;
+    }
+
+    .welcome-footer {
+      padding-top: 0.2rem;
+    }
+
+    .welcome-join-button {
+      padding: 0.7rem;
+      font-size: 0.8rem;
+    }
+  }
 </style>

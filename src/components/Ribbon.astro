@@ -384,8 +384,8 @@ const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseI
   html:not(.dark) .ribbon-theme-sun { display: none; }
   html.dark .ribbon-theme-moon { display: none; }
   /* Mobile body padding so content isn't hidden under bottom bar */
-  @media (max-width: 560px) {
-    body { padding-bottom: calc(var(--ribbon-bottom-height, 52px) + 8px + env(safe-area-inset-bottom, 0px)); }
+  @media (max-width: 500px) {
+    body { padding-bottom: calc(var(--ribbon-mobile-clearance, 64px) + 8px); }
   }
 
   /* Inactive (unlinked) ribbon item */
@@ -425,10 +425,10 @@ const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseI
   }
 
   /* Mobile más sheet */
-  @media (max-width: 560px) {
+  @media (max-width: 500px) {
     .ribbon-mas-sheet {
       position: fixed;
-      bottom: var(--ribbon-bottom-height);
+      bottom: var(--ribbon-mobile-clearance, 64px);
       right: 0;
       left: 0;
       background: color-mix(in srgb, var(--c-bg) 96%, var(--c-fg) 4%);
@@ -478,7 +478,7 @@ const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseI
     }
   }
   /* Hide sheet on desktop */
-  @media (min-width: 561px) {
+  @media (min-width: 501px) {
     .ribbon-mas-sheet { display: none; }
     .ribbon-mas-toggle { display: none; }
   }
@@ -532,7 +532,7 @@ const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseI
         if (btn instanceof HTMLElement && !btn.dataset.hapticBound) {
           btn.dataset.hapticBound = 'true';
           btn.addEventListener('click', () => {
-            if (window.matchMedia('(max-width: 560px)').matches) {
+            if (window.matchMedia('(max-width: 500px)').matches) {
               navigator.vibrate(10);
             }
           });

@@ -5,6 +5,8 @@
   --ribbon-border: var(--c-border);
   --ribbon-item-size: 32px;
   --ribbon-bottom-height: 52px; /* mobile */
+  --ribbon-mobile-edge-gap: max(6px, env(safe-area-inset-bottom, 0px));
+  --ribbon-mobile-clearance: calc(var(--ribbon-bottom-height) + var(--ribbon-mobile-edge-gap) + 6px);
 }
 
 /* ── Desktop ribbon ────────────────────────────────────────────────────── */
@@ -159,8 +161,8 @@
   position: relative;
 }
 
-/* ── Tablet 561–1024px: fixed left column ───────────────────────────────── */
-@media (min-width: 561px) and (max-width: 1024px) {
+/* ── Tablet 501–1024px: fixed left column ───────────────────────────────── */
+@media (min-width: 501px) and (max-width: 1024px) {
   .ribbon {
     position: fixed;
     top: 0;
@@ -174,32 +176,29 @@
 }
 
 /* ── Mobile: bottom bar ─────────────────────────────────────────────────── */
-@media (max-width: 560px) {
+@media (max-width: 500px) {
   .ribbon {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    bottom: var(--ribbon-mobile-edge-gap);
+    left: max(8px, env(safe-area-inset-left, 0px));
+    right: max(8px, env(safe-area-inset-right, 0px));
     top: auto;
-    width: 100%;
-    height: calc(var(--ribbon-bottom-height) + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    height: var(--ribbon-bottom-height);
     box-sizing: border-box;
     flex-direction: row;
     justify-content: center;
     align-items: center;
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    padding:
-      4px
-      max(8px, env(safe-area-inset-right, 0px))
-      max(9px, env(safe-area-inset-bottom, 0px))
-      max(8px, env(safe-area-inset-left, 0px));
-    border-right: none;
-    border-top: 1px solid var(--ribbon-border);
+    padding: 5px 4px;
+    border: 1px solid var(--ribbon-border);
+    border-radius: 14px;
     z-index: 100;
     gap: 0;
     overflow: hidden;
     background: var(--ribbon-bg);
+    box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.12);
   }
   /* show only mobile-visible items */
   .ribbon > .ribbon-item { display: none; }
@@ -221,6 +220,7 @@
     width: 16px;
     height: 16px;
   }
+  .ribbon-mobile-primary { grid-row: 1; }
   .ribbon-mobile-primary--toc { order: 1; }
   .ribbon-mobile-primary--live { order: 2; }
   .ribbon-mobile-primary--search { order: 3; }
@@ -231,7 +231,7 @@
 }
 
 /* ── Desktop: hide mobile-only elements ─────────────────────────────────── */
-@media (min-width: 561px) {
+@media (min-width: 501px) {
   .ribbon-mas-sheet { display: none; }
   .ribbon-mas-toggle { display: none; }
   .ribbon-item--mobile-only { display: none; }
