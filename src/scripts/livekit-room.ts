@@ -10975,6 +10975,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let sonicVisualizerController: SonicVisualizerController | null = null;
   let visualizerController: VisualizerController | null = null;
   let recursosController: RecursosController | null = null;
+  let notesController: ReturnType<typeof createRoomNotesController> | null = null;
   let recursosCurrentLessonId: string | null = null;
   let lastAppliedSonicCacheKey = '';
   let lastDispatchedSonicCacheKey = '';
@@ -11497,6 +11498,36 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       };
     };
 
+    const onNotesInit = (container: HTMLElement) => {
+      notesController?.dispose();
+      notesController = createRoomNotesController({
+        getCourseId: () => getEffectiveCourseId() || normalizeText(root.dataset.courseId) || null,
+        // Keep the pod aligned with 90 NOTAS in the course view, which is scoped by course.
+        getRoomName: () => null,
+        notesBodyInput: container.querySelector<HTMLTextAreaElement>('[data-notes-body]'),
+        notesDownloadBtn: container.querySelector<HTMLButtonElement>('[data-notes-download]'),
+        notesForm: container.querySelector<HTMLFormElement>('[data-notes-form]'),
+        notesListEl: container.querySelector<HTMLElement>('[data-notes-list]'),
+        notesNewBtn: container.querySelector<HTMLButtonElement>('[data-notes-new]'),
+        notesPreviewBtn: container.querySelector<HTMLButtonElement>('[data-notes-preview-btn]'),
+        notesPreviewEl: container.querySelector<HTMLElement>('[data-notes-preview]'),
+        notesSaveBtn: container.querySelector<HTMLButtonElement>('[data-notes-save]'),
+        notesSection: container.matches('[data-notes-section]')
+          ? container
+          : container.querySelector('[data-notes-section]'),
+        notesTitleInput: container.querySelector<HTMLInputElement>('[data-notes-title]'),
+        reportStatus: (message) => setStatus(message),
+      });
+      notesController.bind();
+      const controller = notesController;
+      return {
+        dispose: () => {
+          controller.dispose();
+          if (notesController === controller) notesController = null;
+        },
+      };
+    };
+
   const getWorkspaceSettingsSnapshot = () => ({
     gridSize,
     showCircle: showPresentationCircle,
@@ -11538,7 +11569,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onSonicAnalyzerInit,
     onSonicVisualizerInit,
     onVisualizerInit,
-    onRecursosInit
+    onRecursosInit,
+    onNotesInit
   );
 
 
@@ -15553,29 +15585,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   });
 
-  // ── NOTAS ────────────────────────────────────────────────────────────────
-  const notesController = createRoomNotesController({
-    getCourseId: () => normalizeText(root.dataset.courseId) || null,
-    getRoomName: () =>
-      roomInput instanceof HTMLInputElement ? normalizeText(roomInput.value) || null : null,
-    notesBodyInput: root.querySelector<HTMLTextAreaElement>('[data-notes-body]'),
-    notesDownloadBtn: root.querySelector<HTMLButtonElement>('[data-notes-download]'),
-    notesForm: root.querySelector<HTMLFormElement>('[data-notes-form]'),
-    notesListEl: root.querySelector<HTMLElement>('[data-notes-list]'),
-    notesNewBtn: root.querySelector<HTMLButtonElement>('[data-notes-new]'),
-    notesPreviewBtn: root.querySelector<HTMLButtonElement>('[data-notes-preview-btn]'),
-    notesPreviewEl: root.querySelector<HTMLElement>('[data-notes-preview]'),
-    notesSaveBtn: root.querySelector<HTMLButtonElement>('[data-notes-save]'),
-    notesSection: root.querySelector('[data-notes-section]'),
-    notesTitleInput: root.querySelector<HTMLInputElement>('[data-notes-title]'),
-    reportStatus: (message) => {
-      setStatus(message);
-    },
-  });
-
-  notesController.bind();
-  // ── END NOTAS ─────────────────────────────────────────────────────────────
-
   // ── CLASE ─────────────────────────────────────────────────────────────────
   const claseController = createClaseController({
     contentEl: root.querySelector<HTMLElement>('[data-clase-content]'),
@@ -16189,7 +16198,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   roomInput.addEventListener('change', () => {
-    notesController.syncScope();
+    notesController?.syncScope();
   });
 
   const handlePresentationLoad = () => {

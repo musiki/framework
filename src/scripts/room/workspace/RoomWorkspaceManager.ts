@@ -21,6 +21,7 @@ export class RoomWorkspaceManager {
   private onSonicVisualizerInit?: (element: HTMLElement) => PodDisposable;
   private onVisualizerInit?: (element: HTMLElement) => PodDisposable;
   private onRecursosInit?: (element: HTMLElement) => PodDisposable;
+  private onNotesInit?: (element: HTMLElement) => PodDisposable;
   private isApplyingRemoteLayout = false;
   private currentWorkspaceKey = "full-win-speaker";
   public hyperpianoController: HyperpianoController | null = null;
@@ -94,7 +95,6 @@ export class RoomWorkspaceManager {
       atomic: 8,
       color: "#93C47D",
       cat: "comm",
-      hidden: true,
     },
     {
       id: "whiteboard",
@@ -227,6 +227,7 @@ export class RoomWorkspaceManager {
     onSonicVisualizerInit?: (element: HTMLElement) => PodDisposable,
     onVisualizerInit?: (element: HTMLElement) => PodDisposable,
     onRecursosInit?: (element: HTMLElement) => PodDisposable,
+    onNotesInit?: (element: HTMLElement) => PodDisposable,
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -244,6 +245,7 @@ export class RoomWorkspaceManager {
     this.onSonicVisualizerInit = onSonicVisualizerInit;
     this.onVisualizerInit = onVisualizerInit;
     this.onRecursosInit = onRecursosInit;
+    this.onNotesInit = onNotesInit;
   }
 
   private rememberPodController(panelId: string, controller: PodDisposable) {
@@ -398,6 +400,12 @@ export class RoomWorkspaceManager {
                 this.rememberPodController(
                   options.id,
                   this.onRecursosInit(element),
+                );
+              }
+              if (id === "notes" && this.onNotesInit) {
+                this.rememberPodController(
+                  options.id,
+                  this.onNotesInit(element),
                 );
               }
               if (id === "graph") {

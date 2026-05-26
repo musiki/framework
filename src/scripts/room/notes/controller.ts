@@ -40,6 +40,7 @@ type CreateRoomNotesControllerOptions = {
 
 export type RoomNotesController = {
   bind: () => void;
+  dispose: () => void;
   syncScope: () => void;
 };
 
@@ -130,6 +131,8 @@ export const createRoomNotesController = ({
   notesTitleInput,
   reportStatus,
 }: CreateRoomNotesControllerOptions): RoomNotesController => {
+  const lifecycle = new AbortController();
+  let notesObserver: IntersectionObserver | null = null;
   let notesCurrentId: string | null = null;
   let notesEditMode = true;
   let notesScopeKey = buildNotesScopeKey(getCourseId(), getRoomName());
@@ -520,7 +523,7 @@ export const createRoomNotesController = ({
         if (!notesListEl.hidden && !notesListEl.contains(event.target as Node) && event.target !== archiveTrigger) {
           notesListEl.hidden = true;
         }
-      });
+      }, { signal: lifecycle.signal });
     }
 
     // Wire CodeMirror + LilyPond/Mermaid template buttons + media upload
@@ -569,7 +572,7 @@ export const createRoomNotesController = ({
         notesBodyInput.value = `${current}${spacer}${content}`;
         notesBodyInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
-    });
+    }, { signal: lifecycle.signal });
 
     // Ctrl/Cmd+Enter to save — listen on the form so it catches CM keystrokes too
     notesForm?.addEventListener('keydown', (event) => {
@@ -589,10 +592,11 @@ export const createRoomNotesController = ({
     renderNotesList(readNotesCache());
 
     if (notesSection && typeof IntersectionObserver === 'function') {
-      const notesObserver = new IntersectionObserver((entries) => {
+      notesObserver = new IntersectionObserver((entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
           void loadNotesList();
-          notesObserver.disconnect();
+          notesObserver?.disconnect();
+          notesObserver = null;
         }
       }, { threshold: 0.1 });
       notesObserver.observe(notesSection);
@@ -602,8 +606,16 @@ export const createRoomNotesController = ({
     void loadNotesList();
   };
 
+  const dispose = () => {
+    writeNotesDraft();
+    lifecycle.abort();
+    notesObserver?.disconnect();
+    notesObserver = null;
+  };
+
   return {
     bind,
+    dispose,
     syncScope,
   };
 };
