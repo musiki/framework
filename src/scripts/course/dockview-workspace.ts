@@ -256,9 +256,14 @@ function toCourseContentPath(courseId: string, slug: string): string {
   return `${courseId}/${slug}`;
 }
 
-const previewContentRequests = new Map<string, Promise<string>>();
+type PreviewContent = {
+  content: string;
+  renderedHtml?: string;
+};
 
-function rememberPreviewContentRequest(key: string, request: Promise<string>) {
+const previewContentRequests = new Map<string, Promise<PreviewContent>>();
+
+function rememberPreviewContentRequest(key: string, request: Promise<PreviewContent>) {
   previewContentRequests.set(key, request);
   request.catch(() => {
     if (previewContentRequests.get(key) === request) previewContentRequests.delete(key);
@@ -271,7 +276,7 @@ function rememberPreviewContentRequest(key: string, request: Promise<string>) {
   }
 }
 
-function loadPreviewContent(courseId: string, slug: string): Promise<string> {
+function loadPreviewContent(courseId: string, slug: string): Promise<PreviewContent> {
   const cacheKey = `${courseId}::${slug}`;
   const cachedRequest = previewContentRequests.get(cacheKey);
   if (cachedRequest) return cachedRequest;
@@ -279,21 +284,30 @@ function loadPreviewContent(courseId: string, slug: string): Promise<string> {
   const request = (async () => {
     if (slug.startsWith('public/')) {
       const path = toCourseContentPath(courseId, slug);
-      const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}`);
+      const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}&rendered=true`);
       if (!res.ok) throw new Error('Note not found');
-      const data = await res.json() as { body?: string };
-      return data.body ?? '';
+      const data = await res.json() as { body?: string; renderedHtml?: string };
+      return {
+        content: data.body ?? '',
+        renderedHtml: data.renderedHtml,
+      };
     }
 
     try {
-      const note = await getNote(courseId, slug);
-      return note.content;
+      const note = await getNote(courseId, slug, { rendered: true });
+      return {
+        content: note.content,
+        renderedHtml: note.renderedHtml,
+      };
     } catch (primaryError) {
       const path = toCourseContentPath(courseId, slug);
-      const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}`);
+      const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}&rendered=true`);
       if (!res.ok) throw primaryError;
-      const data = await res.json() as { body?: string };
-      return data.body ?? '';
+      const data = await res.json() as { body?: string; renderedHtml?: string };
+      return {
+        content: data.body ?? '',
+        renderedHtml: data.renderedHtml,
+      };
     }
   })();
 
@@ -320,7 +334,15 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
   injectMdCss();
   bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
   try {
-    const content = await loadPreviewContent(courseId, slug);
+    const preview = await loadPreviewContent(courseId, slug);
+    const content = preview.content;
+    if (preview.renderedHtml?.trim()) {
+      bodyEl.innerHTML = `<div class="cnw-md">${preview.renderedHtml}</div>`;
+      hydrateLazyYouTubeEmbeds(bodyEl);
+      bodyEl.dataset.renderedSlug = slug;
+      bodyEl.dataset.lastContent = content;
+      return content;
+    }
     const { body } = parseFrontmatter(content);
     // Strip %%cover%%...%%/cover%% presentation blocks and eval fences
     const cleanBody = body
@@ -605,10 +627,13 @@ async function loadDbNotePreview(state: DbNotePanelState) {
     const d = await r.json() as { notes?: any[] };
     const note = d.notes?.[0];
     if (!note) { state.bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;">Nota no encontrada</p>'; return; }
-    await ensureKatexFor(note.body ?? '');
-    configureMarked();
     injectMdCss();
-    const html = deferYouTubeEmbeds(String(marked.parse(note.body ?? '', { async: false })));
+    let html = typeof note.renderedHtml === 'string' ? note.renderedHtml.trim() : '';
+    if (!html) {
+      await ensureKatexFor(note.body ?? '');
+      configureMarked();
+      html = deferYouTubeEmbeds(String(marked.parse(note.body ?? '', { async: false })));
+    }
     state.bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
     hydrateLazyYouTubeEmbeds(state.bodyEl);
     updateDbNoteHud(state, note.body ?? '');

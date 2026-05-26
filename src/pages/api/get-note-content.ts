@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getEntry } from 'astro:content';
+import { renderRuntimeMarkdown } from '../../lib/runtime-content';
 
 async function readEntryBody(note: any): Promise<string> {
   const body = typeof note?.body === 'string' ? note.body : '';
@@ -26,6 +27,7 @@ const legacyCourseSlugAliases: Record<string, Record<string, string>> = {
 export const GET: APIRoute = async ({ request }) => {
   const url = new URL(request.url);
   const slug = url.searchParams.get('slug');
+  const includeRenderedHtml = url.searchParams.get('rendered') === 'true';
 
   if (!slug) {
     return new Response('Missing slug', { status: 400 });
@@ -129,8 +131,17 @@ export const GET: APIRoute = async ({ request }) => {
     note.data.revealTheme
   );
 
+  const body = await readEntryBody(note);
+  const rendered = includeRenderedHtml
+    ? await renderRuntimeMarkdown(body, cleanSlug).catch((error) => {
+        console.error('[get-note-content] Preview render failed:', error);
+        return null;
+      })
+    : null;
+
   return new Response(JSON.stringify({
-    body: await readEntryBody(note),
+    body,
+    renderedHtml: rendered?.html || '',
     reveal,
     title: note.data.title || cleanSlug
   }), {

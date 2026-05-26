@@ -10982,7 +10982,8 @@ a[node] -->|edge| b[hub]
         }
 
         function renderForumMermaid(container) {
-          const nodes = Array.from(container.querySelectorAll('.mermaid'));
+          const nodes = Array.from(container.querySelectorAll('.mermaid'))
+            .filter((node) => !(node instanceof HTMLElement) || node.dataset.mermaidRendered !== 'true');
           if (nodes.length === 0) return;
 
           ensureForumMermaid()

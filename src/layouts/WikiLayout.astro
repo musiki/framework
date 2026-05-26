@@ -229,39 +229,51 @@ const view = Astro.url.searchParams.get('view');
 
 
     <!-- Mermaid -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" defer></script>
     <script is:inline>
+      let wikiMermaidPromise = null;
       let wikiMermaidConfigured = false;
       let wikiMermaidRenderSequence = 0;
       const normalizeMermaidSource = (v) => String(v || '').replace(/\r\n?/g, '\n').trim();
-      const renderWikiMermaid = (attempt = 0) => {
-        const api = window.mermaid;
-        if (!api?.render) {
-          if (attempt < 8) window.setTimeout(() => renderWikiMermaid(attempt + 1), 90 * (attempt + 1));
-          return;
-        }
-        if (!wikiMermaidConfigured) {
-          api.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose', suppressErrorRendering: false });
-          wikiMermaidConfigured = true;
-        }
-        const nodes = Array.from(document.querySelectorAll('.mermaid')).filter((n) => n instanceof HTMLElement);
-        if (!nodes.length) return;
-        const tasks = nodes.map(async (node) => {
-          const source = normalizeMermaidSource(node.dataset.mermaidSource || node.textContent || '');
-          if (!source) return;
-          if (node.dataset.mermaidRendered === 'true' && node.dataset.mermaidSource === source) return;
-          node.dataset.mermaidSource = source;
-          node.textContent = source;
-          const id = `wiki-mermaid-${Date.now()}-${wikiMermaidRenderSequence += 1}`;
-          const result = await api.render(id, source);
-          node.innerHTML = result?.svg || '';
-          if (typeof result?.bindFunctions === 'function') result.bindFunctions(node);
-          node.dataset.mermaidRendered = 'true';
+      const ensureWikiMermaid = () => {
+        if (window.mermaid?.render) return Promise.resolve(window.mermaid);
+        if (wikiMermaidPromise) return wikiMermaidPromise;
+        wikiMermaidPromise = new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+          script.defer = true;
+          script.dataset.wikiMermaidLoader = 'true';
+          script.onload = () => resolve(window.mermaid || null);
+          script.onerror = () => resolve(null);
+          document.head.appendChild(script);
         });
-        Promise.all(tasks).catch((err) => {
-          console.error('Wiki mermaid render error:', err);
-          nodes.forEach((n) => { delete n.dataset.mermaidRendered; const s = normalizeMermaidSource(n.dataset.mermaidSource || n.textContent || ''); if (s) n.textContent = s; });
-          if (attempt < 3) window.setTimeout(() => renderWikiMermaid(attempt + 1), 180 * (attempt + 1));
+        return wikiMermaidPromise;
+      };
+      const renderWikiMermaid = (attempt = 0) => {
+        const nodes = Array.from(document.querySelectorAll('.mermaid'))
+          .filter((n) => n instanceof HTMLElement && n.dataset.mermaidRendered !== 'true');
+        if (!nodes.length) return;
+        ensureWikiMermaid().then((api) => {
+          if (!api?.render) return;
+          if (!wikiMermaidConfigured) {
+            api.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose', suppressErrorRendering: false });
+            wikiMermaidConfigured = true;
+          }
+          const tasks = nodes.map(async (node) => {
+            const source = normalizeMermaidSource(node.dataset.mermaidSource || node.textContent || '');
+            if (!source) return;
+            node.dataset.mermaidSource = source;
+            node.textContent = source;
+            const id = `wiki-mermaid-${Date.now()}-${wikiMermaidRenderSequence += 1}`;
+            const result = await api.render(id, source);
+            node.innerHTML = result?.svg || '';
+            if (typeof result?.bindFunctions === 'function') result.bindFunctions(node);
+            node.dataset.mermaidRendered = 'true';
+          });
+          Promise.all(tasks).catch((err) => {
+            console.error('Wiki mermaid render error:', err);
+            nodes.forEach((n) => { delete n.dataset.mermaidRendered; const s = normalizeMermaidSource(n.dataset.mermaidSource || n.textContent || ''); if (s) n.textContent = s; });
+            if (attempt < 3) window.setTimeout(() => renderWikiMermaid(attempt + 1), 180 * (attempt + 1));
+          });
         });
       };
       document.addEventListener('DOMContentLoaded', () => renderWikiMermaid());

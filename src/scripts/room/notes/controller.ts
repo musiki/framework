@@ -87,7 +87,8 @@ const createMarkedLoader = async () => {
 };
 
 const runMermaidIn = (container: HTMLElement) => {
-  const nodes = Array.from(container.querySelectorAll<HTMLElement>('.mermaid'));
+  const nodes = Array.from(container.querySelectorAll<HTMLElement>('.mermaid'))
+    .filter((node) => node.dataset.mermaidRendered !== 'true');
   if (nodes.length === 0) return;
   const notesWindow = window as NotesWindow;
   const load = () => {

@@ -13,4 +13,5 @@ export type NoteContent = {
   slug: string;
   content: string;
   filePath: string;
+  renderedHtml?: string;
 };
