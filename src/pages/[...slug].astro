@@ -4810,8 +4810,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
     )}
     {canManageLiveInteractions && (
       <script>
-        import { mountInlineNotesEditor } from '../scripts/course/notes/inline-editor.ts';
-
         function bootInlineEditor() {
           const mountEl = document.getElementById('notes-editor-mount') as HTMLElement | null;
           const contentEl = document.querySelector<HTMLElement>('[data-class-content]');
@@ -4820,10 +4818,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           document.querySelectorAll<HTMLElement>('[data-notes-action]').forEach(btn => {
             if (btn.dataset.notesBound) return;
             btn.dataset.notesBound = 'true';
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
               const mode = (btn.dataset.notesAction || 'edit') as 'edit' | 'create';
               const courseId = btn.dataset.courseId || '';
               const slug = btn.dataset.slug || null;
+              const { mountInlineNotesEditor } = await import('../scripts/course/notes/inline-editor.ts');
               mountInlineNotesEditor({ mountEl: mountEl!, contentEl: contentEl!, courseId, slug, mode });
             });
           });
@@ -9758,7 +9757,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           }
         }
 
-        function applyForumThreadsPayload(payload, { preserveSelection = true } = {}) {
+        function applyForumThreadsPayload(payload, { preserveSelection = true, autoOpenNewThreads = true } = {}) {
           const previousThreadId = forumState.selectedThreadId;
           const previousThreadIds = new Set(
             forumState.threads.map((thread) => String(thread?.id || '').trim()).filter(Boolean),
@@ -9773,14 +9772,16 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           if (newThreadContainer) newThreadContainer.hidden = !forumState.canWrite;
 
           if (!preserveSelection) {
-            forumState.openThreadIds = new Set(nextThreadIds);
+            forumState.openThreadIds = autoOpenNewThreads ? new Set(nextThreadIds) : new Set();
           } else {
             Array.from(forumState.openThreadIds).forEach((threadId) => {
               if (!nextThreadIds.has(threadId)) forumState.openThreadIds.delete(threadId);
             });
-            nextThreadIds.forEach((threadId) => {
-              if (!previousThreadIds.has(threadId)) forumState.openThreadIds.add(threadId);
-            });
+            if (autoOpenNewThreads) {
+              nextThreadIds.forEach((threadId) => {
+                if (!previousThreadIds.has(threadId)) forumState.openThreadIds.add(threadId);
+              });
+            }
           }
 
           if (
@@ -12163,7 +12164,7 @@ a[node] -->|edge| b[hub]
           });
         }
 
-        async function loadThreads({ preserveSelection = true } = {}) {
+        async function loadThreads({ preserveSelection = true, autoOpenNewThreads = true } = {}) {
           const scope = resolveForumScopeDescriptor();
           const cacheKey = getForumScopeCacheKey(scope);
           const requestToken = ++latestThreadRequestToken;
@@ -12173,7 +12174,7 @@ a[node] -->|edge| b[hub]
             if (requestToken !== latestThreadRequestToken) return;
             if (!isForumScopeCurrent(scope)) return;
 
-            const openThreadIds = applyForumThreadsPayload(payload, { preserveSelection });
+            const openThreadIds = applyForumThreadsPayload(payload, { preserveSelection, autoOpenNewThreads });
             syncCourseForumSubnavScopeMetrics(scope, payload?.threads || []);
 
             await Promise.all(openThreadIds.map((threadId) => loadPosts(threadId)));
@@ -12199,7 +12200,7 @@ a[node] -->|edge| b[hub]
                 .then((payload) => {
                   void applyPayloadIfCurrent(payload);
                   const firstThreadId = String(payload?.threads?.[0]?.id || '').trim();
-                  if (firstThreadId) {
+                  if (firstThreadId && autoOpenNewThreads) {
                     void prefetchForumPosts(firstThreadId);
                   }
                 })
@@ -12223,7 +12224,7 @@ a[node] -->|edge| b[hub]
             await applyPayloadIfCurrent(payload);
 
             const firstThreadId = String(payload?.threads?.[0]?.id || '').trim();
-            if (firstThreadId) {
+            if (firstThreadId && autoOpenNewThreads) {
               void prefetchForumPosts(firstThreadId);
             }
 
@@ -12728,7 +12729,7 @@ a[node] -->|edge| b[hub]
           void prefetchForumScope('lesson', { lessonSlug: forumState.lessonSlug });
         }
 
-        await loadThreads({ preserveSelection: false });
+        await loadThreads({ preserveSelection: false, autoOpenNewThreads: false });
       }
 
       const LEGACY_OBSIDIAN_AUDIO_REGEX = /\.(mp3|wav|ogg|m4a|aac|flac)$/i;
@@ -13740,6 +13741,8 @@ a[node] -->|edge| b[hub]
           if (!sidebarEl) return;
           const courseId = sidebarEl.dataset.notasCourseId ?? '';
           if (!courseId) return;
+          if (sidebarEl.dataset.notasSidebarBound === courseId) return;
+          sidebarEl.dataset.notasSidebarBound = courseId;
 
           const treeEl = sidebarEl.querySelector<HTMLElement>('.notas-sb-tree');
           if (!treeEl) return;

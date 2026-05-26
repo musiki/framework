@@ -1,17 +1,12 @@
 // src/scripts/course/dockview-workspace.ts
 import { DockviewComponent, positionToDirection } from 'dockview-core';
 import { marked, type Renderer } from 'marked';
-import katex from 'katex';
-import 'katex/dist/katex.min.css';
 import { NotesPersistence } from './notes-persistence';
 import { getNote } from '../notes-editor/api';
 import { parseFrontmatter } from '../notes-editor/yaml-strip';
-import {
-  mountInlineNotesEditor,
-  type InlineEditorOptions,
-} from './notes/inline-editor';
+import type { InlineEditorOptions } from './notes/inline-editor';
 import { buildShell, injectWorkspaceCss, type NoteMode } from './dockview-shell';
-import { createLiveMdEditor, type LiveMdEditor } from './notes/live-md-editor';
+import type { LiveMdEditor } from './notes/live-md-editor';
 import type { TraceMarginHandle } from './notes/trace-margin';
 import { deferYouTubeEmbeds, hydrateLazyYouTubeEmbeds } from './lazy-youtube';
 
@@ -95,6 +90,25 @@ function setTraceEnabledByDefault(enabled: boolean) {
 
 // ── marked setup (once) ────────────────────────────────────────────────────
 let markedConfigured = false;
+type KatexApi = typeof import('katex').default;
+let katexApi: KatexApi | null = null;
+let katexPromise: Promise<KatexApi> | null = null;
+
+function containsMathSyntax(content: string): boolean {
+  return /\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/.test(content);
+}
+
+async function ensureKatexFor(content: string): Promise<void> {
+  if (!containsMathSyntax(content) || katexApi) return;
+  if (!katexPromise) {
+    katexPromise = Promise.all([
+      import('katex'),
+      import('katex/dist/katex.min.css'),
+    ]).then(([module]) => module.default);
+  }
+  katexApi = await katexPromise;
+}
+
 function configureMarked() {
   if (markedConfigured) return;
   markedConfigured = true;
@@ -152,7 +166,9 @@ function configureMarked() {
         },
         renderer(token) {
           try {
-            return `<div class="cnw-math-block">${katex.renderToString(token.text, { displayMode: true, throwOnError: false })}</div>`;
+            return katexApi
+              ? `<div class="cnw-math-block">${katexApi.renderToString(token.text, { displayMode: true, throwOnError: false })}</div>`
+              : `<pre class="cnw-math-err">${escHtmlInline(token.text)}</pre>`;
           } catch { return `<pre class="cnw-math-err">${escHtmlInline(token.text)}</pre>`; }
         },
       },
@@ -166,7 +182,9 @@ function configureMarked() {
         },
         renderer(token) {
           try {
-            return katex.renderToString(token.text, { displayMode: false, throwOnError: false });
+            return katexApi
+              ? katexApi.renderToString(token.text, { displayMode: false, throwOnError: false })
+              : `<code>${escHtmlInline(token.text)}</code>`;
           } catch { return `<code>${escHtmlInline(token.text)}</code>`; }
         },
       },
@@ -300,7 +318,6 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
   // Skip re-render if we already rendered this slug into this element
   if (bodyEl.dataset.renderedSlug === slug) return bodyEl.dataset.lastContent ?? '';
   injectMdCss();
-  configureMarked();
   bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
   try {
     const content = await loadPreviewContent(courseId, slug);
@@ -310,6 +327,8 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
       .replace(/%%cover%%[\s\S]*?%%\/cover%%/gi, '')
       .replace(/```eval[\s\S]*?```/gi, '')
       .trim();
+    await ensureKatexFor(cleanBody);
+    configureMarked();
     const html = deferYouTubeEmbeds(String(marked.parse(cleanBody, { async: false })));
     bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
     hydrateLazyYouTubeEmbeds(bodyEl);
@@ -532,7 +551,7 @@ async function enterEditMode(state: PanelState) {
   }
 }
 
-function mountEditor(state: PanelState, overrideContent: string | null) {
+async function mountEditor(state: PanelState, overrideContent: string | null) {
   const editorMount = document.createElement('div');
   editorMount.style.cssText = 'display:flex;flex-direction:column;overflow:hidden;height:100%;';
   state.bodyEl.appendChild(editorMount);
@@ -541,6 +560,9 @@ function mountEditor(state: PanelState, overrideContent: string | null) {
   const contentPlaceholder = document.createElement('div');
   contentPlaceholder.style.display = 'none';
   editorMount.appendChild(contentPlaceholder);
+
+  const { mountInlineNotesEditor } = await import('./notes/inline-editor');
+  if (!editorMount.isConnected || state.mode !== 'edit') return;
 
   const opts: InlineEditorOptions = {
     mountEl: editorMount,
@@ -583,6 +605,7 @@ async function loadDbNotePreview(state: DbNotePanelState) {
     const d = await r.json() as { notes?: any[] };
     const note = d.notes?.[0];
     if (!note) { state.bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;">Nota no encontrada</p>'; return; }
+    await ensureKatexFor(note.body ?? '');
     configureMarked();
     injectMdCss();
     const html = deferYouTubeEmbeds(String(marked.parse(note.body ?? '', { async: false })));
@@ -594,7 +617,7 @@ async function loadDbNotePreview(state: DbNotePanelState) {
   }
 }
 
-function enterDbNoteEditMode(state: DbNotePanelState) {
+async function enterDbNoteEditMode(state: DbNotePanelState) {
   state.liveEditor?.destroy();
   state.liveEditor = null;
   if (state.traceHandle) {
@@ -610,9 +633,11 @@ function enterDbNoteEditMode(state: DbNotePanelState) {
   mount.style.cssText = 'height:100%;overflow:hidden;';
   state.bodyEl.appendChild(mount);
 
-  fetch(`/api/live/notes?id=${state.noteId}`)
-    .then(r => r.json())
-    .then((d: any) => {
+  try {
+    const [d, { createLiveMdEditor }] = await Promise.all([
+      fetch(`/api/live/notes?id=${state.noteId}`).then(r => r.json()),
+      import('./notes/live-md-editor'),
+    ]);
       if (!mount.isConnected) return;
       const content: string = d.notes?.[0]?.body ?? '';
 
@@ -635,8 +660,9 @@ function enterDbNoteEditMode(state: DbNotePanelState) {
         state.traceOnEnterEdit = false;
         state.traceBtn.click();
       }
-    })
-    .catch(() => {});
+  } catch {
+    // Keep the editor shell available for a retry through the mode button.
+  }
 }
 
 async function enterDbNotePreviewMode(state: DbNotePanelState) {
@@ -837,7 +863,7 @@ export function initDockviewWorkspace(
         };
         dbNotePanelStates.set(panelId, state);
         pencilBtn.addEventListener('click', () => {
-          if (state.mode === 'preview') enterDbNoteEditMode(state);
+          if (state.mode === 'preview') void enterDbNoteEditMode(state);
           else void enterDbNotePreviewMode(state);
         });
         traceBtn.addEventListener('click', async () => {
@@ -871,7 +897,7 @@ export function initDockviewWorkspace(
             traceBtn.disabled = false;
           }
         });
-        enterDbNoteEditMode(state);
+        void enterDbNoteEditMode(state);
         return { element: shell, init: () => {} };
       }
 

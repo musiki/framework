@@ -32,8 +32,6 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/force-graph"></script>
-
 <script define:vars={{ currentSlug, isLoggedIn }}>
   // ── Per-folder visual identity ─────────────────────────────────────────────
   // shape: 'circle' | 'diamond' | 'triangle' | 'square' | 'pentagon' | 'hexagon' | 'star' | 'cross'
@@ -141,11 +139,40 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
 
   let graphData = null;
   let graphInstance = null;
+  let forceGraphPromise = null;
   const highlightNodes = new Set();
   const highlightLinks = new Set();
   let hoverNode = null;
   const labelOpacity = new Map();
   let showAll = false; // default: only public notes + their tags
+
+  function ensureForceGraph() {
+    const existingCtor = window.ForceGraph || window.default;
+    if (typeof existingCtor === 'function') return Promise.resolve(existingCtor);
+    if (forceGraphPromise) return forceGraphPromise;
+
+    forceGraphPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-musiki-force-graph="true"]');
+      if (existing instanceof HTMLScriptElement) {
+        existing.addEventListener('load', () => resolve(window.ForceGraph || window.default), { once: true });
+        existing.addEventListener('error', () => reject(new Error('Failed to load graph renderer')), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/force-graph';
+      script.async = true;
+      script.dataset.musikiForceGraph = 'true';
+      script.addEventListener('load', () => resolve(window.ForceGraph || window.default), { once: true });
+      script.addEventListener('error', () => reject(new Error('Failed to load graph renderer')), { once: true });
+      document.head.appendChild(script);
+    }).catch((error) => {
+      forceGraphPromise = null;
+      throw error;
+    });
+
+    return forceGraphPromise;
+  }
 
   // Load raw graph data (no cross-linking here — done per filtered dataset)
   async function initGraph() {
@@ -275,7 +302,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
 
   // Render the graph
   async function renderGraph() {
-    const raw = await initGraph();
+    const [raw, ForceGraphCtor] = await Promise.all([initGraph(), ensureForceGraph()]);
     const data = showAll ? raw : filterVisibleData(raw);
     crossLinkNodes(data);
     const container = document.getElementById('graph-canvas');
@@ -333,7 +360,6 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
 
     const NODE_R = 3.2;
 
-    const ForceGraphCtor = (window).ForceGraph || (window).default;
     if (typeof ForceGraphCtor !== 'function') {
       console.error('ForceGraph not loaded');
       return;

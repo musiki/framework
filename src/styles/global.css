@@ -21,9 +21,12 @@
   --font-ui-dank:
     "Dank Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
+  --font-ui-system-mono:
+    ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
   --font-ui-current: var(--font-ui-helvetica);
   --font-family-primary: var(--font-ui-current);
-  --font-family-mono: var(--font-ui-dank);
+  --font-family-mono: var(--font-ui-system-mono);
 }
 
 html {

@@ -1,6 +1,6 @@
 # La Universidad Pública Argentina: Historia, Soberanía y Futuro
 
-La educación superior pública, gratuita y laica en la República Argentina no es solo un servicio educativo, sino uno de los pilares fundacionales de la identidad nacional, de la movilidad social ascendente y del desarrollo científico-tecnológico soberano. 
+La educación superior pública, gratuita y laica en la República Argentina es uno de los pilares fundacionales de la identidad nacional, de la movilidad social ascendente y del desarrollo científico-tecnológico soberano. 
 
 ---
 
