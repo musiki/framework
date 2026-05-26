@@ -405,18 +405,36 @@ if (session?.user?.email) {
   }
 
   /* Vivo — live camera, red accent so it pops */
-  .ribbon-item--vivo {
-    color: #e53e3e;
+  .ribbon-item--vivo:not(.ribbon-item--vivo--off) {
+    color: #e53e3e !important;
   }
-  .ribbon-item--vivo:hover {
-    color: #fc4444;
-    background: color-mix(in srgb, #e53e3e 12%, transparent);
+  .ribbon-item--vivo:not(.ribbon-item--vivo--off):hover {
+    color: #fc4444 !important;
+    background: color-mix(in srgb, #e53e3e 12%, transparent) !important;
   }
   .ribbon-item--vivo--off {
-    color: color-mix(in srgb, var(--c-fg) 25%, transparent);
+    color: color-mix(in srgb, var(--c-fg) 25%, transparent) !important;
     pointer-events: none;
     cursor: default;
   }
+
+  /* Vivo camera logo 20% larger on desktop */
+  .ribbon-item--vivo svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  /* Vivo camera logo 20% larger on mobile */
+  @media (max-width: 500px) {
+    .ribbon > .ribbon-item--mobile-visible.ribbon-item--vivo svg {
+      width: 19.2px !important;
+      height: 19.2px !important;
+    }
+    .ribbon > .ribbon-item--mobile-visible.ribbon-item--vivo:not(.ribbon-item--vivo--off) {
+      color: #e53e3e !important;
+    }
+  }
+
   /* Reveal icon — accent color hint */
   .ribbon-item--reveal {
     color: color-mix(in srgb, var(--c-fg) 55%, var(--c-accent, #7c6ff7) 45%);
