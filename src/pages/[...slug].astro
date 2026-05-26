@@ -1300,16 +1300,26 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         letter-spacing: 0.05em;
       }
 
-      .sidebar--left .chapter {
-        margin-bottom: 0.5rem;
+      :global(.sidebar--left .chapter) {
+        margin-bottom: 0.38rem;
       }
 
-      .sidebar--left .chapter-title {
+      :global(.sidebar--left .chapter--conceptos),
+      :global(.sidebar--left .chapter--recursos),
+      :global(.sidebar--left .chapter--notas) {
+        margin-top: 0.58rem;
+      }
+
+      :global(.sidebar--left .chapter-details) {
+        padding: 0;
+      }
+
+      :global(.sidebar--left .chapter-title) {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.2rem 0.75rem;
-        font-size: 0.75rem;
+        padding: 0 0.75rem;
+        font-size: 0.72rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.1em;
@@ -1319,14 +1329,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         list-style: none;
       }
 
-      .sidebar--left .chapter-title-main {
+      :global(.sidebar--left .chapter-title-main) {
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
         min-width: 0;
       }
 
-      .sidebar--left .chapter-editor-link {
+      :global(.sidebar--left .chapter-editor-link) {
         display: inline-grid;
         place-items: center;
         width: 1.15rem;
@@ -1337,32 +1347,35 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         text-decoration: none;
       }
 
-      .sidebar--left .chapter-editor-link:hover,
-      .sidebar--left .chapter-editor-link.active {
+      :global(.sidebar--left .chapter-editor-link:hover),
+      :global(.sidebar--left .chapter-editor-link.active) {
         color: var(--accent);
         opacity: 1;
         background: color-mix(in srgb, var(--accent) 10%, transparent);
       }
 
-      .sidebar--left .chapter-editor-link svg {
+      :global(.sidebar--left .chapter-editor-link svg) {
         width: 0.82rem;
         height: 0.82rem;
         stroke: currentColor;
       }
 
-      .sidebar--left .chapter-title::-webkit-details-marker {
+      :global(.sidebar--left .chapter-title::-webkit-details-marker) {
         display: none;
       }
 
-      .sidebar--left .chapter-caret {
-        display: inline-flex;
-        transition: transform 0.2s;
+      :global(.sidebar--left .chapter-caret) {
+        display: inline-block;
+        transition: transform 0.15s;
         color: var(--c-fg-subtle);
         opacity: 0.5;
+        font-size: 1.0rem;
+        flex-shrink: 0;
+        margin-right: 0.3rem;
       }
 
-      .sidebar--left .chapter-details[open] .chapter-caret {
-        transform: rotate(180deg);
+      :global(.sidebar--left .chapter-details[open] > .chapter-title .chapter-caret) {
+        transform: rotate(90deg);
       }
 
       .sidebar--left .lesson-item {
@@ -1388,7 +1401,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
 
       .sidebar--left .lesson-link {
-        padding: 0.12rem 0.3rem;
+        padding: 0.12rem 0.25rem;
         font-size: 0.76rem;
       }
 
@@ -1433,7 +1446,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       .sidebar--left .recursos-sidebar-session-caret {
         flex-shrink: 0;
-        font-size: 0.6rem;
+        font-size: 1.0rem;
         display: inline-block;
         transition: transform 0.15s;
       }
@@ -1520,7 +1533,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       .sidebar--left .recursos-sidebar-folder-name::marker { display: none; }
       .sidebar--left .recursos-sidebar-folder-caret {
         flex-shrink: 0;
-        font-size: 0.55rem;
+        font-size: 0.92rem;
         display: inline-block;
         transition: transform 0.15s;
       }
@@ -1812,15 +1825,15 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         display: none;
       }
 
-      .sidebar--left details > summary.chapter-title {
+      :global(.sidebar--left details > summary.chapter-title) {
         list-style: none;
       }
 
-      .sidebar--left details > summary.chapter-title::-webkit-details-marker {
+      :global(.sidebar--left details > summary.chapter-title::-webkit-details-marker) {
         display: none;
       }
 
-      .sidebar--left details > summary.chapter-title::marker {
+      :global(.sidebar--left details > summary.chapter-title::marker) {
         content: "";
       }
 
@@ -3378,8 +3391,20 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
     </style>
     <style is:global>
+    .sidebar--left details > summary::-webkit-details-marker {
+      display: none !important;
+    }
+    .sidebar--left details > summary::marker {
+      display: none !important;
+      content: "" !important;
+    }
+    .sidebar--left details > summary {
+      list-style: none !important;
+    }
+
     .sidebar--left .lesson-item {
-      padding-left: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
       position: static !important;
     }
 
@@ -3608,10 +3633,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             ).map((entry) => {
           if (entry.kind === 'recursos') {
             return (
-              <div class="chapter">
+              <div class="chapter chapter--recursos">
                 <details class="chapter-details" open={isRecursosEditorPage}>
                   <summary class="chapter-title">
                     <span class="chapter-title-main">
+                      <span class="chapter-caret">▸</span>
                       <span class="chapter-title-text">80 RECURSOS</span>
                       <a
                         href={`${courseHref}/recursos`}
@@ -3625,11 +3651,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
                         </svg>
                       </a>
-                    </span>
-                    <span class="chapter-caret">
-                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                      </svg>
                     </span>
                   </summary>
                   {recursosSidebarGroups.length > 0 && (
@@ -3697,12 +3718,16 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
           const isTOC = chapterName === 'TOC de clase';
           const isRecursosChapter = normalizeContentSlug(chapterName) === '80-recursos';
+          const isConceptos = displayTitle.toUpperCase().includes('CONCEPTOS');
+          const isRecursos = displayTitle.toUpperCase().includes('RECURSOS');
+          const isNotas = displayTitle.toUpperCase().includes('NOTAS');
 
           return (
-            <div class="chapter">
+            <div class:list={["chapter", { "chapter--conceptos": isConceptos, "chapter--recursos": isRecursos, "chapter--notas": isNotas }]}>
               <details class="chapter-details" open={isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
                 <summary class="chapter-title">
                   <span class="chapter-title-main">
+                    <span class="chapter-caret">▸</span>
                     <span class="chapter-title-text">{displayTitle}</span>
                     {canManageLiveInteractions && isRecursosChapter && (
                       <a
@@ -3718,11 +3743,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                         </svg>
                       </a>
                     )}
-                  </span>
-                  <span class="chapter-caret">
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
                   </span>
                 </summary>
                 {isRecursosChapter && recursosSidebarGroups.length > 0 ? (
@@ -3865,15 +3885,15 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             {sidebarChapterEntries.filter(e => e.kind === 'notas').map((entry) => {
               if (entry.kind !== 'notas') return null;
               return (
-                <div class="chapter" data-notas-sidebar data-notas-course-id={entry.courseId}>
+                <div class="chapter chapter--notas" data-notas-sidebar data-notas-course-id={entry.courseId} style="margin-top: 1rem">
                   <details class="chapter-details">
                     <summary class="chapter-title">
                       <span class="chapter-title-main">
+                        <span class="chapter-caret" style="font-size: 1.2em">▸</span>
                         <span class="chapter-title-text">90 NOTAS</span>
                         <button type="button" class="chapter-editor-link notas-sb-new-btn" title="Nueva nota" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.85rem;line-height:1">+</button>
                         <button type="button" class="chapter-editor-link notas-sb-new-folder-btn" title="Nueva carpeta" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.75rem;line-height:1">⊟+</button>
                       </span>
-                      <span class="chapter-caret"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
                     </summary>
                     <div class="notas-sb-tree" style="padding:.3rem 0"></div>
                   </details>
@@ -3885,10 +3905,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           (!isPublicWikiPage || Boolean(session)) && sidebarChapterEntries.map((entry) => {
             if (entry.kind === 'recursos') {
               return (
-                <div class="chapter">
+                <div class="chapter chapter--recursos" style="margin-top: 1rem">
                   <details class="chapter-details" open={isRecursosEditorPage}>
                     <summary class="chapter-title">
                       <span class="chapter-title-main">
+                        <span class="chapter-caret" style="font-size: 1.2em">▸</span>
                         <span class="chapter-title-text">80 RECURSOS</span>
                         <a
                           href={`${courseHref}/recursos`}
@@ -3903,11 +3924,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           </svg>
                         </a>
                       </span>
-                      <span class="chapter-caret">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                      </span>
                     </summary>
                     {recursosSidebarGroups.length > 0 && (
                       <div class="recursos-sidebar-tree" data-recursos-sidebar data-room={`${recursosCourseId}-stage`} data-clase={recursosCourseId}>
@@ -3916,7 +3932,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           return (
                             <details class="recursos-sidebar-session" open>
                               <summary class="recursos-sidebar-session-name">
-                                <span class="recursos-sidebar-session-caret">▸</span>
+                                <span class="recursos-sidebar-session-caret" style="font-size: 1.2em">▸</span>
                                 {group.session?.name || 'Sin sesión'}
                               </summary>
                               <ul class="recursos-sidebar-resource-list">
@@ -3935,7 +3951,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                   <li class="recursos-sidebar-resource-item">
                                     <details class="recursos-sidebar-folder" open>
                                       <summary class="recursos-sidebar-folder-name">
-                                        <span class="recursos-sidebar-folder-caret">▸</span>
+                                        <span class="recursos-sidebar-folder-caret" style="font-size: 1.2em">▸</span>
                                         <span style="color:#4e6070">⊟</span>
                                         {folderName}
                                       </summary>
@@ -3967,10 +3983,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             }
             if (entry.kind === 'notas') {
               return (
-                <div class="chapter" data-notas-sidebar data-notas-course-id={entry.courseId}>
+                <div class="chapter chapter--notas" data-notes-sidebar data-notes-course-id={entry.courseId}>
                   <details class="chapter-details">
                     <summary class="chapter-title">
                       <span class="chapter-title-main">
+                        <span class="chapter-caret">▸</span>
                         <span class="chapter-title-text">90 NOTAS</span>
                         <button
                           type="button"
@@ -3987,11 +4004,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.75rem;line-height:1"
                         >⊟+</button>
                       </span>
-                      <span class="chapter-caret">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                      </span>
                     </summary>
                     <div class="notas-sb-tree" style="padding:.3rem 0"></div>
                   </details>
@@ -4003,12 +4015,16 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
             const isTOC = chapterName === 'TOC de clase';
             const isRecursosChapter = normalizeContentSlug(chapterName) === '80-recursos';
+            const isConceptos = displayTitle.toUpperCase().includes('CONCEPTOS');
+            const isRecursos = displayTitle.toUpperCase().includes('RECURSOS');
+            const isNotas = displayTitle.toUpperCase().includes('NOTAS');
 
             return (
-              <div class="chapter">
+              <div class:list={["chapter", { "chapter--conceptos": isConceptos, "chapter--recursos": isRecursos, "chapter--notas": isNotas }]}>
                 <details class="chapter-details" open={isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
                   <summary class="chapter-title">
                     <span class="chapter-title-main">
+                      <span class="chapter-caret">▸</span>
                       <span class="chapter-title-text">{displayTitle}</span>
                       {canManageLiveInteractions && isRecursosChapter && (
                         <a
@@ -4024,11 +4040,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           </svg>
                         </a>
                       )}
-                    </span>
-                    <span class="chapter-caret">
-                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                      </svg>
                     </span>
                   </summary>
                   {isRecursosChapter && recursosSidebarGroups.length > 0 ? (

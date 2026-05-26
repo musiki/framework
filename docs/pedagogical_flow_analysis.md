@@ -64,3 +64,5 @@ La IA es excelente para estructurar material introductorio.
 *   **Domènech Francesch, J. (2009).** *Elogio de la educación lenta.* Barcelona: Graó.
 *   **Holt, M. (2002).** *It's time to start the Slow School Movement.* Phi Delta Kappan, 84(4), 264-271.
 *   **Cornella, A. (2000).** *Cómo sobrevivir a la infoxicación.* Barcelona: Infonomia.
+
+

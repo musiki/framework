@@ -139,12 +139,15 @@ export function renderNotesTree(
     for (const folder of (children.get(parentId) ?? [])) {
       const details = document.createElement('details');
       details.open = true;
-      details.style.cssText = `padding-left:${indent * 8}px`;
+      const isSpecialFolder = /^(70[\s-]*conceptos|80[\s-]*recursos|90[\s-]*notas)/i.test(folder.name);
+      if (isSpecialFolder) {
+        details.className = 'notas-sb-folder--special';
+      }
 
       const summary = document.createElement('summary');
       summary.className = 'notas-sb-folder';
       summary.style.cssText = 'font-size:11px;cursor:pointer;list-style:none;padding:3px 8px;display:flex;align-items:center;gap:4px;color:var(--c-fg);border-radius:2px;transition:background 120ms';
-      summary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:9px;width:8px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
+      summary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:12px;width:10px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
 
       // Folder drop zone
       summary.addEventListener('dragover', e => {
@@ -229,7 +232,7 @@ function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void
   el.className = 'notas-sb-item';
   el.draggable = true;
   el.dataset.noteId = note.id;
-  el.style.cssText = `padding:2px 8px 2px ${indent * 20 + 8}px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;border-left:2px solid transparent;color:var(--c-fg);transition:border-color 100ms,background 100ms;border-radius:2px`;
+  el.style.cssText = `padding:2px 8px 2px 14px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;border-left:2px solid transparent;color:var(--c-fg);transition:border-color 100ms,background 100ms;border-radius:2px`;
   el.title = note.title || '(sin título)';
   el.dataset.noteId = note.id;
   el.innerHTML = `<span style="color:#45d384;font-size:12px;width:17px;text-align:center;flex-shrink:0">■</span><span class="notas-sb-note-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-fg)">${escHtml(note.title || '(sin título)')}</span>`;

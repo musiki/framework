@@ -118,11 +118,12 @@ La defensa de la educación superior no es una causa corporativa de docentes o e
 
 > **POSTDATA: Musiki**
 > 
-> Musiki se desarrolla desde 2016 , en el ámbito de la Universidad Pública Argentina como un proyecto abierto de contribución y democratización de la información musical, coconstruido por estudiantes y docentes universitarios. Partiendo de la filosofía wiki, se sustenta en la atomización de conceptos académicos y en la estructuración de datos relacionales, con la premisa fundacional de hacer visible el proceso de enseñanza-aprendizaje y generar así dinámicas de recursión cognitiva positiva. Portales clave de Musiki, tales como su base de datos de acústica y su catálogo razonado de instrumentos, han logrado un impacto sostenido de hasta 30,000 visitas diarias entre los años 2016 y 2025. En la era agéntica, Musiki busca expandir su visión original hacia modelos de conocimiento estigmérgico —donde las interacciones descentralizadas sobre un entorno compartido producen dinámicas complejas de autoorganización—(Grassé 1959, expandida luego por Heylighen), promoviendo formas de co-creación y aprendizaje abierto y colaborativo.
+> Musiki se desarrolla desde 2016 , en el ámbito de la Universidad Pública Argentina como un proyecto abierto de contribución y democratización de la información musical, coconstruido por estudiantes y docentes universitarios. Partiendo de la filosofía wiki, se sustenta en la atomización de conceptos académicos y en la estructuración de datos relacionales, con la premisa fundacional de hacer visible el proceso de enseñanza-aprendizaje y generar así dinámicas de recursión cognitiva positiva. Portales clave de Musiki, tales como su base de datos de acústica y su catálogo razonado de instrumentos, han logrado un impacto sostenido de hasta 30,000 visitas mensuales entre los años 2016 y 2025. En la era agéntica, Musiki busca expandir su visión original hacia modelos de conocimiento estigmérgico —donde las interacciones descentralizadas sobre un entorno compartido producen dinámicas complejas de autoorganización—(Grassé 1959, expandida luego por Heylighen), promoviendo formas de co-creación y aprendizaje abierto y colaborativo.
 
+zztt,mistral,claude
 ---
 
-### 9. Bibliografía en formato BibTeX
+### 9. Referencias
 
 ```bibtex
 @book{reformades18,

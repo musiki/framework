@@ -237,7 +237,11 @@ export function renderNotesSidebar(
   // ── Chapter loop ──────────────────────────────────────────────────────
   for (const group of groups) {
     const chapterEl = document.createElement('div');
-    chapterEl.className = 'chapter';
+    const nameUpper = group.name.toUpperCase();
+    const isConceptos = nameUpper.includes('CONCEPTOS');
+    const isRecursos = nameUpper.includes('RECURSOS');
+    const isNotas = nameUpper.includes('NOTAS');
+    chapterEl.className = `chapter${isConceptos ? ' chapter--conceptos' : ''}${isRecursos ? ' chapter--recursos' : ''}${isNotas ? ' chapter--notas' : ''}`;
 
     const details = document.createElement('details');
     details.className = 'chapter-details';
@@ -247,12 +251,8 @@ export function renderNotesSidebar(
     summary.className = 'chapter-title';
     summary.innerHTML = `
       <span class="chapter-title-main">
+        <span class="chapter-caret">▸</span>
         <span class="chapter-title-text">${escHtml(group.name)}</span>
-      </span>
-      <span class="chapter-caret">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
       </span>
     `;
 
@@ -507,11 +507,25 @@ function injectCss() {
     /* ── Notes sidebar overrides ─────────────────────────────── */
     /* Chapter titles: small, grey, bold, uppercase */
     [data-notes-sidebar] .chapter-title {
-      font-size: 0.68rem !important;
+      font-size: 0.72rem !important;
       font-weight: 700 !important;
       letter-spacing: 0.08em !important;
       text-transform: uppercase !important;
       color: var(--c-fg-subtle, #888) !important;
+    }
+    [data-notes-sidebar] details > summary::-webkit-details-marker {
+      display: none !important;
+    }
+    [data-notes-sidebar] details > summary::marker {
+      display: none !important;
+      content: "" !important;
+    }
+    [data-notes-sidebar] details > summary {
+      list-style: none !important;
+    }
+    [data-notes-sidebar] .lesson-item {
+      margin: 0 !important;
+      padding: 0 !important;
     }
     /* Suppress list-item ::before markers injected by global stylesheet */
     [data-notes-sidebar] .lesson-item::before {
@@ -521,9 +535,9 @@ function injectCss() {
     /* Note items: smaller, no blue, black/white hierarchy */
     [data-notes-sidebar] .lesson-list { gap: 0 !important; margin-top: 0.1rem !important; margin-bottom: 0.15rem !important; }
     [data-notes-sidebar] .lesson-link {
-      font-size: 0.8rem !important;
+      font-size: 0.76rem !important;
       color: var(--c-fg-dim) !important;
-      padding: 0.18rem 0.45rem !important;
+      padding: 0.12rem 0.25rem !important;
     }
     [data-notes-sidebar] .lesson-link:hover {
       color: var(--c-fg) !important;
@@ -537,24 +551,63 @@ function injectCss() {
     }
     /* ── Drop lines ──────────────────────────────────────────── */
     .ns-drop-line {
-      height: 8px;
+      height: 0;
       list-style: none;
       padding: 0;
-      margin: -4px 0;
-      transition: height 80ms, margin 80ms;
+      margin: 0;
+      transition: height 80ms, background-color 80ms;
       overflow: visible;
       position: relative;
+    }
+    .ns-drop-line::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: -4px;
+      height: 8px;
+      z-index: 10;
+      background: transparent;
     }
     .ns-drop-line.ns-drop-active {
       height: 3px;
       background: var(--c-link, #3b82f6);
-      margin: 2px 0;
+      margin: 3px 0;
     }
     .ns-drop-line::before { content: none !important; display: none !important; }
     .ns-drag-over.chapter-title {
       background: var(--c-bg-alt, var(--c-bg-mute)) !important;
       outline: 1px dashed var(--c-link, #3b82f6);
       outline-offset: -2px;
+    }
+    [data-notes-sidebar] .chapter-link {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    [data-notes-sidebar] .chapter-caret {
+      font-size: 1.0rem !important;
+    }
+    [data-notes-sidebar] .chapter-details {
+      padding: 0 !important;
+    }
+    /* Notes tree caret styling */
+    .notas-sb-folder-caret {
+      font-size: 16px !important;
+      width: 13px !important;
+    }
+    .notas-sb-folder--special {
+      margin-top: 0.58rem !important;
+    }
+    /* Notes tree indentation and vertical connection lines (Roam Research style) */
+    .notas-sb-level {
+      display: grid;
+      gap: 1px;
+    }
+    .notas-sb-level .notas-sb-level {
+      margin-left: 8px !important;
+      padding-left: 6px !important;
+      border-left: 1px solid color-mix(in srgb, var(--c-border, #ccc) 50%, transparent) !important;
     }
     [data-notes-sidebar] .lesson-link[draggable="true"] {
       cursor: grab;
