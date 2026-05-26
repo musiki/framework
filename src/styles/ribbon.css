@@ -234,3 +234,446 @@
 @media (min-width: 501px) {
   .ribbon-item--mobile-only { display: none; }
 }
+
+/* ── UNTREF Logo & Legend ───────────────────────────────────────────────── */
+.ribbon-untref-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.ribbon-untref-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  width: calc(100% - 8px);
+  box-sizing: border-box;
+  text-decoration: none;
+  gap: 4px;
+  border-radius: 6px;
+  transition: background 150ms;
+}
+
+.ribbon-untref-btn:hover {
+  background: color-mix(in srgb, var(--c-fg) 6%, transparent);
+}
+
+.ribbon-untref-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  transform: rotate(-90deg);
+  opacity: 0.7;
+  transition: opacity 150ms, filter 150ms, transform 150ms;
+}
+
+.ribbon-untref-btn:hover .ribbon-untref-logo {
+  opacity: 1;
+}
+
+/* Light mode inversion so white SVG logo becomes black */
+html:not(.dark) .ribbon-untref-logo {
+  filter: invert(1);
+}
+
+.ribbon-untref-legend {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  text-align: center;
+  color: color-mix(in srgb, var(--c-fg) 45%, transparent);
+  user-select: none;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  margin-bottom: 6px;
+  transition: color 150ms;
+}
+
+.ribbon-untref-btn:hover .ribbon-untref-legend {
+  color: var(--c-fg);
+}
+
+/* Hide on mobile viewports (< 500px) since bottom bar is compact */
+@media (max-width: 500px) {
+  .ribbon-untref-container {
+    display: none !important;
+  }
+}
+
+/* ── UNTREF Modal Dialog ────────────────────────────────────────────────── */
+.untref-modal {
+  border: 1px solid var(--c-border);
+  background: var(--c-bg);
+  color: var(--c-fg);
+  border-radius: 12px;
+  padding: 0;
+  max-width: 720px;
+  width: 90vw;
+  max-height: 80vh;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.untref-modal::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  animation: untref-backdrop-fade 250ms ease-out;
+}
+
+.untref-modal-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 80vh;
+}
+
+.untref-modal-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 40%, transparent);
+  position: sticky;
+  top: 0;
+  background: var(--c-bg);
+  z-index: 10;
+}
+
+.untref-modal-close {
+  background: transparent;
+  border: none;
+  color: color-mix(in srgb, var(--c-fg) 60%, transparent);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 150ms, color 150ms;
+}
+
+.untref-modal-close:hover {
+  background: color-mix(in srgb, var(--c-fg) 8%, transparent);
+  color: var(--c-fg);
+}
+
+.untref-modal-body {
+  padding: 24px 32px 32px;
+  overflow-y: auto;
+  flex: 1;
+  font-family: inherit;
+  line-height: 1.6;
+}
+
+/* Custom premium scrollbar for modal body */
+.untref-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+.untref-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.untref-modal-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c-fg) 15%, transparent);
+  border-radius: 3px;
+}
+.untref-modal-body::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--c-fg) 30%, transparent);
+}
+
+/* Styles for loading and error states */
+.untref-modal-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 2rem;
+  font-size: 14px;
+  color: color-mix(in srgb, var(--c-fg) 60%, transparent);
+  font-weight: 500;
+}
+
+.untref-modal-loading::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  border: 2px solid color-mix(in srgb, var(--c-fg) 20%, transparent);
+  border-top-color: var(--c-fg);
+  border-radius: 50%;
+  animation: untref-spin 0.8s linear infinite;
+}
+
+@keyframes untref-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes untref-backdrop-fade {
+  from { background: rgba(0, 0, 0, 0); backdrop-filter: blur(0px); }
+  to { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); }
+}
+
+/* Typography styles for markdown body inside modal */
+.untref-modal-body h1 {
+  font-size: 1.8rem;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  font-weight: 700;
+  border-bottom: 2px solid var(--c-border);
+  padding-bottom: 8px;
+  color: var(--c-fg);
+}
+
+.untref-modal-body h2 {
+  font-size: 1.4rem;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 60%, transparent);
+  padding-bottom: 4px;
+}
+
+.untref-modal-body h3 {
+  font-size: 1.15rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.untref-modal-body h4 {
+  font-size: 1rem;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.untref-modal-body p {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: color-mix(in srgb, var(--c-fg) 90%, transparent);
+}
+
+.untref-modal-body ul, .untref-modal-body ol {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding-left: 20px;
+}
+
+.untref-modal-body li {
+  margin-bottom: 0.4rem;
+  color: color-mix(in srgb, var(--c-fg) 90%, transparent);
+}
+
+.untref-modal-body hr {
+  border: 0;
+  height: 1px;
+  background: var(--c-border);
+  margin: 2rem 0;
+}
+
+/* Markdown tables inside the modal */
+.untref-modal-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+}
+
+.untref-modal-body th, .untref-modal-body td {
+  border: 1px solid var(--c-border);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.untref-modal-body th {
+  background: color-mix(in srgb, var(--c-fg) 4%, transparent);
+  font-weight: 600;
+}
+
+.untref-modal-body tr:nth-child(even) {
+  background: color-mix(in srgb, var(--c-fg) 2%, transparent);
+}
+
+/* Pre and Code block styling inside the modal */
+.untref-modal-body pre {
+  background: color-mix(in srgb, var(--c-fg) 5%, transparent);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 14px;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+
+.untref-modal-body code {
+  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+  font-size: 0.85em;
+  background: color-mix(in srgb, var(--c-fg) 5%, transparent);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.untref-modal-body pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Responsive adjustments for the modal content */
+@media (max-width: 600px) {
+  .untref-modal-body {
+    padding: 16px 20px 24px;
+  }
+  .untref-modal-body h1 {
+    font-size: 1.5rem;
+  }
+  .untref-modal-body h2 {
+    font-size: 1.2rem;
+  }
+}
+
+/* ── Ribbon Courses Switcher Dropdown ───────────────────────────────────── */
+.ribbon-courses-menu {
+  position: fixed;
+  left: calc(var(--ribbon-width) + 8px);
+  bottom: 48px;
+  width: 260px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  font-family: inherit;
+  overflow: hidden;
+  animation: ribbon-menu-fade 120ms ease-out;
+}
+
+.ribbon-courses-menu.is-open {
+  display: flex;
+}
+
+@keyframes ribbon-menu-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ribbon-courses-menu-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--c-fg) 40%, transparent);
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 40%, transparent);
+  margin-bottom: 4px;
+  letter-spacing: 0.06em;
+}
+
+.ribbon-courses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px 6px;
+}
+
+/* Scrollbar for courses list */
+.ribbon-courses-list::-webkit-scrollbar {
+  width: 4px;
+}
+.ribbon-courses-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ribbon-courses-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c-fg) 12%, transparent);
+  border-radius: 2px;
+}
+
+.ribbon-courses-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--c-fg) 75%, transparent);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: background 120ms, color 120ms;
+  gap: 12px;
+}
+
+.ribbon-courses-item:hover {
+  background: color-mix(in srgb, var(--c-fg) 6%, transparent);
+  color: var(--c-fg);
+}
+
+.ribbon-courses-item.is-active {
+  background: color-mix(in srgb, var(--c-fg) 8%, transparent);
+  color: var(--c-fg);
+  font-weight: 600;
+  border-left: 3px solid var(--c-accent, #7c6ff7);
+  padding-left: 7px;
+}
+
+.ribbon-courses-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  text-align: left;
+}
+
+.ribbon-courses-item-code {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--c-fg) 8%, transparent);
+  color: color-mix(in srgb, var(--c-fg) 60%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.ribbon-courses-menu-empty {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--c-fg) 35%, transparent);
+  padding: 16px 8px;
+  text-align: center;
+  font-style: italic;
+}
+
+.ribbon-courses-menu-footer {
+  margin-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--c-border) 40%, transparent);
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--c-fg) 1%, transparent);
+}
+
+.ribbon-courses-menu-footer a {
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--c-fg) 55%, transparent);
+  text-decoration: none;
+  padding: 6px;
+  border-radius: 5px;
+  transition: background 120ms, color 120ms;
+}
+
+.ribbon-courses-menu-footer a:hover {
+  background: color-mix(in srgb, var(--c-fg) 5%, transparent);
+  color: var(--c-fg);
+}

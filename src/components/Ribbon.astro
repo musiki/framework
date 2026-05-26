@@ -1,5 +1,8 @@
 ---
 import '../styles/ribbon.css';
+import { getCollection } from 'astro:content';
+import { isElevatedGlobalRole } from '../lib/roles';
+import { buildCourseHref } from '../lib/course-routing';
 
 interface Props {
   courseId?: string;
@@ -26,6 +29,55 @@ const userInitial = (session?.user?.name || session?.user?.email || '?')
 const hasVivo = Boolean(performativeRoomHref);
 const badgeLabel = activeCourseCode.slice(0, 4) || '···';
 const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseId)}` : '/dashboard';
+
+// Get all courses from the content collection
+const allCourseFiles = await getCollection('cursos').catch(() => []);
+const coursesData = allCourseFiles
+  .filter(entry => entry.id.endsWith('_index'))
+  .map(entry => {
+    const cid = entry.id.replace('/_index', '');
+    return {
+      id: cid,
+      title: entry.data?.title || cid,
+      code: (entry.data as any)?.code || cid.slice(0, 4).toUpperCase(),
+      href: buildCourseHref(cid, (entry.data || {}) as Record<string, unknown>),
+      public: (entry.data as any)?.public ?? false,
+    };
+  });
+
+let userCourses: typeof coursesData = [];
+
+if (session?.user?.email) {
+  try {
+    const { query } = await import('../lib/db/pool');
+    const email = String(session.user.email).trim().toLowerCase();
+
+    const { data: users } = await query(
+      `SELECT id, role FROM "User" WHERE "email" ILIKE $1`,
+      [email]
+    );
+    const user = users?.[0];
+
+    if (user) {
+      const isTeacher = isElevatedGlobalRole(user.role);
+
+      if (isTeacher) {
+        userCourses = coursesData;
+      } else {
+        const { data: enrollments } = await query(
+          `SELECT "courseId" FROM "Enrollment" WHERE "userId" = $1`,
+          [user.id]
+        );
+        const enrolledIds = enrollments ? enrollments.map((e: any) => String(e.courseId)) : [];
+        userCourses = coursesData.filter(c => enrolledIds.includes(c.id));
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching user courses for ribbon switcher:', error);
+  }
+} else {
+  userCourses = coursesData.filter(c => c.public);
+}
 ---
 
 <!-- Desktop ribbon / Mobile bottom bar -->
@@ -263,20 +315,68 @@ const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseI
   <div class="ribbon-spacer"></div>
   <div class="ribbon-divider"></div>
 
-  <!-- Course switcher badge -->
-  <a
-    href="/cursos"
+  <!-- UNTREF / Universidad Pública -->
+  <div class="ribbon-untref-container">
+    <button
+      type="button"
+      class="ribbon-untref-btn"
+      id="ribbon-untref-btn"
+      aria-label="Universidad Pública Argentina"
+      title="Universidad Pública Argentina — Más información"
+    >
+      <span class="ribbon-untref-legend">universidad pública</span>
+      <img src="/logos/logo-untref.svg" alt="UNTREF" class="ribbon-untref-logo" />
+    </button>
+  </div>
+
+  <!-- Course switcher badge/dropdown trigger -->
+  <button
+    type="button"
     class="ribbon-item ribbon-item--badge"
+    id="ribbon-courses-btn"
     aria-label={`Mis cursos — curso activo: ${badgeLabel}`}
+    aria-haspopup="listbox"
+    aria-expanded="false"
     title="Mis cursos"
   >
     {badgeLabel}
-  </a>
+  </button>
 
   <!-- About -->
   <a href="/about" class="ribbon-about" aria-label="Acerca de musiki26">·</a>
 
 </nav>
+
+<!-- Modal for Universidad Pública -->
+<dialog id="untref-modal" class="untref-modal">
+  <div class="untref-modal-content">
+    <div class="untref-modal-header">
+      <button type="button" class="untref-modal-close" id="untref-modal-close" aria-label="Cerrar modal">&times;</button>
+    </div>
+    <div class="untref-modal-body markdown-body" id="untref-modal-body">
+      <div class="untref-modal-loading">Cargando información...</div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Course switcher menu -->
+<div class="ribbon-courses-menu" id="ribbon-courses-menu" role="listbox">
+  <div class="ribbon-courses-menu-header">Mis Cursos</div>
+  <div class="ribbon-courses-list">
+    {userCourses.map(c => (
+      <a href={c.href} class={`ribbon-courses-item ${c.id === courseId ? 'is-active' : ''}`} role="option" aria-selected={c.id === courseId}>
+        <span class="ribbon-courses-item-title">{c.title}</span>
+        <span class="ribbon-courses-item-code">{c.code}</span>
+      </a>
+    ))}
+    {userCourses.length === 0 && (
+      <span class="ribbon-courses-menu-empty">No tienes cursos activos</span>
+    )}
+  </div>
+  <div class="ribbon-courses-menu-footer">
+    <a href="/cursos">Ver todos los cursos</a>
+  </div>
+</div>
 
 <style>
   .ribbon {
@@ -408,6 +508,88 @@ const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseI
         btn.addEventListener('click', () => window.dispatchEvent(new CustomEvent('musiki:open-page-info')));
       }
     });
+
+    // UNTREF Modal setup
+    const untrefBtn = document.getElementById('ribbon-untref-btn');
+    const untrefModal = document.getElementById('untref-modal');
+    const untrefClose = document.getElementById('untref-modal-close');
+    const untrefBody = document.getElementById('untref-modal-body');
+
+    if (untrefBtn && untrefModal instanceof HTMLDialogElement && !untrefBtn.dataset.bound) {
+      untrefBtn.dataset.bound = 'true';
+      let contentLoaded = false;
+
+      const openModal = async () => {
+        untrefModal.showModal();
+
+        if (!contentLoaded && untrefBody) {
+          try {
+            const response = await fetch('/universidad-publica.md');
+            if (!response.ok) throw new Error('Error al cargar la información');
+            const markdownText = await response.text();
+
+            // Import marked dynamically for performance
+            const { marked } = await import('marked');
+            untrefBody.innerHTML = await marked.parse(markdownText);
+            contentLoaded = true;
+          } catch (error) {
+            console.error('Error loading public university info:', error);
+            untrefBody.innerHTML = `<div class="untref-modal-error" style="padding: 2rem; text-align: center;">
+              <h3>Error de carga</h3>
+              <p>No se pudo cargar la información sobre la universidad pública. Por favor, intente nuevamente más tarde.</p>
+            </div>`;
+          }
+        }
+      };
+
+      untrefBtn.addEventListener('click', openModal);
+
+      // Light dismiss (click outside modal content to close)
+      untrefModal.addEventListener('click', (e) => {
+        if (e.target === untrefModal) {
+          untrefModal.close();
+        }
+      });
+
+      if (untrefClose) {
+        untrefClose.addEventListener('click', () => {
+          untrefModal.close();
+        });
+      }
+    }
+
+    // Courses Dropdown setup
+    const coursesBtn = document.getElementById('ribbon-courses-btn');
+    const coursesMenu = document.getElementById('ribbon-courses-menu');
+
+    if (coursesBtn && coursesMenu && !coursesBtn.dataset.bound) {
+      coursesBtn.dataset.bound = 'true';
+
+      const toggleMenu = (e: Event) => {
+        e.stopPropagation();
+        const isOpen = coursesMenu.classList.toggle('is-open');
+        coursesBtn.setAttribute('aria-expanded', String(isOpen));
+      };
+
+      coursesBtn.addEventListener('click', toggleMenu);
+
+      // Close menu when clicking outside
+      document.addEventListener('click', (e) => {
+        if (coursesMenu.classList.contains('is-open') && !coursesMenu.contains(e.target as Node) && e.target !== coursesBtn) {
+          coursesMenu.classList.remove('is-open');
+          coursesBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+
+      // Close menu on ESC key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && coursesMenu.classList.contains('is-open')) {
+          coursesMenu.classList.remove('is-open');
+          coursesBtn.setAttribute('aria-expanded', 'false');
+          coursesBtn.focus();
+        }
+      });
+    }
 
   };
 
