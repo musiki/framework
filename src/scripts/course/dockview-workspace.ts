@@ -334,7 +334,7 @@ function injectMdCss() {
       max-width:min(100%, 86ch);
       margin-inline:auto;
       padding:clamp(1rem, 2vw, 1.8rem) clamp(1rem, 3vw, 2.4rem);
-      font-size:var(--font-size-base, 1rem);
+      font-size:calc(var(--font-size-base, 1rem) * 1.15);
       line-height:1.72;
       color:var(--c-fg);
     }
@@ -920,10 +920,14 @@ export function initDockviewWorkspace(
   // Keep class-content (course overview) visible until first panel; hide dockview until then
   const classContent = container.querySelector<HTMLElement>('[data-class-content]');
   const dvRoot = container.querySelector<HTMLElement>('.dv-dockview');
-  if (dvRoot) dvRoot.style.display = 'none';
+  const setDockviewActive = (active: boolean) => {
+    container.classList.toggle('is-dockview-active', active);
+    if (classContent) classContent.style.display = active ? 'none' : '';
+    if (dvRoot) dvRoot.style.display = active ? '' : 'none';
+  };
+  setDockviewActive(false);
   dockview.onDidAddPanel(() => {
-    if (classContent) classContent.style.display = 'none';
-    if (dvRoot) dvRoot.style.display = '';
+    setDockviewActive(true);
   });
 
   // Open initial panel
@@ -1179,6 +1183,11 @@ export function initDockviewWorkspace(
     dbNotePanelStates.delete(event.id);
     qaShells.delete(event.id);
     if (_activeQaPanelId === event.id) _activeQaPanelId = null;
+    queueMicrotask(() => {
+      if (dockview.panels.length === 0) {
+        setDockviewActive(false);
+      }
+    });
   });
 
   const workspace: CourseNotesWorkspace = {

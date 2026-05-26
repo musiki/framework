@@ -5,7 +5,7 @@ import {
   EditorView, ViewPlugin, Decoration,
   type DecorationSet, type ViewUpdate,
 } from '@codemirror/view';
-import { computeFrequency, computeKwic, computeZipfProfile } from '../../notas/qa-analyzer-logic';
+import { computeKwic, computeZipfProfile } from '../../notas/qa-analyzer-logic';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,8 @@ type ParagraphRelation = {
 type Diagnostic = {
   severidad: 'baja' | 'media' | 'alta';
   tipo: 'concepto_huerfano';
-  mensaje: string;
+  etiqueta?: string;
+  mensaje?: string;
 };
 type ParagraphTrace = {
   id?: string;
@@ -66,7 +67,7 @@ export interface TraceMarginHandle {
   destroy(): void;
 }
 
-type MonitorSectionKey = 'trace' | 'lexico' | 'zipf' | 'qa';
+type MonitorSectionKey = 'trace' | 'estructura' | 'zipf' | 'qa';
 
 type MonitorState = {
   open: Record<MonitorSectionKey, boolean>;
@@ -95,7 +96,7 @@ const MODE_LABELS: Record<TraceMode, string> = {
   borrador: 'Borrador',
   seminario: 'Seminario',
   tesis: 'Tesis',
-  artistico: 'Artístico',
+  artistico: 'Lit Art (Literatura y Arte)',
   entrega: 'Entrega',
 };
 const LEGACY_ROLES: Record<string, RhetoricalRole> = {
@@ -168,6 +169,20 @@ export function collectParagraphIndicesInRange(paras: Paragraph[], from: number,
   return new Set(paras
     .filter(para => para.to >= from && para.from <= to)
     .map(para => para.index));
+}
+
+const LIT_ART_APPROX_CHARS_PER_LINE = 64;
+
+function approximateParagraphLines(text: string): number {
+  return text.split('\n').reduce(
+    (count, line) => count + Math.max(1, Math.ceil(line.trim().length / LIT_ART_APPROX_CHARS_PER_LINE)),
+    0,
+  );
+}
+
+export function paragraphsForAnalysis(paras: Paragraph[], mode: TraceMode): Paragraph[] {
+  if (mode !== 'artistico') return paras;
+  return paras.filter(para => approximateParagraphLines(para.text) > 2);
 }
 
 // ── NLP auto-suggestions ───────────────────────────────────────────────────
@@ -261,7 +276,8 @@ async function computeLocalTraces(
   codes: TraceCode[],
   mode: TraceMode,
 ): Promise<ParagraphTrace[]> {
-  const keywordsByParagraph = paras.map(para => ({
+  const analyzedParas = paragraphsForAnalysis(paras, mode);
+  const keywordsByParagraph = analyzedParas.map(para => ({
     index: para.index,
     keywords: extractKeywords(para.text),
   }));
@@ -273,8 +289,8 @@ async function computeLocalTraces(
       occurrences.set(keyword, positions);
     }
   }
-  const hashValues = await Promise.all(paras.map(para => paragraphTextHash(para.text)));
-  return paras.map((para, offset) => {
+  const hashValues = await Promise.all(analyzedParas.map(para => paragraphTextHash(para.text)));
+  return analyzedParas.map((para, offset) => {
     const keywords = keywordsByParagraph[offset].keywords;
     const role = roleValue(codes.find(code => code.paraIndex === para.index && code.dimension === 'rhetorical')) || null;
     const conceptos: ConceptMention[] = keywords.map(etiqueta => {
@@ -304,7 +320,7 @@ async function computeLocalTraces(
         .map(keyword => ({
           severidad: 'baja',
           tipo: 'concepto_huerfano',
-          mensaje: `"${keyword}" aparece aquí y no vuelve a retomarse.`,
+          etiqueta: keyword,
         }));
     return {
       paraIndex: para.index,
@@ -473,17 +489,19 @@ export function injectTraceCss() {
   s.textContent = `
     .cnw-trace-hl { border-left: 3px solid var(--c-link, #3b82f6) !important; padding-left: 4px !important; box-sizing: border-box; }
     .cnw-trace-col {
-      flex: 0 0 35%;
-      min-width: 180px;
-      max-width: 280px;
+      flex: 0 0 clamp(178px, 22%, 224px);
+      min-width: 178px;
+      max-width: 252px;
       border-left: 1px solid var(--c-border, rgba(120,120,140,0.2));
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      font-size: 11px;
+      font-size: 12.65px;
       color: var(--c-fg);
       background: var(--c-bg);
     }
+    .cnw-trace-rail { flex-basis: clamp(178px, 23%, 226px); }
+    .cnw-analysis-col { flex-basis: clamp(192px, 25%, 254px); }
     .tc-monitor { flex: 1; min-height: 0; overflow-y: auto; }
     .tc-section { border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.15)); }
     .tc-section-summary {
@@ -494,7 +512,7 @@ export function injectTraceCss() {
       align-items: center;
       gap: .35rem;
       padding: 6px 8px;
-      font-size: 9px;
+      font-size: 10.35px;
       letter-spacing: .16em;
       text-transform: uppercase;
       opacity: .7;
@@ -519,7 +537,7 @@ export function injectTraceCss() {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      font-size: 8px;
+      font-size: 9.2px;
       letter-spacing: .12em;
       opacity: .6;
     }
@@ -538,6 +556,46 @@ export function injectTraceCss() {
       100% { transform: scale(1); opacity: .6; }
     }
     .tc-list { padding: 4px 0; }
+    .cnw-trace-rail .tc-monitor,
+    .cnw-trace-rail .tc-section--trace,
+    .cnw-trace-rail .tc-section--trace[open] .tc-section-body {
+      height: 100%;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .cnw-trace-rail .tc-section--trace { border-bottom: none; }
+    .cnw-trace-rail .tc-section-summary {
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 3px 6px;
+      background: color-mix(in srgb, var(--c-bg) 86%, transparent);
+    }
+    .cnw-trace-rail .tc-list {
+      position: absolute;
+      inset: 0;
+      padding: 0;
+    }
+    .cnw-trace-rail .tc-row {
+      position: absolute;
+      left: 0;
+      right: 0;
+      box-sizing: border-box;
+      min-height: var(--tc-para-height, 34px);
+      max-height: var(--tc-para-height, 34px);
+      overflow: hidden;
+      z-index: 1;
+    }
+    .cnw-trace-rail .tc-row:is(.is-active, .is-hovered, :focus-within) {
+      max-height: none;
+      overflow: visible;
+      z-index: 3;
+      background: var(--c-bg);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--c-fg) 10%, transparent);
+    }
     .tc-row {
       position: relative;
       padding: 4px 8px;
@@ -564,7 +622,7 @@ export function injectTraceCss() {
       display: flex;
       justify-content: center;
       align-items: flex-start;
-      font: 7px/1 var(--font-mono, monospace);
+      font: 8.05px/1 var(--font-mono, monospace);
       letter-spacing: .08em;
       writing-mode: vertical-rl;
       opacity: .78;
@@ -575,7 +633,7 @@ export function injectTraceCss() {
       color: inherit;
       cursor: pointer;
       padding: 0;
-      font-size: 9px;
+      font-size: 10.35px;
       font-family: var(--font-mono, monospace);
       opacity: 0.5;
       flex-shrink: 0;
@@ -588,18 +646,18 @@ export function injectTraceCss() {
       background: transparent;
       color: var(--c-fg-dim, currentColor);
       font: inherit;
-      font-size: 9px;
+      font-size: 10.35px;
       opacity: .62;
       outline: none;
     }
     .tc-role-select:focus, .tc-role-select:hover { opacity: 1; color: var(--c-fg); }
     .tc-role-select.is-error { color: #c87e7e; }
-    .tc-add-btn { background: none; border: none; cursor: pointer; font-size: 13px; line-height: 1; color: var(--c-fg-dim); opacity: 0.4; padding: 0 2px; flex-shrink: 0; }
+    .tc-add-btn { background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1; color: var(--c-fg-dim); opacity: 0.4; padding: 0 2px; flex-shrink: 0; }
     .tc-add-btn:hover { opacity: 1; color: var(--c-link, #3b82f6); }
     .tc-codes { display: flex; flex-wrap: wrap; gap: 3px; min-height: 4px; }
     .tc-concepts { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 3px; }
     .tc-concept {
-      font-size: 9px;
+      font-size: 10.35px;
       padding: 1px 5px;
       border-radius: 10px;
       color: var(--c-fg-dim, currentColor);
@@ -610,21 +668,26 @@ export function injectTraceCss() {
       color: var(--c-fg, currentColor);
       background: color-mix(in srgb, var(--c-link, #3b82f6) 8%, transparent);
     }
-    .tc-diagnostic-list { margin: 3px 0 0; padding: 0; list-style: none; color: #c87e7e; font-size: 9px; opacity: .78; }
-    .tc-diagnostic-list li::before { content: "· "; }
+    .tc-concept.is-orphan::after, .tc-chip.is-orphan::after {
+      content: "";
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: #c34848;
+      flex-shrink: 0;
+    }
     .tc-chip { display: inline-flex; align-items: center; gap: 2px; background: var(--c-bg-mute); border-radius: 10px; padding: 1px 4px 1px 6px; cursor: pointer; transition: background 120ms; }
     .tc-chip.is-emergent { outline: 1px dashed color-mix(in srgb, var(--c-link, #3b82f6) 34%, transparent); }
     .tc-chip:hover { background: color-mix(in srgb, var(--c-link, #3b82f6) 15%, var(--c-bg-mute)); }
     .tc-chip.is-highlighted { background: color-mix(in srgb, var(--c-link, #3b82f6) 22%, var(--c-bg-mute)); outline: 1px solid color-mix(in srgb, var(--c-link, #3b82f6) 40%, transparent); }
-    .tc-chip-label { font-size: 10px; color: var(--c-fg); }
-    .tc-chip-del { background: none; border: none; cursor: pointer; font-size: 11px; line-height: 1; color: var(--c-fg-dim); padding: 0; opacity: 0.45; }
+    .tc-chip-label { font-size: 11.5px; color: var(--c-fg); }
+    .tc-chip-del { background: none; border: none; cursor: pointer; font-size: 12.65px; line-height: 1; color: var(--c-fg-dim); padding: 0; opacity: 0.45; }
     .tc-chip-del:hover { opacity: 1; color: #c87e7e; }
-    .tc-orphan-badge { font-size: 9px; color: #c87e7e; opacity: 0.75; margin-left: auto; }
-    .tc-add-input { width: 100%; font-size: 10px; border: 1px solid var(--c-link, #3b82f6); background: var(--c-bg); color: var(--c-fg); border-radius: 3px; padding: 2px 4px; margin-top: 3px; box-sizing: border-box; outline: none; }
-    .tc-mode-row { display:flex; align-items:center; gap:6px; padding: 1px 8px 6px; font-size:9px; opacity:.76; }
+    .tc-add-input { width: 100%; font-size: 11.5px; border: 1px solid var(--c-link, #3b82f6); background: var(--c-bg); color: var(--c-fg); border-radius: 3px; padding: 2px 4px; margin-top: 3px; box-sizing: border-box; outline: none; }
+    .tc-mode-row { display:flex; align-items:center; gap:6px; padding: 1px 8px 6px; font-size:10.35px; opacity:.76; }
     .tc-mode-select { margin-left:auto; min-width:88px; border:1px solid var(--c-border, rgba(120,120,140,.22)); border-radius:3px; background:transparent; color:inherit; font:inherit; }
-    .tc-graph { border-top: 1px solid var(--c-border, rgba(120,120,140,0.15)); flex-shrink: 0; padding-top: 4px; }
-    .tc-subhead { font-size: 9px; opacity: .42; padding: 2px 8px 5px; letter-spacing: .09em; text-transform: uppercase; }
+    .tc-graph { flex-shrink: 0; padding-top: 4px; }
+    .tc-subhead { font-size: 10.35px; opacity: .42; padding: 2px 8px 5px; letter-spacing: .09em; text-transform: uppercase; }
     .tc-svg { display: block; margin: 0 auto; padding-bottom: 8px; }
     .tc-graph-link {
       transition: opacity 160ms ease, stroke-width 160ms ease;
@@ -652,7 +715,7 @@ export function injectTraceCss() {
       background: transparent;
     }
     .tc-chip-suggestion:hover { opacity: 0.9; background: color-mix(in srgb, var(--c-link, #3b82f6) 8%, var(--c-bg)); }
-    .tc-empty { margin: 0; padding: 7px 8px; font-size: 10px; opacity: .45; }
+    .tc-empty { margin: 0; padding: 7px 8px; font-size: 11.5px; opacity: .45; }
     .tc-lexical-tools { padding: 2px 8px 7px; }
     .tc-lexical-input {
       width: 100%;
@@ -662,11 +725,11 @@ export function injectTraceCss() {
       background: transparent;
       color: inherit;
       font: inherit;
-      font-size: 10px;
+      font-size: 11.5px;
       padding: 3px 5px;
       margin-bottom: 6px;
     }
-    .tc-frequency-row { display: flex; align-items: center; gap: 5px; padding: 2px 0; cursor: pointer; }
+    .tc-frequency-row { display: grid; grid-template-columns: 21px 1fr auto; align-items: center; gap: 5px; padding: 2px 0; cursor: pointer; }
     .tc-frequency-bar, .tc-zipf-bar {
       height: 6px;
       min-width: 3px;
@@ -675,16 +738,16 @@ export function injectTraceCss() {
       background: var(--c-link, #3b82f6);
       opacity: .48;
     }
-    .tc-frequency-label, .tc-zipf-label { font-size: 10px; opacity: .72; font-family: var(--font-mono, monospace); }
+    .tc-frequency-label, .tc-zipf-label { font-size: 11.5px; opacity: .72; font-family: var(--font-mono, monospace); }
     .tc-kwic { margin-top: 7px; border-top: 1px solid var(--c-border, rgba(120,120,140,.12)); padding-top: 5px; }
-    .tc-kwic-row { font-size: 9px; line-height: 1.45; opacity: .74; font-family: var(--font-mono, monospace); padding: 2px 0; }
+    .tc-kwic-row { font-size: 10.35px; line-height: 1.45; opacity: .74; font-family: var(--font-mono, monospace); padding: 2px 0; }
     .tc-kwic-row mark { background: color-mix(in srgb, var(--c-link, #3b82f6) 22%, transparent); color: inherit; border-radius: 2px; }
-    .tc-zipf-stats, .tc-qa-copy { padding: 2px 8px 7px; font-size: 10px; line-height: 1.5; opacity: .65; }
+    .tc-zipf-stats, .tc-qa-copy { padding: 2px 8px 7px; font-size: 11.5px; line-height: 1.5; opacity: .65; }
     .tc-zipf-row { display: grid; grid-template-columns: 21px 1fr auto; gap: 4px; align-items: center; padding: 2px 8px; }
-    .tc-zipf-rank { font-size: 9px; opacity: .42; font-family: var(--font-mono, monospace); }
+    .tc-zipf-rank { font-size: 10.35px; opacity: .42; font-family: var(--font-mono, monospace); }
     .tc-zipf-bars { display: flex; align-items: center; gap: 5px; min-width: 0; }
     .tc-qa-metrics { display: flex; gap: 5px; flex-wrap: wrap; padding: 2px 8px 5px; }
-    .tc-qa-metric { padding: 2px 5px; border: 1px solid var(--c-border, rgba(120,120,140,.18)); border-radius: 10px; font-size: 9px; opacity: .65; }
+    .tc-qa-metric { padding: 2px 5px; border: 1px solid var(--c-border, rgba(120,120,140,.18)); border-radius: 10px; font-size: 10.35px; opacity: .65; }
   `;
   document.head.appendChild(s);
 }
@@ -702,6 +765,7 @@ function renderTraceGraph(
   const CX = 16;
   const W = 52;
   const h = paras.length * SPACING + 20;
+  const graphPositions = new Map(paras.map((para, position) => [para.index, position]));
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${h}`);
@@ -712,12 +776,15 @@ function renderTraceGraph(
   const drawnPairs = new Set<string>();
   for (const trace of traces) {
     for (const relation of trace.relaciones) {
+        const sourcePosition = graphPositions.get(relation.indiceObjetivo);
+        const targetPosition = graphPositions.get(trace.paraIndex);
+        if (sourcePosition === undefined || targetPosition === undefined) continue;
         const key = `${relation.indiceObjetivo},${trace.paraIndex}`;
         if (drawnPairs.has(key)) continue;
         drawnPairs.add(key);
-        const y1 = 10 + relation.indiceObjetivo * SPACING;
-        const y2 = 10 + trace.paraIndex * SPACING;
-        const dist = trace.paraIndex - relation.indiceObjetivo;
+        const y1 = 10 + sourcePosition * SPACING;
+        const y2 = 10 + targetPosition * SPACING;
+        const dist = targetPosition - sourcePosition;
         const ctrl = Math.min(10 + dist * 6, 30);
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', `M ${CX + R} ${y1} C ${CX + R + ctrl} ${y1}, ${CX + R + ctrl} ${y2}, ${CX + R} ${y2}`);
@@ -733,8 +800,8 @@ function renderTraceGraph(
     }
   }
 
-  for (const para of paras) {
-    const cy = 10 + para.index * SPACING;
+  for (const [position, para] of paras.entries()) {
+    const cy = 10 + position * SPACING;
     const trace = traces.find(item => item.paraIndex === para.index);
     const role = trace?.rolRetorico ? ROLE_PRESENTATION[trace.rolRetorico] : null;
     const fill = role
@@ -768,7 +835,7 @@ function renderTraceGraph(
     text.setAttribute('x', String(CX));
     text.setAttribute('y', String(cy + 3));
     text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('font-size', '7');
+    text.setAttribute('font-size', '8.05');
     text.setAttribute('fill', 'var(--c-fg, currentColor)');
     text.setAttribute('opacity', '0.7');
     text.classList.add('tc-graph-label');
@@ -828,6 +895,13 @@ function setHoveredParagraph(traceCol: HTMLElement, paraIndex: number | null) {
   });
 }
 
+function restartAnimation(element: Element, className: string) {
+  element.classList.remove(className);
+  requestAnimationFrame(() => {
+    if (element.isConnected) element.classList.add(className);
+  });
+}
+
 function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animate: boolean) {
   traceCol.querySelectorAll<HTMLElement>('.tc-row').forEach(row => {
     const index = Number(row.dataset.paraIndex);
@@ -835,9 +909,7 @@ function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animat
     row.classList.toggle('is-visible', state.visibleParagraphs.has(index));
     row.classList.toggle('is-active', isActive);
     if (animate && isActive) {
-      row.classList.remove('is-entering');
-      void row.offsetWidth;
-      row.classList.add('is-entering');
+      restartAnimation(row, 'is-entering');
     }
   });
   traceCol.querySelectorAll<SVGElement>('.tc-graph-node').forEach(node => {
@@ -846,9 +918,7 @@ function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animat
     node.classList.toggle('is-visible', state.visibleParagraphs.has(index));
     node.classList.toggle('is-active', isActive);
     if (animate && isActive) {
-      node.classList.remove('is-entering');
-      node.getBoundingClientRect();
-      node.classList.add('is-entering');
+      restartAnimation(node, 'is-entering');
     }
   });
   traceCol.querySelectorAll<SVGElement>('.tc-graph-link').forEach(link => {
@@ -857,6 +927,58 @@ function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animat
   });
   const context = traceCol.querySelector<HTMLElement>('.tc-live-context');
   if (context) context.textContent = state.activeParagraph === null ? 'LIVE' : `LIVE · P${state.activeParagraph}`;
+}
+
+type TraceRowMeasurement = {
+  row: HTMLElement;
+  hidden: boolean;
+  top?: number;
+  height?: number;
+};
+
+function requestTraceRowsSync(traceCol: HTMLElement, paras: Paragraph[], editorView: EditorView) {
+  editorView.requestMeasure<TraceRowMeasurement[]>({
+    key: traceCol,
+    read: () => {
+      const list = traceCol.querySelector<HTMLElement>('.tc-list');
+      if (!list || !traceCol.isConnected) return [];
+      const listTop = list.getBoundingClientRect().top;
+      const listHeight = list.clientHeight;
+      const docLength = editorView.state.doc.length;
+      const measurements: TraceRowMeasurement[] = [];
+      for (const para of paras) {
+        const row = list.querySelector<HTMLElement>(`.tc-row[data-para-index="${para.index}"]`);
+        if (!row) continue;
+        const from = Math.min(para.from, docLength);
+        const to = Math.max(from, Math.min(para.to, docLength));
+        const start = editorView.coordsAtPos(from);
+        const end = editorView.coordsAtPos(to, -1);
+        if (!start || !end) {
+          measurements.push({ row, hidden: true });
+          continue;
+        }
+        const visualHeight = Math.max(start.bottom - start.top, end.bottom - start.top);
+        const compactShift = visualHeight < 34 ? 2 : 0;
+        const top = start.top - listTop + compactShift;
+        const height = Math.max(34, visualHeight - compactShift);
+        measurements.push({
+          row,
+          hidden: top + height < 0 || top > listHeight,
+          top: Math.round(top),
+          height: Math.round(height),
+        });
+      }
+      return measurements;
+    },
+    write: measurements => {
+      for (const measurement of measurements) {
+        measurement.row.hidden = measurement.hidden;
+        if (measurement.top === undefined || measurement.height === undefined) continue;
+        measurement.row.style.top = `${measurement.top}px`;
+        measurement.row.style.setProperty('--tc-para-height', `${measurement.height}px`);
+      }
+    },
+  });
 }
 
 function renderKwicLines(target: HTMLElement, text: string, query: string) {
@@ -883,46 +1005,63 @@ function renderKwicLines(target: HTMLElement, text: string, query: string) {
   }
 }
 
-function appendLexicalSection(monitor: HTMLElement, text: string, state: MonitorState) {
-  const body = createMonitorSection(monitor, 'lexico', 'Léxico', state);
+function appendFreqZipfSection(monitor: HTMLElement, text: string, state: MonitorState) {
+  const body = createMonitorSection(monitor, 'zipf', 'Freq · Zipf', state);
   const tools = document.createElement('div');
   tools.className = 'tc-lexical-tools';
   body.appendChild(tools);
 
+  const profile = computeZipfProfile(text, 12);
+  const stats = document.createElement('div');
+  stats.className = 'tc-zipf-stats';
+  stats.textContent = profile.slope === null
+    ? 'Distribución insuficiente para estimar una pendiente.'
+    : `${profile.tokenCount} tokens · ${profile.vocabularySize} términos · pendiente log-log ${profile.slope.toFixed(2)}`;
+  tools.appendChild(stats);
+
   const input = document.createElement('input');
   input.className = 'tc-lexical-input';
   input.placeholder = 'concordancia...';
-  const frequencies = computeFrequency(text, 12);
-  if (!state.lexicalQuery && frequencies[0]) state.lexicalQuery = frequencies[0].word;
+  if (!state.lexicalQuery && profile.points[0]) state.lexicalQuery = profile.points[0].word;
   input.value = state.lexicalQuery;
   tools.appendChild(input);
 
   const freqHead = document.createElement('div');
   freqHead.className = 'tc-subhead';
-  freqHead.textContent = 'Frecuencia';
+  freqHead.textContent = 'Rango · frecuencia observada';
   tools.appendChild(freqHead);
 
-  if (frequencies.length === 0) {
+  if (profile.points.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'tc-empty';
     empty.textContent = 'Sin términos suficientes';
     tools.appendChild(empty);
   }
-  for (const entry of frequencies) {
+  for (const point of profile.points) {
     const row = document.createElement('div');
     row.className = 'tc-frequency-row';
     row.title = 'Ver concordancias';
+    const rank = document.createElement('span');
+    rank.className = 'tc-zipf-rank';
+    rank.textContent = `#${point.rank}`;
+    const bars = document.createElement('span');
+    bars.className = 'tc-zipf-bars';
     const bar = document.createElement('span');
     bar.className = 'tc-frequency-bar';
-    bar.style.width = `${Math.max(4, Math.min(entry.pct, 100))}%`;
+    bar.style.width = `${Math.max(4, (point.count / (profile.points[0]?.count ?? 1)) * 100)}%`;
     const label = document.createElement('span');
     label.className = 'tc-frequency-label';
-    label.textContent = `${entry.word} (${entry.count})`;
-    row.append(bar, label);
+    label.textContent = point.word;
+    bars.append(bar, label);
+    const count = document.createElement('span');
+    count.className = 'tc-frequency-label';
+    count.title = `Ideal Zipf aproximado: ${point.expected.toFixed(1)}`;
+    count.textContent = String(point.count);
+    row.append(rank, bars, count);
     row.addEventListener('click', () => {
-      state.lexicalQuery = entry.word;
-      input.value = entry.word;
-      renderKwicLines(kwic, text, entry.word);
+      state.lexicalQuery = point.word;
+      input.value = point.word;
+      renderKwicLines(kwic, text, point.word);
     });
     tools.appendChild(row);
   }
@@ -940,45 +1079,16 @@ function appendLexicalSection(monitor: HTMLElement, text: string, state: Monitor
   renderKwicLines(kwic, text, state.lexicalQuery);
 }
 
-function appendZipfSection(monitor: HTMLElement, text: string, state: MonitorState) {
-  const body = createMonitorSection(monitor, 'zipf', 'Zipf', state);
-  const profile = computeZipfProfile(text, 10);
-  const stats = document.createElement('div');
-  stats.className = 'tc-zipf-stats';
-  if (profile.slope === null) {
-    stats.textContent = 'Distribución insuficiente para estimar una pendiente.';
-  } else {
-    stats.textContent = `${profile.tokenCount} tokens · ${profile.vocabularySize} términos · pendiente log-log ${profile.slope.toFixed(2)}`;
-  }
-  body.appendChild(stats);
-
-  for (const point of profile.points) {
-    const row = document.createElement('div');
-    row.className = 'tc-zipf-row';
-    const rank = document.createElement('span');
-    rank.className = 'tc-zipf-rank';
-    rank.textContent = `#${point.rank}`;
-    const bars = document.createElement('span');
-    bars.className = 'tc-zipf-bars';
-    const bar = document.createElement('span');
-    bar.className = 'tc-zipf-bar';
-    bar.style.width = `${Math.max(4, (point.count / (profile.points[0]?.count ?? 1)) * 100)}%`;
-    const word = document.createElement('span');
-    word.className = 'tc-zipf-label';
-    word.textContent = point.word;
-    bars.append(bar, word);
-    const count = document.createElement('span');
-    count.className = 'tc-zipf-label';
-    count.title = `Ideal Zipf aproximado: ${point.expected.toFixed(1)}`;
-    count.textContent = String(point.count);
-    row.append(rank, bars, count);
-    body.appendChild(row);
-  }
-}
-
-function appendQaSection(monitor: HTMLElement, codes: TraceCode[], traces: ParagraphTrace[], state: MonitorState) {
+function appendQaSection(
+  monitor: HTMLElement,
+  codes: TraceCode[],
+  traces: ParagraphTrace[],
+  state: MonitorState,
+  analyzedParas: Paragraph[],
+) {
   const body = createMonitorSection(monitor, 'qa', 'QA', state);
-  const traceCodes = analyticalCodes(codes);
+  const analyzedIndices = new Set(analyzedParas.map(para => para.index));
+  const traceCodes = analyticalCodes(codes).filter(code => analyzedIndices.has(code.paraIndex));
   const metrics = document.createElement('div');
   metrics.className = 'tc-qa-metrics';
   const emergent = traces.reduce(
@@ -1002,13 +1112,14 @@ function appendQaSection(monitor: HTMLElement, codes: TraceCode[], traces: Parag
   const copy = document.createElement('div');
   copy.className = 'tc-qa-copy';
   copy.textContent = state.mode === 'artistico'
-    ? 'Modo artístico: cadenas visibles, sin alertas de progresión lineal.'
+    ? 'Lit Art: se omiten párrafos breves de una o dos líneas.'
     : 'Indicios locales de cohesión: no califican la calidad del argumento.';
   body.append(metrics, copy);
 }
 
 function renderMargin(
   traceCol: HTMLElement,
+  analysisCol: HTMLElement,
   paras: Paragraph[],
   codes: TraceCode[],
   traces: ParagraphTrace[],
@@ -1019,12 +1130,17 @@ function renderMargin(
   state: MonitorState,
 ) {
   traceCol.innerHTML = '';
+  analysisCol.innerHTML = '';
+  const analyzedParas = paragraphsForAnalysis(paras, state.mode);
   const traceCodes = analyticalCodes(codes);
   const orphans = computeOrphanLabels(traceCodes);
-  const monitor = document.createElement('div');
-  monitor.className = 'tc-monitor';
-  traceCol.appendChild(monitor);
-  const traceBody = createMonitorSection(monitor, 'trace', 'Trace', state);
+  const traceMonitor = document.createElement('div');
+  traceMonitor.className = 'tc-monitor';
+  traceCol.appendChild(traceMonitor);
+  const analysisMonitor = document.createElement('div');
+  analysisMonitor.className = 'tc-monitor';
+  analysisCol.appendChild(analysisMonitor);
+  const traceBody = createMonitorSection(traceMonitor, 'trace', 'Trace', state);
   const modeRow = document.createElement('label');
   modeRow.className = 'tc-mode-row';
   modeRow.textContent = 'Modo';
@@ -1040,7 +1156,6 @@ function renderMargin(
   modeSelect.value = state.mode;
   modeSelect.addEventListener('change', () => onModeChange(modeSelect.value as TraceMode));
   modeRow.appendChild(modeSelect);
-  traceBody.appendChild(modeRow);
   const jumpToParagraph = (para: Paragraph) => {
     editorView.dispatch({
       selection: { anchor: Math.min(para.from, editorView.state.doc.length) },
@@ -1048,23 +1163,31 @@ function renderMargin(
     });
     editorView.focus();
   };
-  const hoverParagraph = (paraIndex: number | null) => setHoveredParagraph(traceCol, paraIndex);
+  const hoverParagraph = (paraIndex: number | null) => {
+    setHoveredParagraph(traceCol, paraIndex);
+    setHoveredParagraph(analysisCol, paraIndex);
+  };
 
   const list = document.createElement('div');
   list.className = 'tc-list';
 
-  if (paras.length === 0) {
+  if (analyzedParas.length === 0) {
     const msg = document.createElement('p');
     msg.style.cssText = 'padding:8px;opacity:.4;font-size:10px;margin:0';
-    msg.textContent = '[sin párrafos]';
+    msg.textContent = state.mode === 'artistico'
+      ? '[sin párrafos extensos para analizar]'
+      : '[sin párrafos]';
     list.appendChild(msg);
   }
 
-  for (const para of paras) {
+  for (const para of analyzedParas) {
     const paraCodes = traceCodes.filter(c => c.paraIndex === para.index);
     const rhetoricalCode = codes.find(c => c.paraIndex === para.index && c.dimension === 'rhetorical');
     const localTrace = traces.find(trace => trace.paraIndex === para.index);
     const currentRole = localTrace?.rolRetorico ?? (roleValue(rhetoricalCode) || null);
+    const diagnosticLabels = new Set((localTrace?.diagnosticos ?? [])
+      .map(diagnostic => diagnostic.etiqueta ?? diagnostic.mensaje?.match(/^"(.+?)"/)?.[1])
+      .filter((label): label is string => Boolean(label)));
     const row = document.createElement('div');
     row.className = 'tc-row';
     row.dataset.paraIndex = String(para.index);
@@ -1147,16 +1270,6 @@ function renderMargin(
     });
     head.appendChild(roleSelect);
 
-    const orphanParaCodes = paraCodes.filter(c => orphans.has(c.label));
-    if (orphanParaCodes.length > 0 || (localTrace?.diagnosticos.length ?? 0) > 0) {
-      const badge = document.createElement('span');
-      badge.className = 'tc-orphan-badge';
-      badge.title = localTrace?.diagnosticos.map(item => item.mensaje).join('; ')
-        || orphanParaCodes.map(c => `'${c.label}' solo aparece aquí`).join('; ');
-      badge.textContent = '⚠';
-      head.appendChild(badge);
-    }
-
     const addBtn = document.createElement('button');
     addBtn.className = 'tc-add-btn';
     addBtn.title = 'Añadir código';
@@ -1171,6 +1284,9 @@ function renderMargin(
       const chip = document.createElement('span');
       chip.className = 'tc-concept';
       if (concept.estado === 'reutilizado') chip.classList.add('is-reused');
+      if (diagnosticLabels.has(concept.etiqueta)) {
+        chip.classList.add('is-orphan');
+      }
       chip.textContent = concept.etiqueta;
       chip.title = `${concept.estado} · confianza local ${Math.round(concept.confianza * 100)}%`;
       conceptsEl.appendChild(chip);
@@ -1184,6 +1300,7 @@ function renderMargin(
     for (const code of paraCodes) {
       const chip = document.createElement('span');
       chip.className = 'tc-chip';
+      if (orphans.has(code.label)) chip.classList.add('is-orphan');
       if (code.source === 'local_nlp') {
         chip.classList.add('is-emergent');
         chip.title = 'Código emergente detectado localmente';
@@ -1240,17 +1357,6 @@ function renderMargin(
     input.style.display = 'none';
     row.appendChild(input);
 
-    if ((localTrace?.diagnosticos.length ?? 0) > 0) {
-      const diagnostics = document.createElement('ul');
-      diagnostics.className = 'tc-diagnostic-list';
-      for (const diagnostic of localTrace!.diagnosticos.slice(0, 2)) {
-        const item = document.createElement('li');
-        item.textContent = diagnostic.mensaje;
-        diagnostics.appendChild(item);
-      }
-      row.appendChild(diagnostics);
-    }
-
     addBtn.addEventListener('click', () => {
       input.style.display = 'block';
       input.focus();
@@ -1286,19 +1392,20 @@ function renderMargin(
 
   traceBody.appendChild(list);
 
+  const structureBody = createMonitorSection(analysisMonitor, 'estructura', 'Estructura', state);
+  structureBody.appendChild(modeRow);
   const graph = document.createElement('div');
   graph.className = 'tc-graph';
-  const graphTitle = document.createElement('div');
-  graphTitle.className = 'tc-subhead';
-  graphTitle.textContent = 'Estructura';
-  graph.appendChild(graphTitle);
-  if (paras.length > 0) graph.appendChild(renderTraceGraph(paras, traces, jumpToParagraph, hoverParagraph));
-  traceBody.appendChild(graph);
+  if (analyzedParas.length > 0) {
+    graph.appendChild(renderTraceGraph(analyzedParas, traces, jumpToParagraph, hoverParagraph));
+  }
+  structureBody.appendChild(graph);
 
-  const text = editorView.state.doc.toString();
-  appendLexicalSection(monitor, text, state);
-  appendZipfSection(monitor, text, state);
-  appendQaSection(monitor, codes, traces, state);
+  const text = state.mode === 'artistico'
+    ? analyzedParas.map(para => para.text).join('\n\n')
+    : editorView.state.doc.toString();
+  appendFreqZipfSection(analysisMonitor, text, state);
+  appendQaSection(analysisMonitor, codes, traces, state, analyzedParas);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -1310,30 +1417,19 @@ export async function mountTraceMargin(
 ): Promise<TraceMarginHandle> {
   injectTraceCss();
 
-  let codes: TraceCode[] = [];
-  let loadedTraces: ParagraphTrace[] = [];
-  try {
-    const res = await fetch(`/api/live/notes/trace?noteId=${encodeURIComponent(noteId)}`);
-    if (res.ok) {
-      const data = await res.json() as { codes?: TraceCode[]; traces?: ParagraphTrace[] };
-      codes = data.codes ?? [];
-      loadedTraces = data.traces ?? [];
-    }
-  } catch { /* render empty margin */ }
-
   const paras = segmentParagraphs(editorView.state.doc.toString());
-  let currentCodes = codes;
-  let currentTraces = loadedTraces;
+  let currentCodes: TraceCode[] = [];
+  let currentTraces: ParagraphTrace[] = [];
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let pulseTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshVersion = 0;
   let active = true;
   const monitorState: MonitorState = {
-    open: { trace: true, lexico: false, zipf: false, qa: false },
+    open: { trace: true, estructura: true, zipf: false, qa: false },
     lexicalQuery: '',
     activeParagraph: null,
     visibleParagraphs: new Set<number>(),
-    mode: loadedTraces[0]?.modo ?? 'borrador',
+    mode: 'borrador',
   };
 
   const refreshFromDocument = () => {
@@ -1358,8 +1454,10 @@ export async function mountTraceMargin(
   panelBodyEl.style.overflow = 'hidden';
 
   const traceCol = document.createElement('div');
-  traceCol.className = 'cnw-trace-col';
-  panelBodyEl.appendChild(traceCol);
+  traceCol.className = 'cnw-trace-col cnw-trace-rail';
+  const analysisCol = document.createElement('div');
+  analysisCol.className = 'cnw-trace-col cnw-analysis-col';
+  panelBodyEl.append(traceCol, analysisCol);
 
   const syncEditorActivity = (view: EditorView, animate: boolean) => {
     const nextActive = resolveParagraphIndex(paras, view.state.selection.main.head);
@@ -1367,12 +1465,12 @@ export async function mountTraceMargin(
     monitorState.activeParagraph = nextActive;
     monitorState.visibleParagraphs = collectParagraphIndicesInRange(paras, view.viewport.from, view.viewport.to);
     applyMonitorActivity(traceCol, monitorState, animate && enteredParagraph);
+    applyMonitorActivity(analysisCol, monitorState, animate && enteredParagraph);
+    requestTraceRowsSync(traceCol, paras, view);
     if (animate && enteredParagraph) {
       const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
       if (traceSection) {
-        traceSection.classList.remove('is-traversing');
-        void traceSection.offsetWidth;
-        traceSection.classList.add('is-traversing');
+        restartAnimation(traceSection, 'is-traversing');
       }
     }
   };
@@ -1383,6 +1481,7 @@ export async function mountTraceMargin(
     editorView.dispatch({ effects: setCodeBars.of(currentCodes) });
     renderMargin(
       traceCol,
+      analysisCol,
       paras,
       currentCodes,
       currentTraces,
@@ -1398,9 +1497,7 @@ export async function mountTraceMargin(
     syncEditorActivity(editorView, false);
     const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
     if (traceSection) {
-      traceSection.classList.remove('is-updating');
-      void traceSection.offsetWidth;
-      traceSection.classList.add('is-updating');
+      restartAnimation(traceSection, 'is-updating');
       if (pulseTimer) clearTimeout(pulseTimer);
       pulseTimer = setTimeout(() => traceSection.classList.remove('is-updating'), 430);
     }
@@ -1414,6 +1511,21 @@ export async function mountTraceMargin(
     rerender(nextCodes, storedTraces);
   };
 
+  const loadStoredTraceData = async () => {
+    try {
+      const res = await fetch(`/api/live/notes/trace?noteId=${encodeURIComponent(noteId)}`);
+      if (res.ok) {
+        const data = await res.json() as { codes?: TraceCode[]; traces?: ParagraphTrace[] };
+        currentCodes = data.codes ?? [];
+        currentTraces = data.traces ?? [];
+        monitorState.mode = currentTraces[0]?.modo ?? monitorState.mode;
+        if (!active) return;
+        rerender(currentCodes, currentTraces);
+      }
+    } catch { /* keep locally rendered empty monitor */ }
+    if (active) await analyzeAndRender(currentCodes);
+  };
+
   const traceExtensions = new Compartment();
   editorView.dispatch({
     effects: StateEffect.appendConfig.of(traceExtensions.of([
@@ -1424,17 +1536,28 @@ export async function mountTraceMargin(
     ])),
   });
 
-  await analyzeAndRender(currentCodes);
+  const onEditorScroll = () => requestTraceRowsSync(traceCol, paras, editorView);
+  editorView.scrollDOM.addEventListener('scroll', onEditorScroll, { passive: true });
+  const resizeObserver = typeof ResizeObserver !== 'undefined'
+    ? new ResizeObserver(() => requestTraceRowsSync(traceCol, paras, editorView))
+    : null;
+  resizeObserver?.observe(panelBodyEl);
+
+  rerender(currentCodes, currentTraces);
+  void loadStoredTraceData();
 
   return {
     destroy() {
       active = false;
       if (refreshTimer) clearTimeout(refreshTimer);
       if (pulseTimer) clearTimeout(pulseTimer);
+      editorView.scrollDOM.removeEventListener('scroll', onEditorScroll);
+      resizeObserver?.disconnect();
       editorView.dispatch({ effects: setHighlight.of(new Set<number>()) });
       editorView.dispatch({ effects: setCodeBars.of([]) });
       editorView.dispatch({ effects: traceExtensions.reconfigure([]) });
       traceCol.remove();
+      analysisCol.remove();
       if (editorContainer) {
         editorContainer.style.flex = '';
         editorContainer.style.minWidth = '';

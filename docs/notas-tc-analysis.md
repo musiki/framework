@@ -1,4 +1,4 @@
-# NOTAS: Text-Cohesion Analysis (DIY TAACO)
+wh# NOTAS: Text-Cohesion Analysis (DIY TAACO)
 
 **Status:** Design / next-phase  
 **Context:** Live within the NOTAS db-note editor, accessed as a margin panel  

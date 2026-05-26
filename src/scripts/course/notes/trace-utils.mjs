@@ -83,6 +83,20 @@ export function collectParagraphIndicesInRange(paras, from, to) {
     .map(para => para.index));
 }
 
+const LIT_ART_APPROX_CHARS_PER_LINE = 64;
+
+function approximateParagraphLines(text) {
+  return text.split('\n').reduce(
+    (count, line) => count + Math.max(1, Math.ceil(line.trim().length / LIT_ART_APPROX_CHARS_PER_LINE)),
+    0,
+  );
+}
+
+export function paragraphsForAnalysis(paras, mode) {
+  if (mode !== 'artistico') return paras;
+  return paras.filter(para => approximateParagraphLines(para.text) > 2);
+}
+
 export function extractKeywords(text, stopwords = STOPWORDS) {
   const tokens = text
     .toLowerCase()
@@ -145,7 +159,8 @@ export function computeSuggestions(paras, codes) {
 }
 
 export function analyzeLocalTraces(paras, roleByParagraph = new Map(), mode = 'borrador') {
-  const keywordsByParagraph = paras.map(para => ({
+  const analyzedParas = paragraphsForAnalysis(paras, mode);
+  const keywordsByParagraph = analyzedParas.map(para => ({
     index: para.index,
     keywords: extractKeywords(para.text),
   }));
@@ -157,7 +172,7 @@ export function analyzeLocalTraces(paras, roleByParagraph = new Map(), mode = 'b
     }
   }
 
-  return paras.map((para, offset) => {
+  return analyzedParas.map((para, offset) => {
     const keywords = keywordsByParagraph[offset].keywords;
     const concepts = keywords.map(label => {
       const positions = occurrences.get(label) ?? [];
@@ -183,7 +198,7 @@ export function analyzeLocalTraces(paras, roleByParagraph = new Map(), mode = 'b
         .map(label => ({
           severidad: 'baja',
           tipo: 'concepto_huerfano',
-          mensaje: `"${label}" aparece aquí y no vuelve a retomarse.`,
+          etiqueta: label,
         }));
     return {
       paraIndex: para.index,

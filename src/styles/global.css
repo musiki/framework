@@ -1450,6 +1450,13 @@ ol ol ol ol > li::marker {
   min-width: 0 !important;
 }
 
+#lesson-forum .forum-thread-list {
+  align-content: start !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
 :is(#lesson-forum, #forum-reader-root) .forum-new-thread,
 :is(#lesson-forum, #forum-reader-root) .forum-thread-item {
   border: 1px solid
@@ -1503,6 +1510,29 @@ ol ol ol ol > li::marker {
   caret-color: var(--forum-text-primary, #1c1f23) !important;
   font-family: var(--font-family-mono, "Dank Mono", monospace) !important;
   line-height: 1.6 !important;
+}
+
+#lesson-forum .musiki-codemirror-host--forum .cm-gutters {
+  display: none !important;
+}
+
+#lesson-forum .forum-new-thread-bar {
+  background: transparent !important;
+}
+
+#lesson-forum .musiki-codemirror-host--forum,
+#lesson-forum .musiki-codemirror-host--forum .cm-editor,
+#lesson-forum .musiki-codemirror-host--forum .cm-scroller,
+#lesson-forum .musiki-codemirror-host--forum .cm-content,
+#lesson-forum .musiki-codemirror-host--forum .cm-line,
+#lesson-forum .musiki-codemirror-host--forum .cm-activeLine,
+#lesson-forum .musiki-codemirror-host--forum .cm-activeLineGutter {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+#lesson-forum .musiki-codemirror-host--forum .cm-content {
+  min-height: inherit !important;
 }
 
 :is(#lesson-forum, #forum-reader-root) .forum-thread-toggle {
@@ -2455,6 +2485,63 @@ ol ol ol ol > li::marker {
 :is(#lesson-forum, #forum-reader-root) .forum-secondary-btn:hover::after {
   opacity: 1 !important;
   transform: translate(-50%, 0) !important;
+}
+
+#lesson-forum .forum-post-date-separator {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.42rem !important;
+  margin: 0.48rem 0 0.32rem !important;
+  color: var(--forum-text-secondary, #6b7480) !important;
+  font-size: 0.4rem !important;
+  line-height: 1 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+}
+
+#lesson-forum .forum-post-date-separator::before,
+#lesson-forum .forum-post-date-separator::after {
+  content: "";
+  height: 1px;
+  flex: 1 1 auto;
+  background: color-mix(
+    in srgb,
+    var(--forum-text-secondary, #6b7480) 24%,
+    transparent
+  );
+}
+
+#lesson-forum
+  :is(
+    .forum-panel,
+    .forum-thread-item,
+    .forum-post,
+    .forum-post.forum-post-role-instructor,
+    .forum-post.forum-post-role-student,
+    .forum-fold,
+    .forum-thread-actions-menu,
+    .forum-post-quick-tray,
+    .forum-action-btn,
+    .forum-secondary-btn,
+    .forum-field,
+    .forum-textarea,
+    .forum-select,
+    .musiki-codemirror-host--forum,
+    .forum-reply-target,
+    .forum-empty,
+    .forum-status,
+    .forum-new-thread-bar,
+    .forum-reply-indicator,
+    .forum-editor-dropzone-overlay,
+    .forum-editor-dropzone-label
+  ) {
+  border: 0 !important;
+  border-color: transparent !important;
+}
+
+#lesson-forum .forum-fold[open] .forum-fold-summary {
+  border-bottom: 0 !important;
 }
 
 @media (max-width: 968px) {

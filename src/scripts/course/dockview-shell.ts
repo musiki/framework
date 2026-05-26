@@ -8,12 +8,14 @@ export function injectWorkspaceCss(containerId: string) {
   const style = document.createElement('style');
   style.setAttribute('data-cnw-ws-css', '1');
   style.textContent = `
-    /* Zero out content-area padding/overflow when dockview takes over */
+    /* Apply workspace sizing only while Dockview owns the content area. */
     #${containerId}.content-area {
-      padding: 0 !important;
-      overflow: hidden !important;
       --dv-sash-color: var(--c-border, rgba(120,120,140,0.35));
       --dv-active-sash-color: var(--c-link, #3b82f6);
+    }
+    #${containerId}.content-area.is-dockview-active {
+      padding: 0 !important;
+      overflow: hidden !important;
     }
     /* Hide ALL native dockview tabs — scoped to our container */
     #${containerId} .dv-header,
@@ -100,9 +102,9 @@ export function injectWorkspaceCss(containerId: string) {
 
     /* Note title — subtle but always visible */
     .cnw-title {
-      font-size: 11px;
-      color: var(--c-fg-subtle, var(--c-fg-dim));
-      opacity: 0.5;
+      font-size: 12.65px;
+      color: var(--c-fg);
+      opacity: 0.8;
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -134,7 +136,7 @@ export function injectWorkspaceCss(containerId: string) {
       color: var(--c-fg-dim);
       opacity: 0;
       line-height: 1;
-      font-size: 12px;
+      font-size: 13.8px;
       transition: opacity 160ms, color 160ms;
       display: flex;
       align-items: center;
@@ -171,7 +173,7 @@ export function injectWorkspaceCss(containerId: string) {
       background: color-mix(in srgb, var(--c-bg, #111) 93%, var(--c-fg) 7%);
       border: 1px solid var(--c-border, rgba(120,120,140,.3));
       color: var(--c-fg, #e5e5e5);
-      font-size: .62rem;
+      font-size: .713rem;
       white-space: nowrap;
       padding: 3px 7px;
       border-radius: 4px;
@@ -198,7 +200,7 @@ export function injectWorkspaceCss(containerId: string) {
       background: var(--c-bg-surface, var(--c-bg-mute));
       border-bottom: 1px solid var(--c-border);
       padding: 6px 12px;
-      font-size: 11px;
+      font-size: 12.65px;
       color: var(--c-fg);
       display: flex;
       align-items: center;
@@ -206,7 +208,7 @@ export function injectWorkspaceCss(containerId: string) {
       z-index: 10;
     }
     .cnw-recovery button {
-      font-size: 11px;
+      font-size: 12.65px;
       padding: 2px 8px;
       border-radius: 3px;
       border: 1px solid var(--c-border);
@@ -217,7 +219,7 @@ export function injectWorkspaceCss(containerId: string) {
 
     /* Unified prose-editor — no border box, CM looks like a document */
     .cnw-body .cm-editor { background: transparent !important; height: 100%; }
-    .cnw-body .cm-scroller { padding: 1.2rem 1.5rem !important; font-size: var(--font-size-base, 1rem); line-height: 1.72; overflow: auto; }
+    .cnw-body .cm-scroller { padding: 1.2rem 1.5rem !important; font-size: calc(var(--font-size-base, 1rem) * 1.15); line-height: 1.72; overflow: auto; }
     .cnw-body .cm-content { caret-color: var(--c-link, #3b82f6) !important; }
     .cnw-body .cm-focused { outline: none !important; }
     /* The shell owns the title row; the YAML strip remains available below it. */
@@ -352,7 +354,7 @@ export function buildShell(
 
     const stats = document.createElement('span');
     stats.className = 'cnw-hud-stats';
-    stats.style.cssText = 'font-size:.682rem;opacity:.7;font-family:var(--font-mono,monospace);flex:1';
+    stats.style.cssText = 'font-size:.784rem;opacity:.7;font-family:var(--font-mono,monospace);flex:1';
     hud.appendChild(stats);
     hud.appendChild(traceBtn);
 

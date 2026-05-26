@@ -116,7 +116,7 @@ const liveMdTheme = EditorView.theme({
     overflow: 'auto',
     lineHeight: '1.78',
     fontFamily: 'var(--font-sans, system-ui, -apple-system, sans-serif)',
-    fontSize: '14px',
+    fontSize: '16.1px',
   },
   '.cm-content': {
     padding: '1rem 1.2rem',

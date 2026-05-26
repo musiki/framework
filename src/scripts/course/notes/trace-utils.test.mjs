@@ -4,6 +4,7 @@ import {
   segmentParagraphs, computeOrphanLabels,
   resolveParagraphIndex, collectParagraphIndicesInRange,
   extractKeywords, lemmatizeToken, detectChains, computeSuggestions, analyzeLocalTraces,
+  paragraphsForAnalysis,
 } from './trace-utils.mjs';
 
 describe('segmentParagraphs', () => {
@@ -196,12 +197,27 @@ describe('analyzeLocalTraces', () => {
 
   test('marks concepts not resumed later as low-severity diagnostics', () => {
     const traces = analyzeLocalTraces(paras);
-    assert.ok(traces[2].diagnosticos.some(d => d.tipo === 'concepto_huerfano'));
+    const diagnostic = traces[2].diagnosticos.find(d => d.tipo === 'concepto_huerfano' && d.etiqueta === 'timbre');
+    assert.ok(diagnostic);
+    assert.equal(diagnostic?.etiqueta, 'timbre');
+    assert.equal('mensaje' in diagnostic, false);
   });
 
   test('artistic mode suppresses linear-progression diagnostics', () => {
-    const traces = analyzeLocalTraces(paras, new Map(), 'artistico');
+    const longParas = segmentParagraphs(
+      'La melodía extiende largamente una textura que retorna y se transforma en una memoria material del relato, con resonancias que permanecen durante toda la escena y conectan cada gesto narrativo.\n\nLa melodía reaparece largamente dentro de otra escena, desplaza su sentido original y compone una continuidad audible que permite seguir el hilo del relato aun cuando la voz se fragmenta.',
+    );
+    const traces = analyzeLocalTraces(longParas, new Map(), 'artistico');
     assert.ok(traces.every(trace => trace.diagnosticos.length === 0));
+  });
+
+  test('Lit Art omits short literary beats from analysis', () => {
+    const literaryParas = segmentParagraphs(
+      'Y Parecelso dijo:\n\nLa habitación sostenía una vibración larga, obstinada, que parecía venir de la pared y atravesaba los cuerpos mientras la conversación se volvía lentamente irreconocible y adquiría otra forma.',
+    );
+    const analyzed = paragraphsForAnalysis(literaryParas, 'artistico');
+    assert.deepEqual(analyzed.map(para => para.index), [1]);
+    assert.deepEqual(analyzeLocalTraces(literaryParas, new Map(), 'artistico').map(trace => trace.paraIndex), [1]);
   });
 
   test('keeps manually assigned rhetorical roles', () => {

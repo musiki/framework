@@ -45,8 +45,8 @@ export function beginInlineFolderCreation(
   if (container.querySelector('[data-notas-folder-input]')) return;
   const row = document.createElement('div');
   row.dataset.notasFolderInput = 'true';
-  row.style.cssText = `padding:3px 8px 3px ${indent * 20 + 20}px;display:flex;align-items:center;gap:4px;font-size:11px;color:#aaa`;
-  row.innerHTML = '<span style="color:#4e6070;font-size:11px">⊟</span>';
+  row.style.cssText = `padding:3px 8px 3px ${indent * 20 + 20}px;display:flex;align-items:center;gap:4px;font-size:11px;color:var(--c-fg)`;
+  row.innerHTML = '<span style="color:var(--c-fg-dim);font-size:11px">⊟</span>';
   const input = document.createElement('input');
   input.placeholder = 'nombre de carpeta...';
   input.style.cssText = 'font:inherit;border:none;border-bottom:1px solid var(--c-link,#3b82f6);background:transparent;color:inherit;width:9rem;outline:none;padding:0';
@@ -143,8 +143,8 @@ export function renderNotesTree(
 
       const summary = document.createElement('summary');
       summary.className = 'notas-sb-folder';
-      summary.style.cssText = 'font-size:11px;cursor:pointer;list-style:none;padding:3px 8px;display:flex;align-items:center;gap:4px;color:#aaa;border-radius:2px;transition:background 120ms';
-      summary.innerHTML = `<span class="notas-sb-folder-caret" style="color:#555;font-size:9px;width:8px">▸</span><span class="notas-sb-folder-icon" style="color:#4e6070;font-size:11px">⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
+      summary.style.cssText = 'font-size:11px;cursor:pointer;list-style:none;padding:3px 8px;display:flex;align-items:center;gap:4px;color:var(--c-fg);border-radius:2px;transition:background 120ms';
+      summary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:9px;width:8px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
 
       // Folder drop zone
       summary.addEventListener('dragover', e => {
@@ -192,7 +192,7 @@ export function renderNotesTree(
   const placeholder = document.createElement('button');
   placeholder.type = 'button';
   placeholder.dataset.notasNewPlaceholder = 'true';
-  placeholder.style.cssText = 'display:flex;align-items:center;gap:5px;width:100%;padding:3px 8px;border:none;background:none;color:#888;cursor:pointer;font:inherit;font-size:11px;text-align:left';
+  placeholder.style.cssText = 'display:flex;align-items:center;gap:5px;width:100%;padding:3px 8px;border:none;background:none;color:var(--c-fg);cursor:pointer;font:inherit;font-size:11px;text-align:left';
   placeholder.innerHTML = '<span style="color:#45d384;font-size:12px;width:17px;text-align:center">+</span><span>nueva nota...</span>';
   placeholder.addEventListener('click', () => {
     void createNoteInFolder(null, courseId, reload, container, nextDefaultNoteTitle(notes));
@@ -229,13 +229,13 @@ function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void
   el.className = 'notas-sb-item';
   el.draggable = true;
   el.dataset.noteId = note.id;
-  el.style.cssText = `padding:2px 8px 2px ${indent * 20 + 8}px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;border-left:2px solid transparent;opacity:.82;transition:opacity 100ms,border-color 100ms,background 100ms;border-radius:2px`;
+  el.style.cssText = `padding:2px 8px 2px ${indent * 20 + 8}px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;border-left:2px solid transparent;color:var(--c-fg);transition:border-color 100ms,background 100ms;border-radius:2px`;
   el.title = note.title || '(sin título)';
   el.dataset.noteId = note.id;
-  el.innerHTML = `<span style="color:#45d384;font-size:12px;width:17px;text-align:center;flex-shrink:0">■</span><span class="notas-sb-note-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d0d0d0">${escHtml(note.title || '(sin título)')}</span>`;
+  el.innerHTML = `<span style="color:#45d384;font-size:12px;width:17px;text-align:center;flex-shrink:0">■</span><span class="notas-sb-note-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-fg)">${escHtml(note.title || '(sin título)')}</span>`;
 
-  el.addEventListener('mouseenter', () => { el.style.opacity = '1'; el.style.background = 'rgba(0,0,0,.04)'; });
-  el.addEventListener('mouseleave', () => { el.style.opacity = '.75'; el.style.background = ''; });
+  el.addEventListener('mouseenter', () => { el.style.background = 'rgba(0,0,0,.04)'; });
+  el.addEventListener('mouseleave', () => { el.style.background = ''; });
 
   // Click: open as pod in the course workspace
   el.addEventListener('click', () => {
