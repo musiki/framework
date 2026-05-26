@@ -238,9 +238,9 @@ function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void
   el.addEventListener('mouseleave', () => { el.style.background = ''; });
 
   // Click: open as pod in the course workspace
-  el.addEventListener('click', () => {
+  el.addEventListener('click', (e) => {
     window.dispatchEvent(new CustomEvent('musiki:open-db-note', {
-      detail: { noteId: note.id, title: note.title || '(sin título)' },
+      detail: { noteId: note.id, title: note.title || '(sin título)', split: e.altKey },
     }));
   });
 

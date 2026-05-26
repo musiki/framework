@@ -1753,6 +1753,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         font-size: 1.05rem;
         cursor: pointer;
         box-shadow: 0 5px 18px rgba(0, 0, 0, 0.12);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+      .scroll-shortcut-btn svg {
+        width: 1.15rem;
+        height: 1.15rem;
       }
 
       .sidebar-maximize-btn {
@@ -4219,8 +4227,16 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         )}
 
         <div class="scroll-shortcuts" aria-label="Navegación rápida">
-          <button id="scroll-forum-btn" class="scroll-shortcut-btn" type="button" title="Ir al foro (⌘/Ctrl + ↓)" aria-label="Ir al foro">↓</button>
-          <button id="scroll-top-btn" class="scroll-shortcut-btn" type="button" title="Volver arriba (⌘/Ctrl + ↑)" aria-label="Volver arriba">↑</button>
+          <button id="scroll-forum-btn" class="scroll-shortcut-btn" type="button" title="Ir al final (⌘/Ctrl + ↓)" aria-label="Ir al final">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(270deg);">
+              <path d="M16.1795 3.26875C15.7889 2.87823 15.1558 2.87823 14.7652 3.26875L8.12078 9.91322C6.94952 11.0845 6.94916 12.9833 8.11996 14.155L14.6903 20.7304C15.0808 21.121 15.714 21.121 16.1045 20.7304C16.495 20.3399 16.495 19.7067 16.1045 19.3162L9.53246 12.7442C9.14194 12.3536 9.14194 11.7205 9.53246 11.33L16.1795 4.68297C16.57 4.29244 16.57 3.65928 16.1795 3.26875Z" fill="currentColor"/>
+            </svg>
+          </button>
+          <button id="scroll-top-btn" class="scroll-shortcut-btn" type="button" title="Volver arriba (⌘/Ctrl + ↑)" aria-label="Volver arriba">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(90deg);">
+              <path d="M16.1795 3.26875C15.7889 2.87823 15.1558 2.87823 14.7652 3.26875L8.12078 9.91322C6.94952 11.0845 6.94916 12.9833 8.11996 14.155L14.6903 20.7304C15.0808 21.121 15.714 21.121 16.1045 20.7304C16.495 20.3399 16.495 19.7067 16.1045 19.3162L9.53246 12.7442C9.14194 12.3536 9.14194 11.7205 9.53246 11.33L16.1795 4.68297C16.57 4.29244 16.57 3.65928 16.1795 3.26875Z" fill="currentColor"/>
+            </svg>
+          </button>
         </div>
       </article>
 
@@ -5033,14 +5049,21 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         }
 
         // Page info panel helpers
-        const openPageInfo = () => {
-          if (hasRightSidebar && !rightOpen) {
+        const togglePageInfo = () => {
+          const currentlyOpen = rightOpen && root.dataset.pageInfoOpen === 'true';
+          if (currentlyOpen) {
+            rightOpen = false;
+            rightMaximized = false;
+            root.dataset.pageInfoOpen = 'false';
+            const panel = document.getElementById('page-info-sidebar');
+            if (panel) panel.setAttribute('aria-hidden', 'true');
+          } else {
             rightOpen = true;
-            persistLayoutState();
+            root.dataset.pageInfoOpen = 'true';
+            const panel = document.getElementById('page-info-sidebar');
+            if (panel) panel.removeAttribute('aria-hidden');
           }
-          root.dataset.pageInfoOpen = 'true';
-          const panel = document.getElementById('page-info-sidebar');
-          if (panel) panel.removeAttribute('aria-hidden');
+          persistLayoutState();
           syncLayoutState();
         };
         const closePageInfo = () => {
@@ -5056,24 +5079,51 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           }
         });
 
-        window.addEventListener('musiki:open-page-info', openPageInfo);
+        window.addEventListener('musiki:open-page-info', togglePageInfo);
 
         const keyHandler = (event: KeyboardEvent) => {
           if (event.defaultPrevented) return;
           if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
-          if (String(event.code || '').toLowerCase() !== 'backslash') return;
+
+          const key = String(event.key || '').toLowerCase();
+          const code = String(event.code || '').toLowerCase();
+          const isBackslash = code === 'backslash';
+          const isKeyI = key === 'i';
+
+          if (!isBackslash && !isKeyI) return;
 
           const target = event.target;
           const isEditable =
             target instanceof HTMLElement &&
-            (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+            (target.isContentEditable ||
+              /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) ||
+              target.closest('.cm-editor'));
           if (isEditable) return;
 
           event.preventDefault();
-          if (event.shiftKey) {
-            openPageInfo();
-          } else {
-            toggleSidebar('left');
+
+          if (isBackslash) {
+            if (event.shiftKey) {
+              // c+shift+\ toggles right forum sidebar (no info!)
+              const isForumOpen = rightOpen && root.dataset.pageInfoOpen !== 'true';
+              if (isForumOpen) {
+                rightOpen = false;
+                rightMaximized = false;
+              } else {
+                rightOpen = true;
+                root.dataset.pageInfoOpen = 'false';
+                const panel = document.getElementById('page-info-sidebar');
+                if (panel) panel.setAttribute('aria-hidden', 'true');
+              }
+              persistLayoutState();
+              syncLayoutState();
+            } else {
+              // c\ toggles left sidebar
+              toggleSidebar('left');
+            }
+          } else if (isKeyI) {
+            // c+i toggles right INFO sidebar
+            togglePageInfo();
           }
         };
 
@@ -9025,6 +9075,16 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
 
       function scrollToTop(behavior = 'smooth') {
+        const wsScroller = document.querySelector('.dockview-group.dockview-active-group .cm-scroller, .dockview-group.dockview-active-group .cnw-body, .dockview-group.dockview-active-group .dockview-panel-content')
+          || document.querySelector('.dockview .cm-scroller, .dockview .cnw-body, .dockview .dockview-panel-content');
+        if (wsScroller) {
+          wsScroller.scrollTo({
+            top: 0,
+            behavior,
+          });
+          return;
+        }
+
         const scroller = getPrimaryScroller();
         if (scroller) {
           scroller.scrollTo({
@@ -9078,6 +9138,31 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         window.scrollTo({
           top: document.body.scrollHeight,
+          behavior,
+        });
+      }
+
+      function scrollToBottom(behavior = 'smooth') {
+        const wsScroller = document.querySelector('.dockview-group.dockview-active-group .cm-scroller, .dockview-group.dockview-active-group .cnw-body, .dockview-group.dockview-active-group .dockview-panel-content')
+          || document.querySelector('.dockview .cm-scroller, .dockview .cnw-body, .dockview .dockview-panel-content');
+        if (wsScroller) {
+          wsScroller.scrollTo({
+            top: wsScroller.scrollHeight,
+            behavior,
+          });
+          return;
+        }
+
+        const scroller = getPrimaryScroller();
+        if (scroller) {
+          scroller.scrollTo({
+            top: scroller.scrollHeight,
+            behavior,
+          });
+          return;
+        }
+        window.scrollTo({
+          top: document.documentElement.scrollHeight || document.body.scrollHeight,
           behavior,
         });
       }
@@ -12956,7 +13041,7 @@ a[node] -->|edge| b[hub]
         };
 
         const handleScrollForumClick = () => {
-          scrollToForum('smooth');
+          scrollToBottom('smooth');
         };
 
         if (scrollTopBtn) {
@@ -13012,7 +13097,7 @@ a[node] -->|edge| b[hub]
 
           if (event.key === 'ArrowDown') {
             event.preventDefault();
-            scrollToForum('smooth');
+            scrollToBottom('smooth');
           }
         };
 

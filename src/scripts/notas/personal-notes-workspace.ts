@@ -119,7 +119,7 @@ function buildBrowserPanel(panelId: string, dockview: DockviewComponent): HTMLEl
       item.textContent = note.title || '(sin título)';
       item.addEventListener('mouseenter', () => { item.style.opacity = '1'; });
       item.addEventListener('mouseleave', () => { item.style.opacity = '.75'; });
-      item.addEventListener('click', () => openNotePanel(note.id, note.title ?? '', dockview));
+      item.addEventListener('click', (e) => openNotePanel(note.id, note.title ?? '', dockview, e.altKey));
       tree.appendChild(item);
     }
   }
@@ -149,13 +149,25 @@ function buildBrowserPanel(panelId: string, dockview: DockviewComponent): HTMLEl
   return el;
 }
 
-function openNotePanel(noteId: string, title: string, dockview: DockviewComponent) {
+function openNotePanel(noteId: string, title: string, dockview: DockviewComponent, split = false) {
   const newId = `pnw-note-${noteId}`;
   const existing = dockview.getGroupPanel(newId);
   if (existing) { existing.api.setActive(); return; }
+
+  const openNotePanel = dockview.panels.find(p => p.id.startsWith('pnw-note-'));
   pendingParams.set(newId, { kind: 'db-note', noteId, title });
-  const refPanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
-  dockview.addPanel({ id: newId, component: 'note-panel', position: refPanel ? { referencePanel: refPanel.id, direction: 'right' } : undefined });
+
+  if (openNotePanel && !split) {
+    dockview.addPanel({
+      id: newId,
+      component: 'note-panel',
+      position: { referencePanel: openNotePanel.id, direction: 'within' },
+    });
+    openNotePanel.api.close();
+  } else {
+    const refPanel = openNotePanel ?? (dockview.panels[dockview.panels.length - 1] ?? undefined);
+    dockview.addPanel({ id: newId, component: 'note-panel', position: refPanel ? { referencePanel: refPanel.id, direction: 'right' } : undefined });
+  }
 }
 
 function startInlineNoteRename(item: HTMLElement, noteId: string, initialTitle: string) {

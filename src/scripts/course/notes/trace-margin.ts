@@ -265,10 +265,73 @@ export function computeSuggestions(paras: Paragraph[], codes: TraceCode[]): Trac
   return suggestions;
 }
 
+function sha1Fallback(str: string): string {
+  const utf8 = new TextEncoder().encode(str);
+  const words: number[] = [];
+  for (let i = 0; i < utf8.length; i++) {
+    words[i >> 2] |= utf8[i] << (24 - (i % 4) * 8);
+  }
+  const len = utf8.length * 8;
+  words[len >> 5] |= 0x80 << (24 - (len % 32));
+  words[(((len + 64) >> 9) << 4) + 15] = len;
+
+  let h0 = 0x67452301;
+  let h1 = 0xEFCDAB89;
+  let h2 = 0x98BADCFE;
+  let h3 = 0x10325476;
+  let h4 = 0xC3D2E1F0;
+
+  const w = new Array(80);
+  for (let i = 0; i < words.length; i += 16) {
+    let a = h0;
+    let b = h1;
+    let c = h2;
+    let d = h3;
+    let e = h4;
+    for (let j = 0; j < 80; j++) {
+      if (j < 16) {
+        w[j] = words[i + j] || 0;
+      } else {
+        const val = w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16];
+        w[j] = (val << 1) | (val >>> 31);
+      }
+      let f, k;
+      if (j < 20) {
+        f = (b & c) | (~b & d);
+        k = 0x5A827999;
+      } else if (j < 40) {
+        f = b ^ c ^ d;
+        k = 0x6ED9EBA1;
+      } else if (j < 60) {
+        f = (b & c) | (b & d) | (c & d);
+        k = 0x8F1BBCDC;
+      } else {
+        f = b ^ c ^ d;
+        k = 0xCA62C1D6;
+      }
+      const temp = (((a << 5) | (a >>> 27)) + f + e + k + w[j]) | 0;
+      e = d;
+      d = c;
+      c = (b << 30) | (b >>> 2);
+      b = a;
+      a = temp;
+    }
+    h0 = (h0 + a) | 0;
+    h1 = (h1 + b) | 0;
+    h2 = (h2 + c) | 0;
+    h3 = (h3 + d) | 0;
+    h4 = (h4 + e) | 0;
+  }
+  return [h0, h1, h2, h3, h4].map(h => (h >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
 async function paragraphTextHash(text: string): Promise<string> {
-  const bytes = new TextEncoder().encode(text);
-  const digest = await crypto.subtle.digest('SHA-1', bytes);
-  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
+    const bytes = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest('SHA-1', bytes);
+    return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return sha1Fallback(text);
 }
 
 async function computeLocalTraces(
@@ -492,7 +555,7 @@ export function injectTraceCss() {
       flex: 0 0 clamp(178px, 22%, 224px);
       min-width: 178px;
       max-width: 252px;
-      border-left: 1px solid var(--c-border, rgba(120,120,140,0.2));
+      border-left: none;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -503,7 +566,7 @@ export function injectTraceCss() {
     .cnw-trace-rail { flex-basis: clamp(178px, 23%, 226px); }
     .cnw-analysis-col { flex-basis: clamp(192px, 25%, 254px); }
     .tc-monitor { flex: 1; min-height: 0; overflow-y: auto; }
-    .tc-section { border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.15)); }
+    .tc-section { border-bottom: none; }
     .tc-section-summary {
       list-style: none;
       cursor: pointer;
@@ -558,7 +621,7 @@ export function injectTraceCss() {
     .tc-list { padding: 4px 0; }
     .cnw-trace-rail .tc-monitor,
     .cnw-trace-rail .tc-section--trace,
-    .cnw-trace-rail .tc-section--trace[open] .tc-section-body {
+    .cnw-trace-rail .tc-section--trace .tc-section-body {
       height: 100%;
       min-height: 0;
       position: relative;
@@ -574,6 +637,7 @@ export function injectTraceCss() {
       padding: 3px 6px;
       background: color-mix(in srgb, var(--c-bg) 86%, transparent);
     }
+    .tc-section--trace .tc-section-summary::before { display: none; }
     .cnw-trace-rail .tc-list {
       position: absolute;
       inset: 0;
@@ -585,7 +649,7 @@ export function injectTraceCss() {
       right: 0;
       box-sizing: border-box;
       min-height: var(--tc-para-height, 34px);
-      max-height: var(--tc-para-height, 34px);
+      height: var(--tc-para-height, 34px);
       overflow: hidden;
       z-index: 1;
     }
@@ -593,36 +657,37 @@ export function injectTraceCss() {
       max-height: none;
       overflow: visible;
       z-index: 3;
-      background: var(--c-bg);
-      box-shadow: 0 2px 8px color-mix(in srgb, var(--c-fg) 10%, transparent);
+      background: color-mix(in srgb, var(--c-link, #3b82f6) 4%, var(--c-bg));
     }
     .tc-row {
       position: relative;
       padding: 4px 8px;
-      padding-left: 20px;
-      border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.08));
+      padding-left: 26px;
+      border-bottom: none;
       transition: background 140ms ease, opacity 140ms ease;
     }
-    .tc-row.is-visible { background: color-mix(in srgb, var(--c-link, #3b82f6) 3%, transparent); }
-    .tc-row.is-active, .tc-row.is-hovered { background: color-mix(in srgb, var(--c-link, #3b82f6) 11%, transparent); }
+    .tc-row.is-visible { background: transparent; }
+    .tc-row.is-active, .tc-row.is-hovered { background: transparent; }
     .tc-row.is-entering { animation: tc-row-enter 360ms ease-out; }
     @keyframes tc-row-enter {
-      0% { background: color-mix(in srgb, var(--c-link, #3b82f6) 24%, transparent); }
-      100% { background: color-mix(in srgb, var(--c-link, #3b82f6) 11%, transparent); }
+      0% { background: color-mix(in srgb, var(--c-link, #3b82f6) 10%, transparent); }
+      100% { background: transparent; }
     }
     .tc-row-head { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; }
     .tc-role-rail {
       position: absolute;
       top: 5px;
       bottom: 5px;
-      left: 5px;
-      width: 10px;
+      left: 1px;
+      width: 14px;
       border-left: 3px solid var(--tc-role-color, transparent);
+      padding-left: 4px;
+      padding-bottom: 5px;
       color: var(--tc-role-color, transparent);
       display: flex;
       justify-content: center;
       align-items: flex-start;
-      font: 8.05px/1 var(--font-mono, monospace);
+      font: 10.6px/1 var(--font-mono, monospace);
       letter-spacing: .08em;
       writing-mode: vertical-rl;
       opacity: .78;
@@ -654,6 +719,28 @@ export function injectTraceCss() {
     .tc-role-select.is-error { color: #c87e7e; }
     .tc-add-btn { background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1; color: var(--c-fg-dim); opacity: 0.4; padding: 0 2px; flex-shrink: 0; }
     .tc-add-btn:hover { opacity: 1; color: var(--c-link, #3b82f6); }
+    .tc-autocode-btn {
+      margin-left: 8px;
+      background: color-mix(in srgb, var(--c-link, #3b82f6) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--c-link, #3b82f6) 30%, transparent);
+      border-radius: 3px;
+      color: var(--c-link, #3b82f6);
+      cursor: pointer;
+      font-size: 9.2px;
+      padding: 1px 4px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      transition: all 120ms ease;
+      line-height: 1.2;
+    }
+    .tc-autocode-btn:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--c-link, #3b82f6) 22%, transparent);
+      border-color: var(--c-link, #3b82f6);
+    }
+    .tc-autocode-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     .tc-codes { display: flex; flex-wrap: wrap; gap: 3px; min-height: 4px; }
     .tc-concepts { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 3px; }
     .tc-concept {
@@ -668,12 +755,17 @@ export function injectTraceCss() {
       color: var(--c-fg, currentColor);
       background: color-mix(in srgb, var(--c-link, #3b82f6) 8%, transparent);
     }
+    .tc-concept.is-orphan, .tc-chip.is-orphan {
+      background: color-mix(in srgb, #ef4444 9%, transparent) !important;
+      border-color: color-mix(in srgb, #ef4444 32%, transparent) !important;
+      color: color-mix(in srgb, #ef4444 90%, var(--c-fg-dim)) !important;
+    }
     .tc-concept.is-orphan::after, .tc-chip.is-orphan::after {
       content: "";
       width: 3px;
       height: 3px;
       border-radius: 50%;
-      background: #c34848;
+      background: #ef4444;
       flex-shrink: 0;
     }
     .tc-chip { display: inline-flex; align-items: center; gap: 2px; background: var(--c-bg-mute); border-radius: 10px; padding: 1px 4px 1px 6px; cursor: pointer; transition: background 120ms; }
@@ -854,12 +946,15 @@ function createMonitorSection(
   label: string,
   state: MonitorState,
 ): HTMLElement {
-  const section = document.createElement('details');
+  const isTrace = key === 'trace';
+  const section = document.createElement(isTrace ? 'div' : 'details');
   section.className = `tc-section tc-section--${key}`;
-  section.open = state.open[key];
-  section.addEventListener('toggle', () => { state.open[key] = section.open; });
+  if (section instanceof HTMLDetailsElement) {
+    section.open = state.open[key];
+    section.addEventListener('toggle', () => { state.open[key] = section.open; });
+  }
 
-  const summary = document.createElement('summary');
+  const summary = document.createElement(isTrace ? 'div' : 'summary');
   summary.className = 'tc-section-summary';
   summary.appendChild(document.createTextNode(label));
   if (key === 'trace') {
@@ -897,9 +992,12 @@ function setHoveredParagraph(traceCol: HTMLElement, paraIndex: number | null) {
 
 function restartAnimation(element: Element, className: string) {
   element.classList.remove(className);
-  requestAnimationFrame(() => {
-    if (element.isConnected) element.classList.add(className);
-  });
+  if (element instanceof HTMLElement) {
+    void element.offsetWidth;
+  } else if (element instanceof SVGElement) {
+    void element.getBoundingClientRect();
+  }
+  element.classList.add(className);
 }
 
 function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animate: boolean) {
@@ -1141,6 +1239,65 @@ function renderMargin(
   analysisMonitor.className = 'tc-monitor';
   analysisCol.appendChild(analysisMonitor);
   const traceBody = createMonitorSection(traceMonitor, 'trace', 'Trace', state);
+  const summary = traceBody.parentElement?.querySelector('.tc-section-summary');
+  if (summary) {
+    const autoBtn = document.createElement('button');
+    autoBtn.type = 'button';
+    autoBtn.className = 'tc-autocode-btn';
+    autoBtn.textContent = '⚡ Auto';
+    autoBtn.title = 'Generar codificación automática (NLP)';
+    const liveBadge = summary.querySelector('.tc-live-badge');
+    if (liveBadge) {
+      summary.insertBefore(autoBtn, liveBadge);
+    } else {
+      summary.appendChild(autoBtn);
+    }
+    autoBtn.addEventListener('click', async () => {
+      const suggestions = computeSuggestions(analyzedParas, codes);
+      if (suggestions.length === 0) {
+        const originalText = autoBtn.textContent;
+        autoBtn.textContent = 'Sin sugerencias';
+        autoBtn.disabled = true;
+        setTimeout(() => {
+          autoBtn.textContent = originalText;
+          autoBtn.disabled = false;
+        }, 1500);
+        return;
+      }
+      autoBtn.textContent = '...';
+      autoBtn.disabled = true;
+      try {
+        const newCodes = [...codes];
+        await Promise.all(suggestions.map(async (sugg) => {
+          try {
+            const res = await fetch('/api/live/notes/trace', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                noteId,
+                paraIndex: sugg.paraIndex,
+                label: sugg.label,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json() as { code?: TraceCode };
+              if (data.code) {
+                newCodes.push(data.code);
+              }
+            }
+          } catch (e) {
+            console.error('Failed to auto-code suggestion:', e);
+          }
+        }));
+        onCodesChange(newCodes);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        autoBtn.textContent = '⚡ Auto';
+        autoBtn.disabled = false;
+      }
+    });
+  }
   const modeRow = document.createElement('label');
   modeRow.className = 'tc-mode-row';
   modeRow.textContent = 'Modo';
@@ -1422,6 +1579,7 @@ export async function mountTraceMargin(
   let currentTraces: ParagraphTrace[] = [];
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let pulseTimer: ReturnType<typeof setTimeout> | null = null;
+  let traversingTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshVersion = 0;
   let active = true;
   const monitorState: MonitorState = {
@@ -1471,6 +1629,10 @@ export async function mountTraceMargin(
       const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
       if (traceSection) {
         restartAnimation(traceSection, 'is-traversing');
+        if (traversingTimer) clearTimeout(traversingTimer);
+        traversingTimer = setTimeout(() => {
+          traceSection.classList.remove('is-traversing');
+        }, 430);
       }
     }
   };
@@ -1551,6 +1713,7 @@ export async function mountTraceMargin(
       active = false;
       if (refreshTimer) clearTimeout(refreshTimer);
       if (pulseTimer) clearTimeout(pulseTimer);
+      if (traversingTimer) clearTimeout(traversingTimer);
       editorView.scrollDOM.removeEventListener('scroll', onEditorScroll);
       resizeObserver?.disconnect();
       editorView.dispatch({ effects: setHighlight.of(new Set<number>()) });

@@ -77,6 +77,22 @@ let _activeCtrl: AbortController | null = null;
 let _activeContainer: HTMLElement | null = null;
 let _activeWorkspace: CourseNotesWorkspace | null = null;
 
+let _traceEnabledByDefault = false;
+try {
+  _traceEnabledByDefault = localStorage.getItem('musiki:trace:enabled') === 'true';
+} catch {
+  // ignore
+}
+
+function setTraceEnabledByDefault(enabled: boolean) {
+  _traceEnabledByDefault = enabled;
+  try {
+    localStorage.setItem('musiki:trace:enabled', String(enabled));
+  } catch {
+    // ignore
+  }
+}
+
 // ── marked setup (once) ────────────────────────────────────────────────────
 let markedConfigured = false;
 function configureMarked() {
@@ -817,7 +833,7 @@ export function initDockviewWorkspace(
           traceBtn,
           liveEditor: null,
           traceHandle: null,
-          traceOnEnterEdit: true,
+          traceOnEnterEdit: _traceEnabledByDefault,
         };
         dbNotePanelStates.set(panelId, state);
         pencilBtn.addEventListener('click', () => {
@@ -829,10 +845,12 @@ export function initDockviewWorkspace(
             state.traceHandle.destroy();
             state.traceHandle = null;
             traceBtn.classList.remove('is-active');
+            setTraceEnabledByDefault(false);
             return;
           }
           if (state.mode !== 'edit') {
             state.traceOnEnterEdit = true;
+            setTraceEnabledByDefault(true);
             pencilBtn.click();
             return;
           }
@@ -846,6 +864,7 @@ export function initDockviewWorkspace(
               state.bodyEl,
             );
             traceBtn.classList.add('is-active');
+            setTraceEnabledByDefault(true);
           } catch (err) {
             console.error('[trace] mount failed', err);
           } finally {
@@ -924,6 +943,8 @@ export function initDockviewWorkspace(
     container.classList.toggle('is-dockview-active', active);
     if (classContent) classContent.style.display = active ? 'none' : '';
     if (dvRoot) dvRoot.style.display = active ? '' : 'none';
+    const shortcuts = container.querySelector<HTMLElement>('.scroll-shortcuts');
+    if (shortcuts) shortcuts.style.display = active ? 'none' : '';
   };
   setDockviewActive(false);
   dockview.onDidAddPanel(() => {
@@ -951,14 +972,32 @@ export function initDockviewWorkspace(
     }
 
     if (!split && dockview.panels.length > 0) {
-      // No dedicated panel for this slug yet — reuse the active/last panel (no unwanted split)
-      const target = dockview.activePanel ?? dockview.panels[dockview.panels.length - 1];
-      const state = panelStates.get(target.id);
-      if (state) {
-        state.slug = slug;
-        const titleEl = state.bodyEl.parentElement?.querySelector('.cnw-title');
-        if (titleEl) titleEl.textContent = slug.split('/').pop()?.replace('.md', '') ?? slug;
-        void enterPreviewMode(state);
+      // Reuse any open note panel first (to prevent unwanted splits)
+      const target = dockview.panels.find(p => (p.id.startsWith('note-') || p.id.startsWith('db-note-')) && !p.id.includes('-split-'))
+        ?? dockview.activePanel
+        ?? dockview.panels[dockview.panels.length - 1];
+      
+      if (target) {
+        if (target.id.startsWith('note-') && !target.id.includes('-split-')) {
+          const state = panelStates.get(target.id);
+          if (state) {
+            state.slug = slug;
+            const titleEl = state.bodyEl.parentElement?.querySelector('.cnw-title');
+            if (titleEl) titleEl.textContent = slug.split('/').pop()?.replace('.md', '') ?? slug;
+            void enterPreviewMode(state);
+            return;
+          }
+        }
+
+        // Replace target panel with the new note panel in the same tab position
+        const newId = panelId + (split ? `-split-${Date.now()}` : '');
+        pendingParams.set(newId, { kind: 'note', slug, courseId, mode });
+        dockview.addPanel({
+          id: newId,
+          component: 'note-panel',
+          position: { referencePanel: target.id, direction: 'within' },
+        });
+        target.api.close();
         return;
       }
     }
@@ -1116,6 +1155,32 @@ export function initDockviewWorkspace(
     }
   }, { signal });
 
+  // Cmd/Ctrl+ArrowUp / ArrowDown — scroll active panel/editor to top/bottom
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      const target = e.target;
+      if (target instanceof HTMLElement && (
+        /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) ||
+        target.closest('.cm-editor')
+      )) {
+        return;
+      }
+      const activePanel = dockview.activePanel ?? dockview.panels.find(p => p.id.startsWith('note-') || p.id.startsWith('db-note-'));
+      if (!activePanel) return;
+
+      const el = activePanel.element;
+      const scroller = el.querySelector('.cm-scroller, .cnw-body, .dockview-panel-content');
+      if (!scroller) return;
+
+      e.preventDefault();
+      const targetTop = e.key === 'ArrowUp' ? 0 : scroller.scrollHeight;
+      scroller.scrollTo({
+        top: targetTop,
+        behavior: 'smooth'
+      });
+    }
+  }, { signal });
+
   // External DnD: sidebar notes dragged into workspace show drop overlay
   dockview.onUnhandledDragOverEvent(event => {
     event.accept();
@@ -1135,15 +1200,36 @@ export function initDockviewWorkspace(
 
   // Open a personal note as a db-note pod (fired by notes sidebar click/context menu)
   window.addEventListener('musiki:open-db-note', (e: Event) => {
-    const ev = e as CustomEvent<{ noteId: string; title: string }>;
-    const { noteId, title } = ev.detail;
+    const ev = e as CustomEvent<{ noteId: string; title: string; split?: boolean }>;
+    const { noteId, title, split } = ev.detail;
+    const isSplit = split ?? false;
+
+    // Check if panel for this exact note is already open
+    const existing = dockview.panels.find(p => p.id.startsWith(`db-note-${noteId}`));
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+
     const newId = `db-note-${noteId}-${Date.now()}`;
     pendingParams.set(newId, { kind: 'db-note', noteId, title });
-    const refPanel = dockview.panels[dockview.panels.length - 1] ?? undefined;
-    dockview.addPanel({
-      id: newId, component: 'note-panel',
-      position: refPanel ? { referencePanel: refPanel.id, direction: 'right' } : undefined,
-    });
+    
+    const openNotePanel = !isSplit ? dockview.panels.find(p => p.id.startsWith('db-note-') || p.id.startsWith('note-')) : undefined;
+    if (openNotePanel) {
+      dockview.addPanel({
+        id: newId,
+        component: 'note-panel',
+        position: { referencePanel: openNotePanel.id, direction: 'within' },
+      });
+      openNotePanel.api.close();
+    } else {
+      const refPanel = dockview.panels.find(p => p.id.startsWith('db-note-') || p.id.startsWith('note-'))
+        ?? (dockview.panels[dockview.panels.length - 1] ?? undefined);
+      dockview.addPanel({
+        id: newId, component: 'note-panel',
+        position: refPanel ? { referencePanel: refPanel.id, direction: 'right' } : undefined,
+      });
+    }
   }, { signal });
 
   // Listen for sidebar note-open events — signal is aborted on next initDockviewWorkspace call

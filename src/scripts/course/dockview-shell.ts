@@ -219,15 +219,282 @@ export function injectWorkspaceCss(containerId: string) {
 
     /* Unified prose-editor — no border box, CM looks like a document */
     .cnw-body .cm-editor { background: transparent !important; height: 100%; }
-    .cnw-body .cm-scroller { padding: 1.2rem 1.5rem !important; font-size: calc(var(--font-size-base, 1rem) * 1.15); line-height: 1.72; overflow: auto; }
+    .cnw-body .cm-scroller { padding: 1.2rem 0.5rem 1.2rem 1.5rem !important; font-size: calc(var(--font-size-base, 1rem) * 1.15); line-height: 1.72; overflow: auto; }
     .cnw-body .cm-content { caret-color: var(--c-link, #3b82f6) !important; }
     .cnw-body .cm-focused { outline: none !important; }
     /* The shell owns the title row; the YAML strip remains available below it. */
     .cnw-body #nie-editor-panel > div:first-child { display: none !important; }
     .cnw-body #nie-editor-panel { flex: 1; height: 100%; }
+
+    /* TraceCode Help Modal Styles */
+    .trace-info-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms ease;
+    }
+    .trace-info-modal-backdrop.is-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .trace-info-modal-container {
+      width: min(840px, 92vw);
+      max-height: 85vh;
+      background: var(--c-bg, #1e1e24);
+      border: 1px solid var(--c-border, rgba(120,120,140,0.25));
+      border-radius: 8px;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.35);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: scale(0.96) translateY(12px);
+      transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .trace-info-modal-backdrop.is-active .trace-info-modal-container {
+      transform: scale(1) translateY(0);
+    }
+    .trace-info-modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.18));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .trace-info-modal-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--c-fg);
+      margin: 0;
+    }
+    .trace-info-modal-close-btn {
+      background: none;
+      border: none;
+      color: var(--c-fg-dim);
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 120ms;
+    }
+    .trace-info-modal-close-btn:hover {
+      color: var(--c-fg);
+    }
+    .trace-info-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      color: var(--c-fg);
+      font-size: 0.94rem;
+      line-height: 1.68;
+    }
+    .trace-info-modal-body h2 {
+      font-size: 1.28rem;
+      margin-top: 1.8rem;
+      margin-bottom: 0.8rem;
+      font-weight: 600;
+      color: var(--c-fg);
+      border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.12));
+      padding-bottom: 6px;
+    }
+    .trace-info-modal-body h3 {
+      font-size: 1.06rem;
+      margin-top: 1.4rem;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: var(--c-link, #3b82f6);
+    }
+    .trace-info-modal-body p {
+      margin-bottom: 1rem;
+      opacity: 0.9;
+    }
+    .trace-info-modal-body ul {
+      margin-bottom: 1.2rem;
+      padding-left: 20px;
+    }
+    .trace-info-modal-body li {
+      margin-bottom: 0.5rem;
+      opacity: 0.9;
+    }
+    .trace-info-modal-body code {
+      font-family: var(--font-mono, monospace);
+      background: rgba(0,0,0,0.15);
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 0.88rem;
+    }
+    .trace-info-modal-body pre {
+      font-family: var(--font-mono, monospace);
+      background: rgba(0,0,0,0.22);
+      padding: 14px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      margin-bottom: 1.2rem;
+      border: 1px solid var(--c-border, rgba(120,120,140,0.15));
+    }
   `;
   document.head.appendChild(style);
 }
+
+// Define global helper for TraceCode info modal
+(window as any).openTraceInfoModal = function openTraceInfoModal() {
+  let backdrop = document.getElementById('trace-info-modal');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'trace-info-modal';
+    backdrop.className = 'trace-info-modal-backdrop';
+
+    const container = document.createElement('div');
+    container.className = 'trace-info-modal-container';
+
+    const header = document.createElement('div');
+    header.className = 'trace-info-modal-header';
+    header.innerHTML = `
+      <h2 class="trace-info-modal-title">Manual de Referencia: TraceCode</h2>
+      <button class="trace-info-modal-close-btn" aria-label="Cerrar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    `;
+
+    const body = document.createElement('div');
+    body.className = 'trace-info-modal-body';
+    body.innerHTML = `
+      <p>Este monitor es un <strong>editor de traza temática (thematic trace editor)</strong> diseñado para hacer visible la estructura conceptual y funcional del texto a nivel de párrafo a medida que se escribe. <strong>No utiliza Inteligencia Artificial (IA) ni Procesamiento de Lenguaje Natural (PLN) por defecto</strong> (o lo hace únicamente en herramientas específicas y autorizadas explícitamente por el usuario bajo un contrato de <strong>Escritura Asimilativa y Atención Sostenida (EAAS)</strong>, un modelo ético de composición académica que protege la atención profunda, la no-dispersión cognitiva, la asimilación reflexiva de las ideas al razonamiento humano, su mutación orgánica y la re-inyección subjetiva del pensamiento del autor); en su lugar, valida el modelo de datos unificado de TraceCode demostrando la utilidad de la interfaz de margen antes de incorporar modelos probabilísticos externos.</p>
+      
+      <p>Su propósito principal es asistir al escritor en la detección de patrones estructurales:</p>
+      <ul>
+        <li><strong>Roles retóricos:</strong> Determina qué función cumple cada párrafo dentro del género discursivo (p. ej., definición, contraste, ejemplo, síntesis).</li>
+        <li><strong>Progresión conceptual:</strong> Identifica cómo se introducen, reúsan, transforman o abandonan los conceptos.</li>
+        <li><strong>Brechas discursivas:</strong> Señala anomalías lógicas, tales como conceptos que se introducen pero nunca se vuelven a retomar (huérfanos), o saltos temáticos demasiado abruptos.</li>
+      </ul>
+
+      <h2>Bases Teóricas y Conceptos Clave</h2>
+      <p>El marco conceptual de TraceCode integra cuatro teorías clásicas del análisis textual y la lingüística sistémico-funcional, adecuadas para el nivel de posgrado:</p>
+
+      <h3>1. Progresión Temática (Daneš, 1974)</h3>
+      <p>Describe el flujo y desarrollo de la información en el texto a través del enlace entre el <strong>Tema</strong> (información conocida) y el <strong>Rema</strong> (información nueva) [Danes74]. Permite estructurar la progresión mediante tres métodos principales:</p>
+      <ul>
+        <li><em>Progresión Lineal Simple:</em> El rema de una oración se convierte en el tema de la siguiente.</li>
+        <li><em>Progresión con Tema Constante:</em> Oraciones sucesivas comparten el mismo tema pero introducen remas distintos.</li>
+        <li><em>Progresión con Temas Derivados (Hipertema):</em> Los temas de las oraciones derivan de un tema general común u organizador de mayor orden.</li>
+      </ul>
+
+      <h3>2. Rhetorical Structure Theory (RST) (Mann & Thompson, 1988)</h3>
+      <p>Analiza la organización jerárquica y funcional de los textos a través de relaciones funcionales entre segmentos [Mann88]. Los métodos identifican cómo los segmentos se vinculan mediante:</p>
+      <ul>
+        <li><em>Relación Núcleo-Satélite:</em> El Núcleo contiene la aserción central esencial, mientras que el Satélite ofrece información de soporte (p. ej., <em>Evidencia</em>, <em>Causa</em>, <em>Elaboración</em>).</li>
+        <li><em>Relaciones Esquematicas Multinucleares:</em> Elementos de igual peso retórico coordinados sin subordinación (p. ej., <em>Contraste</em>, <em>Lista</em>).</li>
+      </ul>
+
+      <h3>3. Análisis de Cohesión (Halliday & Hasan, 1976)</h3>
+      <p>Estudia los mecanismos semánticos (lazos cohesivos) que permiten que un texto sea percibido como una unidad coherente y no como oraciones aisladas [Halliday76]. Sus métodos clasifican la cohesión en:</p>
+      <ul>
+        <li><em>Cohesión Léxica:</em> Reiteración de términos (repetición exacta, sinonimia, hiponimia) y colocación.</li>
+        <li><em>Cohesión Gramatical:</em> Dispositivos como referencia (anafórica/catafórica), sustitución, elipsis y conectores conjuntivos.</li>
+      </ul>
+
+      <h3>4. Movimientos de Género (Swales, 1990)</h3>
+      <p>Considera el texto como una estructura retórica dividida en pasos comunicativos u orientados a un propósito ("moves") dentro de una comunidad académica o disciplinar [Swales90]. Sus métodos guían la progresión retórica por secuencias estandarizadas, p. ej., el modelo CARS (Creating a Research Space):</p>
+      <ul>
+        <li><em>Move 1:</em> Establecer el territorio (relevancia del tema).</li>
+        <li><em>Move 2:</em> Establecer el nicho (indicar la brecha o pregunta de investigación).</li>
+        <li><em>Move 3:</em> Ocupar el nicho (presentar el estudio actual o la contribución).</li>
+      </ul>
+
+      <h3>Auditoría Textual y Concordancia</h3>
+      <ul>
+        <li><strong>Frecuencia Léxica (Word-Freq):</strong> Calcula la distribución y recurrencia de los términos clave para diagnosticar la centralidad conceptual de la nota.</li>
+        <li><strong>Concordancia KWIC (Key Word In Context):</strong> Permite auditar en tiempo real la consistencia del uso conceptual, proyectando las palabras clave centradas con su contexto lingüístico inmediato a la izquierda y derecha.</li>
+        <li><strong>NLP Pure Functions / Mirror NLP Functions (Futuro):</strong> Implementación de análisis sintáctico local y el Code Bar CM6 Extension en <code>trace-margin.ts</code> para renderizar la densidad retórica en el propio gutter del editor.</li>
+      </ul>
+
+      <h2>Herramientas y Arquitectura Técnica</h2>
+      <p>La implementación actual y planificada en Musiki consta de los siguientes componentes:</p>
+      <ol>
+        <li><strong>Paragraph Segmenter:</strong> Algoritmo de lógica determinista que descompone el flujo de Markdown en párrafos lógicos mediante dobles saltos de línea e identificadores estables, validado rigurosamente mediante pruebas unitarias (p. ej., controlando acentos, caracteres en español y marcas estructurales).</li>
+        <li><strong>Frequency Panel:</strong> Extractor que tabula las palabras clave con mayor peso conceptual, omitiendo automáticamente las palabras vacías (stopwords).</li>
+        <li><strong>Concordance Panel:</strong> Interfaz interactiva de alineación KWIC para explorar la concordancia de términos en contexto.</li>
+        <li><strong>Event Wiring:</strong> Sistema reactivo de mensajería (a través de eventos globales y CustomEvents del DOM) que sincroniza el editor de Markdown en tiempo real con las vistas analíticas colindantes.</li>
+        <li><strong>State Management:</strong> Arquitectura de mapas y cachés que preserva el estado conceptual de los paneles y editores activos en el Dockview Workspace.</li>
+        <li><strong>Orphan Detection (Detección de Huérfanos):</strong> Diagnóstico visual que resalta con un tinte distintivo rojo/translúcido las etiquetas o códigos aplicados a un único párrafo que carecen de continuación o relación asociativa.</li>
+        <li><strong>Suggestion Chips (Chips de Sugerencia):</strong> Sugeridores automatizados que asisten en la codificación de temas detectando cadenas léxicas repetidas.</li>
+        <li><strong>Self Review (Autorevisión):</strong> Flujo interactivo que permite al estudiante verificar y clasificar críticamente su propio avance temático.</li>
+        <li><strong>LLM Assisted Classification (Futuro):</strong> Mapeo inteligente asistido por modelos de lenguaje locales para agilizar el etiquetado de roles retóricos y moves discursivos.</li>
+        <li><strong>UAM Corpus Tool Export (Futuro):</strong> Exportación a formatos XML estándares compatibles con herramientas académicas de anotación de corpus (como UAM Corpus Tool).</li>
+        <li><strong>TAACO Integration (Futuro):</strong> Incorporación de métricas cuantitativas automáticas inspiradas en TAACO (Tool for the Automatic Analysis of Cohesion) para evaluar cohesión local, global y enlaces sinónimos.</li>
+      </ol>
+
+      <h2>Referencias Bibliográficas (BibTeX)</h2>
+      <pre>@incollection{Danes74,
+  author    = {Dane{\\v{s}}, Franti{\\v{s}}ek},
+  title     = {Functional sentence perspective and the organization of the text},
+  booktitle = {Papers on functional sentence perspective},
+  pages     = {106--128},
+  year      = {1974},
+  publisher = {Academia}
+}
+
+@book{Mann88,
+  author    = {Mann, William C. and Thompson, Sandra A.},
+  title     = {Rhetorical Structure Theory: Toward a functional theory of text organization},
+  journal   = {Text-Interdisciplinary Journal for the Study of Discourse},
+  volume    = {8},
+  number    = {3},
+  pages     = {243--281},
+  year      = {1988}
+}
+
+@book{Halliday76,
+  author    = {Halliday, Michael A. K. and Hasan, Ruqaiya},
+  title     = {Cohesion in English},
+  year      = {1976},
+  publisher = {Longman}
+}
+
+@book{Swales90,
+  author    = {Swales, John M.},
+  title     = {Genre analysis: English in academic and research settings},
+  year      = {1990},
+  publisher = {Cambridge University Press}
+}</pre>
+    `;
+
+    container.appendChild(header);
+    container.appendChild(body);
+    backdrop.appendChild(container);
+    document.body.appendChild(backdrop);
+
+    // Close events
+    const closeBtn = header.querySelector('.trace-info-modal-close-btn');
+    closeBtn?.addEventListener('click', () => {
+      backdrop.classList.remove('is-active');
+    });
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        backdrop.classList.remove('is-active');
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && backdrop.classList.contains('is-active')) {
+        backdrop.classList.remove('is-active');
+      }
+    });
+  }
+
+  // Force a reflow before adding the active class for smooth transition
+  void backdrop.offsetWidth;
+  backdrop.classList.add('is-active');
+};
 
 export function buildShell(
   panelId: string,
@@ -350,13 +617,26 @@ export function buildShell(
   if (showHud) {
     const hud = document.createElement('div');
     hud.className = 'cnw-hud';
-    hud.style.cssText = 'display:flex;align-items:center;padding:0 .6rem;height:20px;flex-shrink:0';
+    hud.style.cssText = 'display:flex;align-items:center;padding:0 .6rem;height:20px;flex-shrink:0;gap:8px;';
 
     const stats = document.createElement('span');
     stats.className = 'cnw-hud-stats';
     stats.style.cssText = 'font-size:.784rem;opacity:.7;font-family:var(--font-mono,monospace);flex:1';
     hud.appendChild(stats);
     hud.appendChild(traceBtn);
+
+    const infoBtn = document.createElement('button');
+    infoBtn.className = 'cnw-hud-icon-btn';
+    infoBtn.title = 'Ayuda e Información Teórica de TraceCode';
+    infoBtn.style.cssText = 'background:none;border:none;color:var(--c-fg);opacity:.6;cursor:pointer;padding:0 4px;font-family:var(--font-mono,monospace);font-weight:bold;font-size:14px;line-height:16px;display:flex;align-items:center;justify-content:center;';
+    infoBtn.innerHTML = '?';
+    infoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof (window as any).openTraceInfoModal === 'function') {
+        (window as any).openTraceInfoModal();
+      }
+    });
+    hud.appendChild(infoBtn);
 
     shell.appendChild(hud);
   }
