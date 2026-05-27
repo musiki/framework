@@ -212,20 +212,79 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
   if (!bodyEl.isConnected) return;
   bodyEl.innerHTML = '';
   const mount = document.createElement('div');
-  mount.style.cssText = 'height:100%;overflow:hidden;';
+  mount.style.cssText = 'height:100%;overflow:hidden;display:flex;flex-direction:column;';
   bodyEl.appendChild(mount);
-  const editor = createLiveMdEditor(mount, note.body ?? '', async content => {
+
+  const save = async (content: string) => {
+    try {
+      localStorage.setItem(`db-note-draft::${noteId}`, JSON.stringify({
+        body: content,
+        ts: Date.now()
+      }));
+    } catch {}
+
     statusDot.className = 'cnw-status saving';
     const result = await fetch('/api/live/notes', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: noteId, body: content }),
     }).catch(() => null);
-    statusDot.className = result?.ok ? 'cnw-status saved' : 'cnw-status error';
+
+    if (result?.ok) {
+      statusDot.className = 'cnw-status saved';
+      try {
+        localStorage.removeItem(`db-note-draft::${noteId}`);
+      } catch {}
+    } else {
+      statusDot.className = 'cnw-status error';
+    }
     updateHud(bodyEl, content);
-  });
-  updateHud(bodyEl, note.body ?? '');
-  editor.focus();
+  };
+
+  const editorWrap = document.createElement('div');
+  editorWrap.style.cssText = 'flex:1;min-height:0;';
+
+  let editor: any;
+
+  // Check for draft recovery
+  let draft: { body: string; ts: number } | null = null;
+  try {
+    const raw = localStorage.getItem(`db-note-draft::${noteId}`);
+    if (raw) draft = JSON.parse(raw);
+  } catch {}
+
+  if (draft) {
+    const banner = document.createElement('div');
+    banner.className = 'cnw-recovery';
+    banner.style.cssText = 'padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; background: rgba(220,180,50,0.15); border-bottom: 1px solid rgba(220,180,50,0.3); color: var(--c-fg); flex-shrink: 0;';
+    banner.innerHTML = `
+      <span style="flex:1">Borrador no guardado (${new Date(draft.ts).toLocaleTimeString()})</span>
+      <button id="cnw-recover-accept" style="background:#2a4a2a; border:1px solid #7ec87e; color:#7ec87e; font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer">Usar borrador</button>
+      <button id="cnw-recover-discard" style="background:none; border:1px solid var(--c-border); color:var(--c-fg-dim); font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer; margin-left: 4px;">Descartar</button>
+    `;
+    mount.appendChild(banner);
+    mount.appendChild(editorWrap);
+
+    banner.querySelector('#cnw-recover-discard')?.addEventListener('click', () => {
+      try { localStorage.removeItem(`db-note-draft::${noteId}`); } catch {}
+      banner.remove();
+      editor = createLiveMdEditor(editorWrap, note.body ?? '', save);
+      updateHud(bodyEl, note.body ?? '');
+      editor.focus();
+    });
+    banner.querySelector('#cnw-recover-accept')?.addEventListener('click', () => {
+      banner.remove();
+      editor = createLiveMdEditor(editorWrap, draft.body, save);
+      updateHud(bodyEl, draft.body);
+      editor.focus();
+      void save(draft.body);
+    });
+  } else {
+    mount.appendChild(editorWrap);
+    editor = createLiveMdEditor(editorWrap, note.body ?? '', save);
+    updateHud(bodyEl, note.body ?? '');
+    editor.focus();
+  }
 
   let traceHandle: TraceMarginHandle | null = null;
   const toggleTrace = async () => {

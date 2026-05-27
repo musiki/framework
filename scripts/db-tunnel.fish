@@ -4,7 +4,7 @@
 
 set REMOTE_USER "zz"
 set REMOTE_HOST "46.225.154.68"
-set REMOTE_DB_HOST "172.18.0.10"
+set REMOTE_DB_HOST "127.0.0.1"
 set REMOTE_PORT 5432
 set LOCAL_PORT 5433
 set DB_URL "postgresql://app:3bce519832b81f101ebc5bc80af7f501@localhost:$LOCAL_PORT/musiki26"
@@ -12,6 +12,7 @@ set DB_URL "postgresql://app:3bce519832b81f101ebc5bc80af7f501@localhost:$LOCAL_P
 echo (set_color cyan)"[INFO] Opening SSH tunnel → $REMOTE_DB_HOST:$REMOTE_PORT via $REMOTE_HOST..."(set_color normal)
 
 ssh -f -N -o ExitOnForwardFailure=yes \
+    -o ServerAliveInterval=60 -o ServerAliveCountMax=3 \
     -L $LOCAL_PORT:$REMOTE_DB_HOST:$REMOTE_PORT \
     $REMOTE_USER@$REMOTE_HOST
 or begin

@@ -342,6 +342,22 @@ export function injectWorkspaceCss(containerId: string) {
       margin-bottom: 1.2rem;
       border: 1px solid var(--c-border, rgba(120,120,140,0.15));
     }
+    .trace-info-modal-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.88rem;
+    }
+    .trace-info-modal-body th, .trace-info-modal-body td {
+      border: 1px solid var(--c-border, rgba(120,120,140,0.2));
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .trace-info-modal-body th {
+      background: rgba(0,0,0,0.15);
+      font-weight: 600;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -411,6 +427,82 @@ export function injectWorkspaceCss(containerId: string) {
         <li><em>Move 3:</em> Ocupar el nicho (presentar el estudio actual o la contribución).</li>
       </ul>
 
+      <h3>5. Escritura Creativa y Narratología (Labov, 1972)</h3>
+      <p>Aplica un análisis estructural a textos no argumentativos (como en el modo <em>Lit Art</em>) basándose en la estructura de la narrativa personal descrita por William Labov [Labov72]. En lugar de argumentos lógicos, se estudian los elementos constituyentes de la experiencia narrada:</p>
+      <ul>
+        <li><strong>Apertura de escena e Imagen:</strong> Establecen la orientación espacial, temporal y el tono sensorial.</li>
+        <li><strong>Introducción y Retorno de Motivo:</strong> Rastrean la recurrencia de elementos simbólicos u objetos conductores (leitmotivs).</li>
+        <li><strong>Cambio de voz e Interrupción:</strong> Marcan transiciones de focalización o quiebres formales.</li>
+      </ul>
+      <p>Roles retóricos disponibles en el modo <strong>Lit Art</strong>:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Rol</th>
+            <th>Código</th>
+            <th>Definición</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Apertura de escena</td><td>APE</td><td>Sitúa espacio, tiempo, atmósfera o condiciones iniciales de una escena.</td></tr>
+          <tr><td>Imagen</td><td>IMG</td><td>Construye una imagen sensorial, simbólica o perceptiva dominante.</td></tr>
+          <tr><td>Introducción de motivo</td><td>INT</td><td>Introduce un objeto, gesto, palabra, sonido, figura o imagen que puede retornar después.</td></tr>
+          <tr><td>Retorno de motivo</td><td>RET</td><td>Retoma un motivo anterior, de forma idéntica, desplazada o transformada.</td></tr>
+          <tr><td>Variación</td><td>VAR</td><td>Repite un elemento con diferencia de tono, escala, perspectiva, función o intensidad.</td></tr>
+          <tr><td>Cambio de voz</td><td>VOZ</td><td>Modifica la voz narrativa, focalización, registro, distancia o posición enunciativa.</td></tr>
+          <tr><td>Interrupción</td><td>ITR</td><td>Corta una continuidad narrativa, perceptiva, sintáctica o argumental.</td></tr>
+          <tr><td>Descripción</td><td>DES</td><td>Detiene el avance para precisar cualidades de lugar, cuerpo, objeto, atmósfera o textura.</td></tr>
+          <tr><td>Acción</td><td>ACC</td><td>Hace avanzar una secuencia mediante eventos, movimientos o transformaciones.</td></tr>
+          <tr><td>Memoria</td><td>MEM</td><td>Introduce una temporalidad retrospectiva, una evocación o una capa de recuerdo.</td></tr>
+          <tr><td>Diálogo</td><td>DIA</td><td>Organiza intercambio verbal, pseudo-verbal o polifónico entre voces.</td></tr>
+          <tr><td>Tensión</td><td>TEN</td><td>Acumula conflicto, expectativa, contradicción, amenaza o inestabilidad.</td></tr>
+          <tr><td>Giro</td><td>GIR</td><td>Produce un cambio semántico, narrativo, perceptivo o afectivo.</td></tr>
+          <tr><td>Elipsis</td><td>ELI</td><td>Omite una transición o acontecimiento, dejando una discontinuidad significativa.</td></tr>
+          <tr><td>Montaje</td><td>MON</td><td>Yuxtapone fragmentos, imágenes, tiempos o materiales sin subordinarlos a una linealidad explícitamente lógica.</td></tr>
+          <tr><td>Resonancia</td><td>RES</td><td>Hace que un elemento anterior reaparezca como eco, atmósfera o asociación.</td></tr>
+          <tr><td>Cierre</td><td>CIE</td><td>Cierra una escena, motivo, secuencia o etapa del proceso.</td></tr>
+          <tr><td>Reflexión</td><td>REF</td><td>Suspende la acción o interpreta críticamente una experiencia o hallazgo.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>6. Investigación Artística y Práctica como Investigación (Borgdorff, 2012)</h3>
+      <p>En el modo de <em>Investigación Artística</em>, el texto opera en la frontera entre la práctica artística y la reflexión académica, caracterizándose por el valor epistémico de la práctica misma [Borgdorff12]. Las trazas no miden coherencia lógica tradicional, sino el registro y análisis crítico de la toma de decisiones:</p>
+      <ul>
+        <li><strong>Nota de proceso y Observación material:</strong> Documentan los acontecimientos del taller/estudio y el comportamiento de los materiales o soportes.</li>
+        <li><strong>Decisiones y Descartes:</strong> Mapean el rumbo del proceso y la argumentación de las elecciones.</li>
+        <li><strong>Feedback e Iteración:</strong> Rastrean las respuestas del entorno (pares o modelos de IA) y su asimilación en la obra.</li>
+      </ul>
+      <p>Roles retóricos disponibles en el modo <strong>Investigación Artística</strong>:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Rol</th>
+            <th>Código</th>
+            <th>Definición</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Nota de proceso</td><td>NOT</td><td>Registra una sesión, paso o momento del desarrollo artístico.</td></tr>
+          <tr><td>Pregunta artística</td><td>PRE</td><td>Formula el problema, hipótesis o tensión que orienta la práctica.</td></tr>
+          <tr><td>Observación material</td><td>OBS</td><td>Describe cómo responde un sonido, cuerpo, objeto, interfaz, imagen, texto o dispositivo.</td></tr>
+          <tr><td>Restricción técnica</td><td>RST</td><td>Identifica una limitación de medio, herramienta, soporte, código, espacio o dispositivo.</td></tr>
+          <tr><td>Decisión</td><td>DEC</td><td>Explicita una elección compositiva, performativa, técnica o conceptual.</td></tr>
+          <tr><td>Descarte</td><td>DES</td><td>Registra una posibilidad abandonada y la razón de su abandono.</td></tr>
+          <tr><td>Variante</td><td>VRT</td><td>Compara versiones, alternativas o configuraciones de un mismo material.</td></tr>
+          <tr><td>Método</td><td>MET</td><td>Procedimiento de trabajo, prueba, análisis, composición o montaje.</td></tr>
+          <tr><td>Documentación</td><td>DOC</td><td>Vincula el proceso con evidencia: audio, imagen, video, partitura, patch, código, bitácora o registro.</td></tr>
+          <tr><td>Ejemplo</td><td>EJE</td><td>Presenta un caso de estudio o ilustración concreta.</td></tr>
+          <tr><td>Reflexión</td><td>REF</td><td>Suspende la acción o interpreta críticamente una experiencia o hallazgo.</td></tr>
+          <tr><td>Análisis</td><td>ANA</td><td>Examina relaciones entre materiales, decisiones, efectos y resultados.</td></tr>
+          <tr><td>Feedback de pares</td><td>PAR</td><td>Incorpora observaciones, críticas o comentarios de otras personas.</td></tr>
+          <tr><td>Feedback IA</td><td>FIA</td><td>Registra una sugerencia, diagnóstico o clasificación producida por un modelo.</td></tr>
+          <tr><td>Revisión</td><td>REV</td><td>Describe una modificación realizada después de feedback, prueba o comparación.</td></tr>
+          <tr><td>Síntesis</td><td>SIN</td><td>Integra materiales, decisiones, problemas y resultados en una formulación general.</td></tr>
+          <tr><td>Artefacto público</td><td>ART</td><td>Presenta o describe una salida: obra, prototipo, demo, concierto, instalación, publicación o entrega.</td></tr>
+          <tr><td>Cierre</td><td>CIE</td><td>Cierra una escena, motivo, secuencia o etapa del proceso.</td></tr>
+        </tbody>
+      </table>
+
       <h3>Auditoría Textual y Concordancia</h3>
       <ul>
         <li><strong>Frecuencia Léxica (Word-Freq):</strong> Calcula la distribución y recurrencia de los términos clave para diagnosticar la centralidad conceptual de la nota.</li>
@@ -466,6 +558,20 @@ export function injectWorkspaceCss(containerId: string) {
   title     = {Genre analysis: English in academic and research settings},
   year      = {1990},
   publisher = {Cambridge University Press}
+}
+
+@book{Labov72,
+  author    = {Labov, William},
+  title     = {Language in the Inner City: Studies in the Black English Vernacular},
+  year      = {1972},
+  publisher = {University of Pennsylvania Press}
+}
+
+@book{Borgdorff12,
+  author    = {Borgdorff, Henk},
+  title     = {The Conflict of the Faculties: Perspectives on Artistic Research and Academia},
+  year      = {2012},
+  publisher = {Leiden University Press}
 }</pre>
     `;
 

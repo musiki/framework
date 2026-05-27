@@ -27,11 +27,136 @@ type Paragraph = {
   to: number;
 };
 
-type TraceMode = 'borrador' | 'seminario' | 'tesis' | 'artistico' | 'entrega';
+type TraceMode =
+  | 'academic'
+  | 'thesis'
+  | 'lit_art'
+  | 'artistic_research'
+  | 'seminar'
+  | 'submission';
+
+export function normalizeMode(mode: string | undefined): TraceMode {
+  if (!mode) return 'academic';
+  const mapping: Record<string, TraceMode> = {
+    borrador: 'academic',
+    seminario: 'seminar',
+    tesis: 'thesis',
+    artistico: 'lit_art',
+    entrega: 'submission',
+    academic: 'academic',
+    seminar: 'seminar',
+    thesis: 'thesis',
+    lit_art: 'lit_art',
+    artistic_research: 'artistic_research',
+    submission: 'submission',
+  };
+  return mapping[mode] || 'academic';
+}
+
 type RhetoricalRole =
   | 'afirmacion' | 'definicion' | 'contexto' | 'literatura'
   | 'ejemplo' | 'analisis' | 'contraste' | 'transicion'
-  | 'sintesis' | 'metodo' | 'reflexion' | 'conclusion';
+  | 'sintesis' | 'metodo' | 'reflexion' | 'conclusion'
+  | 'scene_opening' | 'image' | 'motif_introduction' | 'motif_return'
+  | 'variation' | 'voice_shift' | 'interruption' | 'description'
+  | 'action' | 'memory' | 'dialogue' | 'tension' | 'turn' | 'ellipsis'
+  | 'montage' | 'resonance' | 'closure' | 'process_note' | 'artistic_question'
+  | 'material_observation' | 'technical_constraint' | 'decision' | 'discard'
+  | 'variant' | 'documentation' | 'peer_feedback' | 'ai_feedback' | 'revision'
+  | 'public_artifact' | 'analysis' | 'method' | 'synthesis' | 'reflection';
+
+const ROLE_PRESENTATION: Record<RhetoricalRole, { label: string; short: string; hue: number; definition?: string }> = {
+  // Academic / Rhetorical (Spanish keys)
+  afirmacion: { label: 'afirmación', short: 'AFI', hue: 15, definition: 'Afirmación central, tesis o argumento principal.' },
+  definicion: { label: 'definición', short: 'DEF', hue: 205, definition: 'Definición de un concepto o término clave.' },
+  contexto: { label: 'contexto', short: 'CTX', hue: 220, definition: 'Contexto histórico, teórico o situacional.' },
+  literatura: { label: 'literatura', short: 'LIT', hue: 275, definition: 'Revisión de literatura o estado del arte.' },
+  ejemplo: { label: 'ejemplo', short: 'EJE', hue: 142, definition: 'Presentación de un caso de estudio o ejemplo concreto.' },
+  analisis: { label: 'análisis', short: 'ANA', hue: 185, definition: 'Análisis detallado de datos, textos o fenómenos.' },
+  contraste: { label: 'contraste', short: 'CON', hue: 2, definition: 'Comparación, debate o contraste de ideas.' },
+  transicion: { label: 'transición', short: 'TRA', hue: 38, definition: 'Párrafo puente o de transición entre secciones.' },
+  sintesis: { label: 'síntesis', short: 'SIN', hue: 300, definition: 'Síntesis o integración de argumentos previos.' },
+  metodo: { label: 'método', short: 'MET', hue: 170, definition: 'Descripción de la metodología o procedimiento.' },
+  reflexion: { label: 'reflexión', short: 'REF', hue: 258, definition: 'Reflexión crítica o metacognitiva sobre el tema.' },
+  conclusion: { label: 'conclusión', short: 'CIE', hue: 330, definition: 'Conclusión, cierre o proyección del texto.' },
+
+  // Shared English keys for creative modes
+  reflection: { label: 'Reflexión', short: 'REF', hue: 230, definition: 'Suspende la acción o interpreta críticamente una experiencia o hallazgo.' },
+  method: { label: 'Método', short: 'MET', hue: 170, definition: 'Procedimiento de trabajo, prueba, análisis, composición o montaje.' },
+  example: { label: 'Ejemplo', short: 'EJE', hue: 142, definition: 'Presenta un caso de estudio o ilustración concreta.' },
+  analysis: { label: 'Análisis', short: 'ANA', hue: 185, definition: 'Examina relaciones entre materiales, decisiones, efectos y resultados.' },
+  synthesis: { label: 'Síntesis', short: 'SIN', hue: 300, definition: 'Integra materiales, decisiones, problemas y resultados en una formulación general.' },
+  closure: { label: 'Cierre', short: 'CIE', hue: 345, definition: 'Cierra una escena, motivo, secuencia o etapa del proceso.' },
+
+  // Lit Art roles
+  scene_opening: { label: 'Apertura de escena', short: 'APE', hue: 120, definition: 'Sitúa espacio, tiempo, atmósfera o condiciones iniciales de una escena.' },
+  image: { label: 'Imagen', short: 'IMG', hue: 190, definition: 'Construye una imagen sensorial, simbólica o perceptiva dominante.' },
+  motif_introduction: { label: 'Introducción de motivo', short: 'INT', hue: 340, definition: 'Introduce un objeto, gesto, palabra, sonido, figura o imagen que puede retornar después.' },
+  motif_return: { label: 'Retorno de motivo', short: 'RET', hue: 320, definition: 'Retoma un motivo anterior, de forma idéntica, desplazada o transformada.' },
+  variation: { label: 'Variación', short: 'VAR', hue: 280, definition: 'Repite un elemento con diferencia de tono, escala, perspectiva, función o intensidad.' },
+  voice_shift: { label: 'Cambio de voz', short: 'VOZ', hue: 260, definition: 'Modifica la voz narrativa, focalización, registro, distancia o posición enunciativa.' },
+  interruption: { label: 'Interrupción', short: 'ITR', hue: 0, definition: 'Corta una continuidad narrativa, perceptiva, sintáctica o argumental.' },
+  description: { label: 'Descripción', short: 'DES', hue: 160, definition: 'Detiene el avance para precisar cualidades de lugar, cuerpo, objeto, atmósfera o textura.' },
+  action: { label: 'Acción', short: 'ACC', hue: 45, definition: 'Hace avanzar una secuencia mediante eventos, movimientos o transformaciones.' },
+  memory: { label: 'Memoria', short: 'MEM', hue: 250, definition: 'Introduce una temporalidad retrospectiva, una evocación o una capa de recuerdo.' },
+  dialogue: { label: 'Diálogo', short: 'DIA', hue: 80, definition: 'Organiza intercambio verbal, pseudo-verbal o polifónico entre voces.' },
+  tension: { label: 'Tensión', short: 'TEN', hue: 10, definition: 'Acumula conflicto, expectativa, contradicción, amenaza o inestabilidad.' },
+  turn: { label: 'Giro', short: 'GIR', hue: 35, definition: 'Produce un cambio semántico, narrativo, perceptivo o afectivo.' },
+  ellipsis: { label: 'Elipsis', short: 'ELI', hue: 200, definition: 'Omite una transición o acontecimiento, dejando una discontinuidad significativa.' },
+  montage: { label: 'Montaje', short: 'MON', hue: 150, definition: 'Yuxtapone fragmentos, imágenes, tiempos o materiales sin subordinarlos a una linealidad explícita.' },
+  resonance: { label: 'Resonancia', short: 'RES', hue: 215, definition: 'Hace que un elemento anterior reaparezca como eco, atmósfera o asociación, no como explicación directa.' },
+
+  // Artistic Research roles
+  process_note: { label: 'Nota de proceso', short: 'NOT', hue: 110, definition: 'Registra una sesión, paso o momento del desarrollo artístico.' },
+  artistic_question: { label: 'Pregunta artística', short: 'PRE', hue: 290, definition: 'Formula el problema, hipótesis o tensión que orienta la práctica.' },
+  material_observation: { label: 'Observación material', short: 'OBS', hue: 180, definition: 'Describe cómo responde un sonido, cuerpo, objeto, interfaz, imagen, texto o dispositivo.' },
+  technical_constraint: { label: 'Restricción técnica', short: 'RST', hue: 10, definition: 'Identifica una limitación de medio, herramienta, soporte, código, espacio o dispositivo.' },
+  decision: { label: 'Decisión', short: 'DEC', hue: 200, definition: 'Explicita una elección compositiva, performativa, técnica o conceptual.' },
+  discard: { label: 'Descarte', short: 'DES', hue: 0, definition: 'Registra una posibilidad abandonada y la razón de su abandono.' },
+  variant: { label: 'Variante', short: 'VRT', hue: 140, definition: 'Compara versiones, alternativas o configuraciones de un mismo material.' },
+  documentation: { label: 'Documentación', short: 'DOC', hue: 220, definition: 'Vincula el proceso con evidencia: audio, imagen, video, partitura, patch, código, bitácora o registro.' },
+  peer_feedback: { label: 'Feedback de pares', short: 'PAR', hue: 90, definition: 'Incorpora observaciones, críticas o comentarios de otras personas.' },
+  ai_feedback: { label: 'Feedback IA', short: 'FIA', hue: 270, definition: 'Registra una sugerencia, diagnóstico o clasificación producida por un modelo.' },
+  revision: { label: 'Revisión', short: 'REV', hue: 320, definition: 'Describe una modificación realizada después de feedback, prueba o comparación.' },
+  public_artifact: { label: 'Artefacto público', short: 'ART', hue: 50, definition: 'Presenta o describe una salida: obra, prototipo, demo, concierto, instalación, publicación o entrega.' },
+};
+
+const roleSets: Record<TraceMode, RhetoricalRole[]> = {
+  academic: ['afirmacion', 'definicion', 'contexto', 'ejemplo', 'analisis', 'contraste', 'transicion', 'sintesis', 'metodo', 'conclusion'],
+  thesis: ['afirmacion', 'definicion', 'contexto', 'ejemplo', 'analisis', 'contraste', 'transicion', 'sintesis', 'metodo', 'conclusion'],
+  seminar: ['afirmacion', 'definicion', 'contexto', 'ejemplo', 'analisis', 'contraste', 'transicion', 'sintesis', 'metodo', 'conclusion'],
+  submission: ['afirmacion', 'definicion', 'contexto', 'ejemplo', 'analisis', 'contraste', 'transicion', 'sintesis', 'metodo', 'conclusion'],
+  lit_art: [
+    'scene_opening', 'image', 'motif_introduction', 'motif_return',
+    'variation', 'voice_shift', 'interruption', 'description',
+    'action', 'reflection', 'memory', 'dialogue', 'tension',
+    'turn', 'ellipsis', 'montage', 'resonance', 'closure'
+  ],
+  artistic_research: [
+    'process_note', 'artistic_question', 'material_observation',
+    'technical_constraint', 'decision', 'discard', 'variant',
+    'method', 'documentation', 'example', 'reflection', 'analysis',
+    'peer_feedback', 'ai_feedback', 'revision', 'synthesis',
+    'public_artifact', 'closure'
+  ],
+};
+
+const RHETORICAL_ROLES = Object.keys(ROLE_PRESENTATION) as RhetoricalRole[];
+
+const MODE_LABELS: Record<TraceMode, string> = {
+  academic: 'Académico',
+  thesis: 'Tesis',
+  lit_art: 'Lit Art (Literatura y Arte)',
+  artistic_research: 'Investigación Artística',
+  seminar: 'Seminario',
+  submission: 'Entrega',
+};
+
+const LEGACY_ROLES: Record<string, RhetoricalRole> = {
+  claim: 'afirmacion', definition: 'definicion', context: 'contexto', literature: 'literatura',
+  contrast: 'contraste', transition: 'transicion', conclusion: 'conclusion',
+};
+
 type ConceptMention = {
   etiqueta: string;
   estado: 'introducido' | 'reutilizado' | 'transformado' | 'abandonado' | 'sintetizado';
@@ -45,10 +170,61 @@ type ParagraphRelation = {
 };
 type Diagnostic = {
   severidad: 'baja' | 'media' | 'alta';
-  tipo: 'concepto_huerfano';
+  tipo: string;
   etiqueta?: string;
   mensaje?: string;
 };
+
+export type ParagraphRhythm = {
+  sentenceCount: number;
+  avgSentenceLength: number;
+  lengthVariance: number;
+  shortSentenceRatio: number;
+  longSentenceRatio: number;
+  punctuationProfile: {
+    comma: number;
+    semicolon: number;
+    colon: number;
+    dash: number;
+    question: number;
+    exclamation: number;
+  };
+};
+
+export type ParagraphRhythmClass =
+  | 'single_long_sentence'
+  | 'short_sentences'
+  | 'mixed_rhythm'
+  | 'accumulative'
+  | 'fragmentary'
+  | 'questioning'
+  | 'emphatic_closure';
+
+export type SentenceRole =
+  | 'setup'
+  | 'extension'
+  | 'specification'
+  | 'image_detail'
+  | 'turn'
+  | 'contrast'
+  | 'intensification'
+  | 'echo'
+  | 'question'
+  | 'closure'
+  | 'rupture';
+
+export type SentenceTrace = {
+  id: string;
+  paragraphId: string;
+  index: number;
+  text: string;
+  role: SentenceRole | null;
+  length: number;
+  startsWithConnector: boolean;
+  endsWithQuestion: boolean;
+  motifs: string[];
+};
+
 type ParagraphTrace = {
   id?: string;
   noteId?: string;
@@ -61,6 +237,9 @@ type ParagraphTrace = {
   diagnosticos: Diagnostic[];
   modo: TraceMode;
   updatedAt?: string;
+  paragraphId?: string;
+  rhythm?: ParagraphRhythm;
+  sentences?: SentenceTrace[];
 };
 
 export interface TraceMarginHandle {
@@ -75,34 +254,6 @@ type MonitorState = {
   activeParagraph: number | null;
   visibleParagraphs: Set<number>;
   mode: TraceMode;
-};
-
-const ROLE_PRESENTATION: Record<RhetoricalRole, { label: string; short: string; hue: number }> = {
-  afirmacion: { label: 'afirmación', short: 'AFI', hue: 15 },
-  definicion: { label: 'definición', short: 'DEF', hue: 205 },
-  contexto: { label: 'contexto', short: 'CTX', hue: 220 },
-  literatura: { label: 'literatura', short: 'LIT', hue: 275 },
-  ejemplo: { label: 'ejemplo', short: 'EJE', hue: 142 },
-  analisis: { label: 'análisis', short: 'ANA', hue: 185 },
-  contraste: { label: 'contraste', short: 'CON', hue: 2 },
-  transicion: { label: 'transición', short: 'TRA', hue: 38 },
-  sintesis: { label: 'síntesis', short: 'SIN', hue: 300 },
-  metodo: { label: 'método', short: 'MET', hue: 170 },
-  reflexion: { label: 'reflexión', short: 'REF', hue: 258 },
-  conclusion: { label: 'conclusión', short: 'CIE', hue: 330 },
-};
-const RHETORICAL_ROLES = Object.keys(ROLE_PRESENTATION) as RhetoricalRole[];
-const MODE_LABELS: Record<TraceMode, string> = {
-  borrador: 'Borrador',
-  seminario: 'Seminario',
-  tesis: 'Tesis',
-  artistico: 'Lit Art (Literatura y Arte)',
-  entrega: 'Entrega',
-};
-const LEGACY_ROLES: Record<string, RhetoricalRole> = {
-  claim: 'afirmacion', definition: 'definicion', context: 'contexto', literature: 'literatura',
-  example: 'ejemplo', analysis: 'analisis', contrast: 'contraste', transition: 'transicion',
-  synthesis: 'sintesis', method: 'metodo', reflection: 'reflexion', conclusion: 'conclusion',
 };
 
 function analyticalCodes(codes: TraceCode[]): TraceCode[] {
@@ -181,8 +332,119 @@ function approximateParagraphLines(text: string): number {
 }
 
 export function paragraphsForAnalysis(paras: Paragraph[], mode: TraceMode): Paragraph[] {
-  if (mode !== 'artistico') return paras;
+  const norm = normalizeMode(mode);
+  if (norm !== 'lit_art') return paras;
   return paras.filter(para => approximateParagraphLines(para.text) > 2);
+}
+
+const CONNECTORS = [
+  'sin embargo', 'pero', 'por lo tanto', 'en consecuencia', 'por ejemplo',
+  'así', 'entonces', 'además', 'no obstante', 'por ende', 'en cambio',
+  'cuando', 'al final', 'mientras', 'luego', 'después'
+];
+
+export function startsWithConnector(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  return CONNECTORS.some(c => lower.startsWith(c));
+}
+
+export function computeSentences(paraText: string, paragraphId: string): SentenceTrace[] {
+  const rawSentences = paraText.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+  return rawSentences.map((text, idx) => {
+    const words = text.split(/\s+/).filter(w => w.length > 0);
+    const length = words.length;
+    const endsWithQuestion = text.endsWith('?');
+    const hasConnector = startsWithConnector(text);
+    return {
+      id: `${paragraphId}-s-${idx}`,
+      paragraphId,
+      index: idx,
+      text,
+      role: null,
+      length,
+      startsWithConnector: hasConnector,
+      endsWithQuestion,
+      motifs: extractKeywords(text),
+    };
+  });
+}
+
+export function computeRhythm(sentences: SentenceTrace[]): ParagraphRhythm {
+  const sentenceCount = sentences.length;
+  if (sentenceCount === 0) {
+    return {
+      sentenceCount: 0,
+      avgSentenceLength: 0,
+      lengthVariance: 0,
+      shortSentenceRatio: 0,
+      longSentenceRatio: 0,
+      punctuationProfile: { comma: 0, semicolon: 0, colon: 0, dash: 0, question: 0, exclamation: 0 }
+    };
+  }
+  const lengths = sentences.map(s => s.length);
+  const avgSentenceLength = lengths.reduce((a, b) => a + b, 0) / sentenceCount;
+  const variance = lengths.reduce((acc, len) => acc + Math.pow(len - avgSentenceLength, 2), 0) / sentenceCount;
+  
+  let shortCount = 0;
+  let longCount = 0;
+  for (const len of lengths) {
+    if (len < 12) shortCount++;
+    if (len > 28) longCount++;
+  }
+  const shortSentenceRatio = shortCount / sentenceCount;
+  const longSentenceRatio = longCount / sentenceCount;
+  
+  const fullText = sentences.map(s => s.text).join(' ');
+  const punctuationProfile = {
+    comma: (fullText.match(/,/g) || []).length,
+    semicolon: (fullText.match(/;/g) || []).length,
+    colon: (fullText.match(/:/g) || []).length,
+    dash: (fullText.match(/[-—]/g) || []).length,
+    question: (fullText.match(/[?¿]/g) || []).length,
+    exclamation: (fullText.match(/[!¡]/g) || []).length,
+  };
+  
+  return {
+    sentenceCount,
+    avgSentenceLength,
+    lengthVariance: variance,
+    shortSentenceRatio,
+    longSentenceRatio,
+    punctuationProfile,
+  };
+}
+
+export function classifyRhythm(rhythm: ParagraphRhythm, sentences: SentenceTrace[]): ParagraphRhythmClass {
+  const { sentenceCount, avgSentenceLength, lengthVariance, punctuationProfile } = rhythm;
+  if (punctuationProfile.question >= 1) return 'questioning';
+  
+  const fullText = sentences.map(s => s.text).join(' ');
+  if (fullText.includes('...') || fullText.includes('…') || (sentenceCount >= 3 && avgSentenceLength < 8)) {
+    return 'fragmentary';
+  }
+  
+  if (sentenceCount === 1 && avgSentenceLength > 28) {
+    return 'single_long_sentence';
+  }
+  
+  if (sentenceCount > 1 && sentences[sentences.length - 1].length < avgSentenceLength * 0.75) {
+    return 'emphatic_closure';
+  }
+  
+  if (sentenceCount >= 3 && avgSentenceLength < 12) {
+    return 'short_sentences';
+  }
+  
+  const commasColonsSemicolons = punctuationProfile.comma + punctuationProfile.semicolon + punctuationProfile.colon;
+  if (commasColonsSemicolons >= sentenceCount * 1.0) {
+    return 'accumulative';
+  }
+  
+  if (sentenceCount >= 3 && lengthVariance > 10) {
+    return 'mixed_rhythm';
+  }
+  
+  return 'mixed_rhythm';
 }
 
 // ── NLP auto-suggestions ───────────────────────────────────────────────────
@@ -334,12 +596,141 @@ async function paragraphTextHash(text: string): Promise<string> {
   return sha1Fallback(text);
 }
 
+function computeDiagnostics(
+  mode: TraceMode,
+  para: Paragraph,
+  occurrences: Map<string, number[]>,
+  analyzedParas: Paragraph[],
+  roleByParagraph: Map<number, RhetoricalRole | null>,
+): Diagnostic[] {
+  const normMode = normalizeMode(mode);
+  const keywords = extractKeywords(para.text);
+  const diagnostics: Diagnostic[] = [];
+  
+  if (normMode === 'academic' || normMode === 'thesis' || normMode === 'seminar' || normMode === 'submission') {
+    for (const keyword of keywords) {
+      const occs = occurrences.get(keyword) ?? [];
+      if (occs.length === 1) {
+        diagnostics.push({
+          severidad: 'baja',
+          tipo: 'concepto_huerfano',
+          etiqueta: keyword,
+        });
+      }
+    }
+  } else if (normMode === 'lit_art') {
+    const currentRole = roleByParagraph.get(para.index) || null;
+    
+    if (currentRole === 'motif_introduction') {
+      for (const keyword of keywords) {
+        const occs = occurrences.get(keyword) ?? [];
+        const subsequentOccs = occs.filter(idx => idx > para.index);
+        if (subsequentOccs.length === 0) {
+          diagnostics.push({
+            severidad: 'media',
+            tipo: 'unreturned_motif',
+            etiqueta: keyword,
+            mensaje: `Motivo no retomado: "${keyword}"`
+          });
+        }
+      }
+    }
+    
+    if (currentRole === 'motif_return') {
+      for (const keyword of keywords) {
+        const occs = occurrences.get(keyword) ?? [];
+        if (occs.some(idx => idx < para.index)) {
+          diagnostics.push({
+            severidad: 'baja',
+            tipo: 'motif_return',
+            etiqueta: keyword,
+            mensaje: `Retorno del motivo "${keyword}"`
+          });
+        }
+      }
+    }
+    
+    if (currentRole === 'voice_shift') {
+      diagnostics.push({
+        severidad: 'baja',
+        tipo: 'voice_shift',
+        mensaje: `Cambio de voz detectado en P${para.index}`
+      });
+    }
+
+    const sentences = computeSentences(para.text, para.id);
+    const rhythm = computeRhythm(sentences);
+    if (rhythm.avgSentenceLength > 25 && rhythm.sentenceCount > 3) {
+      diagnostics.push({
+        severidad: 'baja',
+        tipo: 'dense_paragraph',
+        mensaje: 'Párrafo denso con frases largas'
+      });
+    }
+  } else if (normMode === 'artistic_research') {
+    const currentRole = roleByParagraph.get(para.index) || null;
+    const hasDocumentation = analyzedParas.some(p => roleByParagraph.get(p.index) === 'documentation');
+    const hasProcess = analyzedParas.some(p => {
+      const r = roleByParagraph.get(p.index);
+      return r === 'process_note' || r === 'method';
+    });
+    const hasReflection = analyzedParas.some(p => roleByParagraph.get(p.index) === 'reflection');
+    
+    if (currentRole === 'decision' && !hasDocumentation) {
+      diagnostics.push({
+        severidad: 'media',
+        tipo: 'undocumented_decision',
+        mensaje: 'Decisión sin documentación en el proceso'
+      });
+    }
+    
+    if (currentRole === 'material_observation' && !hasDocumentation) {
+      diagnostics.push({
+        severidad: 'media',
+        tipo: 'missing_material_evidence',
+        mensaje: 'Observación material sin evidencia de documentación'
+      });
+    }
+
+    if (currentRole === 'variant') {
+      const totalVariants = analyzedParas.filter(p => roleByParagraph.get(p.index) === 'variant').length;
+      const hasAnalysis = analyzedParas.some(p => roleByParagraph.get(p.index) === 'analysis');
+      if (totalVariants === 1 && !hasAnalysis) {
+        diagnostics.push({
+          severidad: 'baja',
+          tipo: 'variant_without_comparison',
+          mensaje: 'Variante sin comparación de alternativas'
+        });
+      }
+    }
+    
+    if (currentRole === 'reflection' && !hasProcess) {
+      diagnostics.push({
+        severidad: 'baja',
+        tipo: 'reflection_without_process',
+        mensaje: 'Reflexión sin registro previo de proceso'
+      });
+    }
+    
+    if (currentRole === 'process_note' && !hasReflection) {
+      diagnostics.push({
+        severidad: 'baja',
+        tipo: 'process_without_reflection',
+        mensaje: 'Nota de proceso sin reflexión crítica asociada'
+      });
+    }
+  }
+  
+  return diagnostics;
+}
+
 async function computeLocalTraces(
   paras: Paragraph[],
   codes: TraceCode[],
   mode: TraceMode,
 ): Promise<ParagraphTrace[]> {
-  const analyzedParas = paragraphsForAnalysis(paras, mode);
+  const normMode = normalizeMode(mode);
+  const analyzedParas = paragraphsForAnalysis(paras, normMode);
   const keywordsByParagraph = analyzedParas.map(para => ({
     index: para.index,
     keywords: extractKeywords(para.text),
@@ -353,9 +744,18 @@ async function computeLocalTraces(
     }
   }
   const hashValues = await Promise.all(analyzedParas.map(para => paragraphTextHash(para.text)));
+  
+  // Construct roleByParagraph map
+  const roleByParagraph = new Map<number, RhetoricalRole | null>();
+  for (const para of analyzedParas) {
+    const rhetoricalCode = codes.find(code => code.paraIndex === para.index && code.dimension === 'rhetorical');
+    const role = roleValue(rhetoricalCode) || null;
+    roleByParagraph.set(para.index, role);
+  }
+
   return analyzedParas.map((para, offset) => {
     const keywords = keywordsByParagraph[offset].keywords;
-    const role = roleValue(codes.find(code => code.paraIndex === para.index && code.dimension === 'rhetorical')) || null;
+    const role = roleByParagraph.get(para.index) ?? null;
     const conceptos: ConceptMention[] = keywords.map(etiqueta => {
       const positions = occurrences.get(etiqueta) ?? [];
       return {
@@ -376,15 +776,12 @@ async function computeLocalTraces(
       evidencia: labels.join(', '),
       confianza: 0.68,
     }));
-    const diagnosticos: Diagnostic[] = mode === 'artistico'
-      ? []
-      : keywords
-        .filter(keyword => (occurrences.get(keyword) ?? []).length === 1)
-        .map(keyword => ({
-          severidad: 'baja',
-          tipo: 'concepto_huerfano',
-          etiqueta: keyword,
-        }));
+    
+    const diagnosticos = computeDiagnostics(normMode, para, occurrences, analyzedParas, roleByParagraph);
+    const sentences = computeSentences(para.text, para.id);
+    const rhythm = computeRhythm(sentences);
+    const rhythmClass = classifyRhythm(rhythm, sentences);
+    
     return {
       paraIndex: para.index,
       textHash: hashValues[offset],
@@ -393,7 +790,11 @@ async function computeLocalTraces(
       rolRetorico: role,
       relaciones,
       diagnosticos,
-      modo: mode,
+      modo: normMode,
+      paragraphId: para.id,
+      rhythm,
+      rhythmClass,
+      sentences,
     };
   });
 }
@@ -1215,6 +1616,31 @@ function appendQaSection(
   body.append(metrics, copy);
 }
 
+function formatRhythmSummary(
+  rhythmClass: ParagraphRhythmClass,
+  rhythm: ParagraphRhythm,
+  sentences: SentenceTrace[]
+): string {
+  const classLabels: Record<ParagraphRhythmClass, string> = {
+    single_long_sentence: 'frase única larga',
+    short_sentences: 'frases breves',
+    mixed_rhythm: 'ritmo mixto',
+    accumulative: 'acumulativo',
+    fragmentary: 'fragmentario',
+    questioning: 'interrogativo',
+    emphatic_closure: 'cierre enfático',
+  };
+  const parts = [classLabels[rhythmClass] || 'ritmo mixto'];
+  
+  if (rhythmClass !== 'emphatic_closure' && rhythm.sentenceCount > 1) {
+    const lastLen = sentences[sentences.length - 1].length;
+    if (lastLen < rhythm.avgSentenceLength * 0.55) {
+      parts.push('cierre enfático');
+    }
+  }
+  return parts.join(' · ');
+}
+
 function renderMargin(
   traceCol: HTMLElement,
   analysisCol: HTMLElement,
@@ -1380,14 +1806,37 @@ function renderMargin(
     emptyRole.value = '';
     emptyRole.textContent = '— rol';
     roleSelect.appendChild(emptyRole);
-    for (const role of RHETORICAL_ROLES) {
+    
+    const activeRoles = roleSets[state.mode] || roleSets.academic;
+    for (const role of activeRoles) {
       const option = document.createElement('option');
       option.value = role;
-      option.textContent = ROLE_PRESENTATION[role].label;
+      option.textContent = ROLE_PRESENTATION[role]?.label || role;
+      if (ROLE_PRESENTATION[role]?.definition) {
+        option.title = ROLE_PRESENTATION[role].definition!;
+      }
       roleSelect.appendChild(option);
     }
+    if (currentRole && !activeRoles.includes(currentRole as RhetoricalRole)) {
+      const option = document.createElement('option');
+      option.value = currentRole;
+      option.textContent = (ROLE_PRESENTATION[currentRole]?.label || currentRole) + ' (externo)';
+      if (ROLE_PRESENTATION[currentRole]?.definition) {
+        option.title = ROLE_PRESENTATION[currentRole].definition!;
+      }
+      roleSelect.appendChild(option);
+    }
+    
     roleSelect.value = currentRole ?? '';
+    const updateRoleTooltip = () => {
+      const selected = roleSelect.value as RhetoricalRole;
+      const meta = selected ? ROLE_PRESENTATION[selected] : null;
+      roleSelect.title = meta?.definition || 'Rol retórico del párrafo';
+    };
+    updateRoleTooltip();
+    
     roleSelect.addEventListener('change', async () => {
+      updateRoleTooltip();
       const previousValue = currentRole ?? '';
       const nextValue = roleSelect.value;
       roleSelect.disabled = true;
@@ -1407,6 +1856,7 @@ function renderMargin(
             paraIndex: para.index,
             label: `rol:${nextValue}`,
             dimension: 'rhetorical',
+            mode: state.mode,
           }),
         });
         if (!res.ok) throw new Error('save failed');
@@ -1419,6 +1869,7 @@ function renderMargin(
         }
       } catch {
         roleSelect.value = previousValue;
+        updateRoleTooltip();
         roleSelect.classList.add('is-error');
         setTimeout(() => roleSelect.classList.remove('is-error'), 1500);
       } finally {
@@ -1437,6 +1888,17 @@ function renderMargin(
 
     const conceptsEl = document.createElement('div');
     conceptsEl.className = 'tc-concepts';
+    
+    const conceptsLabel = document.createElement('span');
+    conceptsLabel.className = 'tc-concepts-label';
+    conceptsLabel.style.cssText = 'font-size: 10px; opacity: 0.5; margin-right: 4px;';
+    conceptsLabel.textContent = state.mode === 'lit_art'
+      ? 'motivos: '
+      : state.mode === 'artistic_research'
+        ? 'trazas: '
+        : 'conceptos: ';
+    conceptsEl.appendChild(conceptsLabel);
+    
     for (const concept of localTrace?.conceptos ?? []) {
       const chip = document.createElement('span');
       chip.className = 'tc-concept';
@@ -1449,6 +1911,62 @@ function renderMargin(
       conceptsEl.appendChild(chip);
     }
     row.appendChild(conceptsEl);
+
+    // Collapsible sentence rhythm info
+    if (localTrace?.rhythm && localTrace.sentences) {
+      const rhythmEl = document.createElement('div');
+      rhythmEl.className = 'tc-rhythm-info';
+      rhythmEl.style.cssText = 'font-size: 10px; opacity: 0.6; margin-top: 3px; display: flex; flex-direction: column; cursor: pointer; user-select: none;';
+      
+      const rhythmSummary = document.createElement('span');
+      rhythmSummary.className = 'tc-rhythm-summary';
+      
+      const rhythmClass = localTrace.rhythmClass || (localTrace.rhythm && localTrace.sentences ? classifyRhythm(localTrace.rhythm, localTrace.sentences) : 'mixed_rhythm');
+      rhythmSummary.textContent = `frases: ${localTrace.rhythm.sentenceCount} · ${formatRhythmSummary(rhythmClass as ParagraphRhythmClass, localTrace.rhythm, localTrace.sentences)}`;
+      rhythmEl.appendChild(rhythmSummary);
+      
+      const rhythmDetails = document.createElement('div');
+      rhythmDetails.className = 'tc-rhythm-details';
+      rhythmDetails.style.cssText = 'display: none; margin-top: 2px; padding-left: 6px; border-left: 1px dashed rgba(120, 120, 140, 0.3);';
+      
+      localTrace.sentences.forEach((s, sIdx) => {
+        const sentenceSpan = document.createElement('div');
+        sentenceSpan.style.cssText = 'font-size: 9px; opacity: 0.8;';
+        sentenceSpan.textContent = `S${sIdx + 1} (${s.length}p): "${s.text.slice(0, 45)}${s.text.length > 45 ? '...' : ''}"`;
+        rhythmDetails.appendChild(sentenceSpan);
+      });
+      rhythmEl.appendChild(rhythmDetails);
+      
+      rhythmSummary.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = rhythmDetails.style.display !== 'none';
+        rhythmDetails.style.display = isOpen ? 'none' : 'block';
+      });
+      
+      row.appendChild(rhythmEl);
+    }
+
+    // Diagnostics / observations line
+    if (localTrace?.diagnosticos && localTrace.diagnosticos.length > 0) {
+      const diagEl = document.createElement('div');
+      diagEl.className = 'tc-diagnostics-info';
+      diagEl.style.cssText = 'font-size: 10px; margin-top: 3px;';
+      
+      const isCreative = state.mode === 'lit_art' || state.mode === 'artistic_research';
+      const prefix = isCreative ? 'observación: ' : 'diagnostics: ⚠ ';
+      
+      diagEl.textContent = prefix + localTrace.diagnosticos.map(d => {
+        if (d.tipo === 'concepto_huerfano') return `concepto huérfano "${d.etiqueta}"`;
+        return d.mensaje || d.tipo;
+      }).join(', ');
+      
+      if (!isCreative) {
+        diagEl.style.color = '#c87e7e';
+      } else {
+        diagEl.style.color = 'var(--c-fg-dim, currentColor)';
+      }
+      row.appendChild(diagEl);
+    }
 
     const codesEl = document.createElement('div');
     codesEl.className = 'tc-codes';

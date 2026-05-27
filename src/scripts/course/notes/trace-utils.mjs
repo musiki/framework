@@ -92,9 +92,138 @@ function approximateParagraphLines(text) {
   );
 }
 
+export function normalizeMode(mode) {
+  if (!mode) return 'academic';
+  const mapping = {
+    borrador: 'academic',
+    seminario: 'seminar',
+    tesis: 'thesis',
+    artistico: 'lit_art',
+    entrega: 'submission',
+    academic: 'academic',
+    seminar: 'seminar',
+    thesis: 'thesis',
+    lit_art: 'lit_art',
+    artistic_research: 'artistic_research',
+    submission: 'submission',
+  };
+  return mapping[mode] || 'academic';
+}
+
 export function paragraphsForAnalysis(paras, mode) {
-  if (mode !== 'artistico') return paras;
+  const norm = normalizeMode(mode);
+  if (norm !== 'lit_art') return paras;
   return paras.filter(para => approximateParagraphLines(para.text) > 2);
+}
+
+const CONNECTORS = [
+  'sin embargo', 'pero', 'por lo tanto', 'en consecuencia', 'por ejemplo',
+  'así', 'entonces', 'además', 'no obstante', 'por ende', 'en cambio',
+  'cuando', 'al final', 'mientras', 'luego', 'después'
+];
+
+export function startsWithConnector(text) {
+  const lower = (text || '').toLowerCase().trim();
+  return CONNECTORS.some(c => lower.startsWith(c));
+}
+
+export function computeSentences(paraText, paragraphId) {
+  const rawSentences = (paraText || '').split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+  return rawSentences.map((text, idx) => {
+    const words = text.split(/\s+/).filter(w => w.length > 0);
+    const length = words.length;
+    const endsWithQuestion = text.endsWith('?');
+    const hasConnector = startsWithConnector(text);
+    return {
+      id: `${paragraphId}-s-${idx}`,
+      paragraphId,
+      index: idx,
+      text,
+      role: null,
+      length,
+      startsWithConnector: hasConnector,
+      endsWithQuestion,
+      motifs: extractKeywords(text),
+    };
+  });
+}
+
+export function computeRhythm(sentences) {
+  const sentenceCount = sentences.length;
+  if (sentenceCount === 0) {
+    return {
+      sentenceCount: 0,
+      avgSentenceLength: 0,
+      lengthVariance: 0,
+      shortSentenceRatio: 0,
+      longSentenceRatio: 0,
+      punctuationProfile: { comma: 0, semicolon: 0, colon: 0, dash: 0, question: 0, exclamation: 0 }
+    };
+  }
+  const lengths = sentences.map(s => s.length);
+  const avgSentenceLength = lengths.reduce((a, b) => a + b, 0) / sentenceCount;
+  const variance = lengths.reduce((acc, len) => acc + Math.pow(len - avgSentenceLength, 2), 0) / sentenceCount;
+  
+  let shortCount = 0;
+  let longCount = 0;
+  for (const len of lengths) {
+    if (len < 12) shortCount++;
+    if (len > 28) longCount++;
+  }
+  const shortSentenceRatio = shortCount / sentenceCount;
+  const longSentenceRatio = longCount / sentenceCount;
+  
+  const fullText = sentences.map(s => s.text).join(' ');
+  const punctuationProfile = {
+    comma: (fullText.match(/,/g) || []).length,
+    semicolon: (fullText.match(/;/g) || []).length,
+    colon: (fullText.match(/:/g) || []).length,
+    dash: (fullText.match(/[-—]/g) || []).length,
+    question: (fullText.match(/[?¿]/g) || []).length,
+    exclamation: (fullText.match(/[!¡]/g) || []).length,
+  };
+  
+  return {
+    sentenceCount,
+    avgSentenceLength,
+    lengthVariance: variance,
+    shortSentenceRatio,
+    longSentenceRatio,
+    punctuationProfile,
+  };
+}
+
+export function classifyRhythm(rhythm, sentences) {
+  const { sentenceCount, avgSentenceLength, lengthVariance, punctuationProfile } = rhythm;
+  if (punctuationProfile.question >= 1) return 'questioning';
+  
+  const fullText = sentences.map(s => s.text).join(' ');
+  if (fullText.includes('...') || fullText.includes('…') || (sentenceCount >= 3 && avgSentenceLength < 8)) {
+    return 'fragmentary';
+  }
+  
+  if (sentenceCount === 1 && avgSentenceLength > 28) {
+    return 'single_long_sentence';
+  }
+  
+  if (sentenceCount > 1 && sentences[sentences.length - 1].length < avgSentenceLength * 0.75) {
+    return 'emphatic_closure';
+  }
+  
+  if (sentenceCount >= 3 && avgSentenceLength < 12) {
+    return 'short_sentences';
+  }
+  
+  const commasColonsSemicolons = punctuationProfile.comma + punctuationProfile.semicolon + punctuationProfile.colon;
+  if (commasColonsSemicolons >= sentenceCount * 1.0) {
+    return 'accumulative';
+  }
+  
+  if (sentenceCount >= 3 && lengthVariance > 10) {
+    return 'mixed_rhythm';
+  }
+  
+  return 'mixed_rhythm';
 }
 
 export function extractKeywords(text, stopwords = STOPWORDS) {
@@ -158,8 +287,131 @@ export function computeSuggestions(paras, codes) {
   return results;
 }
 
+export function computeDiagnostics(mode, para, occurrences, analyzedParas, roleByParagraph) {
+  const normMode = normalizeMode(mode);
+  const keywords = extractKeywords(para.text);
+  const diagnostics = [];
+  
+  if (normMode === 'academic' || normMode === 'thesis' || normMode === 'seminar' || normMode === 'submission') {
+    for (const keyword of keywords) {
+      const occs = occurrences.get(keyword) ?? [];
+      if (occs.length === 1) {
+        diagnostics.push({
+          severidad: 'baja',
+          tipo: 'concepto_huerfano',
+          etiqueta: keyword,
+        });
+      }
+    }
+  } else if (normMode === 'lit_art') {
+    const currentRole = roleByParagraph.get(para.index) || null;
+    
+    if (currentRole === 'motif_introduction') {
+      for (const keyword of keywords) {
+        const occs = occurrences.get(keyword) ?? [];
+        const subsequentOccs = occs.filter(idx => idx > para.index);
+        if (subsequentOccs.length === 0) {
+          diagnostics.push({
+            severidad: 'media',
+            tipo: 'unreturned_motif',
+            etiqueta: keyword,
+            mensaje: `Motivo no retomado: "${keyword}"`
+          });
+        }
+      }
+    }
+    
+    if (currentRole === 'motif_return') {
+      for (const keyword of keywords) {
+        const occs = occurrences.get(keyword) ?? [];
+        if (occs.some(idx => idx < para.index)) {
+          diagnostics.push({
+            severidad: 'baja',
+            tipo: 'motif_return',
+            etiqueta: keyword,
+            mensaje: `Retorno del motivo "${keyword}"`
+          });
+        }
+      }
+    }
+    
+    if (currentRole === 'voice_shift') {
+      diagnostics.push({
+        severidad: 'baja',
+        tipo: 'voice_shift',
+        mensaje: `Cambio de voz detectado en P${para.index}`
+      });
+    }
+
+    const sentences = computeSentences(para.text, para.id);
+    const rhythm = computeRhythm(sentences);
+    if (rhythm.avgSentenceLength > 25 && rhythm.sentenceCount > 3) {
+      diagnostics.push({
+        severidad: 'baja',
+        tipo: 'dense_paragraph',
+        mensaje: 'Párrafo denso con frases largas'
+      });
+    }
+  } else if (normMode === 'artistic_research') {
+    const currentRole = roleByParagraph.get(para.index) || null;
+    const hasDocumentation = analyzedParas.some(p => roleByParagraph.get(p.index) === 'documentation');
+    const hasProcess = analyzedParas.some(p => {
+      const r = roleByParagraph.get(p.index);
+      return r === 'process_note' || r === 'method';
+    });
+    const hasReflection = analyzedParas.some(p => roleByParagraph.get(p.index) === 'reflection');
+    
+    if (currentRole === 'decision' && !hasDocumentation) {
+      diagnostics.push({
+        severidad: 'media',
+        tipo: 'undocumented_decision',
+        mensaje: 'Decisión sin documentación en el proceso'
+      });
+    }
+    
+    if (currentRole === 'material_observation' && !hasDocumentation) {
+      diagnostics.push({
+        severidad: 'media',
+        tipo: 'missing_material_evidence',
+        mensaje: 'Observación material sin evidencia de documentación'
+      });
+    }
+
+    if (currentRole === 'variant') {
+      const totalVariants = analyzedParas.filter(p => roleByParagraph.get(p.index) === 'variant').length;
+      const hasAnalysis = analyzedParas.some(p => roleByParagraph.get(p.index) === 'analysis');
+      if (totalVariants === 1 && !hasAnalysis) {
+        diagnostics.push({
+          severidad: 'baja',
+          tipo: 'variant_without_comparison',
+          mensaje: 'Variante sin comparación de alternativas'
+        });
+      }
+    }
+    
+    if (currentRole === 'reflection' && !hasProcess) {
+      diagnostics.push({
+        severidad: 'baja',
+        tipo: 'reflection_without_process',
+        mensaje: 'Reflexión sin registro previo de proceso'
+      });
+    }
+    
+    if (currentRole === 'process_note' && !hasReflection) {
+      diagnostics.push({
+        severidad: 'baja',
+        tipo: 'process_without_reflection',
+        mensaje: 'Nota de proceso sin reflexión crítica asociada'
+      });
+    }
+  }
+  
+  return diagnostics;
+}
+
 export function analyzeLocalTraces(paras, roleByParagraph = new Map(), mode = 'borrador') {
-  const analyzedParas = paragraphsForAnalysis(paras, mode);
+  const normMode = normalizeMode(mode);
+  const analyzedParas = paragraphsForAnalysis(paras, normMode);
   const keywordsByParagraph = analyzedParas.map(para => ({
     index: para.index,
     keywords: extractKeywords(para.text),
@@ -191,15 +443,12 @@ export function analyzeLocalTraces(paras, roleByParagraph = new Map(), mode = 'b
         confianza: 0.68,
       });
     }
-    const diagnostics = mode === 'artistico'
-      ? []
-      : keywords
-        .filter(label => (occurrences.get(label) ?? []).length === 1)
-        .map(label => ({
-          severidad: 'baja',
-          tipo: 'concepto_huerfano',
-          etiqueta: label,
-        }));
+    
+    const diagnostics = computeDiagnostics(normMode, para, occurrences, analyzedParas, roleByParagraph);
+    const sentences = computeSentences(para.text, para.id);
+    const rhythm = computeRhythm(sentences);
+    const rhythmClass = classifyRhythm(rhythm, sentences);
+    
     return {
       paraIndex: para.index,
       temaPrincipal: keywords[0] ?? null,
@@ -207,7 +456,11 @@ export function analyzeLocalTraces(paras, roleByParagraph = new Map(), mode = 'b
       rolRetorico: roleByParagraph.get(para.index) ?? null,
       relaciones: [...relationsByTarget.values()],
       diagnosticos: diagnostics,
-      modo: mode,
+      modo: normMode,
+      paragraphId: para.id,
+      rhythm,
+      rhythmClass,
+      sentences,
     };
   });
 }

@@ -225,3 +225,93 @@ describe('analyzeLocalTraces', () => {
     assert.equal(traces[1].rolRetorico, 'contraste');
   });
 });
+
+describe('creative modes dummy texts and diagnostics', () => {
+  test('Investigación Artística dummy text analysis', () => {
+    const text = [
+      '¿Cómo puede un sensor de presión transformar la escucha? Diseñé un prototipo de instrumento electrónico con un sensor de presión donde una presión mínima podía producir una respuesta sonora de escucha que no pareciera una simple traducción del gesto.',
+      'La variante A respondía demasiado rápido. Cada presión generaba una vibración inmediata, casi ilustrativa. Decidí descartarla porque convertía el dispositivo en una interfaz demostrativa y no en un campo de indeterminación.',
+      'La variante B introdujo una demora aleatoria entre el contacto y la vibración. Esa demora modificó el gesto y la escucha: el performer ya no podía anticipar el resultado de su gesto, y el performer empezó a ajustar cada gesto a la incertidumbre del sistema.',
+      'Documenté la prueba del motor con video, audio directo y una captura del patch. La evidencia del motor muestra que los momentos más interesantes de la documentación del motor aparecen cuando el motor responde tarde and el performer interrumpe el movimiento antes de recibir confirmación sonora.',
+      'Después del feedback de pares, mantuve la demora pero reduje su rango. La revisión no resolvió completamente el problema, pero hizo más clara la relación entre restricción técnica, decisión compositiva y percepción del gesto.'
+    ].join('\n\n');
+
+    const paras = segmentParagraphs(text);
+    const roleByParagraph = new Map([
+      [0, 'method'],
+      [1, 'decision'],
+      [2, 'material_observation'],
+      [3, 'documentation'],
+      [4, 'reflection']
+    ]);
+
+    const traces = analyzeLocalTraces(paras, roleByParagraph, 'artistic_research');
+
+    // Assert counts
+    assert.equal(traces.length, 5);
+
+    // Assert modes
+    assert.equal(traces[0].modo, 'artistic_research');
+
+    // Assert concepts / keywords extracted
+    const allConcepts = new Set(traces.flatMap(t => t.conceptos.map(c => c.etiqueta)));
+    assert.ok(allConcepts.has('sensor'));
+    assert.ok(allConcepts.has('motor'));
+    assert.ok(allConcepts.has('gesto'));
+    assert.ok(allConcepts.has('demora'));
+    assert.ok(allConcepts.has('escucha'));
+    assert.ok(allConcepts.has('performer'));
+    assert.ok(allConcepts.has('documentación') || allConcepts.has('documenté'));
+
+    // Assert diagnostics behavior: undocumented_decision should be suppressed
+    const p1Trace = traces[1];
+    assert.equal(p1Trace.rolRetorico, 'decision');
+    const decisionDiag = p1Trace.diagnosticos.find(d => d.tipo === 'undocumented_decision');
+    assert.equal(decisionDiag, undefined); // Suppressed because P3 is documentation
+  });
+
+  test('Lit Art dummy text analysis and diagnostics', () => {
+    const text = [
+      'La noche caía lentamente sobre los tejados de pizarra de la ciudad vieja, envolviendo las calles estrechas y empedradas en una niebla fría y espesa que difuminaba la luz amarilla de los faroles.',
+      'El espejo reflejaba la penumbra del atardecer en el centro de la habitación vacía y polvorienta, donde el espejo de marco dorado y labrado esperaba en silencio una sombra o un rostro que nunca llegaba a aparecer.',
+      'De pronto, el narrador siente que no es él quien escribe estas líneas; es otra voz más profunda la que dicta el fluir constante de las palabras desde el rincón más oscuro y apartado del estudio.',
+      'Al acercarme con cautela, el espejo antiguo devolvió una imagen sumamente extraña y de espejo desconocida, completamente deformada por el paso del tiempo y las capas de polvo acumulado durante largas décadas.',
+      'El murmullo constante del viento se filtraba lentamente por las rendijas estrechas de las viejas ventanas de madera carcomida, arrastrando consigo el eco lejano y melancólico de unas campanas que sonaban a medianoche. La lluvia persistente comenzaba a golpear con una fuerza obstinada y regular contra los cristales empañados de la habitación, borrando de inmediato cualquier rastro de luz o sombra en la calle solitaria. Los pocos transeúntes que aún quedaban apresuraban el paso con visible urgencia en busca de un refugio temporal en los portales oscuros y silenciosos de la avenida principal. Ninguno de aquellos hombres cansados se detuvo un solo instante a mirar hacia la ventana solitaria del segundo piso, donde la lámpara de aceite seguía encendida.'
+    ].join('\n\n');
+
+    const paras = segmentParagraphs(text);
+    const roleByParagraph = new Map([
+      [0, 'scene_opening'],
+      [1, 'motif_introduction'],
+      [2, 'voice_shift'],
+      [3, 'motif_return'],
+      [4, 'description']
+    ]);
+
+    const traces = analyzeLocalTraces(paras, roleByParagraph, 'lit_art');
+
+    // Assert counts
+    assert.equal(traces.length, 5);
+
+    // Assert modes
+    assert.equal(traces[0].modo, 'lit_art');
+
+    // Assert motif return diagnostic
+    const p3Trace = traces[3];
+    assert.equal(p3Trace.rolRetorico, 'motif_return');
+    const motifDiag = p3Trace.diagnosticos.find(d => d.tipo === 'motif_return');
+    assert.ok(motifDiag);
+    assert.equal(motifDiag.etiqueta, 'espejo');
+
+    // Assert voice shift diagnostic
+    const p2Trace = traces[2];
+    assert.equal(p2Trace.rolRetorico, 'voice_shift');
+    const voiceDiag = p2Trace.diagnosticos.find(d => d.tipo === 'voice_shift');
+    assert.ok(voiceDiag);
+
+    // Assert dense paragraph diagnostic (P4)
+    const p4Trace = traces[4];
+    const denseDiag = p4Trace.diagnosticos.find(d => d.tipo === 'dense_paragraph');
+    assert.ok(denseDiag);
+  });
+});

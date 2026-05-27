@@ -655,7 +655,7 @@ async function enterDbNoteEditMode(state: DbNotePanelState) {
   state.bodyEl.innerHTML = '';
 
   const mount = document.createElement('div');
-  mount.style.cssText = 'height:100%;overflow:hidden;';
+  mount.style.cssText = 'height:100%;overflow:hidden;display:flex;flex-direction:column;';
   state.bodyEl.appendChild(mount);
 
   try {
@@ -667,20 +667,75 @@ async function enterDbNoteEditMode(state: DbNotePanelState) {
       const content: string = d.notes?.[0]?.body ?? '';
 
       const save = async (text: string) => {
+        try {
+          localStorage.setItem(`db-note-draft::${state.noteId}`, JSON.stringify({
+            body: text,
+            ts: Date.now()
+          }));
+        } catch {}
+
         state.statusDot.className = 'cnw-status saving';
         const res = await fetch('/api/live/notes', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: state.noteId, body: text }),
         }).catch(() => null);
-        state.statusDot.className = res?.ok ? 'cnw-status saved' : 'cnw-status error';
+
+        if (res?.ok) {
+          state.statusDot.className = 'cnw-status saved';
+          try {
+            localStorage.removeItem(`db-note-draft::${state.noteId}`);
+          } catch {}
+        } else {
+          state.statusDot.className = 'cnw-status error';
+        }
         setTimeout(() => { state.statusDot.className = 'cnw-status'; }, 2000);
         updateDbNoteHud(state, text);
       };
 
-      state.liveEditor = createLiveMdEditor(mount, content, save);
-      updateDbNoteHud(state, content);
-      state.liveEditor.focus();
+      const editorWrap = document.createElement('div');
+      editorWrap.style.cssText = 'flex:1;min-height:0;';
+
+      // Check for draft recovery
+      let draft: { body: string; ts: number } | null = null;
+      try {
+        const raw = localStorage.getItem(`db-note-draft::${state.noteId}`);
+        if (raw) draft = JSON.parse(raw);
+      } catch {}
+
+      if (draft) {
+        const banner = document.createElement('div');
+        banner.className = 'cnw-recovery';
+        banner.style.cssText = 'padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; background: rgba(220,180,50,0.15); border-bottom: 1px solid rgba(220,180,50,0.3); color: var(--c-fg); flex-shrink: 0;';
+        banner.innerHTML = `
+          <span style="flex:1">Borrador no guardado (${new Date(draft.ts).toLocaleTimeString()})</span>
+          <button id="cnw-recover-accept" style="background:#2a4a2a; border:1px solid #7ec87e; color:#7ec87e; font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer">Usar borrador</button>
+          <button id="cnw-recover-discard" style="background:none; border:1px solid var(--c-border); color:var(--c-fg-dim); font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer; margin-left: 4px;">Descartar</button>
+        `;
+        mount.appendChild(banner);
+        mount.appendChild(editorWrap);
+
+        banner.querySelector('#cnw-recover-discard')?.addEventListener('click', () => {
+          try { localStorage.removeItem(`db-note-draft::${state.noteId}`); } catch {}
+          banner.remove();
+          state.liveEditor = createLiveMdEditor(editorWrap, content, save);
+          updateDbNoteHud(state, content);
+          state.liveEditor.focus();
+        });
+        banner.querySelector('#cnw-recover-accept')?.addEventListener('click', () => {
+          banner.remove();
+          state.liveEditor = createLiveMdEditor(editorWrap, draft.body, save);
+          updateDbNoteHud(state, draft.body);
+          state.liveEditor.focus();
+          void save(draft.body);
+        });
+      } else {
+        mount.appendChild(editorWrap);
+        state.liveEditor = createLiveMdEditor(editorWrap, content, save);
+        updateDbNoteHud(state, content);
+        state.liveEditor.focus();
+      }
+
       if (state.traceOnEnterEdit) {
         state.traceOnEnterEdit = false;
         state.traceBtn.click();
