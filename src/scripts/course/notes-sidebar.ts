@@ -4,7 +4,34 @@ export interface NoteFolder {
   id: string; name: string; parentId: string | null; courseId: string | null;
 }
 export interface NoteItem {
-  id: string; title: string; folderId: string | null; updatedAt: string;
+  id: string; title: string; folderId: string | null; updatedAt: string; body?: string;
+}
+
+function getNoteIcon(note: NoteItem): string {
+  const body = note.body || '';
+  const title = note.title || '';
+  
+  let isConcept = false;
+  let isDraft = false;
+
+  const frontmatterMatch = body.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (frontmatterMatch) {
+    const yaml = frontmatterMatch[1];
+    const typeMatch = yaml.match(/^type:\s*["']?concept["']?\s*$/m);
+    if (typeMatch) {
+      isConcept = true;
+    }
+    const draftMatch = yaml.match(/^draft:\s*true\s*$/m);
+    const statusMatch = yaml.match(/^status:\s*["']?draft["']?/m);
+    if (draftMatch || statusMatch) {
+      isDraft = true;
+    }
+  }
+
+  if (isDraft) return '◩';
+  if (isConcept) return '🔷';
+  if (title.toUpperCase().includes('MOC')) return '🟪';
+  return '◽️';
 }
 
 export async function loadNotesTree(courseId: string): Promise<{ folders: NoteFolder[]; notes: NoteItem[] }> {
@@ -146,7 +173,7 @@ export function renderNotesTree(
 
       const summary = document.createElement('summary');
       summary.className = 'notas-sb-folder';
-      summary.style.cssText = 'font-size:11px;cursor:pointer;list-style:none;padding:3px 8px;display:flex;align-items:center;gap:4px;color:var(--c-fg);border-radius:2px;transition:background 120ms';
+      summary.style.cssText = 'cursor:pointer;list-style:none;';
       summary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:12px;width:10px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
 
       // Folder drop zone
@@ -194,9 +221,10 @@ export function renderNotesTree(
   container.appendChild(renderLevel(null, 0));
   const placeholder = document.createElement('button');
   placeholder.type = 'button';
+  placeholder.className = 'notas-sb-placeholder';
   placeholder.dataset.notasNewPlaceholder = 'true';
-  placeholder.style.cssText = 'display:flex;align-items:center;gap:5px;width:100%;padding:3px 8px;border:none;background:none;color:var(--c-fg);cursor:pointer;font:inherit;font-size:11px;text-align:left';
-  placeholder.innerHTML = '<span style="color:#45d384;font-size:12px;width:17px;text-align:center">+</span><span>nueva nota...</span>';
+  placeholder.style.cssText = 'display:flex;align-items:center;gap:5px;width:100%;border:none;background:none;cursor:pointer;text-align:left';
+  placeholder.innerHTML = '<span class="lesson-icon" style="font-size:12px;width:17px;text-align:center;flex-shrink:0">+</span><span>nueva nota...</span>';
   placeholder.addEventListener('click', () => {
     void createNoteInFolder(null, courseId, reload, container, nextDefaultNoteTitle(notes));
   });
@@ -232,13 +260,11 @@ function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void
   el.className = 'notas-sb-item';
   el.draggable = true;
   el.dataset.noteId = note.id;
-  el.style.cssText = `padding:2px 8px 2px 14px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;border-left:2px solid transparent;color:var(--c-fg);transition:border-color 100ms,background 100ms;border-radius:2px`;
+  el.style.cssText = `cursor:pointer;border-left:2px solid transparent;`;
   el.title = note.title || '(sin título)';
-  el.dataset.noteId = note.id;
-  el.innerHTML = `<span style="color:#45d384;font-size:12px;width:17px;text-align:center;flex-shrink:0">■</span><span class="notas-sb-note-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c-fg)">${escHtml(note.title || '(sin título)')}</span>`;
-
-  el.addEventListener('mouseenter', () => { el.style.background = 'rgba(0,0,0,.04)'; });
-  el.addEventListener('mouseleave', () => { el.style.background = ''; });
+  
+  const icon = getNoteIcon(note);
+  el.innerHTML = `<span class="lesson-icon" style="font-size:12px;width:17px;text-align:center;flex-shrink:0">${icon}</span><span class="notas-sb-note-title">${escHtml(note.title || '(sin título)')}</span>`;
 
   // Click: open as pod in the course workspace
   el.addEventListener('click', (e) => {
