@@ -22,6 +22,26 @@ describe('groupByChapter', () => {
     const groups = groupByChapter(notes);
     assert.equal(groups[0].name, '(sin capítulo)');
   });
+
+  test('respects new order of notes across chapters to sort chapters', () => {
+    const notes = [
+      { slug: 'cursos/s1/a.md', title: 'A', chapter: 'Ch1', order: 2, type: 'lesson', status: 'draft', filePath: '' },
+      { slug: 'cursos/s1/b.md', title: 'B', chapter: 'Ch2', order: 1, type: 'lesson', status: 'draft', filePath: '' },
+    ];
+    // Initially, min order of Ch2 is 1, Ch1 is 2. So Ch2 comes first.
+    let groups = groupByChapter(notes);
+    assert.equal(groups[0].name, 'Ch2');
+    assert.equal(groups[1].name, 'Ch1');
+
+    // If we re-assign sequential orders to place Ch1 first:
+    // Ch1 note order = 0, Ch2 note order = 1
+    notes.find(n => n.chapter === 'Ch1').order = 0;
+    notes.find(n => n.chapter === 'Ch2').order = 1;
+
+    groups = groupByChapter(notes);
+    assert.equal(groups[0].name, 'Ch1');
+    assert.equal(groups[1].name, 'Ch2');
+  });
 });
 
 describe('computeNewOrders', () => {

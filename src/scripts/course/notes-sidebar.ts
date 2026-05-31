@@ -7,7 +7,7 @@ export interface NoteItem {
   id: string; title: string; folderId: string | null; updatedAt: string; body?: string;
 }
 
-function getNoteIcon(note: NoteItem): string {
+function getNoteIconInfo(note: NoteItem) {
   const body = note.body || '';
   const title = note.title || '';
   
@@ -28,10 +28,10 @@ function getNoteIcon(note: NoteItem): string {
     }
   }
 
-  if (isDraft) return '◩';
-  if (isConcept) return '🔷';
-  if (title.toUpperCase().includes('MOC')) return '🟪';
-  return '◽️';
+  if (isDraft) return { char: '◩', color: '#888888', isConcept: false };
+  if (isConcept) return { char: '🔷', color: '', isConcept: true };
+  if (title.toUpperCase().includes('MOC')) return { char: '■', color: '#8e7cc3', isConcept: false };
+  return { char: '■', color: '#45d384', isConcept: false };
 }
 
 export async function loadNotesTree(courseId: string): Promise<{ folders: NoteFolder[]; notes: NoteItem[] }> {
@@ -224,7 +224,7 @@ export function renderNotesTree(
   placeholder.className = 'notas-sb-placeholder';
   placeholder.dataset.notasNewPlaceholder = 'true';
   placeholder.style.cssText = 'display:flex;align-items:center;gap:5px;width:100%;border:none;background:none;cursor:pointer;text-align:left';
-  placeholder.innerHTML = '<span class="lesson-icon" style="font-size:12px;width:17px;text-align:center;flex-shrink:0">+</span><span>nueva nota...</span>';
+  placeholder.innerHTML = '<span class="lesson-icon" style="font-size:12px;width:17px;text-align:center;flex-shrink:0;color:#45d384">+</span><span>nueva nota...</span>';
   placeholder.addEventListener('click', () => {
     void createNoteInFolder(null, courseId, reload, container, nextDefaultNoteTitle(notes));
   });
@@ -263,8 +263,10 @@ function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void
   el.style.cssText = `cursor:pointer;border-left:2px solid transparent;`;
   el.title = note.title || '(sin título)';
   
-  const icon = getNoteIcon(note);
-  el.innerHTML = `<span class="lesson-icon" style="font-size:12px;width:17px;text-align:center;flex-shrink:0">${icon}</span><span class="notas-sb-note-title">${escHtml(note.title || '(sin título)')}</span>`;
+  const ic = getNoteIconInfo(note);
+  const scaleStyle = ic.isConcept ? 'transform: scale(0.6); transform-origin: center; display: inline-block;' : '';
+  const colorStyle = ic.color ? `color: ${ic.color};` : '';
+  el.innerHTML = `<span class="lesson-icon" style="font-size:12px;width:17px;text-align:center;flex-shrink:0;${scaleStyle}${colorStyle}">${ic.char}</span><span class="notas-sb-note-title">${escHtml(note.title || '(sin título)')}</span>`;
 
   // Click: open as pod in the course workspace
   el.addEventListener('click', (e) => {

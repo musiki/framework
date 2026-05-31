@@ -17,7 +17,12 @@ const URL_EXT_RE = /\.([a-z0-9]+)(?:\?|#|$)/i;
 
 const VIDEO_EXT_RE = /\.(mp4|mov|webm)(?:\?|#|$)/i;
 
-export function iconFor(type: string, url?: string): { char: string; color: string } {
+export function iconFor(type: string, url?: string, name?: string): { char: string; color: string } {
+  const isSco = (name && /(?:^|[\s_#-])[sS][cC][oO](?:$|[\s_#.-])/.test(name)) || (url && /(?:^|[\s_#-])[sS][cC][oO](?:$|[\s_#.-])/.test(url));
+  if (isSco) {
+    return { char: '■', color: '#13c2c2' }; // Sheet music (SCO) cyan/teal color
+  }
+
   if (type === 'link' && url && LINK_VIDEO_RE.test(url)) return TYPE_ICON['link-video'];
   // Stored type may be 'audio' for video files — correct via URL
   if (type === 'audio' && url && VIDEO_EXT_RE.test(url)) return TYPE_ICON['video'];

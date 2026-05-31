@@ -132,7 +132,7 @@ function buildItemEl(
   item: ResourceItem,
   options: Parameters<typeof renderFiletree>[4],
 ): HTMLElement {
-  const { char, color } = iconFor(item.type, item.url);
+  const { char, color } = iconFor(item.type, item.url, item.name);
   const canEdit = options.canEdit ?? true;
   const el = document.createElement('div');
   el.className = 're-item';

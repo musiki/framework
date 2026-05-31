@@ -2,13 +2,10 @@ import type { NoteListItem } from '../../notes-editor/types';
 
 export type ChapterGroup = { name: string; notes: NoteListItem[] };
 
-const FAKE_CHAPTER_RE = /^80\s*RECURSOS/i;
-
 export function groupByChapter(notes: NoteListItem[]): ChapterGroup[] {
   const map = new Map<string, NoteListItem[]>();
   for (const note of notes) {
     const ch = note.chapter || '(sin capítulo)';
-    if (FAKE_CHAPTER_RE.test(ch)) continue;
     if (!map.has(ch)) map.set(ch, []);
     map.get(ch)!.push(note);
   }
@@ -130,6 +127,23 @@ if (typeof document !== 'undefined') {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
 }
 
+function getNoteIconInfo(note: NoteListItem) {
+  const noteType = String(note.type || '').trim().toLowerCase();
+  const noteStatus = String(note.status || '').trim().toLowerCase();
+  const title = String(note.title || '');
+
+  if (noteStatus === 'draft') {
+    return { char: '◩', color: '#888888', isConcept: false };
+  }
+  if (noteType === 'concept') {
+    return { char: '🔷', color: '', isConcept: true };
+  }
+  if (title.toUpperCase().includes('MOC')) {
+    return { char: '■', color: '#8e7cc3', isConcept: false };
+  }
+  return { char: '■', color: '#888888', isConcept: false };
+}
+
 // ── Render ────────────────────────────────────────────────────────────────
 
 function dispatchRefresh() {
@@ -143,6 +157,21 @@ export function renderNotesSidebar(
   courseId: string,
   courseHref: string,
 ): void {
+  // Before rebuilding, rescue static trees to prevent them from being destroyed
+  const currentRecursosTree = container.querySelector('.recursos-sidebar-tree');
+  if (currentRecursosTree) {
+    document.getElementById('recursos-sidebar-tree-container')?.appendChild(currentRecursosTree);
+  }
+  const currentNotasTree = container.querySelector('.notas-sb-tree');
+  if (currentNotasTree) {
+    const parent = document.querySelector('#notas-sidebar-tree-container .chapter-details');
+    if (parent) {
+      parent.appendChild(currentNotasTree);
+    } else {
+      document.getElementById('notas-sidebar-tree-container')?.appendChild(currentNotasTree);
+    }
+  }
+
   // Preserve collapsed chapters across re-renders
   const closedNames = new Set<string>();
   container.querySelectorAll<HTMLDetailsElement>('details.chapter-details').forEach(d => {
@@ -153,9 +182,30 @@ export function renderNotesSidebar(
   });
 
   const groups = groupByChapter(notes);
+
+  // Ensure virtual chapters are present in groups
+  let recursosGroup = groups.find(g => g.name.toUpperCase().includes('RECURSOS'));
+  if (!recursosGroup) {
+    recursosGroup = { name: '80 RECURSOS', notes: [] };
+    groups.push(recursosGroup);
+  }
+  let notasGroup = groups.find(g => g.name.toUpperCase().includes('NOTAS'));
+  if (!notasGroup) {
+    notasGroup = { name: '90 NOTAS', notes: [] };
+    groups.push(notasGroup);
+  }
+
+  // Sort groups by min note order (with defaults for empty groups)
+  groups.sort((a, b) => {
+    const minA = a.notes.length ? Math.min(...a.notes.map(n => n.order)) : 80;
+    const minB = b.notes.length ? Math.min(...b.notes.map(n => n.order)) : 90;
+    return minA - minB || a.name.localeCompare(b.name);
+  });
+
   const newChapterEls: HTMLElement[] = [];
 
   let draggingSlug: string | null = null;
+  let draggingChapterName: string | null = null;
   let activeDropTarget: HTMLElement | null = null;
 
   function clearDropState() {
@@ -172,6 +222,87 @@ export function renderNotesSidebar(
     if (!Array.from(e.dataTransfer?.types ?? []).includes('text/x-musiki-course-note')) return null;
     const slug = e.dataTransfer?.getData('text/x-musiki-course-note')?.trim() || null;
     return slug && notes.some(note => note.slug === slug) ? slug : null;
+  }
+
+  function makeChapterDropLine(afterChapterName: string | null): HTMLDivElement {
+    const div = document.createElement('div');
+    div.className = 'ns-chapter-drop-line';
+
+    div.addEventListener('dragover', e => {
+      if (!e.dataTransfer?.types.includes('text/x-musiki-course-chapter')) return;
+      e.preventDefault();
+      if (activeDropTarget !== div) {
+        clearDropState();
+        activeDropTarget = div;
+        div.classList.add('ns-drop-active');
+      }
+    });
+    div.addEventListener('dragleave', () => {
+      if (activeDropTarget === div) {
+        div.classList.remove('ns-drop-active');
+        activeDropTarget = null;
+      }
+    });
+    div.addEventListener('drop', async e => {
+      e.preventDefault();
+      clearDropState();
+      const draggedName = e.dataTransfer?.getData('text/x-musiki-course-chapter') || draggingChapterName;
+      if (!draggedName || draggedName === afterChapterName) return;
+
+      try {
+        const draggedIndex = groups.findIndex(g => g.name === draggedName);
+        if (draggedIndex === -1) return;
+
+        const draggedGroup = groups[draggedIndex];
+        const remaining = groups.filter(g => g.name !== draggedName);
+
+        let insertIdx = 0;
+        if (afterChapterName !== null) {
+          insertIdx = remaining.findIndex(g => g.name === afterChapterName) + 1;
+        }
+
+        const reorderedGroups = [
+          ...remaining.slice(0, insertIdx),
+          draggedGroup,
+          ...remaining.slice(insertIdx),
+        ];
+
+        let globalOrder = 0;
+        for (const g of reorderedGroups) {
+          if (g.notes.length === 0) {
+            const isRecursos = g.name.toUpperCase().includes('RECURSOS');
+            const isNotas = g.name.toUpperCase().includes('NOTAS');
+            if (isRecursos || isNotas) {
+              const slug = isRecursos ? 'recursos-info' : 'notas-info';
+              const title = isRecursos ? 'Recursos Info' : 'Notas Info';
+              try {
+                await createNote(courseId, {
+                  slug, title, type: 'info',
+                  chapter: g.name, status: 'draft', order: globalOrder,
+                });
+              } catch (e) {
+                console.warn('[notes-sidebar] dummy note creation failed:', e);
+              }
+            }
+          } else {
+            for (const note of g.notes) {
+              if (note.order !== globalOrder) {
+                const nd = await getNote(courseId, note.slug);
+                const { data: fm, body } = parseFrontmatter(nd.content);
+                (fm as any).order = globalOrder;
+                await saveNote(courseId, note.slug, serializeFrontmatter(fm as any, body));
+              }
+            }
+          }
+          globalOrder += Math.max(1, g.notes.length);
+        }
+        dispatchRefresh();
+      } catch (err) {
+        console.error('[notes-sidebar] chapter drop failed:', err);
+      }
+    });
+
+    return div;
   }
 
   // ── Drop line factory ──────────────────────────────────────────────────
@@ -234,6 +365,8 @@ export function renderNotesSidebar(
     return li;
   }
 
+  newChapterEls.push(makeChapterDropLine(null));
+
   // ── Chapter loop ──────────────────────────────────────────────────────
   for (const group of groups) {
     const chapterEl = document.createElement('div');
@@ -249,12 +382,67 @@ export function renderNotesSidebar(
 
     const summary = document.createElement('summary');
     summary.className = 'chapter-title';
-    summary.innerHTML = `
-      <span class="chapter-title-main">
-        <span class="chapter-caret">▸</span>
-        <span class="chapter-title-text">${escHtml(group.name)}</span>
-      </span>
-    `;
+    if (isRecursos) {
+      summary.innerHTML = `
+        <span class="chapter-title-main">
+          <span class="chapter-drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
+          <span class="chapter-caret">▸</span>
+          <span class="chapter-title-text">${escHtml(group.name)}</span>
+          <a
+            href="${courseHref}/recursos"
+            class="chapter-editor-link"
+            title="Editor de recursos"
+            aria-label="Editor de recursos"
+            onclick="event.stopPropagation()"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.82rem;height:0.82rem;stroke:currentColor;">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </a>
+        </span>
+      `;
+    } else if (isNotas) {
+      summary.innerHTML = `
+        <span class="chapter-title-main">
+          <span class="chapter-drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
+          <span class="chapter-caret">▸</span>
+          <span class="chapter-title-text">${escHtml(group.name)}</span>
+          <button type="button" class="chapter-editor-link notas-sb-new-btn" title="Nueva nota" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.85rem;line-height:1">+</button>
+          <button type="button" class="chapter-editor-link notas-sb-new-folder-btn" title="Nueva carpeta" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.75rem;line-height:1">⊟+</button>
+        </span>
+      `;
+      summary.querySelector('.notas-sb-new-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelector('#notas-sidebar-tree-container .notas-sb-new-btn')?.dispatchEvent(new MouseEvent('click'));
+      });
+      summary.querySelector('.notas-sb-new-folder-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelector('#notas-sidebar-tree-container .notas-sb-new-folder-btn')?.dispatchEvent(new MouseEvent('click'));
+      });
+    } else {
+      summary.innerHTML = `
+        <span class="chapter-title-main">
+          <span class="chapter-drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
+          <span class="chapter-caret">▸</span>
+          <span class="chapter-title-text">${escHtml(group.name)}</span>
+        </span>
+      `;
+    }
+    summary.draggable = true;
+
+    summary.addEventListener('dragstart', e => {
+      draggingChapterName = group.name;
+      e.dataTransfer!.setData('text/x-musiki-course-chapter', group.name);
+      e.dataTransfer!.setData('text/plain', group.name);
+      e.dataTransfer!.effectAllowed = 'move';
+      setTimeout(() => { chapterEl.style.opacity = '.4'; }, 0);
+    });
+    summary.addEventListener('dragend', () => {
+      draggingChapterName = null;
+      chapterEl.style.opacity = '';
+      clearDropState();
+    });
 
     // Chapter context menu
     summary.addEventListener('contextmenu', e => {
@@ -381,6 +569,16 @@ export function renderNotesSidebar(
       textSpan.textContent = titleText;
       const trailingSpan = document.createElement('span');
       trailingSpan.className = 'lesson-link-trailing';
+
+      const ic = getNoteIconInfo(note);
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'lesson-icon' + (ic.isConcept ? ' lesson-icon--concept' : '');
+      if (ic.color) {
+        iconSpan.style.color = ic.color;
+      }
+      iconSpan.textContent = ic.char;
+
+      a.appendChild(iconSpan);
       a.appendChild(textSpan);
       a.appendChild(trailingSpan);
 
@@ -478,9 +676,24 @@ export function renderNotesSidebar(
       ul.appendChild(makeDropLine(group.name, note.slug));
     }
 
-    details.appendChild(ul);
+    if (isRecursos) {
+      const tree = document.querySelector('#recursos-sidebar-tree-container .recursos-sidebar-tree')
+        || document.querySelector('.recursos-sidebar-tree');
+      if (tree) {
+        details.appendChild(tree);
+      }
+    } else if (isNotas) {
+      const tree = document.querySelector('#notas-sidebar-tree-container .notas-sb-tree')
+        || document.querySelector('.notas-sb-tree');
+      if (tree) {
+        details.appendChild(tree);
+      }
+    } else {
+      details.appendChild(ul);
+    }
     chapterEl.appendChild(details);
     newChapterEls.push(chapterEl);
+    newChapterEls.push(makeChapterDropLine(group.name));
   }
 
   // Restore collapsed state on new elements before inserting into DOM
@@ -507,11 +720,13 @@ function injectCss() {
     /* ── Notes sidebar overrides ─────────────────────────────── */
     /* Chapter titles: small, grey, bold, uppercase */
     [data-notes-sidebar] .chapter-title {
-      font-size: 0.72rem !important;
+      font-size: 0.8rem !important;
       font-weight: 700 !important;
       letter-spacing: 0.08em !important;
       text-transform: uppercase !important;
       color: var(--c-fg-subtle, #888) !important;
+      padding: 0.2rem 0.75rem 0.2rem 0 !important;
+      margin: 0 !important;
     }
     [data-notes-sidebar] details > summary::-webkit-details-marker {
       display: none !important;
@@ -533,9 +748,9 @@ function injectCss() {
       display: none !important;
     }
     /* Note items: smaller, no blue, black/white hierarchy */
-    [data-notes-sidebar] .lesson-list { gap: 0 !important; margin-top: 0.1rem !important; margin-bottom: 0.15rem !important; }
+    [data-notes-sidebar] .lesson-list { gap: 0 !important; margin-top: 0.16rem !important; margin-bottom: 0.22rem !important; }
     [data-notes-sidebar] .lesson-link {
-      font-size: 0.76rem !important;
+      font-size: 0.84rem !important;
       color: var(--c-fg-dim) !important;
       padding: 0.12rem 0.25rem !important;
     }
@@ -575,6 +790,29 @@ function injectCss() {
       margin: 3px 0;
     }
     .ns-drop-line::before { content: none !important; display: none !important; }
+    .ns-chapter-drop-line {
+      height: 0;
+      padding: 0;
+      margin: 0;
+      transition: height 80ms, background-color 80ms;
+      overflow: visible;
+      position: relative;
+    }
+    .ns-chapter-drop-line::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: -6px;
+      height: 12px;
+      z-index: 10;
+      background: transparent;
+    }
+    .ns-chapter-drop-line.ns-drop-active {
+      height: 3px;
+      background: var(--c-link, #3b82f6);
+      margin: 6px 0;
+    }
     .ns-drag-over.chapter-title {
       background: var(--c-bg-alt, var(--c-bg-mute)) !important;
       outline: 1px dashed var(--c-link, #3b82f6);
@@ -591,28 +829,17 @@ function injectCss() {
     [data-notes-sidebar] .chapter-details {
       padding: 0 !important;
     }
-    /* Notes tree caret styling */
-    .notas-sb-folder-caret {
-      font-size: 16px !important;
-      width: 13px !important;
-    }
-    .notas-sb-folder--special {
-      margin-top: 0.58rem !important;
-    }
-    /* Notes tree indentation and vertical connection lines (Roam Research style) */
-    .notas-sb-level {
-      display: grid;
-      gap: 1px;
-    }
-    .notas-sb-level .notas-sb-level {
-      margin-left: 8px !important;
-      padding-left: 6px !important;
-      border-left: 1px solid color-mix(in srgb, var(--c-border, #ccc) 50%, transparent) !important;
-    }
+
     [data-notes-sidebar] .lesson-link[draggable="true"] {
       cursor: grab;
     }
     [data-notes-sidebar] .lesson-link[draggable="true"]:active {
+      cursor: grabbing;
+    }
+    [data-notes-sidebar] .chapter-title[draggable="true"] {
+      cursor: grab;
+    }
+    [data-notes-sidebar] .chapter-title[draggable="true"]:active {
       cursor: grabbing;
     }
   `;

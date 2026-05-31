@@ -14,6 +14,7 @@ import {
   type PublicContentRouteProps,
 } from '../lib/public-content-routes';
 import { canonicalizeCourseId, getCourseAliases } from '../lib/course-alias';
+import { listCourseNotes } from '../lib/notes-fs';
 import {
   buildDefaultCreatePath,
   getEditableLocalRepoFile,
@@ -41,15 +42,21 @@ import { getRuntimeDynamicContent } from '../lib/runtime-content';
 import { normalizeContentSlug, getContentCanonicalSlug } from '../lib/content-slug';
 import { iconFor } from '../scripts/room/recursos/icons';
 
-const getLessonIcon = (lesson: any): string => {
+const getLessonIconInfo = (lesson: any) => {
   const lessonType = String(lesson.data?.type || '').trim().toLowerCase();
   const lessonStatus = String(lesson.data?.status || '').trim().toLowerCase();
   const title = String(lesson.data?.title || '');
 
-  if (lessonStatus === 'draft') return '◩';
-  if (lessonType === 'concept') return '🔷';
-  if (title.toUpperCase().includes('MOC')) return '🟪';
-  return '◽️';
+  if (lessonStatus === 'draft') {
+    return { char: '◩', color: '#888888', isConcept: false };
+  }
+  if (lessonType === 'concept') {
+    return { char: '🔷', color: '', isConcept: true };
+  }
+  if (title.toUpperCase().includes('MOC')) {
+    return { char: '■', color: '#8e7cc3', isConcept: false };
+  }
+  return { char: '■', color: '#888888', isConcept: false };
 };
 
 // Forzamos SSR dinámico puro y desactivamos caché para contenido vivo
@@ -188,6 +195,42 @@ const courseHref = buildCourseHref(canonicalCourseIdToUse || '', courseData);
 const allLessons = canonicalCourseIdToUse ? (await getCollection('cursos'))
   .filter((entry) => isCourseLessonEntryForCourse(entry, canonicalCourseIdToUse))
   .sort((a, b) => (a.data.order || 0) - (b.data.order || 0)) : [];
+
+let liveNotes: any[] = [];
+if (canonicalCourseIdToUse) {
+  try {
+    liveNotes = listCourseNotes(canonicalCourseIdToUse);
+    const liveNotesMap = new Map<string, typeof liveNotes[0]>();
+    for (const note of liveNotes) {
+      const rel = note.slug.replace(/^cursos\//, '').replace(/\\/g, '/');
+      liveNotesMap.set(rel, note);
+    }
+
+    for (const lesson of allLessons) {
+      const filePath = (lesson as any).filePath;
+      let rel = '';
+      if (filePath) {
+        const match = filePath.replace(/\\/g, '/').match(/(?:^|\/)src\/content\/cursos\/(.+)$/);
+        if (match) rel = match[1];
+      } else {
+        rel = lesson.id.replace(/\\/g, '/');
+      }
+      if (rel) {
+        const match = liveNotesMap.get(rel) || liveNotesMap.get(rel + '.md') || liveNotesMap.get(rel.replace(/\.md$/, ''));
+        if (match) {
+          lesson.data.order = match.order;
+          if (match.chapter) lesson.data.chapter = match.chapter;
+          lesson.data.title = match.title;
+          lesson.data.status = match.status;
+        }
+      }
+    }
+    // Re-sort lessons by updated live order values
+    allLessons.sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
+  } catch (err) {
+    console.error('[slug] failed to override lesson metadata with live notes:', err);
+  }
+}
 
 const lessonPathIndex = canonicalCourseIdToUse ? buildCourseLessonPathIndex(
   canonicalCourseIdToUse,
@@ -370,10 +413,34 @@ conceptsAndGlossary.forEach((lesson) => {
   chapters[chapter].push(lesson);
 });
 
-const sortedChapters = Object.entries(chapters).sort(([leftChapter], [rightChapter]) => {
+// Ensure virtual chapters are present in chapters
+if (!chapters['80 RECURSOS']) {
+  chapters['80 RECURSOS'] = [];
+}
+if (session && !chapters['90 NOTAS']) {
+  chapters['90 NOTAS'] = [];
+}
+
+const sortedChapters = Object.entries(chapters).sort(([leftChapter, leftLessons], [rightChapter, rightLessons]) => {
+  const getMinOrder = (name: string, lessons: typeof allLessons) => {
+    const liveNotesInChapter = liveNotes.filter(n => n.chapter?.trim().toUpperCase() === name.trim().toUpperCase());
+    if (liveNotesInChapter.length > 0) {
+      return Math.min(...liveNotesInChapter.map(n => n.order));
+    }
+    if (lessons.length > 0) {
+      return Math.min(...lessons.map(l => l.data.order ?? 0));
+    }
+    const nameUpper = name.toUpperCase();
+    if (nameUpper.includes('RECURSOS')) return 80;
+    if (nameUpper.includes('NOTAS')) return 90;
+    return 9999;
+  };
+  const leftMin = getMinOrder(leftChapter, leftLessons);
+  const rightMin = getMinOrder(rightChapter, rightLessons);
+  if (leftMin !== rightMin) return leftMin - rightMin;
+
   const leftIsPublic = /^9\d/.test(leftChapter);
   const rightIsPublic = /^9\d/.test(rightChapter);
-
   if (leftIsPublic && !rightIsPublic) return 1;
   if (!leftIsPublic && rightIsPublic) return -1;
 
@@ -388,21 +455,25 @@ const sidebarChapterEntries: Array<
   | { kind: 'notas'; courseId: string }
 > = [];
 let insertedRecursosSidebarEntry = false;
-const hasRecursosSidebarChapter = sortedChapters.some(([chapterName]) => normalizeContentSlug(chapterName) === '80-recursos');
+let insertedNotasSidebarEntry = false;
 for (const [chapterName, lessons] of sortedChapters) {
-  if (canManageLiveInteractions && !insertedRecursosSidebarEntry &&
-      (/^9\d/.test(chapterName) || normalizeContentSlug(chapterName) === '80-recursos')) {
+  const slug = normalizeContentSlug(chapterName);
+  if (slug === '80-recursos') {
     sidebarChapterEntries.push({ kind: 'recursos' });
     insertedRecursosSidebarEntry = true;
+  } else if (slug === '90-notas') {
+    if (session && canonicalCourseIdToUse) {
+      sidebarChapterEntries.push({ kind: 'notas', courseId: canonicalCourseIdToUse });
+      insertedNotasSidebarEntry = true;
+    }
+  } else {
+    sidebarChapterEntries.push({ kind: 'chapter', chapterName, lessons });
   }
-  // Skip the "80 RECURSOS" content chapter for teachers — recursos section handles it
-  if (canManageLiveInteractions && normalizeContentSlug(chapterName) === '80-recursos') continue;
-  sidebarChapterEntries.push({ kind: 'chapter', chapterName, lessons });
 }
-if (canManageLiveInteractions && !insertedRecursosSidebarEntry) {
+if (!insertedRecursosSidebarEntry) {
   sidebarChapterEntries.push({ kind: 'recursos' });
 }
-if (session?.user && canonicalCourseIdToUse) {
+if (!insertedNotasSidebarEntry && session && canonicalCourseIdToUse) {
   sidebarChapterEntries.push({ kind: 'notas', courseId: canonicalCourseIdToUse });
 }
 
@@ -927,6 +998,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       .sidebar--left {
         justify-self: stretch;
+        --course-sidebar-pad-x: 10px;
       }
 
       .sidebar--right {
@@ -1312,13 +1384,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
 
       :global(.sidebar--left .chapter) {
-        margin-bottom: 0.38rem;
+        margin-bottom: 0.24rem;
       }
 
-      :global(.sidebar--left .chapter--conceptos),
-      :global(.sidebar--left .chapter--recursos),
-      :global(.sidebar--left .chapter--notas) {
-        margin-top: 0.58rem;
+      :global(.sidebar--left [data-notes-sidebar]) {
+        display: contents !important;
       }
 
       :global(.sidebar--left .chapter-details) {
@@ -1329,8 +1399,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 0.75rem;
-        font-size: 0.72rem;
+        padding: 0.2rem 0.75rem 0.2rem 0 !important;
+        font-size: 0.8rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.1em;
@@ -1338,12 +1408,13 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         cursor: pointer;
         user-select: none;
         list-style: none;
+        margin: 0 !important;
       }
 
       :global(.sidebar--left .chapter-title-main) {
         display: inline-flex;
         align-items: center;
-        gap: 0.35rem;
+        gap: 0.25rem;
         min-width: 0;
       }
 
@@ -1382,69 +1453,70 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         opacity: 0.5;
         font-size: 1.0rem;
         flex-shrink: 0;
-        margin-right: 0.3rem;
+        margin-right: 0.05rem;
       }
 
       :global(.sidebar--left .chapter-details[open] > .chapter-title .chapter-caret) {
         transform: rotate(90deg);
       }
 
-      .sidebar--left .lesson-item {
+      :global(.sidebar--left .lesson-item) {
         list-style: none;
         margin: 0;
         padding-left: 0 !important;
       }
 
-      .sidebar--left .lesson-item::before {
+      :global(.sidebar--left .lesson-item::before) {
         content: none !important;
         display: none !important;
       }
 
-      .sidebar--left .lesson-list {
+      :global(.sidebar--left .lesson-list) {
         display: grid;
         gap: 1px;
         padding-top: 0;
-        margin-top: 0.25rem;
-        margin-bottom: 0.35rem;
-        margin-left: 0.75rem;
-        padding-left: 0.45rem;
+        margin-top: 0.16rem;
+        margin-bottom: 0.22rem;
+        margin-left: 0.25rem;
+        padding-left: 0.25rem;
         border-left: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
       }
 
-      .sidebar--left .lesson-link {
-        padding: 0.12rem 0.25rem;
-        font-size: 0.76rem;
+      :global(.sidebar--left .lesson-link) {
+        padding: 0.12rem 0.25rem !important;
+        font-size: 0.84rem !important;
       }
 
       /* HR separator above CONTENIDOS */
-      .sidebar--left .class-toc:not([hidden]) {
+      :global(.sidebar--left .class-toc:not([hidden])) {
         border-top: 1px solid color-mix(in srgb, var(--c-border) 55%, transparent);
-        margin-top: 0.5rem;
-        padding-top: 0.35rem;
+        margin-top: 0.4rem;
+        padding-top: 0.28rem;
       }
 
-      .sidebar--left .recursos-sidebar-tree {
+      :global(.sidebar--left .recursos-sidebar-tree) {
         display: grid;
-        gap: 0.35rem;
-        margin: 0.35rem 0 0.55rem;
-        padding: 0 0.35rem 0 0.8rem;
+        gap: 0.3rem;
+        margin-top: 0.16rem;
+        margin-bottom: 0.22rem;
+        margin-left: 0.8rem;
       }
 
-      .sidebar--left .recursos-sidebar-session {
+      :global(.sidebar--left .recursos-sidebar-session) {
         display: grid;
         gap: 0.12rem;
         border-left: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
-        padding-left: 0.45rem;
+        padding-left: 0.5rem;
       }
 
-      .sidebar--left .recursos-sidebar-session-name {
+      :global(.sidebar--left .recursos-sidebar-session-name) {
         display: flex;
         align-items: center;
         gap: 0.25rem;
         cursor: pointer;
         list-style: none;
         color: var(--c-fg-subtle);
-        font-size: 0.72rem;
+        font-size: 0.8rem;
         font-weight: 700;
         line-height: 1.2;
         overflow: hidden;
@@ -1452,20 +1524,20 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         white-space: nowrap;
         user-select: none;
       }
-      .sidebar--left .recursos-sidebar-session-name::-webkit-details-marker { display: none; }
-      .sidebar--left .recursos-sidebar-session-name::marker { display: none; }
+      :global(.sidebar--left .recursos-sidebar-session-name::-webkit-details-marker) { display: none; }
+      :global(.sidebar--left .recursos-sidebar-session-name::marker) { display: none; }
 
-      .sidebar--left .recursos-sidebar-session-caret {
+      :global(.sidebar--left .recursos-sidebar-session-caret) {
         flex-shrink: 0;
-        font-size: 1.0rem;
+        font-size: 1.1rem;
         display: inline-block;
         transition: transform 0.15s;
       }
-      .sidebar--left .recursos-sidebar-session[open] > .recursos-sidebar-session-name .recursos-sidebar-session-caret {
+      :global(.sidebar--left .recursos-sidebar-session[open] > .recursos-sidebar-session-name .recursos-sidebar-session-caret) {
         transform: rotate(90deg);
       }
 
-      .sidebar--left .recursos-sidebar-resource-list {
+      :global(.sidebar--left .recursos-sidebar-resource-list) {
         display: grid;
         gap: 2px;
         list-style: none;
@@ -1473,41 +1545,41 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         padding: 0;
       }
 
-      .sidebar--left .recursos-sidebar-resource-item {
+      :global(.sidebar--left .recursos-sidebar-resource-item) {
         list-style: none;
         margin: 0;
       }
-      .sidebar--left .recursos-sidebar-resource-item::before {
+      :global(.sidebar--left .recursos-sidebar-resource-item::before) {
         content: none !important;
         display: none !important;
       }
 
-      .sidebar--left .recursos-sidebar-resource-link {
+      :global(.sidebar--left .recursos-sidebar-resource-link) {
         display: flex;
         align-items: center;
         gap: 0.35rem;
         min-width: 0;
         border-radius: 4px;
         color: var(--c-fg);
-        font-size: 0.76rem;
+        font-size: 0.84rem;
         line-height: 1.2;
         padding: 0.12rem 0.25rem;
         text-decoration: none;
       }
 
-      .sidebar--left .recursos-sidebar-resource-link:hover {
+      :global(.sidebar--left .recursos-sidebar-resource-link:hover) {
         background: color-mix(in srgb, var(--accent) 9%, transparent);
         color: var(--accent);
       }
 
-      .sidebar--left .recursos-sidebar-resource-icon {
+      :global(.sidebar--left .recursos-sidebar-resource-icon) {
         flex-shrink: 0;
-        font-size: 10px;
+        font-size: 11px;
         width: 12px;
         text-align: center;
       }
 
-      .sidebar--left .recursos-sidebar-resource-name {
+      :global(.sidebar--left .recursos-sidebar-resource-name) {
         flex: 1 1 auto;
         min-width: 0;
         overflow: hidden;
@@ -1515,51 +1587,51 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         white-space: nowrap;
       }
 
-      .sidebar--left .recursos-sidebar-resource-folder {
+      :global(.sidebar--left .recursos-sidebar-resource-folder) {
         flex: 0 0 auto;
         color: var(--c-fg-subtle);
-        font-size: 0.66rem;
+        font-size: 0.73rem;
       }
 
-      .sidebar--left .recursos-sidebar-folder {
+      :global(.sidebar--left .recursos-sidebar-folder) {
         display: grid;
         gap: 1px;
-        padding-left: 0.5rem;
+        padding-left: 0.55rem;
         border-left: 1px solid color-mix(in srgb, var(--c-border) 50%, transparent);
       }
-      .sidebar--left .recursos-sidebar-folder-name {
+      :global(.sidebar--left .recursos-sidebar-folder-name) {
         display: flex;
         align-items: center;
         gap: 0.25rem;
         cursor: pointer;
         list-style: none;
         color: #4e6070;
-        font-size: 0.7rem;
+        font-size: 0.77rem;
         font-weight: 600;
         line-height: 1.3;
         user-select: none;
         padding: 0.1rem 0.25rem;
       }
-      .sidebar--left .recursos-sidebar-folder-name::-webkit-details-marker { display: none; }
-      .sidebar--left .recursos-sidebar-folder-name::marker { display: none; }
-      .sidebar--left .recursos-sidebar-folder-caret {
+      :global(.sidebar--left .recursos-sidebar-folder-name::-webkit-details-marker) { display: none; }
+      :global(.sidebar--left .recursos-sidebar-folder-name::marker) { display: none; }
+      :global(.sidebar--left .recursos-sidebar-folder-caret) {
         flex-shrink: 0;
-        font-size: 0.92rem;
+        font-size: 1.01rem;
         display: inline-block;
         transition: transform 0.15s;
       }
-      .sidebar--left .recursos-sidebar-folder[open] > .recursos-sidebar-folder-name .recursos-sidebar-folder-caret {
+      :global(.sidebar--left .recursos-sidebar-folder[open] > .recursos-sidebar-folder-name .recursos-sidebar-folder-caret) {
         transform: rotate(90deg);
       }
-      .sidebar--left .recursos-sidebar-folder-items {
+      :global(.sidebar--left .recursos-sidebar-folder-items) {
         display: grid;
         gap: 1px;
         list-style: none;
         margin: 0;
         padding: 0;
       }
-      .sidebar--left .recursos-sidebar-folder-items li { list-style: none; margin: 0; }
-      .sidebar--left .recursos-sidebar-folder-items li::before { content: none !important; display: none !important; }
+      :global(.sidebar--left .recursos-sidebar-folder-items li) { list-style: none; margin: 0; }
+      :global(.sidebar--left .recursos-sidebar-folder-items li::before) { content: none !important; display: none !important; }
 
       .lesson-link {
         display: flex;
@@ -1599,7 +1671,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 78%, transparent);
       }
 
-      .lesson-icon {
+      :global(.lesson-icon) {
         font-size: 11px;
         width: 17px;
         text-align: center;
@@ -1607,18 +1679,48 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         display: inline-block;
       }
 
+      :global(.lesson-icon--concept) {
+        transform: scale(0.6);
+        transform-origin: center;
+      }
+
       /* Notes sidebar tree layout matching the rest of the tree */
-      .sidebar--left .notas-sb-level {
+      :global(.sidebar--left .notas-sb-level) {
         display: grid;
         gap: 1px;
-        margin-top: 0.25rem;
-        margin-bottom: 0.35rem;
+        margin-top: 0.16rem;
+        margin-bottom: 0.22rem;
         margin-left: 0.75rem;
         padding-left: 0.45rem;
         border-left: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
       }
 
-      .sidebar--left .notas-sb-item {
+      /* Notes tree indentation and vertical connection lines (Roam Research style) */
+      :global(.sidebar--left .notas-sb-level .notas-sb-level) {
+        margin-left: 8px !important;
+        padding-left: 6px !important;
+        border-left: 1px solid color-mix(in srgb, var(--c-border, #ccc) 50%, transparent) !important;
+      }
+
+      /* Notes tree caret styling */
+      :global(.sidebar--left .notas-sb-folder-caret) {
+        font-size: 16px !important;
+        width: 13px !important;
+      }
+
+      /* Chapter drag handle (visible only to teachers) */
+      :global(.sidebar--left .chapter-drag-handle) {
+        cursor: grab;
+        opacity: 0.35;
+        margin-right: 0.15rem;
+        font-size: 0.9em;
+        user-select: none;
+      }
+      :global(.sidebar--left .chapter-drag-handle:active) {
+        cursor: grabbing;
+      }
+
+      :global(.sidebar--left .notas-sb-item) {
         display: flex;
         align-items: center;
         gap: 0.4rem;
@@ -1626,17 +1728,17 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         border-radius: 4px;
         text-decoration: none;
         color: var(--c-fg);
-        font-size: 0.76rem;
+        font-size: 0.84rem;
         line-height: 1.2;
         transition: all 0.15s;
       }
 
-      .sidebar--left .notas-sb-item:hover {
+      :global(.sidebar--left .notas-sb-item:hover) {
         background: color-mix(in srgb, var(--accent) 9%, transparent);
         color: var(--accent);
       }
 
-      .sidebar--left .notas-sb-folder {
+      :global(.sidebar--left .notas-sb-folder) {
         display: flex;
         align-items: center;
         gap: 0.25rem;
@@ -1650,20 +1752,20 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         user-select: none;
       }
 
-      .sidebar--left .notas-sb-folder:hover {
+      :global(.sidebar--left .notas-sb-folder:hover) {
         background: color-mix(in srgb, var(--accent) 9%, transparent);
         color: var(--accent);
       }
 
-      .sidebar--left .notas-sb-placeholder {
+      :global(.sidebar--left .notas-sb-placeholder) {
         padding: 0.12rem 0.25rem;
-        font-size: 0.76rem;
+        font-size: 0.84rem;
         line-height: 1.2;
         color: var(--c-fg-subtle);
         transition: all 0.15s;
       }
 
-      .sidebar--left .notas-sb-placeholder:hover {
+      :global(.sidebar--left .notas-sb-placeholder:hover) {
         background: color-mix(in srgb, var(--accent) 9%, transparent);
         color: var(--accent);
       }
@@ -3700,15 +3802,88 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         {canManageLiveInteractions ? (
           <>
             {localContentAdminEnabled && (
-              <div
-                data-notes-sidebar
-                data-course-id={canonicalCourseId || courseSlug}
-                data-course-href={courseHref}
-                data-active-slug={currentEntrySourcePath || ''}
-              ></div>
+              <>
+                <div
+                  data-notes-sidebar
+                  data-course-id={canonicalCourseId || courseSlug}
+                  data-course-href={courseHref}
+                  data-active-slug={currentEntrySourcePath || ''}
+                ></div>
+                <div style="display: none;">
+                  <div id="recursos-sidebar-tree-container">
+                    {recursosSidebarGroups.length > 0 && (
+                      <div class="recursos-sidebar-tree" data-recursos-sidebar data-room={`${recursosCourseId}-stage`} data-clase={recursosCourseId}>
+                        {recursosSidebarGroups.map((group) => {
+                          const { root, folders } = groupByFolder(group.resources);
+                          return (
+                            <details class="recursos-sidebar-session" open>
+                              <summary class="recursos-sidebar-session-name">
+                                <span class="recursos-sidebar-session-caret">▸</span>
+                                {group.session?.name || 'Sin sesión'}
+                              </summary>
+                              <ul class="recursos-sidebar-resource-list">
+                                {root.map((resource) => {
+                                  const ic = iconFor(resource.type, resource.url, resource.name);
+                                  return (
+                                    <li class="recursos-sidebar-resource-item" data-id={resource.id}>
+                                      <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                        <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                        <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                      </a>
+                                    </li>
+                                  );
+                                })}
+                                {[...folders.entries()].map(([folderName, items]) => (
+                                  <li class="recursos-sidebar-resource-item">
+                                    <details class="recursos-sidebar-folder" open>
+                                      <summary class="recursos-sidebar-folder-name">
+                                        <span class="recursos-sidebar-folder-caret">▸</span>
+                                        <span style="color:#4e6070">⊟</span>
+                                        {folderName}
+                                      </summary>
+                                      <ul class="recursos-sidebar-folder-items">
+                                        {items.map((resource) => {
+                                          const ic = iconFor(resource.type, resource.url, resource.name);
+                                          return (
+                                            <li class="recursos-sidebar-resource-item" data-id={resource.id}>
+                                              <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
+                                                <span class="recursos-sidebar-resource-icon" style={`color:${ic.color}`}>{ic.char}</span>
+                                                <span class="recursos-sidebar-resource-name">{resource.name}</span>
+                                              </a>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    </details>
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div id="notas-sidebar-tree-container">
+                    <div class="chapter chapter--notas" data-notas-sidebar data-notas-course-id={canonicalCourseId || courseSlug}>
+                      <details class="chapter-details">
+                        <summary class="chapter-title">
+                          <span class="chapter-title-main">
+                            <span class="chapter-caret">▸</span>
+                            <span class="chapter-title-text">90 NOTAS</span>
+                            <button type="button" class="chapter-editor-link notas-sb-new-btn" title="Nueva nota" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.85rem;line-height:1">+</button>
+                            <button type="button" class="chapter-editor-link notas-sb-new-folder-btn" title="Nueva carpeta" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.75rem;line-height:1">⊟+</button>
+                          </span>
+                        </summary>
+                        <div class="notas-sb-tree" style="padding:.24rem 0"></div>
+                      </details>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
             {sidebarChapterEntries.filter(e =>
-              e.kind === 'recursos'
+              (e.kind === 'recursos' && !localContentAdminEnabled)
               || (e.kind === 'chapter' && (!localContentAdminEnabled || e.lessons.some((lesson) => (lesson as any).collection === 'content')))
             ).map((entry) => {
           if (entry.kind === 'recursos') {
@@ -3743,9 +3918,9 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                               <span class="recursos-sidebar-session-caret">▸</span>
                               {group.session?.name || 'Sin sesión'}
                             </summary>
-                            <ul class="recursos-sidebar-resource-list">
+                             <ul class="recursos-sidebar-resource-list">
                               {root.map((resource) => {
-                                const ic = iconFor(resource.type, resource.url);
+                                const ic = iconFor(resource.type, resource.url, resource.name);
                                 return (
                                   <li class="recursos-sidebar-resource-item" data-id={resource.id}>
                                     <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
@@ -3765,7 +3940,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                     </summary>
                                     <ul class="recursos-sidebar-folder-items">
                                       {items.map((resource) => {
-                                        const ic = iconFor(resource.type, resource.url);
+                                        const ic = iconFor(resource.type, resource.url, resource.name);
                                         return (
                                           <li class="recursos-sidebar-resource-item" data-id={resource.id}>
                                             <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
@@ -3837,7 +4012,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           </summary>
                           <ul class="recursos-sidebar-resource-list">
                             {root.map((resource) => {
-                              const ic = iconFor(resource.type, resource.url);
+                              const ic = iconFor(resource.type, resource.url, resource.name);
                               return (
                                 <li class="recursos-sidebar-resource-item">
                                   <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
@@ -3857,7 +4032,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                   </summary>
                                   <ul class="recursos-sidebar-folder-items">
                                     {items.map((resource) => {
-                                      const ic = iconFor(resource.type, resource.url);
+                                      const ic = iconFor(resource.type, resource.url, resource.name);
                                       return (
                                         <li>
                                           <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
@@ -3882,6 +4057,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                     const isContentCollection = (lesson as any).collection === 'content';
                     const lessonType = String(lesson.data.type || '').trim().toLowerCase();
                     const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
+                    const ic = getLessonIconInfo(lesson);
 
                     // IF logged in and it belongs to this course, we prefer the course-prefixed URL
                     // ELSE we use the generic top-level URL for public notes
@@ -3921,14 +4097,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           data-course-id={canonicalCourseIdToUse || courseSlug}
                           data-lesson-page-slug={isContentCollection ? ((lesson as any).id || lessonPageSlug) : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
                         >
-                          <span class="lesson-icon">{getLessonIcon(lesson)}</span>
+                          <span class:list={["lesson-icon", { "lesson-icon--concept": ic.isConcept }]} style={ic.color ? `color: ${ic.color}` : undefined}>{ic.char}</span>
                           <span class="lesson-link-text">{lesson.data.title}</span>
                           <span class="lesson-link-trailing">
                             {lessonType === 'info' && (
                               <span class="lesson-type">ℹ️</span>
                             )}
-                            {(lessonType === 'concept' || lessonType === 'glossary') && (
-                              <span class="lesson-type" title={lessonType}>{lessonType === 'concept' ? '💡' : '📖'}</span>
+                            {lessonType === 'glossary' && (
+                              <span class="lesson-type" title={lessonType}>📖</span>
                             )}
                             {assignmentLikeTypes.has(lessonType) && (
                               <span class="lesson-type">📝</span>
@@ -3963,10 +4139,10 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             </div>
           );
         })}
-            {sidebarChapterEntries.filter(e => e.kind === 'notas').map((entry) => {
+            {sidebarChapterEntries.filter(e => e.kind === 'notas' && !localContentAdminEnabled).map((entry) => {
               if (entry.kind !== 'notas') return null;
               return (
-                <div class="chapter chapter--notas" data-notas-sidebar data-notas-course-id={entry.courseId} style="margin-top: 1rem">
+                <div class="chapter chapter--notas" data-notas-sidebar data-notas-course-id={entry.courseId}>
                   <details class="chapter-details">
                     <summary class="chapter-title">
                       <span class="chapter-title-main">
@@ -3976,7 +4152,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                         <button type="button" class="chapter-editor-link notas-sb-new-folder-btn" title="Nueva carpeta" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.75rem;line-height:1">⊟+</button>
                       </span>
                     </summary>
-                    <div class="notas-sb-tree" style="padding:.3rem 0"></div>
+                    <div class="notas-sb-tree" style="padding:.24rem 0"></div>
                   </details>
                 </div>
               );
@@ -3986,7 +4162,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           (!isPublicWikiPage || Boolean(session)) && sidebarChapterEntries.map((entry) => {
             if (entry.kind === 'recursos') {
               return (
-                <div class="chapter chapter--recursos" style="margin-top: 1rem">
+                <div class="chapter chapter--recursos">
                   <details class="chapter-details" open={isRecursosEditorPage}>
                     <summary class="chapter-title">
                       <span class="chapter-title-main">
@@ -4018,7 +4194,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                               </summary>
                               <ul class="recursos-sidebar-resource-list">
                                 {root.map((resource) => {
-                                  const ic = iconFor(resource.type, resource.url);
+                                  const ic = iconFor(resource.type, resource.url, resource.name);
                                   return (
                                     <li class="recursos-sidebar-resource-item" data-id={resource.id}>
                                       <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
@@ -4038,7 +4214,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                       </summary>
                                       <ul class="recursos-sidebar-folder-items">
                                         {items.map((resource) => {
-                                          const ic = iconFor(resource.type, resource.url);
+                                          const ic = iconFor(resource.type, resource.url, resource.name);
                                           return (
                                             <li class="recursos-sidebar-resource-item" data-id={resource.id}>
                                               <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
@@ -4086,7 +4262,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                         >⊟+</button>
                       </span>
                     </summary>
-                    <div class="notas-sb-tree" style="padding:.3rem 0"></div>
+                    <div class="notas-sb-tree" style="padding:.24rem 0"></div>
                   </details>
                 </div>
               );
@@ -4135,7 +4311,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                             </summary>
                             <ul class="recursos-sidebar-resource-list">
                               {root.map((resource) => {
-                                const ic = iconFor(resource.type, resource.url);
+                                const ic = iconFor(resource.type, resource.url, resource.name);
                                 return (
                                   <li class="recursos-sidebar-resource-item">
                                     <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
@@ -4155,7 +4331,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                     </summary>
                                     <ul class="recursos-sidebar-folder-items">
                                       {items.map((resource) => {
-                                        const ic = iconFor(resource.type, resource.url);
+                                        const ic = iconFor(resource.type, resource.url, resource.name);
                                         return (
                                           <li>
                                             <a href={resource.url} class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title={resource.url}>
@@ -4180,6 +4356,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                       const isContentCollection = (lesson as any).collection === 'content';
                       const lessonType = String(lesson.data.type || '').trim().toLowerCase();
                       const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
+                      const ic = getLessonIconInfo(lesson);
 
                       let lessonHref;
                       if (session && (isConceptGlossary || isContentCollection)) {
@@ -4217,14 +4394,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                             data-course-id={canonicalCourseIdToUse || courseSlug}
                             data-lesson-page-slug={isContentCollection ? ((lesson as any).id || lessonPageSlug) : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
                           >
-                            <span class="lesson-icon">{getLessonIcon(lesson)}</span>
+                            <span class:list={["lesson-icon", { "lesson-icon--concept": ic.isConcept }]} style={ic.color ? `color: ${ic.color}` : undefined}>{ic.char}</span>
                             <span class="lesson-link-text">{lesson.data.title}</span>
                             <span class="lesson-link-trailing">
                               {lessonType === 'info' && (
                                 <span class="lesson-type">ℹ️</span>
                               )}
-                              {(lessonType === 'concept' || lessonType === 'glossary') && (
-                                <span class="lesson-type" title={lessonType}>{lessonType === 'concept' ? '💡' : '📖'}</span>
+                              {lessonType === 'glossary' && (
+                                <span class="lesson-type" title={lessonType}>📖</span>
                               )}
                               {assignmentLikeTypes.has(lessonType) && (
                                 <span class="lesson-type">📝</span>
