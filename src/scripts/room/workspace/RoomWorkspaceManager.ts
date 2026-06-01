@@ -23,6 +23,16 @@ export class RoomWorkspaceManager {
   private onRecursosInit?: (element: HTMLElement) => PodDisposable;
   private onNotesInit?: (element: HTMLElement) => PodDisposable;
   private isApplyingRemoteLayout = false;
+  private isBatchLayoutUpdate = false;
+  private panelCache = new Map<
+    string,
+    {
+      shell: HTMLElement;
+      element: HTMLElement;
+      controller: any;
+      disposable: any;
+    }
+  >();
   private currentWorkspaceKey = "full-win-speaker";
   public hyperpianoController: HyperpianoController | null = null;
   private podControllers = new Map<string, any>();
@@ -289,6 +299,27 @@ export class RoomWorkspaceManager {
             if (id === "lilypond-editor") id = "lily-code";
             if (id === "lilypond-preview") id = "lily-render";
 
+            if (this.panelCache.has(options.id)) {
+              const cached = this.panelCache.get(options.id)!;
+              return {
+                element: cached.shell,
+                init: (params: any) => {
+                  if (id === "hyperpiano" && cached.controller) {
+                    params.api.onDidFocusChange((focused: boolean) => {
+                      cached.controller.setFocused(focused);
+                    });
+                  }
+                },
+                update: (params: any) => {},
+                dispose: () => {
+                  if (!this.panelCache.has(options.id)) {
+                    this.disposePodController(options.id);
+                    if (cached.element) cached.element.remove();
+                  }
+                },
+              };
+            }
+
             const templateDiv = document.getElementById("musiki-pod-templates");
             const dataScript = document.getElementById(
               "musiki-presentation-data",
@@ -328,85 +359,67 @@ export class RoomWorkspaceManager {
             if (element) body.appendChild(element);
             shell.appendChild(body);
 
+            let controller: any = null;
+            let disposable: any = null;
+
             if (element) {
               if (id === "forum") {
                 this.bindForum(element);
               }
               if (id === "hyperpiano" && this.onHyperpianoInit) {
-                const hp = this.onHyperpianoInit(element);
-                this.rememberPodController(options.id, hp);
+                controller = this.onHyperpianoInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (
                 (id === "lily-code" || id === "lily-render") &&
                 this.onLilypondInit
               ) {
-                this.rememberPodController(
-                  options.id,
-                  this.onLilypondInit(element),
-                );
+                controller = this.onLilypondInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "concept" && this.onConceptInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onConceptInit(element),
-                );
+                controller = this.onConceptInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "external-media" && this.onMediaInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onMediaInit(element),
-                );
+                controller = this.onMediaInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "clase" && this.onClaseInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onClaseInit(element),
-                );
+                controller = this.onClaseInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "chat" && this.onChatInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onChatInit(element),
-                );
+                controller = this.onChatInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "orf" && this.onOrfInit) {
-                this.rememberPodController(options.id, this.onOrfInit(element));
+                controller = this.onOrfInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "instant-score" && this.onScoreInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onScoreInit(element),
-                );
+                controller = this.onScoreInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "sonic-analyzer" && this.onSonicAnalyzerInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onSonicAnalyzerInit(element),
-                );
+                controller = this.onSonicAnalyzerInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "sonic-visualizer" && this.onSonicVisualizerInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onSonicVisualizerInit(element),
-                );
+                controller = this.onSonicVisualizerInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "visualizer" && this.onVisualizerInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onVisualizerInit(element),
-                );
+                controller = this.onVisualizerInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "recursos" && this.onRecursosInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onRecursosInit(element),
-                );
+                controller = this.onRecursosInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "notes" && this.onNotesInit) {
-                this.rememberPodController(
-                  options.id,
-                  this.onNotesInit(element),
-                );
+                controller = this.onNotesInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "graph") {
                 delete element.dataset.graphPodReady;
@@ -415,6 +428,13 @@ export class RoomWorkspaceManager {
                 }, 100);
               }
             }
+
+            this.panelCache.set(options.id, {
+              shell,
+              element,
+              controller,
+              disposable: null,
+            });
 
             return {
               element: shell,
@@ -425,13 +445,17 @@ export class RoomWorkspaceManager {
                   });
                 }
                 if (id === "whiteboard" && element && this.onWhiteboardInit) {
-                  this.onWhiteboardInit(element);
+                  disposable = this.onWhiteboardInit(element);
+                  const cached = this.panelCache.get(options.id);
+                  if (cached) cached.disposable = disposable;
                 }
               },
               update: (params: any) => {},
               dispose: () => {
-                this.disposePodController(options.id);
-                if (element) element.remove();
+                if (!this.panelCache.has(options.id)) {
+                  this.disposePodController(options.id);
+                  if (element) element.remove();
+                }
               },
             };
           },
@@ -448,6 +472,9 @@ export class RoomWorkspaceManager {
             if (layout) this.onLayoutChange(layout);
           }
           window.dispatchEvent(new CustomEvent("musiki:workspace:changed"));
+          if (!this.isBatchLayoutUpdate) {
+            this.prunePanelCache();
+          }
         });
 
         // Ensure Dockview reacts to container size changes
@@ -1239,6 +1266,8 @@ export class RoomWorkspaceManager {
 
   public applyLayoutByKey(key: string) {
     if (!this.dockview) return;
+    this.isBatchLayoutUpdate = true;
+    try {
 
     // Check if there's a saved override for this master key
     const custom = localStorage.getItem(`musiki:workspace:${key}`);
@@ -1601,6 +1630,10 @@ export class RoomWorkspaceManager {
       this.currentWorkspaceKey = "mobile";
       this.renderQuickLists();
     }
+    } finally {
+      this.isBatchLayoutUpdate = false;
+      this.prunePanelCache();
+    }
   }
 
   private clearAllPanels() {
@@ -1608,9 +1641,35 @@ export class RoomWorkspaceManager {
     this.dockview.panels.forEach((p) => p.api.close());
   }
 
+  private prunePanelCache() {
+    if (!this.dockview) return;
+    const activeIds = new Set(this.dockview.panels.map((p) => p.id));
+    this.panelCache.forEach((cached, id) => {
+      if (!activeIds.has(id)) {
+        this.disposePodController(id);
+        if (cached.disposable) {
+          try {
+            if (typeof cached.disposable === "function") {
+              cached.disposable();
+            } else if (typeof cached.disposable.dispose === "function") {
+              cached.disposable.dispose();
+            }
+          } catch (e) {
+            console.warn(`Error disposing cached panel ${id}:`, e);
+          }
+        }
+        try {
+          cached.shell.remove();
+        } catch (e) {}
+        this.panelCache.delete(id);
+      }
+    });
+  }
+
   public applyLayout(layout: any) {
     if (!this.dockview || !layout) return;
     this.isApplyingRemoteLayout = true;
+    this.isBatchLayoutUpdate = true;
     try {
       if (typeof layout === "string") this.applyLayoutByKey(layout);
       else {
@@ -1628,6 +1687,8 @@ export class RoomWorkspaceManager {
       console.error("Error applying remote layout:", e);
     } finally {
       this.isApplyingRemoteLayout = false;
+      this.isBatchLayoutUpdate = false;
+      this.prunePanelCache();
     }
   }
 

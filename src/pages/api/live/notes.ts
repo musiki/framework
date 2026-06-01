@@ -7,6 +7,7 @@ import {
 } from '../../../lib/forum-server';
 import { renderForumMarkdown } from '../../../lib/forum-markdown';
 import { query } from '../../../lib/db/pool';
+import { getNoteAccess } from './notes/annotations';
 
 const TITLE_MAX = 160;
 const BODY_MAX  = 8_000;
@@ -19,7 +20,7 @@ async function validateOwnedFolderScope(
   if (!folderId) return null;
   const { data, error } = await query(
     `SELECT id FROM "LiveClassNoteFolder"
-     WHERE id = $1 AND "userId" = $2 AND "courseId" IS NOT DISTINCT FROM $3
+     WHERE id = $1::uuid AND "userId" = $2::uuid AND "courseId" IS NOT DISTINCT FROM $3
      LIMIT 1`,
     [folderId, userId, courseId],
   );
@@ -27,10 +28,10 @@ async function validateOwnedFolderScope(
   return data?.length ? null : 'Folder does not belong to this note scope';
 }
 
-async function findOwnedNoteCourseId(id: string, userId: string): Promise<string | null | undefined> {
+async function findNoteCourseId(id: string): Promise<string | null | undefined> {
   const { data, error } = await query(
-    `SELECT "courseId" FROM "LiveClassNote" WHERE id = $1 AND "userId" = $2 LIMIT 1`,
-    [id, userId],
+    `SELECT "courseId" FROM "LiveClassNote" WHERE id = $1::uuid LIMIT 1`,
+    [id],
   );
   if (error) throw error;
   return data?.length ? (data[0].courseId ?? null) : undefined;
@@ -59,34 +60,81 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
   const folderId = cleanString(url.searchParams.get('folderId') ?? '', 36) || null;
   const limit    = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || '40')));
 
+  // Get user's classes in this course to retrieve group-shared notes
+  let userClasses: string[] = [];
+  if (courseId) {
+    const { data: classRows } = await query(
+      `SELECT DISTINCT "claseId" FROM "ResourceSession"
+       WHERE "courseId" = $1 AND "claseId" IS NOT NULL AND "claseId" != ''`,
+      [courseId]
+    );
+    userClasses = (classRows ?? []).map((row: any) => String(row.claseId));
+
+    // Also get the user's group from their student profile metadata submission
+    const { data: profileSub } = await query(
+      `SELECT payload->>'grupo' as grupo
+       FROM "Submission"
+       WHERE "userId" = $1::uuid 
+         AND "assignmentId" LIKE $2
+       LIMIT 1`,
+      [user.id, `__meta__:course-student-profile:${encodeURIComponent(courseId)}:%`]
+    );
+    if (profileSub?.length && profileSub[0].grupo) {
+      const g = String(profileSub[0].grupo).trim();
+      if (g) {
+        userClasses.push(g);
+        userClasses.push(`${courseId}/${g}`);
+      }
+    }
+  }
+
   const params: any[] = [user.id];
-  let sql = `SELECT id, title, body, "renderedHtml", "noteDate", "courseId", "folderId", "createdAt", "updatedAt"
-             FROM "LiveClassNote" WHERE "userId" = $1`;
+  let classCondition = '';
+  if (userClasses.length > 0) {
+    params.push(userClasses);
+    classCondition = ` OR (s."targetType" = 'class' AND s."targetId" = ANY($${params.length}::text[]))`;
+  }
+
+  let sql = `SELECT DISTINCT n.id, n.title, n.body, n."renderedHtml", n."noteDate", n."courseId", n."folderId", n."createdAt", n."updatedAt", n."userId",
+                    o.name as "ownerName"
+             FROM "LiveClassNote" n
+             LEFT JOIN "User" o ON n."userId" = o.id
+             LEFT JOIN "LiveClassNoteShare" s ON n.id = s."noteId"
+             WHERE (n."userId" = $1::uuid OR
+                    (s."targetType" = 'user' AND s."targetId" = $1::text) OR
+                    (s."targetType" = 'teachers' AND EXISTS (SELECT 1 FROM "Enrollment" WHERE "userId" = $1::uuid AND "courseId" = n."courseId" AND "roleInCourse" = 'teacher')) OR
+                    (s."targetType" = 'students' AND EXISTS (SELECT 1 FROM "Enrollment" WHERE "userId" = $1::uuid AND "courseId" = n."courseId" AND "roleInCourse" = 'student'))${classCondition})`;
 
   if (noteId) {
     params.push(noteId);
-    sql += ` AND "id" = $${params.length}`;
+    sql += ` AND n."id" = $${params.length}::uuid`;
   }
   if (courseId) {
     params.push(courseId);
-    sql += ` AND "courseId" = $${params.length}`;
+    sql += ` AND n."courseId" = $${params.length}`;
   }
   if (roomName) {
     params.push(roomName);
-    sql += ` AND "roomName" = $${params.length}`;
+    sql += ` AND n."roomName" = $${params.length}`;
   }
   if (folderId) {
     params.push(folderId);
-    sql += ` AND "folderId" = $${params.length}`;
+    sql += ` AND n."folderId" = $${params.length}::uuid`;
   }
 
-  sql += ` ORDER BY "noteDate" DESC, "updatedAt" DESC LIMIT $${params.length + 1}`;
+  sql += ` ORDER BY n."noteDate" DESC, n."updatedAt" DESC LIMIT $${params.length + 1}`;
   params.push(limit);
 
   const { data, error } = await query(sql, params);
   if (error) return json({ error: error.message }, 500);
 
-  return json({ notes: data ?? [] });
+  const notesWithAccess = [];
+  for (const note of data ?? []) {
+    const access = await getNoteAccess(note.id, user.id);
+    notesWithAccess.push({ ...note, accessLevel: access });
+  }
+
+  return json({ notes: notesWithAccess, currentUserId: user.id });
 };
 
 // POST /api/live/notes  — upsert by id (create if no id, update if id provided)
@@ -107,7 +155,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (folderId) {
     let folderCourseId = courseId;
     if (id && !('courseId' in body)) {
-      const existingCourseId = await findOwnedNoteCourseId(id, user.id);
+      const existingCourseId = await findNoteCourseId(id);
       if (existingCourseId === undefined) return json({ error: 'Not found' }, 404);
       folderCourseId = existingCourseId;
     }
@@ -130,6 +178,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // Insert/update first (fast) - omitted fields on updates must remain untouched.
   let result;
   if (id) {
+    const access = await getNoteAccess(id, user.id);
+    if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
+
     const updateRow: Record<string, unknown> = { updatedAt: row.updatedAt };
     if ('title' in body) updateRow.title = title;
     if ('body' in body) {
@@ -144,9 +195,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const vals = Object.values(updateRow);
     const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
     result = await query(
-      `UPDATE "LiveClassNote" SET ${setSql} WHERE "id" = $${cols.length + 1} AND "userId" = $${cols.length + 2} 
+      `UPDATE "LiveClassNote" SET ${setSql} WHERE "id" = $${cols.length + 1}::uuid 
        RETURNING id, title, "noteDate", "updatedAt", "courseId", "folderId"`,
-      [...vals, id, user.id]
+      [...vals, id]
     );
   } else {
     const insertRow = { ...row, id: crypto.randomUUID(), createdAt: row.updatedAt };
@@ -172,8 +223,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
       try {
         const renderedHtml = await renderForumMarkdown(noteBody, { remoteLilypond: true });
         await query(
-          `UPDATE "LiveClassNote" SET "renderedHtml" = $1 WHERE "id" = $2 AND "userId" = $3`,
-          [renderedHtml, savedId, user.id]
+          `UPDATE "LiveClassNote" SET "renderedHtml" = $1 WHERE "id" = $2::uuid`,
+          [renderedHtml, savedId]
         );
       } catch {
         // non-fatal: rendered HTML stays null
@@ -201,7 +252,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   // null means "remove from folder"; missing key means "don't change"
   if ('folderId' in body) {
     const folderId = body.folderId === null ? null : cleanString(String(body.folderId ?? ''), 36) || null;
-    const noteCourseId = await findOwnedNoteCourseId(id, user.id);
+    const noteCourseId = await findNoteCourseId(id);
     if (noteCourseId === undefined) return json({ error: 'Not found' }, 404);
     const folderError = await validateOwnedFolderScope(folderId, user.id, noteCourseId);
     if (folderError) return json({ error: folderError }, 400);
@@ -223,10 +274,13 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
 
   if (sets.length === 0) return json({ error: 'nothing to update' }, 400);
 
-  params.push(id, user.id);
+  const access = await getNoteAccess(id, user.id);
+  if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
+
+  params.push(id);
   const { data, error } = await query(
     `UPDATE "LiveClassNote" SET ${sets.join(', ')}, "updatedAt" = now()
-     WHERE "id" = $${params.length - 1} AND "userId" = $${params.length}
+     WHERE "id" = $${params.length}::uuid
      RETURNING id`,
     params
   );
@@ -239,8 +293,8 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       try {
         const renderedHtml = await renderForumMarkdown(updatedBody, { remoteLilypond: true });
         await query(
-          `UPDATE "LiveClassNote" SET "renderedHtml" = $1 WHERE "id" = $2 AND "userId" = $3`,
-          [renderedHtml, id, user.id],
+          `UPDATE "LiveClassNote" SET "renderedHtml" = $1 WHERE "id" = $2::uuid`,
+          [renderedHtml, id],
         );
       } catch {
         // A failed preview render must not invalidate an already-saved draft.
@@ -261,7 +315,7 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
   if (!id) return json({ error: 'id required' }, 400);
 
   const { error } = await query(
-    `DELETE FROM "LiveClassNote" WHERE "id" = $1 AND "userId" = $2`,
+    `DELETE FROM "LiveClassNote" WHERE "id" = $1::uuid AND "userId" = $2::uuid`,
     [id, user.id]
   );
 

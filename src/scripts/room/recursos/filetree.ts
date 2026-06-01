@@ -69,6 +69,7 @@ export function renderFiletree(
     headerEl?: HTMLElement;
     canEdit?: boolean;
     onItemClick: (item: ResourceItem) => void;
+    onItemDblClick?: (item: ResourceItem) => void;
     onItemContextMenu: (item: ResourceItem, e: MouseEvent) => void;
     onFolderContextMenu: (folder: string, e: MouseEvent) => void;
     onFolderToggle: (folder: string) => void;
@@ -143,6 +144,9 @@ function buildItemEl(
     <span class="re-item-name" title="${escHtml(item.url)}">${escHtml(item.name)}</span>
   `;
   el.addEventListener('click', () => options.onItemClick(item));
+  if (options.onItemDblClick) {
+    el.addEventListener('dblclick', () => options.onItemDblClick?.(item));
+  }
   el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); options.onItemContextMenu(item, e); });
   el.addEventListener('dragstart', () => options.onDragStart(item.id));
   return el;

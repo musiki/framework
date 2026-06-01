@@ -11,7 +11,7 @@ import {
   type ViewUpdate,
   keymap,
 } from '@codemirror/view';
-import { EditorState, RangeSetBuilder } from '@codemirror/state';
+import { EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { markdown } from '@codemirror/lang-markdown';
 import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
@@ -134,18 +134,49 @@ const liveMdTheme = EditorView.theme({
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+export const setAnnotationsEffect = StateEffect.define<Array<{ id: string; from: number; to: number; color?: string }>>();
+
+export const annotationsField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const effect of tr.effects) {
+      if (effect.is(setAnnotationsEffect)) {
+        const builder = new RangeSetBuilder<Decoration>();
+        const sorted = [...effect.value].sort((a, b) => a.from - b.from);
+        for (const ann of sorted) {
+          if (ann.from < ann.to) {
+            const colorClass = ann.color ? ` annotation-highlight--${ann.color}` : '';
+            builder.add(ann.from, ann.to, Decoration.mark({
+              class: `annotation-highlight${colorClass}`,
+              attributes: { 'data-annotation-id': ann.id }
+            }));
+          }
+        }
+        value = builder.finish();
+      }
+    }
+    return value;
+  },
+  provide: f => EditorView.decorations.from(f)
+});
+
 export interface LiveMdEditor {
   getContent(): string;
   setContent(content: string): void;
   focus(): void;
   destroy(): void;
   getView(): EditorView;
+  setAnnotations(annotations: Array<{ id: string; from: number; to: number; color?: string }>): void;
 }
 
 export function createLiveMdEditor(
   container: HTMLElement,
   initialContent: string,
   onSave: (content: string) => void | Promise<void>,
+  options?: { readOnly?: boolean }
 ): LiveMdEditor {
   injectCss();
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -184,9 +215,34 @@ export function createLiveMdEditor(
       blockPlugin,
       inlinePlugin,
       liveMdTheme,
+      annotationsField,
+      options?.readOnly ? EditorState.readOnly.of(true) : [],
+      options?.readOnly ? EditorView.editable.of(false) : [],
+      EditorView.domEventHandlers({
+        click(event, view) {
+          const target = event.target as HTMLElement;
+          const highlight = target.closest('.annotation-highlight');
+          if (highlight) {
+            const annotationId = highlight.getAttribute('data-annotation-id');
+            if (annotationId) {
+              view.dom.dispatchEvent(new CustomEvent('annotation-clicked', {
+                detail: { annotationId },
+                bubbles: true
+              }));
+              return true;
+            }
+          }
+          return false;
+        }
+      }),
       EditorView.updateListener.of(u => {
         if (u.docChanged) scheduleSave(u.view.state.doc.toString());
         if (u.focusChanged && !u.view.hasFocus) flushSave(u.view.state.doc.toString());
+        if (u.selectionSet) {
+          u.view.dom.dispatchEvent(new CustomEvent('editor-selection-changed', {
+            bubbles: true
+          }));
+        }
       }),
     ],
   });
@@ -202,5 +258,6 @@ export function createLiveMdEditor(
       view.destroy();
     },
     getView:    () => view,
+    setAnnotations: (anns) => view.dispatch({ effects: setAnnotationsEffect.of(anns) })
   };
 }

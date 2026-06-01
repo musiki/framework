@@ -177,6 +177,10 @@ export const renderParticipantRoster = ({
 
   participants
     .sort((left, right) => {
+      const leftCam = left.isCameraEnabled;
+      const rightCam = right.isCameraEnabled;
+      if (leftCam !== rightCam) return leftCam ? -1 : 1;
+
       const leftRole = readRole(left);
       const rightRole = readRole(right);
       if (leftRole !== rightRole) return leftRole === 'teacher' ? -1 : 1;
@@ -242,6 +246,22 @@ export const renderParticipantRoster = ({
         speaker.title = 'Hablando';
         indicators.appendChild(speaker);
       }
+
+      // Mic indicator
+      const micIndicator = document.createElement('span');
+      micIndicator.className = 'conference-roster-mic-icon';
+      micIndicator.dataset.enabled = participant.isMicrophoneEnabled ? 'true' : 'false';
+      micIndicator.title = participant.isMicrophoneEnabled ? 'Micrófono encendido' : 'Micrófono apagado';
+      micIndicator.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V7A3.5 3.5 0 1 0 8.5 7v5a3.5 3.5 0 0 0 3.5 3.5Zm-6-3a1 1 0 1 1 2 0 4 4 0 1 0 8 0 1 1 0 1 1 2 0 6 6 0 0 1-5 5.91V21h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.59A6 6 0 0 1 6 12.5Z"/></svg>';
+      indicators.appendChild(micIndicator);
+
+      // Camera indicator
+      const camIndicator = document.createElement('span');
+      camIndicator.className = 'conference-roster-camera-icon';
+      camIndicator.dataset.enabled = participant.isCameraEnabled ? 'true' : 'false';
+      camIndicator.title = participant.isCameraEnabled ? 'Cámara encendida' : 'Cámara apagada';
+      camIndicator.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h7A2.5 2.5 0 0 1 16 7.5v1.13l2.76-1.85A1.5 1.5 0 0 1 21 8.03v7.94a1.5 1.5 0 0 1-2.24 1.25L16 15.37v1.13A2.5 2.5 0 0 1 13.5 19h-7A2.5 2.5 0 0 1 4 16.5v-9Z"/></svg>';
+      indicators.appendChild(camIndicator);
 
       info.append(colorDot, primary, indicators);
 

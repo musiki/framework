@@ -14011,8 +14011,8 @@ a[node] -->|edge| b[hub]
 
           const reload = async () => {
             try {
-              const { folders, notes } = await loadNotesTree(courseId);
-              renderNotesTree(treeEl, folders, notes, courseId);
+              const { folders, notes, currentUserId } = await loadNotesTree(courseId);
+              renderNotesTree(treeEl, folders, notes, courseId, currentUserId);
             } catch (error) {
               renderNotesTreeError(treeEl, error);
             }

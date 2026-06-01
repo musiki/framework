@@ -3520,6 +3520,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     backgroundColorApplyButton,
     previewInvertInput,
     screenshareAudioInput,
+    recursosAutoOpenInput,
     showCircleInput,
     statusNode,
     stateNode,
@@ -4144,6 +4145,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   if (optimizeSpeakerInput instanceof HTMLInputElement && persistedSetup.optimizeSpeaker !== undefined) {
     optimizeSpeakerInput.checked = persistedSetup.optimizeSpeaker;
   }
+  if (recursosAutoOpenInput instanceof HTMLInputElement) {
+    recursosAutoOpenInput.checked = persistedSetup.recursosAutoOpen === true;
+  }
   if (limitGridQualityInput instanceof HTMLInputElement && persistedSetup.limitGridQuality !== undefined) {
     limitGridQualityInput.checked = persistedSetup.limitGridQuality;
   }
@@ -4232,7 +4236,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       source: MediaStreamAudioSourceNode;
     }
   >();
-  let manualSessionLeaderIdentity = '';
+  let manualSessionLeaderIdentity = 'inactive';
   let focusChangedAtMs = 0;
 
   // ── Break rooms state ─────────────────────────────────────────────
@@ -7680,9 +7684,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   const compareParticipantsForDisplay = (left: Participant, right: Participant) => {
-    const leftHasCamera = hasCameraTrack(left);
-    const rightHasCamera = hasCameraTrack(right);
-    if (leftHasCamera !== rightHasCamera) return leftHasCamera ? -1 : 1;
+    const leftCam = left.isCameraEnabled;
+    const rightCam = right.isCameraEnabled;
+    if (leftCam !== rightCam) return leftCam ? -1 : 1;
 
     const leftRole = readParticipantRole(room, left, localRole);
     const rightRole = readParticipantRole(room, right, localRole);
@@ -7759,8 +7763,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   function getResolvedSessionLeaderIdentity() {
+    if (manualSessionLeaderIdentity === 'inactive') {
+      return 'inactive';
+    }
     if (
       manualSessionLeaderIdentity &&
+      manualSessionLeaderIdentity !== 'inactive' &&
       allParticipants().some(
         (participant) =>
           participant.identity === manualSessionLeaderIdentity &&
@@ -7773,14 +7781,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   const isSessionLeader = (participant: Participant | { identity: string } | null | undefined) =>
-    Boolean(participant && getResolvedSessionLeaderIdentity() && participant.identity === getResolvedSessionLeaderIdentity());
+    Boolean(participant && getResolvedSessionLeaderIdentity() && getResolvedSessionLeaderIdentity() !== 'inactive' && participant.identity === getResolvedSessionLeaderIdentity());
 
   function canLeadSession() {
-    return (
-      localRole === 'teacher' &&
-      room.state === ConnectionState.Connected &&
-      room.localParticipant.identity === getResolvedSessionLeaderIdentity()
-    );
+    if (localRole !== 'teacher') return false;
+    const leader = getResolvedSessionLeaderIdentity();
+    if (!leader || leader === 'inactive') return true;
+    return room.state === ConnectionState.Connected && room.localParticipant.identity === leader;
   }
 
   const applySessionLeaderState = () => {
@@ -7797,6 +7804,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         .sort(compareSessionLeaderCandidates);
 
       sessionLeaderSelect.innerHTML = '';
+
+      const inactiveOpt = document.createElement('option');
+      inactiveOpt.value = 'inactive';
+      inactiveOpt.textContent = 'DESACTIVADO';
+      sessionLeaderSelect.appendChild(inactiveOpt);
+
       teachers.forEach((participant) => {
         const option = document.createElement('option');
         option.value = participant.identity;
@@ -7812,7 +7825,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       sessionLeaderSelect.value = sessionLeaderIdentity;
-      sessionLeaderSelect.disabled = localRole !== 'teacher' || !canLeadSession();
+      sessionLeaderSelect.disabled = localRole !== 'teacher';
     }
 
     applySessionControlState();
@@ -8204,6 +8217,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       limiterThreshold: synthLimiterThreshold,
       streamingProfile: streamingProfileSelect instanceof HTMLSelectElement ? (streamingProfileSelect.value as StreamingProfileKey) : undefined,
       optimizeSpeaker: optimizeSpeakerInput instanceof HTMLInputElement ? optimizeSpeakerInput.checked : undefined,
+      recursosAutoOpen: recursosAutoOpenInput instanceof HTMLInputElement ? recursosAutoOpenInput.checked : undefined,
       limitGridQuality: limitGridQualityInput instanceof HTMLInputElement ? limitGridQualityInput.checked : undefined,
       audioEchoCancellation: audioEchoCancellationInput instanceof HTMLInputElement ? audioEchoCancellationInput.checked : undefined,
       audioNoiseSuppression: audioNoiseSuppressionInput instanceof HTMLInputElement ? audioNoiseSuppressionInput.checked : undefined,
@@ -11488,6 +11502,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         getRoomName: () => roomInput.value.trim() || null,
         getIdentity: () => room.localParticipant?.identity ?? '',
         publish: (msg) => void publishMessage(msg as any),
+        getRecursosAutoOpen: () => recursosAutoOpenInput instanceof HTMLInputElement ? recursosAutoOpenInput.checked : false,
       });
       const controller = recursosController;
       return {
@@ -14022,7 +14037,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           // Plan A: audio: false by default — no ScreenShareAudio track published, zero echo risk.
           // Only capture system audio if the user explicitly enables it in Setup.
           audio: includeScreenAudio
-            ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+            ? ({
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false,
+                systemAudio: 'include',
+                suppressLocalAudioPlayback: true,
+              } as any)
             : false,
           resolution: {
             width: 1920,
@@ -14033,7 +14054,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           contentHint: 'detail',
           selfBrowserSurface: 'include',
           surfaceSwitching: 'include',
-          ...(includeScreenAudio && { systemAudio: 'include', suppressLocalAudioPlayback: true }),
         });
       }
       syncAllParticipants();
@@ -14046,7 +14066,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   root.querySelector('[data-action="screenshare-audio-toggle"]')?.addEventListener('click', () => {
     if (screenshareAudioInput instanceof HTMLInputElement) {
       screenshareAudioInput.checked = !screenshareAudioInput.checked;
-      setControlState();
+      screenshareAudioInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
   });
 
@@ -15101,7 +15121,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   if (sessionLeaderSelect instanceof HTMLSelectElement) {
     sessionLeaderSelect.addEventListener('change', () => {
-      if (localRole !== 'teacher' || !canLeadSession()) {
+      if (localRole !== 'teacher') {
         applySessionLeaderState();
         return;
       }
@@ -16097,6 +16117,50 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         }
       }
       queuePreferredRemoteVideoDimensionsSync();
+    });
+  }
+
+  if (recursosAutoOpenInput instanceof HTMLInputElement) {
+    recursosAutoOpenInput.addEventListener('change', () => {
+      persistSetupState();
+    });
+  }
+
+  if (screenshareAudioInput instanceof HTMLInputElement) {
+    screenshareAudioInput.addEventListener('change', async () => {
+      persistSetupState();
+      setControlState();
+
+      if (room.state === ConnectionState.Connected && room.localParticipant.isScreenShareEnabled) {
+        try {
+          await room.localParticipant.setScreenShareEnabled(false);
+          const includeScreenAudio = screenshareAudioInput.checked;
+          await room.localParticipant.setScreenShareEnabled(true, {
+            audio: includeScreenAudio
+              ? ({
+                  echoCancellation: false,
+                  noiseSuppression: false,
+                  autoGainControl: false,
+                  systemAudio: 'include',
+                  suppressLocalAudioPlayback: true,
+                } as any)
+              : false,
+            resolution: {
+              width: 1920,
+              height: 1080,
+              frameRate: 30,
+              aspectRatio: 16 / 9,
+            },
+            contentHint: 'detail',
+            selfBrowserSurface: 'include',
+            surfaceSwitching: 'include',
+          });
+          syncAllParticipants();
+          setControlState();
+        } catch (error) {
+          setStatus(safeErrorMessage(error));
+        }
+      }
     });
   }
 

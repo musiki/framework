@@ -179,6 +179,16 @@ const isTeacher = defaultRole === 'teacher';
               <p class="conference-field-hint">Captura el audio del sistema al presentar pantalla (para compartir música/video). Desactivado = sin audio de pantalla, micrófono sigue funcionando normalmente. Activar puede causar eco.</p>
             </div>
 
+            <div class="conference-field">
+              <div class="conference-field-row">
+                <label for="modal-recursos-auto-open">Abrir los pods asociados a los tipos de archivos de RECURSOS</label>
+                <label class="conference-switch">
+                  <input type="checkbox" id="modal-recursos-auto-open" data-recursos-auto-open-input />
+                  <span class="conference-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+
             <div class="conference-field" data-session-leader-field>
               <label for="modal-leader-select">Delegar sesion</label>
               <select id="modal-leader-select" data-session-leader-select>

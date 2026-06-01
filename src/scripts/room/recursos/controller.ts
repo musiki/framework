@@ -23,6 +23,7 @@ type RecursosOptions = {
   getRoomName: () => string | null;
   getIdentity: () => string;
   publish: (msg: RecursosMessage) => void;
+  getRecursosAutoOpen?: () => boolean;
 };
 
 type RecursosMessage =
@@ -37,6 +38,7 @@ export class RecursosController {
   private getRoomName: () => string | null;
   private getIdentity: () => string;
   private publish: (msg: RecursosMessage) => void;
+  private getRecursosAutoOpen?: () => boolean;
 
   private items: ResourceItem[] = [];
   private allowStudents = false;
@@ -85,6 +87,7 @@ export class RecursosController {
     this.getRoomName = opts.getRoomName;
     this.getIdentity = opts.getIdentity;
     this.publish = opts.publish;
+    this.getRecursosAutoOpen = opts.getRecursosAutoOpen;
     this.bindElements();
     this.bindEvents();
     void this.bootstrap();
@@ -147,14 +150,22 @@ export class RecursosController {
   private async loadSession(): Promise<void> {
     const roomName = this.getRoomName() ?? '';
     if (!roomName) return;
+    const claseId = this.getCourseId();
+    const courseId = this.getCourseRootId?.() ?? null;
     try {
+      const params = new URLSearchParams({
+        roomName,
+        ...(claseId && { claseId }),
+        ...(courseId && { courseId }),
+      });
       // Fetch latest session for the room
-      const resp = await fetch(`/api/live/session?roomName=${encodeURIComponent(roomName)}`);
+      const resp = await fetch(`/api/live/session?${params}`);
       if (resp.ok) {
         const { session } = await resp.json();
         if (session) {
           this.sessionId = session.id;
           this.sessionName = session.name;
+          if (this.sessionName) this.emptyFolders.add(this.sessionName);
           await this.loadSessionResources([session.id]);
         }
       }
@@ -196,6 +207,7 @@ export class RecursosController {
         const { session } = await resp.json();
         this.sessionId = session.id;
         this.sessionName = session.name;
+        if (this.sessionName) this.emptyFolders.add(this.sessionName);
         this.updateSessionBar();
       }
     } catch { /**/ }
@@ -415,6 +427,7 @@ export class RecursosController {
         const { session } = await resp.json();
         this.sessionId = session.id;
         this.sessionName = session.name;
+        if (this.sessionName) this.emptyFolders.add(this.sessionName);
         this.updateSessionBar();
       }
     } catch { /**/ }
@@ -425,6 +438,7 @@ export class RecursosController {
     try {
       await fetch(`/api/live/session?id=${encodeURIComponent(this.sessionId)}`, { method: 'DELETE' });
     } catch { /**/ }
+    if (this.sessionName) this.emptyFolders.delete(this.sessionName);
     this.sessionId = null;
     this.sessionName = '';
     this.updateSessionBar();
@@ -441,7 +455,9 @@ export class RecursosController {
         body: JSON.stringify({ id: this.sessionId, name }),
       });
       if (resp.ok) {
+        if (this.sessionName) this.emptyFolders.delete(this.sessionName);
         this.sessionName = name.trim();
+        if (this.sessionName) this.emptyFolders.add(this.sessionName);
         this.updateSessionBar();
       }
     } catch { /**/ }
@@ -501,6 +517,7 @@ export class RecursosController {
           }
           this.sessionId = s.id;
           this.sessionName = s.name;
+          if (this.sessionName) this.emptyFolders.add(this.sessionName);
           await this.loadSessionResources([s.id]);
           this.sessionsModalEl.setAttribute('hidden', '');
           this.render();
@@ -578,9 +595,10 @@ export class RecursosController {
       const text = (await navigator.clipboard.readText()).trim();
       if (!/^https?:\/\//i.test(text)) return;
       const sid = await this.ensureSession();
+      const type = typeFromUrl(text);
       const item: ResourceItem = {
         id: crypto.randomUUID(), url: text, name: quickNameFromUrl(text),
-        type: typeFromUrl(text), folder: '', source: 'paste',
+        type, folder: this.defaultFolderForType(type), source: 'paste',
         createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
         sessionId: sid || null,
       };
@@ -635,7 +653,7 @@ export class RecursosController {
       const payload = {
         ...this.buildSavePayload(roomName),
         persist: true,
-        courseRootId: this.getCourseRootId() ?? null,
+        courseRootId: this.getCourseRootId?.() ?? null,
       };
       const resp = await fetch('/api/live/recursos', {
         method: 'POST',
@@ -716,7 +734,12 @@ export class RecursosController {
     renderFiletree(this.contentEl, visibleItems, this.collapsedFolders, this.emptyFolders, {
       headerEl: this.buildHeaderEl(),
       canEdit: this.canEdit(),
-      onItemClick: (item) => this.requestResourceOpen(item),
+      onItemClick: (item) => {
+        if (this.getRecursosAutoOpen ? this.getRecursosAutoOpen() : false) {
+          this.requestResourceOpen(item);
+        }
+      },
+      onItemDblClick: (item) => this.requestResourceOpen(item),
       onItemContextMenu: (item, e) => this.openItemCtxMenu(item, e),
       onFolderContextMenu: (folder, e) => this.openFolderCtxMenu(folder, e),
       onFolderToggle: (folder) => this.toggleFolder(folder),
@@ -837,6 +860,9 @@ export class RecursosController {
   }
 
   private defaultFolderForType(type: ResourceType | 'other'): string {
+    if (this.sessionId && this.sessionName) {
+      return this.sessionName;
+    }
     if (type === 'audio') return 'media';
     if (type === 'pdf' || type === 'pptx' || type === 'img' || type === 'video') return 'DOC';
     return '';

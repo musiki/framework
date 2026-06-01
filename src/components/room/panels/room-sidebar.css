@@ -1403,6 +1403,28 @@ details[open] > summary.conference-sidebar-heading::before {
   }
 }
 
+.conference-roster-mic-icon,
+.conference-roster-camera-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 150ms ease, opacity 150ms ease;
+  width: 12px;
+  height: 12px;
+}
+
+.conference-roster-mic-icon[data-enabled="true"],
+.conference-roster-camera-icon[data-enabled="true"] {
+  color: var(--conference-green, #22c55e);
+  opacity: 0.9;
+}
+
+.conference-roster-mic-icon[data-enabled="false"],
+.conference-roster-camera-icon[data-enabled="false"] {
+  color: var(--conference-red, #ef4444);
+  opacity: 0.5;
+}
+
 .conference-roster-role {
   font-size: 0.62rem;
   letter-spacing: 0.04em;
