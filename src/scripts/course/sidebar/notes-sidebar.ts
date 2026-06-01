@@ -431,6 +431,12 @@ export function renderNotesSidebar(
     }
     summary.draggable = true;
 
+    summary.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('button, a')) return;
+      e.preventDefault();
+      details.open = !details.open;
+    });
+
     summary.addEventListener('dragstart', e => {
       draggingChapterName = group.name;
       e.dataTransfer!.setData('text/x-musiki-course-chapter', group.name);

@@ -21,7 +21,6 @@ export const HIGHLIGHT_COLORS: Record<string, { label: string; color: string; bg
 const pendingParams = new Map<string, any>();
 let _workspace: PersonalNotesWorkspace | null = null;
 let _ctrl: AbortController | null = null;
-let _editorCleanups: Array<() => void> = [];
 
 export function initPersonalNotesWorkspace(container: HTMLElement): PersonalNotesWorkspace {
   if (_workspace) { _ctrl?.abort(); _workspace = null; }
@@ -66,8 +65,9 @@ export function initPersonalNotesWorkspace(container: HTMLElement): PersonalNote
   _workspace = {
     destroy: () => {
       _ctrl?.abort();
-      for (const cleanup of _editorCleanups) cleanup();
-      _editorCleanups = [];
+      container.querySelectorAll('.cnw-body').forEach((bodyEl) => {
+        (bodyEl as any).__editorCleanups?.forEach((c: any) => c());
+      });
       ro.disconnect();
       dockview.dispose();
       _workspace = null;
@@ -430,7 +430,9 @@ function injectWorkspaceExtraCss() {
   document.head.appendChild(s);
 }
 
-async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, traceBtn: HTMLButtonElement, noteId: string) {
+export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, traceBtn: HTMLButtonElement, noteId: string) {
+  const localCleanups: Array<() => void> = [];
+  (bodyEl as any).__editorCleanups = localCleanups;
   injectWorkspaceExtraCss();
 
   bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
@@ -442,6 +444,7 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
   bodyEl.innerHTML = '';
   
   const isReadOnly = note.accessLevel === 'view' || note.accessLevel === 'comment';
+  const canComment = note.accessLevel === 'comment' || note.accessLevel === 'edit';
 
   const mount = document.createElement('div');
   mount.style.cssText = 'height:100%;overflow:hidden;display:flex;flex-direction:column;';
@@ -495,12 +498,6 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
       <div style="display:flex; align-items:center; gap:6px;">
         <select class="category-filter-select" style="background: rgba(0,0,0,0.2); border: 1px solid var(--c-border, rgba(120,120,140,0.22)); border-radius: 3px; font-size: 9.5px; color: var(--c-fg); padding: 1px 4px; outline: none; cursor: pointer; max-width: 95px;">
           <option value="all">Todas</option>
-          <option value="green">🟢 Idea principal</option>
-          <option value="blue">🔵 Concepto / ideas</option>
-          <option value="red">🔴 Crítica / antítesis</option>
-          <option value="yellow">🟡 Dato</option>
-          <option value="orange">🟠 Acción / método</option>
-          <option value="violet">🟣 Generativo</option>
         </select>
         <label style="font-size: 9px; color: var(--c-fg-dim); display: flex; align-items: center; gap: 2px; cursor: pointer; user-select: none; margin-left: 2px; white-space: nowrap;">
           <input type="checkbox" class="show-resolved-checkbox" style="margin:0;" /> Resueltos
@@ -511,6 +508,17 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
     <div class="new-comment-section" style="padding: 10px; border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.15)); flex-shrink: 0; display: none; flex-direction: column; gap: 6px;"></div>
     <div class="comments-list-container" style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px;"></div>
   `;
+
+  const filterSelect = commentsSidebar.querySelector('.category-filter-select');
+  if (filterSelect) {
+    const emojis: Record<string, string> = { green: '🟢', blue: '🔵', red: '🔴', yellow: '🟡', orange: '🟠', violet: '🟣' };
+    for (const [colorName, colorObj] of Object.entries(HIGHLIGHT_COLORS)) {
+      const opt = document.createElement('option');
+      opt.value = colorName;
+      opt.textContent = `${emojis[colorName] || '⚪'} ${colorObj.label}`;
+      filterSelect.appendChild(opt);
+    }
+  }
 
   versionsSidebar.innerHTML = `
     <div style="padding: 10px 12px; border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.15)); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
@@ -525,14 +533,6 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
 
   let editor: any;
   let currentSelectionColor: string | null = null;
-  const HIGHLIGHT_COLORS: Record<string, { label: string; color: string; bg: string; border: string }> = {
-    yellow: { label: 'Dato', color: '#eab308', bg: 'rgba(250, 204, 21, 0.14)', border: 'rgba(250, 204, 21, 0.5)' },
-    green: { label: 'Idea principal', color: '#22c55e', bg: 'rgba(74, 222, 128, 0.14)', border: 'rgba(74, 222, 128, 0.5)' },
-    blue: { label: 'Concepto / ideas', color: '#3b82f6', bg: 'rgba(96, 165, 250, 0.14)', border: 'rgba(96, 165, 250, 0.5)' },
-    red: { label: 'Crítica / antítesis', color: '#ef4444', bg: 'rgba(248, 113, 113, 0.14)', border: 'rgba(248, 113, 113, 0.5)' },
-    orange: { label: 'Acción / método', color: '#f97316', bg: 'rgba(251, 146, 60, 0.14)', border: 'rgba(251, 146, 60, 0.5)' },
-    violet: { label: 'Generativo', color: '#8b5cf6', bg: 'rgba(167, 139, 250, 0.14)', border: 'rgba(167, 139, 250, 0.5)' }
-  };
 
   const selectionToolbar = document.createElement('div');
   selectionToolbar.className = 'pnw-selection-toolbar';
@@ -583,7 +583,7 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
   };
 
   const updateSelectionToolbar = () => {
-    if (isReadOnly) {
+    if (!canComment) {
       selectionToolbar.style.display = 'none';
       return;
     }
@@ -639,7 +639,27 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
     }
   };
   document.addEventListener('mousedown', onDocClick);
-  _editorCleanups.push(() => document.removeEventListener('mousedown', onDocClick));
+  localCleanups.push(() => document.removeEventListener('mousedown', onDocClick));
+
+  const onContextMenu = (e: MouseEvent) => {
+    if (!canComment) return;
+
+    const sel = getSelectionInfo();
+    if (!sel) return;
+
+    e.preventDefault();
+
+    const wrapRect = editorWrap.getBoundingClientRect();
+    const left = e.clientX - wrapRect.left;
+    const top = e.clientY - wrapRect.top - 10;
+
+    selectionToolbar.style.display = 'flex';
+    selectionToolbar.style.left = `${left}px`;
+    selectionToolbar.style.top = `${top}px`;
+    selectionToolbar.style.transform = 'translate(-50%, -100%)';
+  };
+  editorWrap.addEventListener('contextmenu', onContextMenu);
+  localCleanups.push(() => editorWrap.removeEventListener('contextmenu', onContextMenu));
 
   const hud = bodyEl.closest('.cnw-shell')?.querySelector<HTMLElement>('.cnw-hud');
   const commentBtn = document.createElement('button');
@@ -1104,6 +1124,7 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
       try { localStorage.removeItem(`db-note-draft::${noteId}`); } catch {}
       banner.remove();
       editor = createLiveMdEditor(editorWrap, note.body ?? '', save, { readOnly: isReadOnly });
+      (bodyEl as any).__editor = editor;
       updateHud(bodyEl, note.body ?? '');
       editor.focus();
       void loadAnnotations();
@@ -1111,6 +1132,7 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
     banner.querySelector('#cnw-recover-accept')?.addEventListener('click', () => {
       banner.remove();
       editor = createLiveMdEditor(editorWrap, draft.body, save, { readOnly: isReadOnly });
+      (bodyEl as any).__editor = editor;
       updateHud(bodyEl, draft.body);
       editor.focus();
       void save(draft.body);
@@ -1119,6 +1141,7 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
   } else {
     mount.appendChild(workspaceRow);
     editor = createLiveMdEditor(editorWrap, note.body ?? '', save, { readOnly: isReadOnly });
+    (bodyEl as any).__editor = editor;
     updateHud(bodyEl, note.body ?? '');
     editor.focus();
     void loadAnnotations();
@@ -1129,13 +1152,13 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
     updateSelectionToolbar();
   };
   bodyEl.addEventListener('editor-selection-changed', onSelectionChanged);
-  _editorCleanups.push(() => bodyEl.removeEventListener('editor-selection-changed', onSelectionChanged));
+  localCleanups.push(() => bodyEl.removeEventListener('editor-selection-changed', onSelectionChanged));
 
   // Reposition selection toolbar on editor scroll
   const scroller = editorWrap.querySelector('.cm-scroller');
   if (scroller) {
     scroller.addEventListener('scroll', updateSelectionToolbar);
-    _editorCleanups.push(() => scroller.removeEventListener('scroll', updateSelectionToolbar));
+    localCleanups.push(() => scroller.removeEventListener('scroll', updateSelectionToolbar));
   }
 
   bodyEl.addEventListener('annotation-clicked', (e: any) => {
@@ -1163,7 +1186,7 @@ async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, tr
   };
   traceBtn.addEventListener('click', () => { void toggleTrace(); });
   await toggleTrace();
-  _editorCleanups.push(() => {
+  localCleanups.push(() => {
     traceHandle?.destroy();
     editor.destroy();
   });

@@ -3,6 +3,7 @@ import { DockviewComponent, positionToDirection } from 'dockview-core';
 import { marked, type Renderer } from 'marked';
 import { NotesPersistence } from './notes-persistence';
 import { getNote } from '../notes-editor/api';
+import { mountDbNoteEditor } from '../notas/personal-notes-workspace';
 import { parseFrontmatter } from '../notes-editor/yaml-strip';
 import type { InlineEditorOptions } from './notes/inline-editor';
 import { buildShell, injectWorkspaceCss, type NoteMode } from './dockview-shell';
@@ -903,6 +904,15 @@ export function initDockviewWorkspace(
   _activeCtrl = ctrl;
   const { signal } = ctrl;
 
+  // Global drag-and-drop cleanup to release preview rectangles on drag end or drop
+  const cleanupDragOver = () => {
+    container.querySelectorAll('.cnw-external-drag-over, .cnw-drag-over').forEach(el => {
+      el.classList.remove('cnw-external-drag-over', 'cnw-drag-over');
+    });
+  };
+  window.addEventListener('dragend', cleanupDragOver, { signal });
+  window.addEventListener('drop', cleanupDragOver, { signal });
+
   const containerId = container.id || 'cnw-root';
   container.id = containerId;
   container.classList.add('dockview-theme-light'); // or dark — matched by CSS vars
@@ -930,54 +940,13 @@ export function initDockviewWorkspace(
           panelId, params.noteId, params.title, dockview, true,
         );
         bindExternalNoteDrop(shell, panelId);
-        const state: DbNotePanelState = {
-          noteId: params.noteId,
-          mode: 'edit',
-          bodyEl,
-          statusDot,
-          pencilBtn,
-          traceBtn,
-          liveEditor: null,
-          traceHandle: null,
-          traceOnEnterEdit: _traceEnabledByDefault,
-        };
-        dbNotePanelStates.set(panelId, state);
-        pencilBtn.addEventListener('click', () => {
-          if (state.mode === 'preview') void enterDbNoteEditMode(state);
-          else void enterDbNotePreviewMode(state);
-        });
-        traceBtn.addEventListener('click', async () => {
-          if (state.traceHandle) {
-            state.traceHandle.destroy();
-            state.traceHandle = null;
-            traceBtn.classList.remove('is-active');
-            setTraceEnabledByDefault(false);
-            return;
-          }
-          if (state.mode !== 'edit') {
-            state.traceOnEnterEdit = true;
-            setTraceEnabledByDefault(true);
-            pencilBtn.click();
-            return;
-          }
-          if (!state.liveEditor) return; // editor still loading — auto-mount will fire
-          traceBtn.disabled = true;
-          try {
-            const { mountTraceMargin } = await import('./notes/trace-margin');
-            state.traceHandle = await mountTraceMargin(
-              state.liveEditor.getView(),
-              state.noteId,
-              state.bodyEl,
-            );
-            traceBtn.classList.add('is-active');
-            setTraceEnabledByDefault(true);
-          } catch (err) {
-            console.error('[trace] mount failed', err);
-          } finally {
-            traceBtn.disabled = false;
-          }
-        });
-        void enterDbNoteEditMode(state);
+        
+        // Hide the pencil button since mountDbNoteEditor manages editing/preview modes inside CodeMirror
+        pencilBtn.style.display = 'none';
+
+        // Mount the comprehensive personal notes editor with highlighting and commenting support
+        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId);
+        
         return { element: shell, init: () => {} };
       }
 
@@ -987,8 +956,9 @@ export function initDockviewWorkspace(
         qaShells.set(panelId, qa);
         _activeQaPanelId = panelId;
         if (params.noteId) {
-          const noteState = [...dbNotePanelStates.values()].find(s => s.noteId === params.noteId);
-          void activateQaNote(qa, params.noteId, params.noteTitle ?? '', noteState?.bodyEl.textContent ?? undefined);
+          const noteBodyEl = container.querySelector(`[data-panel-id^="db-note-${params.noteId}"] .cnw-body`);
+          const text = (noteBodyEl as any)?.__editor?.getContent() ?? undefined;
+          void activateQaNote(qa, params.noteId, params.noteTitle ?? '', text);
         }
         return { element: qa.root, init: () => {} };
       }
@@ -1370,6 +1340,13 @@ export function initDockviewWorkspace(
     if (state?.persistence) {
       state.persistence.flush().then(() => state.persistence?.destroy());
     }
+
+    // Run panel-scoped editor cleanups (mousedown, contextmenu, scroll, annotations)
+    const bodyEl = container.querySelector(`[data-panel-id="${event.id}"] .cnw-body`);
+    if (bodyEl) {
+      (bodyEl as any).__editorCleanups?.forEach((c: any) => c());
+    }
+
     dbNotePanelStates.get(event.id)?.liveEditor?.destroy();
     panelStates.delete(event.id);
     dbNotePanelStates.delete(event.id);
@@ -1387,6 +1364,10 @@ export function initDockviewWorkspace(
     openMedia,
     destroy: () => {
       ro.disconnect();
+      // Run cleanups for any open panel editors
+      container.querySelectorAll('.cnw-body').forEach((bodyEl) => {
+        (bodyEl as any).__editorCleanups?.forEach((c: any) => c());
+      });
       panelStates.forEach(s => s.persistence?.destroy());
       panelStates.clear();
       dockview.dispose();

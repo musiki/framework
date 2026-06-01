@@ -13997,52 +13997,66 @@ a[node] -->|edge| b[hub]
         import { loadNotesTree, renderNotesTree, renderNotesTreeError, beginRootNoteCreation, beginInlineFolderCreation } from '../scripts/course/notes-sidebar';
 
         async function bootNotasSidebar() {
-          const sidebarEl = document.querySelector<HTMLElement>('[data-notas-sidebar]');
-          if (!sidebarEl) return;
-          const courseId = sidebarEl.dataset.notasCourseId ?? '';
-          if (!courseId) return;
-          if (sidebarEl.dataset.notasSidebarBound === courseId) return;
-          sidebarEl.dataset.notasSidebarBound = courseId;
+          const sidebarEls = document.querySelectorAll<HTMLElement>('[data-notas-sidebar]');
+          sidebarEls.forEach(sidebarEl => {
+            const courseId = sidebarEl.dataset.notasCourseId ?? '';
+            if (!courseId) return;
+            if (sidebarEl.dataset.notasSidebarBound === courseId) return;
+            sidebarEl.dataset.notasSidebarBound = courseId;
 
-          const treeEl = sidebarEl.querySelector<HTMLElement>('.notas-sb-tree');
-          if (!treeEl) return;
+            const treeEl = sidebarEl.querySelector<HTMLElement>('.notas-sb-tree');
+            if (!treeEl) return;
 
-          const details = sidebarEl.querySelector<HTMLDetailsElement>('details');
+            const details = sidebarEl.querySelector<HTMLDetailsElement>('details');
 
-          const reload = async () => {
-            try {
-              const { folders, notes, currentUserId } = await loadNotesTree(courseId);
-              renderNotesTree(treeEl, folders, notes, courseId, currentUserId);
-            } catch (error) {
-              renderNotesTreeError(treeEl, error);
-            }
-          };
+            const reload = async () => {
+              try {
+                const { folders, notes, currentUserId } = await loadNotesTree(courseId);
+                renderNotesTree(treeEl, folders, notes, courseId, currentUserId);
+              } catch (error) {
+                renderNotesTreeError(treeEl, error);
+              }
+            };
 
-          let loaded = false;
-          details?.addEventListener('toggle', async () => {
-            if (!details.open || loaded) return;
-            loaded = true;
-            await reload();
-          });
+            let loaded = false;
+            details?.addEventListener('toggle', async () => {
+              if (!details.open || loaded) return;
+              loaded = true;
+              await reload();
+            });
 
-          // New note button
-          sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-btn')?.addEventListener('click', async () => {
-            if (!details?.open) { details!.open = true; loaded = false; }
-            await reload();
-            beginRootNoteCreation(treeEl);
-          });
+            // Fail-safe click listener on summary to manually toggle the fold
+            const summaryEl = sidebarEl.querySelector<HTMLElement>('summary.chapter-title');
+            summaryEl?.addEventListener('click', (e) => {
+              if ((e.target as HTMLElement).closest('button, a')) return;
+              e.preventDefault();
+              if (details) {
+                details.open = !details.open;
+              }
+            });
 
-          // New folder button
-          sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-folder-btn')?.addEventListener('click', async () => {
-            if (!details?.open) { details!.open = true; loaded = false; }
-            await reload();
-            beginInlineFolderCreation(treeEl, courseId);
+            // New note button
+            sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-btn')?.addEventListener('click', async () => {
+              if (!details?.open) { details!.open = true; loaded = false; }
+              await reload();
+              beginRootNoteCreation(treeEl);
+            });
+
+            // New folder button
+            sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-folder-btn')?.addEventListener('click', async () => {
+              if (!details?.open) { details!.open = true; loaded = false; }
+              await reload();
+              beginInlineFolderCreation(treeEl, courseId);
+            });
           });
 
           // Ribbon NOTAS button: focus/open this section
           window.addEventListener('musiki:open-notas', () => {
-            if (!details?.open) details!.open = true;
-            sidebarEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            const visibleSidebar = document.querySelector<HTMLElement>('[data-notas-sidebar]:not([style*="display: none"])')
+              || document.querySelector<HTMLElement>('[data-notas-sidebar]');
+            const details = visibleSidebar?.querySelector<HTMLDetailsElement>('details');
+            if (details && !details.open) details.open = true;
+            visibleSidebar?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           });
         }
 
