@@ -739,14 +739,14 @@ function injectCss() {
   style.setAttribute('data-cnw-ns-css', '1');
   style.textContent = `
     /* ── Notes sidebar overrides ─────────────────────────────── */
-    /* Chapter titles: small, grey, bold, uppercase */
+    /* Chapter titles: compact, stronger hierarchy, uppercase */
     [data-notes-sidebar] .chapter-title {
       font-size: 0.8rem !important;
-      font-weight: 700 !important;
+      font-weight: 760 !important;
       letter-spacing: 0.08em !important;
       text-transform: uppercase !important;
-      color: var(--c-fg-subtle, #888) !important;
-      padding: 0.2rem 0.75rem 0.2rem 0 !important;
+      color: color-mix(in srgb, var(--c-fg, #222) 84%, var(--c-fg-subtle, #888)) !important;
+      padding: 0.11rem 0.75rem 0.11rem 0 !important;
       margin: 0 !important;
     }
     [data-notes-sidebar] details > summary::-webkit-details-marker {
@@ -769,8 +769,9 @@ function injectCss() {
       display: none !important;
     }
     /* Note items: smaller, no blue, black/white hierarchy */
-    [data-notes-sidebar] .lesson-list { gap: 0 !important; margin-top: 0.16rem !important; margin-bottom: 0.22rem !important; }
+    [data-notes-sidebar] .lesson-list { gap: 0 !important; margin-top: 0.16rem !important; margin-bottom: 0.34rem !important; }
     [data-notes-sidebar] .lesson-link {
+      align-items: flex-start !important;
       font-size: 0.84rem !important;
       color: var(--c-fg-dim) !important;
       padding: 0.12rem 0.25rem !important;

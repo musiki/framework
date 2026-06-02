@@ -903,6 +903,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         --course-shell-top: 0px;
         --course-shell-bottom-gap: 0px;
         --left-sidebar-width: clamp(258px, calc(19vw + 10px), 322px);
+        --left-sidebar-min-width: 232px;
+        --left-sidebar-max-width: min(42vw, 620px);
         --right-sidebar-width: clamp(400px, 31vw, 520px);
         /* reset global main styles */
         width: 100%;
@@ -1011,6 +1013,41 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       .sidebar--left {
         justify-self: stretch;
         --course-sidebar-pad-x: 10px;
+      }
+
+      .course-sidebar-resize-handle {
+        position: absolute;
+        top: 0;
+        right: -4px;
+        bottom: 0;
+        width: 8px;
+        z-index: 24;
+        cursor: col-resize;
+        touch-action: none;
+      }
+
+      .course-sidebar-resize-handle::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 3px;
+        width: 1px;
+        background: color-mix(in srgb, var(--c-border) 62%, transparent);
+        opacity: 0;
+        transition: opacity 120ms, background 120ms;
+      }
+
+      .course-sidebar-resize-handle:hover::after,
+      .course-container.is-left-resizing .course-sidebar-resize-handle::after {
+        opacity: 1;
+        background: color-mix(in srgb, var(--accent) 72%, var(--c-border));
+      }
+
+      .course-container.is-left-resizing,
+      .course-container.is-left-resizing * {
+        cursor: col-resize !important;
+        user-select: none !important;
       }
 
       .sidebar--right {
@@ -1396,7 +1433,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
 
       :global(.sidebar--left .chapter) {
-        margin-bottom: 0.24rem;
+        margin-bottom: 0.08rem;
+      }
+
+      :global(.sidebar--left .chapter:has(.chapter-details[open])) {
+        margin-bottom: 0.34rem;
       }
 
       :global(.sidebar--left [data-notes-sidebar]) {
@@ -1411,12 +1452,12 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.2rem 0.75rem 0.2rem 0 !important;
+        padding: 0.11rem 0.75rem 0.11rem 0 !important;
         font-size: 0.8rem;
-        font-weight: 700;
+        font-weight: 760;
         text-transform: uppercase;
         letter-spacing: 0.1em;
-        color: var(--c-fg-subtle);
+        color: color-mix(in srgb, var(--c-fg) 84%, var(--c-fg-subtle));
         cursor: pointer;
         user-select: none;
         list-style: none;
@@ -1425,9 +1466,18 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       :global(.sidebar--left .chapter-title-main) {
         display: inline-flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.25rem;
         min-width: 0;
+        width: 100%;
+      }
+
+      :global(.sidebar--left .chapter-title-text) {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        line-height: 1.28;
+        padding-top: 0.06rem;
       }
 
       :global(.sidebar--left .chapter-editor-link) {
@@ -1474,11 +1524,12 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       :global(.sidebar--left .chapter-caret) {
         display: inline-block;
         transition: transform 0.15s;
-        color: var(--c-fg-subtle);
-        opacity: 0.5;
+        color: currentColor;
+        opacity: 0.72;
         font-size: 1.0rem;
         flex-shrink: 0;
         margin-right: 0.05rem;
+        line-height: 1.05;
       }
 
       :global(.sidebar--left .chapter-details[open] > .chapter-title .chapter-caret) {
@@ -1501,13 +1552,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         gap: 1px;
         padding-top: 0;
         margin-top: 0.16rem;
-        margin-bottom: 0.22rem;
+        margin-bottom: 0.34rem;
         margin-left: 0.25rem;
         padding-left: 0.25rem;
         border-left: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
       }
 
       :global(.sidebar--left .lesson-link) {
+        align-items: flex-start !important;
         padding: 0.12rem 0.25rem !important;
         font-size: 0.84rem !important;
       }
@@ -1536,7 +1588,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       :global(.sidebar--left .recursos-sidebar-session-name) {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.25rem;
         cursor: pointer;
         list-style: none;
@@ -1544,9 +1596,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         font-size: 0.8rem;
         font-weight: 700;
         line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
         user-select: none;
       }
       :global(.sidebar--left .recursos-sidebar-session-name::-webkit-details-marker) { display: none; }
@@ -1581,7 +1630,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       :global(.sidebar--left .recursos-sidebar-resource-link) {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.35rem;
         min-width: 0;
         border-radius: 4px;
@@ -1602,14 +1651,13 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         font-size: 11px;
         width: 12px;
         text-align: center;
+        line-height: 1.2rem;
       }
 
       :global(.sidebar--left .recursos-sidebar-resource-name) {
         flex: 1 1 auto;
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
       }
 
       :global(.sidebar--left .recursos-sidebar-resource-folder) {
@@ -1626,7 +1674,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
       :global(.sidebar--left .recursos-sidebar-folder-name) {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.25rem;
         cursor: pointer;
         list-style: none;
@@ -1660,7 +1708,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       .lesson-link {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 0.4rem;
         padding: 0.4rem 0.45rem;
@@ -1673,6 +1721,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
 
       .lesson-link-text {
+        flex: 1 1 auto;
         min-width: 0;
         overflow-wrap: anywhere;
       }
@@ -1702,6 +1751,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         text-align: center;
         flex-shrink: 0;
         display: inline-block;
+        line-height: 1.2rem;
       }
 
       :global(.lesson-icon--concept) {
@@ -1710,15 +1760,15 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       }
 
       /* Notes sidebar tree layout matching the rest of the tree */
-      :global(.sidebar--left .notas-sb-level) {
-        display: grid;
-        gap: 1px;
-        margin-top: 0.16rem;
-        margin-bottom: 0.22rem;
-        margin-left: 0.75rem;
-        padding-left: 0.45rem;
-        border-left: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
-      }
+	      :global(.sidebar--left .notas-sb-level) {
+	        display: grid;
+	        gap: 1px;
+	        margin-top: 0.16rem;
+	        margin-bottom: 0.34rem;
+	        margin-left: 0.75rem;
+	        padding-left: 0.45rem;
+	        border-left: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
+	      }
 
       /* Notes tree indentation and vertical connection lines (Roam Research style) */
       :global(.sidebar--left .notas-sb-level .notas-sb-level) {
@@ -1745,10 +1795,10 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         cursor: grabbing;
       }
 
-      :global(.sidebar--left .notas-sb-item) {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
+	      :global(.sidebar--left .notas-sb-item) {
+	        display: flex;
+	        align-items: flex-start;
+	        gap: 0.4rem;
         padding: 0.12rem 0.25rem;
         border-radius: 4px;
         text-decoration: none;
@@ -1763,10 +1813,10 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         color: var(--accent);
       }
 
-      :global(.sidebar--left .notas-sb-folder) {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
+	      :global(.sidebar--left .notas-sb-folder) {
+	        display: flex;
+	        align-items: flex-start;
+	        gap: 0.25rem;
         cursor: pointer;
         list-style: none;
         color: var(--c-fg);
@@ -3352,6 +3402,10 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           transform: translateX(-100%);
         }
 
+        .course-sidebar-resize-handle {
+          display: none;
+        }
+
         .sidebar--right {
           right: 0;
           transform: translateX(100%);
@@ -3620,12 +3674,21 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       display: none !important;
     }
 
-    .sidebar--left .class-toc-link {
-      font-size: 0.76rem !important;
-      padding: 0 0.3rem !important;
-      line-height: 1.0 !important;
-      color: var(--c-fg) !important;
-    }
+	    .sidebar--left .class-toc-link {
+	      display: flex !important;
+	      align-items: flex-start !important;
+	      gap: 0.25rem !important;
+	      font-size: 0.76rem !important;
+	      padding: 0 0.3rem !important;
+	      line-height: 1.15 !important;
+	      color: var(--c-fg) !important;
+	      overflow-wrap: anywhere !important;
+	    }
+
+	    .sidebar--left .class-toc-link.level-1 {
+	      color: color-mix(in srgb, var(--c-fg) 88%, var(--accent)) !important;
+	      font-weight: 700 !important;
+	    }
 
     .sidebar--left .class-toc-link.level-1,
     .sidebar--left .class-toc-link.level-2,
@@ -3781,6 +3844,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
       <!-- Sidebar Navigation -->
       <aside class="sidebar sidebar--left" data-course-sidebar="left">
+        <div
+          class="course-sidebar-resize-handle"
+          data-left-sidebar-resize
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionar navegación"
+          title="Redimensionar navegación"
+        ></div>
         <div class="course-title">
           <div class="course-title-row">
             <a href={courseHref} class="course-title-link">
@@ -5380,11 +5451,12 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         const overlay = root.querySelector('[data-course-sidebar-overlay]');
         const leftSidebar = root.querySelector('[data-course-sidebar="left"]');
         const rightSidebar = root.querySelector('[data-course-sidebar="right"]');
-        const leftButtons = Array.from(root.querySelectorAll('[data-sidebar-toggle="left"], [data-sidebar-handle="left"]'));
-        const rightButtons = Array.from(root.querySelectorAll('[data-sidebar-toggle="right"], [data-sidebar-handle="right"]'));
-        const leftEdgeButtons = Array.from(root.querySelectorAll('[data-sidebar-edge-toggle="left"]'));
-        const rightMaximizeButtons = Array.from(root.querySelectorAll('[data-sidebar-maximize="right"]'));
-        const hasRightSidebar = root.dataset.hasRightSidebar === 'true';
+	        const leftButtons = Array.from(root.querySelectorAll('[data-sidebar-toggle="left"], [data-sidebar-handle="left"]'));
+	        const rightButtons = Array.from(root.querySelectorAll('[data-sidebar-toggle="right"], [data-sidebar-handle="right"]'));
+	        const leftEdgeButtons = Array.from(root.querySelectorAll('[data-sidebar-edge-toggle="left"]'));
+	        const leftResizeHandle = root.querySelector('[data-left-sidebar-resize]');
+	        const rightMaximizeButtons = Array.from(root.querySelectorAll('[data-sidebar-maximize="right"]'));
+	        const hasRightSidebar = root.dataset.hasRightSidebar === 'true';
 
         const isMobileViewport = () => window.matchMedia('(max-width: 1024px)').matches;
         const isBottomBarViewport = () => window.matchMedia('(max-width: 500px)').matches;
@@ -5403,10 +5475,35 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           window.localStorage.getItem('musiki:course:right-open'),
           root.dataset.rightOpen !== 'false',
         );
-        let rightMaximized = hasRightSidebar && coerceBoolean(
-          window.localStorage.getItem('musiki:course:right-maximized'),
-          root.dataset.rightMaximized === 'true',
-        );
+	        let rightMaximized = hasRightSidebar && coerceBoolean(
+	          window.localStorage.getItem('musiki:course:right-maximized'),
+	          root.dataset.rightMaximized === 'true',
+	        );
+	        let leftSidebarWidth = Number.parseInt(window.localStorage.getItem('musiki:course:left-width') || '', 10);
+
+	        const getLeftSidebarWidthBounds = () => {
+	          const viewport = window.innerWidth || 0;
+	          const min = Math.min(320, Math.max(220, viewport - 180));
+	          const max = Math.max(min, Math.min(620, Math.round(viewport * 0.42)));
+	          return { min, max };
+	        };
+
+	        const applyLeftSidebarWidth = (width: number, persist = false) => {
+	          if (!Number.isFinite(width)) {
+	            root.style.removeProperty('--left-sidebar-width');
+	            return;
+	          }
+	          const { min, max } = getLeftSidebarWidthBounds();
+	          leftSidebarWidth = Math.min(max, Math.max(min, Math.round(width)));
+	          root.style.setProperty('--left-sidebar-width', `${leftSidebarWidth}px`);
+	          if (persist) {
+	            window.localStorage.setItem('musiki:course:left-width', String(leftSidebarWidth));
+	          }
+	        };
+
+	        if (Number.isFinite(leftSidebarWidth)) {
+	          applyLeftSidebarWidth(leftSidebarWidth, false);
+	        }
 
         const syncShellOffsets = () => {
           const rootRect = root.getBoundingClientRect();
@@ -5659,12 +5756,49 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           window.removeEventListener('resize', window.__musikiCourseLayoutResizeHandler);
         }
 
-        const resizeHandler = () => {
-          syncLayoutState();
-        };
+	        const resizeHandler = () => {
+	          if (Number.isFinite(leftSidebarWidth)) {
+	            applyLeftSidebarWidth(leftSidebarWidth, true);
+	          }
+	          syncLayoutState();
+	        };
 
-        window.addEventListener('resize', resizeHandler);
-        window.__musikiCourseLayoutResizeHandler = resizeHandler;
+	        window.addEventListener('resize', resizeHandler);
+	        window.__musikiCourseLayoutResizeHandler = resizeHandler;
+
+	        if (leftResizeHandle instanceof HTMLElement && leftResizeHandle.dataset.boundLeftSidebarResize !== 'true') {
+	          leftResizeHandle.dataset.boundLeftSidebarResize = 'true';
+	          let resizeStartX = 0;
+	          let resizeStartWidth = 0;
+
+	          const stopResize = (event?: PointerEvent) => {
+	            root.classList.remove('is-left-resizing');
+	            if (event && leftResizeHandle.hasPointerCapture(event.pointerId)) {
+	              leftResizeHandle.releasePointerCapture(event.pointerId);
+	            }
+	          };
+
+	          leftResizeHandle.addEventListener('pointerdown', (event) => {
+	            if (isMobileViewport() || event.button !== 0 || !(leftSidebar instanceof HTMLElement)) return;
+	            event.preventDefault();
+	            resizeStartX = event.clientX;
+	            resizeStartWidth = leftSidebar.getBoundingClientRect().width;
+	            leftResizeHandle.setPointerCapture(event.pointerId);
+	            root.classList.add('is-left-resizing');
+	          });
+
+	          leftResizeHandle.addEventListener('pointermove', (event) => {
+	            if (!root.classList.contains('is-left-resizing')) return;
+	            event.preventDefault();
+	            applyLeftSidebarWidth(resizeStartWidth + event.clientX - resizeStartX, true);
+	          });
+
+	          leftResizeHandle.addEventListener('pointerup', stopResize);
+	          leftResizeHandle.addEventListener('pointercancel', stopResize);
+	          leftResizeHandle.addEventListener('lostpointercapture', () => {
+	            root.classList.remove('is-left-resizing');
+	          });
+	        }
 
         if (typeof window.__musikiCourseLayoutTouchStartHandler === 'function') {
           document.removeEventListener('touchstart', window.__musikiCourseLayoutTouchStartHandler);
