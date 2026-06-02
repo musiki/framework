@@ -43,6 +43,18 @@ export const createPresentationController = ({
 
   const render = () => {
     const hasPresentation = Boolean(currentHref);
+    currentFrame.loading = 'eager';
+    currentFrame.allowFullscreen = true;
+    currentFrame.referrerPolicy = 'strict-origin-when-cross-origin';
+    const currentAllow = String(currentFrame.getAttribute('allow') || '').trim();
+    if (!/autoplay/i.test(currentAllow)) {
+      currentFrame.setAttribute(
+        'allow',
+        currentAllow
+          ? `${currentAllow}; autoplay; fullscreen; encrypted-media; picture-in-picture`
+          : 'autoplay; fullscreen; encrypted-media; picture-in-picture',
+      );
+    }
     currentFrame.hidden = !hasPresentation;
     currentPlaceholder.hidden = hasPresentation;
     currentFrame.src = hasPresentation ? currentHref ?? '' : 'about:blank';

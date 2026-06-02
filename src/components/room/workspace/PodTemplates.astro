@@ -55,7 +55,14 @@ const { presentationOptions = [] } = Astro.props;
   <div class="musiki-pod" data-pod="presentation" data-pod-title="PRESENTACIÓN">
     <section class="conference-stage-panel conference-stage-panel--presentation" data-panel="presentation">
       <div class="conference-presentation" style="flex: 1;">
-        <iframe title="Presentation stage" data-presentation-frame hidden loading="lazy" allowfullscreen></iframe>
+        <iframe
+          title="Presentation stage"
+          data-presentation-frame
+          hidden
+          loading="eager"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowfullscreen
+        ></iframe>
         <div class="conference-empty conference-empty--presentation" data-presentation-placeholder>
           Seleccioná una lección para cargar Reveal.
         </div>
