@@ -940,12 +940,9 @@ export function initDockviewWorkspace(
           panelId, params.noteId, params.title, dockview, true,
         );
         bindExternalNoteDrop(shell, panelId);
-        
-        // Hide the pencil button since mountDbNoteEditor manages editing/preview modes inside CodeMirror
-        pencilBtn.style.display = 'none';
 
         // Mount the comprehensive personal notes editor with highlighting and commenting support
-        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId);
+        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId, pencilBtn);
         
         return { element: shell, init: () => {} };
       }

@@ -400,6 +400,20 @@ export function renderNotesSidebar(
               <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
             </svg>
           </a>
+          <button
+            type="button"
+            class="chapter-editor-link recursos-sidebar-fold-all-btn"
+            title="Desplegar árbol de recursos"
+            aria-label="Desplegar árbol de recursos"
+            onclick="event.stopPropagation()"
+            style="border:none;background:none;cursor:pointer;padding:0"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.82rem;height:0.82rem;stroke:currentColor;">
+              <path d="M4 6h16" />
+              <path d="M7 12h10" />
+              <path d="M10 18h4" />
+            </svg>
+          </button>
         </span>
       `;
     } else if (isNotas) {
@@ -714,6 +728,7 @@ export function renderNotesSidebar(
 
   // Atomic swap — no blank flash between teardown and rebuild
   container.replaceChildren(...newChapterEls);
+  window.dispatchEvent(new CustomEvent('musiki:recursos-sidebar-mounted'));
 }
 
 // ── CSS injection ─────────────────────────────────────────────────────────

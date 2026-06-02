@@ -3,6 +3,7 @@ import { DockviewComponent } from 'dockview-core';
 import { EditorView } from '@codemirror/view';
 import { buildShell, injectWorkspaceCss } from '../course/dockview-shell';
 import { createLiveMdEditor } from '../course/notes/live-md-editor';
+import { enhanceCourseNotesContent } from '../course/notes/content';
 import type { TraceMarginHandle } from '../course/notes/trace-margin';
 
 export interface PersonalNotesWorkspace {
@@ -21,6 +22,7 @@ export const HIGHLIGHT_COLORS: Record<string, { label: string; color: string; bg
 const pendingParams = new Map<string, any>();
 let _workspace: PersonalNotesWorkspace | null = null;
 let _ctrl: AbortController | null = null;
+let _activeDbNoteBody: HTMLElement | null = null;
 
 export function initPersonalNotesWorkspace(container: HTMLElement): PersonalNotesWorkspace {
   if (_workspace) { _ctrl?.abort(); _workspace = null; }
@@ -43,10 +45,9 @@ export function initPersonalNotesWorkspace(container: HTMLElement): PersonalNote
         const { shell, bodyEl, pencilBtn, statusDot, splitRightBtn, splitBelowBtn, traceBtn } = buildShell(
           options.id, params.noteId, params.title, dockview, true,
         );
-        pencilBtn.style.display = 'none';
         splitRightBtn.style.display = 'none';
         splitBelowBtn.style.display = 'none';
-        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId);
+        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId, pencilBtn);
         return { element: shell, init: () => {} };
       }
 
@@ -205,12 +206,26 @@ function startInlineNoteRename(item: HTMLElement, noteId: string, initialTitle: 
   });
 }
 
-function updateHud(bodyEl: HTMLElement, content: string) {
+type DbNoteViewMode = 'live-edit' | 'render';
+
+const PENCIL_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+const EYE_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+function updateHud(bodyEl: HTMLElement, content: string, mode: DbNoteViewMode = 'live-edit') {
   const hud = bodyEl.closest('.cnw-shell')?.querySelector<HTMLElement>('.cnw-hud-stats');
   if (!hud) return;
   const words = content.trim() ? content.trim().split(/\s+/).length : 0;
   const sentences = content.split(/[.!?]+/).filter(sentence => sentence.trim()).length;
-  hud.textContent = `${words} palabras · ${content.length.toLocaleString()} caracteres · ${sentences} oraciones`;
+  const modeTitle = mode === 'live-edit'
+    ? 'MODO LIVE EDIT. Click para ver Markdown renderizado. Atajo: Alt+Shift+E.'
+    : 'MODO RENDER. Click para volver al editor. Atajo: Alt+Shift+E.';
+  const modeIcon = mode === 'live-edit' ? PENCIL_ICON : EYE_ICON;
+  hud.innerHTML = `
+    <button type="button" class="cnw-hud-mini cnw-hud-mode-toggle" title="${escHtml(modeTitle)}" aria-label="${escHtml(modeTitle)}">${modeIcon}</button>
+    <span class="cnw-hud-mini" title="${words.toLocaleString()} palabras" aria-label="${words.toLocaleString()} palabras">≋ ${words.toLocaleString()}</span>
+    <span class="cnw-hud-mini" title="${content.length.toLocaleString()} caracteres" aria-label="${content.length.toLocaleString()} caracteres"># ${content.length.toLocaleString()}</span>
+    <span class="cnw-hud-mini" title="${sentences.toLocaleString()} oraciones" aria-label="${sentences.toLocaleString()} oraciones">. ${sentences.toLocaleString()}</span>
+  `;
 }
 
 function escHtml(s: string) {
@@ -426,11 +441,52 @@ function injectWorkspaceExtraCss() {
       transform: translate(-50%, -100%);
       transition: opacity 0.15s, transform 0.15s;
     }
+    .pnw-render-preview {
+      height: 100%;
+      overflow: auto;
+      padding: 1rem 1.2rem 1.5rem;
+      box-sizing: border-box;
+    }
+    .pnw-render-preview .cnw-md {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .cnw-hud-stats {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .cnw-hud-mini {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+      padding: 0;
+      opacity: .78;
+      white-space: nowrap;
+    }
+    button.cnw-hud-mini {
+      cursor: pointer;
+    }
+    .cnw-hud-mini:hover {
+      opacity: 1;
+      color: var(--c-link, #3b82f6);
+    }
   `;
   document.head.appendChild(s);
 }
 
-export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElement, traceBtn: HTMLButtonElement, noteId: string) {
+export async function mountDbNoteEditor(
+  bodyEl: HTMLElement,
+  statusDot: HTMLElement,
+  traceBtn: HTMLButtonElement,
+  noteId: string,
+  pencilBtn?: HTMLButtonElement,
+) {
   const localCleanups: Array<() => void> = [];
   (bodyEl as any).__editorCleanups = localCleanups;
   injectWorkspaceExtraCss();
@@ -442,15 +498,124 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
   if (!note) { bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4">Nota no encontrada</p>'; return; }
   if (!bodyEl.isConnected) return;
   bodyEl.innerHTML = '';
+  let currentMode: DbNoteViewMode = 'live-edit';
+  let currentContent = String(note.body ?? '');
+  let traceWantsRestore = false;
   
   const isReadOnly = note.accessLevel === 'view' || note.accessLevel === 'comment';
   const canComment = note.accessLevel === 'comment' || note.accessLevel === 'edit';
+
+  const updateModeButton = () => {
+    if (!pencilBtn) return;
+    pencilBtn.style.display = '';
+    pencilBtn.title = currentMode === 'live-edit'
+      ? 'Ver render Markdown (Alt+Shift+E)'
+      : 'Volver a live edit (Alt+Shift+E)';
+    pencilBtn.innerHTML = currentMode === 'live-edit' ? EYE_ICON : PENCIL_ICON;
+    pencilBtn.classList.toggle('is-active', currentMode === 'live-edit');
+  };
+
+  const renderMarkdownPreview = async () => {
+    if (editor) currentContent = editor.getContent();
+    currentMode = 'render';
+    updateModeButton();
+    updateHud(bodyEl, currentContent, currentMode);
+    selectionToolbar.style.display = 'none';
+    if (traceHandle) {
+      traceWantsRestore = traceBtn.classList.contains('is-active');
+      traceHandle.destroy();
+      traceHandle = null;
+      traceBtn.classList.remove('is-active');
+    }
+    editor?.destroy();
+    editor = null;
+    (bodyEl as any).__editor = null;
+    editorWrap.innerHTML = '<div class="pnw-render-preview"><p style="opacity:.4;font-size:.85rem;">Renderizando…</p></div>';
+    try {
+      const res = await fetch('/api/live/preview-markdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markdown: currentContent }),
+      });
+      if (!res.ok) throw new Error('preview failed');
+      const data = await res.json();
+      editorWrap.innerHTML = `<div class="pnw-render-preview"><div class="cnw-md">${data.html || ''}</div></div>`;
+      enhanceCourseNotesContent(editorWrap);
+    } catch {
+      editorWrap.innerHTML = '<div class="pnw-render-preview"><p style="color:#c87e7e;font-size:.85rem;">No se pudo renderizar la vista Markdown.</p></div>';
+    }
+  };
+
+  const renderLiveEditor = () => {
+    currentMode = 'live-edit';
+    updateModeButton();
+    editorWrap.innerHTML = '';
+    editorWrap.appendChild(selectionToolbar);
+    editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly });
+    (bodyEl as any).__editor = editor;
+    updateHud(bodyEl, currentContent, currentMode);
+    editor.focus();
+    void loadAnnotations();
+    if (traceWantsRestore) {
+      traceWantsRestore = false;
+      traceBtn.click();
+    }
+  };
+
+  const toggleMode = () => {
+    if (currentMode === 'live-edit') void renderMarkdownPreview();
+    else renderLiveEditor();
+  };
+
+  const shellEl = bodyEl.closest('.cnw-shell') as HTMLElement | null;
+  const markActiveDbNote = () => {
+    _activeDbNoteBody = bodyEl;
+  };
+  const hudStatsEl = shellEl?.querySelector<HTMLElement>('.cnw-hud-stats');
+  shellEl?.addEventListener('pointerdown', markActiveDbNote);
+  shellEl?.addEventListener('focusin', markActiveDbNote);
+  localCleanups.push(() => {
+    shellEl?.removeEventListener('pointerdown', markActiveDbNote);
+    shellEl?.removeEventListener('focusin', markActiveDbNote);
+    if (_activeDbNoteBody === bodyEl) _activeDbNoteBody = null;
+  });
+
+  pencilBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    markActiveDbNote();
+    toggleMode();
+  });
+
+  const onHudModeClick = (event: MouseEvent) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.closest('.cnw-hud-mode-toggle')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    markActiveDbNote();
+    toggleMode();
+  };
+  hudStatsEl?.addEventListener('click', onHudModeClick);
+  localCleanups.push(() => hudStatsEl?.removeEventListener('click', onHudModeClick));
+
+  const onModeShortcut = (event: KeyboardEvent) => {
+    if (event.key.toLowerCase() !== 'e' || !event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey) return;
+    const shell = shellEl;
+    const target = event.target instanceof Node ? event.target : null;
+    const targetIsPage = target === document.body || target === document.documentElement;
+    const eventTargetsThisShell = Boolean(shell && target && shell.contains(target));
+    if (!eventTargetsThisShell && (!targetIsPage || _activeDbNoteBody !== bodyEl)) return;
+    event.preventDefault();
+    toggleMode();
+  };
+  document.addEventListener('keydown', onModeShortcut);
+  localCleanups.push(() => document.removeEventListener('keydown', onModeShortcut));
 
   const mount = document.createElement('div');
   mount.style.cssText = 'height:100%;overflow:hidden;display:flex;flex-direction:column;';
   bodyEl.appendChild(mount);
 
   const save = async (content: string) => {
+    currentContent = content;
     try {
       localStorage.setItem(`db-note-draft::${noteId}`, JSON.stringify({
         body: content,
@@ -473,7 +638,7 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
     } else {
       statusDot.className = 'cnw-status error';
     }
-    updateHud(bodyEl, content);
+    updateHud(bodyEl, content, currentMode);
   };
 
   const workspaceRow = document.createElement('div');
@@ -533,6 +698,7 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
 
   let editor: any;
   let currentSelectionColor: string | null = null;
+  let traceHandle: TraceMarginHandle | null = null;
 
   const selectionToolbar = document.createElement('div');
   selectionToolbar.className = 'pnw-selection-toolbar';
@@ -710,8 +876,13 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
       if (!res.ok) return;
       const data = await res.json();
       activeAnnotations = data.annotations ?? [];
+      if (!editor) {
+        renderCommentsList();
+        return;
+      }
       
       const docText = editor.getContent();
+      currentContent = docText;
       const editorAnns: Array<{ id: string; from: number; to: number; color?: string }> = [];
       
       for (const ann of activeAnnotations) {
@@ -732,6 +903,11 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
   };
 
   const focusAnnotation = (annId: string) => {
+    if (!editor) {
+      renderLiveEditor();
+      window.setTimeout(() => focusAnnotation(annId), 0);
+      return;
+    }
     const cards = commentsSidebar.querySelectorAll('.comment-card');
     cards.forEach(card => {
       if (card.id === `comment-card-${annId}`) {
@@ -1053,12 +1229,18 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
         
         if (res.ok) {
           const resData = await res.json();
-          editor.setContent(resData.body ?? '');
+          const restoredBody = String(resData.body ?? '');
+          currentContent = restoredBody;
+          if (editor) {
+            editor.setContent(restoredBody);
+          } else if (currentMode === 'render') {
+            void renderMarkdownPreview();
+          }
           const titleEl = bodyEl.closest('.cnw-shell')?.querySelector('.cnw-title');
           if (titleEl && resData.title) {
             titleEl.textContent = resData.title;
           }
-          updateHud(bodyEl, resData.body ?? '');
+          updateHud(bodyEl, restoredBody, currentMode);
           void loadAnnotations();
           statusDot.className = 'cnw-status saved';
         } else {
@@ -1120,29 +1302,37 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
     mount.appendChild(banner);
     mount.appendChild(workspaceRow);
 
+    updateModeButton();
+    updateHud(bodyEl, currentContent, currentMode);
+
     banner.querySelector('#cnw-recover-discard')?.addEventListener('click', () => {
       try { localStorage.removeItem(`db-note-draft::${noteId}`); } catch {}
       banner.remove();
-      editor = createLiveMdEditor(editorWrap, note.body ?? '', save, { readOnly: isReadOnly });
+      currentContent = String(note.body ?? '');
+      editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly });
       (bodyEl as any).__editor = editor;
-      updateHud(bodyEl, note.body ?? '');
+      updateModeButton();
+      updateHud(bodyEl, currentContent, currentMode);
       editor.focus();
       void loadAnnotations();
     });
     banner.querySelector('#cnw-recover-accept')?.addEventListener('click', () => {
       banner.remove();
-      editor = createLiveMdEditor(editorWrap, draft.body, save, { readOnly: isReadOnly });
+      currentContent = draft.body;
+      editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly });
       (bodyEl as any).__editor = editor;
-      updateHud(bodyEl, draft.body);
+      updateModeButton();
+      updateHud(bodyEl, currentContent, currentMode);
       editor.focus();
-      void save(draft.body);
+      void save(currentContent);
       void loadAnnotations();
     });
   } else {
     mount.appendChild(workspaceRow);
-    editor = createLiveMdEditor(editorWrap, note.body ?? '', save, { readOnly: isReadOnly });
+    editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly });
     (bodyEl as any).__editor = editor;
-    updateHud(bodyEl, note.body ?? '');
+    updateModeButton();
+    updateHud(bodyEl, currentContent, currentMode);
     editor.focus();
     void loadAnnotations();
   }
@@ -1172,12 +1362,16 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
     }
   });
 
-  let traceHandle: TraceMarginHandle | null = null;
   const toggleTrace = async () => {
     if (traceHandle) {
       traceHandle.destroy();
       traceHandle = null;
       traceBtn.classList.remove('is-active');
+      return;
+    }
+    if (!editor) {
+      traceWantsRestore = true;
+      renderLiveEditor();
       return;
     }
     const { mountTraceMargin } = await import('../course/notes/trace-margin');
@@ -1188,6 +1382,6 @@ export async function mountDbNoteEditor(bodyEl: HTMLElement, statusDot: HTMLElem
   await toggleTrace();
   localCleanups.push(() => {
     traceHandle?.destroy();
-    editor.destroy();
+    editor?.destroy();
   });
 }

@@ -553,7 +553,12 @@ if (session && recursosCourseId) {
       ...((resourcesBySession.get('') ?? []).length
         ? [{ session: null, resources: resourcesBySession.get('') ?? [] }]
         : []),
-    ];
+    ].sort((a, b) =>
+      String(a.session?.name || 'Sin sesión').localeCompare(String(b.session?.name || 'Sin sesión'), 'es', {
+        sensitivity: 'base',
+        numeric: true,
+      })
+    );
   } catch (error) {
     console.error('[recursos-sidebar] failed to load resources', error);
   }
@@ -561,6 +566,8 @@ if (session && recursosCourseId) {
 
 // Group a session's resources into root items + named folder buckets
 function groupByFolder(resources: Array<{ id: string; url: string; name: string; type: string; folder: string | null }>) {
+  const byName = (a: { name?: string | null }, b: { name?: string | null }) =>
+    String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base', numeric: true });
   const root: typeof resources = [];
   const folders = new Map<string, typeof resources>();
   for (const r of resources) {
@@ -569,7 +576,12 @@ function groupByFolder(resources: Array<{ id: string; url: string; name: string;
     if (!folders.has(f)) folders.set(f, []);
     folders.get(f)!.push(r);
   }
-  return { root, folders };
+  root.sort(byName);
+  const sortedFolders = new Map<string, typeof resources>();
+  for (const [name, items] of [...folders.entries()].sort(([a], [b]) => a.localeCompare(b, 'es', { sensitivity: 'base', numeric: true }))) {
+    sortedFolders.set(name, items.sort(byName));
+  }
+  return { root, folders: sortedFolders };
 }
 
 // Group concepts and glossary by project and parent
@@ -1429,6 +1441,14 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         text-decoration: none;
       }
 
+      :global(.sidebar--left button.chapter-editor-link) {
+        border: 0;
+        padding: 0;
+        background: none;
+        font: inherit;
+        cursor: pointer;
+      }
+
       :global(.sidebar--left .chapter-editor-link:hover),
       :global(.sidebar--left .chapter-editor-link.active) {
         color: var(--accent);
@@ -1439,6 +1459,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       :global(.sidebar--left .chapter-editor-link svg) {
         width: 0.82rem;
         height: 0.82rem;
+        stroke: currentColor;
+      }
+
+      :global(.sidebar--left .recursos-sidebar-fold-all-btn svg) {
+        fill: none;
         stroke: currentColor;
       }
 
@@ -3882,7 +3907,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                         {recursosSidebarGroups.map((group) => {
                           const { root, folders } = groupByFolder(group.resources);
                           return (
-                            <details class="recursos-sidebar-session" open>
+                            <details class="recursos-sidebar-session">
                               <summary class="recursos-sidebar-session-name">
                                 <span class="recursos-sidebar-session-caret">▸</span>
                                 {group.session?.name || 'Sin sesión'}
@@ -3901,7 +3926,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                 })}
                                 {[...folders.entries()].map(([folderName, items]) => (
                                   <li class="recursos-sidebar-resource-item">
-                                    <details class="recursos-sidebar-folder" open>
+                                    <details class="recursos-sidebar-folder">
                                       <summary class="recursos-sidebar-folder-name">
                                         <span class="recursos-sidebar-folder-caret">▸</span>
                                         <span style="color:#4e6070">⊟</span>
@@ -3968,20 +3993,27 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                         title="Editor de recursos"
                         aria-label="Editor de recursos"
                         onclick="event.stopPropagation()"
-                      >
-                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                        </svg>
-                      </a>
-                    </span>
+	                        >
+	                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	                            <path d="M12 20h9" />
+	                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+	                          </svg>
+	                        </a>
+	                        <button type="button" class="chapter-editor-link recursos-sidebar-fold-all-btn" title="Desplegar árbol de recursos" aria-label="Desplegar árbol de recursos">
+	                          <svg viewBox="0 0 24 24" aria-hidden="true" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	                            <path d="M4 6h16" />
+	                            <path d="M7 12h10" />
+	                            <path d="M10 18h4" />
+	                          </svg>
+	                        </button>
+	                      </span>
                   </summary>
                   {recursosSidebarGroups.length > 0 && (
                     <div class="recursos-sidebar-tree" data-recursos-sidebar data-room={`${recursosCourseId}-stage`} data-clase={recursosCourseId}>
                       {recursosSidebarGroups.map((group) => {
                         const { root, folders } = groupByFolder(group.resources);
                         return (
-                          <details class="recursos-sidebar-session" open>
+                          <details class="recursos-sidebar-session">
                             <summary class="recursos-sidebar-session-name">
                               <span class="recursos-sidebar-session-caret">▸</span>
                               {group.session?.name || 'Sin sesión'}
@@ -4000,7 +4032,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                               })}
                               {[...folders.entries()].map(([folderName, items]) => (
                                 <li class="recursos-sidebar-resource-item">
-                                  <details class="recursos-sidebar-folder" open>
+                                  <details class="recursos-sidebar-folder">
                                     <summary class="recursos-sidebar-folder-name">
                                       <span class="recursos-sidebar-folder-caret">▸</span>
                                       <span style="color:#4e6070">⊟</span>
@@ -4052,20 +4084,29 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                   <span class="chapter-title-main">
                     <span class="chapter-caret">▸</span>
                     <span class="chapter-title-text">{displayTitle}</span>
-                    {canManageLiveInteractions && isRecursosChapter && (
-                      <a
-                        href={`${courseHref}/recursos`}
-                        class:list={['chapter-editor-link', { active: isRecursosEditorPage }]}
-                        title="Editor de recursos"
-                        aria-label="Editor de recursos"
-                        onclick="event.stopPropagation()"
-                      >
-                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                        </svg>
-                      </a>
-                    )}
+	                    {canManageLiveInteractions && isRecursosChapter && (
+	                      <>
+	                        <a
+	                          href={`${courseHref}/recursos`}
+	                          class:list={['chapter-editor-link', { active: isRecursosEditorPage }]}
+	                          title="Editor de recursos"
+	                          aria-label="Editor de recursos"
+	                          onclick="event.stopPropagation()"
+	                        >
+	                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	                            <path d="M12 20h9" />
+	                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+	                          </svg>
+	                        </a>
+	                        <button type="button" class="chapter-editor-link recursos-sidebar-fold-all-btn" title="Desplegar árbol de recursos" aria-label="Desplegar árbol de recursos">
+	                          <svg viewBox="0 0 24 24" aria-hidden="true" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	                            <path d="M4 6h16" />
+	                            <path d="M7 12h10" />
+	                            <path d="M10 18h4" />
+	                          </svg>
+	                        </button>
+	                      </>
+	                    )}
                   </span>
                 </summary>
                 {isRecursosChapter && recursosSidebarGroups.length > 0 ? (
@@ -4073,7 +4114,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                     {recursosSidebarGroups.map((group) => {
                       const { root, folders } = groupByFolder(group.resources);
                       return (
-                        <details class="recursos-sidebar-session" open>
+                        <details class="recursos-sidebar-session">
                           <summary class="recursos-sidebar-session-name">
                             <span class="recursos-sidebar-session-caret">▸</span>
                             {group.session?.name || 'Sin sesión'}
@@ -4092,7 +4133,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                             })}
                             {[...folders.entries()].map(([folderName, items]) => (
                               <li class="recursos-sidebar-resource-item">
-                                <details class="recursos-sidebar-folder" open>
+                                <details class="recursos-sidebar-folder">
                                   <summary class="recursos-sidebar-folder-name">
                                     <span class="recursos-sidebar-folder-caret">▸</span>
                                     <span style="color:#4e6070">⊟</span>
@@ -4242,20 +4283,27 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                           title="Editor de recursos"
                           aria-label="Editor de recursos"
                           onclick="event.stopPropagation()"
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                          </svg>
-                        </a>
-                      </span>
+	                        >
+	                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	                            <path d="M12 20h9" />
+	                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+	                          </svg>
+	                        </a>
+	                        <button type="button" class="chapter-editor-link recursos-sidebar-fold-all-btn" title="Desplegar árbol de recursos" aria-label="Desplegar árbol de recursos">
+	                          <svg viewBox="0 0 24 24" aria-hidden="true" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	                            <path d="M4 6h16" />
+	                            <path d="M7 12h10" />
+	                            <path d="M10 18h4" />
+	                          </svg>
+	                        </button>
+	                      </span>
                     </summary>
                     {recursosSidebarGroups.length > 0 && (
                       <div class="recursos-sidebar-tree" data-recursos-sidebar data-room={`${recursosCourseId}-stage`} data-clase={recursosCourseId}>
                         {recursosSidebarGroups.map((group) => {
                           const { root, folders } = groupByFolder(group.resources);
                           return (
-                            <details class="recursos-sidebar-session" open>
+                            <details class="recursos-sidebar-session">
                               <summary class="recursos-sidebar-session-name">
                                 <span class="recursos-sidebar-session-caret" style="font-size: 1.2em">▸</span>
                                 {group.session?.name || 'Sin sesión'}
@@ -4274,7 +4322,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                 })}
                                 {[...folders.entries()].map(([folderName, items]) => (
                                   <li class="recursos-sidebar-resource-item">
-                                    <details class="recursos-sidebar-folder" open>
+                                    <details class="recursos-sidebar-folder">
                                       <summary class="recursos-sidebar-folder-name">
                                         <span class="recursos-sidebar-folder-caret" style="font-size: 1.2em">▸</span>
                                         <span style="color:#4e6070">⊟</span>
@@ -4351,20 +4399,29 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                     <span class="chapter-title-main">
                       <span class="chapter-caret">▸</span>
                       <span class="chapter-title-text">{displayTitle}</span>
-                      {canManageLiveInteractions && isRecursosChapter && (
-                        <a
-                          href={`${courseHref}/recursos`}
-                          class:list={['chapter-editor-link', { active: isRecursosEditorPage }]}
-                          title="Editor de recursos"
-                          aria-label="Editor de recursos"
-                          onclick="event.stopPropagation()"
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                          </svg>
-                        </a>
-                      )}
+	                      {canManageLiveInteractions && isRecursosChapter && (
+	                        <>
+	                          <a
+	                            href={`${courseHref}/recursos`}
+	                            class:list={['chapter-editor-link', { active: isRecursosEditorPage }]}
+	                            title="Editor de recursos"
+	                            aria-label="Editor de recursos"
+	                            onclick="event.stopPropagation()"
+	                          >
+	                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	                              <path d="M12 20h9" />
+	                              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+	                            </svg>
+	                          </a>
+	                          <button type="button" class="chapter-editor-link recursos-sidebar-fold-all-btn" title="Desplegar árbol de recursos" aria-label="Desplegar árbol de recursos">
+	                            <svg viewBox="0 0 24 24" aria-hidden="true" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	                              <path d="M4 6h16" />
+	                              <path d="M7 12h10" />
+	                              <path d="M10 18h4" />
+	                            </svg>
+	                          </button>
+	                        </>
+	                      )}
                     </span>
                   </summary>
                   {isRecursosChapter && recursosSidebarGroups.length > 0 ? (
@@ -4372,7 +4429,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                       {recursosSidebarGroups.map((group) => {
                         const { root, folders } = groupByFolder(group.resources);
                         return (
-                          <details class="recursos-sidebar-session" open>
+                          <details class="recursos-sidebar-session">
                             <summary class="recursos-sidebar-session-name">
                               <span class="recursos-sidebar-session-caret">▸</span>
                               {group.session?.name || 'Sin sesión'}
@@ -4391,7 +4448,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                               })}
                               {[...folders.entries()].map(([folderName, items]) => (
                                 <li class="recursos-sidebar-resource-item">
-                                  <details class="recursos-sidebar-folder" open>
+                                  <details class="recursos-sidebar-folder">
                                     <summary class="recursos-sidebar-folder-name">
                                       <span class="recursos-sidebar-folder-caret">▸</span>
                                       <span style="color:#4e6070">⊟</span>
@@ -5000,13 +5057,144 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           e.stopImmediatePropagation();
           // Alt+click = split; plain click = replace current panel
           ws.openNote(noteSlug, 'preview', e.altKey);
-        };
-        document.addEventListener('click', win.__musikiCourseLessonClickHandler, true);
-      </script>
-    )}
-    {canManageLiveInteractions && (
-      <script>
-        // ── Recursos sidebar context menus ──────────────────────────────────
+	        };
+	        document.addEventListener('click', win.__musikiCourseLessonClickHandler, true);
+	      </script>
+	    )}
+	    <script>
+	      const recursosFoldWin = window as any;
+
+	      function normalizeRecursosFoldLabel(value: string) {
+	        return value
+	          .replace(/[▸⊟]/g, ' ')
+	          .replace(/\s+/g, ' ')
+	          .trim()
+	          .toLowerCase();
+	      }
+
+	      function getRecursosFoldDetails(tree: HTMLElement) {
+	        return Array.from(
+	          tree.querySelectorAll<HTMLDetailsElement>('details.recursos-sidebar-session, details.recursos-sidebar-folder')
+	        );
+	      }
+
+	      function getRecursosFoldStorageKey(tree: HTMLElement) {
+	        const rawCourse = String(tree.dataset.clase || tree.dataset.courseId || tree.dataset.room || '').split('/')[0];
+	        return `musiki:recursos-sidebar-fold-state:${rawCourse || location.pathname}`;
+	      }
+
+	      function readRecursosFoldState(tree: HTMLElement): Record<string, boolean> {
+	        try {
+	          const raw = localStorage.getItem(getRecursosFoldStorageKey(tree));
+	          const parsed = raw ? JSON.parse(raw) : {};
+	          return parsed && typeof parsed === 'object' ? parsed : {};
+	        } catch {
+	          return {};
+	        }
+	      }
+
+	      function getRecursosFoldNodeKey(details: HTMLDetailsElement): string {
+	        const summary = details.querySelector('summary');
+	        const label = normalizeRecursosFoldLabel(summary?.textContent || '');
+	        if (details.classList.contains('recursos-sidebar-folder')) {
+	          const session = details.closest<HTMLDetailsElement>('details.recursos-sidebar-session');
+	          const sessionKey = session ? getRecursosFoldNodeKey(session) : 'session:root';
+	          return `${sessionKey}/folder:${label || 'sin-carpeta'}`;
+	        }
+	        return `session:${label || 'sin-sesion'}`;
+	      }
+
+	      function writeRecursosFoldState(tree: HTMLElement) {
+	        const state: Record<string, boolean> = {};
+	        for (const details of getRecursosFoldDetails(tree)) {
+	          state[getRecursosFoldNodeKey(details)] = details.open;
+	        }
+	        try {
+	          localStorage.setItem(getRecursosFoldStorageKey(tree), JSON.stringify(state));
+	        } catch {}
+	      }
+
+	      function updateRecursosFoldButtons(tree: HTMLElement) {
+	        const details = getRecursosFoldDetails(tree);
+	        const canOpen = details.some(d => !d.open);
+	        const chapter = tree.closest<HTMLElement>('.chapter--recursos');
+	        const buttons = chapter
+	          ? Array.from(chapter.querySelectorAll<HTMLButtonElement>('.recursos-sidebar-fold-all-btn'))
+	          : Array.from(document.querySelectorAll<HTMLButtonElement>('.recursos-sidebar-fold-all-btn'));
+	        for (const button of buttons) {
+	          const label = canOpen ? 'Desplegar árbol de recursos' : 'Plegar árbol de recursos';
+	          button.title = label;
+	          button.setAttribute('aria-label', label);
+	          button.dataset.recursosFoldState = canOpen ? 'closed' : 'open';
+	        }
+	      }
+
+	      function applyRecursosFoldState(tree: HTMLElement) {
+	        const state = readRecursosFoldState(tree);
+	        const hasStoredState = Object.keys(state).length > 0;
+	        for (const details of getRecursosFoldDetails(tree)) {
+	          const key = getRecursosFoldNodeKey(details);
+	          details.open = hasStoredState ? state[key] === true : false;
+	        }
+	        updateRecursosFoldButtons(tree);
+	      }
+
+	      function findRecursosTreeForButton(button: HTMLElement) {
+	        const chapter = button.closest<HTMLElement>('.chapter--recursos');
+	        return chapter?.querySelector<HTMLElement>('[data-recursos-sidebar]')
+	          || document.querySelector<HTMLElement>('#recursos-sidebar-tree-container [data-recursos-sidebar]')
+	          || document.querySelector<HTMLElement>('[data-recursos-sidebar]');
+	      }
+
+	      function toggleRecursosTreeForButton(button: HTMLElement) {
+	        const tree = findRecursosTreeForButton(button);
+	        if (!tree) return;
+	        const details = getRecursosFoldDetails(tree);
+	        const shouldOpen = details.some(d => !d.open);
+	        for (const detail of details) detail.open = shouldOpen;
+	        writeRecursosFoldState(tree);
+	        updateRecursosFoldButtons(tree);
+	      }
+
+	      function bootRecursosSidebarFolding() {
+	        document.querySelectorAll<HTMLElement>('[data-recursos-sidebar]').forEach(tree => {
+	          if (!tree.dataset.recursosFoldBound) {
+	            tree.dataset.recursosFoldBound = 'true';
+	            tree.addEventListener('toggle', event => {
+	              const target = event.target;
+	              if (!(target instanceof HTMLDetailsElement)) return;
+	              if (!target.matches('.recursos-sidebar-session, .recursos-sidebar-folder')) return;
+	              window.setTimeout(() => {
+	                writeRecursosFoldState(tree);
+	                updateRecursosFoldButtons(tree);
+	              }, 0);
+	            }, { capture: true });
+	          }
+	          applyRecursosFoldState(tree);
+	        });
+	      }
+
+	      if (typeof recursosFoldWin.__musikiRecursosFoldClickHandler === 'function') {
+	        document.removeEventListener('click', recursosFoldWin.__musikiRecursosFoldClickHandler, true);
+	      }
+	      recursosFoldWin.__musikiRecursosFoldClickHandler = (event: MouseEvent) => {
+	        const target = event.target instanceof Element ? event.target : null;
+	        const button = target?.closest<HTMLElement>('.recursos-sidebar-fold-all-btn');
+	        if (!button) return;
+	        event.preventDefault();
+	        event.stopPropagation();
+	        toggleRecursosTreeForButton(button);
+	      };
+	      document.addEventListener('click', recursosFoldWin.__musikiRecursosFoldClickHandler, true);
+
+	      bootRecursosSidebarFolding();
+	      document.addEventListener('astro:page-load', bootRecursosSidebarFolding);
+	      window.addEventListener('notes-sidebar-refresh', () => window.setTimeout(bootRecursosSidebarFolding, 0));
+	      window.addEventListener('musiki:recursos-sidebar-mounted', () => window.setTimeout(bootRecursosSidebarFolding, 0));
+	    </script>
+	    {canManageLiveInteractions && (
+	      <script>
+	        // ── Recursos sidebar context menus ──────────────────────────────────
         let _activeRecursosMenu: HTMLElement | null = null;
 
         function closeRecursosMenu() {
