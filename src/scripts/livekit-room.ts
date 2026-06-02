@@ -11437,6 +11437,48 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sonicAnalyzerController && console.debug(`[sA] analysis ${phase} ${percent}%`);
     });
 
+    const refreshSidebarHTML = async () => {
+      const sidebar = document.querySelector('[data-course-sidebar="left"]');
+      if (!sidebar) return;
+      try {
+        const scrollTop = sidebar.scrollTop;
+        const openStates = new Map<string, boolean>();
+        sidebar.querySelectorAll('details').forEach((details, idx) => {
+          const titleText = details.querySelector('.chapter-title-text, .recursos-sidebar-session-name, .recursos-sidebar-folder-name')?.textContent?.trim();
+          const key = titleText || `details-idx-${idx}`;
+          openStates.set(key, details.hasAttribute('open'));
+        });
+
+        const res = await fetch(window.location.href);
+        if (!res.ok) return;
+        const htmlText = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        const newSidebar = doc.querySelector('[data-course-sidebar="left"]');
+        if (!newSidebar) return;
+
+        newSidebar.querySelectorAll('details').forEach((details, idx) => {
+          const titleText = details.querySelector('.chapter-title-text, .recursos-sidebar-session-name, .recursos-sidebar-folder-name')?.textContent?.trim();
+          const key = titleText || `details-idx-${idx}`;
+          if (openStates.get(key) === true) {
+            details.setAttribute('open', '');
+          } else if (openStates.get(key) === false) {
+            details.removeAttribute('open');
+          }
+        });
+
+        sidebar.innerHTML = newSidebar.innerHTML;
+        sidebar.scrollTop = scrollTop;
+      } catch (err) {
+        console.error('[livekit-room] Failed to refresh sidebar HTML:', err);
+      }
+    };
+
+    window.addEventListener('notes-sidebar-refresh', (e: Event) => {
+      if ((e as CustomEvent).detail?.broadcast === false) return;
+      void publishMessage({ type: 'notes-sidebar-refresh' }).catch(() => undefined);
+    });
+
     window.addEventListener('musiki:clase-presentation-changed', (e: Event) => {
       const ev = e as CustomEvent<{ lessonId: string | null }>;
       recursosCurrentLessonId = ev.detail?.lessonId ?? null;
@@ -13073,6 +13115,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         message.appearances.forEach((appearance) => {
           lilypondLive.refreshRemoteCursorAppearance(appearance.userId, appearance.color);
         });
+        return;
+      }
+
+      if (message.type === 'notes-sidebar-refresh') {
+        if (localRole !== 'teacher') {
+          void refreshSidebarHTML();
+        } else {
+          window.dispatchEvent(new CustomEvent('notes-sidebar-refresh', { detail: { broadcast: false } }));
+        }
         return;
       }
 

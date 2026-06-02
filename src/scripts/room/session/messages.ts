@@ -283,7 +283,8 @@ export type ConferenceMessage =
       zoom: number;
     }
   | { type: 'recursos:sync'; items: any[]; allowStudents: boolean }
-  | { type: 'recursos:allow-students'; allow: boolean };
+  | { type: 'recursos:allow-students'; allow: boolean }
+  | { type: 'notes-sidebar-refresh' };
 
 export const MESSAGE_TOPIC = 'conference-ui';
 
@@ -852,6 +853,12 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'recursos:allow-students',
         allow: Boolean((parsed as any).allow),
+      };
+    }
+
+    if (parsed.type === 'notes-sidebar-refresh') {
+      return {
+        type: 'notes-sidebar-refresh',
       };
     }
 

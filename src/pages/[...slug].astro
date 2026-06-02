@@ -3801,6 +3801,72 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         {canManageLiveInteractions ? (
           <>
+            {/* Render content collection chapters (like 70 CONCEPTOS) first if content admin is enabled, to match student sorting layout */}
+            {localContentAdminEnabled && sidebarChapterEntries.filter(e =>
+              e.kind === 'chapter' && e.lessons.some((lesson) => (lesson as any).collection === 'content')
+            ).map((entry) => {
+              const { chapterName } = entry;
+              const lessons = entry.lessons.filter((lesson) => (lesson as any).collection === 'content');
+              if (lessons.length === 0) return null;
+              const isPublicFolder = /^[79]\d /.test(chapterName);
+              const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
+              const isConceptos = displayTitle.toUpperCase().includes('CONCEPTOS');
+              const isRecursos = displayTitle.toUpperCase().includes('RECURSOS');
+              const isNotas = displayTitle.toUpperCase().includes('NOTAS');
+
+              return (
+                <div class:list={["chapter", { "chapter--conceptos": isConceptos, "chapter--recursos": isRecursos, "chapter--notas": isNotas }]}>
+                  <details class="chapter-details" open={isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
+                    <summary class="chapter-title">
+                      <span class="chapter-title-main">
+                        <span class="chapter-drag-handle" style="opacity: 0.15; cursor: default;" title="No se puede reordenar">⋮⋮</span>
+                        <span class="chapter-caret">▸</span>
+                        <span class="chapter-title-text">{displayTitle}</span>
+                      </span>
+                    </summary>
+                    <ul class="lesson-list">
+                      {lessons.map((lesson) => {
+                        const isContentCollection = (lesson as any).collection === 'content';
+                        const lessonType = String(lesson.data.type || '').trim().toLowerCase();
+                        const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
+                        const ic = getLessonIconInfo(lesson);
+
+                        let lessonHref = buildCourseLessonHref(
+                          canonicalCourseIdToUse || '',
+                          courseData,
+                          lesson as any,
+                          lessonPathIndex,
+                        );
+
+                        const lessonPageSlug = isContentCollection
+                          ? getContentCanonicalSlug(lesson as any)
+                          : (lessonPathIndex.pathByEntryId.get(lesson.id)
+                             || getCourseEntryLegacyPath(lesson as any, canonicalCourseIdToUse || ''));
+
+                        const isActive = currentEntry?.id === lesson.id;
+
+                        return (
+                          <li class="lesson-item">
+                            <a
+                              href={lessonHref}
+                              class:list={['lesson-link', { active: isActive }]}
+                              data-astro-prefetch="false"
+                              data-course-id={canonicalCourseIdToUse || courseSlug}
+                              data-lesson-page-slug={isContentCollection ? ((lesson as any).id || lessonPageSlug) : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
+                            >
+                              <span class:list={["lesson-icon", { "lesson-icon--concept": ic.isConcept }]} style={ic.color ? `color: ${ic.color}` : undefined}>{ic.char}</span>
+                              <span class="lesson-link-text">{lesson.data.title}</span>
+                              <span class="lesson-link-trailing"></span>
+                            </a>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                </div>
+              );
+            })}
+
             {localContentAdminEnabled && (
               <>
                 <div
@@ -3865,7 +3931,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                     )}
                   </div>
                   <div id="notas-sidebar-tree-container">
-                    <div class="chapter chapter--notas" data-notas-sidebar data-notas-course-id={canonicalCourseId || courseSlug}>
+                    <div class="chapter chapter--notas" data-notes-sidebar data-notes-course-id={canonicalCourseId || courseSlug}>
                       <details class="chapter-details">
                         <summary class="chapter-title">
                           <span class="chapter-title-main">
@@ -3883,8 +3949,10 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
               </>
             )}
             {sidebarChapterEntries.filter(e =>
-              (e.kind === 'recursos' && !localContentAdminEnabled)
-              || (e.kind === 'chapter' && (!localContentAdminEnabled || e.lessons.some((lesson) => (lesson as any).collection === 'content')))
+              !localContentAdminEnabled && (
+                (e.kind === 'recursos')
+                || (e.kind === 'chapter')
+              )
             ).map((entry) => {
           if (entry.kind === 'recursos') {
             return (
@@ -13997,67 +14065,104 @@ a[node] -->|edge| b[hub]
         import { loadNotesTree, renderNotesTree, renderNotesTreeError, beginRootNoteCreation, beginInlineFolderCreation } from '../scripts/course/notes-sidebar';
 
         async function bootNotasSidebar() {
-          const sidebarEls = document.querySelectorAll<HTMLElement>('[data-notas-sidebar]');
+          const sidebarEls = document.querySelectorAll<HTMLElement>('[data-notas-sidebar], [data-notes-sidebar]');
           sidebarEls.forEach(sidebarEl => {
-            const courseId = sidebarEl.dataset.notasCourseId ?? '';
+            const courseId = sidebarEl.dataset.notasCourseId ?? sidebarEl.dataset.notesCourseId ?? sidebarEl.dataset.courseId ?? '';
             if (!courseId) return;
-            if (sidebarEl.dataset.notasSidebarBound === courseId) return;
+            const boundKey = sidebarEl.dataset.notasSidebarBound ?? sidebarEl.dataset.notesSidebarBound ?? '';
+            if (boundKey === courseId) return;
             sidebarEl.dataset.notasSidebarBound = courseId;
+            sidebarEl.dataset.notesSidebarBound = courseId;
 
-            const treeEl = sidebarEl.querySelector<HTMLElement>('.notas-sb-tree');
-            if (!treeEl) return;
-
-            const details = sidebarEl.querySelector<HTMLDetailsElement>('details');
-
-            const reload = async () => {
+            const reload = async (): Promise<boolean> => {
+              const currentTreeEl = sidebarEl.querySelector<HTMLElement>('.notas-sb-tree');
+              if (!currentTreeEl) return false;
               try {
                 const { folders, notes, currentUserId } = await loadNotesTree(courseId);
-                renderNotesTree(treeEl, folders, notes, courseId, currentUserId);
+                renderNotesTree(currentTreeEl, folders, notes, courseId, currentUserId);
+                return true;
               } catch (error) {
-                renderNotesTreeError(treeEl, error);
+                renderNotesTreeError(currentTreeEl, error);
+                return false;
               }
             };
 
             let loaded = false;
-            details?.addEventListener('toggle', async () => {
-              if (!details.open || loaded) return;
-              loaded = true;
-              await reload();
-            });
 
-            // Fail-safe click listener on summary to manually toggle the fold
-            const summaryEl = sidebarEl.querySelector<HTMLElement>('summary.chapter-title');
-            summaryEl?.addEventListener('click', (e) => {
-              if ((e.target as HTMLElement).closest('button, a')) return;
-              e.preventDefault();
-              if (details) {
-                details.open = !details.open;
+            // Handle toggle loading using event capturing delegation
+            sidebarEl.addEventListener('toggle', async (e) => {
+              const details = e.target as HTMLDetailsElement;
+              if (
+                details.tagName !== 'DETAILS'
+                || !details.open
+                || loaded
+                || !details.querySelector('.notas-sb-tree')
+              ) return;
+              loaded = await reload();
+            }, { capture: true });
+
+            // Event delegation for clicks on summary / buttons
+            sidebarEl.addEventListener('click', async (e) => {
+              const target = e.target as HTMLElement;
+
+              // 1. Fold toggle override
+              const summary = target.closest('summary.chapter-title');
+              const summaryDetails = summary?.closest('details');
+              if (summary && summaryDetails?.querySelector('.notas-sb-tree') && !target.closest('button, a')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (summaryDetails) {
+                  summaryDetails.open = !summaryDetails.open;
+                }
+                return;
               }
-            });
 
-            // New note button
-            sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-btn')?.addEventListener('click', async () => {
-              if (!details?.open) { details!.open = true; loaded = false; }
-              await reload();
-              beginRootNoteCreation(treeEl);
-            });
+              // 2. New Note / Folder Actions
+              const newBtn = target.closest('.notas-sb-new-btn');
+              const newFolderBtn = target.closest('.notas-sb-new-folder-btn');
+              if (newBtn || newFolderBtn) {
+                e.stopPropagation();
+                e.preventDefault();
+                const details = target.closest('details');
+                if (details && !details.open) {
+                  details.open = true;
+                  loaded = false;
+                }
+                loaded = await reload();
+                const currentTreeEl = sidebarEl.querySelector<HTMLElement>('.notas-sb-tree');
+                if (currentTreeEl) {
+                  if (newBtn) {
+                    beginRootNoteCreation(currentTreeEl);
+                  } else {
+                    beginInlineFolderCreation(currentTreeEl, courseId);
+                  }
+                }
+              }
+            }, { capture: true });
 
-            // New folder button
-            sidebarEl.querySelector<HTMLButtonElement>('.notas-sb-new-folder-btn')?.addEventListener('click', async () => {
-              if (!details?.open) { details!.open = true; loaded = false; }
-              await reload();
-              beginInlineFolderCreation(treeEl, courseId);
-            });
+            const initiallyOpenNotesDetails = Array.from(sidebarEl.querySelectorAll<HTMLDetailsElement>('details'))
+              .find(details => details.open && Boolean(details.querySelector('.notas-sb-tree')));
+            if (initiallyOpenNotesDetails) {
+              void (async () => {
+                loaded = await reload();
+              })();
+            }
           });
 
           // Ribbon NOTAS button: focus/open this section
-          window.addEventListener('musiki:open-notas', () => {
-            const visibleSidebar = document.querySelector<HTMLElement>('[data-notas-sidebar]:not([style*="display: none"])')
-              || document.querySelector<HTMLElement>('[data-notas-sidebar]');
-            const details = visibleSidebar?.querySelector<HTMLDetailsElement>('details');
-            if (details && !details.open) details.open = true;
-            visibleSidebar?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          });
+          const notasWin = window as any;
+          if (notasWin.__musikiNotasSidebarOpenBound !== true) {
+            notasWin.__musikiNotasSidebarOpenBound = true;
+            window.addEventListener('musiki:open-notas', () => {
+              const sidebarCandidates = Array.from(document.querySelectorAll<HTMLElement>('[data-notas-sidebar], [data-notes-sidebar]'));
+              const visibleSidebar = sidebarCandidates.find((el) => el.offsetParent !== null && Boolean(el.querySelector('.notas-sb-tree')))
+                || sidebarCandidates.find((el) => Boolean(el.querySelector('.notas-sb-tree')))
+                || sidebarCandidates[0];
+              const details = visibleSidebar?.querySelector<HTMLDetailsElement>('details');
+              if (details && !details.open) details.open = true;
+              visibleSidebar?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+          }
         }
 
         bootNotasSidebar();
