@@ -584,6 +584,10 @@ function groupByFolder(resources: Array<{ id: string; url: string; name: string;
   return { root, folders: sortedFolders };
 }
 
+function recursosLegacyFolderId(courseId: string, sessionId: string | null | undefined, folderName: string) {
+  return `legacy-folder:${courseId}:${sessionId || 'root'}:${folderName}`;
+}
+
 // Group concepts and glossary by project and parent
 const groupedConcepts: Record<string, Record<string, typeof allLessons>> = {};
 
@@ -3978,7 +3982,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                         {recursosSidebarGroups.map((group) => {
                           const { root, folders } = groupByFolder(group.resources);
                           return (
-                            <details class="recursos-sidebar-session">
+                            <details class="recursos-sidebar-session" data-node-id={group.session?.id || ''} data-node-kind={group.session?.id ? 'session' : ''}>
                               <summary class="recursos-sidebar-session-name">
                                 <span class="recursos-sidebar-session-caret">▸</span>
                                 {group.session?.name || 'Sin sesión'}
@@ -3997,7 +4001,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                 })}
                                 {[...folders.entries()].map(([folderName, items]) => (
                                   <li class="recursos-sidebar-resource-item">
-                                    <details class="recursos-sidebar-folder">
+                                    <details class="recursos-sidebar-folder" data-node-id={recursosLegacyFolderId(recursosCourseId, group.session?.id, folderName)} data-node-kind="folder">
                                       <summary class="recursos-sidebar-folder-name">
                                         <span class="recursos-sidebar-folder-caret">▸</span>
                                         <span style="color:#4e6070">⊟</span>
@@ -4084,7 +4088,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                       {recursosSidebarGroups.map((group) => {
                         const { root, folders } = groupByFolder(group.resources);
                         return (
-                          <details class="recursos-sidebar-session">
+                          <details class="recursos-sidebar-session" data-node-id={group.session?.id || ''} data-node-kind={group.session?.id ? 'session' : ''}>
                             <summary class="recursos-sidebar-session-name">
                               <span class="recursos-sidebar-session-caret">▸</span>
                               {group.session?.name || 'Sin sesión'}
@@ -4103,7 +4107,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                               })}
                               {[...folders.entries()].map(([folderName, items]) => (
                                 <li class="recursos-sidebar-resource-item">
-                                  <details class="recursos-sidebar-folder">
+                                  <details class="recursos-sidebar-folder" data-node-id={recursosLegacyFolderId(recursosCourseId, group.session?.id, folderName)} data-node-kind="folder">
                                     <summary class="recursos-sidebar-folder-name">
                                       <span class="recursos-sidebar-folder-caret">▸</span>
                                       <span style="color:#4e6070">⊟</span>
@@ -4185,7 +4189,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                     {recursosSidebarGroups.map((group) => {
                       const { root, folders } = groupByFolder(group.resources);
                       return (
-                        <details class="recursos-sidebar-session">
+                        <details class="recursos-sidebar-session" data-node-id={group.session?.id || ''} data-node-kind={group.session?.id ? 'session' : ''}>
                           <summary class="recursos-sidebar-session-name">
                             <span class="recursos-sidebar-session-caret">▸</span>
                             {group.session?.name || 'Sin sesión'}
@@ -4204,7 +4208,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                             })}
                             {[...folders.entries()].map(([folderName, items]) => (
                               <li class="recursos-sidebar-resource-item">
-                                <details class="recursos-sidebar-folder">
+                                <details class="recursos-sidebar-folder" data-node-id={recursosLegacyFolderId(recursosCourseId, group.session?.id, folderName)} data-node-kind="folder">
                                   <summary class="recursos-sidebar-folder-name">
                                     <span class="recursos-sidebar-folder-caret">▸</span>
                                     <span style="color:#4e6070">⊟</span>
@@ -4374,7 +4378,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                         {recursosSidebarGroups.map((group) => {
                           const { root, folders } = groupByFolder(group.resources);
                           return (
-                            <details class="recursos-sidebar-session">
+                            <details class="recursos-sidebar-session" data-node-id={group.session?.id || ''} data-node-kind={group.session?.id ? 'session' : ''}>
                               <summary class="recursos-sidebar-session-name">
                                 <span class="recursos-sidebar-session-caret" style="font-size: 1.2em">▸</span>
                                 {group.session?.name || 'Sin sesión'}
@@ -4393,7 +4397,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                                 })}
                                 {[...folders.entries()].map(([folderName, items]) => (
                                   <li class="recursos-sidebar-resource-item">
-                                    <details class="recursos-sidebar-folder">
+                                    <details class="recursos-sidebar-folder" data-node-id={recursosLegacyFolderId(recursosCourseId, group.session?.id, folderName)} data-node-kind="folder">
                                       <summary class="recursos-sidebar-folder-name">
                                         <span class="recursos-sidebar-folder-caret" style="font-size: 1.2em">▸</span>
                                         <span style="color:#4e6070">⊟</span>
@@ -4500,7 +4504,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                       {recursosSidebarGroups.map((group) => {
                         const { root, folders } = groupByFolder(group.resources);
                         return (
-                          <details class="recursos-sidebar-session">
+                          <details class="recursos-sidebar-session" data-node-id={group.session?.id || ''} data-node-kind={group.session?.id ? 'session' : ''}>
                             <summary class="recursos-sidebar-session-name">
                               <span class="recursos-sidebar-session-caret">▸</span>
                               {group.session?.name || 'Sin sesión'}
@@ -4519,7 +4523,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                               })}
                               {[...folders.entries()].map(([folderName, items]) => (
                                 <li class="recursos-sidebar-resource-item">
-                                  <details class="recursos-sidebar-folder">
+                                  <details class="recursos-sidebar-folder" data-node-id={recursosLegacyFolderId(recursosCourseId, group.session?.id, folderName)} data-node-kind="folder">
                                     <summary class="recursos-sidebar-folder-name">
                                       <span class="recursos-sidebar-folder-caret">▸</span>
                                       <span style="color:#4e6070">⊟</span>
@@ -5210,6 +5214,138 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 	        updateRecursosFoldButtons(tree);
 	      }
 
+	      function recursosSidebarEsc(value: unknown) {
+	        return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+	          '&': '&amp;',
+	          '<': '&lt;',
+	          '>': '&gt;',
+	          '"': '&quot;',
+	          "'": '&#39;',
+	        }[ch] || ch));
+	      }
+
+	      function recursosSidebarIcon(type: string, url = '', name = '') {
+	        const lower = `${type} ${url} ${name}`.toLowerCase();
+	        if (lower.includes('pdf') || /\.pdf(\?|$)/.test(lower)) return { char: '■', color: '#c85f5f' };
+	        if (lower.includes('audio') || /\.(mp3|wav|ogg|m4a|aac|flac)(\?|$)/.test(lower)) return { char: '■', color: '#45d384' };
+	        if (lower.includes('video') || /\.(mp4|mov|webm)(\?|$)/.test(lower)) return { char: '■', color: '#7e9cc8' };
+	        if (lower.includes('image') || /\.(png|jpe?g|gif|webp|svg)(\?|$)/.test(lower)) return { char: '■', color: '#c8a87e' };
+	        if (lower.includes('pptx') || /\.pptx(\?|$)/.test(lower)) return { char: '■', color: '#c87e45' };
+	        return { char: '■', color: '#8a8f98' };
+	      }
+
+	      function renderRecursosSidebarTreePayload(tree: HTMLElement, payload: any) {
+	        const nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
+	        const assetsByNode = new Map<string, any>(
+	          (Array.isArray(payload?.assets) ? payload.assets : []).map((asset: any) => [String(asset.nodeId || ''), asset])
+	        );
+	        const children = new Map<string, any[]>();
+	        for (const node of nodes) {
+	          const parentId = String(node?.parentId || '');
+	          if (!children.has(parentId)) children.set(parentId, []);
+	          children.get(parentId)!.push(node);
+	        }
+	        const byName = (a: any, b: any) => String(a?.name || a?.sortKey || '')
+	          .localeCompare(String(b?.name || b?.sortKey || ''), 'es', { sensitivity: 'base', numeric: true });
+	        for (const list of children.values()) list.sort(byName);
+
+	        const isSession = (node: any) => String(node?.kind || '') === 'session';
+	        const isFolder = (node: any) => String(node?.kind || '') === 'folder';
+	        const renderResource = (node: any) => {
+	          const asset = assetsByNode.get(String(node?.id || ''));
+	          const url = String(asset?.externalUrl || '');
+	          if (!url) return '';
+	          const name = String(node?.name || 'Recurso');
+	          const ic = recursosSidebarIcon(String(asset?.resourceType || node?.kind || ''), url, name);
+	          return `
+	            <li class="recursos-sidebar-resource-item" data-id="${recursosSidebarEsc(node.id)}">
+	              <a href="${recursosSidebarEsc(url)}" class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title="${recursosSidebarEsc(url)}">
+	                <span class="recursos-sidebar-resource-icon" style="color:${recursosSidebarEsc(ic.color)}">${recursosSidebarEsc(ic.char)}</span>
+	                <span class="recursos-sidebar-resource-name">${recursosSidebarEsc(name)}</span>
+	              </a>
+	            </li>
+	          `;
+	        };
+	        const renderFolder = (node: any) => {
+	          const nested = renderChildren(String(node?.id || ''));
+	          if (!nested.trim()) return '';
+	          return `
+	            <li class="recursos-sidebar-resource-item">
+	              <details class="recursos-sidebar-folder" data-node-id="${recursosSidebarEsc(node?.id || '')}" data-node-kind="folder">
+	                <summary class="recursos-sidebar-folder-name">
+	                  <span class="recursos-sidebar-folder-caret">▸</span>
+	                  <span style="color:#4e6070">⊟</span>
+	                  ${recursosSidebarEsc(node?.name || 'Carpeta')}
+	                </summary>
+	                <ul class="recursos-sidebar-folder-items">${nested}</ul>
+	              </details>
+	            </li>
+	          `;
+	        };
+	        const renderChild = (node: any) => isFolder(node) ? renderFolder(node) : renderResource(node);
+	        const renderChildren = (parentId: string): string => (children.get(parentId) || [])
+	          .map(renderChild)
+	          .join('');
+
+	        const rootChildren = children.get('') || [];
+	        const topSessions = rootChildren.filter(isSession);
+	        const unsessioned = rootChildren.filter((node) => !isSession(node)).map(renderChild).join('');
+	        const groups = topSessions.map((node) => {
+	          const nested = renderChildren(String(node?.id || ''));
+	          if (!nested.trim()) return '';
+	          return `
+	            <details class="recursos-sidebar-session" data-node-id="${recursosSidebarEsc(node?.id || '')}" data-node-kind="session">
+	              <summary class="recursos-sidebar-session-name">
+	                <span class="recursos-sidebar-session-caret">▸</span>
+	                ${recursosSidebarEsc(node?.name || 'Sesión')}
+	              </summary>
+	              <ul class="recursos-sidebar-resource-list">${nested}</ul>
+	            </details>
+	          `;
+	        }).filter(Boolean);
+	        if (unsessioned.trim()) {
+	          groups.push(`
+	            <details class="recursos-sidebar-session" data-node-id="" data-node-kind="">
+	              <summary class="recursos-sidebar-session-name">
+	                <span class="recursos-sidebar-session-caret">▸</span>
+	                Sin sesión
+	              </summary>
+	              <ul class="recursos-sidebar-resource-list">${unsessioned}</ul>
+	            </details>
+	          `);
+	        }
+	        tree.innerHTML = groups.length
+	          ? groups.join('')
+	          : '<div class="course-sidebar-state-note">Sin recursos vinculados.</div>';
+	      }
+
+	      async function refreshRecursosSidebarTree(tree: HTMLElement) {
+	        const courseId = String(tree.dataset.clase || tree.dataset.courseId || tree.dataset.room || '').split('/')[0].replace(/-stage$/, '');
+	        if (!courseId) return;
+	        tree.setAttribute('aria-busy', 'true');
+	        try {
+	          const response = await fetch(`/api/class-workspace/resources?courseId=${encodeURIComponent(courseId)}`);
+	          const payload = await response.json().catch(() => ({}));
+	          if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+	          renderRecursosSidebarTreePayload(tree, payload);
+	          tree.dataset.recursosFoldBound = '';
+	          bootRecursosSidebarFolding();
+	          window.dispatchEvent(new CustomEvent('musiki:recursos-sidebar-mounted'));
+	        } catch (error) {
+	          tree.innerHTML = `<div class="course-sidebar-state-note">${recursosSidebarEsc((error as Error)?.message || error || 'Error al refrescar recursos.')}</div>`;
+	        } finally {
+	          tree.removeAttribute('aria-busy');
+	        }
+	      }
+
+	      function refreshRecursosSidebars(courseId = '') {
+	        document.querySelectorAll<HTMLElement>('[data-recursos-sidebar]').forEach((tree) => {
+	          const treeCourse = String(tree.dataset.clase || tree.dataset.courseId || tree.dataset.room || '').split('/')[0].replace(/-stage$/, '');
+	          if (courseId && treeCourse && treeCourse !== courseId) return;
+	          void refreshRecursosSidebarTree(tree);
+	        });
+	      }
+
 	      function findRecursosTreeForButton(button: HTMLElement) {
 	        const chapter = button.closest<HTMLElement>('.chapter--recursos');
 	        return chapter?.querySelector<HTMLElement>('[data-recursos-sidebar]')
@@ -5262,6 +5398,18 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 	      document.addEventListener('astro:page-load', bootRecursosSidebarFolding);
 	      window.addEventListener('notes-sidebar-refresh', () => window.setTimeout(bootRecursosSidebarFolding, 0));
 	      window.addEventListener('musiki:recursos-sidebar-mounted', () => window.setTimeout(bootRecursosSidebarFolding, 0));
+	      window.addEventListener('musiki:recursos-sidebar-refresh', (event) => {
+	        refreshRecursosSidebars(String((event as CustomEvent)?.detail?.courseId || ''));
+	      });
+	      window.addEventListener('storage', (event) => {
+	        if (event.key !== 'musiki:recursos-sidebar-refresh') return;
+	        try {
+	          const detail = event.newValue ? JSON.parse(event.newValue) : {};
+	          refreshRecursosSidebars(String(detail.courseId || ''));
+	        } catch {
+	          refreshRecursosSidebars('');
+	        }
+	      });
 	    </script>
 	    {canManageLiveInteractions && (
 	      <script>
@@ -5273,12 +5421,75 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           _activeRecursosMenu = null;
         }
 
+        function recursosSidebarNormalizeLabel(value: string) {
+          return String(value || '').replace(/[▸⊟]/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
+        function recursosSidebarCourseIdFor(tree: HTMLElement) {
+          return (tree.dataset.clase || tree.dataset.courseId || tree.dataset.room || '').split('/')[0].replace(/-stage$/, '');
+        }
+
+        function recursosSidebarBroadcastRefresh(courseId: string) {
+          const detail = { courseId, at: Date.now() };
+          window.dispatchEvent(new CustomEvent('musiki:recursos-sidebar-refresh', { detail }));
+          try {
+            localStorage.setItem('musiki:recursos-sidebar-refresh', JSON.stringify(detail));
+          } catch {}
+        }
+
+        async function recursosWorkspaceCommand(courseId: string, commandPayload: any) {
+          const response = await fetch('/api/class-workspace/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              courseId,
+              roomName: `${courseId}-stage`,
+              command: commandPayload,
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+          return payload;
+        }
+
+        function recursosSidebarMenuTarget(rawTarget: Element | null) {
+          if (!rawTarget) return null;
+          const resourceItem = rawTarget.closest<HTMLElement>('.recursos-sidebar-resource-item[data-id]');
+          if (resourceItem && rawTarget.closest('.recursos-sidebar-resource-link')) {
+            const name = resourceItem.querySelector<HTMLElement>('.recursos-sidebar-resource-name')?.textContent?.trim() || 'Recurso';
+            return {
+              element: resourceItem,
+              id: resourceItem.dataset.id || '',
+              kind: 'resource',
+              label: name,
+            };
+          }
+          const folder = rawTarget.closest<HTMLElement>('details.recursos-sidebar-folder[data-node-id]');
+          if (folder && rawTarget.closest('summary.recursos-sidebar-folder-name')) {
+            return {
+              element: folder,
+              id: folder.dataset.nodeId || '',
+              kind: 'folder',
+              label: recursosSidebarNormalizeLabel(folder.querySelector('summary')?.textContent || 'Carpeta'),
+            };
+          }
+          const session = rawTarget.closest<HTMLElement>('details.recursos-sidebar-session[data-node-id]');
+          if (session && rawTarget.closest('summary.recursos-sidebar-session-name')) {
+            return {
+              element: session,
+              id: session.dataset.nodeId || '',
+              kind: 'session',
+              label: recursosSidebarNormalizeLabel(session.querySelector('summary')?.textContent || 'Sesión'),
+            };
+          }
+          return null;
+        }
+
         function showRecursosMenu(
           x: number,
           y: number,
-          id: string,
+          targetInfo: { element: HTMLElement; id: string; kind: string; label: string },
           courseId: string,
-          li: HTMLElement,
         ) {
           closeRecursosMenu();
           const menu = document.createElement('div');
@@ -5290,8 +5501,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             'box-shadow:0 4px 12px rgba(0,0,0,.4);',
           ].join('');
 
-          const nameEl = li.querySelector<HTMLElement>('.recursos-sidebar-resource-name');
-          const currentName = nameEl?.textContent?.trim() || '';
+          const currentName = targetInfo.label || 'Recurso';
+          const canMove = targetInfo.kind === 'resource';
 
           const items: Array<{ label: string; danger?: boolean; action: () => Promise<void> } | { sep: true }> = [
             {
@@ -5299,19 +5510,15 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
               action: async () => {
                 const newName = prompt('Nuevo nombre:', currentName);
                 if (!newName || newName === currentName) return;
-                const r = await fetch('/api/live/recursos/editor', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id, name: newName, courseId }),
+                await recursosWorkspaceCommand(courseId, {
+                  type: 'node.rename',
+                  nodeId: targetInfo.id,
+                  name: newName,
                 });
-                if (r.ok) {
-                  if (nameEl) nameEl.textContent = newName;
-                } else {
-                  alert('Error al renombrar');
-                }
+                recursosSidebarBroadcastRefresh(courseId);
               },
             },
-            {
+            ...(canMove ? [{
               label: 'Mover a carpeta',
               action: async () => {
                 const folder = prompt('Carpeta (vacío = raíz):');
@@ -5319,30 +5526,26 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                 const r = await fetch('/api/live/recursos/editor', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ id, folder: folder.trim(), courseId }),
+                  body: JSON.stringify({ id: targetInfo.id, folder: folder.trim(), courseId }),
                 });
                 if (r.ok) {
-                  window.location.reload();
+                  recursosSidebarBroadcastRefresh(courseId);
                 } else {
                   alert('Error al mover');
                 }
               },
-            },
+            }] : []),
             { sep: true },
             {
               label: 'Eliminar',
               danger: true,
               action: async () => {
                 if (!confirm(`¿Eliminar "${currentName}"?`)) return;
-                const r = await fetch(
-                  `/api/live/recursos/editor?id=${encodeURIComponent(id)}&courseId=${encodeURIComponent(courseId)}`,
-                  { method: 'DELETE' },
-                );
-                if (r.ok) {
-                  li.remove();
-                } else {
-                  alert('Error al eliminar');
-                }
+                await recursosWorkspaceCommand(courseId, {
+                  type: 'node.delete',
+                  nodeIds: [targetInfo.id],
+                });
+                recursosSidebarBroadcastRefresh(courseId);
               },
             },
           ];
@@ -5359,7 +5562,10 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
             el.style.cssText = `padding:4px 12px;font-size:11px;cursor:pointer;color:${item.danger ? '#c87e7e' : 'var(--c-fg)'};`;
             el.addEventListener('mouseenter', () => { el.style.background = 'var(--c-bg-alt,var(--c-bg-mute))'; });
             el.addEventListener('mouseleave', () => { el.style.background = ''; });
-            el.addEventListener('click', () => { closeRecursosMenu(); item.action(); });
+            el.addEventListener('click', () => {
+              closeRecursosMenu();
+              item.action().catch((error) => alert((error as Error)?.message || 'No se pudo completar la acción.'));
+            });
             menu.appendChild(el);
           }
 
@@ -5377,21 +5583,23 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         function bootRecursosSidebar() {
           document.querySelectorAll<HTMLElement>('[data-recursos-sidebar]').forEach(tree => {
-            const courseId = (tree.dataset.clase || tree.dataset.courseId || '').split('/')[0];
+            const courseId = recursosSidebarCourseIdFor(tree);
             if (!courseId) return;
-            tree.querySelectorAll<HTMLElement>('.recursos-sidebar-resource-item[data-id]').forEach(li => {
-              if (li.dataset.recursosBound) return;
-              li.dataset.recursosBound = 'true';
-              li.addEventListener('contextmenu', e => {
-                e.preventDefault();
-                showRecursosMenu(e.clientX, e.clientY, li.dataset.id!, courseId, li);
-              });
+            if (tree.dataset.recursosContextBound) return;
+            tree.dataset.recursosContextBound = 'true';
+            tree.addEventListener('contextmenu', e => {
+              const target = recursosSidebarMenuTarget(e.target instanceof Element ? e.target : null);
+              if (!target?.id) return;
+              e.preventDefault();
+              e.stopPropagation();
+              showRecursosMenu(e.clientX, e.clientY, target, courseId);
             });
           });
         }
 
         bootRecursosSidebar();
         document.addEventListener('astro:page-load', bootRecursosSidebar);
+        window.addEventListener('musiki:recursos-sidebar-mounted', () => window.setTimeout(bootRecursosSidebar, 0));
       </script>
     )}
     {canManageLiveInteractions && (
@@ -14411,6 +14619,32 @@ a[node] -->|edge| b[hub]
 
             let loaded = false;
 
+            const ensureRefreshButton = () => {
+              const summary = sidebarEl.querySelector<HTMLElement>('summary.chapter-title');
+              const actionHost = summary?.querySelector<HTMLElement>('.chapter-title-main') || summary;
+              if (!actionHost || actionHost.querySelector('.notas-sb-refresh-btn')) return;
+              const button = document.createElement('button');
+              button.type = 'button';
+              button.className = 'chapter-editor-link notas-sb-refresh-btn';
+              button.title = 'Refrescar notas';
+              button.setAttribute('aria-label', 'Refrescar notas');
+              button.textContent = '↻';
+              button.style.cssText = 'border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.82rem;line-height:1';
+              actionHost.appendChild(button);
+            };
+            ensureRefreshButton();
+
+            const refreshFromExternalChange = async (detailCourseId = '') => {
+              if (detailCourseId && detailCourseId !== courseId) return;
+              const details = sidebarEl.querySelector<HTMLDetailsElement>('details');
+              if (details && !details.open) details.open = true;
+              loaded = await reload();
+            };
+
+            sidebarEl.addEventListener('musiki:notes-sidebar-refresh-local', () => {
+              void refreshFromExternalChange(courseId);
+            });
+
             // Handle toggle loading using event capturing delegation
             sidebarEl.addEventListener('toggle', async (e) => {
               const details = e.target as HTMLDetailsElement;
@@ -14442,6 +14676,13 @@ a[node] -->|edge| b[hub]
               // 2. New Note / Folder Actions
               const newBtn = target.closest('.notas-sb-new-btn');
               const newFolderBtn = target.closest('.notas-sb-new-folder-btn');
+              const refreshBtn = target.closest('.notas-sb-refresh-btn');
+              if (refreshBtn) {
+                e.stopPropagation();
+                e.preventDefault();
+                loaded = await reload();
+                return;
+              }
               if (newBtn || newFolderBtn) {
                 e.stopPropagation();
                 e.preventDefault();
@@ -14470,6 +14711,31 @@ a[node] -->|edge| b[hub]
               })();
             }
           });
+
+          const notasRefreshWin = window as any;
+          if (notasRefreshWin.__musikiNotasSidebarRefreshBound !== true) {
+            notasRefreshWin.__musikiNotasSidebarRefreshBound = true;
+            const triggerRefresh = (courseId = '') => {
+              document.querySelectorAll<HTMLElement>('[data-notas-sidebar], [data-notes-sidebar]').forEach((sidebarEl) => {
+                const sidebarCourseId = sidebarEl.dataset.notasCourseId ?? sidebarEl.dataset.notesCourseId ?? sidebarEl.dataset.courseId ?? '';
+                if (courseId && sidebarCourseId && sidebarCourseId !== courseId) return;
+                sidebarEl.dispatchEvent(new CustomEvent('musiki:notes-sidebar-refresh-local'));
+              });
+            };
+            window.addEventListener('musiki:notes-sidebar-refresh', (event) => {
+              triggerRefresh((event as CustomEvent)?.detail?.courseId || '');
+            });
+            window.addEventListener('notes-sidebar-refresh', () => triggerRefresh(''));
+            window.addEventListener('storage', (event) => {
+              if (event.key !== 'musiki:notes-sidebar-refresh') return;
+              try {
+                const detail = event.newValue ? JSON.parse(event.newValue) : {};
+                triggerRefresh(String(detail.courseId || ''));
+              } catch {
+                triggerRefresh('');
+              }
+            });
+          }
 
           // Ribbon NOTAS button: focus/open this section
           const notasWin = window as any;

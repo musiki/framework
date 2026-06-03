@@ -282,7 +282,7 @@ export type ConferenceMessage =
       zoomMode: 'fit' | 'width' | 'actual' | 'custom';
       zoom: number;
     }
-  | { type: 'recursos:sync'; items: any[]; allowStudents: boolean }
+  | { type: 'recursos:sync'; items: any[]; allowStudents: boolean; emptyFolders?: string[] }
   | { type: 'recursos:allow-students'; allow: boolean }
   | { type: 'notes-sidebar-refresh' };
 
@@ -846,6 +846,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         type: 'recursos:sync',
         items: Array.isArray((parsed as any).items) ? (parsed as any).items : [],
         allowStudents: Boolean((parsed as any).allowStudents),
+        emptyFolders: Array.isArray((parsed as any).emptyFolders) ? (parsed as any).emptyFolders : [],
       };
     }
 

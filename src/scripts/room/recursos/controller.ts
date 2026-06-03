@@ -27,7 +27,7 @@ type RecursosOptions = {
 };
 
 type RecursosMessage =
-  | { type: 'recursos:sync'; items: ResourceItem[]; allowStudents: boolean }
+  | { type: 'recursos:sync'; items: ResourceItem[]; allowStudents: boolean; emptyFolders?: string[] }
   | { type: 'recursos:allow-students'; allow: boolean };
 
 export class RecursosController {
@@ -60,6 +60,7 @@ export class RecursosController {
   private contentEl!: HTMLElement;
   private dropOverlayEl!: HTMLElement;
   private ctxMenuEl!: HTMLElement;
+  private ctxNewFolderBtn!: HTMLButtonElement;
   private ctxRenameBtn!: HTMLButtonElement;
   private ctxMoveBtn!: HTMLButtonElement;
   private ctxDeleteBtn!: HTMLButtonElement;
@@ -70,6 +71,7 @@ export class RecursosController {
   private sessionCtxRenameBtn!: HTMLButtonElement;
   private sessionCtxListBtn!: HTMLButtonElement;
   private sessionCtxDeleteBtn!: HTMLButtonElement;
+  private bottomSessionListBtn!: HTMLButtonElement;
   private sessionsModalEl!: HTMLElement;
   private sessionsListEl!: HTMLElement;
   private collabBtn!: HTMLButtonElement;
@@ -98,6 +100,7 @@ export class RecursosController {
     this.contentEl          = q('[data-re-content]');
     this.dropOverlayEl      = q('[data-re-drop-overlay]');
     this.ctxMenuEl          = q('[data-re-ctx-menu]');
+    this.ctxNewFolderBtn    = q('[data-re-ctx-new-folder]');
     this.ctxRenameBtn       = q('[data-re-ctx-rename]');
     this.ctxMoveBtn         = q('[data-re-ctx-move]');
     this.ctxDeleteBtn       = q('[data-re-ctx-delete]');
@@ -108,6 +111,7 @@ export class RecursosController {
     this.sessionCtxRenameBtn = q('[data-re-sctx-rename]');
     this.sessionCtxListBtn  = q('[data-re-sctx-list]');
     this.sessionCtxDeleteBtn = q('[data-re-sctx-delete]');
+    this.bottomSessionListBtn = q('[data-re-session-list]');
     this.sessionsModalEl    = q('[data-re-sessions-modal]');
     this.sessionsListEl     = q('[data-re-sessions-list]');
     this.collabBtn          = q('[data-re-collab]');
@@ -130,6 +134,13 @@ export class RecursosController {
     try {
       const raw = localStorage.getItem(`re:collapsed:${claseId ?? '_'}`);
       if (raw) JSON.parse(raw).forEach((f: string) => this.collapsedFolders.add(f));
+    } catch { /**/ }
+    try {
+      const raw = localStorage.getItem(this.emptyFoldersStorageKey());
+      if (raw) JSON.parse(raw).forEach((f: string) => {
+        const folder = String(f || '').trim();
+        if (folder) this.emptyFolders.add(folder);
+      });
     } catch { /**/ }
 
     try {
@@ -256,9 +267,14 @@ export class RecursosController {
     this.foldBtn.addEventListener('click', () => this.toggleFoldAll());
     this.saveRepoBtn.addEventListener('click', () => void this.saveToRepo());
     this.newFolderBtn.addEventListener('click', () => this.startNewFolder());
+    this.bottomSessionListBtn.addEventListener('click', () => void this.showSessionsList());
     this.pasteBtn.addEventListener('click', () => void this.pasteClipboard());
     this.collabBtn.addEventListener('click', () => this.toggleAllowStudents());
 
+    this.ctxNewFolderBtn.addEventListener('click', () => {
+      this.closeCtxMenu();
+      this.startNewFolder();
+    });
     this.ctxRenameBtn.addEventListener('click', () => this.startInlineRename());
     this.ctxDeleteBtn.addEventListener('click', () => this.deleteCtxTarget());
     this.ctxMoveBtn.addEventListener('click', () => this.showMoveSubmenu());
@@ -303,6 +319,13 @@ export class RecursosController {
     this.contentEl.addEventListener('touchend', () => {
       if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null; }
     }, { passive: true });
+    this.contentEl.addEventListener('contextmenu', (e) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('.re-item, .re-folder-row, .re-header')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.openRootCtxMenu(e);
+    });
   }
 
   private canEdit() { return this.isTeacher || this.allowStudents; }
@@ -334,6 +357,7 @@ export class RecursosController {
     }
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       if (this.isTeacher) this.openSessionCtx(e as MouseEvent);
       else this.startHeaderInlineEdit(el);
     });
@@ -582,10 +606,6 @@ export class RecursosController {
       this.items = addItem(this.items, newItem);
       this.render(); this.scheduleAutosave(); this.broadcastSync();
       if (type === 'video') this.requestResourceOpen(newItem);
-      void resolveNameFromUrl(url).then(name => {
-        this.items = this.items.map(i => i.id === newItem.id ? { ...i, name } : i);
-        this.render(); this.scheduleAutosave();
-      });
     } catch (e) { console.error('[Re] upload error', e); }
   }
 
@@ -615,7 +635,12 @@ export class RecursosController {
 
   private broadcastSync() {
     this.items = this.dedupeItems(this.items);
-    this.publish({ type: 'recursos:sync', items: this.items, allowStudents: this.allowStudents });
+    this.publish({
+      type: 'recursos:sync',
+      items: this.items,
+      allowStudents: this.allowStudents,
+      emptyFolders: [...this.emptyFolders],
+    });
   }
 
   public publishCurrentState(): void {
@@ -625,6 +650,8 @@ export class RecursosController {
   applyRemoteMessage(msg: RecursosMessage) {
     if (msg.type === 'recursos:sync') {
       this.items = this.dedupeItems(msg.items); this.allowStudents = msg.allowStudents;
+      this.emptyFolders = new Set((msg.emptyFolders ?? []).map((folder) => String(folder || '').trim()).filter(Boolean));
+      this.persistEmptyFolders();
       this.updateCollabBtn(); this.render();
       this.emitAllowStudentsChanged();
     } else if (msg.type === 'recursos:allow-students') {
@@ -783,7 +810,7 @@ export class RecursosController {
   }
 
   private toggleFoldAll() {
-    const folders = foldersFromItems(this.items);
+    const folders = [...new Set([...foldersFromItems(this.items), ...this.emptyFolders])];
     const allCollapsed = folders.every(f => this.collapsedFolders.has(f));
     if (allCollapsed) this.collapsedFolders.clear();
     else folders.forEach(f => this.collapsedFolders.add(f));
@@ -805,7 +832,13 @@ export class RecursosController {
     const finish = () => {
       const name = input.textContent?.trim() ?? '';
       el.remove();
-      if (name) { this.emptyFolders.add(name); this.render(); }
+      if (name) {
+        this.emptyFolders.add(name);
+        this.render();
+        this.persistEmptyFolders();
+        this.scheduleAutosave();
+        this.broadcastSync();
+      }
       input.removeEventListener('blur', finish);
       input.removeEventListener('keydown', onKey);
     };
@@ -817,6 +850,16 @@ export class RecursosController {
     input.addEventListener('keydown', onKey);
   }
 
+  private emptyFoldersStorageKey(): string {
+    return `re:empty-folders:${this.getRoomName() ?? '_'}:${this.getCourseId() ?? '_'}`;
+  }
+
+  private persistEmptyFolders(): void {
+    try {
+      localStorage.setItem(this.emptyFoldersStorageKey(), JSON.stringify([...this.emptyFolders]));
+    } catch { /**/ }
+  }
+
   // ── Context menu ──────────────────────────────────────────────────────────────
 
   private openItemCtxMenu(item: ResourceItem, e: MouseEvent) {
@@ -825,6 +868,7 @@ export class RecursosController {
     const canSendToVs = this.isVisualMedia(item) && this.canSendVisual();
     if (!canEdit && !canSendToSa && !canSendToVs) return;
     this.ctxTargetItem = item; this.ctxTargetFolder = null;
+    this.ctxNewFolderBtn.style.display = canEdit ? '' : 'none';
     this.ctxMoveBtn.style.display = canEdit ? '' : 'none';
     this.ctxRenameBtn.style.display = canEdit ? '' : 'none';
     this.ctxDeleteBtn.style.display = canEdit ? '' : 'none';
@@ -836,11 +880,27 @@ export class RecursosController {
   }
 
   private openFolderCtxMenu(folder: string, e: MouseEvent) {
-    if (!this.canEdit() || folder === 'DOC' || folder === 'compartidos' || folder === 'media') return;
+    if (!this.canEdit()) return;
+    const isPinnedFolder = folder === 'DOC' || folder === 'compartidos' || folder === 'media';
     this.ctxTargetFolder = folder; this.ctxTargetItem = null;
+    this.ctxNewFolderBtn.style.display = '';
     this.ctxMoveBtn.style.display = 'none';
-    this.ctxRenameBtn.style.display = '';
-    this.ctxDeleteBtn.style.display = '';
+    this.ctxRenameBtn.style.display = isPinnedFolder ? 'none' : '';
+    this.ctxDeleteBtn.style.display = isPinnedFolder ? 'none' : '';
+    this.ctxSendToSaBtn.hidden = true;
+    this.ctxSendToVsBtn.hidden = true;
+    this.ctxMenuEl.removeAttribute('hidden');
+    this.ctxMenuEl.style.left = `${e.clientX}px`;
+    this.ctxMenuEl.style.top  = `${e.clientY}px`;
+  }
+
+  private openRootCtxMenu(e: MouseEvent) {
+    if (!this.canEdit()) return;
+    this.ctxTargetFolder = null; this.ctxTargetItem = null;
+    this.ctxNewFolderBtn.style.display = '';
+    this.ctxMoveBtn.style.display = 'none';
+    this.ctxRenameBtn.style.display = 'none';
+    this.ctxDeleteBtn.style.display = 'none';
     this.ctxSendToSaBtn.hidden = true;
     this.ctxSendToVsBtn.hidden = true;
     this.ctxMenuEl.removeAttribute('hidden');
@@ -905,6 +965,7 @@ export class RecursosController {
       this.makeEditable(el, folder, (newName) => {
         this.items = this.items.map(i => i.folder === folder ? { ...i, folder: newName } : i);
         if (this.emptyFolders.has(folder)) { this.emptyFolders.delete(folder); this.emptyFolders.add(newName); }
+        this.persistEmptyFolders();
         this.render(); this.scheduleAutosave(); this.broadcastSync();
       });
     }
@@ -971,6 +1032,7 @@ export class RecursosController {
         if (resp.ok) {
           this.items = this.items.filter(i => i.folder !== folder);
           this.emptyFolders.delete(folder);
+          this.persistEmptyFolders();
           this.render(); this.broadcastSync();
         } else {
           const err = await resp.json();

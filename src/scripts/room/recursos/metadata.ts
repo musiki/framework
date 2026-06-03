@@ -120,6 +120,6 @@ export async function resolveNameFromUrl(url: string): Promise<string> {
 }
 
 export function nameFromFile(file: File): string {
-  const stem = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-  return formatCandidateName(stem);
+  const name = String(file.name || '').trim();
+  return name || 'recurso';
 }

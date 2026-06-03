@@ -22,6 +22,11 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     </div>
     <div class="cw-toolbar-actions">
       <input class="cw-search" data-cw-search placeholder="Buscar" />
+      <select class="cw-sort" data-cw-sort aria-label="Ordenar recursos">
+        <option value="name">Nombre</option>
+        <option value="date-desc">Fecha ↓</option>
+        <option value="date-asc">Fecha ↑</option>
+      </select>
       <button type="button" class="cw-btn" data-cw-refresh>Actualizar</button>
       {canContribute && (
         <>
@@ -128,7 +133,8 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     padding: 0.48rem 0.62rem;
   }
 
-  .cw-search {
+  .cw-search,
+  .cw-sort {
     min-width: 10rem;
     border: 0;
     border-radius: 6px;
@@ -137,6 +143,11 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     font: inherit;
     font-size: 0.78rem;
     padding: 0.43rem 0.55rem;
+  }
+
+  .cw-sort {
+    min-width: 7.2rem;
+    cursor: pointer;
   }
 
   .cw-btn-primary {
@@ -804,6 +815,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       selectedNodeId: '',
       selectedIds: new Set(),
       search: '',
+      sortMode: 'name',
       hoveredNodeId: '',
       canManage: initialCanManage,
       canContribute: initialCanContribute,
@@ -849,6 +861,29 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     const getNode = (nodeId) => (state.nodes || []).find((item) => String(item.id) === String(nodeId)) || null;
     const getAsset = (nodeId) => (state.assets || []).find((asset) => String(asset.nodeId) === String(nodeId)) || null;
     const selectedIds = () => Array.from(state.selectedIds || []).map(String).filter(Boolean);
+    const sortTimestamp = (node) => {
+      const raw = node?.updatedAt || node?.createdAt || node?.sortKey || '';
+      const time = raw ? Date.parse(String(raw)) : Number.NaN;
+      return Number.isFinite(time) ? time : 0;
+    };
+    const compareByName = (a, b) => String(a.name || a.sortKey || a.kind || '')
+      .localeCompare(String(b.name || b.sortKey || b.kind || ''), 'es', { sensitivity: 'base', numeric: true });
+    const compareNodes = (a, b) => {
+      if (state.sortMode === 'date-asc') return sortTimestamp(a) - sortTimestamp(b) || compareByName(a, b);
+      if (state.sortMode === 'date-desc') return sortTimestamp(b) - sortTimestamp(a) || compareByName(a, b);
+      return compareByName(a, b);
+    };
+
+    const broadcastSidebarRefresh = (kind) => {
+      const detail = { courseId, kind, at: Date.now() };
+      window.dispatchEvent(new CustomEvent(kind === 'notes' ? 'musiki:notes-sidebar-refresh' : 'musiki:recursos-sidebar-refresh', { detail }));
+      try {
+        localStorage.setItem(
+          kind === 'notes' ? 'musiki:notes-sidebar-refresh' : 'musiki:recursos-sidebar-refresh',
+          JSON.stringify(detail),
+        );
+      } catch {}
+    };
 
     const dragIdsForNode = (nodeId) => {
       const selected = selectedIds();
@@ -1172,6 +1207,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       const visible = search
         ? visibleInParent.filter((node) => String(node.name || node.kind || '').toLowerCase().includes(search))
         : visibleInParent;
+      visible.sort(compareNodes);
       const selectedParent = selectedParentId ? nodeMap.get(selectedParentId) : null;
       const selectedNode = state.selectedNodeId ? nodeMap.get(state.selectedNodeId) : null;
 
@@ -1280,6 +1316,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       state.selectedIds = new Set(selectedIds().filter((id) => nodeIds.has(id)));
       setStatus(`Workspace listo: ${state.nodes.length} objetos${state.r2Error ? ` · S2: ${state.r2Error}` : ''}.`);
       render();
+      broadcastSidebarRefresh('resources');
     };
 
     const createSession = async () => {
@@ -1537,20 +1574,24 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     });
 
     gridEl?.addEventListener('pointerover', (event) => {
-      if (event.pointerType === 'touch') return;
+      const pointerEvent = event instanceof PointerEvent ? event : null;
+      if (pointerEvent?.pointerType === 'touch') return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const card = target?.closest('[data-node-id]');
       if (!(card instanceof HTMLElement)) return;
-      if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
+      const related = pointerEvent?.relatedTarget instanceof Node ? pointerEvent.relatedTarget : null;
+      if (related && card.contains(related)) return;
       state.hoveredNodeId = card.dataset.nodeId || '';
       if (!card.querySelector('[data-cw-audio-preview]')) return;
       playAudioHover(card);
     });
 
     gridEl?.addEventListener('pointerout', (event) => {
+      const pointerEvent = event instanceof PointerEvent ? event : null;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const card = target?.closest('[data-node-id]');
-      if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
+      const related = pointerEvent?.relatedTarget instanceof Node ? pointerEvent.relatedTarget : null;
+      if (related && card instanceof HTMLElement && card.contains(related)) return;
       if (card instanceof HTMLElement && state.hoveredNodeId === (card.dataset.nodeId || '')) state.hoveredNodeId = '';
       if (!(card instanceof HTMLElement) || !card.querySelector('[data-cw-audio-preview]')) return;
       stopAudioHover(card);
@@ -1593,7 +1634,8 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     gridEl?.addEventListener('dragleave', (event) => {
       const target = event.target instanceof HTMLElement ? event.target.closest('[data-container="true"][data-node-id]') : null;
       if (!(target instanceof HTMLElement)) return;
-      const related = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+      const dragEvent = event instanceof DragEvent ? event : null;
+      const related = dragEvent?.relatedTarget instanceof Node ? dragEvent.relatedTarget : null;
       if (related && target.contains(related)) return;
       target.dataset.dropTarget = 'false';
     });
@@ -1728,6 +1770,11 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       state.search = target?.value || '';
       render();
     });
+    root.querySelector('[data-cw-sort]')?.addEventListener('change', (event) => {
+      const target = event.target instanceof HTMLSelectElement ? event.target : null;
+      state.sortMode = target?.value || 'name';
+      render();
+    });
     uploadEl?.addEventListener('change', async () => {
       if (!(uploadEl instanceof HTMLInputElement)) return;
       try {
@@ -1751,7 +1798,9 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     });
 
     root.addEventListener('dragleave', (event) => {
-      if (event.relatedTarget instanceof Node && root.contains(event.relatedTarget)) return;
+      const dragEvent = event instanceof DragEvent ? event : null;
+      const related = dragEvent?.relatedTarget instanceof Node ? dragEvent.relatedTarget : null;
+      if (related && root.contains(related)) return;
       root.dataset.draggingFiles = 'false';
     });
 

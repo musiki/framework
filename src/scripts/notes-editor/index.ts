@@ -11,6 +11,14 @@ let activeSlug: string | null = null;
 let originalContent: string | null = null;
 let editorMounted = false;
 
+function broadcastNotesSidebarRefresh() {
+  const detail = { courseId, at: Date.now() };
+  window.dispatchEvent(new CustomEvent('musiki:notes-sidebar-refresh', { detail }));
+  try {
+    localStorage.setItem('musiki:notes-sidebar-refresh', JSON.stringify(detail));
+  } catch {}
+}
+
 function setStatus(msg: string, type?: 'ok' | 'error') {
   const bar = document.getElementById('status-bar')!;
   bar.textContent = msg;
@@ -74,13 +82,19 @@ async function saveCurrentNote() {
     await saveNote(courseId, activeSlug, content);
     originalContent = content;
 
-    const listData = await listNotes(courseId);
-    allNotes = listData.notes;
-    refreshTree();
+    await refreshNotesList();
+    broadcastNotesSidebarRefresh();
     setStatus('Guardado', 'ok');
   } catch (e: any) {
     setStatus(e.message, 'error');
   }
+}
+
+async function refreshNotesList() {
+  const listData = await listNotes(courseId);
+  allNotes = listData.notes;
+  refreshTree();
+  return listData.notes;
 }
 
 function refreshTree() {
@@ -94,8 +108,8 @@ function refreshTree() {
       const maxOrder = Math.max(0, ...allNotes.filter(n => n.chapter === chapter).map(n => n.order));
       try {
         const result = await createNote(courseId, { slug, title, type: 'lesson', chapter, status: 'draft', order: maxOrder + 1 });
-        const listData = await listNotes(courseId);
-        allNotes = listData.notes;
+        await refreshNotesList();
+        broadcastNotesSidebarRefresh();
         await loadNote(result.slug);
       } catch (e: any) {
         setStatus(e.message, 'error');
@@ -106,9 +120,8 @@ function refreshTree() {
       try {
         await deleteNote(courseId, slug);
         if (activeSlug === slug) { activeSlug = null; showEditorPanel(false); }
-        const listData = await listNotes(courseId);
-        allNotes = listData.notes;
-        refreshTree();
+        await refreshNotesList();
+        broadcastNotesSidebarRefresh();
         setStatus('Nota eliminada', 'ok');
       } catch (e: any) {
         setStatus(e.message, 'error');
@@ -119,8 +132,8 @@ function refreshTree() {
       if (!newSlug || newSlug === slug) return;
       try {
         await moveNote(courseId, slug, newSlug);
-        const listData = await listNotes(courseId);
-        allNotes = listData.notes;
+        await refreshNotesList();
+        broadcastNotesSidebarRefresh();
         if (activeSlug === slug) await loadNote(newSlug);
         else refreshTree();
         setStatus('Nota renombrada', 'ok');
@@ -135,9 +148,8 @@ function refreshTree() {
         fm.chapter = newChapter;
         const content = serializeFrontmatter(fm as any, body);
         await saveNote(courseId, slug, content);
-        const listData = await listNotes(courseId);
-        allNotes = listData.notes;
-        refreshTree();
+        await refreshNotesList();
+        broadcastNotesSidebarRefresh();
       } catch (e: any) {
         setStatus(e.message, 'error');
       }
@@ -157,6 +169,12 @@ document.getElementById('btn-discard')?.addEventListener('click', () => {
 
 // Save button + Cmd/Ctrl+S
 document.getElementById('btn-save')?.addEventListener('click', saveCurrentNote);
+document.getElementById('tree-refresh-btn')?.addEventListener('click', () => {
+  setStatus('Refrescando árbol...');
+  refreshNotesList()
+    .then(notes => setStatus(`${notes.length} notas cargadas`, 'ok'))
+    .catch((e: any) => setStatus(e.message, 'error'));
+});
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); saveCurrentNote(); }
 });
@@ -168,7 +186,11 @@ document.getElementById('tree-new-btn')?.addEventListener('click', () => {
   if (!title) return;
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   createNote(courseId, { slug, title, type: 'lesson', chapter, status: 'draft', order: 0 })
-    .then(result => listNotes(courseId).then(d => { allNotes = d.notes; return loadNote(result.slug); }))
+    .then(async result => {
+      await refreshNotesList();
+      broadcastNotesSidebarRefresh();
+      return loadNote(result.slug);
+    })
     .catch(e => setStatus(e.message, 'error'));
 });
 

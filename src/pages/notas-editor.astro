@@ -79,6 +79,16 @@ if (!access.canManage) return Astro.redirect('/');
       font-size: 10px;
       cursor: pointer;
     }
+    #tree-refresh-btn {
+      background: transparent;
+      color: #666;
+      border: 1px solid #252525;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    #tree-refresh-btn:hover { color: #999; border-color: #333; }
 
     #tree-scroll { overflow-y: auto; flex: 1; padding: .3rem 0; }
 
@@ -233,6 +243,7 @@ if (!access.canManage) return Astro.redirect('/');
   <div id="tree-panel">
     <div id="tree-header">
       <span id="tree-course-label">{courseId}</span>
+      <button id="tree-refresh-btn" title="Refrescar árbol">↻</button>
       <button id="tree-new-btn">+ nota</button>
     </div>
     <div id="tree-scroll">

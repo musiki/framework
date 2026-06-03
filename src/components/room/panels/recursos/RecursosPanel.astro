@@ -12,6 +12,7 @@ import './recursos.css';
 
     <!-- Context menu (item / folder / root right-click) -->
     <div class="re-ctx-menu" data-re-ctx-menu hidden>
+      <button type="button" class="re-ctx-item" data-re-ctx-new-folder>Nueva carpeta</button>
       <button type="button" class="re-ctx-item" data-re-ctx-send-to-sa hidden>Enviar a SA</button>
       <button type="button" class="re-ctx-item" data-re-ctx-send-to-vs hidden>Enviar a VS</button>
       <button type="button" class="re-ctx-item" data-re-ctx-rename>Renombrar</button>
@@ -38,10 +39,10 @@ import './recursos.css';
 
     <!-- Bottom bar — teacher-only, hidden via JS for students -->
     <div class="musiki-pod-toolbar re-bottombar" data-re-bottombar>
-      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-sctx-list title="Lista de sesiones">📁</button>
+      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-new-folder title="Nueva carpeta">📁</button>
       <button type="button" class="musiki-pod-btn re-bb-btn" data-re-fold title="Plegar/desplegar todo">⊟</button>
       <button type="button" class="musiki-pod-btn re-bb-btn" data-re-save-repo title="Guardar cambios en el repositorio (Markdown)">💾</button>
-      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-new-folder title="Nueva carpeta">+</button>
+      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-session-list title="Lista de sesiones">▤</button>
       <button type="button" class="musiki-pod-btn re-bb-btn" data-re-paste title="Pegar clipboard">⎘</button>
       <div style="flex:1;"></div>
       <button

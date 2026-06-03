@@ -904,10 +904,11 @@ async function createResourceLink(input: {
   if (nodeResult.error) throw nodeResult.error;
 
   const assetResult = await query<any>(
-    `INSERT INTO "ClassResourceAsset"
+     `INSERT INTO "ClassResourceAsset"
       (id, "nodeId", mime, "resourceType", "objectKey", "externalUrl",
        "sizeBytes", sha256, "previewStatus", "uploadStatus", preview)
-     VALUES ($1, $2, '', $3::"ClassResourceAssetType", NULL, $4, NULL, NULL, 'none', 'ready', '{}'::jsonb)
+     VALUES ($1, $2, '', $3::"ClassResourceAssetType", NULL, $4, NULL, NULL,
+             'none'::"ResourcePreviewStatus", 'ready'::"ResourceUploadStatus", '{}'::jsonb)
      RETURNING ${assetColumns}`,
     [assetId, nodeId, resourceType, publicUrl],
   );
@@ -1024,7 +1025,8 @@ async function prepareResourceUpload(input: {
       `INSERT INTO "ClassResourceAsset"
         (id, "nodeId", mime, "resourceType", "objectKey", "externalUrl",
          "sizeBytes", sha256, "previewStatus", "uploadStatus", preview)
-       VALUES ($1, $2, $3, $4::"ClassResourceAssetType", $5, NULL, $6, $7, 'pending', 'pending', $8::jsonb)
+       VALUES ($1, $2, $3, $4::"ClassResourceAssetType", $5, NULL, $6, $7,
+               'pending'::"ResourcePreviewStatus", 'pending'::"ResourceUploadStatus", $8::jsonb)
        RETURNING ${assetColumns}`,
       [
         assetId,
@@ -1072,8 +1074,11 @@ async function completeResourceUpload(input: {
     `UPDATE "ClassResourceAsset" asset
         SET "objectKey" = $1,
             "externalUrl" = $2,
-            "uploadStatus" = 'ready',
-            "previewStatus" = CASE WHEN asset."previewStatus" = 'none' THEN 'none' ELSE 'pending' END,
+            "uploadStatus" = 'ready'::"ResourceUploadStatus",
+            "previewStatus" = CASE
+              WHEN asset."previewStatus" = 'none'::"ResourcePreviewStatus" THEN 'none'::"ResourcePreviewStatus"
+              ELSE 'pending'::"ResourcePreviewStatus"
+            END,
             "updatedAt" = now()
        FROM "ClassWorkspaceNode" node
       WHERE asset.id = $3

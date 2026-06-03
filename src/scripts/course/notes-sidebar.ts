@@ -9,6 +9,14 @@ export interface NoteItem {
   ownerName?: string;
 }
 
+function broadcastNotesSidebarRefresh(courseId: string) {
+  const detail = { courseId, at: Date.now() };
+  window.dispatchEvent(new CustomEvent('musiki:notes-sidebar-refresh', { detail }));
+  try {
+    localStorage.setItem('musiki:notes-sidebar-refresh', JSON.stringify(detail));
+  } catch {}
+}
+
 function getNoteIconInfo(note: NoteItem) {
   const body = note.body || '';
   const title = note.title || '';
@@ -95,6 +103,7 @@ export function beginInlineFolderCreation(
     row.remove();
     if (!name) return;
     await createFolder(courseId, name, parentId);
+    broadcastNotesSidebarRefresh(courseId);
     const tree = await loadNotesTree(courseId);
     renderNotesTree(container, tree.folders, tree.notes, courseId, tree.currentUserId);
   };
@@ -166,6 +175,7 @@ export function renderNotesTree(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: noteId, folderId: null }),
     });
+    broadcastNotesSidebarRefresh(courseId);
     await reload();
   });
   container.appendChild(rootDrop);
@@ -205,6 +215,7 @@ export function renderNotesTree(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: noteId, folderId: folder.id }),
         });
+        broadcastNotesSidebarRefresh(courseId);
         await reload();
       });
 
@@ -288,6 +299,7 @@ export function renderNotesTree(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: noteId, folderId: null }),
     });
+    broadcastNotesSidebarRefresh(courseId);
     await reload();
   });
   container.appendChild(placeholder);
@@ -390,9 +402,9 @@ function showNoteMenu(e: MouseEvent, note: NoteItem, el: HTMLElement, reload: ()
     }]
   ];
   if (isOwner) {
-    items.push(['Renombrar', () => renameNote(note, el)]);
+    items.push(['Renombrar', () => renameNote(note, el, courseId)]);
     items.push(['Compartir', () => openSharingModal(note.id, note.title || '(sin título)', courseId)]);
-    items.push(['Eliminar', () => deleteNote(note, reload)]);
+    items.push(['Eliminar', () => deleteNote(note, reload, courseId)]);
   }
   const menu = buildCtxMenu(e.clientX, e.clientY, items);
   document.body.appendChild(menu);
@@ -404,8 +416,8 @@ function showFolderMenu(e: MouseEvent, folder: NoteFolder, notes: NoteItem[], re
   const menu = buildCtxMenu(e.clientX, e.clientY, [
     ['Nueva nota aquí', () => createNoteInFolder(folder.id, courseId, reload, container, nextDefaultNoteTitle(notes))],
     ['Nueva carpeta aquí', () => beginInlineFolderCreation(container, courseId, folder.id, indent + 1)],
-    ['Renombrar', () => renameFolder(folder, summaryEl)],
-    ['Eliminar', () => deleteFolder(folder, reload)],
+    ['Renombrar', () => renameFolder(folder, summaryEl, courseId)],
+    ['Eliminar', () => deleteFolder(folder, reload, courseId)],
   ]);
   document.body.appendChild(menu);
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
@@ -437,25 +449,26 @@ function buildCtxMenu(x: number, y: number, items: [string, () => void][]): HTML
   return menu;
 }
 
-function renameNote(note: NoteItem, el: HTMLElement) {
+function renameNote(note: NoteItem, el: HTMLElement, courseId: string) {
   const titleSpan = el.querySelector<HTMLElement>('.notas-sb-note-title');
   if (!titleSpan) return;
-  startInlineRename(titleSpan, note.id, el);
+  startInlineRename(titleSpan, note.id, el, courseId);
 }
 
-async function deleteNote(note: NoteItem, reload: () => Promise<void>) {
+async function deleteNote(note: NoteItem, reload: () => Promise<void>, courseId: string) {
   if (!confirm(`¿Eliminar "${note.title || '(sin título)'}"?`)) return;
   await fetch(`/api/live/notes?id=${note.id}`, { method: 'DELETE' });
+  broadcastNotesSidebarRefresh(courseId);
   await reload();
 }
 
-function renameFolder(folder: NoteFolder, summaryEl: HTMLElement) {
+function renameFolder(folder: NoteFolder, summaryEl: HTMLElement, courseId: string) {
   const nameSpan = summaryEl.querySelector<HTMLElement>('.notas-sb-folder-name');
   if (!nameSpan) return;
-  startInlineFolderRename(nameSpan, folder);
+  startInlineFolderRename(nameSpan, folder, courseId);
 }
 
-function startInlineFolderRename(nameSpan: HTMLElement, folder: NoteFolder) {
+function startInlineFolderRename(nameSpan: HTMLElement, folder: NoteFolder, courseId: string) {
   const prev = nameSpan.textContent ?? '';
   const input = document.createElement('input');
   input.value = prev;
@@ -475,6 +488,7 @@ function startInlineFolderRename(nameSpan: HTMLElement, folder: NoteFolder) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: folder.id, name: val }),
       });
+      broadcastNotesSidebarRefresh(courseId);
     }
   };
   input.addEventListener('blur', commit, { once: true });
@@ -484,9 +498,10 @@ function startInlineFolderRename(nameSpan: HTMLElement, folder: NoteFolder) {
   });
 }
 
-async function deleteFolder(folder: NoteFolder, reload: () => Promise<void>) {
+async function deleteFolder(folder: NoteFolder, reload: () => Promise<void>, courseId: string) {
   if (!confirm('¿Eliminar carpeta? Las notas dentro quedarán sin carpeta.')) return;
   await fetch(`/api/note-folders?id=${folder.id}`, { method: 'DELETE' });
+  broadcastNotesSidebarRefresh(courseId);
   await reload();
 }
 
@@ -510,15 +525,16 @@ async function createNoteInFolder(folderId: string | null, courseId: string, rel
   }
   const data = await res.json();
   const newId = data.note?.id;
+  broadcastNotesSidebarRefresh(courseId);
   await reload();
   if (!newId || !container) return;
   const item = container.querySelector<HTMLElement>(`[data-note-id="${newId}"]`);
   const titleSpan = item?.querySelector<HTMLElement>('.notas-sb-note-title');
   if (!titleSpan || !item) return;
-  startInlineRename(titleSpan, newId, item);
+  startInlineRename(titleSpan, newId, item, courseId);
 }
 
-function startInlineRename(titleSpan: HTMLElement, noteId: string, item: HTMLElement) {
+function startInlineRename(titleSpan: HTMLElement, noteId: string, item: HTMLElement, courseId: string) {
   const prev = titleSpan.textContent ?? '';
   const input = document.createElement('input');
   input.value = prev === '(sin título)' ? '' : prev;
@@ -537,6 +553,7 @@ function startInlineRename(titleSpan: HTMLElement, noteId: string, item: HTMLEle
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: noteId, title: val }),
     });
+    broadcastNotesSidebarRefresh(courseId);
   };
   input.addEventListener('blur', commit, { once: true });
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } if (e.key === 'Escape') { input.value = prev; input.blur(); } });
