@@ -47,6 +47,10 @@ export class HyperpianoController {
   private NEON_PALETTE = ['#39FF14', '#FF1493', '#14E7FF', '#FF6600', '#FFFF00', '#9D00FF', '#FF0000', '#00FF7F', '#FF4500', '#DA70D6', '#00BFFF', '#ADFF2F'];
   private NOTE_INDEX: Record<string, number> = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'E#':5,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11,'Cb':11,'B#':0 };
   private NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  private PIANO_FIRST_MIDI = 21; // A0
+  private PIANO_LAST_MIDI = 108; // C8
+  private MIN_BLACK_KEY_WIDTH = 18;
+  private MIN_WHITE_KEY_WIDTH = 29;
 
   private keyToNote: Record<string, [number, number]> = {
     // Octave 0 Chromatic (zsxdcvgbhnjm)
@@ -140,18 +144,14 @@ export class HyperpianoController {
   }
 
   private handleResize() {
-    const width = this.container.offsetWidth;
     const lower = this.container.querySelector('.piano--lower') as HTMLElement;
     const upper = this.container.querySelector('.piano--upper') as HTMLElement;
 
-    if (width < 500) {
-      if (lower) lower.style.display = 'block';
-      this.buildPiano(lower, [0]);
-      this.buildPiano(upper, [1]);
-    } else {
-      if (lower) lower.style.display = 'none';
-      this.buildPiano(upper, [-1, 0, 1, 2, 3]);
+    if (lower) {
+      lower.style.display = 'none';
+      lower.innerHTML = '';
     }
+    if (upper) this.buildPiano(upper);
   }
 
   private setStatus(s: string) {
@@ -200,57 +200,54 @@ export class HyperpianoController {
     return 12 * (o + 1) + n;
   }
 
-  private buildPiano(pianoContainer: HTMLElement, offsets: number[]) {
+  private buildPiano(pianoContainer: HTMLElement) {
     if (!pianoContainer) return;
     pianoContainer.innerHTML = '';
-    const whiteKeyNotes = [0, 2, 4, 5, 7, 9, 11];
-    const blackKeyNotes = [1, 3, 6, 8, 10];
-    const blackKeyPositions = [0.65, 1.65, 3.65, 4.65, 5.65];
-
-    const keyCharMap: Record<number, Record<number, string[]>> = {};
-    for (const key in this.keyToNote) {
-      const [octave, semitone] = this.keyToNote[key];
-      if (!keyCharMap[octave]) keyCharMap[octave] = {};
-      if (!keyCharMap[octave][semitone]) keyCharMap[octave][semitone] = [];
-      keyCharMap[octave][semitone].push(key);
-    }
+    const isWhiteKey = (midi: number) => ![1, 3, 6, 8, 10].includes(midi % 12);
+    const whiteKeyCount = Array.from(
+      { length: this.PIANO_LAST_MIDI - this.PIANO_FIRST_MIDI + 1 },
+      (_, index) => this.PIANO_FIRST_MIDI + index,
+    ).filter(isWhiteKey).length;
+    const availableWidth = pianoContainer.clientWidth || this.container.clientWidth || 0;
+    const whiteKeyWidth = Math.max(this.MIN_WHITE_KEY_WIDTH, availableWidth / whiteKeyCount);
+    const blackKeyWidth = Math.max(this.MIN_BLACK_KEY_WIDTH, whiteKeyWidth * 0.62);
+    const keyboardWidth = whiteKeyWidth * whiteKeyCount;
 
     const whiteKeysContainer = document.createElement('div');
     whiteKeysContainer.className = 'white-keys';
     pianoContainer.appendChild(whiteKeysContainer);
 
-    const totalWhiteKeys = whiteKeyNotes.length * offsets.length;
-    whiteKeysContainer.style.width = '100%';
+    whiteKeysContainer.style.width = `${keyboardWidth}px`;
     whiteKeysContainer.style.margin = '0';
 
-    offsets.forEach((octaveOffset, octaveIndex) => {
-      whiteKeyNotes.forEach(semi => {
+    let whiteKeysBefore = 0;
+    for (let midi = this.PIANO_FIRST_MIDI; midi <= this.PIANO_LAST_MIDI; midi++) {
+      const semi = midi % 12;
+      const octave = Math.floor(midi / 12) - 1;
+      const noteName = `${this.NAMES[semi]}${octave}`;
+
+      if (isWhiteKey(midi)) {
         const keyDiv = document.createElement('div');
         keyDiv.className = 'key is-white';
         keyDiv.dataset.semitone = String(semi);
-        keyDiv.dataset.octaveOffset = String(octaveOffset);
-        keyDiv.style.width = `${100 / totalWhiteKeys}%`;
-        if (keyCharMap[octaveOffset] && keyCharMap[octaveOffset][semi]) {
-          keyDiv.dataset.keys = keyCharMap[octaveOffset][semi].join(' ');
-        }
+        keyDiv.dataset.midiNote = String(midi);
+        keyDiv.dataset.noteName = noteName;
+        keyDiv.style.width = `${whiteKeyWidth}px`;
         whiteKeysContainer.appendChild(keyDiv);
-      });
+        whiteKeysBefore++;
+        continue;
+      }
 
-      blackKeyNotes.forEach((semi, i) => {
-        const keyDiv = document.createElement('div');
-        keyDiv.className = 'key is-black';
-        keyDiv.dataset.semitone = String(semi);
-        keyDiv.dataset.octaveOffset = String(octaveOffset);
-        if (keyCharMap[octaveOffset] && keyCharMap[octaveOffset][semi]) {
-          keyDiv.dataset.keys = keyCharMap[octaveOffset][semi].join(' ');
-        }
-        const leftPosition = (octaveIndex * whiteKeyNotes.length + blackKeyPositions[i]) * (100 / totalWhiteKeys);
-        keyDiv.style.left = `${leftPosition}%`;
-        keyDiv.style.width = `calc(${100 / totalWhiteKeys}% * 0.65)`;
-        keyDiv.style.border = '1px solid #333';
-        whiteKeysContainer.appendChild(keyDiv);
-      });
-    });
+      const keyDiv = document.createElement('div');
+      keyDiv.className = 'key is-black';
+      keyDiv.dataset.semitone = String(semi);
+      keyDiv.dataset.midiNote = String(midi);
+      keyDiv.dataset.noteName = noteName;
+      keyDiv.style.left = `${(whiteKeysBefore * whiteKeyWidth) - (blackKeyWidth / 2)}px`;
+      keyDiv.style.width = `${blackKeyWidth}px`;
+      keyDiv.style.border = '1px solid #333';
+      whiteKeysContainer.appendChild(keyDiv);
+    }
   }
 
   private drawVuMeter() {
@@ -286,21 +283,29 @@ export class HyperpianoController {
       if (!data) return;
       this.triggerKeyOff(data.keyChar, data.midiNote);
     };
+    const onWheel = (e: WheelEvent) => {
+      const piano = e.currentTarget as HTMLElement | null;
+      if (!piano || piano.scrollWidth <= piano.clientWidth) return;
+      e.preventDefault();
+      piano.scrollLeft += e.deltaX || e.deltaY;
+    };
 
     const pianos = this.container.querySelectorAll('.piano');
     pianos.forEach(p => {
       p.addEventListener('pointerdown', onPointerDown as any);
       p.addEventListener('pointerup', onPointerUp as any);
       p.addEventListener('pointerleave', onPointerUp as any);
+      p.addEventListener('pointercancel', onPointerUp as any);
+      p.addEventListener('wheel', onWheel as any, { passive: false } as any);
     });
   }
 
   private keyFromEvent(evt: any) {
     const targetKey = evt.target.closest('.key');
     if (!targetKey) return null;
-    const semitone = Number(targetKey.dataset.semitone);
-    const octaveOffset = Number(targetKey.dataset.octaveOffset);
-    
+    const midiNote = Number(targetKey.dataset.midiNote);
+    if (!Number.isFinite(midiNote)) return null;
+
     const rect = targetKey.getBoundingClientRect();
     const clientY = evt.clientY || (evt.touches && evt.touches[0].clientY);
     const relativeY = clientY - rect.top;
@@ -312,9 +317,7 @@ export class HyperpianoController {
     else if (velocityZone === 2) { velocity = 0.75; dynamic = 'mf'; }
     else { velocity = 1.0; dynamic = 'f'; }
 
-    const keyChar = targetKey.dataset.keys ? targetKey.dataset.keys.split(' ')[0] : null;
-    const targetOct = Math.max(0, Math.min(9, this.currentOctave + octaveOffset));
-    const midiNote = 12 * (targetOct + 1) + semitone;
+    const keyChar = null;
     return { keyChar, velocity, dynamic, midiNote };
   }
 
@@ -329,17 +332,14 @@ export class HyperpianoController {
     if (!this.audioContext || !this.masterOut) return;
     if (this.audioContext.state === 'suspended') this.audioContext.resume();
     let targetMIDI: number;
-    let semi: number;
     if (k) {
       if (this.activeKeys[k]) return;
       const [octOff, semiIdx] = this.keyToNote[k];
-      semi = semiIdx;
       const targetOct = Math.max(0, Math.min(9, this.currentOctave + octOff));
-      targetMIDI = 12 * (targetOct + 1) + semi;
+      targetMIDI = 12 * (targetOct + 1) + semiIdx;
       this.activeKeys[k] = { midi: targetMIDI };
     } else if (midiNote !== null) {
       targetMIDI = midiNote;
-      semi = midiNote % 12;
     } else return;
 
     if (this.activeNotes.has(targetMIDI)) return;
@@ -347,7 +347,7 @@ export class HyperpianoController {
     if (!root) return;
     const playback = this.playWithRoot(root, targetMIDI, velocity);
     this.activeNotes.set(targetMIDI, playback);
-    this.startKeyHighlight(k, playback.adjustedDuration, semi, velocity, targetMIDI, participantId);
+    this.startKeyHighlight(playback.adjustedDuration, velocity, targetMIDI, participantId);
 
     if (!isRemote && this.onNoteEvent) {
       this.onNoteEvent(targetMIDI, velocity, 'on');
@@ -421,9 +421,7 @@ export class HyperpianoController {
   }
 
   private startKeyHighlight(
-    key: string | null,
     duration: number,
-    semitone: number,
     velocity: number,
     midi: number,
     participantId: string | null,
@@ -432,9 +430,7 @@ export class HyperpianoController {
     const color = this.getParticipantAppearance?.(identity)?.color ?? FALLBACK_PARTICIPANT_COLOR;
     const intensity = Math.max(18, Math.min(88, Math.round(velocity * 88)));
     const backgroundColor = `color-mix(in srgb, ${color.stroke} ${intensity}%, transparent)`;
-    const octOff = Math.floor(midi / 12) - 1 - this.currentOctave;
-    
-    const selector = `.key[data-semitone="${semitone}"][data-octave-offset="${octOff}"]`;
+    const selector = `.key[data-midi-note="${midi}"]`;
     this.container.querySelectorAll(selector).forEach((el: any) => {
       el.style.transition = 'none';
       el.style.backgroundColor = backgroundColor;

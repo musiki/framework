@@ -56,9 +56,14 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     <aside class="cw-tree" data-cw-tree></aside>
     <main class="cw-main">
       <div class="cw-breadcrumb">
-        <button type="button" class="cw-breadcrumb-btn" data-cw-root>Todo</button>
-        <button type="button" class="cw-breadcrumb-btn" data-cw-up hidden>Arriba</button>
-        <span data-cw-current>Todo</span>
+        <button type="button" class="cw-breadcrumb-btn cw-breadcrumb-btn--icon" data-cw-root title="Ver todo" aria-label="Ver todo">⌂</button>
+        <button type="button" class="cw-breadcrumb-btn cw-breadcrumb-btn--icon" data-cw-up hidden title="Subir carpeta" aria-label="Subir carpeta">↑</button>
+        <span class="cw-size-group" data-cw-size-group aria-label="Tamaño de previews">
+          <button type="button" class="cw-size-btn" data-cw-size="small" title="Previews compactas" aria-label="Previews compactas">▦</button>
+          <button type="button" class="cw-size-btn" data-cw-size="medium" title="Previews medianas" aria-label="Previews medianas">▥</button>
+          <button type="button" class="cw-size-btn" data-cw-size="large" title="Previews grandes" aria-label="Previews grandes">▣</button>
+        </span>
+        <span data-cw-current>Workspace</span>
       </div>
       <div class="cw-grid" data-cw-grid></div>
     </main>
@@ -86,10 +91,23 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
 
 <style is:global>
   .cw-panel {
+    --cw-card-size: 100px;
     display: grid;
     gap: 0.7rem;
     padding: 0;
     background: transparent;
+  }
+
+  .cw-panel[data-cw-preview-size="small"] {
+    --cw-card-size: 82px;
+  }
+
+  .cw-panel[data-cw-preview-size="medium"] {
+    --cw-card-size: 112px;
+  }
+
+  .cw-panel[data-cw-preview-size="large"] {
+    --cw-card-size: 152px;
   }
 
   .cw-panel[data-dragging-files="true"] {
@@ -222,6 +240,8 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
   }
 
   .cw-breadcrumb-btn {
+    display: inline-grid;
+    place-items: center;
     border: 0;
     border-radius: 6px;
     background: color-mix(in srgb, var(--c-fg) 6%, transparent);
@@ -232,14 +252,53 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     padding: 0.25rem 0.45rem;
   }
 
+  .cw-breadcrumb-btn--icon {
+    width: 1.75rem;
+    height: 1.55rem;
+    padding: 0;
+    font-size: 0.92rem;
+    font-weight: 750;
+  }
+
   .cw-breadcrumb-btn[hidden] {
     display: none;
   }
 
+  .cw-size-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.12rem;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c-fg) 5%, transparent);
+    padding: 0.12rem;
+  }
+
+  .cw-size-btn {
+    display: inline-grid;
+    width: 1.52rem;
+    height: 1.32rem;
+    place-items: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--c-fg-dim);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72rem;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .cw-size-btn[data-active="true"],
+  .cw-size-btn:hover {
+    background: color-mix(in srgb, var(--c-link) 14%, transparent);
+    color: color-mix(in srgb, var(--c-link) 86%, var(--c-fg));
+  }
+
   .cw-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 100px);
-    grid-auto-rows: 100px;
+    grid-template-columns: repeat(auto-fill, var(--cw-card-size));
+    grid-auto-rows: var(--cw-card-size);
     align-content: start;
     gap: 0.62rem;
     justify-content: start;
@@ -314,12 +373,12 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
   .cw-card {
     position: relative;
     display: block;
-    width: 100px;
-    height: 100px;
+    width: var(--cw-card-size);
+    height: var(--cw-card-size);
     border: 0;
     border-radius: 7px;
     background: #15171c;
-    min-width: 100px;
+    min-width: var(--cw-card-size);
     overflow: hidden;
     padding: 0;
   }
@@ -799,6 +858,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     const gridEl = root.querySelector('[data-cw-grid]');
     const currentEl = root.querySelector('[data-cw-current]');
     const upEl = root.querySelector('[data-cw-up]');
+    const sizeButtons = Array.from(root.querySelectorAll('[data-cw-size]')).filter((node) => node instanceof HTMLButtonElement);
     const previewEl = root.querySelector('[data-cw-preview]');
     const statusEl = root.querySelector('[data-cw-status]');
     const uploadEl = root.querySelector('[data-cw-upload]');
@@ -816,6 +876,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       selectedIds: new Set(),
       search: '',
       sortMode: 'name',
+      previewSize: localStorage.getItem(`cw:preview-size:${courseId}`) || 'medium',
       hoveredNodeId: '',
       canManage: initialCanManage,
       canContribute: initialCanContribute,
@@ -824,6 +885,17 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     };
     let pointerDrag = null;
     let treeLongPress = null;
+
+    const applyPreviewSize = () => {
+      const size = ['small', 'medium', 'large'].includes(String(state.previewSize))
+        ? String(state.previewSize)
+        : 'medium';
+      state.previewSize = size;
+      root.dataset.cwPreviewSize = size;
+      sizeButtons.forEach((button) => {
+        button.dataset.active = button.dataset.cwSize === size ? 'true' : 'false';
+      });
+    };
 
     const setStatus = (message) => {
       if (statusEl) statusEl.textContent = message || '';
@@ -1213,8 +1285,9 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
 
       if (currentEl) {
         const r2Parent = r2Prefixes().find((entry) => entry.id === selectedParentId);
-        currentEl.textContent = selectedParent ? selectedParent.name : r2Parent ? r2Parent.name : 'Todo';
+        currentEl.textContent = selectedParent ? selectedParent.name : r2Parent ? r2Parent.name : 'Workspace';
       }
+      applyPreviewSize();
       if (upEl instanceof HTMLElement) upEl.hidden = !selectedParent && !isR2Parent(selectedParentId);
       if (treeEl) {
         const childrenFor = (parentId) => containers
@@ -1461,6 +1534,20 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       state.selectedParentId = '';
       state.selectedNodeId = '';
       render();
+    });
+
+    sizeButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const size = button.dataset.cwSize || 'medium';
+        if (!['small', 'medium', 'large'].includes(size)) return;
+        state.previewSize = size;
+        try {
+          localStorage.setItem(`cw:preview-size:${courseId}`, size);
+        } catch {
+          // Ignore preference persistence failures.
+        }
+        applyPreviewSize();
+      });
     });
 
     upEl?.addEventListener('click', () => {

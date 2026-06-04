@@ -882,13 +882,24 @@ const { presentationOptions = [] } = Astro.props;
     flex: 1;
     position: relative;
     width: 100%;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+
+  .musiki-pod .hyperpiano-shell .piano::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   .musiki-pod .hyperpiano-shell .white-keys {
     display: flex;
     position: relative;
-    width: 100%;
+    min-width: 100%;
     height: 100%;
     z-index: 1;
   }
@@ -899,7 +910,7 @@ const { presentationOptions = [] } = Astro.props;
   }
 
   .musiki-pod .hyperpiano-shell .key.is-white {
-    flex: 1;
+    flex: 0 0 auto;
     height: 100%;
     border-left: 1px solid rgba(255,255,255,0.25);
     z-index: 1;
