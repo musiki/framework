@@ -164,7 +164,7 @@ export class RecursosController {
     const roomName = this.getRoomName() ?? '';
     if (!roomName) return;
     const courseId = this.getCourseRootId?.() ?? null;
-    const claseId = this.getCourseId() ?? courseId;
+    const claseId = this.getEffectiveCourseId();
     try {
       const params = new URLSearchParams({
         roomName,
@@ -442,7 +442,7 @@ export class RecursosController {
   private async newSession(): Promise<void> {
     if (!this.isTeacher) return;
     const roomName = this.getRoomName() ?? '';
-    const claseId  = this.getCourseId();
+    const claseId  = this.getEffectiveCourseId();
     const courseId = this.getCourseRootId?.() ?? null;
     const suggestedName = new Date().toISOString().slice(0, 10) + '-sesión';
     const name = window.prompt('Nombre de la nueva sesión:', suggestedName)?.trim();
@@ -759,14 +759,14 @@ export class RecursosController {
     const courseRootId = this.getCourseRootId?.() ?? null;
     return {
       roomName,
-      claseId: this.getCourseId() ?? courseRootId,
+      claseId: this.getEffectiveCourseId(),
       courseRootId,
       items: this.dedupeItems(this.items),
     };
   }
 
   private getEffectiveCourseId(): string | null {
-    return this.getCourseId() ?? this.getCourseRootId?.() ?? null;
+    return this.getCourseRootId?.() ?? this.getCourseId() ?? null;
   }
 
   private dedupeItems(items: ResourceItem[]): ResourceItem[] {

@@ -933,6 +933,16 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 
     const normalizeText = (value) => String(value ?? '').trim();
 
+    const broadcastSidebarRefresh = () => {
+      const detail = { courseId, at: Date.now() };
+      window.dispatchEvent(new CustomEvent('musiki:recursos-sidebar-refresh', { detail }));
+      try {
+        localStorage.setItem('musiki:recursos-sidebar-refresh', JSON.stringify(detail));
+      } catch {
+        // Ignore cross-tab refresh persistence failures.
+      }
+    };
+
     const labelForClaseId = (claseId) => {
       const normalized = normalizeText(claseId);
       if (!normalized) return 'curso';
@@ -1235,6 +1245,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         });
         setStatus('Sesión guardada');
         await loadResources();
+        broadcastSidebarRefresh();
         return;
       }
       const row = target.closest('.recursos-row');
@@ -1249,6 +1260,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         await saveResourceRow(row);
         setStatus('Guardado');
         await loadResources();
+        broadcastSidebarRefresh();
         return;
       }
       if (target.matches('[data-delete]')) {
@@ -1259,6 +1271,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         });
         setStatus('Borrado');
         await loadResources();
+        broadcastSidebarRefresh();
       }
     });
 
@@ -1305,6 +1318,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
       await saveResourceRow(row, { sessionId });
       setStatus('Recurso movido');
       await loadResources();
+      broadcastSidebarRefresh();
     });
 
     listEl?.addEventListener('change', (event) => {
@@ -1335,6 +1349,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
       });
       setStatus('Sesión guardada');
       await loadResources();
+      broadcastSidebarRefresh();
     });
 
     r2TreeEl?.addEventListener('click', async (event) => {
@@ -1437,6 +1452,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
       renderAttachSessions();
       setStatus('Vinculado');
       await loadResources();
+      broadcastSidebarRefresh();
     });
 
     attachClase?.addEventListener('input', renderAttachSessions);
@@ -1462,6 +1478,7 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
         attachSession.value = newSessionId;
       }
       setStatus('Sesión creada');
+      broadcastSidebarRefresh();
     });
 
     root.querySelector('[data-recursos-refresh]')?.addEventListener('click', () => loadResources());
