@@ -51,7 +51,6 @@ const isTeacher = defaultRole === 'teacher';
           <a href="#setup-identity" class="conference-setup-toc-link" data-toc-target="setup-identity">Identity</a>
           <a href="#setup-devices" class="conference-setup-toc-link" data-toc-target="setup-devices">Devices</a>
           <a href="#setup-session" class="conference-setup-toc-link" data-toc-target="setup-session">Session</a>
-          {isTeacher && <a href="#setup-students" class="conference-setup-toc-link" data-toc-target="setup-students">Students Control</a>}
           <a href="#setup-recording" class="conference-setup-toc-link" data-toc-target="setup-recording">Recording</a>
           {isTeacher && <a href="#setup-streaming" class="conference-setup-toc-link" data-toc-target="setup-streaming">Streaming</a>}
           {isTeacher && <a href="#setup-invite" class="conference-setup-toc-link" data-toc-target="setup-invite">Invitar</a>}
@@ -197,24 +196,6 @@ const isTeacher = defaultRole === 'teacher';
             </div>
           </div>
         </section>
-
-        <!-- STUDENTS CONTROL (Teacher only) -->
-        {isTeacher && (
-          <section id="setup-students" class="conference-setup-section" data-setup-section="students control">
-            <h2 class="conference-setup-section-title">Students Control</h2>
-            <div class="conference-setup-section-content">
-              <div class="conference-field">
-              <div class="conference-field-row">
-                <span>Allow instruments</span>
-                <label class="conference-switch">
-                  <input type="checkbox" checked data-session-allow-instruments-input />
-                  <span class="conference-switch-slider"></span>
-                </label>
-              </div>
-            </div>
-            </div>
-          </section>
-        )}
 
         <!-- RECORDING -->
         <section id="setup-recording" class="conference-setup-section" data-setup-section="recording presets">

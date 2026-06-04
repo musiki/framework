@@ -1133,6 +1133,7 @@ export class RoomWorkspaceManager {
         "clase",
         "lily-code",
         "lily-render",
+        "visualizer",
       ].includes(id);
       const existing = this.dockview.getGroupPanel(id);
 
@@ -1203,9 +1204,10 @@ export class RoomWorkspaceManager {
 
   public focusOrOpenVisualizer(
     source: "recursos" | "visualizer" = "visualizer",
+    options: { forceNew?: boolean; title?: string } = {},
   ) {
     if (!this.dockview) return;
-    const existing = this.findPanelByBaseId("visualizer");
+    const existing = options.forceNew ? null : this.findPanelByBaseId("visualizer");
     if (existing) {
       existing.api.setActive();
       return;
@@ -1217,17 +1219,49 @@ export class RoomWorkspaceManager {
       ) ?? this.dockview.panels.find((panel) => panel.id !== "visualizer");
     const rect = this.container.getBoundingClientRect();
     const W = rect.width || this.container.offsetWidth || 1280;
+    const panelId = options.forceNew
+      ? `visualizer-${Date.now().toString(36)}`
+      : "visualizer";
     this.dockview.addPanel({
-      id: "visualizer",
+      id: panelId,
       component: "visualizer",
-      title: "VS",
+      title: options.title ?? "VS",
       position: reference
         ? { referencePanel: reference.id, direction: "left" }
         : undefined,
       initialWidth: Math.round(W * 0.45),
     });
     window.setTimeout(
-      () => this.dockview?.getGroupPanel("visualizer")?.api.setActive(),
+      () => this.dockview?.getGroupPanel(panelId)?.api.setActive(),
+      80,
+    );
+  }
+
+  public focusOrOpenExternalMedia(referencePanelId = "recursos"): void {
+    if (!this.dockview) return;
+    const existing = this.findPanelByBaseId("external-media");
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+
+    const reference =
+      this.findPanelByBaseId(referencePanelId) ??
+      this.findPanelByBaseId("recursos") ??
+      this.dockview.panels[0] ??
+      null;
+
+    this.dockview.addPanel({
+      id: "external-media",
+      component: "external-media",
+      title: "MEDIA",
+      position: reference
+        ? { referencePanel: reference.id, direction: "right" }
+        : undefined,
+      initialWidth: Math.round((this.container.getBoundingClientRect().width || 1280) * 0.46),
+    });
+    window.setTimeout(
+      () => this.dockview?.getGroupPanel("external-media")?.api.setActive(),
       80,
     );
   }

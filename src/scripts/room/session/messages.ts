@@ -21,7 +21,7 @@ export type SlideState = {
 
 export type PresentationPointerKind = 'move' | 'mark' | 'clear';
 
-export type ExternalMediaProvider = 'youtube';
+export type ExternalMediaProvider = 'youtube' | 'vimeo';
 export type ExternalMediaPlaybackState = 'playing' | 'paused' | 'ended';
 export type PresentationMediaProvider = 'youtube';
 export type PresentationMediaPlaybackState = ExternalMediaPlaybackState;
@@ -534,7 +534,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
 
       if (
         (action !== 'open' && action !== 'sync') ||
-        provider !== 'youtube' ||
+        (provider !== 'youtube' && provider !== 'vimeo') ||
         !isExternalMediaPlaybackState(playbackState) ||
         !mediaId ||
         !sourceUrl
@@ -548,7 +548,7 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         currentTime: Math.max(0, Number((parsed as { currentTime?: number }).currentTime) || 0),
         mediaId,
         playbackState,
-        provider: 'youtube',
+        provider,
         sourceUrl,
         title: normalizeText((parsed as { title?: string }).title) || 'YouTube',
         type: 'external-media',

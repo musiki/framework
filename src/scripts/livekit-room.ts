@@ -1046,6 +1046,18 @@ const buildYouTubeEmbedUrl = (mediaId: string) => {
   return embedUrl.toString();
 };
 
+const buildVimeoEmbedUrl = (mediaId: string) => {
+  const normalizedMediaId = normalizeText(mediaId);
+  if (!normalizedMediaId) return '';
+
+  const embedUrl = new URL(`https://player.vimeo.com/video/${normalizedMediaId}`);
+  embedUrl.searchParams.set('autoplay', '1');
+  embedUrl.searchParams.set('title', '0');
+  embedUrl.searchParams.set('byline', '0');
+  embedUrl.searchParams.set('portrait', '0');
+  return embedUrl.toString();
+};
+
 const normalizeYouTubeMediaUrl = (rawUrl: string): { mediaId: string; sourceUrl: string } | null => {
   const normalizedUrl = normalizeText(rawUrl);
   if (!normalizedUrl) return null;
@@ -1076,6 +1088,27 @@ const normalizeYouTubeMediaUrl = (rawUrl: string): { mediaId: string; sourceUrl:
     return {
       mediaId,
       sourceUrl: buildYouTubeEmbedUrl(mediaId),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const normalizeVimeoMediaUrl = (rawUrl: string): { mediaId: string; sourceUrl: string } | null => {
+  const normalizedUrl = normalizeText(rawUrl);
+  if (!normalizedUrl) return null;
+
+  try {
+    const url = new URL(normalizedUrl, window.location.origin);
+    const host = url.hostname.toLowerCase();
+    if (host !== 'vimeo.com' && !host.endsWith('.vimeo.com')) return null;
+
+    const mediaId = normalizeText(url.pathname.split('/').filter(Boolean).find((part) => /^\d+$/.test(part)));
+    if (!mediaId) return null;
+
+    return {
+      mediaId,
+      sourceUrl: buildVimeoEmbedUrl(mediaId),
     };
   } catch {
     return null;
@@ -4236,7 +4269,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       source: MediaStreamAudioSourceNode;
     }
   >();
-  let manualSessionLeaderIdentity = 'inactive';
+  let manualSessionLeaderIdentity = '';
   let focusChangedAtMs = 0;
 
   // ── Break rooms state ─────────────────────────────────────────────
@@ -5731,18 +5764,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const applySessionControlState = () => {
-    root.dataset.instrumentsAllowed = sessionAllowsInstruments ? 'true' : 'false';
-
-    if (sessionControlsField instanceof HTMLElement) {
-      sessionControlsField.hidden = localRole !== 'teacher';
-    }
-
-    if (sessionAllowInstrumentsInput instanceof HTMLInputElement) {
-      sessionAllowInstrumentsInput.checked = sessionAllowsInstruments;
-      sessionAllowInstrumentsInput.disabled =
-        localRole !== 'teacher' ||
-        (room.state === ConnectionState.Connected && !canLeadSession());
-    }
+    sessionAllowsInstruments = true;
+    root.dataset.instrumentsAllowed = 'true';
+    if (sessionControlsField instanceof HTMLElement) sessionControlsField.hidden = true;
 
     syncKickToggleButtons();
 
@@ -6254,6 +6278,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const captureExternalMediaSessionSnapshot = (): ExternalMediaSessionState | null => {
     if (!externalMediaSession) return null;
+    if (externalMediaSession.provider !== 'youtube') {
+      return {
+        ...externalMediaSession,
+        capturedAt: Date.now(),
+      };
+    }
     const videoData = externalMediaPlayer?.getVideoData?.() ?? {};
     return {
       ...externalMediaSession,
@@ -6320,13 +6350,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (externalMediaProviderLabel instanceof HTMLElement) {
       externalMediaProviderLabel.textContent = externalMediaSession?.provider === 'youtube'
         ? 'YouTube'
+        : externalMediaSession?.provider === 'vimeo'
+          ? 'Vimeo'
         : 'External Media';
     }
 
     if (externalMediaEmpty instanceof HTMLElement) {
       externalMediaEmpty.hidden = isActive && externalMediaPlayerReady;
       externalMediaEmpty.textContent = isActive
-        ? 'Cargando YouTube sincronizado...'
+        ? `Cargando ${externalMediaSession?.provider === 'vimeo' ? 'Vimeo' : 'YouTube'}...`
         : '';
     }
 
@@ -6337,7 +6369,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
     externalMediaPlayToggleButtons.forEach((button) => {
       if (!(button instanceof HTMLButtonElement)) return;
-      button.disabled = !isActive || !externalMediaPlayerReady || !canControl;
+      button.disabled = !isActive || !externalMediaPlayerReady || !canControl || externalMediaSession?.provider !== 'youtube';
       const isPlaying = playbackState === 'playing';
       button.textContent = isPlaying ? '||' : 'P';
       button.title = isPlaying ? 'Pausar media externa' : 'Reproducir media externa';
@@ -6422,6 +6454,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   const syncExternalMediaPlayerState = (session: ExternalMediaSessionState) => {
+    if (session.provider !== 'youtube') return;
     const player = externalMediaPlayer;
     if (!externalMediaPlayerReady || !player) return;
 
@@ -6448,6 +6481,21 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   const ensureExternalMediaPlayer = async (session: ExternalMediaSessionState) => {
     if (!(externalMediaPlayerHost instanceof HTMLElement)) return;
+    if (session.provider === 'vimeo') {
+      clearExternalMediaPlayer();
+      const iframe = document.createElement('iframe');
+      iframe.dataset.externalMediaPlayer = 'vimeo';
+      iframe.src = session.sourceUrl || buildVimeoEmbedUrl(session.mediaId);
+      iframe.title = session.title || 'Vimeo';
+      iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+      iframe.allowFullscreen = true;
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = '0';
+      externalMediaPlayerHost.appendChild(iframe);
+      externalMediaPlayerReady = true;
+      return;
+    }
     const currentVideoId = normalizeText(externalMediaPlayer?.getVideoData?.()?.video_id);
 
     if (externalMediaPlayer && externalMediaPlayerReady && currentVideoId === session.mediaId) {
@@ -6557,7 +6605,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           externalMediaInput.value = '';
         }
         clearExternalMediaSearchResults();
-        setExternalMediaStatus('YouTube sincronizado listo.');
+        setExternalMediaStatus(`${externalMediaSession.provider === 'vimeo' ? 'Vimeo' : 'YouTube'} listo.`);
         if (room.state === ConnectionState.Connected) {
           await broadcastExternalMediaState('open', true);
         }
@@ -6588,32 +6636,42 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
 
     const normalizedInput = normalizeText(inputValue);
-    const parsedMedia = normalizeYouTubeMediaUrl(normalizedInput);
+    const parsedMedia = normalizeYouTubeMediaUrl(normalizedInput) ?? normalizeVimeoMediaUrl(normalizedInput);
     if (!parsedMedia) {
       await runExternalMediaSearch(normalizedInput);
       return;
     }
+    const provider = normalizeVimeoMediaUrl(normalizedInput) ? 'vimeo' : 'youtube';
 
-    setExternalMediaStatus('Cargando YouTube...');
+    setExternalMediaStatus(`Cargando ${provider === 'vimeo' ? 'Vimeo' : 'YouTube'}...`);
     await applyExternalMediaSession(
       {
         capturedAt: Date.now(),
         currentTime: 0,
         mediaId: parsedMedia.mediaId,
         playbackState: 'playing',
-        provider: 'youtube',
+        provider,
         sourceUrl: parsedMedia.sourceUrl,
-        title: 'YouTube',
+        title: provider === 'vimeo' ? 'Vimeo' : 'YouTube',
       },
       'local',
     );
     window.dispatchEvent(new CustomEvent('musiki:recursos:external-media', {
-      detail: { url: `https://www.youtube.com/watch?v=${parsedMedia.mediaId}`, name: inputValue },
+      detail: {
+        url: provider === 'vimeo' ? `https://vimeo.com/${parsedMedia.mediaId}` : `https://www.youtube.com/watch?v=${parsedMedia.mediaId}`,
+        name: inputValue,
+      },
     }));
   };
 
   const toggleExternalMediaPlayback = () => {
-    if (!externalMediaSession || !externalMediaPlayerReady || !externalMediaPlayer || !getExternalMediaAuthority()) {
+    if (
+      !externalMediaSession ||
+      externalMediaSession.provider !== 'youtube' ||
+      !externalMediaPlayerReady ||
+      !externalMediaPlayer ||
+      !getExternalMediaAuthority()
+    ) {
       syncExternalMediaShell();
       return;
     }
@@ -7763,12 +7821,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   function getResolvedSessionLeaderIdentity() {
-    if (manualSessionLeaderIdentity === 'inactive') {
-      return 'inactive';
-    }
     if (
       manualSessionLeaderIdentity &&
-      manualSessionLeaderIdentity !== 'inactive' &&
       allParticipants().some(
         (participant) =>
           participant.identity === manualSessionLeaderIdentity &&
@@ -7781,12 +7835,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   }
 
   const isSessionLeader = (participant: Participant | { identity: string } | null | undefined) =>
-    Boolean(participant && getResolvedSessionLeaderIdentity() && getResolvedSessionLeaderIdentity() !== 'inactive' && participant.identity === getResolvedSessionLeaderIdentity());
+    Boolean(participant && getResolvedSessionLeaderIdentity() && participant.identity === getResolvedSessionLeaderIdentity());
 
   function canLeadSession() {
     if (localRole !== 'teacher') return false;
     const leader = getResolvedSessionLeaderIdentity();
-    if (!leader || leader === 'inactive') return true;
+    if (!leader) return true;
     return room.state === ConnectionState.Connected && room.localParticipant.identity === leader;
   }
 
@@ -7794,9 +7848,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     sessionLeaderIdentity = getResolvedSessionLeaderIdentity();
     root.dataset.sessionLeaderIdentity = sessionLeaderIdentity;
 
-    if (sessionControlsField instanceof HTMLElement) {
-      sessionControlsField.hidden = localRole !== 'teacher';
-    }
+    if (sessionControlsField instanceof HTMLElement) sessionControlsField.hidden = true;
 
     if (sessionLeaderSelect instanceof HTMLSelectElement) {
       const teachers = allParticipants()
@@ -7804,11 +7856,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         .sort(compareSessionLeaderCandidates);
 
       sessionLeaderSelect.innerHTML = '';
-
-      const inactiveOpt = document.createElement('option');
-      inactiveOpt.value = 'inactive';
-      inactiveOpt.textContent = 'DESACTIVADO';
-      sessionLeaderSelect.appendChild(inactiveOpt);
 
       teachers.forEach((participant) => {
         const option = document.createElement('option');
@@ -7827,8 +7874,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sessionLeaderSelect.value = sessionLeaderIdentity;
       sessionLeaderSelect.disabled = localRole !== 'teacher';
     }
-
-    applySessionControlState();
     syncPresentationSessionControl();
   };
 
@@ -7837,14 +7882,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     await publishMessage({
       type: 'session-leader',
       identity,
-    });
-  };
-
-  const publishSessionControlState = async () => {
-    if (!canLeadSession()) return;
-    await publishMessage({
-      type: 'session-control',
-      allowInstruments: sessionAllowsInstruments,
     });
   };
 
@@ -8483,9 +8520,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (roleLabel instanceof HTMLElement) {
       roleLabel.textContent = formatRoleLabel(localRole);
     }
-    if (sessionControlsField instanceof HTMLElement) {
-      sessionControlsField.hidden = localRole !== 'teacher';
-    }
+    if (sessionControlsField instanceof HTMLElement) sessionControlsField.hidden = true;
     syncBreakRoomsShell();
     syncExternalMediaShell();
     syncConceptsShell();
@@ -10988,6 +11023,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let sonicAnalyzerController: SonicAnalyzerController | null = null;
   let sonicVisualizerController: SonicVisualizerController | null = null;
   let visualizerController: VisualizerController | null = null;
+  const visualizerControllers = new Set<VisualizerController>();
   let recursosController: RecursosController | null = null;
   let notesController: ReturnType<typeof createRoomNotesController> | null = null;
   let recursosCurrentLessonId: string | null = null;
@@ -11414,20 +11450,24 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     };
 
     const onVisualizerInit = (container: HTMLElement) => {
-      visualizerController?.dispose();
       const controller = new VisualizerController({
         container,
         publish: (msg) => void publishMessage(msg),
       });
+      visualizerControllers.add(controller);
       visualizerController = controller;
-      visualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
-      visualizerController.setAllowStudents(recursosAllowsStudents);
+      controller.setRole(localRole === 'teacher' ? 'teacher' : 'student');
+      controller.setAllowStudents(recursosAllowsStudents);
       scheduleMediaRehydrate([100, 360, 900]);
       window.setTimeout(() => window.dispatchEvent(new CustomEvent('vs:request-state')), 100);
       return {
         dispose: () => {
           controller.dispose();
-          if (visualizerController === controller) visualizerController = null;
+          visualizerControllers.delete(controller);
+          if (visualizerController === controller) {
+            const remainingVisualizers = Array.from(visualizerControllers);
+            visualizerController = remainingVisualizers[remainingVisualizers.length - 1] ?? null;
+          }
         },
       };
     };
@@ -11488,7 +11528,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       recursosAllowsStudents = Boolean((e as CustomEvent<{ allow: boolean }>).detail?.allow);
       sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
       sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
-      visualizerController?.setAllowStudents(recursosAllowsStudents);
+      visualizerControllers.forEach((controller) => controller.setAllowStudents(recursosAllowsStudents));
       if (recursosAllowsStudents) reinforceMediaSession([160, 650, 1300]);
     });
 
@@ -11528,10 +11568,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     window.addEventListener('musiki:visual:load-url', (e: Event) => {
       const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail ?? {};
       if (!url) return;
-      workspaceManager.focusOrOpenVisualizer('recursos');
+      const fileName = normalizeText(name) || 'document';
+      workspaceManager.focusOrOpenVisualizer('recursos', { forceNew: true, title: fileName });
       window.setTimeout(() => {
-        visualizerController?.loadUrl(url, normalizeText(name) || 'document');
-      }, 80);
+        visualizerController?.loadUrl(url, fileName);
+      }, 120);
+    });
+
+    window.addEventListener('musiki:external-media:open-url', (e: Event) => {
+      const { url } = (e as CustomEvent<{ url: string; name?: string }>).detail ?? {};
+      if (!url) return;
+      workspaceManager.focusOrOpenExternalMedia('recursos');
+      window.setTimeout(() => {
+        void openExternalMediaFromInput(url);
+      }, 120);
     });
 
     const onRecursosInit = (container: HTMLElement) => {
@@ -11907,11 +11957,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     await publishMessage({
       type: 'session-leader',
       identity: getResolvedSessionLeaderIdentity(),
-    });
-
-    await publishMessage({
-      type: 'session-control',
-      allowInstruments: sessionAllowsInstruments,
     });
 
     await publishMessage({
@@ -13424,7 +13469,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         recursosAllowsStudents = message.type === 'recursos:sync' ? message.allowStudents : message.allow;
         sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
         sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
-        visualizerController?.setAllowStudents(recursosAllowsStudents);
+        visualizerControllers.forEach((controller) => controller.setAllowStudents(recursosAllowsStudents));
         scheduleMediaRehydrate([120, 500]);
         window.dispatchEvent(new CustomEvent('musiki:recursos:receive', { detail: message }));
         return;
@@ -13456,15 +13501,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           },
           'remote',
         );
-        return;
-      }
-
-      if (message.type === 'session-control') {
-        sessionAllowsInstruments = message.allowInstruments !== false;
-        if (!sessionAllowsInstruments) {
-          forceSessionInstrumentShutdown();
-        }
-        applySessionControlState();
         return;
       }
 
@@ -14082,7 +14118,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     try {
       if (room.localParticipant.isScreenShareEnabled) {
         await room.localParticipant.setScreenShareEnabled(false);
+        if (localRole === 'student' && screenshareAudioInput instanceof HTMLInputElement) {
+          screenshareAudioInput.checked = false;
+        }
       } else {
+        if (localRole === 'student' && screenshareAudioInput instanceof HTMLInputElement) {
+          screenshareAudioInput.checked = true;
+        }
         const includeScreenAudio = screenshareAudioInput instanceof HTMLInputElement && screenshareAudioInput.checked;
         await room.localParticipant.setScreenShareEnabled(true, {
           // Plan A: audio: false by default — no ScreenShareAudio track published, zero echo risk.
@@ -15184,29 +15226,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       void publishSessionLeaderIdentity(manualSessionLeaderIdentity).catch((error) => {
         setStatus(safeErrorMessage(error));
       });
-    });
-  }
-
-  if (sessionAllowInstrumentsInput instanceof HTMLInputElement) {
-    sessionAllowInstrumentsInput.addEventListener('change', () => {
-      if (
-        localRole !== 'teacher' ||
-        (room.state === ConnectionState.Connected && !canLeadSession())
-      ) {
-        applySessionControlState();
-        return;
-      }
-
-      sessionAllowsInstruments = sessionAllowInstrumentsInput.checked;
-      applySessionControlState();
-      if (!sessionAllowsInstruments) {
-        setStatus('Instrumentos desactivados para estudiantes.');
-      }
-      if (room.state === ConnectionState.Connected) {
-        void publishSessionControlState().catch((error) => {
-          setStatus(safeErrorMessage(error));
-        });
-      }
     });
   }
 

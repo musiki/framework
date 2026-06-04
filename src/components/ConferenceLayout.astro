@@ -4400,6 +4400,22 @@ if (
     font-size: 0.59rem;
   }
 
+  :global(.conference-roster-speaker-icon) {
+    color: rgba(245, 247, 251, 0.34);
+    opacity: 0.55;
+    transition: color 2s ease, opacity 2s ease, transform 2s ease;
+  }
+
+  :global(.conference-roster-speaker-icon[data-active="true"]) {
+    color: var(--roster-speaker-active-color, var(--conference-accent));
+    opacity: 1;
+    transform: scale(1.05);
+  }
+
+  :global(.conference-roster-mic-icon) {
+    display: none;
+  }
+
   :global(.conference-roster-empty) {
     color: rgba(245, 247, 251, 0.5);
     font-size: 0.53rem;

@@ -22,6 +22,9 @@ import {
   participantAppearanceStore,
 } from './appearance';
 
+const ROSTER_SPEAKER_DECAY_MS = 2000;
+const rosterLastSpeakerAt = new Map<string, number>();
+
 export const listRoomParticipants = (room: Room): RoomParticipant[] => {
   if (room.state === ConnectionState.Disconnected) return [];
   return [room.localParticipant, ...Array.from(room.remoteParticipants.values())];
@@ -193,6 +196,10 @@ export const renderParticipantRoster = ({
       const isLocal = isLocalParticipant(room, participant);
       const isHandRaised = readParticipantHandRaisedFromMetadata(participant);
       const isSpeaking = room.activeSpeakers.some((s) => s.identity === participant.identity);
+      const now = Date.now();
+      if (isSpeaking) rosterLastSpeakerAt.set(participant.identity, now);
+      const isSpeakingRecently = participant.isMicrophoneEnabled &&
+        now - (rosterLastSpeakerAt.get(participant.identity) ?? 0) < ROSTER_SPEAKER_DECAY_MS;
 
       item.dataset.identity = participant.identity;
       item.dataset.role = role;
@@ -239,11 +246,26 @@ export const renderParticipantRoster = ({
         indicators.appendChild(hand);
       }
 
-      if (isSpeaking) {
+      if (participant.isMicrophoneEnabled) {
         const speaker = document.createElement('span');
         speaker.className = 'conference-roster-speaker-icon';
+        speaker.dataset.active = isSpeakingRecently ? 'true' : 'false';
         speaker.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/><path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/><path d="M8.707 11.182A4.486 4.483 0 0 0 10.025 8a4.486 4.483 0 0 0-1.318-3.182L8 5.525A3.489 3.483 0 0 1 9.025 8a3.489 3.483 0 0 1-1.025 2.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/></svg>';
-        speaker.title = 'Hablando';
+        speaker.title = isSpeakingRecently ? 'Hablando' : 'Micrófono encendido';
+        const syncSpeakerColor = () => {
+          const appearance = participantAppearanceStore.get(participant.identity);
+          const color = appearance?.color ?? FALLBACK_PARTICIPANT_COLOR;
+          speaker.style.setProperty('--roster-speaker-active-color', color.stroke);
+        };
+        syncSpeakerColor();
+        let unsubscribeSpeakerColor = () => {};
+        unsubscribeSpeakerColor = bindParticipantAppearance(participant.identity, () => {
+          if (!speaker.isConnected) {
+            unsubscribeSpeakerColor();
+            return;
+          }
+          syncSpeakerColor();
+        });
         indicators.appendChild(speaker);
       }
 
@@ -271,11 +293,10 @@ export const renderParticipantRoster = ({
 
       const secondary = document.createElement('span');
       secondary.className = 'conference-roster-role';
-      secondary.textContent = `${role === 'teacher' ? 'Teacher' : role === 'external' ? 'EXTERNALS' : 'Student'}${
-        isLocal ? ' · You' : ''
-      }`;
+      secondary.textContent = isLocal ? 'Vos' : '';
 
-      mainRow.append(info, secondary);
+      mainRow.append(info);
+      if (secondary.textContent) mainRow.append(secondary);
       item.appendChild(mainRow);
 
       // Dedicated action row for kick button (if teacher and not local)
