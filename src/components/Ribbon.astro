@@ -249,7 +249,7 @@ if (session?.user?.email) {
   </button>
 
   <!-- Reveal / Slides — only when this note has a presentation theme -->
-  {revealHref && (
+  {revealHref && !isPublicReaderMode && (
     <a
       href={revealHref}
       class="ribbon-item ribbon-item--reveal"

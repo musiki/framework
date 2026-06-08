@@ -41,6 +41,7 @@ import { getCoursePageHistory } from '../lib/page-history';
 import { getRuntimeDynamicContent, getRuntimeDynamicContentByFilePath } from '../lib/runtime-content';
 import { normalizeContentSlug, getContentCanonicalSlug } from '../lib/content-slug';
 import { iconFor } from '../scripts/room/recursos/icons';
+import { buildGraphData } from '../scripts/build-graph-data.mjs';
 
 const getLessonIconInfo = (lesson: any) => {
   const lessonType = String(lesson.data?.type || '').trim().toLowerCase();
@@ -108,6 +109,8 @@ let publicTitle = '';
 let publicDescription = '';
 let publicTags = undefined;
 let publicPresentationHref = '';
+let publicRouteCollection = '';
+let publicRouteEntryId = '';
 
 // Check if it's a general public content entry (like a concept or glossary)
 // We check this for all paths as a fallback, but prioritize courses if canonicalCourseId matches
@@ -138,6 +141,8 @@ if (routeMatch) {
     }
     // Same-URL redirect skipped — treat as no public route match for this path.
   } else if (!canonicalCourseId || parts.length > 1) {
+    publicRouteCollection = route.collection;
+    publicRouteEntryId = route.entryId;
     // @ts-ignore
     publicEntry = await getEntry(route.collection, route.entryId);
     if (publicEntry) {
@@ -735,6 +740,62 @@ const hasPresentationTheme = (typeof rawPresentationTheme === 'string' && rawPre
   || rawRevealFlag === true || rawRevealFlag === 'true';
 const presentationHref =
   (hasPresentationTheme ? `/slides${Astro.url.pathname}` : '') || publicPresentationHref;
+const stripMarkdownExtension = (value: unknown) =>
+  String(value || '').replace(/\.(md|mdx)$/i, '');
+const publicGraphNodeId = publicRouteEntryId
+  ? stripMarkdownExtension(publicRouteCollection === 'cursos'
+    ? `cursos/${publicRouteEntryId}`
+    : publicRouteEntryId)
+  : '';
+const publicGraphRelations = (() => {
+  if (!isPublicWikiPage) return { outlinks: [], inlinks: [], hasAny: false };
+
+  const graph = buildGraphData({ publicOnly: true });
+  const nodeById = new Map(graph.nodes.map((node: any) => [String(node.id), node]));
+  const currentNode =
+    nodeById.get(publicGraphNodeId) ||
+    graph.nodes.find((node: any) => String(node.canonicalSlug || '').trim() === normalizedRequestedSlug);
+
+  if (!currentNode) return { outlinks: [], inlinks: [], hasAny: false };
+
+  const currentId = String((currentNode as any).id || '');
+  const toRelationItem = (id: unknown) => {
+    const node = nodeById.get(String(id));
+    if (!node) return null;
+    const slug = String((node as any).canonicalSlug || '').trim();
+    if (!slug) return null;
+    return {
+      id: String((node as any).id || slug),
+      title: String((node as any).name || slug),
+      href: `/${slug}`,
+    };
+  };
+  const uniqueItems = (items: Array<{ id: string; title: string; href: string } | null>) => {
+    const seen = new Set<string>();
+    return items
+      .filter((item): item is { id: string; title: string; href: string } => Boolean(item))
+      .filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      })
+      .sort((left, right) => left.title.localeCompare(right.title, undefined, { sensitivity: 'base' }));
+  };
+
+  const linkEdges = graph.links.filter((link: any) => String(link.type || '') === 'link');
+  const outlinks = uniqueItems(
+    linkEdges
+      .filter((link: any) => String(link.source) === currentId)
+      .map((link: any) => toRelationItem(link.target)),
+  );
+  const inlinks = uniqueItems(
+    linkEdges
+      .filter((link: any) => String(link.target) === currentId)
+      .map((link: any) => toRelationItem(link.source)),
+  );
+
+  return { outlinks, inlinks, hasAny: outlinks.length > 0 || inlinks.length > 0 };
+})();
 const isLiveEnabled =
   Boolean(courseData?.live) ||
   Boolean((currentEntry?.data as Record<string, unknown>)?.live);
@@ -2305,6 +2366,60 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         width: 100%;
         max-width: min(100%, 86ch);
         margin-inline: auto;
+      }
+
+      .public-note-relations {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: min(100%, 86ch);
+        margin: clamp(2.5rem, 5vw, 4rem) auto 0;
+        padding-top: 1.35rem;
+        border-top: 1px solid color-mix(in srgb, var(--c-border) 78%, transparent);
+        color: color-mix(in srgb, var(--c-fg) 78%, transparent);
+      }
+
+      .public-note-relations-title {
+        margin: 0 0 0.85rem;
+        font-size: 0.88rem;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--c-fg);
+      }
+
+      .public-note-relations-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+        gap: 1rem 1.6rem;
+      }
+
+      .public-note-relation-group {
+        min-width: 0;
+      }
+
+      .public-note-relation-heading {
+        margin: 0 0 0.45rem;
+        font-size: 0.78rem;
+        font-weight: 650;
+        color: color-mix(in srgb, var(--c-fg) 58%, transparent);
+      }
+
+      .public-note-relation-list {
+        display: grid;
+        gap: 0.32rem;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .public-note-relation-link {
+        color: var(--accent);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+
+      .public-note-relation-link:hover {
+        text-decoration: underline;
       }
 
       .content-area .eval-block-wrapper,
@@ -4764,6 +4879,38 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />
         )}
       </div>
+
+      {publicGraphRelations.hasAny && (
+        <section class="public-note-relations" aria-labelledby="public-note-relations-title">
+          <h2 id="public-note-relations-title" class="public-note-relations-title">Enlaces</h2>
+          <div class="public-note-relations-grid">
+            {publicGraphRelations.outlinks.length > 0 && (
+              <div class="public-note-relation-group">
+                <h3 class="public-note-relation-heading">Outlinks</h3>
+                <ul class="public-note-relation-list">
+                  {publicGraphRelations.outlinks.map((item) => (
+                    <li>
+                      <a class="public-note-relation-link" href={item.href}>{item.title}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {publicGraphRelations.inlinks.length > 0 && (
+              <div class="public-note-relation-group">
+                <h3 class="public-note-relation-heading">Linkins</h3>
+                <ul class="public-note-relation-list">
+                  {publicGraphRelations.inlinks.map((item) => (
+                    <li>
+                      <a class="public-note-relation-link" href={item.href}>{item.title}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
       <div id="notes-editor-mount" hidden style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;"></div>
 
         {isAssignment && (
