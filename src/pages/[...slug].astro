@@ -4196,6 +4196,16 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                   data-course-id={canonicalCourseId || courseSlug}
                   data-course-href={courseHref}
                   data-active-slug={currentEntrySourcePath || ''}
+                  data-global-concepts={JSON.stringify(globalConcepts.map(entry => ({
+                    id: entry.id,
+                    data: {
+                      title: entry.data.title,
+                      type: entry.data.type,
+                      status: entry.data.status,
+                      project: entry.data.project,
+                      order: entry.data.order,
+                    }
+                  })))}
                 ></div>
                 <div style="display: none;">
                   <div id="recursos-sidebar-tree-container">

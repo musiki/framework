@@ -54,6 +54,11 @@ export function computeNewOrders(
 // Returns the URL path segment after the courseId prefix, without extension
 // e.g. "10 Chapter/note.md" -> "10-chapter/note"
 export function noteSlugToRelPath(slug: string, courseId: string): string {
+  if (slug.startsWith('public/')) {
+    const parts = slug.split('/');
+    const filename = parts[parts.length - 1].replace(/\.md$/, '');
+    return slugify(filename);
+  }
   const relPath = slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
   return relPath
     .split('/')
@@ -306,6 +311,9 @@ export function renderNotesSidebar(
             }
           } else {
             for (const note of g.notes) {
+              if (note.slug.startsWith('public/')) {
+                continue;
+              }
               if (note.order !== globalOrder) {
                 const nd = await getNote(courseId, note.slug);
                 const { data: fm, body } = parseFrontmatter(nd.content);
@@ -329,6 +337,8 @@ export function renderNotesSidebar(
   function makeDropLine(chapter: string, afterSlug: string | null): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'ns-drop-line';
+    const isGlobal = chapter.toUpperCase().includes('CONCEPTOS') || chapter.toUpperCase().includes('INSTRUMENTOS') || chapter.toUpperCase().includes('SPEAKERS') || chapter.toUpperCase().includes('GLOSARIO');
+    if (isGlobal) return li;
 
     li.addEventListener('dragover', e => {
       if (!canAcceptDraggedNote(e)) return;
@@ -488,6 +498,8 @@ export function renderNotesSidebar(
     summary.addEventListener('contextmenu', e => {
       e.preventDefault();
       e.stopPropagation();
+      const isGlobal = group.notes.some(n => n.slug.startsWith('public/')) || group.name.startsWith('70 ') || group.name.startsWith('71 ');
+      if (isGlobal) return;
       showContextMenu(e.clientX, e.clientY, [
         {
           label: 'Nueva nota en este capítulo',
@@ -548,6 +560,8 @@ export function renderNotesSidebar(
     // Chapter as cross-chapter drop target
     summary.addEventListener('dragover', e => {
       if (!canAcceptDraggedNote(e)) return;
+      const isGlobal = group.name.startsWith('70 ') || group.name.startsWith('71 ') || group.name.startsWith('80 ') || group.name.startsWith('90 ');
+      if (isGlobal) return;
       e.preventDefault();
       if (activeDropTarget !== summary) {
         clearDropState();
@@ -601,7 +615,7 @@ export function renderNotesSidebar(
       a.href = noteUrl;
       a.className = 'lesson-link' + (isActive ? ' active' : '');
       a.dataset.astroPrefetch = 'false';
-      a.draggable = true;
+      a.draggable = !note.slug.startsWith('public/');
 
       const titleText = note.title || note.slug.split('/').pop()?.replace('.md', '') || note.slug;
       const textSpan = document.createElement('span');
@@ -649,6 +663,7 @@ export function renderNotesSidebar(
       a.addEventListener('contextmenu', e => {
         e.preventDefault();
         e.stopPropagation();
+        if (note.slug.startsWith('public/')) return;
         showContextMenu(e.clientX, e.clientY, [
           {
             label: 'Editar',
@@ -917,7 +932,32 @@ export function initNotesSidebar(
   async function refresh() {
     try {
       const { notes } = await listNotes(courseId);
-      renderNotesSidebar(container, notes, currentActive, courseId, courseHref);
+      const globalConceptsAttr = container.dataset.globalConcepts;
+      let allNotes = [...notes];
+      if (globalConceptsAttr) {
+        try {
+          const parsed = JSON.parse(globalConceptsAttr) as any[];
+          const mapped = parsed.map(entry => {
+            const idParts = String(entry.id || '').split('/');
+            const folderName = idParts.length >= 2 ? idParts[idParts.length - 2] : '';
+            const chapter = folderName ? `70 ${folderName.toUpperCase()}` : '70 CONCEPTOS';
+            const title = entry.data.title || idParts[idParts.length - 1].replace(/\.md$/, '');
+            return {
+              slug: entry.id,
+              title,
+              type: entry.data.type || 'concept',
+              chapter,
+              status: entry.data.status || 'published',
+              order: entry.data.order || 0,
+              filePath: entry.id,
+            };
+          });
+          allNotes = [...allNotes, ...mapped];
+        } catch (e) {
+          console.warn('[notes-sidebar] failed to parse global concepts:', e);
+        }
+      }
+      renderNotesSidebar(container, allNotes, currentActive, courseId, courseHref);
     } catch (err) {
       console.error('[notes-sidebar] failed to load notes:', err);
     }

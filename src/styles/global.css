@@ -220,6 +220,16 @@ code {
   background-color: transparent;
   border-radius: 0;
 }
+mark {
+  background-color: rgba(253, 224, 71, 0.35);
+  color: #111111;
+  border-radius: 4px;
+  padding: 0.1em 0.25em;
+}
+.dark mark {
+  background-color: rgba(253, 224, 71, 0.2);
+  color: #fde047;
+}
 pre {
   font-family: var(--font-family-mono);
   padding: 1rem 1.15rem;

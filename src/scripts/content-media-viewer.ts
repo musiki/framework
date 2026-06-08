@@ -352,7 +352,7 @@ export function setupContentMediaViewer(root: HTMLElement | null): ViewerCleanup
     }
   };
 
-  const handleRootDblClick = (event: MouseEvent) => {
+  const handleRootClick = (event: MouseEvent) => {
     const node = resolveMediaNode(root, event.target);
     if (!node) return;
     event.preventDefault();
@@ -476,7 +476,7 @@ export function setupContentMediaViewer(root: HTMLElement | null): ViewerCleanup
   const observer = new MutationObserver(() => markSources(root));
   observer.observe(root, { childList: true, subtree: true });
 
-  root.addEventListener('dblclick', handleRootDblClick);
+  root.addEventListener('click', handleRootClick);
   root.addEventListener('touchstart', handleTouchStart, { passive: true });
   root.addEventListener('touchend', handleTouchEnd, { passive: false });
   closeButton.addEventListener('click', close);
@@ -493,7 +493,7 @@ export function setupContentMediaViewer(root: HTMLElement | null): ViewerCleanup
   return () => {
     delete root.dataset.contentMediaViewerBound;
     observer.disconnect();
-    root.removeEventListener('dblclick', handleRootDblClick);
+    root.removeEventListener('click', handleRootClick);
     root.removeEventListener('touchstart', handleTouchStart);
     root.removeEventListener('touchend', handleTouchEnd);
     closeButton.removeEventListener('click', close);
