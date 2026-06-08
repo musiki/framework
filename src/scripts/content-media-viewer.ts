@@ -322,7 +322,37 @@ export function setupContentMediaViewer(root: HTMLElement | null): ViewerCleanup
     closeButton.focus({ preventScroll: true });
   };
 
-  const handleRootClick = (event: MouseEvent) => {
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartTime = 0;
+
+  const handleTouchStart = (event: TouchEvent) => {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchStartTime = Date.now();
+  };
+
+  const handleTouchEnd = (event: TouchEvent) => {
+    if (event.changedTouches.length !== 1) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+    const dt = Date.now() - touchStartTime;
+
+    // Detect a quick tap (touch duration under 300ms, moved less than 10px)
+    if (Math.hypot(dx, dy) < 10 && dt < 300) {
+      const node = resolveMediaNode(root, event.target);
+      if (node) {
+        event.preventDefault();
+        event.stopPropagation();
+        open(node);
+      }
+    }
+  };
+
+  const handleRootDblClick = (event: MouseEvent) => {
     const node = resolveMediaNode(root, event.target);
     if (!node) return;
     event.preventDefault();
@@ -446,7 +476,9 @@ export function setupContentMediaViewer(root: HTMLElement | null): ViewerCleanup
   const observer = new MutationObserver(() => markSources(root));
   observer.observe(root, { childList: true, subtree: true });
 
-  root.addEventListener('click', handleRootClick);
+  root.addEventListener('dblclick', handleRootDblClick);
+  root.addEventListener('touchstart', handleTouchStart, { passive: true });
+  root.addEventListener('touchend', handleTouchEnd, { passive: false });
   closeButton.addEventListener('click', close);
   modal.addEventListener('click', handleModalClick);
   viewport.addEventListener('wheel', handleWheel, { passive: false });
@@ -461,7 +493,9 @@ export function setupContentMediaViewer(root: HTMLElement | null): ViewerCleanup
   return () => {
     delete root.dataset.contentMediaViewerBound;
     observer.disconnect();
-    root.removeEventListener('click', handleRootClick);
+    root.removeEventListener('dblclick', handleRootDblClick);
+    root.removeEventListener('touchstart', handleTouchStart);
+    root.removeEventListener('touchend', handleTouchEnd);
     closeButton.removeEventListener('click', close);
     modal.removeEventListener('click', handleModalClick);
     viewport.removeEventListener('wheel', handleWheel);
