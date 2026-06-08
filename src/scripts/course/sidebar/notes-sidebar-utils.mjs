@@ -13,9 +13,19 @@ export function groupByChapter(notes) {
       notes: [...notes].sort((a, b) => a.order - b.order || (a.title ?? '').localeCompare(b.title ?? '')),
     }))
     .sort((a, b) => {
-      const minA = Math.min(...a.notes.map(n => n.order));
-      const minB = Math.min(...b.notes.map(n => n.order));
-      return minA - minB || a.name.localeCompare(b.name);
+      const getMinOrder = (name, notesList) => {
+        const matchDigits = name.trim().match(/^(\d+)/);
+        const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
+        if (notesList.length > 0) {
+          return Math.min(...notesList.map(n => n.order));
+        }
+        if (fallbackFromTitle !== null) return fallbackFromTitle;
+        const nameUpper = name.toUpperCase();
+        if (nameUpper.includes('RECURSOS')) return 80;
+        if (nameUpper.includes('NOTAS')) return 90;
+        return 9999;
+      };
+      return getMinOrder(a.name, a.notes) - getMinOrder(b.name, b.notes) || a.name.localeCompare(b.name);
     });
 }
 

@@ -42,6 +42,19 @@ describe('groupByChapter', () => {
     assert.equal(groups[0].name, 'Ch1');
     assert.equal(groups[1].name, 'Ch2');
   });
+
+  test('sorts chapters with digit prefixes using the prefix as order fallback', () => {
+    const notes = [
+      { slug: 'cursos/s1/a.md', title: 'A', chapter: '80 RECURSOS', order: 0, type: 'lesson', status: 'draft', filePath: '' },
+      { slug: 'cursos/s1/b.md', title: 'B', chapter: '70 CONCEPTOS', order: 0, type: 'lesson', status: 'draft', filePath: '' },
+      { slug: 'cursos/s1/c.md', title: 'C', chapter: '02 ACÚSTICA', order: 0, type: 'lesson', status: 'draft', filePath: '' },
+    ];
+    const groups = groupByChapter(notes);
+    assert.equal(groups.length, 3);
+    assert.equal(groups[0].name, '02 ACÚSTICA');
+    assert.equal(groups[1].name, '70 CONCEPTOS');
+    assert.equal(groups[2].name, '80 RECURSOS');
+  });
 });
 
 describe('computeNewOrders', () => {

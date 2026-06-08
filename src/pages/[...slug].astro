@@ -51,7 +51,17 @@ const getLessonIconInfo = (lesson: any) => {
   if (lessonStatus === 'draft') {
     return { char: '◩', color: '#888888', isConcept: false };
   }
-  if (lessonType === 'concept') {
+
+  let isConcept = lessonType === 'concept';
+  if (!isConcept && (lesson as any).collection === 'content') {
+    const idParts = String((lesson as any).id || '').split('/');
+    const folderName = idParts.length >= 2 ? idParts[idParts.length - 2].toLowerCase() : '';
+    if (['conceptos', 'instrumentos', 'speakers'].includes(folderName)) {
+      isConcept = true;
+    }
+  }
+
+  if (isConcept) {
     return { char: '🔷', color: '', isConcept: true };
   }
   if (title.toUpperCase().includes('MOC')) {
@@ -285,8 +295,19 @@ const globalConcepts = (await getCollection('content')).filter((entry) => {
   const type = String(entry.data.type || '').trim().toLowerCase();
   const status = String(entry.data.status || '').trim().toLowerCase();
 
+  let isConceptOrGlossary = type.includes('concept') || type.includes('glossary');
+  if (!isConceptOrGlossary && !type) {
+    const idParts = String(entry.id || '').split('/');
+    const folderName = idParts.length >= 2 ? idParts[idParts.length - 2].toLowerCase() : '';
+    if (['conceptos', 'instrumentos', 'speakers'].includes(folderName)) {
+      isConceptOrGlossary = true;
+    } else if (folderName === 'glosario') {
+      isConceptOrGlossary = true;
+    }
+  }
+
   // They must be concept/glossary
-  if (type !== 'concept' && type !== 'glossary') return false;
+  if (!isConceptOrGlossary) return false;
 
   // They must be public or session must exist
   if (!session && status !== 'public' && status !== 'published') return false;
@@ -433,12 +454,22 @@ const sortedChapters = Object.entries(chapters).sort(([leftChapter, leftLessons]
     if (liveNotesInChapter.length > 0) {
       return Math.min(...liveNotesInChapter.map(n => n.order));
     }
+    const matchDigits = name.trim().match(/^(\d+)/);
+    const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
     if (lessons.length > 0) {
-      return Math.min(...lessons.map(l => l.data.order ?? 0));
+      const orders = lessons.map(l => l.data.order).filter((o): o is number => typeof o === 'number');
+      if (orders.length > 0) {
+        return Math.min(...orders);
+      }
+      if (fallbackFromTitle !== null) {
+        return fallbackFromTitle;
+      }
+      return 0;
     }
     const nameUpper = name.toUpperCase();
     if (nameUpper.includes('RECURSOS')) return 80;
     if (nameUpper.includes('NOTAS')) return 90;
+    if (fallbackFromTitle !== null) return fallbackFromTitle;
     return 9999;
   };
   const leftMin = getMinOrder(leftChapter, leftLessons);

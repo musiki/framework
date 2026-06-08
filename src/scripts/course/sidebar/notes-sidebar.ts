@@ -15,9 +15,19 @@ export function groupByChapter(notes: NoteListItem[]): ChapterGroup[] {
       notes: [...notes].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title ?? '')),
     }))
     .sort((a, b) => {
-      const minA = Math.min(...a.notes.map(n => n.order));
-      const minB = Math.min(...b.notes.map(n => n.order));
-      return minA - minB || a.name.localeCompare(b.name);
+      const getMinOrder = (name: string, notesList: NoteListItem[]) => {
+        const matchDigits = name.trim().match(/^(\d+)/);
+        const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
+        if (notesList.length > 0) {
+          return Math.min(...notesList.map(n => n.order));
+        }
+        if (fallbackFromTitle !== null) return fallbackFromTitle;
+        const nameUpper = name.toUpperCase();
+        if (nameUpper.includes('RECURSOS')) return 80;
+        if (nameUpper.includes('NOTAS')) return 90;
+        return 9999;
+      };
+      return getMinOrder(a.name, a.notes) - getMinOrder(b.name, b.notes) || a.name.localeCompare(b.name);
     });
 }
 
@@ -197,9 +207,19 @@ export function renderNotesSidebar(
 
   // Sort groups by min note order (with defaults for empty groups)
   groups.sort((a, b) => {
-    const minA = a.notes.length ? Math.min(...a.notes.map(n => n.order)) : 80;
-    const minB = b.notes.length ? Math.min(...b.notes.map(n => n.order)) : 90;
-    return minA - minB || a.name.localeCompare(b.name);
+    const getMinOrder = (name: string, notesList: NoteListItem[]) => {
+      const matchDigits = name.trim().match(/^(\d+)/);
+      const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
+      if (notesList.length > 0) {
+        return Math.min(...notesList.map(n => n.order));
+      }
+      if (fallbackFromTitle !== null) return fallbackFromTitle;
+      const nameUpper = name.toUpperCase();
+      if (nameUpper.includes('RECURSOS')) return 80;
+      if (nameUpper.includes('NOTAS')) return 90;
+      return 9999;
+    };
+    return getMinOrder(a.name, a.notes) - getMinOrder(b.name, b.notes) || a.name.localeCompare(b.name);
   });
 
   const newChapterEls: HTMLElement[] = [];
