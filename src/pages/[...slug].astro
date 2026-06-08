@@ -38,7 +38,7 @@ import {
 } from '../lib/course-routing';
 import { getCoursePageHistory } from '../lib/page-history';
 
-import { getRuntimeDynamicContent } from '../lib/runtime-content';
+import { getRuntimeDynamicContent, getRuntimeDynamicContentByFilePath } from '../lib/runtime-content';
 import { normalizeContentSlug, getContentCanonicalSlug } from '../lib/content-slug';
 import { iconFor } from '../scripts/room/recursos/icons';
 
@@ -701,7 +701,10 @@ if (currentEntryType === 'info' && !session) {
 const renderedEntry = PublicContent ? { Content: PublicContent } : await render(currentEntry);
 const { Content: StaticContent } = renderedEntry;
 const dynamicContent = !isCourseForumPage && !isRecursosEditorPage
-  ? await getRuntimeDynamicContent(currentEntry.id)
+  ? (
+    await getRuntimeDynamicContentByFilePath((currentEntry as any).filePath, currentEntry.id)
+    || await getRuntimeDynamicContent(currentEntry.id)
+  )
   : null;
 
 // Envolvemos el contenido en un objeto compatible para el JSX
@@ -3284,6 +3287,123 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         max-width: 100%;
       }
 
+      .class-content :where(img, .mermaid, svg) {
+        cursor: zoom-in;
+      }
+
+      .class-content :where(button, a, input, textarea, select) :where(svg) {
+        cursor: inherit;
+      }
+
+      .content-media-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 140;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.92);
+        padding: 1rem;
+      }
+
+      .content-media-modal[hidden] {
+        display: none;
+      }
+
+      .content-media-modal-stage {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      .content-media-modal-close,
+      .content-media-modal-control {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(12, 14, 18, 0.72);
+        color: rgba(255, 255, 255, 0.9);
+        font: inherit;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .content-media-modal-close {
+        position: absolute;
+        top: 0.8rem;
+        right: 0.8rem;
+        z-index: 2;
+        width: 2.35rem;
+        height: 2.35rem;
+        border-radius: 999px;
+        font-size: 1.65rem;
+      }
+
+      .content-media-modal-controls {
+        position: absolute;
+        left: 50%;
+        bottom: 1rem;
+        z-index: 2;
+        display: flex;
+        gap: 0.4rem;
+        transform: translateX(-50%);
+      }
+
+      .content-media-modal-control {
+        min-width: 2.25rem;
+        height: 2.1rem;
+        border-radius: 6px;
+        padding: 0 0.7rem;
+        font-size: 0.95rem;
+      }
+
+      .content-media-modal-viewport {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        cursor: grab;
+        touch-action: none;
+      }
+
+      .content-media-modal-viewport.is-dragging {
+        cursor: grabbing;
+      }
+
+      .content-media-modal-content {
+        display: grid;
+        place-items: center;
+        max-width: 94vw;
+        max-height: 88vh;
+        transform-origin: center center;
+        will-change: transform;
+        user-select: none;
+      }
+
+      .content-media-modal-content img,
+      .content-media-modal-content svg {
+        display: block;
+        max-width: 94vw;
+        max-height: 88vh;
+        width: auto;
+        height: auto;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+
+      .content-media-modal-content .mermaid {
+        display: block;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .content-media-modal-content .mermaid svg {
+        max-width: none;
+        max-height: 88vh;
+      }
+
       .forum-post-actions {
         margin-top: 0.58rem;
         display: flex;
@@ -5626,6 +5746,19 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         document.addEventListener('astro:page-load', bootInlineEditor);
       </script>
     )}
+    <div id="content-media-modal" class="content-media-modal" hidden aria-hidden="true">
+      <div id="content-media-modal-stage" class="content-media-modal-stage" role="dialog" aria-modal="true" aria-label="Imagen ampliada">
+        <button id="content-media-modal-close" class="content-media-modal-close" type="button" aria-label="Cerrar" title="Cerrar">×</button>
+        <div id="content-media-modal-viewport" class="content-media-modal-viewport">
+          <div id="content-media-modal-content" class="content-media-modal-content"></div>
+        </div>
+        <div class="content-media-modal-controls" aria-label="Controles de zoom">
+          <button class="content-media-modal-control" type="button" data-content-media-zoom="out" aria-label="Alejar" title="Alejar">−</button>
+          <button class="content-media-modal-control" type="button" data-content-media-zoom="reset" aria-label="Restablecer zoom" title="Restablecer zoom">1:1</button>
+          <button class="content-media-modal-control" type="button" data-content-media-zoom="in" aria-label="Acercar" title="Acercar">+</button>
+        </div>
+      </div>
+    </div>
     <div id="forum-media-modal" class="forum-media-modal" hidden aria-hidden="true">
       <div class="forum-media-modal-stage" role="dialog" aria-modal="true" aria-label="Media ampliado">
         <button
@@ -13692,6 +13825,234 @@ a[node] -->|edge| b[hub]
         }
       }
 
+      const setupCourseContentMediaViewer = (root: HTMLElement | null) => {
+        if (!(root instanceof HTMLElement)) return () => {};
+
+        const modal = document.getElementById('content-media-modal');
+        const stage = document.getElementById('content-media-modal-stage');
+        const viewport = document.getElementById('content-media-modal-viewport');
+        const content = document.getElementById('content-media-modal-content');
+        const closeButton = document.getElementById('content-media-modal-close');
+        const controls = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-content-media-zoom]'));
+
+        if (
+          !(modal instanceof HTMLElement) ||
+          !(stage instanceof HTMLElement) ||
+          !(viewport instanceof HTMLElement) ||
+          !(content instanceof HTMLElement) ||
+          !(closeButton instanceof HTMLButtonElement)
+        ) {
+          return () => {};
+        }
+
+        let scale = 1;
+        let offsetX = 0;
+        let offsetY = 0;
+        let pointerId: number | null = null;
+        let dragOriginX = 0;
+        let dragOriginY = 0;
+        let startOffsetX = 0;
+        let startOffsetY = 0;
+        let movedDuringPointer = false;
+
+        const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+        const applyTransform = () => {
+          if (scale <= 1) {
+            offsetX = 0;
+            offsetY = 0;
+          }
+          content.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+        };
+
+        const setScale = (nextScale: number) => {
+          scale = clamp(nextScale, 1, 8);
+          applyTransform();
+        };
+
+        const resetView = () => {
+          scale = 1;
+          offsetX = 0;
+          offsetY = 0;
+          applyTransform();
+        };
+
+        const close = () => {
+          modal.hidden = true;
+          modal.setAttribute('aria-hidden', 'true');
+          content.replaceChildren();
+          content.style.transform = '';
+          document.documentElement.style.overflow = '';
+          resetView();
+        };
+
+        const cloneSvg = (svg: SVGSVGElement) => {
+          const clone = svg.cloneNode(true) as SVGSVGElement;
+          clone.removeAttribute('width');
+          clone.removeAttribute('height');
+          clone.style.maxWidth = '94vw';
+          clone.style.maxHeight = '88vh';
+          clone.style.width = 'auto';
+          clone.style.height = 'auto';
+          return clone;
+        };
+
+        const resolveMediaNode = (rawTarget: EventTarget | null) => {
+          const target = rawTarget instanceof Element ? rawTarget : null;
+          if (!target || !root.contains(target)) return null;
+          if (target.closest('button, input, textarea, select, #lesson-forum, #notes-editor-mount')) return null;
+
+          const mermaid = target.closest<HTMLElement>('.mermaid');
+          if (mermaid && root.contains(mermaid)) {
+            return mermaid.cloneNode(true) as HTMLElement;
+          }
+
+          const image = target.closest<HTMLImageElement>('img');
+          if (image && root.contains(image)) {
+            const clone = document.createElement('img');
+            clone.src = image.currentSrc || image.src;
+            clone.alt = image.alt || '';
+            clone.loading = 'eager';
+            clone.decoding = 'async';
+            return clone;
+          }
+
+          const svg = target.closest<SVGSVGElement>('svg');
+          if (svg && root.contains(svg) && !svg.closest('a, button')) {
+            return cloneSvg(svg);
+          }
+
+          return null;
+        };
+
+        const open = (node: HTMLElement | SVGSVGElement) => {
+          resetView();
+          content.replaceChildren(node);
+          modal.hidden = false;
+          modal.setAttribute('aria-hidden', 'false');
+          document.documentElement.style.overflow = 'hidden';
+          closeButton.focus({ preventScroll: true });
+        };
+
+        const handleRootClick = (event: MouseEvent) => {
+          const node = resolveMediaNode(event.target);
+          if (!node) return;
+          event.preventDefault();
+          event.stopPropagation();
+          open(node);
+        };
+
+        const handleWheel = (event: WheelEvent) => {
+          if (modal.hidden) return;
+          event.preventDefault();
+          setScale(scale + (event.deltaY < 0 ? 0.25 : -0.25));
+        };
+
+        const handlePointerDown = (event: PointerEvent) => {
+          if (modal.hidden || scale <= 1) return;
+          pointerId = event.pointerId;
+          dragOriginX = event.clientX;
+          dragOriginY = event.clientY;
+          startOffsetX = offsetX;
+          startOffsetY = offsetY;
+          movedDuringPointer = false;
+          viewport.classList.add('is-dragging');
+          viewport.setPointerCapture(pointerId);
+        };
+
+        const handlePointerMove = (event: PointerEvent) => {
+          if (pointerId !== event.pointerId) return;
+          const deltaX = event.clientX - dragOriginX;
+          const deltaY = event.clientY - dragOriginY;
+          movedDuringPointer = movedDuringPointer || Math.abs(deltaX) + Math.abs(deltaY) > 6;
+          offsetX = startOffsetX + deltaX;
+          offsetY = startOffsetY + deltaY;
+          applyTransform();
+        };
+
+        const stopDragging = (event: PointerEvent) => {
+          if (pointerId !== event.pointerId) return;
+          try {
+            viewport.releasePointerCapture(pointerId);
+          } catch {}
+          pointerId = null;
+          viewport.classList.remove('is-dragging');
+        };
+
+        const handleModalClick = (event: MouseEvent) => {
+          if (modal.hidden) return;
+          if (movedDuringPointer) {
+            movedDuringPointer = false;
+            return;
+          }
+          if (event.target === modal || event.target === stage || event.target === viewport) {
+            close();
+          }
+        };
+
+        const handleDblClick = (event: MouseEvent) => {
+          if (modal.hidden) return;
+          event.preventDefault();
+          setScale(scale < 2 ? 2 : 1);
+        };
+
+        const handleKeydown = (event: KeyboardEvent) => {
+          if (modal.hidden) return;
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            close();
+          }
+          if ((event.key === '+' || event.key === '=') && (event.metaKey || event.ctrlKey || !event.altKey)) {
+            event.preventDefault();
+            setScale(scale + 0.5);
+          }
+          if (event.key === '-' && (event.metaKey || event.ctrlKey || !event.altKey)) {
+            event.preventDefault();
+            setScale(scale - 0.5);
+          }
+          if (event.key === '0') {
+            event.preventDefault();
+            resetView();
+          }
+        };
+
+        const handleControlClick = (event: MouseEvent) => {
+          const button = event.currentTarget;
+          if (!(button instanceof HTMLButtonElement)) return;
+          const action = button.dataset.contentMediaZoom;
+          if (action === 'in') setScale(scale + 0.5);
+          else if (action === 'out') setScale(scale - 0.5);
+          else resetView();
+        };
+
+        root.addEventListener('click', handleRootClick);
+        closeButton.addEventListener('click', close);
+        modal.addEventListener('click', handleModalClick);
+        viewport.addEventListener('wheel', handleWheel, { passive: false });
+        viewport.addEventListener('pointerdown', handlePointerDown);
+        viewport.addEventListener('pointermove', handlePointerMove);
+        viewport.addEventListener('pointerup', stopDragging);
+        viewport.addEventListener('pointercancel', stopDragging);
+        content.addEventListener('dblclick', handleDblClick);
+        document.addEventListener('keydown', handleKeydown);
+        controls.forEach((button) => button.addEventListener('click', handleControlClick));
+
+        return () => {
+          root.removeEventListener('click', handleRootClick);
+          closeButton.removeEventListener('click', close);
+          modal.removeEventListener('click', handleModalClick);
+          viewport.removeEventListener('wheel', handleWheel);
+          viewport.removeEventListener('pointerdown', handlePointerDown);
+          viewport.removeEventListener('pointermove', handlePointerMove);
+          viewport.removeEventListener('pointerup', stopDragging);
+          viewport.removeEventListener('pointercancel', stopDragging);
+          content.removeEventListener('dblclick', handleDblClick);
+          document.removeEventListener('keydown', handleKeydown);
+          controls.forEach((button) => button.removeEventListener('click', handleControlClick));
+          close();
+        };
+      };
+
       const mountCourseContent = async () => {
         const pageRoot = document.querySelector('[data-course-layout-root]');
         const hasPendingEvalHydration = Array.from(document.querySelectorAll('.eval-block-wrapper'))
@@ -13743,10 +14104,13 @@ a[node] -->|edge| b[hub]
           console.error('Legacy audio bootstrap error:', error);
         }
 
+        let cleanupCourseMediaViewer = () => {};
+
         try {
           const classContent = document.querySelector('[data-class-content]');
           if (classContent instanceof HTMLElement) {
             enhanceCourseNotesContent(classContent);
+            cleanupCourseMediaViewer = setupCourseContentMediaViewer(classContent);
           }
         } catch (error) {
           console.error('Course notes content bootstrap error:', error);
@@ -14011,6 +14375,7 @@ a[node] -->|edge| b[hub]
           }
           window.removeEventListener('resize', handleScrollShortcutVisibility);
           document.removeEventListener('keydown', handleScrollHotkeys);
+          cleanupCourseMediaViewer();
         };
       };
 

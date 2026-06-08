@@ -69,6 +69,30 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
   return { html, frontmatter, id };
 }
 
+export async function getRuntimeDynamicContentByFilePath(filePath: string | null | undefined, id = '') {
+  const normalizedFilePath = String(filePath || '').trim();
+  if (!normalizedFilePath) return null;
+
+  const actualPath = path.isAbsolute(normalizedFilePath)
+    ? normalizedFilePath
+    : path.resolve(process.cwd(), normalizedFilePath);
+
+  const relativeToContent = path.relative(CONTENT_DIR, actualPath);
+  if (relativeToContent.startsWith('..') || path.isAbsolute(relativeToContent)) {
+    console.warn(`[Runtime Content] Refusing to render file outside cursos content: ${actualPath}`);
+    return null;
+  }
+
+  try {
+    const rawContent = await fs.readFile(actualPath, 'utf-8');
+    console.log(`[Runtime Content] RENDERING DYNAMIC FILE: ${actualPath}`);
+    return await renderRuntimeMarkdown(rawContent, id || relativeToContent.replace(/\.(mdx?|md)$/i, ''));
+  } catch (error) {
+    console.error(`[Runtime Content] Error processing file ${actualPath}:`, error);
+    return null;
+  }
+}
+
 export async function getRuntimeDynamicContent(slug: string) {
   // El slug puede venir como "i1/01-mentes/segundo-cerebro"
   // Pero el archivo puede ser "i1/01-mentes/segundo cerebro.md"
