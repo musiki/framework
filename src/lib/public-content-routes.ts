@@ -79,17 +79,16 @@ const hasPresentationTheme = (entry: ContentEntry) => {
   );
 };
 
+const hasPublicStatus = (entry: ContentEntry | CourseEntry) =>
+  String(entry.data?.status || '').trim().toLowerCase() === 'public';
+
 const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
   const [allContentEntries, courseEntries] = await Promise.all([
     safeGetCollection<ContentEntry>('content'),
     getCollection('cursos'),
   ]);
 
-  const contentEntries = allContentEntries.filter(entry => {
-    const status = String(entry.data?.status || '').trim().toLowerCase();
-    // For general content, we allow it if status is public/published OR if no status is defined yet
-    return !status || status === 'public' || status === 'published';
-  });
+  const contentEntries = allContentEntries.filter(hasPublicStatus);
 
   const contentEntryBySlug = new Map<string, ContentEntry>();
   registerUniqueMatches(contentEntryBySlug, groupBySlug(contentEntries, getContentFrontmatterSlug));
@@ -141,9 +140,8 @@ const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
   // Handle concept, glossary and public notes from cursos
   const publicCourseEntries = courseEntries.filter(entry => {
     const type = String(entry.data.type || '').trim().toLowerCase();
-    const status = String(entry.data.status || '').trim().toLowerCase();
     const isPublicType = type === 'concept' || type === 'glossary' || type === 'notes' || type === 'public-note';
-    return isPublicType && (status === 'public' || status === 'published');
+    return isPublicType && hasPublicStatus(entry);
   });
 
   const publicCourseEntryBySlug = new Map<string, CourseEntry>();
@@ -176,7 +174,7 @@ const buildContentRouteIndex = async (): Promise<PublicContentRouteIndex> => {
         
         // Add top-level course route if it doesn't conflict
         const courseSlug = normalizeSlug(getPreferredCoursePathSegment(courseId, entry.data as Record<string, unknown>));
-        if (courseSlug && !contentEntryBySlug.has(courseSlug) && !publicCourseEntryBySlug.has(courseSlug)) {
+        if (hasPublicStatus(entry) && courseSlug && !contentEntryBySlug.has(courseSlug) && !publicCourseEntryBySlug.has(courseSlug)) {
            contentPaths.push({
              params: { slug: courseSlug },
              props: {

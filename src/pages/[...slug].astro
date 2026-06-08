@@ -164,6 +164,7 @@ const isPublicWikiPage = Boolean(publicEntry);
 
 // Check auth session early as it's used for course context determination
 const session = (Astro.locals as any).session;
+const isPublicReaderMode = isPublicWikiPage && !session;
 
 // We need a course context for public notes if the user is logged in
 // and the note belongs to an enrolled course.
@@ -761,7 +762,7 @@ const sessionFirstName = extractSessionFirstName(
   session?.user?.name,
   session?.user?.email?.split('@')[0],
 );
-const hasForumSidebar = Boolean(canonicalCourseId || courseSlug);
+const hasForumSidebar = Boolean(!isPublicReaderMode && (canonicalCourseId || courseSlug));
 const activeCourseCode = String(
   courseData?.id ||
   courseData?.code ||
@@ -969,6 +970,21 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
           0
           minmax(0, 1fr)
           0;
+      }
+
+      .course-container[data-public-reader='true'] {
+        grid-template-columns:
+          var(--ribbon-width)
+          minmax(0, 1fr);
+      }
+
+      .course-container[data-public-reader='true'] .sidebar,
+      .course-container[data-public-reader='true'] .course-sidebar-edge-toggle {
+        display: none !important;
+      }
+
+      .course-container[data-public-reader='true'] .content-area {
+        grid-column: 2;
       }
 
       .course-sidebar-overlay {
@@ -3944,6 +3960,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       data-left-open={isPublicWikiPage && !session ? "false" : "true"}
       data-right-open="false"
       data-right-maximized="false"
+      data-public-reader={isPublicReaderMode ? 'true' : 'false'}
       data-has-right-sidebar={hasForumSidebar ? 'true' : 'false'}
       data-can-manage-live-interactions={canManageLiveInteractions ? 'true' : 'false'}
       data-live-course-id={canonicalCourseId || courseSlug}
@@ -3956,6 +3973,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         activeCourseCode={activeCourseCode}
         session={session}
         revealHref={presentationHref || undefined}
+        publicReaderMode={isPublicReaderMode}
       />
       <div class="course-sidebar-overlay" data-course-sidebar-overlay></div>
       <button
@@ -13825,234 +13843,6 @@ a[node] -->|edge| b[hub]
         }
       }
 
-      const setupCourseContentMediaViewer = (root: HTMLElement | null) => {
-        if (!(root instanceof HTMLElement)) return () => {};
-
-        const modal = document.getElementById('content-media-modal');
-        const stage = document.getElementById('content-media-modal-stage');
-        const viewport = document.getElementById('content-media-modal-viewport');
-        const content = document.getElementById('content-media-modal-content');
-        const closeButton = document.getElementById('content-media-modal-close');
-        const controls = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-content-media-zoom]'));
-
-        if (
-          !(modal instanceof HTMLElement) ||
-          !(stage instanceof HTMLElement) ||
-          !(viewport instanceof HTMLElement) ||
-          !(content instanceof HTMLElement) ||
-          !(closeButton instanceof HTMLButtonElement)
-        ) {
-          return () => {};
-        }
-
-        let scale = 1;
-        let offsetX = 0;
-        let offsetY = 0;
-        let pointerId: number | null = null;
-        let dragOriginX = 0;
-        let dragOriginY = 0;
-        let startOffsetX = 0;
-        let startOffsetY = 0;
-        let movedDuringPointer = false;
-
-        const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-        const applyTransform = () => {
-          if (scale <= 1) {
-            offsetX = 0;
-            offsetY = 0;
-          }
-          content.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
-        };
-
-        const setScale = (nextScale: number) => {
-          scale = clamp(nextScale, 1, 8);
-          applyTransform();
-        };
-
-        const resetView = () => {
-          scale = 1;
-          offsetX = 0;
-          offsetY = 0;
-          applyTransform();
-        };
-
-        const close = () => {
-          modal.hidden = true;
-          modal.setAttribute('aria-hidden', 'true');
-          content.replaceChildren();
-          content.style.transform = '';
-          document.documentElement.style.overflow = '';
-          resetView();
-        };
-
-        const cloneSvg = (svg: SVGSVGElement) => {
-          const clone = svg.cloneNode(true) as SVGSVGElement;
-          clone.removeAttribute('width');
-          clone.removeAttribute('height');
-          clone.style.maxWidth = '94vw';
-          clone.style.maxHeight = '88vh';
-          clone.style.width = 'auto';
-          clone.style.height = 'auto';
-          return clone;
-        };
-
-        const resolveMediaNode = (rawTarget: EventTarget | null) => {
-          const target = rawTarget instanceof Element ? rawTarget : null;
-          if (!target || !root.contains(target)) return null;
-          if (target.closest('button, input, textarea, select, #lesson-forum, #notes-editor-mount')) return null;
-
-          const mermaid = target.closest<HTMLElement>('.mermaid');
-          if (mermaid && root.contains(mermaid)) {
-            return mermaid.cloneNode(true) as HTMLElement;
-          }
-
-          const image = target.closest<HTMLImageElement>('img');
-          if (image && root.contains(image)) {
-            const clone = document.createElement('img');
-            clone.src = image.currentSrc || image.src;
-            clone.alt = image.alt || '';
-            clone.loading = 'eager';
-            clone.decoding = 'async';
-            return clone;
-          }
-
-          const svg = target.closest<SVGSVGElement>('svg');
-          if (svg && root.contains(svg) && !svg.closest('a, button')) {
-            return cloneSvg(svg);
-          }
-
-          return null;
-        };
-
-        const open = (node: HTMLElement | SVGSVGElement) => {
-          resetView();
-          content.replaceChildren(node);
-          modal.hidden = false;
-          modal.setAttribute('aria-hidden', 'false');
-          document.documentElement.style.overflow = 'hidden';
-          closeButton.focus({ preventScroll: true });
-        };
-
-        const handleRootClick = (event: MouseEvent) => {
-          const node = resolveMediaNode(event.target);
-          if (!node) return;
-          event.preventDefault();
-          event.stopPropagation();
-          open(node);
-        };
-
-        const handleWheel = (event: WheelEvent) => {
-          if (modal.hidden) return;
-          event.preventDefault();
-          setScale(scale + (event.deltaY < 0 ? 0.25 : -0.25));
-        };
-
-        const handlePointerDown = (event: PointerEvent) => {
-          if (modal.hidden || scale <= 1) return;
-          pointerId = event.pointerId;
-          dragOriginX = event.clientX;
-          dragOriginY = event.clientY;
-          startOffsetX = offsetX;
-          startOffsetY = offsetY;
-          movedDuringPointer = false;
-          viewport.classList.add('is-dragging');
-          viewport.setPointerCapture(pointerId);
-        };
-
-        const handlePointerMove = (event: PointerEvent) => {
-          if (pointerId !== event.pointerId) return;
-          const deltaX = event.clientX - dragOriginX;
-          const deltaY = event.clientY - dragOriginY;
-          movedDuringPointer = movedDuringPointer || Math.abs(deltaX) + Math.abs(deltaY) > 6;
-          offsetX = startOffsetX + deltaX;
-          offsetY = startOffsetY + deltaY;
-          applyTransform();
-        };
-
-        const stopDragging = (event: PointerEvent) => {
-          if (pointerId !== event.pointerId) return;
-          try {
-            viewport.releasePointerCapture(pointerId);
-          } catch {}
-          pointerId = null;
-          viewport.classList.remove('is-dragging');
-        };
-
-        const handleModalClick = (event: MouseEvent) => {
-          if (modal.hidden) return;
-          if (movedDuringPointer) {
-            movedDuringPointer = false;
-            return;
-          }
-          if (event.target === modal || event.target === stage || event.target === viewport) {
-            close();
-          }
-        };
-
-        const handleDblClick = (event: MouseEvent) => {
-          if (modal.hidden) return;
-          event.preventDefault();
-          setScale(scale < 2 ? 2 : 1);
-        };
-
-        const handleKeydown = (event: KeyboardEvent) => {
-          if (modal.hidden) return;
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            close();
-          }
-          if ((event.key === '+' || event.key === '=') && (event.metaKey || event.ctrlKey || !event.altKey)) {
-            event.preventDefault();
-            setScale(scale + 0.5);
-          }
-          if (event.key === '-' && (event.metaKey || event.ctrlKey || !event.altKey)) {
-            event.preventDefault();
-            setScale(scale - 0.5);
-          }
-          if (event.key === '0') {
-            event.preventDefault();
-            resetView();
-          }
-        };
-
-        const handleControlClick = (event: MouseEvent) => {
-          const button = event.currentTarget;
-          if (!(button instanceof HTMLButtonElement)) return;
-          const action = button.dataset.contentMediaZoom;
-          if (action === 'in') setScale(scale + 0.5);
-          else if (action === 'out') setScale(scale - 0.5);
-          else resetView();
-        };
-
-        root.addEventListener('click', handleRootClick);
-        closeButton.addEventListener('click', close);
-        modal.addEventListener('click', handleModalClick);
-        viewport.addEventListener('wheel', handleWheel, { passive: false });
-        viewport.addEventListener('pointerdown', handlePointerDown);
-        viewport.addEventListener('pointermove', handlePointerMove);
-        viewport.addEventListener('pointerup', stopDragging);
-        viewport.addEventListener('pointercancel', stopDragging);
-        content.addEventListener('dblclick', handleDblClick);
-        document.addEventListener('keydown', handleKeydown);
-        controls.forEach((button) => button.addEventListener('click', handleControlClick));
-
-        return () => {
-          root.removeEventListener('click', handleRootClick);
-          closeButton.removeEventListener('click', close);
-          modal.removeEventListener('click', handleModalClick);
-          viewport.removeEventListener('wheel', handleWheel);
-          viewport.removeEventListener('pointerdown', handlePointerDown);
-          viewport.removeEventListener('pointermove', handlePointerMove);
-          viewport.removeEventListener('pointerup', stopDragging);
-          viewport.removeEventListener('pointercancel', stopDragging);
-          content.removeEventListener('dblclick', handleDblClick);
-          document.removeEventListener('keydown', handleKeydown);
-          controls.forEach((button) => button.removeEventListener('click', handleControlClick));
-          close();
-        };
-      };
-
       const mountCourseContent = async () => {
         const pageRoot = document.querySelector('[data-course-layout-root]');
         const hasPendingEvalHydration = Array.from(document.querySelectorAll('.eval-block-wrapper'))
@@ -14110,7 +13900,8 @@ a[node] -->|edge| b[hub]
           const classContent = document.querySelector('[data-class-content]');
           if (classContent instanceof HTMLElement) {
             enhanceCourseNotesContent(classContent);
-            cleanupCourseMediaViewer = setupCourseContentMediaViewer(classContent);
+            const { setupContentMediaViewer } = await import('../scripts/content-media-viewer.ts');
+            cleanupCourseMediaViewer = setupContentMediaViewer(classContent);
           }
         } catch (error) {
           console.error('Course notes content bootstrap error:', error);
@@ -14954,7 +14745,7 @@ a[node] -->|edge| b[hub]
       }
     </style>
     <GraphModal />
-    <Search />
+    <Search searchEndpoint={isPublicReaderMode ? '/public-search.json' : '/search.json'} />
     {session?.user && canonicalCourseIdToUse && (
       <script>
         import { loadNotesTree, renderNotesTree, renderNotesTreeError, beginRootNoteCreation, beginInlineFolderCreation } from '../scripts/course/notes-sidebar';

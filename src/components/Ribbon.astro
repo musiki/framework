@@ -11,6 +11,7 @@ interface Props {
   activeCourseCode?: string;
   session?: { user?: { name?: string; email?: string; image?: string } } | null;
   revealHref?: string;
+  publicReaderMode?: boolean;
 }
 
 const {
@@ -20,7 +21,10 @@ const {
   activeCourseCode = '',
   session = null,
   revealHref = '',
+  publicReaderMode = false,
 } = Astro.props;
+
+const isPublicReaderMode = Boolean(publicReaderMode);
 
 const userInitial = (session?.user?.name || session?.user?.email || '?')
   .trim()
@@ -90,17 +94,19 @@ if (session?.user?.email) {
   </a>
 
   <!-- Course nav toggle (was .course-sidebar-handle--left) -->
-  <button
-    type="button"
-    class="ribbon-item ribbon-item--circle ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--toc"
-    data-sidebar-toggle="left"
-    aria-label="Navegación del curso"
-    title="Navegación del curso (⌘/Ctrl + \)"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-  </button>
+  {!isPublicReaderMode && (
+    <button
+      type="button"
+      class="ribbon-item ribbon-item--circle ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--toc"
+      data-sidebar-toggle="left"
+      aria-label="Navegación del curso"
+      title="Navegación del curso (⌘/Ctrl + \)"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  )}
 
   <div class="ribbon-divider"></div>
 
@@ -131,22 +137,24 @@ if (session?.user?.email) {
   </button>
 
   <!-- Dashboard — mobile primary action -->
-  <a
-    href={dashboardHref}
-    class="ribbon-item ribbon-item--mobile-visible ribbon-item--mobile-only ribbon-mobile-primary ribbon-mobile-primary--dashboard"
-    aria-label="Dashboard"
-    title="Dashboard"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
-      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
-      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
-      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
-    </svg>
-  </a>
+  {!isPublicReaderMode && (
+    <a
+      href={dashboardHref}
+      class="ribbon-item ribbon-item--mobile-visible ribbon-item--mobile-only ribbon-mobile-primary ribbon-mobile-primary--dashboard"
+      aria-label="Dashboard"
+      title="Dashboard"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
+        <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
+        <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </a>
+  )}
 
   <!-- Vivo (sala performativa) — camera icon, accent color, always shown -->
-  {hasVivo ? (
+  {!isPublicReaderMode && hasVivo ? (
     <a
       href={performativeRoomHref}
       class="ribbon-item ribbon-item--vivo ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--live"
@@ -160,7 +168,7 @@ if (session?.user?.email) {
         <circle cx="8" cy="12" r="2" fill="currentColor"/>
       </svg>
     </a>
-  ) : (
+  ) : !isPublicReaderMode ? (
     <span
       class="ribbon-item ribbon-item--vivo ribbon-item--vivo--off ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--live"
       aria-label="Sala vivo (no disponible)"
@@ -174,35 +182,39 @@ if (session?.user?.email) {
         <circle cx="8" cy="12" r="2" fill="currentColor"/>
       </svg>
     </span>
-  )}
+  ) : null}
 
   <!-- Foro — opens right sidebar (on mobile: sweeps up from bottom) -->
-  <button
-    type="button"
-    class="ribbon-item ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--forum"
-    data-sidebar-toggle="right"
-    aria-label="Foro"
-    title="Foro"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </button>
+  {!isPublicReaderMode && (
+    <button
+      type="button"
+      class="ribbon-item ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--forum"
+      data-sidebar-toggle="right"
+      aria-label="Foro"
+      title="Foro"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  )}
 
   <!-- Actividad — placeholder, not yet linked -->
-  <span
-    class="ribbon-item ribbon-item--inactive"
-    aria-label="Actividad (próximamente)"
-    title="Actividad (próximamente)"
-    aria-disabled="true"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-      <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-      <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-      <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
-    </svg>
-  </span>
+  {!isPublicReaderMode && (
+    <span
+      class="ribbon-item ribbon-item--inactive"
+      aria-label="Actividad (próximamente)"
+      title="Actividad (próximamente)"
+      aria-disabled="true"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+        <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+        <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+        <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </span>
+  )}
 
   <!-- Theme toggle -->
   <button
@@ -254,7 +266,7 @@ if (session?.user?.email) {
 
   <div class="ribbon-spacer"></div>
   <div class="ribbon-divider"></div>
-  <span class="ribbon-label">pods</span>
+  {!isPublicReaderMode && <span class="ribbon-label">pods</span>}
 
   <!-- Graph -->
   <button
@@ -273,44 +285,50 @@ if (session?.user?.email) {
   </button>
 
   <!-- Nueva nota — mobile primary action -->
-  <button
-    type="button"
-    class="ribbon-item ribbon-item--mobile-visible ribbon-item--mobile-only ribbon-mobile-primary ribbon-mobile-primary--new-note"
-    id="ribbon-new-note-btn"
-    aria-label="Nueva nota"
-    title="Nueva nota"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-    </svg>
-  </button>
+  {!isPublicReaderMode && (
+    <button
+      type="button"
+      class="ribbon-item ribbon-item--mobile-visible ribbon-item--mobile-only ribbon-mobile-primary ribbon-mobile-primary--new-note"
+      id="ribbon-new-note-btn"
+      aria-label="Nueva nota"
+      title="Nueva nota"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+    </button>
+  )}
 
   <!-- Notas -->
-  <button
-    type="button"
-    class="ribbon-item"
-    id="ribbon-notas-btn"
-    aria-label="Notas"
-    title="Notas"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-  </button>
+  {!isPublicReaderMode && (
+    <button
+      type="button"
+      class="ribbon-item"
+      id="ribbon-notas-btn"
+      aria-label="Notas"
+      title="Notas"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+  )}
 
   <!-- Hyperpiano — future, disabled -->
-  <span
-    class="ribbon-item ribbon-item--inactive"
-    aria-label="Hyperpiano (próximamente)"
-    title="Hyperpiano (próximamente)"
-    aria-disabled="true"
-  >
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-      <path d="M7 6v6M10 6v4M14 6v6M17 6v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-  </span>
+  {!isPublicReaderMode && (
+    <span
+      class="ribbon-item ribbon-item--inactive"
+      aria-label="Hyperpiano (próximamente)"
+      title="Hyperpiano (próximamente)"
+      aria-disabled="true"
+    >
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="2" y="6" width="20" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+        <path d="M7 6v6M10 6v4M14 6v6M17 6v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </span>
+  )}
 
   <div class="ribbon-spacer"></div>
   <div class="ribbon-divider"></div>
@@ -330,17 +348,19 @@ if (session?.user?.email) {
   </div>
 
   <!-- Course switcher badge/dropdown trigger -->
-  <button
-    type="button"
-    class="ribbon-item ribbon-item--badge"
-    id="ribbon-courses-btn"
-    aria-label={`Mis cursos — curso activo: ${badgeLabel}`}
-    aria-haspopup="listbox"
-    aria-expanded="false"
-    title="Mis cursos"
-  >
-    {badgeLabel}
-  </button>
+  {!isPublicReaderMode && (
+    <button
+      type="button"
+      class="ribbon-item ribbon-item--badge"
+      id="ribbon-courses-btn"
+      aria-label={`Mis cursos — curso activo: ${badgeLabel}`}
+      aria-haspopup="listbox"
+      aria-expanded="false"
+      title="Mis cursos"
+    >
+      {badgeLabel}
+    </button>
+  )}
 
   <!-- About -->
   <a href="/about" class="ribbon-about" aria-label="Acerca de musiki26">·</a>
@@ -360,23 +380,25 @@ if (session?.user?.email) {
 </dialog>
 
 <!-- Course switcher menu -->
-<div class="ribbon-courses-menu" id="ribbon-courses-menu" role="listbox">
-  <div class="ribbon-courses-menu-header">Mis Cursos</div>
-  <div class="ribbon-courses-list">
-    {userCourses.map(c => (
-      <a href={c.href} class={`ribbon-courses-item ${c.id === courseId ? 'is-active' : ''}`} role="option" aria-selected={c.id === courseId}>
-        <span class="ribbon-courses-item-title">{c.title}</span>
-        <span class="ribbon-courses-item-code">{c.code}</span>
-      </a>
-    ))}
-    {userCourses.length === 0 && (
-      <span class="ribbon-courses-menu-empty">No tienes cursos activos</span>
-    )}
+{!isPublicReaderMode && (
+  <div class="ribbon-courses-menu" id="ribbon-courses-menu" role="listbox">
+    <div class="ribbon-courses-menu-header">Mis Cursos</div>
+    <div class="ribbon-courses-list">
+      {userCourses.map(c => (
+        <a href={c.href} class={`ribbon-courses-item ${c.id === courseId ? 'is-active' : ''}`} role="option" aria-selected={c.id === courseId}>
+          <span class="ribbon-courses-item-title">{c.title}</span>
+          <span class="ribbon-courses-item-code">{c.code}</span>
+        </a>
+      ))}
+      {userCourses.length === 0 && (
+        <span class="ribbon-courses-menu-empty">No tienes cursos activos</span>
+      )}
+    </div>
+    <div class="ribbon-courses-menu-footer">
+      <a href="/cursos">Ver todos los cursos</a>
+    </div>
   </div>
-  <div class="ribbon-courses-menu-footer">
-    <a href="/cursos">Ver todos los cursos</a>
-  </div>
-</div>
+)}
 
 <style>
   .ribbon {

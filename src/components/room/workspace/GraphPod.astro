@@ -307,7 +307,7 @@
       async function init() {
         if (graphInstance) return;
         try {
-          const response = await fetch('/graph-data.json');
+          const response = await fetch('/api/graph-data');
           if (!response.ok) throw new Error('Could not load graph-data.json');
           graphData = await response.json();
           observer?.disconnect();
@@ -519,10 +519,9 @@
     }
 
     function filterVisible(data: any) {
-      // Allow 'public' group OR 'cursos' group nodes by default
       const allowedIds = new Set(
         data.nodes.filter((n: any) => 
-          n.type === 'document' && (n.group === 'public' || n.group === 'cursos')
+          n.type === 'document' && n.isPublic === true
         ).map((n: any) => n.id)
       );
       
@@ -566,4 +565,3 @@
     document.querySelectorAll('[data-pod="graph"]').forEach((pod) => initGraphPod(pod));
   })();
 </script>
-

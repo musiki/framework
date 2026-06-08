@@ -1,6 +1,7 @@
 // Script to build graph data from markdown files
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import matter from 'gray-matter';
 
 function norm(s) {
@@ -16,7 +17,7 @@ function extractWikilinks(content) {
   const regex = /\[\[([^\]]+)\]\]/g;
   const links = [];
   let match;
-  
+
   while ((match = regex.exec(content)) !== null) {
     let inner = match[1].trim();
     let target = inner;
@@ -33,11 +34,13 @@ function extractWikilinks(content) {
     
     if (target) links.push(target);
   }
-  
+
   return links;
 }
 
-export function buildGraphData() {
+const isPublicStatus = (data) => String(data?.status || '').trim().toLowerCase() === 'public';
+
+export function buildGraphData({ publicOnly = false } = {}) {
   const ROOT = path.resolve('src/content');
   const files = [];
   
@@ -51,24 +54,30 @@ export function buildGraphData() {
     }
   })(ROOT);
   
-  // Build slug index
-  const slugMap = new Map();
-  const slugToTitle = new Map();
-  
-  for (const abs of files) {
+  const fileRecords = files.map((abs) => {
     const rel = abs.slice(ROOT.length + 1);
     const posix = rel.split(path.sep).join('/');
     const raw = fs.readFileSync(abs, 'utf8');
     const fm = matter(raw);
-    
     const slug = posix.replace(/\.(md|mdx)$/i, '');
-    
     const base = slug.split('/').pop() || slug;
     const title = fm.data.title || base;
-    
-    slugMap.set(norm(slug), slug);
-    slugMap.set(norm(base), slug);
-    slugToTitle.set(slug, title);
+    const publicStatus = isPublicStatus(fm.data);
+    return { abs, posix, raw, fm, slug, base, title, isPublic: publicStatus };
+  }).filter((record) => record.slug.toLowerCase() !== 'home');
+
+  const visibleRecords = publicOnly
+    ? fileRecords.filter((record) => record.isPublic)
+    : fileRecords;
+
+  // Build slug index
+  const slugMap = new Map();
+  const slugToTitle = new Map();
+
+  for (const record of visibleRecords) {
+    slugMap.set(norm(record.slug), record.slug);
+    slugMap.set(norm(record.base), record.slug);
+    slugToTitle.set(record.slug, record.title);
   }
   
   // Build nodes and links
@@ -77,16 +86,8 @@ export function buildGraphData() {
   const nodeIds = new Set();
   const linkSet = new Set();
   
-  for (const abs of files) {
-    const rel = abs.slice(ROOT.length + 1);
-    const posix = rel.split(path.sep).join('/');
-    const slug = posix.replace(/\.(md|mdx)$/i, '');
-    
-    if (slug.toLowerCase() === 'home') continue;
-    
-    const raw = fs.readFileSync(abs, 'utf8');
-    const fm = matter(raw);
-    const title = fm.data.title || slug.split('/').pop() || slug;
+  for (const record of visibleRecords) {
+    const { posix, slug, fm, title } = record;
     const tags = Array.isArray(fm.data.tags) 
       ? fm.data.tags 
       : (fm.data.tags ? String(fm.data.tags).split(',').map(s => s.trim()) : []);
@@ -110,6 +111,8 @@ export function buildGraphData() {
         type: 'document',
         group: slug.split('/')[0] || 'root',
         publicFolder: publicFolder || null,
+        isPublic: record.isPublic,
+        status: String(fm.data.status || '').trim().toLowerCase(),
         canonicalSlug,
         img: fm.data.img || fm.data.coverUrl || fm.data.image || fm.data.photo || ''
       });
@@ -161,7 +164,7 @@ export function buildGraphData() {
   return { nodes, links };
 }
 
-export function buildSearchIndex() {
+export function buildSearchIndex({ publicOnly = true } = {}) {
   const ROOT = path.resolve('src/content');
   const files = [];
   
@@ -183,6 +186,7 @@ export function buildSearchIndex() {
     try {
       const raw = fs.readFileSync(abs, 'utf8');
       const { data } = matter(raw);
+      if (publicOnly && !isPublicStatus(data)) continue;
       
       if (data.title) {
         const parts = slug.split('/');
@@ -203,7 +207,7 @@ export function buildSearchIndex() {
           reveal: data.reveal === true || data.reveal === 'true',
           type: data.type || null,
           courseId,
-          isPublic: parts[0] === 'public'
+          isPublic: isPublicStatus(data)
         });
       }
     } catch (e) {
@@ -213,15 +217,16 @@ export function buildSearchIndex() {
   return index;
 }
 
-// Write Graph Data
-const graphData = buildGraphData();
-const graphPath = path.resolve('public/graph-data.json');
-fs.mkdirSync(path.dirname(graphPath), { recursive: true });
-fs.writeFileSync(graphPath, JSON.stringify(graphData, null, 2));
-console.log(`Graph data written to ${graphPath}`);
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  // Public static artifacts must never expose non-curated course/private notes.
+  const graphData = buildGraphData({ publicOnly: true });
+  const graphPath = path.resolve('public/graph-data.json');
+  fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+  fs.writeFileSync(graphPath, JSON.stringify(graphData, null, 2));
+  console.log(`Public graph data written to ${graphPath}`);
 
-// Write Search Index
-const searchIndex = buildSearchIndex();
-const indexPath = path.resolve('public/search-index.json');
-fs.writeFileSync(indexPath, JSON.stringify(searchIndex, null, 2));
-console.log(`Search index written to ${indexPath} with ${searchIndex.length} entries.`);
+  const searchIndex = buildSearchIndex({ publicOnly: true });
+  const indexPath = path.resolve('public/search-index.json');
+  fs.writeFileSync(indexPath, JSON.stringify(searchIndex, null, 2));
+  console.log(`Public search index written to ${indexPath} with ${searchIndex.length} entries.`);
+}

@@ -681,28 +681,14 @@ const view = Astro.url.searchParams.get('view');
       });
 
       // ── Hero zoom ──────────────────────────────────────────
-      function initHeroZoom() {
-        const container = document.querySelector('.hero-image-container');
-        if (!container) return;
-        const img = container.querySelector('.svg-hero, img') as HTMLElement;
-        if (!img) return;
-        let isZoomed = false;
-        container.addEventListener('click', () => {
-          isZoomed = !isZoomed;
-          container.classList.toggle('is-zoomed', isZoomed);
-          if (!isZoomed) img.style.transform = '';
-        });
-        container.addEventListener('mousemove', (e: any) => {
-          if (!isZoomed) return;
-          const rect = container.getBoundingClientRect();
-          img.style.transformOrigin = `${((e.clientX - rect.left) / rect.width) * 100}% ${((e.clientY - rect.top) / rect.height) * 100}%`;
-        });
-        document.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape' && isZoomed) { isZoomed = false; container.classList.remove('is-zoomed'); img.style.transform = ''; }
-        });
+      async function initMediaViewer() {
+        const root = document.querySelector('main.wiki-layout');
+        if (!(root instanceof HTMLElement)) return;
+        const { setupContentMediaViewer } = await import('../scripts/content-media-viewer.ts');
+        setupContentMediaViewer(root);
       }
-      document.addEventListener('DOMContentLoaded', initHeroZoom);
-      document.addEventListener('astro:page-load', initHeroZoom);
+      document.addEventListener('DOMContentLoaded', () => { void initMediaViewer(); });
+      document.addEventListener('astro:page-load', () => { void initMediaViewer(); });
 
       // ── Copy buttons ───────────────────────────────────────
       function addCopyButtons() {

@@ -10,15 +10,21 @@ import {
 } from '../lib/course-routing';
 import { getContentCanonicalSlug } from '../lib/content-slug';
 
-export const prerender = true;
+export const prerender = false;
 
-export async function GET() {
+const hasPublicStatus = (item) => String(item?.data?.status || '').trim().toLowerCase() === 'public';
+
+export async function GET({ locals }) {
+  const hasSession = Boolean(locals?.session?.user);
   const [content, cursos] = await Promise.all([
     safeGetCollection('content'),
     getCollection('cursos'),
   ]);
 
-  const contentItems = content.map((item) => {
+  const visibleContent = hasSession ? content : content.filter(hasPublicStatus);
+  const visibleCursos = hasSession ? cursos : cursos.filter(hasPublicStatus);
+
+  const contentItems = visibleContent.map((item) => {
     const filename = item.id.split('/').pop()?.replace(/\.[^/.]+$/, '');
     const title = item.data.title || filename || 'Untitled';
     const slug = getContentCanonicalSlug(item);
@@ -46,7 +52,7 @@ export async function GET() {
   });
 
   const courseIndexById = new Map();
-  cursos.forEach((item) => {
+  visibleCursos.forEach((item) => {
     if (!isCourseIndexEntry(item)) return;
     const courseId = getCourseEntryCourseId(item);
     if (!courseId) return;
@@ -55,7 +61,7 @@ export async function GET() {
 
   const lessonPathIndexByCourseId = new Map();
   courseIndexById.forEach((courseEntry, courseId) => {
-    const lessons = cursos
+    const lessons = visibleCursos
       .filter((item) => isCourseLessonEntryForCourse(item, courseId))
       .sort((a, b) => (Number(a.data?.order || 0) - Number(b.data?.order || 0)));
 
@@ -65,7 +71,7 @@ export async function GET() {
     );
   });
 
-  const courseItems = cursos.map((item) => {
+  const courseItems = visibleCursos.map((item) => {
     const isCourseIndex = isCourseIndexEntry(item);
     const courseId = getCourseEntryCourseId(item);
     const filename = item.id.split('/').pop()?.replace(/\.[^/.]+$/, '');

@@ -1,3 +1,7 @@
+---
+const { searchEndpoint = '/search.json' } = Astro.props as { searchEndpoint?: string };
+---
+
 <div id="zz-search-modal" class="hidden">
   <div class="search-wrap">
     <input type="text" id="zz-search-input" placeholder="Search..." autocomplete="off" />
@@ -77,29 +81,15 @@
   }
 </style>
 
-<script>
-  type SearchResultItem = {
-    title: string;
-    slug: string;
-    content?: string | null;
-    type: string;
-    hasDataview?: boolean;
-  };
-
-  type SearchWindow = Window & {
-    openSearch?: () => Promise<void>;
-    closeSearch?: () => void;
-    handleSearchNavigation?: (payload: { href: string; title?: string }) => boolean | Promise<boolean>;
-  };
-
-  let searchData: SearchResultItem[] | null = null;
-  const commands: Array<SearchResultItem & { keys: string[] }> = [
+<script define:vars={{ searchEndpoint }}>
+  let searchData = null;
+  const commands = [
     { keys: ['home', 'inicio'], slug: '/', title: 'Inicio', type: 'Special' },
     { keys: ['dash', 'board'], slug: '/dashboard', title: 'Dashboard', type: 'Special' },
     { keys: ['about', 'acerca'], slug: '/about', title: 'Acerca de', type: 'Special' },
   ];
 
-  const normalizeSearchItem = (item: Record<string, unknown>): SearchResultItem => ({
+  const normalizeSearchItem = (item) => ({
     title: String(item.title || ''),
     slug: String(item.slug || ''),
     content: typeof item.content === 'string' ? item.content : null,
@@ -111,7 +101,7 @@
     const modal = document.getElementById('zz-search-modal');
     const input = document.getElementById('zz-search-input');
     const resultsContainer = document.getElementById('zz-search-results');
-    const searchWindow = window as SearchWindow;
+    const searchWindow = window;
 
     if (!(modal instanceof HTMLDivElement)) return;
     if (!(input instanceof HTMLInputElement)) return;
@@ -122,11 +112,11 @@
       input.focus();
       if (!searchData) {
         try {
-          const res = await fetch('/search.json');
-          const payload: unknown = await res.json();
+          const res = await fetch(searchEndpoint);
+          const payload = await res.json();
           searchData = Array.isArray(payload)
             ? payload
-                .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+                .filter((item) => typeof item === 'object' && item !== null)
                 .map((item) => normalizeSearchItem(item))
             : [];
         } catch (e) {
@@ -141,11 +131,11 @@
       resultsContainer.innerHTML = '';
     };
 
-    modal.onclick = (e: MouseEvent) => {
+    modal.onclick = (e) => {
       if (e.target === modal) searchWindow.closeSearch?.();
     };
 
-    input.onkeydown = (e: KeyboardEvent) => {
+    input.onkeydown = (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         const first = resultsContainer.querySelector('a');
@@ -153,7 +143,7 @@
       }
     };
 
-    input.oninput = (e: Event) => {
+    input.oninput = (e) => {
       const target = e.target;
       if (!(target instanceof HTMLInputElement)) return;
 
@@ -163,11 +153,11 @@
         return;
       }
 
-      const commandResults: SearchResultItem[] = commands
+      const commandResults = commands
         .filter((cmd) => cmd.keys.some((key) => key.includes(query)))
         .map(({ keys: _keys, ...cmd }) => cmd);
 
-      let contentResults: SearchResultItem[] = [];
+      let contentResults = [];
       if (searchData) {
         contentResults = searchData.filter((item) => {
           return (item.title && item.title.toLowerCase().includes(query))
@@ -211,7 +201,7 @@
       }).join('');
     };
 
-    resultsContainer.onclick = async (e: MouseEvent) => {
+    resultsContainer.onclick = async (e) => {
       const target = e.target;
       if (!(target instanceof Element)) return;
 
@@ -238,9 +228,9 @@
     };
   }
 
-  const handleGlobalKeydown = (e: KeyboardEvent) => {
+  const handleGlobalKeydown = (e) => {
     const modal = document.getElementById('zz-search-modal');
-    const searchWindow = window as SearchWindow;
+    const searchWindow = window;
     if (e.key === 'Escape' && modal instanceof HTMLElement && modal.classList.contains('visible')) {
       searchWindow.closeSearch?.();
     }

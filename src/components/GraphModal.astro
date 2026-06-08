@@ -177,7 +177,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   // Load raw graph data (no cross-linking here — done per filtered dataset)
   async function initGraph() {
     if (!graphData) {
-      const response = await fetch('/graph-data.json');
+      const response = await fetch(isLoggedIn ? '/api/graph-data' : '/graph-data.json');
       graphData = await response.json();
     }
     return graphData;
@@ -198,11 +198,10 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     });
   }
 
-  // Return visible nodes (public + courses) + tag nodes connected to them
+  // Return public-status nodes + tag nodes connected to them.
   function filterVisibleData(data) {
-    // Allow 'public' group OR 'cursos' group nodes by default
     const allowedIds = new Set(
-      data.nodes.filter(n => n.type === 'document' && (n.group === 'public' || n.group === 'cursos')).map(n => n.id)
+      data.nodes.filter(n => n.type === 'document' && n.isPublic === true).map(n => n.id)
     );
     const tagIds = new Set();
     for (const link of data.links) {
