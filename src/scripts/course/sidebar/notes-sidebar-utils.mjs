@@ -16,6 +16,13 @@ export function groupByChapter(notes) {
       const getMinOrder = (name, notesList) => {
         const matchDigits = name.trim().match(/^(\d+)/);
         const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
+        const isSystemOrGlobal = (fallbackFromTitle !== null && fallbackFromTitle >= 70) ||
+                                 name.toUpperCase().includes('RECURSOS') ||
+                                 name.toUpperCase().includes('NOTAS') ||
+                                 (notesList.length > 0 && notesList.every(n => n.order === 0));
+        if (isSystemOrGlobal && fallbackFromTitle !== null) {
+          return fallbackFromTitle;
+        }
         if (notesList.length > 0) {
           return Math.min(...notesList.map(n => n.order));
         }

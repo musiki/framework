@@ -18,6 +18,13 @@ export function groupByChapter(notes: NoteListItem[]): ChapterGroup[] {
       const getMinOrder = (name: string, notesList: NoteListItem[]) => {
         const matchDigits = name.trim().match(/^(\d+)/);
         const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
+        const isSystemOrGlobal = (fallbackFromTitle !== null && fallbackFromTitle >= 70) ||
+                                 name.toUpperCase().includes('RECURSOS') ||
+                                 name.toUpperCase().includes('NOTAS') ||
+                                 (notesList.length > 0 && notesList.every(n => n.order === 0));
+        if (isSystemOrGlobal && fallbackFromTitle !== null) {
+          return fallbackFromTitle;
+        }
         if (notesList.length > 0) {
           return Math.min(...notesList.map(n => n.order));
         }
@@ -215,6 +222,13 @@ export function renderNotesSidebar(
     const getMinOrder = (name: string, notesList: NoteListItem[]) => {
       const matchDigits = name.trim().match(/^(\d+)/);
       const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
+      const isSystemOrGlobal = (fallbackFromTitle !== null && fallbackFromTitle >= 70) ||
+                               name.toUpperCase().includes('RECURSOS') ||
+                               name.toUpperCase().includes('NOTAS') ||
+                               (notesList.length > 0 && notesList.every(n => n.order === 0));
+      if (isSystemOrGlobal && fallbackFromTitle !== null) {
+        return fallbackFromTitle;
+      }
       if (notesList.length > 0) {
         return Math.min(...notesList.map(n => n.order));
       }
@@ -412,10 +426,11 @@ export function renderNotesSidebar(
 
     const summary = document.createElement('summary');
     summary.className = 'chapter-title';
+    const isGlobalChapter = isRecursos || isNotas || group.notes.some(n => n.slug.startsWith('public/')) || group.name.startsWith('70 ') || group.name.startsWith('71 ') || group.name.startsWith('72 ');
     if (isRecursos) {
       summary.innerHTML = `
         <span class="chapter-title-main">
-          <span class="chapter-drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
+          <span class="chapter-drag-handle" style="opacity: 0.15; cursor: default;" title="No se puede reordenar">⋮⋮</span>
           <span class="chapter-caret">▸</span>
           <span class="chapter-title-text">${escHtml(group.name)}</span>
           <a
@@ -449,7 +464,7 @@ export function renderNotesSidebar(
     } else if (isNotas) {
       summary.innerHTML = `
         <span class="chapter-title-main">
-          <span class="chapter-drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
+          <span class="chapter-drag-handle" style="opacity: 0.15; cursor: default;" title="No se puede reordenar">⋮⋮</span>
           <span class="chapter-caret">▸</span>
           <span class="chapter-title-text">${escHtml(group.name)}</span>
           <button type="button" class="chapter-editor-link notas-sb-new-btn" title="Nueva nota" onclick="event.stopPropagation()" style="border:none;background:none;cursor:pointer;padding:0 3px;opacity:.6;font-size:.85rem;line-height:1">+</button>
@@ -465,15 +480,25 @@ export function renderNotesSidebar(
         document.querySelector('#notas-sidebar-tree-container .notas-sb-new-folder-btn')?.dispatchEvent(new MouseEvent('click'));
       });
     } else {
-      summary.innerHTML = `
-        <span class="chapter-title-main">
-          <span class="chapter-drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
-          <span class="chapter-caret">▸</span>
-          <span class="chapter-title-text">${escHtml(group.name)}</span>
-        </span>
-      `;
+      if (isGlobalChapter) {
+        summary.innerHTML = `
+          <span class="chapter-title-main">
+            <span class="chapter-drag-handle" style="opacity: 0.15; cursor: default;" title="No se puede reordenar">⋮⋮</span>
+            <span class="chapter-caret">▸</span>
+            <span class="chapter-title-text">${escHtml(group.name)}</span>
+          </span>
+        `;
+      } else {
+        summary.innerHTML = `
+          <span class="chapter-title-main">
+            <span class="chapter-drag-handle" title="Arrastrar para reordenar">⋮⋮</span>
+            <span class="chapter-caret">▸</span>
+            <span class="chapter-title-text">${escHtml(group.name)}</span>
+          </span>
+        `;
+      }
     }
-    summary.draggable = true;
+    summary.draggable = !isGlobalChapter;
 
     summary.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('button, a')) return;
@@ -498,8 +523,7 @@ export function renderNotesSidebar(
     summary.addEventListener('contextmenu', e => {
       e.preventDefault();
       e.stopPropagation();
-      const isGlobal = group.notes.some(n => n.slug.startsWith('public/')) || group.name.startsWith('70 ') || group.name.startsWith('71 ');
-      if (isGlobal) return;
+      if (isGlobalChapter) return;
       showContextMenu(e.clientX, e.clientY, [
         {
           label: 'Nueva nota en este capítulo',

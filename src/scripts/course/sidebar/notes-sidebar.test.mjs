@@ -55,6 +55,19 @@ describe('groupByChapter', () => {
     assert.equal(groups[1].name, '70 CONCEPTOS');
     assert.equal(groups[2].name, '80 RECURSOS');
   });
+
+  test('sorts global chapter by title prefix even if it has order 0 notes, while local chapters have custom orders', () => {
+    const notes = [
+      { slug: 'cursos/s1/c1.md', title: 'C1', chapter: '02 ACÚSTICA', order: 10, type: 'lesson', status: 'draft', filePath: '' },
+      { slug: 'public/conceptos/parrot.md', title: 'Parrot', chapter: '70 CONCEPTOS', order: 0, type: 'concept', status: 'public', filePath: '' },
+      { slug: 'cursos/s1/r1.md', title: 'R1', chapter: '80 RECURSOS', order: 20, type: 'lesson', status: 'draft', filePath: '' },
+    ];
+    const groups = groupByChapter(notes);
+    assert.equal(groups.length, 3);
+    assert.equal(groups[0].name, '02 ACÚSTICA'); // min order 10
+    assert.equal(groups[1].name, '70 CONCEPTOS'); // isGlobal/order0 fallback to 70
+    assert.equal(groups[2].name, '80 RECURSOS'); // min order 20
+  });
 });
 
 describe('computeNewOrders', () => {

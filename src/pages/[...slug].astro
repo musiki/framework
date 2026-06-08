@@ -450,12 +450,21 @@ if (session && !chapters['90 NOTAS']) {
 
 const sortedChapters = Object.entries(chapters).sort(([leftChapter, leftLessons], [rightChapter, rightLessons]) => {
   const getMinOrder = (name: string, lessons: typeof allLessons) => {
+    const matchDigits = name.trim().match(/^(\d+)/);
+    const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
+
+    const isSystemOrGlobal = (fallbackFromTitle !== null && fallbackFromTitle >= 70) ||
+                             name.toUpperCase().includes('RECURSOS') ||
+                             name.toUpperCase().includes('NOTAS') ||
+                             (lessons.length > 0 && lessons.every(l => l.data.order === 0));
+    if (isSystemOrGlobal && fallbackFromTitle !== null) {
+      return fallbackFromTitle;
+    }
+
     const liveNotesInChapter = liveNotes.filter(n => n.chapter?.trim().toUpperCase() === name.trim().toUpperCase());
     if (liveNotesInChapter.length > 0) {
       return Math.min(...liveNotesInChapter.map(n => n.order));
     }
-    const matchDigits = name.trim().match(/^(\d+)/);
-    const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
     if (lessons.length > 0) {
       const orders = lessons.map(l => l.data.order).filter((o): o is number => typeof o === 'number');
       if (orders.length > 0) {
@@ -4123,72 +4132,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
 
         {canManageLiveInteractions ? (
           <>
-            {/* Render content collection chapters (like 70 CONCEPTOS) first if content admin is enabled, to match student sorting layout */}
-            {localContentAdminEnabled && sidebarChapterEntries.filter(e =>
-              e.kind === 'chapter' && e.lessons.some((lesson) => (lesson as any).collection === 'content')
-            ).map((entry) => {
-              const { chapterName } = entry;
-              const lessons = entry.lessons.filter((lesson) => (lesson as any).collection === 'content');
-              if (lessons.length === 0) return null;
-              const isPublicFolder = /^[79]\d /.test(chapterName);
-              const displayTitle = isPublicFolder ? chapterName.toUpperCase() : chapterName.replace(/-/g, ' ');
-              const isConceptos = displayTitle.toUpperCase().includes('CONCEPTOS');
-              const isRecursos = displayTitle.toUpperCase().includes('RECURSOS');
-              const isNotas = displayTitle.toUpperCase().includes('NOTAS');
-
-              return (
-                <div class:list={["chapter", { "chapter--conceptos": isConceptos, "chapter--recursos": isRecursos, "chapter--notas": isNotas }]}>
-                  <details class="chapter-details" open={isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
-                    <summary class="chapter-title">
-                      <span class="chapter-title-main">
-                        <span class="chapter-drag-handle" style="opacity: 0.15; cursor: default;" title="No se puede reordenar">⋮⋮</span>
-                        <span class="chapter-caret">▸</span>
-                        <span class="chapter-title-text">{displayTitle}</span>
-                      </span>
-                    </summary>
-                    <ul class="lesson-list">
-                      {lessons.map((lesson) => {
-                        const isContentCollection = (lesson as any).collection === 'content';
-                        const lessonType = String(lesson.data.type || '').trim().toLowerCase();
-                        const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
-                        const ic = getLessonIconInfo(lesson);
-
-                        let lessonHref = buildCourseLessonHref(
-                          canonicalCourseIdToUse || '',
-                          courseData,
-                          lesson as any,
-                          lessonPathIndex,
-                        );
-
-                        const lessonPageSlug = isContentCollection
-                          ? getContentCanonicalSlug(lesson as any)
-                          : (lessonPathIndex.pathByEntryId.get(lesson.id)
-                             || getCourseEntryLegacyPath(lesson as any, canonicalCourseIdToUse || ''));
-
-                        const isActive = currentEntry?.id === lesson.id;
-
-                        return (
-                          <li class="lesson-item">
-                            <a
-                              href={lessonHref}
-                              class:list={['lesson-link', { active: isActive }]}
-                              data-astro-prefetch="false"
-                              data-course-id={canonicalCourseIdToUse || courseSlug}
-                              data-lesson-page-slug={isContentCollection ? ((lesson as any).id || lessonPageSlug) : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
-                            >
-                              <span class:list={["lesson-icon", { "lesson-icon--concept": ic.isConcept }]} style={ic.color ? `color: ${ic.color}` : undefined}>{ic.char}</span>
-                              <span class="lesson-link-text">{lesson.data.title}</span>
-                              <span class="lesson-link-trailing"></span>
-                            </a>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </details>
-                </div>
-              );
-            })}
-
             {localContentAdminEnabled && (
               <>
                 <div
