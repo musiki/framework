@@ -975,16 +975,26 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       .course-container[data-public-reader='true'] {
         grid-template-columns:
           var(--ribbon-width)
-          minmax(0, 1fr);
+          minmax(0, 1fr) !important;
+      }
+
+      .course-container[data-public-reader='true'][data-left-open='false'],
+      .course-container[data-public-reader='true'][data-right-open='false'],
+      .course-container[data-public-reader='true'][data-left-open='false'][data-right-open='false'] {
+        grid-template-columns:
+          var(--ribbon-width)
+          minmax(0, 1fr) !important;
       }
 
       .course-container[data-public-reader='true'] .sidebar,
-      .course-container[data-public-reader='true'] .course-sidebar-edge-toggle {
+      .course-container[data-public-reader='true'] .course-sidebar-edge-toggle,
+      .course-container[data-public-reader='true'] .course-sidebar-overlay {
         display: none !important;
       }
 
       .course-container[data-public-reader='true'] .content-area {
-        grid-column: 2;
+        grid-column: 2 / -1 !important;
+        min-width: 0;
       }
 
       .course-sidebar-overlay {
@@ -3311,115 +3321,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         cursor: inherit;
       }
 
-      .content-media-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 140;
-        display: grid;
-        place-items: center;
-        background: rgba(0, 0, 0, 0.92);
-        padding: 1rem;
-      }
-
-      .content-media-modal[hidden] {
-        display: none;
-      }
-
-      .content-media-modal-stage {
-        position: relative;
-        display: grid;
-        place-items: center;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-      }
-
-      .content-media-modal-close,
-      .content-media-modal-control {
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        background: rgba(12, 14, 18, 0.72);
-        color: rgba(255, 255, 255, 0.9);
-        font: inherit;
-        line-height: 1;
-        cursor: pointer;
-      }
-
-      .content-media-modal-close {
-        position: absolute;
-        top: 0.8rem;
-        right: 0.8rem;
-        z-index: 2;
-        width: 2.35rem;
-        height: 2.35rem;
-        border-radius: 999px;
-        font-size: 1.65rem;
-      }
-
-      .content-media-modal-controls {
-        position: absolute;
-        left: 50%;
-        bottom: 1rem;
-        z-index: 2;
-        display: flex;
-        gap: 0.4rem;
-        transform: translateX(-50%);
-      }
-
-      .content-media-modal-control {
-        min-width: 2.25rem;
-        height: 2.1rem;
-        border-radius: 6px;
-        padding: 0 0.7rem;
-        font-size: 0.95rem;
-      }
-
-      .content-media-modal-viewport {
-        display: grid;
-        place-items: center;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        cursor: grab;
-        touch-action: none;
-      }
-
-      .content-media-modal-viewport.is-dragging {
-        cursor: grabbing;
-      }
-
-      .content-media-modal-content {
-        display: grid;
-        place-items: center;
-        max-width: 94vw;
-        max-height: 88vh;
-        transform-origin: center center;
-        will-change: transform;
-        user-select: none;
-      }
-
-      .content-media-modal-content img,
-      .content-media-modal-content svg {
-        display: block;
-        max-width: 94vw;
-        max-height: 88vh;
-        width: auto;
-        height: auto;
-        user-select: none;
-        -webkit-user-drag: none;
-      }
-
-      .content-media-modal-content .mermaid {
-        display: block;
-        max-width: none;
-        margin: 0;
-        padding: 0;
-      }
-
-      .content-media-modal-content .mermaid svg {
-        max-width: none;
-        max-height: 88vh;
-      }
-
       .forum-post-actions {
         margin-top: 0.58rem;
         display: flex;
@@ -3731,6 +3632,42 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         }
       }
 
+      .course-container[data-public-reader='true'] .content-area > .class-content:not([data-entry-type='recursos-editor']) {
+        width: min(100%, 86ch);
+        max-width: 86ch;
+      }
+
+      @media (max-width: 1024px) {
+        .course-container[data-public-reader='true'],
+        .course-container[data-public-reader='true'][data-left-open='false'],
+        .course-container[data-public-reader='true'][data-right-open='false'],
+        .course-container[data-public-reader='true'][data-left-open='false'][data-right-open='false'] {
+          grid-template-columns: minmax(0, 1fr) !important;
+          padding-left: var(--ribbon-width) !important;
+        }
+
+        .course-container[data-public-reader='true'] .content-area {
+          grid-column: 1 !important;
+          grid-row: 1;
+          min-width: 0;
+          width: 100%;
+        }
+      }
+
+      @media (max-width: 500px) {
+        .course-container[data-public-reader='true'],
+        .course-container[data-public-reader='true'][data-left-open='false'],
+        .course-container[data-public-reader='true'][data-right-open='false'],
+        .course-container[data-public-reader='true'][data-left-open='false'][data-right-open='false'] {
+          padding-left: 0 !important;
+          padding-bottom: var(--ribbon-mobile-clearance, 64px);
+        }
+
+        .course-container[data-public-reader='true'] .content-area {
+          height: calc(100dvh - var(--ribbon-mobile-clearance, 64px));
+        }
+      }
+
       /* Issues 4+6: right sidebar slides up from bottom on mobile */
       @media (max-width: 500px) {
         .sidebar--right {
@@ -3961,6 +3898,7 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       data-right-open="false"
       data-right-maximized="false"
       data-public-reader={isPublicReaderMode ? 'true' : 'false'}
+      data-authenticated={session ? 'true' : 'false'}
       data-has-right-sidebar={hasForumSidebar ? 'true' : 'false'}
       data-can-manage-live-interactions={canManageLiveInteractions ? 'true' : 'false'}
       data-live-course-id={canonicalCourseId || courseSlug}
@@ -5764,19 +5702,6 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         document.addEventListener('astro:page-load', bootInlineEditor);
       </script>
     )}
-    <div id="content-media-modal" class="content-media-modal" hidden aria-hidden="true">
-      <div id="content-media-modal-stage" class="content-media-modal-stage" role="dialog" aria-modal="true" aria-label="Imagen ampliada">
-        <button id="content-media-modal-close" class="content-media-modal-close" type="button" aria-label="Cerrar" title="Cerrar">×</button>
-        <div id="content-media-modal-viewport" class="content-media-modal-viewport">
-          <div id="content-media-modal-content" class="content-media-modal-content"></div>
-        </div>
-        <div class="content-media-modal-controls" aria-label="Controles de zoom">
-          <button class="content-media-modal-control" type="button" data-content-media-zoom="out" aria-label="Alejar" title="Alejar">−</button>
-          <button class="content-media-modal-control" type="button" data-content-media-zoom="reset" aria-label="Restablecer zoom" title="Restablecer zoom">1:1</button>
-          <button class="content-media-modal-control" type="button" data-content-media-zoom="in" aria-label="Acercar" title="Acercar">+</button>
-        </div>
-      </div>
-    </div>
     <div id="forum-media-modal" class="forum-media-modal" hidden aria-hidden="true">
       <div class="forum-media-modal-stage" role="dialog" aria-modal="true" aria-label="Media ampliado">
         <button
@@ -6350,6 +6275,10 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         courseLayoutRoot instanceof HTMLElement
           ? courseLayoutRoot.dataset.canManageLiveInteractions === 'true'
           : false;
+      const isAuthenticatedUser =
+        courseLayoutRoot instanceof HTMLElement
+          ? courseLayoutRoot.dataset.authenticated === 'true'
+          : false;
       const canonicalLiveCourseId =
         courseLayoutRoot instanceof HTMLElement
           ? String(courseLayoutRoot.dataset.liveCourseId || '').trim()
@@ -6382,6 +6311,11 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
       let livePollTickId = null;
 
       async function loadUserSubmissions() {
+        if (!isAuthenticatedUser) {
+          userSubmissions = {};
+          return;
+        }
+
         try {
           const response = await fetch('/api/submissions/my-submissions');
           const data = await response.json();
@@ -7622,6 +7556,8 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
         feedback = '',
         markAsGraded = false,
       }) {
+        if (!isAuthenticatedUser) return false;
+
         try {
           const { courseId, pageSlug } = getPageContext();
           const numericScore = typeof score === 'number' && Number.isFinite(score) ? score : null;
@@ -13925,14 +13861,18 @@ a[node] -->|edge| b[hub]
           console.error('Lesson note-prefix-strip error:', error);
         }
 
-        try {
-          await loadUserSubmissions();
-        } catch (error) {
-          console.error('User submission bootstrap error:', error);
-        }
-
         const evalWrappers = document.querySelectorAll('.eval-block-wrapper');
         hasEvalBlocks = evalWrappers.length > 0;
+
+        if (hasEvalBlocks && isAuthenticatedUser) {
+          try {
+            await loadUserSubmissions();
+          } catch (error) {
+            console.error('User submission bootstrap error:', error);
+          }
+        } else {
+          userSubmissions = {};
+        }
 
         evalWrappers.forEach((wrapper, index) => {
           try {

@@ -15,6 +15,11 @@ type Point = {
 };
 
 const STYLE_ID = 'musiki-content-media-viewer-style';
+const MODAL_ID = 'musiki-content-media-viewer-modal';
+const STAGE_ID = 'musiki-content-media-viewer-stage';
+const VIEWPORT_ID = 'musiki-content-media-viewer-viewport';
+const CONTENT_ID = 'musiki-content-media-viewer-content';
+const CLOSE_ID = 'musiki-content-media-viewer-close';
 const MAX_SCALE = 10;
 const MIN_SCALE = 1;
 
@@ -129,15 +134,15 @@ function injectViewerStyles() {
 
 function createModal(): ViewerElements {
   const modal = document.createElement('div');
-  modal.id = 'content-media-modal';
+  modal.id = MODAL_ID;
   modal.className = 'content-media-modal';
   modal.hidden = true;
   modal.setAttribute('aria-hidden', 'true');
   modal.innerHTML = `
-    <div id="content-media-modal-stage" class="content-media-modal-stage" role="dialog" aria-modal="true" aria-label="Media ampliado">
-      <button id="content-media-modal-close" class="content-media-modal-close" type="button" aria-label="Cerrar" title="Cerrar">×</button>
-      <div id="content-media-modal-viewport" class="content-media-modal-viewport">
-        <div id="content-media-modal-content" class="content-media-modal-content"></div>
+    <div id="${STAGE_ID}" class="content-media-modal-stage" role="dialog" aria-modal="true" aria-label="Media ampliado">
+      <button id="${CLOSE_ID}" class="content-media-modal-close" type="button" aria-label="Cerrar" title="Cerrar">×</button>
+      <div id="${VIEWPORT_ID}" class="content-media-modal-viewport">
+        <div id="${CONTENT_ID}" class="content-media-modal-content"></div>
       </div>
       <div class="content-media-modal-controls" aria-label="Controles de zoom">
         <button class="content-media-modal-control" type="button" data-content-media-zoom="out" aria-label="Alejar" title="Alejar">−</button>
@@ -151,12 +156,14 @@ function createModal(): ViewerElements {
 }
 
 function getViewerElements(): ViewerElements | null {
-  const modal = document.getElementById('content-media-modal');
-  const stage = document.getElementById('content-media-modal-stage');
-  const viewport = document.getElementById('content-media-modal-viewport');
-  const content = document.getElementById('content-media-modal-content');
-  const closeButton = document.getElementById('content-media-modal-close');
-  const controls = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-content-media-zoom]'));
+  const modal = document.getElementById(MODAL_ID);
+  const stage = document.getElementById(STAGE_ID);
+  const viewport = document.getElementById(VIEWPORT_ID);
+  const content = document.getElementById(CONTENT_ID);
+  const closeButton = document.getElementById(CLOSE_ID);
+  const controls = modal instanceof HTMLElement
+    ? Array.from(modal.querySelectorAll<HTMLButtonElement>('[data-content-media-zoom]'))
+    : [];
 
   if (
     !(modal instanceof HTMLElement) ||
