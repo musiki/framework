@@ -306,8 +306,22 @@ function loadPreviewContent(courseId: string, slug: string): Promise<PreviewCont
   const cachedRequest = previewContentRequests.get(cacheKey);
   if (cachedRequest) return cachedRequest;
 
+  const layoutRoot = document.querySelector<HTMLElement>('[data-course-layout-root]');
+  const canManage = layoutRoot?.dataset.canManageLiveInteractions === 'true';
+
   const request = (async () => {
     if (slug.startsWith('public/')) {
+      const path = toCourseContentPath(courseId, slug);
+      const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}&rendered=true`);
+      if (!res.ok) throw new Error('Note not found');
+      const data = await res.json() as { body?: string; renderedHtml?: string };
+      return {
+        content: data.body ?? '',
+        renderedHtml: data.renderedHtml,
+      };
+    }
+
+    if (!canManage) {
       const path = toCourseContentPath(courseId, slug);
       const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}&rendered=true`);
       if (!res.ok) throw new Error('Note not found');
@@ -993,6 +1007,12 @@ export function initDockviewWorkspace(
       );
       bindExternalNoteDrop(shell, panelId);
 
+      const layoutRoot = document.querySelector<HTMLElement>('[data-course-layout-root]');
+      const canManage = layoutRoot?.dataset.canManageLiveInteractions === 'true';
+      if (!canManage) {
+        pencilBtn.style.display = 'none';
+      }
+
       const state: PanelState = {
         slug: params.slug,
         courseId: params.courseId,
@@ -1244,6 +1264,10 @@ export function initDockviewWorkspace(
   // Cmd/Ctrl+E — toggle edit/preview on active pod
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+      const layoutRoot = document.querySelector<HTMLElement>('[data-course-layout-root]');
+      const canManage = layoutRoot?.dataset.canManageLiveInteractions === 'true';
+      if (!canManage) return;
+
       const state = panelStates.get(dockview.activePanel?.id ?? '');
       if (!state) return;
       e.preventDefault();

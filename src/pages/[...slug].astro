@@ -313,8 +313,8 @@ const globalConcepts = (await getCollection('content')).filter((entry) => {
   // They must be concept/glossary
   if (!isConceptOrGlossary) return false;
 
-  // They must be public or session must exist
-  if (!session && status !== 'public' && status !== 'published') return false;
+  // They must be public or user has teacher/live management rights
+  if (!canManageLiveInteractions && status !== 'public' && status !== 'published') return false;
 
   // Filter by project/course
   const project = String(entry.data.project || '').trim().toLowerCase();

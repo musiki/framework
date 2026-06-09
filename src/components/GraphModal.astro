@@ -203,6 +203,30 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   let hoverNode = null;
   const labelOpacity = new Map();
   let showAll = false; // default: only public notes + their tags
+  const hiddenLayers = new Set();
+
+  function getNodeLayer(node) {
+    const isCurrent = node.id === currentSlug || node.canonicalSlug === currentSlug;
+    if (isCurrent) return 'actual';
+    if (node.type === 'tag') return 'tags';
+    if (node.type === 'document' && node.publicFolder) return node.publicFolder;
+    return 'documentos';
+  }
+
+  function applyLayerFilters(data) {
+    if (hiddenLayers.size === 0) return data;
+    const filteredNodes = data.nodes.filter(node => {
+      const layer = getNodeLayer(node);
+      return !hiddenLayers.has(layer);
+    });
+    const nodeIds = new Set(filteredNodes.map(n => n.id));
+    const filteredLinks = data.links.filter(link => {
+      const s = typeof link.source === 'object' ? link.source.id : link.source;
+      const t = typeof link.target === 'object' ? link.target.id : link.target;
+      return nodeIds.has(s) && nodeIds.has(t);
+    });
+    return { nodes: filteredNodes, links: filteredLinks };
+  }
 
   function ensureForceGraph() {
     const existingCtor = window.ForceGraph || window.default;
@@ -218,7 +242,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       }
 
       const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/force-graph';
+      script.src = '/scripts/force-graph.min.js';
       script.async = true;
       script.dataset.musikiForceGraph = 'true';
       script.addEventListener('load', () => resolve(window.ForceGraph || window.default), { once: true });
@@ -283,15 +307,30 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     const legend = document.querySelector('.graph-legend');
     if (!legend) return;
     const colors = getThemeColors();
-    const folders = [...new Set(data.nodes.map(n => n.publicFolder).filter(Boolean))].sort();
-    let html = `
-      <div>${getShapeSvg('circle', colors.document, 14)} Documentos</div>
-      <div>${getShapeSvg('circle', colors.tag, 14)} Tags</div>
-      <div>${getShapeSvg('circle', colors.current, 14)} Actual</div>
-    `;
+    
+    const foldersData = graphData ? graphData : data;
+    const folders = [...new Set(foldersData.nodes.map(n => n.publicFolder).filter(Boolean))].sort();
+
+    const makeItem = (layerKey, label, defaultColor, shape) => {
+      const isHidden = hiddenLayers.has(layerKey);
+      const color = isHidden ? '#888888' : defaultColor;
+      const opacityStyle = isHidden ? 'style="opacity: 0.45;"' : '';
+      const disabledClass = isHidden ? 'is-disabled' : '';
+      return `
+        <div class="legend-item ${disabledClass}" data-layer="${layerKey}" ${opacityStyle}>
+          ${getShapeSvg(shape, color, 14)}
+          <span>${label}</span>
+        </div>
+      `;
+    };
+
+    let html = '';
+    html += makeItem('documentos', 'Documentos', colors.document, 'circle');
+    html += makeItem('tags', 'Tags', colors.tag, 'circle');
+    html += makeItem('actual', 'Actual', colors.current, 'circle');
     for (const folder of folders) {
       const id = getFolderIdentity(folder);
-      html += `<div>${getShapeSvg(id.shape, id.color, 14)} ${id.label}</div>`;
+      html += makeItem(folder, id.label, id.color, id.shape);
     }
     legend.innerHTML = html;
   }
@@ -361,7 +400,8 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   // Render the graph
   async function renderGraph() {
     const [raw, ForceGraphCtor] = await Promise.all([initGraph(), ensureForceGraph()]);
-    const data = showAll ? raw : filterVisibleData(raw);
+    let data = showAll ? raw : filterVisibleData(raw);
+    data = applyLayerFilters(data);
     crossLinkNodes(data);
     const container = document.getElementById('graph-canvas');
 
@@ -612,7 +652,8 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   // Toggle public/all filter while graph is open
   function applyGraphFilter() {
     if (!graphInstance || !graphData) return;
-    const data = showAll ? graphData : filterVisibleData(graphData);
+    let data = showAll ? graphData : filterVisibleData(graphData);
+    data = applyLayerFilters(data);
     crossLinkNodes(data);
     highlightNodes.clear();
     highlightLinks.clear();
@@ -693,6 +734,20 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     if (e.target.id === 'graph-modal') {
       void setModalOpen(false, 'local');
     }
+  });
+
+  document.querySelector('.graph-legend')?.addEventListener('click', (e) => {
+    const item = e.target.closest('.legend-item');
+    if (!item) return;
+    const layer = item.dataset.layer;
+    if (!layer) return;
+
+    if (hiddenLayers.has(layer)) {
+      hiddenLayers.delete(layer);
+    } else {
+      hiddenLayers.add(layer);
+    }
+    applyGraphFilter();
   });
 
   document.addEventListener(
@@ -849,10 +904,23 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     font-size: 0.85rem;
   }
 
-  .graph-legend > div {
+  .graph-legend > div,
+  .graph-legend :global(.legend-item) {
     display: flex;
     align-items: center;
     gap: 0.4rem;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.2s ease, transform 0.1s ease;
+  }
+
+  .graph-legend :global(.legend-item):hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+  }
+
+  .graph-legend :global(.legend-item.is-disabled):hover {
+    opacity: 0.6;
   }
 
   :global(.graph-legend svg) {
