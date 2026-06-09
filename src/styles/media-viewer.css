@@ -14,20 +14,38 @@
 .media-viewer.is-open {
   display: flex;
 }
-.media-viewer__image {
+.media-viewer__content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   max-width: 92vw;
   max-height: 92vh;
-  object-fit: contain;
   cursor: grab;
   user-select: none;
-  -webkit-user-drag: none;
   touch-action: none;
   transform-origin: center center;
   transition: transform 120ms ease-out;
 }
-.media-viewer__image.is-dragging {
+.media-viewer__content.is-dragging {
   cursor: grabbing;
   transition: none;
+}
+.media-viewer__content img,
+.media-viewer__content svg {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  display: block;
+}
+.media-viewer__content .mermaid {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+.media-viewer__content .mermaid svg {
+  max-width: 92vw;
+  max-height: 92vh;
 }
 .media-viewer__fog {
   position: absolute;
@@ -46,6 +64,21 @@
 .content img,
 article img,
 .markdown-body img,
-.content-area img {
+.content-area img,
+.content svg:not(a svg):not(button svg):not(.mermaid svg),
+article svg:not(a svg):not(button svg):not(.mermaid svg),
+.markdown-body svg:not(a svg):not(button svg):not(.mermaid svg),
+.content-area svg:not(a svg):not(button svg):not(.mermaid svg),
+.content .mermaid,
+article .mermaid,
+.markdown-body .mermaid,
+.content-area .mermaid {
   cursor: zoom-in;
+}
+.no-media-viewer,
+.no-viewer,
+.icon,
+.logo,
+[data-content-media-ignore] {
+  cursor: inherit !important;
 }

@@ -10,9 +10,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   <div id="graph-canvas"></div>
   <div class="graph-hud">
     <div class="graph-legend">
-      <div><span class="legend-doc"></span> Documents</div>
-      <div><span class="legend-tag"></span> Tags</div>
-      <div><span class="legend-current"></span> Current</div>
+      <!-- Dynamically generated legend -->
     </div>
     <div class="graph-hud-right">
       <div class="graph-search">
@@ -137,6 +135,66 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     ctx.fill();
   }
 
+  function getShapeSvg(shape, color, size = 12) {
+    const r = (size / 2) * 0.85; // Leave margin
+    const x = size / 2;
+    const y = size / 2;
+    let path = '';
+
+    switch (shape) {
+      case 'diamond': {
+        path = `M ${x} ${y - r * 1.4} L ${x + r * 1.05} ${y} L ${x} ${y + r * 1.4} L ${x - r * 1.05} ${y} Z`;
+        break;
+      }
+      case 'triangle': {
+        path = `M ${x} ${y - r * 1.25} L ${x + r * 1.1} ${y + r * 0.85} L ${x - r * 1.1} ${y + r * 0.85} Z`;
+        break;
+      }
+      case 'square': {
+        const s = r * 0.92;
+        path = `M ${x - s} ${y - s} L ${x + s} ${y - s} L ${x + s} ${y + s} L ${x - s} ${y + s} Z`;
+        break;
+      }
+      case 'pentagon': {
+        const pts = [];
+        for (let i = 0; i < 5; i++) {
+          const a = (i * 2 * Math.PI / 5) - Math.PI / 2;
+          pts.push(`${x + r * Math.cos(a)} ${y + r * Math.sin(a)}`);
+        }
+        path = 'M ' + pts.join(' L ') + ' Z';
+        break;
+      }
+      case 'hexagon': {
+        const pts = [];
+        for (let i = 0; i < 6; i++) {
+          const a = i * Math.PI / 3;
+          pts.push(`${x + r * Math.cos(a)} ${y + r * Math.sin(a)}`);
+        }
+        path = 'M ' + pts.join(' L ') + ' Z';
+        break;
+      }
+      case 'star': {
+        const pts = [];
+        for (let i = 0; i < 10; i++) {
+          const a = (i * Math.PI / 5) - Math.PI / 2;
+          const rad = i % 2 === 0 ? r * 1.25 : r * 0.52;
+          pts.push(`${x + rad * Math.cos(a)} ${y + rad * Math.sin(a)}`);
+        }
+        path = 'M ' + pts.join(' L ') + ' Z';
+        break;
+      }
+      case 'cross': {
+        const t = r * 0.33, l = r * 1.0;
+        path = `M ${x - t} ${y - l} L ${x + t} ${y - l} L ${x + t} ${y - t} L ${x + l} ${y - t} L ${x + l} ${y + t} L ${x + t} ${y + t} L ${x + t} ${y + l} L ${x - t} ${y + l} L ${x - t} ${y + t} L ${x - l} ${y + t} L ${x - l} ${y - t} L ${x - t} ${y - t} Z`;
+        break;
+      }
+      default: { // circle
+        return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${x}" cy="${y}" r="${r}" fill="${color}" /></svg>`;
+      }
+    }
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><path d="${path}" fill="${color}" /></svg>`;
+  }
+
   let graphData = null;
   let graphInstance = null;
   let forceGraphPromise = null;
@@ -224,15 +282,16 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   function updateLegend(data) {
     const legend = document.querySelector('.graph-legend');
     if (!legend) return;
+    const colors = getThemeColors();
     const folders = [...new Set(data.nodes.map(n => n.publicFolder).filter(Boolean))].sort();
     let html = `
-      <div><span class="legend-doc"></span> Docs</div>
-      <div><span class="legend-tag"></span> Tags</div>
-      <div><span class="legend-current"></span> Actual</div>
+      <div>${getShapeSvg('circle', colors.document, 14)} Documentos</div>
+      <div>${getShapeSvg('circle', colors.tag, 14)} Tags</div>
+      <div>${getShapeSvg('circle', colors.current, 14)} Actual</div>
     `;
     for (const folder of folders) {
       const id = getFolderIdentity(folder);
-      html += `<div><span class="legend-folder" style="background:${id.color}"></span> ${id.label}</div>`;
+      html += `<div>${getShapeSvg(id.shape, id.color, 14)} ${id.label}</div>`;
     }
     legend.innerHTML = html;
   }
@@ -431,7 +490,8 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         labelOpacity.set(node.id, opacity);
 
         if (opacity > 0) {
-          const fontSize = 12 / globalScale;
+          const baseFontSize = isTag ? 10.2 : 12; // 15% smaller for tags
+          const fontSize = baseFontSize / globalScale;
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
@@ -538,6 +598,9 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       graphInstance
         .backgroundColor(colors.background)
         .linkColor(link => highlightLinks.has(link) ? colors.highlight : link.type === 'tag' ? colors.tagLink : colors.link);
+      if (graphInstance) {
+        updateLegend(graphInstance.graphData());
+      }
     });
     
     observer.observe(document.documentElement, {
@@ -792,28 +855,10 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     gap: 0.4rem;
   }
 
-  .graph-legend span {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
+  :global(.graph-legend svg) {
     display: inline-block;
-  }
-
-  .legend-doc {
-    background: #4f83ff;
-  }
-
-  .legend-tag {
-    background: #34d399;
-  }
-
-  .legend-current {
-    background: #f87171;
-  }
-
-  /* Folder identity swatches — color set dynamically by JS */
-  .legend-folder {
-    border-radius: 2px; /* square-ish to hint at custom shapes */
+    vertical-align: middle;
+    flex-shrink: 0;
   }
 
   .graph-hud-right button {

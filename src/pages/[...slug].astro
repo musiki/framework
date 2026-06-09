@@ -374,8 +374,6 @@ if (isStudentEnrolled && !isRequestingWelcomePage) {
   }
 }
 
-// Statuses hidden from students but visible to teachers with indicator
-const teacherOnlyStatuses = new Set(['draft', 'private']);
 const conceptGlossaryTypes = new Set(['concept', 'glossary', 'notes', 'public-note']);
 
 const conceptsAndGlossary = [
@@ -386,12 +384,7 @@ const conceptsAndGlossary = [
     if (canManageLiveInteractions) return true;
 
     const status = String(l.data.status || '').trim().toLowerCase();
-    if (teacherOnlyStatuses.has(status)) return false;
-
-    // They must be public or session must exist
-    if (!session && status !== 'public') return false;
-
-    return true;
+    return status === 'published' || status === 'public';
   }),
   ...globalConcepts
 ];
@@ -399,10 +392,10 @@ const conceptsAndGlossary = [
 const sidebarLessons = canManageLiveInteractions
   ? allLessons.filter(l => !conceptGlossaryTypes.has(String(l.data.type || '').trim().toLowerCase()))
   : allLessons.filter((l) => {
-      const status = String(l.data.status || '').trim().toLowerCase();
       const type = String(l.data.type || '').trim().toLowerCase();
       if (conceptGlossaryTypes.has(type)) return false;
-      if (teacherOnlyStatuses.has(status)) return false;
+      const status = String(l.data.status || '').trim().toLowerCase();
+      if (status !== 'published' && status !== 'public') return false;
       // Info type is only visible to logged-in users
       if (type === 'info' && !session) return false;
       return true;
@@ -763,6 +756,9 @@ const assignmentLikeTypes = new Set(['assignment', 'eval']);
 const isAssignment = assignmentLikeTypes.has(currentEntryType);
 const isLessonPage = parts.length > 1 && !isCourseForumPage;
 const currentEntryStatus = String(currentEntry.data.status || '').trim().toLowerCase();
+if (isLessonPage && !canManageLiveInteractions && currentEntryStatus !== 'published' && currentEntryStatus !== 'public') {
+  return Astro.redirect(courseHref);
+}
 const lessonDescription =
   String(currentEntry.data.summary || currentEntry.data.description || '').trim() ||
   String(courseIndex?.data?.summary || courseIndex?.data?.description || '').trim();

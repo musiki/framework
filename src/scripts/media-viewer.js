@@ -1,6 +1,4 @@
 export function initMediaViewer() {
-  const selector = "article img, .content img, .markdown-body img, .content-area img";
-
   let modal = document.querySelector(".media-viewer");
   const isNewModal = !modal;
 
@@ -13,13 +11,13 @@ export function initMediaViewer() {
     modal.innerHTML = `
       <div class="media-viewer__fog" data-close></div>
       <div class="media-viewer__stage">
-        <img class="media-viewer__image" alt="" draggable="false">
+        <div class="media-viewer__content"></div>
       </div>
     `;
     document.body.appendChild(modal);
   }
 
-  const image = modal.querySelector(".media-viewer__image");
+  const content = modal.querySelector(".media-viewer__content");
   const fog = modal.querySelector("[data-close]");
 
   // We store the state on the modal element so that it persists and is shared
@@ -45,7 +43,7 @@ export function initMediaViewer() {
   const state = modal.state;
 
   function applyTransform() {
-    image.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+    content.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
   }
 
   function resetTransform() {
@@ -55,9 +53,38 @@ export function initMediaViewer() {
     applyTransform();
   }
 
-  function openViewer(sourceImage) {
-    image.src = sourceImage.currentSrc || sourceImage.src;
-    image.alt = sourceImage.alt || "";
+  function cloneMedia(el) {
+    const tagName = el.tagName.toLowerCase();
+    if (tagName === "img") {
+      const clone = document.createElement("img");
+      clone.src = el.currentSrc || el.src;
+      clone.alt = el.alt || "";
+      clone.setAttribute("draggable", "false");
+      return clone;
+    }
+    
+    // SVG or Mermaid container (contains SVG)
+    const clone = el.cloneNode(true);
+    
+    // Remove fixed dimensions so it scales cleanly with CSS
+    if (clone.tagName.toLowerCase() === "svg") {
+      clone.removeAttribute("width");
+      clone.removeAttribute("height");
+    } else {
+      const svgs = clone.querySelectorAll("svg");
+      svgs.forEach((svg) => {
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+      });
+    }
+    return clone;
+  }
+
+  function openViewer(sourceElement) {
+    content.innerHTML = "";
+    const clone = cloneMedia(sourceElement);
+    content.appendChild(clone);
+
     modal.classList.add("is-open");
     document.body.style.overflow = "hidden";
     state.isOpen = true;
@@ -81,7 +108,7 @@ export function initMediaViewer() {
   }
 
   function zoomAt(clientX, clientY, nextScale) {
-    const rect = image.getBoundingClientRect();
+    const rect = content.getBoundingClientRect();
     const previousScale = state.scale;
     nextScale = clamp(nextScale, state.minScale, state.maxScale);
     if (nextScale === previousScale) return;
@@ -99,52 +126,61 @@ export function initMediaViewer() {
     }
   }
 
-  function isEligible(img) {
-    if (img.classList.contains("no-viewer") || 
-        img.classList.contains("no-media-viewer") || 
-        img.classList.contains("icon") || 
-        img.classList.contains("logo")) {
+  function isEligible(el) {
+    if (el.classList.contains("no-viewer") || 
+        el.classList.contains("no-media-viewer") || 
+        el.classList.contains("icon") || 
+        el.classList.contains("logo") ||
+        el.dataset.contentMediaIgnore === "true") {
       return false;
     }
-    if (img.closest("header, nav, footer, a, button, [data-content-media-ignore]")) {
+    if (el.closest("header, nav, footer, a, button, [data-content-media-ignore]")) {
       return false;
     }
     return true;
   }
 
-  function setupImage(img) {
-    if (img.dataset.mediaViewerBound === "true") return;
-    if (!isEligible(img)) return;
-
-    function applyEligibleCursor() {
-      if (img.width >= 120 && img.height >= 120) {
-        img.style.cursor = "zoom-in";
-        img.dataset.mediaViewerBound = "true";
-        img.addEventListener("click", onClick);
-      }
+  function findZoomableMedia(target) {
+    if (!target) return null;
+    
+    // 1. Check if it's an image
+    const img = target.closest("img");
+    if (img && img.closest("article, .content, .markdown-body, .content-area")) {
+      return img;
     }
-
-    function onClick() {
-      openViewer(img);
+    
+    // 2. Check if it's a mermaid container
+    const mermaid = target.closest(".mermaid");
+    if (mermaid && mermaid.closest("article, .content, .markdown-body, .content-area")) {
+      return mermaid;
     }
-
-    if (img.complete) {
-      applyEligibleCursor();
-    } else {
-      img.addEventListener("load", applyEligibleCursor, { once: true });
+    
+    // 3. Check if it's a standalone SVG
+    const svg = target.closest("svg");
+    if (svg && svg.closest("article, .content, .markdown-body, .content-area")) {
+      if (svg.closest("a, button, .mermaid, [data-content-media-ignore]")) return null;
+      return svg;
     }
+    
+    return null;
   }
 
-  // Bind to existing images
-  document.querySelectorAll(selector).forEach(setupImage);
+  // Bind single event-delegated listener once on document
+  if (isNewModal || !modal.dataset.mediaViewerDelegated) {
+    modal.dataset.mediaViewerDelegated = "true";
 
-  // Re-run setup for dynamic images via MutationObserver
-  if (isNewModal || !modal.observer) {
-    const observer = new MutationObserver(() => {
-      document.querySelectorAll(selector).forEach(setupImage);
+    document.addEventListener("click", (event) => {
+      const media = findZoomableMedia(event.target);
+      if (!media) return;
+      if (!isEligible(media)) return;
+
+      const rect = media.getBoundingClientRect();
+      if (rect.width < 120 || rect.height < 120) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      openViewer(media);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
-    modal.observer = observer;
   }
 
   // Bind modal event listeners once
@@ -152,6 +188,12 @@ export function initMediaViewer() {
     modal.dataset.mediaViewerEventsBound = "true";
 
     fog.addEventListener("click", closeViewer);
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal || event.target.classList.contains("media-viewer__stage")) {
+        closeViewer();
+      }
+    });
 
     modal.addEventListener("wheel", (event) => {
       if (!state.isOpen) return;
@@ -161,10 +203,10 @@ export function initMediaViewer() {
       zoomAt(event.clientX, event.clientY, state.scale * factor);
     }, { passive: false });
 
-    image.addEventListener("pointerdown", (event) => {
+    content.addEventListener("pointerdown", (event) => {
       if (!state.isOpen) return;
       event.preventDefault();
-      image.setPointerCapture(event.pointerId);
+      content.setPointerCapture(event.pointerId);
       state.activePointers.set(event.pointerId, event);
       state.didMove = false;
 
@@ -172,7 +214,7 @@ export function initMediaViewer() {
         state.isDragging = true;
         state.lastX = event.clientX;
         state.lastY = event.clientY;
-        image.classList.add("is-dragging");
+        content.classList.add("is-dragging");
       }
       if (state.activePointers.size === 2) {
         const points = Array.from(state.activePointers.values());
@@ -181,7 +223,7 @@ export function initMediaViewer() {
       }
     });
 
-    image.addEventListener("pointermove", (event) => {
+    content.addEventListener("pointermove", (event) => {
       if (!state.isOpen || !state.activePointers.has(event.pointerId)) return;
       state.activePointers.set(event.pointerId, event);
 
@@ -214,19 +256,19 @@ export function initMediaViewer() {
       }
     });
 
-    image.addEventListener("pointerup", (event) => {
+    content.addEventListener("pointerup", (event) => {
       state.activePointers.delete(event.pointerId);
       state.isDragging = false;
-      image.classList.remove("is-dragging");
+      content.classList.remove("is-dragging");
     });
 
-    image.addEventListener("pointercancel", (event) => {
+    content.addEventListener("pointercancel", (event) => {
       state.activePointers.delete(event.pointerId);
       state.isDragging = false;
-      image.classList.remove("is-dragging");
+      content.classList.remove("is-dragging");
     });
 
-    image.addEventListener("click", (event) => {
+    content.addEventListener("click", (event) => {
       event.stopPropagation();
       if (state.didMove) {
         state.didMove = false;
