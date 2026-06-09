@@ -117,7 +117,8 @@ export class ConceptsController {
       const data = await resp.json();
       
       const parse = await loadMarked();
-      const html = parse ? (parse(data.body) as string) : `<pre>${data.body}</pre>`;
+      const processedBody = (data.body || '').replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+      const html = parse ? (parse(processedBody) as string) : `<pre>${data.body}</pre>`;
       
       if (this.currentContentEl) {
         this.currentContentEl.innerHTML = html;

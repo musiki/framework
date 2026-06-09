@@ -1,4 +1,5 @@
 @import "dockview-core/dist/styles/dockview.css";
+@import "./media-viewer.css";
 
 :root {
   --accent: #2337ff;
@@ -27,6 +28,7 @@
   --font-ui-current: var(--font-ui-helvetica);
   --font-family-primary: var(--font-ui-current);
   --font-family-mono: var(--font-ui-system-mono);
+  --mark-bg: rgba(255, 220, 90, 0.42);
 }
 
 html {
@@ -221,14 +223,10 @@ code {
   border-radius: 0;
 }
 mark {
-  background-color: rgba(253, 224, 71, 0.35);
-  color: #111111;
-  border-radius: 4px;
-  padding: 0.1em 0.25em;
-}
-.dark mark {
-  background-color: rgba(253, 224, 71, 0.2);
-  color: #fde047;
+  background: var(--mark-bg);
+  color: inherit;
+  padding: 0.04em 0.16em;
+  border-radius: 0.16em;
 }
 pre {
   font-family: var(--font-family-mono);
@@ -378,6 +376,7 @@ hr {
   --gray-light: 69, 71, 90; /* Surface1 (rgb) */
   --gray-dark: 205, 214, 244; /* Text (rgb) */
   --gray-gradient: rgba(var(--gray-light), 50%), #1e1e2e;
+  --mark-bg: rgba(255, 190, 70, 0.28);
 
   /* Semantic tokens from reference palette */
   --surface-background: #1e1e2e; /* Base */
@@ -1276,6 +1275,106 @@ ol ol ol ol > li::marker {
 }
 .bibtex.entry {
   color: var(--text-accent);
+}
+
+/* Solarized Neon Punk BibTeX custom theme (Light Mode default) */
+pre.musiki-code-block--bibtex,
+pre[class*="language-bibtex"],
+pre[class*="lang-bibtex"] {
+  background: #fdf6e3 !important;
+  color: #586e75 !important;
+  border: 1px solid rgba(147, 161, 161, 0.25) !important;
+  border-left: 4px solid #d33682 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+  padding: 1rem !important;
+  border-radius: 8px !important;
+  font-family: var(--font-family-mono), monospace !important;
+}
+
+pre.musiki-code-block--bibtex .bibtex.entry,
+pre[class*="language-bibtex"] .bibtex.entry,
+pre[class*="lang-bibtex"] .bibtex.entry {
+  color: #d33682 !important;
+  font-weight: bold !important;
+}
+
+pre.musiki-code-block--bibtex .bibtex.header,
+pre[class*="language-bibtex"] .bibtex.header,
+pre[class*="lang-bibtex"] .bibtex.header {
+  color: #6c71c4 !important;
+  font-weight: bold !important;
+}
+
+pre.musiki-code-block--bibtex .bibtex.key,
+pre[class*="language-bibtex"] .bibtex.key,
+pre[class*="lang-bibtex"] .bibtex.key {
+  color: #cb4b16 !important;
+}
+
+pre.musiki-code-block--bibtex .bibtex.value,
+pre[class*="language-bibtex"] .bibtex.value,
+pre[class*="lang-bibtex"] .bibtex.value {
+  color: #2aa198 !important;
+}
+
+pre.musiki-code-block--bibtex .bibtex.normal,
+pre[class*="language-bibtex"] .bibtex.normal,
+pre[class*="lang-bibtex"] .bibtex.normal {
+  color: #586e75 !important;
+}
+
+pre.musiki-code-block--bibtex .musiki-code-comment,
+pre[class*="language-bibtex"] .musiki-code-comment,
+pre[class*="lang-bibtex"] .musiki-code-comment {
+  color: #93a1a1 !important;
+  font-style: italic !important;
+}
+
+/* Dark Mode Overrides */
+.dark pre.musiki-code-block--bibtex,
+.dark pre[class*="language-bibtex"],
+.dark pre[class*="lang-bibtex"] {
+  background: #0c0d12 !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(0, 240, 255, 0.15) !important;
+  border-left: 4px solid #ff2a74 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 15px rgba(0, 240, 255, 0.05) !important;
+}
+
+.dark pre.musiki-code-block--bibtex .bibtex.entry,
+.dark pre[class*="language-bibtex"] .bibtex.entry,
+.dark pre[class*="lang-bibtex"] .bibtex.entry {
+  color: #ff2a74 !important;
+}
+
+.dark pre.musiki-code-block--bibtex .bibtex.header,
+.dark pre[class*="language-bibtex"] .bibtex.header,
+.dark pre[class*="lang-bibtex"] .bibtex.header {
+  color: #bd93f9 !important;
+}
+
+.dark pre.musiki-code-block--bibtex .bibtex.key,
+.dark pre[class*="language-bibtex"] .bibtex.key,
+.dark pre[class*="lang-bibtex"] .bibtex.key {
+  color: #ff9f1c !important;
+}
+
+.dark pre.musiki-code-block--bibtex .bibtex.value,
+.dark pre[class*="language-bibtex"] .bibtex.value,
+.dark pre[class*="lang-bibtex"] .bibtex.value {
+  color: #00f0ff !important;
+}
+
+.dark pre.musiki-code-block--bibtex .bibtex.normal,
+.dark pre[class*="language-bibtex"] .bibtex.normal,
+.dark pre[class*="lang-bibtex"] .bibtex.normal {
+  color: #e2e8f0 !important;
+}
+
+.dark pre.musiki-code-block--bibtex .musiki-code-comment,
+.dark pre[class*="language-bibtex"] .musiki-code-comment,
+.dark pre[class*="lang-bibtex"] .musiki-code-comment {
+  color: #6272a4 !important;
 }
 
 /* LilyPond Scores */

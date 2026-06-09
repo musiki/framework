@@ -680,15 +680,7 @@ const view = Astro.url.searchParams.get('view');
         document.querySelectorAll('.fade-in-section:not(.is-visible)').forEach((el) => observer.observe(el));
       });
 
-      // ── Hero zoom ──────────────────────────────────────────
-      async function initMediaViewer() {
-        const root = document.querySelector('main.wiki-layout');
-        if (!(root instanceof HTMLElement)) return;
-        const { setupContentMediaViewer } = await import('../scripts/content-media-viewer.ts');
-        setupContentMediaViewer(root);
-      }
-      document.addEventListener('DOMContentLoaded', () => { void initMediaViewer(); });
-      document.addEventListener('astro:page-load', () => { void initMediaViewer(); });
+
 
       // ── Copy buttons ───────────────────────────────────────
       function addCopyButtons() {

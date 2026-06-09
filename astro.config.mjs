@@ -16,6 +16,8 @@ import remarkWikiLink from './src/plugins/remark-wiki-link.mjs'
 import remarkLily from './src/plugins/remark-lily.mjs'
 import remarkCoverBlock from './src/plugins/remark-cover-block.mjs'
 import rehypeLazyYouTube from './src/plugins/rehype-lazy-youtube.mjs'
+import rehypeCodeSyntax from './src/plugins/rehype-code-syntax.mjs'
+import remarkObsidianHighlight from './src/plugins/remark-obsidian-highlight.mjs'
 
 import auth from 'auth-astro';
 import node from '@astrojs/node';
@@ -135,12 +137,14 @@ export default defineConfig({
       remarkDataviewLite,     // procesa bloques dataview
       remarkWikiLink,         // procesa wiki links [[Link]]
       remarkLily,             // usa renderer local de lilypond
+      remarkObsidianHighlight,
     ],
     rehypePlugins: [
       rehypeObsidianCallouts, // detecta y transforma callouts tipo GitHub/Obsidian
       rehypeRaw,              // permite inyectar HTML desde remark
       [rehypeKatex, { strict: false }], // Render math even if there are minor LaTeX errors
       rehypeLazyYouTube,
+      rehypeCodeSyntax,
     ]
   }
 })

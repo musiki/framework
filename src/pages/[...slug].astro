@@ -14164,8 +14164,6 @@ a[node] -->|edge| b[hub]
           const classContent = document.querySelector('[data-class-content]');
           if (classContent instanceof HTMLElement) {
             enhanceCourseNotesContent(classContent);
-            const { setupContentMediaViewer } = await import('../scripts/content-media-viewer.ts');
-            cleanupCourseMediaViewer = setupContentMediaViewer(classContent);
           }
         } catch (error) {
           console.error('Course notes content bootstrap error:', error);

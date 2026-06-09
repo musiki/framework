@@ -192,6 +192,30 @@ function configureMarked() {
     ],
   });
 
+  marked.use({
+    extensions: [
+      {
+        name: 'highlight',
+        level: 'inline',
+        start(src) { return src.indexOf('=='); },
+        tokenizer(src) {
+          const match = src.match(/^==([^=\n]+)==/);
+          if (match) {
+            return {
+              type: 'highlight',
+              raw: match[0],
+              text: match[1].trim(),
+              tokens: (this as any).lexer.inlineTokens(match[1].trim()),
+            };
+          }
+        },
+        renderer(token) {
+          return `<mark>${(this as any).parser.parseInline(token.tokens)}</mark>`;
+        },
+      },
+    ],
+  });
+
   const renderer: Partial<Renderer> = {
     code({ text, lang }) {
       if (lang === 'mermaid') {

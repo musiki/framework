@@ -76,7 +76,8 @@ export const createClaseController = ({
 
     contentEl.innerHTML = sections
       .map((section, index) => {
-        const html = parse ? (parse(section) as string) : `<pre>${escapeHtml(section)}</pre>`;
+        const processedSection = section.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+        const html = parse ? (parse(processedSection) as string) : `<pre>${escapeHtml(section)}</pre>`;
         const isActive = index === activeIndex;
         return [
           `<div class="clase-section${isActive ? ' is-active' : ''}" data-clase-index="${index}">${html}</div>`,

@@ -2233,7 +2233,8 @@ const resolvedSlideTheme =
 
         const renderGridMarkdown = (rawValue) => {
           const markdown = stripCoverMarkers(normalizeGridInnerMarkdown(rawValue));
-          return String(marked.parse(markdown, { gfm: true, breaks: true }));
+          const processedMarkdown = markdown.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+          return String(marked.parse(processedMarkdown, { gfm: true, breaks: true }));
         };
 
         const normalizeMermaidSource = (value) =>

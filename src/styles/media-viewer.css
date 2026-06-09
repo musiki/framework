@@ -1,0 +1,51 @@
+.media-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 10, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  overflow: hidden;
+  touch-action: none;
+}
+.media-viewer.is-open {
+  display: flex;
+}
+.media-viewer__image {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
+  transform-origin: center center;
+  transition: transform 120ms ease-out;
+}
+.media-viewer__image.is-dragging {
+  cursor: grabbing;
+  transition: none;
+}
+.media-viewer__fog {
+  position: absolute;
+  inset: 0;
+}
+.media-viewer__stage {
+  position: relative;
+  z-index: 1;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.content img,
+article img,
+.markdown-body img,
+.content-area img {
+  cursor: zoom-in;
+}

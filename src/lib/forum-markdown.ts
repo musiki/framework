@@ -20,6 +20,7 @@ import remarkLily from '../plugins/remark-lily.mjs';
 import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 import remarkForumMathMacros from '../plugins/remark-forum-math-macros.mjs';
 import remarkDataviewLite from '../plugins/remark-dataview-lite.mjs';
+import remarkObsidianHighlight from '../plugins/remark-obsidian-highlight.mjs';
 
 const forumHighlightAliases = {
   javascript: ['js'],
@@ -46,6 +47,7 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
     .use(remarkWikiLink)
     .use(remarkMediaEmbed)
     .use(remarkLily)
+    .use(remarkObsidianHighlight)
     .use(remarkDataviewLite)
     .use(remarkRemoteLilypond, {
       enabled: options.remoteLilypond !== false,

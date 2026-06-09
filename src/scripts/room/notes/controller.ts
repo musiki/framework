@@ -388,7 +388,8 @@ export const createRoomNotesController = ({
     if (!notesWindow.marked?.parse) {
       await createMarkedLoader();
     }
-    return notesWindow.marked?.parse ? String(notesWindow.marked.parse(body)) : `<pre>${body}</pre>`;
+    const processedBody = body.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+    return notesWindow.marked?.parse ? String(notesWindow.marked.parse(processedBody)) : `<pre>${body}</pre>`;
   };
 
   const submitNotesForm = () => {

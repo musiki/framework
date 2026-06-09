@@ -570,7 +570,8 @@ if (session?.user?.email) {
 
             // Import marked dynamically for performance
             const { marked } = await import('marked');
-            untrefBody.innerHTML = await marked.parse(markdownText);
+            const processedText = markdownText.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+            untrefBody.innerHTML = await marked.parse(processedText);
             contentLoaded = true;
           } catch (error) {
             console.error('Error loading public university info:', error);

@@ -21,7 +21,7 @@ function createSpanNode(className, value) {
   return {
     type: 'element',
     tagName: 'span',
-    properties: { className: [className] },
+    properties: { className: String(className || '').split(' ').filter(Boolean) },
     children: [createTextNode(value)],
   };
 }
@@ -160,6 +160,29 @@ function highlightMermaidLine(lineText) {
   return buildLineNodes(lineText, selectNonOverlappingSpans(spans));
 }
 
+function highlightBibtexLine(lineText) {
+  const spans = [];
+  const commentIndex = lineText.indexOf('%');
+  const codeText = commentIndex === -1 ? lineText : lineText.slice(0, commentIndex);
+
+  if (commentIndex !== -1) {
+    spans.push({
+      from: commentIndex,
+      to: lineText.length,
+      className: 'musiki-code-comment',
+      priority: 0,
+    });
+  }
+
+  collectMatches(spans, codeText, /(?<==\s*)(?:\{[^{}]*\}|"[^"]*"|\d+)/g, 'bibtex value', 1);
+  collectMatches(spans, codeText, /(?<=@\w+\s*\{\s*)[^,\s]+/g, 'bibtex header', 2);
+  collectMatches(spans, codeText, /@\w+/g, 'bibtex entry', 3);
+  collectMatches(spans, codeText, /\b[a-zA-Z_][a-zA-Z0-9_-]*(?=\s*=)/g, 'bibtex key', 4);
+  collectMatches(spans, codeText, /[{}==,]/g, 'bibtex normal', 5);
+
+  return buildLineNodes(lineText, selectNonOverlappingSpans(spans));
+}
+
 function highlightCodeText(source, language) {
   const lines = String(source || '').split('\n');
   const nodes = [];
@@ -168,6 +191,8 @@ function highlightCodeText(source, language) {
     const lineNodes =
       language === 'mermaid'
         ? highlightMermaidLine(lineText)
+        : language === 'bibtex'
+        ? highlightBibtexLine(lineText)
         : highlightLilyLine(lineText);
     nodes.push(...lineNodes);
     if (index < lines.length - 1) {
@@ -183,6 +208,7 @@ function resolveCodeLanguage(codeNode) {
   for (const className of classNames) {
     if (['language-lily', 'language-lilypond', 'language-ly'].includes(className)) return 'lily';
     if (['language-mermaid', 'lang-mermaid'].includes(className)) return 'mermaid';
+    if (['language-bibtex', 'language-bib', 'language-biblatex', 'language-btx', 'lang-bibtex', 'lang-bib'].includes(className)) return 'bibtex';
   }
   return '';
 }

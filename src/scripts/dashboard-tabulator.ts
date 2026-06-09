@@ -462,6 +462,17 @@ const unlockDashboardSaveStatus = () => {
 const toTitleCase = (text: string): string =>
   String(text || '').replace(/\S+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 
+const toUsualCaps = (text: string): string => {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return text;
+  const isAllUpper = trimmed === trimmed.toUpperCase();
+  const isAllLower = trimmed === trimmed.toLowerCase();
+  if (isAllUpper || isAllLower) {
+    return toTitleCase(trimmed);
+  }
+  return text;
+};
+
 const EDITABLE_USER_FIELDS = ['firstName', 'lastName', 'email', 'name'];
 
 const saveUserFieldFromCell = async (cell: any, overrideValue?: string, meta?: DashboardMeta): Promise<void> => {
@@ -3199,6 +3210,23 @@ const buildCellContextMenu = (
       },
       {
         separator: true,
+      },
+      {
+        label: `Corregir mayúsculas/minúsculas${suffix}`,
+        action: async () => {
+          for (const targetCell of targets) {
+            const targetField = getCellField(targetCell);
+            const current = String(targetCell.getValue() ?? '');
+            const corrected = toUsualCaps(current);
+            if (corrected === current) continue;
+            if (EDITABLE_USER_FIELDS.includes(targetField)) {
+              await saveSingleUserFieldCellValue(targetCell, corrected, meta);
+            } else {
+              targetCell.setValue(corrected);
+              await saveUserFieldFromCell(targetCell, corrected, meta);
+            }
+          }
+        },
       },
       {
         label: `Title Case${suffix}`,
