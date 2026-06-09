@@ -157,13 +157,68 @@ function getNoteIconInfo(note: NoteListItem) {
   if (noteStatus === 'draft') {
     return { char: '◩', color: '#888888', isConcept: false };
   }
-  if (noteType === 'concept') {
+  let isConcept = noteType === 'concept';
+  if (!isConcept && note.slug.startsWith('public/')) {
+    const isGlossary = noteType === 'glossary' || note.slug.includes('/glosario/') || note.slug.startsWith('public/glosario/');
+    const isPublicNote = noteType === 'public-note' || noteType === 'notes' || note.slug.includes('/notes/') || note.slug.startsWith('public/notes/');
+    if (!isGlossary && !isPublicNote) {
+      isConcept = true;
+    }
+  }
+  if (isConcept) {
     return { char: '🔷', color: '', isConcept: true };
   }
   if (title.toUpperCase().includes('MOC')) {
     return { char: '■', color: '#8e7cc3', isConcept: false };
   }
   return { char: '■', color: '#888888', isConcept: false };
+}
+
+interface NoteTreeNode {
+  name: string;
+  note: NoteListItem | null;
+  children: Map<string, NoteTreeNode>;
+}
+
+function buildNoteTree(notesList: NoteListItem[]): NoteTreeNode {
+  const root: NoteTreeNode = { name: '', note: null, children: new Map() };
+  for (const note of notesList) {
+    let relPath = '';
+    if (note.slug.startsWith('public/')) {
+      const publicIndex = note.slug.indexOf('public/');
+      if (publicIndex !== -1) {
+        relPath = note.slug.slice(publicIndex + 'public/'.length);
+      } else {
+        relPath = note.slug;
+      }
+    } else {
+      relPath = 'conceptos/' + note.slug.split('/').pop()!;
+    }
+
+    const parts = relPath.split('/').filter(Boolean);
+    let current = root;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+      if (!current.children.has(part)) {
+        current.children.set(part, {
+          name: part,
+          note: isLast ? note : null,
+          children: new Map(),
+        });
+      }
+      current = current.children.get(part)!;
+    }
+  }
+  return root;
+}
+
+function hasActiveNoteClient(node: NoteTreeNode, activeSlug: string): boolean {
+  if (node.note && node.note.slug === activeSlug) return true;
+  for (const child of node.children.values()) {
+    if (hasActiveNoteClient(child, activeSlug)) return true;
+  }
+  return false;
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
@@ -250,6 +305,176 @@ export function renderNotesSidebar(
   function clearDropState() {
     activeDropTarget?.classList.remove('ns-drag-over', 'ns-drop-active');
     activeDropTarget = null;
+  }
+
+  function renderNoteTree(
+    node: NoteTreeNode,
+    parentEl: HTMLElement,
+    isGlobalChapter: boolean
+  ) {
+    const sortedChildren = [...node.children.values()].sort((a, b) => {
+      const aIsFolder = a.children.size > 0;
+      const bIsFolder = b.children.size > 0;
+      if (aIsFolder !== bIsFolder) {
+        return aIsFolder ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    for (const child of sortedChildren) {
+      if (child.children.size > 0) {
+        const li = document.createElement('li');
+        li.className = 'recursos-sidebar-resource-item';
+
+        const details = document.createElement('details');
+        details.className = 'recursos-sidebar-folder';
+
+        const isOpen = activeSlug ? hasActiveNoteClient(child, activeSlug) : false;
+        details.open = isOpen;
+
+        const summary = document.createElement('summary');
+        summary.className = 'recursos-sidebar-folder-name';
+        summary.innerHTML = `<span class="recursos-sidebar-folder-caret">▸</span><span style="color:#4e6070">⊟</span>${escHtml(child.name)}`;
+
+        const childUl = document.createElement('ul');
+        childUl.className = 'recursos-sidebar-folder-items';
+
+        renderNoteTree(child, childUl, isGlobalChapter);
+
+        details.appendChild(summary);
+        details.appendChild(childUl);
+        li.appendChild(details);
+        parentEl.appendChild(li);
+      } else if (child.note) {
+        const note = child.note;
+        const li = document.createElement('li');
+        li.className = 'lesson-item';
+
+        const isActive = note.slug === activeSlug;
+        const relPath = noteSlugToRelPath(note.slug, courseId);
+        const noteUrl = `${courseHref}/${relPath}`;
+
+        const a = document.createElement('a');
+        a.href = noteUrl;
+        a.className = 'lesson-link' + (isActive ? ' active' : '');
+        a.dataset.astroPrefetch = 'false';
+        a.draggable = !note.slug.startsWith('public/');
+
+        const titleText = note.title || child.name.replace(/\.md$/, '');
+        const textSpan = document.createElement('span');
+        textSpan.className = 'lesson-link-text';
+        textSpan.textContent = titleText;
+        const trailingSpan = document.createElement('span');
+        trailingSpan.className = 'lesson-link-trailing';
+
+        const ic = getNoteIconInfo(note);
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'lesson-icon' + (ic.isConcept ? ' lesson-icon--concept' : '');
+        if (ic.color) {
+          iconSpan.style.color = ic.color;
+        }
+        iconSpan.textContent = ic.char;
+
+        a.appendChild(iconSpan);
+        a.appendChild(textSpan);
+        a.appendChild(trailingSpan);
+
+        a.addEventListener('click', e => {
+          const cancelled = !window.dispatchEvent(
+            new CustomEvent('note-open', {
+              detail: { slug: note.slug, courseId, mode: 'preview', split: e.altKey },
+              cancelable: true,
+              bubbles: false,
+            }),
+          );
+          if (cancelled) e.preventDefault();
+        });
+
+        if (a.draggable) {
+          a.addEventListener('dragstart', e => {
+            draggingSlug = note.slug;
+            e.dataTransfer!.setData('text/x-musiki-course-note', note.slug);
+            e.dataTransfer!.setData('text/plain', note.slug);
+            e.dataTransfer!.effectAllowed = 'move';
+            setTimeout(() => { a.style.opacity = '.35'; }, 0);
+          });
+          a.addEventListener('dragend', () => {
+            draggingSlug = null;
+            a.style.opacity = '';
+            clearDropState();
+          });
+        }
+
+        a.addEventListener('contextmenu', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (note.slug.startsWith('public/')) return;
+          showContextMenu(e.clientX, e.clientY, [
+            {
+              label: 'Editar',
+              action: () => {
+                const cancelled = !window.dispatchEvent(
+                  new CustomEvent('note-open', {
+                    detail: { slug: note.slug, courseId, mode: 'edit' },
+                    cancelable: true,
+                    bubbles: false,
+                  }),
+                );
+                if (!cancelled) window.location.href = noteUrl;
+              },
+            },
+            {
+              label: 'Renombrar slug',
+              action: async () => {
+                try {
+                  const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
+                  const newBare = prompt('Nuevo slug (sin extensión):', bare);
+                  if (!newBare || newBare === bare) return;
+                  await moveNote(courseId, bare, newBare);
+                  dispatchRefresh();
+                } catch (err) {
+                  console.error('[notes-sidebar] mutation failed:', err);
+                }
+              },
+            },
+            {
+              label: 'Eliminar',
+              danger: true,
+              action: async () => {
+                try {
+                  if (!confirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`)) return;
+                  const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
+                  await deleteNote(courseId, bare);
+                  dispatchRefresh();
+                } catch (err) {
+                  console.error('[notes-sidebar] mutation failed:', err);
+                }
+              },
+            },
+            { separator: true },
+            {
+              label: 'Nueva nota aquí',
+              action: async () => {
+                try {
+                  const title = prompt('Título:');
+                  if (!title) return;
+                  await createNote(courseId, {
+                    slug: slugify(title), title, type: 'lesson',
+                    chapter: note.chapter, status: 'draft', order: note.order + 0.5,
+                  });
+                  dispatchRefresh();
+                } catch (err) {
+                  console.error('[notes-sidebar] mutation failed:', err);
+                }
+              },
+            },
+          ]);
+        });
+
+        li.appendChild(a);
+        parentEl.appendChild(li);
+      }
+    }
   }
 
   function canAcceptDraggedNote(e: DragEvent): boolean {
@@ -627,132 +852,137 @@ export function renderNotesSidebar(
 
     ul.appendChild(makeDropLine(group.name, null));
 
-    for (const note of group.notes) {
-      const li = document.createElement('li');
-      li.className = 'lesson-item';
+    if (group.name.toUpperCase().includes('CONCEPTOS')) {
+      const tree = buildNoteTree(group.notes);
+      renderNoteTree(tree, ul, isGlobalChapter);
+    } else {
+      for (const note of group.notes) {
+        const li = document.createElement('li');
+        li.className = 'lesson-item';
 
-      const isActive = note.slug === activeSlug;
-      const relPath = noteSlugToRelPath(note.slug, courseId);
-      const noteUrl = `${courseHref}/${relPath}`;
+        const isActive = note.slug === activeSlug;
+        const relPath = noteSlugToRelPath(note.slug, courseId);
+        const noteUrl = `${courseHref}/${relPath}`;
 
-      const a = document.createElement('a');
-      a.href = noteUrl;
-      a.className = 'lesson-link' + (isActive ? ' active' : '');
-      a.dataset.astroPrefetch = 'false';
-      a.draggable = !note.slug.startsWith('public/');
+        const a = document.createElement('a');
+        a.href = noteUrl;
+        a.className = 'lesson-link' + (isActive ? ' active' : '');
+        a.dataset.astroPrefetch = 'false';
+        a.draggable = !note.slug.startsWith('public/');
 
-      const titleText = note.title || note.slug.split('/').pop()?.replace('.md', '') || note.slug;
-      const textSpan = document.createElement('span');
-      textSpan.className = 'lesson-link-text';
-      textSpan.textContent = titleText;
-      const trailingSpan = document.createElement('span');
-      trailingSpan.className = 'lesson-link-trailing';
+        const titleText = note.title || note.slug.split('/').pop()?.replace('.md', '') || note.slug;
+        const textSpan = document.createElement('span');
+        textSpan.className = 'lesson-link-text';
+        textSpan.textContent = titleText;
+        const trailingSpan = document.createElement('span');
+        trailingSpan.className = 'lesson-link-trailing';
 
-      const ic = getNoteIconInfo(note);
-      const iconSpan = document.createElement('span');
-      iconSpan.className = 'lesson-icon' + (ic.isConcept ? ' lesson-icon--concept' : '');
-      if (ic.color) {
-        iconSpan.style.color = ic.color;
+        const ic = getNoteIconInfo(note);
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'lesson-icon' + (ic.isConcept ? ' lesson-icon--concept' : '');
+        if (ic.color) {
+          iconSpan.style.color = ic.color;
+        }
+        iconSpan.textContent = ic.char;
+
+        a.appendChild(iconSpan);
+        a.appendChild(textSpan);
+        a.appendChild(trailingSpan);
+
+        a.addEventListener('click', e => {
+          const cancelled = !window.dispatchEvent(
+            new CustomEvent('note-open', {
+              detail: { slug: note.slug, courseId, mode: 'preview', split: e.altKey },
+              cancelable: true,
+              bubbles: false,
+            }),
+          );
+          if (cancelled) e.preventDefault();
+        });
+
+        a.addEventListener('dragstart', e => {
+          draggingSlug = note.slug;
+          e.dataTransfer!.setData('text/x-musiki-course-note', note.slug);
+          e.dataTransfer!.setData('text/plain', note.slug);
+          e.dataTransfer!.effectAllowed = 'move';
+          setTimeout(() => { a.style.opacity = '.35'; }, 0);
+        });
+        a.addEventListener('dragend', () => {
+          draggingSlug = null;
+          a.style.opacity = '';
+          clearDropState();
+        });
+
+        a.addEventListener('contextmenu', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (note.slug.startsWith('public/')) return;
+          showContextMenu(e.clientX, e.clientY, [
+            {
+              label: 'Editar',
+              action: () => {
+                const cancelled = !window.dispatchEvent(
+                  new CustomEvent('note-open', {
+                    detail: { slug: note.slug, courseId, mode: 'edit' },
+                    cancelable: true,
+                    bubbles: false,
+                  }),
+                );
+                if (!cancelled) window.location.href = noteUrl;
+              },
+            },
+            {
+              label: 'Renombrar slug',
+              action: async () => {
+                try {
+                  const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
+                  const newBare = prompt('Nuevo slug (sin extensión):', bare);
+                  if (!newBare || newBare === bare) return;
+                  await moveNote(courseId, bare, newBare);
+                  dispatchRefresh();
+                } catch (err) {
+                  console.error('[notes-sidebar] mutation failed:', err);
+                }
+              },
+            },
+            {
+              label: 'Eliminar',
+              danger: true,
+              action: async () => {
+                try {
+                  if (!confirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`)) return;
+                  const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
+                  await deleteNote(courseId, bare);
+                  dispatchRefresh();
+                } catch (err) {
+                  console.error('[notes-sidebar] mutation failed:', err);
+                }
+              },
+            },
+            { separator: true },
+            {
+              label: 'Nueva nota aquí',
+              action: async () => {
+                try {
+                  const title = prompt('Título:');
+                  if (!title) return;
+                  await createNote(courseId, {
+                    slug: slugify(title), title, type: 'lesson',
+                    chapter: note.chapter, status: 'draft', order: note.order + 0.5,
+                  });
+                  dispatchRefresh();
+                } catch (err) {
+                  console.error('[notes-sidebar] mutation failed:', err);
+                }
+              },
+            },
+          ]);
+        });
+
+        li.appendChild(a);
+        ul.appendChild(li);
+        ul.appendChild(makeDropLine(group.name, note.slug));
       }
-      iconSpan.textContent = ic.char;
-
-      a.appendChild(iconSpan);
-      a.appendChild(textSpan);
-      a.appendChild(trailingSpan);
-
-      a.addEventListener('click', e => {
-        const cancelled = !window.dispatchEvent(
-          new CustomEvent('note-open', {
-            detail: { slug: note.slug, courseId, mode: 'preview', split: e.altKey },
-            cancelable: true,
-            bubbles: false,
-          }),
-        );
-        if (cancelled) e.preventDefault();
-      });
-
-      a.addEventListener('dragstart', e => {
-        draggingSlug = note.slug;
-        e.dataTransfer!.setData('text/x-musiki-course-note', note.slug);
-        e.dataTransfer!.setData('text/plain', note.slug);
-        e.dataTransfer!.effectAllowed = 'move';
-        setTimeout(() => { a.style.opacity = '.35'; }, 0);
-      });
-      a.addEventListener('dragend', () => {
-        draggingSlug = null;
-        a.style.opacity = '';
-        clearDropState();
-      });
-
-      a.addEventListener('contextmenu', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (note.slug.startsWith('public/')) return;
-        showContextMenu(e.clientX, e.clientY, [
-          {
-            label: 'Editar',
-            action: () => {
-              const cancelled = !window.dispatchEvent(
-                new CustomEvent('note-open', {
-                  detail: { slug: note.slug, courseId, mode: 'edit' },
-                  cancelable: true,
-                  bubbles: false,
-                }),
-              );
-              if (!cancelled) window.location.href = noteUrl;
-            },
-          },
-          {
-            label: 'Renombrar slug',
-            action: async () => {
-              try {
-                const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
-                const newBare = prompt('Nuevo slug (sin extensión):', bare);
-                if (!newBare || newBare === bare) return;
-                await moveNote(courseId, bare, newBare);
-                dispatchRefresh();
-              } catch (err) {
-                console.error('[notes-sidebar] mutation failed:', err);
-              }
-            },
-          },
-          {
-            label: 'Eliminar',
-            danger: true,
-            action: async () => {
-              try {
-                if (!confirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`)) return;
-                const bare = note.slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
-                await deleteNote(courseId, bare);
-                dispatchRefresh();
-              } catch (err) {
-                console.error('[notes-sidebar] mutation failed:', err);
-              }
-            },
-          },
-          { separator: true },
-          {
-            label: 'Nueva nota aquí',
-            action: async () => {
-              try {
-                const title = prompt('Título:');
-                if (!title) return;
-                await createNote(courseId, {
-                  slug: slugify(title), title, type: 'lesson',
-                  chapter: note.chapter, status: 'draft', order: note.order + 0.5,
-                });
-                dispatchRefresh();
-              } catch (err) {
-                console.error('[notes-sidebar] mutation failed:', err);
-              }
-            },
-          },
-        ]);
-      });
-
-      li.appendChild(a);
-      ul.appendChild(li);
-      ul.appendChild(makeDropLine(group.name, note.slug));
     }
 
     if (isRecursos) {
@@ -963,8 +1193,20 @@ export function initNotesSidebar(
           const parsed = JSON.parse(globalConceptsAttr) as any[];
           const mapped = parsed.map(entry => {
             const idParts = String(entry.id || '').split('/');
-            const folderName = idParts.length >= 2 ? idParts[idParts.length - 2] : '';
-            const chapter = folderName ? `70 ${folderName.toUpperCase()}` : '70 CONCEPTOS';
+            const entryId = String(entry.id || '');
+            const type = String(entry.data?.type || '').trim().toLowerCase();
+
+            const isGlossary = type === 'glossary' || entryId.includes('/glosario/') || entryId.startsWith('public/glosario/');
+            const isPublicNote = type === 'public-note' || type === 'notes' || entryId.includes('/notes/') || entryId.startsWith('public/notes/');
+
+            let chapter = '';
+            if (isGlossary) {
+              chapter = '71 GLOSARIO';
+            } else if (isPublicNote) {
+              chapter = '72 NOTAS PÚBLICAS';
+            } else {
+              chapter = '70 CONCEPTOS';
+            }
             const title = entry.data.title || idParts[idParts.length - 1].replace(/\.md$/, '');
             return {
               slug: entry.id,

@@ -53,11 +53,15 @@ const getLessonIconInfo = (lesson: any) => {
   }
 
   let isConcept = lessonType === 'concept';
-  if (!isConcept && (lesson as any).collection === 'content') {
-    const idParts = String((lesson as any).id || '').split('/');
-    const folderName = idParts.length >= 2 ? idParts[idParts.length - 2].toLowerCase() : '';
-    if (['conceptos', 'instrumentos', 'speakers'].includes(folderName)) {
-      isConcept = true;
+  if (!isConcept) {
+    const isFromContentCollection = (lesson as any).collection === 'content';
+    const entryId = String((lesson as any).id || '');
+    if (isFromContentCollection || entryId.startsWith('public/')) {
+      const isGlossary = lessonType === 'glossary' || entryId.includes('/glosario/') || entryId.startsWith('public/glosario/');
+      const isPublicNote = lessonType === 'public-note' || lessonType === 'notes' || entryId.includes('/notes/') || entryId.startsWith('public/notes/');
+      if (!isGlossary && !isPublicNote) {
+        isConcept = true;
+      }
     }
   }
 
@@ -297,12 +301,12 @@ const globalConcepts = (await getCollection('content')).filter((entry) => {
 
   let isConceptOrGlossary = type.includes('concept') || type.includes('glossary');
   if (!isConceptOrGlossary && !type) {
-    const idParts = String(entry.id || '').split('/');
-    const folderName = idParts.length >= 2 ? idParts[idParts.length - 2].toLowerCase() : '';
-    if (['conceptos', 'instrumentos', 'speakers'].includes(folderName)) {
-      isConceptOrGlossary = true;
-    } else if (folderName === 'glosario') {
-      isConceptOrGlossary = true;
+    const entryId = String(entry.id || '');
+    if (entryId.startsWith('public/')) {
+      const isPublicNote = type === 'public-note' || type === 'notes' || entryId.includes('/notes/') || entryId.startsWith('public/notes/');
+      if (!isPublicNote) {
+        isConceptOrGlossary = true;
+      }
     }
   }
 
@@ -417,22 +421,20 @@ conceptsAndGlossary.forEach((lesson) => {
   let chapter = lesson.data.chapter;
   if (!chapter) {
     const isFromContentCollection = (lesson as any).collection === 'content';
-    if (isFromContentCollection) {
-      // Derive chapter from folder path in the entry ID: public/{folderName}/filename
-      const idParts = String((lesson as any).id || '').split('/');
-      const folderName = idParts.length >= 2 ? idParts[idParts.length - 2] : '';
-      chapter = folderName ? `70 ${folderName.toUpperCase()}` : '70 CONCEPTOS';
+    const entryId = String((lesson as any).id || '');
+    const type = String(lesson.data.type || '').trim().toLowerCase();
+
+    const isGlossary = type === 'glossary' || entryId.includes('/glosario/') || entryId.startsWith('public/glosario/');
+    const isPublicNote = type === 'public-note' || type === 'notes' || entryId.includes('/notes/') || entryId.startsWith('public/notes/');
+
+    if (isGlossary) {
+      chapter = '71 GLOSARIO';
+    } else if (isPublicNote) {
+      chapter = '72 NOTAS PÚBLICAS';
+    } else if (isFromContentCollection || entryId.startsWith('public/') || type === 'concept') {
+      chapter = '70 CONCEPTOS';
     } else {
-      const type = String(lesson.data.type || '').trim().toLowerCase();
-      // For cursos entries inside public/{subfolder}/, group by that subfolder name
-      const entryId = String((lesson as any).id || '');
-      const publicSubMatch = entryId.match(/\/public\/([^/]+)\//);
-      if (publicSubMatch) {
-        chapter = `70 ${publicSubMatch[1].toUpperCase()}`;
-      } else if (type === 'concept') chapter = '70 CONCEPTOS';
-      else if (type === 'glossary') chapter = '71 GLOSARIO';
-      else if (type === 'public-note' || type === 'notes') chapter = '72 NOTAS PÚBLICAS';
-      else chapter = '79 OTROS';
+      chapter = '79 OTROS';
     }
   }
 
@@ -989,6 +991,186 @@ const forumThreadPrompt = sessionFirstName
   ? `¿Qué pensás, ${sessionFirstName}?`
   : '¿Qué pensás?';
 const localContentAdminEnabled = isLocalContentAdminEnabled();
+
+interface LessonTreeNode {
+  name: string;
+  lesson: any | null;
+  children: Map<string, LessonTreeNode>;
+}
+
+function buildLessonsTree(lessons: any[]): LessonTreeNode {
+  const root: LessonTreeNode = { name: '', lesson: null, children: new Map() };
+  for (const lesson of lessons) {
+    let relPath = '';
+    const isFromContentCollection = (lesson as any).collection === 'content';
+    const entryId = String((lesson as any).id || '');
+    if (isFromContentCollection || entryId.startsWith('public/')) {
+      const publicIndex = entryId.indexOf('public/');
+      if (publicIndex !== -1) {
+        relPath = entryId.slice(publicIndex + 'public/'.length);
+      } else {
+        relPath = entryId;
+      }
+    } else {
+      relPath = 'conceptos/' + (lesson.slug || entryId).split('/').pop()!;
+    }
+
+    const parts = relPath.split('/').filter(Boolean);
+    let current = root;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+      if (!current.children.has(part)) {
+        current.children.set(part, {
+          name: part,
+          lesson: isLast ? lesson : null,
+          children: new Map(),
+        });
+      }
+      current = current.children.get(part)!;
+    }
+  }
+  return root;
+}
+
+function hasActiveNote(node: LessonTreeNode, activeId: string): boolean {
+  if (node.lesson && node.lesson.id === activeId) return true;
+  for (const child of node.children.values()) {
+    if (hasActiveNote(child, activeId)) return true;
+  }
+  return false;
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderLessonsTreeHTML(
+  node: LessonTreeNode,
+  activeEntryId: string | undefined,
+  session: any,
+  canonicalCourseIdToUse: string | undefined,
+  courseSlug: string,
+  courseData: any,
+  lessonPathIndex: any,
+  canManageLiveInteractions: boolean
+): string {
+  const sortedChildren = [...node.children.values()].sort((a, b) => {
+    const aIsFolder = a.children.size > 0;
+    const bIsFolder = b.children.size > 0;
+    if (aIsFolder !== bIsFolder) {
+      return aIsFolder ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  return sortedChildren
+    .map((child) => {
+      if (child.children.size > 0) {
+        const isOpen = activeEntryId ? hasActiveNote(child, activeEntryId) : false;
+        const nested = renderLessonsTreeHTML(
+          child,
+          activeEntryId,
+          session,
+          canonicalCourseIdToUse,
+          courseSlug,
+          courseData,
+          lessonPathIndex,
+          canManageLiveInteractions
+        );
+        return `
+          <li class="recursos-sidebar-resource-item">
+            <details class="recursos-sidebar-folder"${isOpen ? ' open' : ''}>
+              <summary class="recursos-sidebar-folder-name">
+                <span class="recursos-sidebar-folder-caret">▸</span>
+                <span style="color:#4e6070">⊟</span>
+                ${escHtml(child.name)}
+              </summary>
+              <ul class="recursos-sidebar-folder-items">
+                ${nested}
+              </ul>
+            </details>
+          </li>
+        `;
+      } else if (child.lesson) {
+        const lesson = child.lesson;
+        const isContentCollection = (lesson as any).collection === 'content';
+        const lessonType = String(lesson.data.type || '').trim().toLowerCase();
+        const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
+        const ic = getLessonIconInfo(lesson);
+
+        let lessonHref;
+        if (session && (isConceptGlossary || isContentCollection)) {
+          lessonHref = buildCourseLessonHref(
+            canonicalCourseIdToUse || '',
+            courseData,
+            lesson as any,
+            lessonPathIndex,
+          );
+        } else if (isContentCollection || isConceptGlossary) {
+          lessonHref = `/${getContentCanonicalSlug(lesson as any)}`;
+        } else {
+          lessonHref = buildCourseLessonHref(
+            canonicalCourseIdToUse || '',
+            courseData,
+            lesson as any,
+            lessonPathIndex,
+          );
+        }
+
+        const lessonPageSlug = isContentCollection
+          ? getContentCanonicalSlug(lesson as any)
+          : (lessonPathIndex.pathByEntryId.get(lesson.id)
+             || getCourseEntryLegacyPath(lesson as any, canonicalCourseIdToUse || ''));
+
+        const isActive = activeEntryId === lesson.id;
+        const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
+
+        const activeClass = isActive ? ' active' : '';
+        const iconConceptClass = ic.isConcept ? ' lesson-icon--concept' : '';
+        const iconStyle = ic.color ? ` style="color: ${ic.color}"` : '';
+
+        const badgeDraft = (canManageLiveInteractions && lessonStatus === 'draft')
+          ? `<span class="lesson-status-badge lesson-status-badge--draft"><span class="lesson-status-blob" aria-hidden="true"></span>DRAFT</span>`
+          : '';
+        const badgePrivate = (canManageLiveInteractions && lessonStatus === 'private')
+          ? `<span class="lesson-status-badge lesson-status-badge--private"><span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE</span>`
+          : '';
+
+        const infoIcon = lessonType === 'info' ? '<span class="lesson-type">ℹ️</span>' : '';
+        const glossaryIcon = lessonType === 'glossary' ? `<span class="lesson-type" title="${lessonType}">📖</span>` : '';
+        const assignmentIcon = assignmentLikeTypes.has(lessonType) ? '<span class="lesson-type">📝</span>' : '';
+
+        const dataLessonPageSlug = isContentCollection
+          ? ((lesson as any).id || lessonPageSlug)
+          : `${canonicalCourseIdToUse}/${lessonPageSlug}`;
+
+        return `
+          <li class="lesson-item">
+            <a
+              href="${lessonHref}"
+              class="lesson-link${activeClass}"
+              data-astro-prefetch="false"
+              data-course-id="${canonicalCourseIdToUse || courseSlug}"
+              data-lesson-page-slug="${dataLessonPageSlug}"
+            >
+              <span class="lesson-icon${iconConceptClass}"${iconStyle}>${ic.char}</span>
+              <span class="lesson-link-text">${escHtml(lesson.data.title || child.name.replace(/\.md$/, ''))}</span>
+              <span class="lesson-link-trailing">
+                ${infoIcon}
+                ${glossaryIcon}
+                ${assignmentIcon}
+                ${badgeDraft}
+                ${badgePrivate}
+              </span>
+            </a>
+          </li>
+        `;
+      }
+      return '';
+    })
+    .join('');
+}
 
 ---
 
@@ -4726,85 +4908,100 @@ const localContentAdminEnabled = isLocalContentAdminEnabled();
                       })}
                     </div>
                   ) : (
-                    <ul class="lesson-list">
-                      {lessons.map((lesson) => {
-                      const isContentCollection = (lesson as any).collection === 'content';
-                      const lessonType = String(lesson.data.type || '').trim().toLowerCase();
-                      const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
-                      const ic = getLessonIconInfo(lesson);
+                    <ul class="lesson-list" set:html={
+                      displayTitle.toUpperCase().includes('CONCEPTOS') ? (
+                        renderLessonsTreeHTML(
+                          buildLessonsTree(lessons),
+                          currentEntry?.id,
+                          session,
+                          canonicalCourseIdToUse,
+                          courseSlug,
+                          courseData,
+                          lessonPathIndex,
+                          canManageLiveInteractions
+                        )
+                      ) : undefined
+                    }>
+                      {!displayTitle.toUpperCase().includes('CONCEPTOS') && (
+                        lessons.map((lesson) => {
+                          const isContentCollection = (lesson as any).collection === 'content';
+                          const lessonType = String(lesson.data.type || '').trim().toLowerCase();
+                          const isConceptGlossary = conceptGlossaryTypes.has(lessonType);
+                          const ic = getLessonIconInfo(lesson);
 
-                      let lessonHref;
-                      if (session && (isConceptGlossary || isContentCollection)) {
-                        lessonHref = buildCourseLessonHref(
-                            canonicalCourseIdToUse || '',
-                            courseData,
-                            lesson as any,
-                            lessonPathIndex,
+                          let lessonHref;
+                          if (session && (isConceptGlossary || isContentCollection)) {
+                            lessonHref = buildCourseLessonHref(
+                              canonicalCourseIdToUse || '',
+                              courseData,
+                              lesson as any,
+                              lessonPathIndex,
+                            );
+                          } else if (isContentCollection || isConceptGlossary) {
+                            lessonHref = `/${getContentCanonicalSlug(lesson as any)}`;
+                          } else {
+                            lessonHref = buildCourseLessonHref(
+                              canonicalCourseIdToUse || '',
+                              courseData,
+                              lesson as any,
+                              lessonPathIndex,
+                            );
+                          }
+
+                          const lessonPageSlug = isContentCollection
+                            ? getContentCanonicalSlug(lesson as any)
+                            : (lessonPathIndex.pathByEntryId.get(lesson.id)
+                               || getCourseEntryLegacyPath(lesson as any, canonicalCourseIdToUse || ''));
+
+                          const isActive = currentEntry?.id === lesson.id;
+                          const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
+
+                          return (
+                            <li class="lesson-item">
+                              <a
+                                href={lessonHref}
+                                class:list={['lesson-link', { active: isActive }]}
+                                data-astro-prefetch="false"
+                                data-course-id={canonicalCourseIdToUse || courseSlug}
+                                data-lesson-page-slug={isContentCollection ? ((lesson as any).id || lessonPageSlug) : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
+                              >
+                                <span class:list={["lesson-icon", { "lesson-icon--concept": ic.isConcept }]} style={ic.color ? `color: ${ic.color}` : undefined}>{ic.char}</span>
+                                <span class="lesson-link-text">{lesson.data.title}</span>
+                                <span class="lesson-link-trailing">
+                                  {lessonType === 'info' && (
+                                    <span class="lesson-type">ℹ️</span>
+                                  )}
+                                  {lessonType === 'glossary' && (
+                                    <span class="lesson-type" title={lessonType}>📖</span>
+                                  )}
+                                  {assignmentLikeTypes.has(lessonType) && (
+                                    <span class="lesson-type">📝</span>
+                                  )}
+                                  {canManageLiveInteractions && lessonStatus === 'draft' && (
+                                    <span class="lesson-status-badge lesson-status-badge--draft">
+                                      <span class="lesson-status-blob" aria-hidden="true"></span>DRAFT
+                                    </span>
+                                  )}
+                                  {canManageLiveInteractions && lessonStatus === 'private' && (
+                                    <span class="lesson-status-badge lesson-status-badge--private">
+                                      <span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE
+                                    </span>
+                                  )}
+                                  <span class="lesson-activity-indicators">
+                                    <span class="lesson-room-indicator" data-lesson-room-indicator hidden aria-hidden="true">
+                                      <span class="lesson-live-led lesson-live-led--room" aria-hidden="true"></span>
+                                    </span>
+                                    <span class="lesson-live-indicator" data-lesson-live-indicator hidden aria-live="polite">
+                                      <span class="lesson-live-led" aria-hidden="true"></span>
+                                      <span class="lesson-live-countdown" data-lesson-live-countdown hidden></span>
+                                    </span>
+                                  </span>
+                                </span>
+                              </a>
+                            </li>
                           );
-                      } else if (isContentCollection || isConceptGlossary) {
-                        lessonHref = `/${getContentCanonicalSlug(lesson as any)}`;
-                      } else {
-                        lessonHref = buildCourseLessonHref(
-                            canonicalCourseIdToUse || '',
-                            courseData,
-                            lesson as any,
-                            lessonPathIndex,
-                          );
-                      }
-
-                      const lessonPageSlug = isContentCollection
-                        ? getContentCanonicalSlug(lesson as any)
-                        : (lessonPathIndex.pathByEntryId.get(lesson.id)
-                           || getCourseEntryLegacyPath(lesson as any, canonicalCourseIdToUse || ''));
-
-                      const isActive = currentEntry?.id === lesson.id;
-                      const lessonStatus = String(lesson.data.status || '').trim().toLowerCase();
-
-                      return (
-                        <li class="lesson-item">
-                          <a
-                            href={lessonHref}
-                            class:list={['lesson-link', { active: isActive }]}
-                            data-astro-prefetch="false"
-                            data-course-id={canonicalCourseIdToUse || courseSlug}
-                            data-lesson-page-slug={isContentCollection ? ((lesson as any).id || lessonPageSlug) : `${canonicalCourseIdToUse}/${lessonPageSlug}`}
-                          >
-                            <span class:list={["lesson-icon", { "lesson-icon--concept": ic.isConcept }]} style={ic.color ? `color: ${ic.color}` : undefined}>{ic.char}</span>
-                            <span class="lesson-link-text">{lesson.data.title}</span>
-                            <span class="lesson-link-trailing">
-                              {lessonType === 'info' && (
-                                <span class="lesson-type">ℹ️</span>
-                              )}
-                              {lessonType === 'glossary' && (
-                                <span class="lesson-type" title={lessonType}>📖</span>
-                              )}
-                              {assignmentLikeTypes.has(lessonType) && (
-                                <span class="lesson-type">📝</span>
-                              )}
-                              {canManageLiveInteractions && lessonStatus === 'draft' && (
-                                <span class="lesson-status-badge lesson-status-badge--draft">
-                                  <span class="lesson-status-blob" aria-hidden="true"></span>DRAFT
-                                </span>
-                              )}
-                              {canManageLiveInteractions && lessonStatus === 'private' && (
-                                <span class="lesson-status-badge lesson-status-badge--private">
-                                  <span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE
-                                </span>
-                              )}
-                              <span class="lesson-activity-indicators">
-                                <span class="lesson-room-indicator" data-lesson-room-indicator hidden aria-hidden="true">
-                                  <span class="lesson-live-led lesson-live-led--room" aria-hidden="true"></span>
-                                </span>
-                                <span class="lesson-live-indicator" data-lesson-live-indicator hidden aria-live="polite">
-                                  <span class="lesson-live-led" aria-hidden="true"></span>
-                                  <span class="lesson-live-countdown" data-lesson-live-countdown hidden></span>
-                                </span>
-                              </span>
-                            </span>
-                          </a>
-                        </li>
-                      );
-                      })}
+                        })
+                      )}
                     </ul>
                   )}
                 </details>
