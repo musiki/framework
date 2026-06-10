@@ -183,14 +183,50 @@ function getOrCreateViewerElements(): ViewerElements {
   return getViewerElements() || createModal();
 }
 
+function parseSvgLength(value: string | null) {
+  const parsed = Number.parseFloat(String(value || '').trim());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function getSvgViewBoxSize(svg: SVGSVGElement) {
+  const viewBox = svg.getAttribute('viewBox');
+  if (!viewBox) return { width: 0, height: 0 };
+  const parts = viewBox.trim().split(/[\s,]+/).map(Number.parseFloat);
+  if (parts.length < 4) return { width: 0, height: 0 };
+  const width = Number.isFinite(parts[2]) && parts[2] > 0 ? parts[2] : 0;
+  const height = Number.isFinite(parts[3]) && parts[3] > 0 ? parts[3] : 0;
+  return { width, height };
+}
+
+function getSvgIntrinsicSize(svg: SVGSVGElement) {
+  const rect = svg.getBoundingClientRect();
+  const viewBox = getSvgViewBoxSize(svg);
+  const width =
+    (rect.width > 1 ? rect.width : 0)
+    || parseSvgLength(svg.getAttribute('width'))
+    || viewBox.width
+    || 800;
+  const height =
+    (rect.height > 1 ? rect.height : 0)
+    || parseSvgLength(svg.getAttribute('height'))
+    || viewBox.height
+    || Math.max(150, width * 0.6);
+  return { width, height };
+}
+
 function cloneSvg(svg: SVGSVGElement) {
   const clone = svg.cloneNode(true) as SVGSVGElement;
-  clone.removeAttribute('width');
-  clone.removeAttribute('height');
+  const { width, height } = getSvgIntrinsicSize(svg);
+  if (!clone.getAttribute('viewBox') && width > 0 && height > 0) {
+    clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  }
+  clone.setAttribute('width', String(Math.ceil(width)));
+  clone.setAttribute('height', String(Math.ceil(height)));
   clone.style.maxWidth = '94vw';
   clone.style.maxHeight = '88vh';
   clone.style.width = 'auto';
   clone.style.height = 'auto';
+  clone.style.display = 'block';
   return clone;
 }
 
@@ -203,6 +239,17 @@ function cloneImage(image: HTMLImageElement) {
   return clone;
 }
 
+function cloneMermaid(mermaid: HTMLElement) {
+  const svg = mermaid.querySelector<SVGSVGElement>('svg');
+  if (!svg) return mermaid.cloneNode(true) as HTMLElement;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'mermaid';
+  wrapper.dataset.mermaidRendered = 'true';
+  wrapper.appendChild(cloneSvg(svg));
+  return wrapper;
+}
+
 function resolveMediaNode(root: HTMLElement, rawTarget: EventTarget | null) {
   const target = rawTarget instanceof Element ? rawTarget : null;
   if (!target || !root.contains(target)) return null;
@@ -211,7 +258,7 @@ function resolveMediaNode(root: HTMLElement, rawTarget: EventTarget | null) {
   }
 
   const mermaid = target.closest<HTMLElement>('.mermaid');
-  if (mermaid && root.contains(mermaid)) return mermaid.cloneNode(true) as HTMLElement;
+  if (mermaid && root.contains(mermaid)) return cloneMermaid(mermaid);
 
   const image = target.closest<HTMLImageElement>('img');
   if (image && root.contains(image) && image.src) return cloneImage(image);

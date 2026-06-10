@@ -2163,7 +2163,7 @@ function renderLessonsTreeHTML(
         margin-left: 0;
       }
 
-      .lesson-status-badge {
+      :global(.lesson-status-badge) {
         font-size: 0.6rem;
         font-weight: 700;
         line-height: 1;
@@ -2177,29 +2177,29 @@ function renderLessonsTreeHTML(
         flex-shrink: 0;
       }
 
-      .lesson-status-blob {
+      :global(.lesson-status-blob) {
         width: 0.45rem;
         height: 0.45rem;
         border-radius: 999px;
         flex: 0 0 auto;
       }
 
-      .lesson-status-badge--draft {
+      :global(.lesson-status-badge--draft) {
         color: #b45309;
         background: rgba(245, 158, 11, 0.15);
       }
 
-      .lesson-status-badge--draft .lesson-status-blob {
+      :global(.lesson-status-badge--draft .lesson-status-blob) {
         background: #f59e0b;
         box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
       }
 
-      .lesson-status-badge--private {
+      :global(.lesson-status-badge--private) {
         color: #6d28d9;
         background: rgba(139, 92, 246, 0.15);
       }
 
-      .lesson-status-badge--private .lesson-status-blob {
+      :global(.lesson-status-badge--private .lesson-status-blob) {
         background: #8b5cf6;
         box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5);
       }

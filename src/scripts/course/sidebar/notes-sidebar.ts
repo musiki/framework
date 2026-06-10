@@ -234,6 +234,9 @@ export function renderNotesSidebar(
   courseId: string,
   courseHref: string,
 ): void {
+  const layoutRoot = document.querySelector('[data-course-layout-root]');
+  const canManage = layoutRoot?.getAttribute('data-can-manage-live-interactions') === 'true';
+
   // Before rebuilding, rescue static trees to prevent them from being destroyed
   const currentRecursosTree = container.querySelector('.recursos-sidebar-tree');
   if (currentRecursosTree) {
@@ -366,6 +369,13 @@ export function renderNotesSidebar(
         textSpan.textContent = titleText;
         const trailingSpan = document.createElement('span');
         trailingSpan.className = 'lesson-link-trailing';
+
+        const noteStatus = String(note.status || '').trim().toLowerCase();
+        if (canManage && noteStatus === 'draft') {
+          trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--draft"><span class="lesson-status-blob" aria-hidden="true"></span>DRAFT</span>';
+        } else if (canManage && noteStatus === 'private') {
+          trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--private"><span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE</span>';
+        }
 
         const ic = getNoteIconInfo(note);
         const iconSpan = document.createElement('span');
@@ -876,6 +886,13 @@ export function renderNotesSidebar(
         textSpan.textContent = titleText;
         const trailingSpan = document.createElement('span');
         trailingSpan.className = 'lesson-link-trailing';
+
+        const noteStatus = String(note.status || '').trim().toLowerCase();
+        if (canManage && noteStatus === 'draft') {
+          trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--draft"><span class="lesson-status-blob" aria-hidden="true"></span>DRAFT</span>';
+        } else if (canManage && noteStatus === 'private') {
+          trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--private"><span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE</span>';
+        }
 
         const ic = getNoteIconInfo(note);
         const iconSpan = document.createElement('span');

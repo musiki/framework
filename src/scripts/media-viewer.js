@@ -53,6 +53,68 @@ export function initMediaViewer() {
     applyTransform();
   }
 
+  function parseSvgLength(value) {
+    const parsed = Number.parseFloat(String(value || "").trim());
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  function getSvgViewBoxSize(svg) {
+    const viewBox = svg.getAttribute("viewBox");
+    if (!viewBox) return { width: 0, height: 0 };
+    const parts = viewBox.trim().split(/[\s,]+/).map(Number.parseFloat);
+    if (parts.length < 4) return { width: 0, height: 0 };
+    const width = Number.isFinite(parts[2]) && parts[2] > 0 ? parts[2] : 0;
+    const height = Number.isFinite(parts[3]) && parts[3] > 0 ? parts[3] : 0;
+    return { width, height };
+  }
+
+  function getSvgIntrinsicSize(svg) {
+    const rect = svg.getBoundingClientRect?.();
+    const viewBox = getSvgViewBoxSize(svg);
+    const width =
+      (rect && rect.width > 1 ? rect.width : 0) ||
+      parseSvgLength(svg.getAttribute("width")) ||
+      viewBox.width ||
+      800;
+    const height =
+      (rect && rect.height > 1 ? rect.height : 0) ||
+      parseSvgLength(svg.getAttribute("height")) ||
+      viewBox.height ||
+      Math.max(150, width * 0.6);
+    return { width, height };
+  }
+
+  function cloneSvgForViewer(svg) {
+    const clone = svg.cloneNode(true);
+    const { width, height } = getSvgIntrinsicSize(svg);
+
+    if (!clone.getAttribute("viewBox") && width > 0 && height > 0) {
+      clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    }
+
+    clone.setAttribute("width", String(Math.ceil(width)));
+    clone.setAttribute("height", String(Math.ceil(height)));
+    clone.style.width = "auto";
+    clone.style.height = "auto";
+    clone.style.maxWidth = "92vw";
+    clone.style.maxHeight = "92vh";
+    clone.style.display = "block";
+    return clone;
+  }
+
+  function cloneMermaidForViewer(el) {
+    const svg = el.matches?.("svg") ? el : el.querySelector?.("svg");
+    if (!(svg instanceof SVGSVGElement)) {
+      return el.cloneNode(true);
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "mermaid";
+    wrapper.dataset.mermaidRendered = "true";
+    wrapper.appendChild(cloneSvgForViewer(svg));
+    return wrapper;
+  }
+
   function cloneMedia(el) {
     const tagName = el.tagName.toLowerCase();
     if (tagName === "img") {
@@ -62,21 +124,20 @@ export function initMediaViewer() {
       clone.setAttribute("draggable", "false");
       return clone;
     }
+
+    if (el.classList?.contains("mermaid")) {
+      return cloneMermaidForViewer(el);
+    }
     
     // SVG or Mermaid container (contains SVG)
-    const clone = el.cloneNode(true);
-    
-    // Remove fixed dimensions so it scales cleanly with CSS
-    if (clone.tagName.toLowerCase() === "svg") {
-      clone.removeAttribute("width");
-      clone.removeAttribute("height");
-    } else {
-      const svgs = clone.querySelectorAll("svg");
-      svgs.forEach((svg) => {
-        svg.removeAttribute("width");
-        svg.removeAttribute("height");
-      });
+    if (el instanceof SVGSVGElement) {
+      return cloneSvgForViewer(el);
     }
+
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll?.("svg").forEach((svg) => {
+      svg.replaceWith(cloneSvgForViewer(svg));
+    });
     return clone;
   }
 
