@@ -11,7 +11,7 @@ export type FrontmatterData = {
 };
 
 // Browser-safe frontmatter parser — handles scalars and simple arrays
-function parseYamlBlock(yaml: string): Record<string, unknown> {
+export function parseYamlBlock(yaml: string): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   let currentKey: string | null = null;
   for (const line of yaml.split('\n')) {

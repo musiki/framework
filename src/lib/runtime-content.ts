@@ -38,6 +38,7 @@ const runtimeHighlightAliases = {
 
 export async function renderRuntimeMarkdown(rawContent: string, id = '') {
   const { data: frontmatter, content: markdownBody } = matter(rawContent);
+  const cleanMarkdownBody = markdownBody.replace(/^[ \t]*[nN]ote:[ \t]*/gm, '');
 
   const processor = unified()
     .use(remarkParse)
@@ -65,7 +66,7 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
     .use(rehypeCodeSyntax)
     .use(rehypeStringify);
 
-  const result = await processor.process(markdownBody);
+  const result = await processor.process(cleanMarkdownBody);
   const html = result.toString();
 
   return { html, frontmatter, id };

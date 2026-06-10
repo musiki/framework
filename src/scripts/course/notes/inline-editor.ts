@@ -10,6 +10,7 @@ import {
   serializeFrontmatter,
   populateYamlStrip,
   readYamlStrip,
+  parseYamlBlock,
   type FrontmatterData,
 } from '../../notes-editor/yaml-strip';
 import { initToolbar } from '../../notes-editor/toolbar';
@@ -36,12 +37,14 @@ let notesList: NoteListItem[] = [];
 let editorCreated = false;
 let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 let mountToken = 0;
+let currentFmData: FrontmatterData | null = null;
 
 function resetState() {
   mounted = false;
   currentSlug = null;
   notesList = [];
   editorCreated = false;
+  currentFmData = null;
   if (keydownHandler) {
     document.removeEventListener('keydown', keydownHandler);
     keydownHandler = null;
@@ -95,6 +98,10 @@ function injectNieCss() {
       box-shadow:0 1px 4px rgba(0,0,0,.15);
     }
     #nie-toolbar .snip-btn:hover::after { opacity:1; }
+    #nie-yaml-dialog::backdrop {
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(4px);
+    }
   `;
   document.head.appendChild(s);
 }
@@ -158,6 +165,7 @@ function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: strin
           <button class="snip-btn" data-snippet="iframe" title="Insertar iframe" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">iframe</button>
           <button class="snip-btn" data-snippet="eval" title="Insertar bloque eval" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">eval</button>
           <button class="snip-btn" data-snippet="img" title="Subir imagen" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">img</button>
+          <button id="nie-yaml-raw-btn" title="Editar YAML Frontmatter" style="background:none;border:none;padding:2px 6px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:3px;font-weight:bold;margin-left:auto;border:1px solid var(--c-border);background:var(--c-bg-mute,rgba(128,128,128,.1));">YAML</button>
         </div>
       </div>
       <div id="editor-cm-wrap" style="flex:1;overflow:hidden;min-height:0;"></div>
@@ -221,6 +229,7 @@ async function loadNote(
     }
 
     currentSlug = slug;
+    currentFmData = effectiveData;
     setStatus(statusEl, '');
     return effectiveData;
   } catch (err) {
@@ -248,6 +257,7 @@ async function saveCurrentNote(
 
     const yamlFields = readYamlStrip(mountEl);
     const fmData: FrontmatterData = {
+      ...currentFmData,
       title,
       type: yamlFields.type || 'lesson',
       chapter: yamlFields.chapter || '',
@@ -264,6 +274,71 @@ async function saveCurrentNote(
   } catch (err) {
     setStatus(statusEl, err instanceof Error ? err.message : 'Error al guardar', 'error');
   }
+}
+
+function showYamlModal(currentData: Record<string, any>, onSave: (newData: Record<string, any>) => void) {
+  let dialog = document.getElementById('nie-yaml-dialog') as HTMLDialogElement;
+  if (!dialog) {
+    dialog = document.createElement('dialog');
+    dialog.id = 'nie-yaml-dialog';
+    dialog.style.cssText = `
+      background: var(--c-bg-surface, #f9f9f9);
+      color: var(--c-fg, #111);
+      border: 1px solid var(--c-border, #dcdcdc);
+      border-radius: 8px;
+      padding: 1.5rem;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+      outline: none;
+    `;
+    document.body.appendChild(dialog);
+  }
+
+  const lines: string[] = [];
+  for (const [k, v] of Object.entries(currentData)) {
+    if (v === null || v === undefined) continue;
+    if (Array.isArray(v)) {
+      lines.push(`${k}:`);
+      v.forEach(item => lines.push(`  - ${item}`));
+    } else if (typeof v === 'string') {
+      const escaped = /[:#\[\]{}|>&!'",%@`\n]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v;
+      lines.push(`${k}: ${escaped}`);
+    } else {
+      lines.push(`${k}: ${v}`);
+    }
+  }
+  const yamlText = lines.join('\n');
+
+  dialog.innerHTML = `
+    <h3 style="margin-top:0;font-size:14px;color:var(--c-fg);border-bottom:1px solid var(--c-border);padding-bottom:.5rem;margin-bottom:1rem;font-weight:600;">Editar YAML Frontmatter</h3>
+    <textarea id="nie-yaml-textarea" style="width:100%;height:250px;font-family:monospace;font-size:12px;background:var(--c-bg, #fff);color:var(--c-fg, #111);border:1px solid var(--c-border, #dcdcdc);padding:.5rem;border-radius:4px;box-sizing:border-box;resize:vertical;outline:none;" spellcheck="false">${yamlText}</textarea>
+    <div style="display:flex;justify-content:end;gap:.5rem;margin-top:1rem;">
+      <button id="nie-yaml-cancel" style="background:none;border:1px solid var(--c-border);color:var(--c-fg-dim);padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer;transition:background 0.2s;">Cancelar</button>
+      <button id="nie-yaml-save" style="background:var(--c-link,#0b6cff);border:none;color:white;padding:4px 16px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:bold;transition:opacity 0.2s;">Guardar</button>
+    </div>
+  `;
+
+  const cancelBtn = dialog.querySelector<HTMLButtonElement>('#nie-yaml-cancel')!;
+  const saveBtn = dialog.querySelector<HTMLButtonElement>('#nie-yaml-save')!;
+
+  cancelBtn.addEventListener('mouseenter', () => { cancelBtn.style.background = 'var(--c-bg-mute,rgba(128,128,128,.1))'; });
+  cancelBtn.addEventListener('mouseleave', () => { cancelBtn.style.background = 'none'; });
+  saveBtn.addEventListener('mouseenter', () => { saveBtn.style.opacity = '0.85'; });
+  saveBtn.addEventListener('mouseleave', () => { saveBtn.style.opacity = '1'; });
+
+  dialog.querySelector('#nie-yaml-cancel')?.addEventListener('click', () => {
+    dialog.close();
+  });
+
+  dialog.querySelector('#nie-yaml-save')?.addEventListener('click', () => {
+    const text = dialog.querySelector<HTMLTextAreaElement>('#nie-yaml-textarea')?.value || '';
+    const parsed = parseYamlBlock(text);
+    onSave(parsed);
+    dialog.close();
+  });
+
+  dialog.showModal();
 }
 
 export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
@@ -340,6 +415,34 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     });
   }
 
+  const yamlRawBtn = mountEl.querySelector<HTMLButtonElement>('#nie-yaml-raw-btn');
+  yamlRawBtn?.addEventListener('click', () => {
+    if (!currentSlug) return;
+    const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
+    const yamlFields = readYamlStrip(mountEl);
+    
+    const mergedData: FrontmatterData = {
+      ...currentFmData,
+      title: titleEl?.value || currentFmData?.title || '',
+      type: yamlFields.type || currentFmData?.type || 'lesson',
+      chapter: yamlFields.chapter || currentFmData?.chapter || '',
+      status: yamlFields.status || currentFmData?.status || 'draft',
+      order: yamlFields.order ?? currentFmData?.order ?? 0,
+      theme: yamlFields.theme || currentFmData?.theme || '',
+    };
+
+    showYamlModal(mergedData, (parsed) => {
+      currentFmData = parsed as FrontmatterData;
+
+      if (titleEl) titleEl.value = String(parsed.title || '');
+      populateYamlStrip(notesList, parsed as FrontmatterData, mountEl);
+
+      if (opts.persistence && persistenceOnChange) {
+        persistenceOnChange();
+      }
+    });
+  });
+
   if (!opts.persistence) {
     keydownHandler = (e: KeyboardEvent) => {
       if (!mounted) return;
@@ -371,24 +474,24 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     const activeStatusEl = statusEl ?? document.createElement('span');
 
     // Mutable ref captures frontmatter after loadNote so persistenceOnChange can re-serialize it
-    const fmRef: { data: FrontmatterData | null } = { data: null };
     const persistenceOnChange = opts.persistence
       ? () => {
         const body = getEditorContent();
-        if (showMetadata && fmRef.data) {
+        if (showMetadata && currentFmData) {
           const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
           const yamlFields = readYamlStrip(mountEl);
           const fmData: FrontmatterData = {
-            title: titleEl?.value || fmRef.data?.title || '',
-            type: yamlFields.type || fmRef.data?.type || 'lesson',
-            chapter: yamlFields.chapter || fmRef.data?.chapter || '',
-            status: yamlFields.status || fmRef.data?.status || 'draft',
-            order: yamlFields.order ?? fmRef.data?.order ?? 0,
-            theme: yamlFields.theme || fmRef.data?.theme || '',
+            ...currentFmData,
+            title: titleEl?.value || currentFmData?.title || '',
+            type: yamlFields.type || currentFmData?.type || 'lesson',
+            chapter: yamlFields.chapter || currentFmData?.chapter || '',
+            status: yamlFields.status || currentFmData?.status || 'draft',
+            order: yamlFields.order ?? currentFmData?.order ?? 0,
+            theme: yamlFields.theme || currentFmData?.theme || '',
           };
           opts.persistence!.onChange(serializeFrontmatter(fmData, body));
-        } else if (fmRef.data) {
-          opts.persistence!.onChange(serializeFrontmatter(fmRef.data, body));
+        } else if (currentFmData) {
+          opts.persistence!.onChange(serializeFrontmatter(currentFmData, body));
         } else {
           opts.persistence!.onChange(body);
         }
@@ -402,7 +505,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     }
 
     if (mode === 'edit' && slug) {
-      fmRef.data = await loadNote(slug, courseId, mountEl, showMetadata, activeStatusEl, opts.overrideContent ?? null, persistenceOnChange);
+      currentFmData = await loadNote(slug, courseId, mountEl, showMetadata, activeStatusEl, opts.overrideContent ?? null, persistenceOnChange);
     } else if (mode === 'create') {
       const title = prompt('Nueva nota — Título:');
       if (!title) { setStatus(activeStatusEl, ''); return; }
@@ -416,7 +519,7 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
         if (mountToken !== myToken) return;
         notesList = notes;
         const fullSlug = notes.find(n => n.slug.endsWith(`/${newSlug}.md`))?.slug || newSlug;
-        fmRef.data = await loadNote(fullSlug, courseId, mountEl, showMetadata, activeStatusEl, null, persistenceOnChange);
+        currentFmData = await loadNote(fullSlug, courseId, mountEl, showMetadata, activeStatusEl, null, persistenceOnChange);
       } catch (err) {
         if (mountToken !== myToken) return;
         setStatus(activeStatusEl, err instanceof Error ? err.message : 'Error al crear', 'error');

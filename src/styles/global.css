@@ -843,6 +843,7 @@ ul ul > li::before {
   left: 0.2em;
   top: 0.22em;
   font-size: 0.85em;
+  color: var(--bullet-2);
 }
 
 ul ul ul > li {
@@ -854,9 +855,10 @@ ul ul ul > li {
 ul ul ul > li::before {
   content: "▪";
   position: absolute;
-  left: 0.04em;
-  top: 0.02em;
-  font-size: 1.8em;
+  left: 0.25em;
+  top: 0.25em;
+  font-size: 1.1em;
+  color: var(--bullet-3);
 }
 
 /* === LISTAS ORDENADAS (OL) === */

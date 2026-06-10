@@ -19,6 +19,27 @@ export function isYouTubeEmbedSrc(src: string): boolean {
   }
 }
 
+export function getYouTubeId(src: string): string | null {
+  try {
+    const url = new URL(src, window.location.href);
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    
+    if (url.pathname.startsWith('/embed/')) {
+      const parts = url.pathname.split('/');
+      return parts[2] || null;
+    }
+    
+    if (url.pathname === '/watch') {
+      return url.searchParams.get('v');
+    }
+    
+    if (host === 'youtu.be') {
+      return url.pathname.replace(/^\//, '') || null;
+    }
+  } catch {}
+  return null;
+}
+
 function appendAutoplay(src: string): string {
   try {
     const url = new URL(src, window.location.href);
@@ -46,6 +67,12 @@ export function deferYouTubeEmbeds(html: string): string {
     placeholder.style.aspectRatio = ratio;
     placeholder.dataset.cnwYoutubeSrc = src;
     placeholder.dataset.cnwYoutubeTitle = title;
+
+    const videoId = getYouTubeId(src);
+    if (videoId) {
+      placeholder.style.backgroundImage = `url(https://img.youtube.com/vi/${videoId}/hqdefault.jpg)`;
+    }
+
     placeholder.innerHTML = `
       <button type="button" class="cnw-lazy-embed-btn" aria-label="${escAttr(`Cargar video: ${title}`)}">
         <span class="cnw-lazy-embed-play" aria-hidden="true">▶</span>
@@ -64,17 +91,27 @@ function injectLazyYouTubeCss() {
   style.setAttribute('data-cnw-lazy-youtube-css', '1');
   style.textContent = `
     .cnw-lazy-embed {
+      position: relative;
       width: 100%;
       min-height: 180px;
       margin: .8em 0;
       border: 1px solid var(--c-border, rgba(148, 163, 184, .35));
       border-radius: 6px;
       overflow: hidden;
-      background:
-        linear-gradient(135deg, rgba(220, 38, 38, .16), rgba(15, 23, 42, .04)),
-        var(--c-bg-mute, rgba(148, 163, 184, .12));
+      background-color: var(--c-bg-mute, rgba(148, 163, 184, .12));
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
       display: grid;
       place-items: center;
+    }
+    .cnw-lazy-embed:not(.cnw-lazy-embed--loaded)::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.65));
+      z-index: 1;
+      pointer-events: none;
     }
     .cnw-lazy-embed iframe {
       width: 100%;
@@ -84,6 +121,8 @@ function injectLazyYouTubeCss() {
       background: #000;
     }
     .cnw-lazy-embed-btn {
+      position: relative;
+      z-index: 2;
       width: 100%;
       height: 100%;
       min-height: 180px;
@@ -94,12 +133,12 @@ function injectLazyYouTubeCss() {
       justify-content: center;
       gap: .55rem;
       cursor: pointer;
-      color: var(--c-fg, currentColor);
+      color: white;
       background: transparent;
       font: inherit;
     }
     .cnw-lazy-embed-btn:hover {
-      background: rgba(220, 38, 38, .08);
+      background: rgba(220, 38, 38, .12);
     }
     .cnw-lazy-embed-play {
       width: 48px;
@@ -114,7 +153,8 @@ function injectLazyYouTubeCss() {
     }
     .cnw-lazy-embed-label {
       font-size: .82rem;
-      opacity: .72;
+      opacity: .9;
+      font-weight: 500;
     }
   `;
   document.head.appendChild(style);

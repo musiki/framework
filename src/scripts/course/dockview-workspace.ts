@@ -387,6 +387,7 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
     const cleanBody = body
       .replace(/%%cover%%[\s\S]*?%%\/cover%%/gi, '')
       .replace(/```eval[\s\S]*?```/gi, '')
+      .replace(/^[ \t]*[nN]ote:[ \t]*/gm, '')
       .trim();
     await ensureKatexFor(cleanBody);
     configureMarked();
@@ -669,9 +670,10 @@ async function loadDbNotePreview(state: DbNotePanelState) {
     injectMdCss();
     let html = typeof note.renderedHtml === 'string' ? note.renderedHtml.trim() : '';
     if (!html) {
-      await ensureKatexFor(note.body ?? '');
+      const cleanBody = (note.body ?? '').replace(/^[ \t]*[nN]ote:[ \t]*/gm, '');
+      await ensureKatexFor(cleanBody);
       configureMarked();
-      html = deferYouTubeEmbeds(String(marked.parse(note.body ?? '', { async: false })));
+      html = deferYouTubeEmbeds(String(marked.parse(cleanBody, { async: false })));
     }
     state.bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
     hydrateLazyYouTubeEmbeds(state.bodyEl);

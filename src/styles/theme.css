@@ -7,6 +7,8 @@
   --c-bg-mute: #f9f9f9;
   --c-fg-dim: #666666;
   --c-fg-subtle: #888888;
+  --bullet-2: #0284c7;
+  --bullet-3: #d97706;
 }
 :root.dark{
   /* Catppuccin Mocha */
@@ -20,6 +22,8 @@
   --c-bg-mute: #313244;   /* Surface0 */
   --c-fg-dim: #9399b2;    /* Overlay2 */
   --c-fg-subtle: #7f849c; /* Overlay0 */
+  --bullet-2: #38bdf8;
+  --bullet-3: #fbbf24;
 }
 
 html, body{
