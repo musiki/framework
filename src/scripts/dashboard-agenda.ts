@@ -15,12 +15,21 @@ import {
 
 type AgendaDateColumn = { dateKey: string; label?: string; isoWeekday?: number; };
 type AgendaConfig = { courseId: string; year: string; startTime: string; endTime: string; teacherSlotMinutes: number; studentSlotMinutes: number; maxStudentMinutes: number; minMeetings: number; comment: string; updatedAt: string; };
-type AgendaBlock = { id: string; dateKey: string; startMinute: number; endMinute: number; comment?: string; updatedAt?: string; };
+type AgendaBlock = { id: string; dateKey: string; startMinute: number; endMinute: number; comment: string; updatedAt: string; };
 type AgendaStudent = { studentId: string; name: string; email: string; color: string; totalMinutes: number; blocks: AgendaBlock[]; grupo?: string; };
 type AgendaEvent = { id: string; dateKey: string; startMinute: number; endMinute: number; text: string; color: string; virtual?: boolean; updatedAt?: string; };
 type AgendaData = { courseId: string; courseTitle: string; year: string; dates: AgendaDateColumn[]; config: AgendaConfig; students: AgendaStudent[]; events: AgendaEvent[]; viewer: { userId: string; isTeacher: boolean; grupo?: string; }; shareUrlPath?: string; };
 type AgendaSlot = { startMinute: number; endMinute: number; label: string; rowIndex: number; };
 type SelectionRect = { rowStart: number; rowEnd: number; colStart: number; colEnd: number; dateKeys: string[]; startMinute: number; endMinute: number; };
+type AgendaDragItem = { blockId: string; dateKey: string; startMinute: number; endMinute: number; canDrag: boolean; };
+type AgendaDragState = {
+  item: AgendaDragItem;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  targetCell: HTMLElement | null;
+  dragging: boolean;
+};
 
 const parseJsonScript = <T>(id: string, fallback: T): T => {
   const node = document.getElementById(id);
@@ -209,6 +218,54 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
   }
 
   const resolveAgendaCellFromTarget = (target: EventTarget | null) => target instanceof Element ? target.closest<HTMLElement>('.agenda-cell') : null;
+  const getCellStartMinute = (cell: HTMLElement | null) => Number.parseInt(cell?.dataset.startMinute || '', 10);
+  const getCellDateKey = (cell: HTMLElement | null) => normalizeAgendaDateKey(cell?.dataset.dateKey);
+  const getLastSlotEndMinute = () => Math.max(...slots.map((slot) => slot.endMinute));
+  const getQuantizedStartMinute = (targetStartMinute: number, duration: number) => {
+    const gridEndMinute = getLastSlotEndMinute();
+    const validStarts = slots
+      .map((slot) => slot.startMinute)
+      .filter((startMinute) => startMinute + duration <= gridEndMinute);
+    if (!validStarts.length) return null;
+    const exact = validStarts.find((startMinute) => startMinute === targetStartMinute);
+    if (exact !== undefined) return exact;
+    return validStarts.reduce((best, startMinute) =>
+      Math.abs(startMinute - targetStartMinute) < Math.abs(best - targetStartMinute) ? startMinute : best,
+    validStarts[0]);
+  };
+
+  const findDragItemFromTarget = (target: EventTarget | null): AgendaDragItem | null => {
+    if (!(target instanceof Element)) return null;
+    const blockTarget = target.closest<HTMLElement>('[data-agenda-block-id]');
+    const eventTarget = target.closest<HTMLElement>('[data-agenda-event-id]');
+    const blockId = blockTarget?.dataset.agendaBlockId || eventTarget?.dataset.agendaEventId || '';
+    if (!blockId) return null;
+
+    const event = data.events.find((entry) => entry.id === blockId);
+    if (event) {
+      return {
+        blockId,
+        dateKey: event.dateKey,
+        startMinute: event.startMinute,
+        endMinute: event.endMinute,
+        canDrag: isTeacher,
+      };
+    }
+
+    for (const student of data.students || []) {
+      const block = (student.blocks || []).find((entry) => entry.id === blockId);
+      if (!block) continue;
+      const isOwn = String(student.studentId || '').toLowerCase() === viewerId.toLowerCase();
+      return {
+        blockId,
+        dateKey: block.dateKey,
+        startMinute: block.startMinute,
+        endMinute: block.endMinute,
+        canDrag: isTeacher || isOwn,
+      };
+    }
+    return null;
+  };
 
   const renderCellEntries = (dateKey: string, slot: AgendaSlot, colIndex: number) => {
     const overlappingEvents = (data.events || []).filter(e => e.dateKey === dateKey && blockOverlapsSlot(e, slot.startMinute, slot.endMinute));
@@ -302,12 +359,15 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
   let selecting = false;
   let activePointerId: number | null = null;
   let longPressTimer: any = null;
+  let dragState: AgendaDragState | null = null;
 
   const stopUiEvent = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
   const stopUiPropagation = (e: Event) => e.stopPropagation();
 
   const clearSelection = () => {
     host.querySelectorAll('.agenda-cell.is-selected').forEach(c => c.classList.remove('is-selected'));
+    host.querySelectorAll('.agenda-cell.is-drag-target').forEach(c => c.classList.remove('is-drag-target'));
+    host.classList.remove('is-agenda-dragging');
     if (popover) popover.hidden = true;
   };
 
@@ -366,6 +426,46 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
       if (rerender) rerender(snapshot);
       window.console.warn(e.message || 'Error');
     }
+  };
+
+  const paintDragTarget = (cell: HTMLElement | null) => {
+    host.querySelectorAll('.agenda-cell.is-drag-target').forEach(c => c.classList.remove('is-drag-target'));
+    if (cell) cell.classList.add('is-drag-target');
+  };
+
+  const clearDragState = () => {
+    paintDragTarget(null);
+    host.classList.remove('is-agenda-dragging');
+    dragState = null;
+  };
+
+  const moveDraggedBlock = async (cell: HTMLElement | null) => {
+    if (!dragState || !cell) return;
+    const dateKey = getCellDateKey(cell);
+    const targetStartMinute = getCellStartMinute(cell);
+    const duration = blockDuration(dragState.item);
+    if (!dateKey || !Number.isFinite(targetStartMinute) || duration <= 0) return;
+
+    const startMinute = getQuantizedStartMinute(targetStartMinute, duration);
+    if (startMinute === null) return;
+    const endMinute = startMinute + duration;
+    if (
+      dateKey === dragState.item.dateKey
+      && startMinute === dragState.item.startMinute
+      && endMinute === dragState.item.endMinute
+    ) {
+      return;
+    }
+
+    await reloadAfterAction({
+      action: 'move-block',
+      courseId: data.courseId,
+      year: data.year,
+      blockId: dragState.item.blockId,
+      dateKey,
+      startMinute,
+      endMinute,
+    });
   };
 
   const openBlockModal = (selection: SelectionRect, blockId?: string) => {
@@ -512,6 +612,17 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     if (e.button !== 0) return;
     const cell = resolveAgendaCellFromTarget(e.target); if (!cell) return;
     e.preventDefault();
+    const dragItem = findDragItemFromTarget(e.target);
+    if (dragItem?.canDrag) {
+      dragState = {
+        item: dragItem,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        targetCell: cell,
+        dragging: false,
+      };
+    }
     const bid = (e.target as HTMLElement).closest('[data-agenda-block-id]') as HTMLElement;
     const eid = (e.target as HTMLElement).closest('[data-agenda-event-id]') as HTMLElement;
     if (bid || eid) {
@@ -526,6 +637,23 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
   };
 
   const handlePointerMove = (e: PointerEvent) => {
+    if (dragState && dragState.pointerId === e.pointerId) {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      const next = resolveAgendaCellFromTarget(document.elementFromPoint(e.clientX, e.clientY));
+      const movedEnough = Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY) > 6;
+      if (movedEnough || dragState.dragging) {
+        if (!dragState.dragging) {
+          clearSelection();
+          if (popover) popover.hidden = true;
+        }
+        dragState.dragging = true;
+        dragState.targetCell = next || dragState.targetCell;
+        selecting = false;
+        host.classList.add('is-agenda-dragging');
+        paintDragTarget(dragState.targetCell);
+        return;
+      }
+    }
     if (!selecting || (activePointerId !== null && e.pointerId !== activePointerId)) return;
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     const next = resolveAgendaCellFromTarget(document.elementFromPoint(e.clientX, e.clientY));
@@ -534,9 +662,30 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
   };
 
   const handlePointerUp = (e: PointerEvent) => {
+    if (e.type === 'pointercancel') {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      if (activePointerId !== null && anchorCell) { try { anchorCell.releasePointerCapture(activePointerId); } catch(err){} }
+      selecting = false;
+      activePointerId = null;
+      clearDragState();
+      return;
+    }
+    if (dragState && dragState.pointerId === e.pointerId && dragState.dragging) {
+      const targetCell = resolveAgendaCellFromTarget(document.elementFromPoint(e.clientX, e.clientY)) || dragState.targetCell;
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+      if (activePointerId !== null && anchorCell) { try { anchorCell.releasePointerCapture(activePointerId); } catch(err){} }
+      activePointerId = null; selecting = false;
+      const dragged = dragState;
+      clearDragState();
+      dragState = dragged;
+      void moveDraggedBlock(targetCell).finally(() => { dragState = null; });
+      return;
+    }
+    if (dragState && dragState.pointerId === e.pointerId) clearDragState();
     if (!selecting || (activePointerId !== null && e.pointerId !== activePointerId)) return;
     selecting = false; if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     if (activePointerId !== null && anchorCell) { try { anchorCell.releasePointerCapture(activePointerId); } catch(err){} }
+    activePointerId = null;
     const selection = findSelectionRect(host); if (selection) openSelectionActions(selection);
   };
 

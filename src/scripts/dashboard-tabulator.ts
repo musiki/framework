@@ -83,6 +83,7 @@ type DashboardTabulatorInstance = Tabulator & {
 
 type AdminEnrollmentCourse = {
   courseId: string;
+  label?: string;
   enrollmentId: string;
   roleInCourse: string;
 };
@@ -1787,6 +1788,7 @@ const getAdminEnrollmentCourses = (data: any): AdminEnrollmentCourse[] =>
   (Array.isArray(data?.enrollmentCourses) ? data.enrollmentCourses : [])
     .map((item: any) => ({
       courseId: normalizeText(item?.courseId || ''),
+      label: normalizeText(item?.label || item?.courseId || ''),
       enrollmentId: normalizeText(item?.enrollmentId || ''),
       roleInCourse: normalizeTextLower(item?.roleInCourse || 'student') || 'student',
     }))
@@ -1809,6 +1811,7 @@ const sortAdminEnrollmentCourses = (courses: AdminEnrollmentCourse[]) =>
           if (!courseId) return null;
           return [courseId, {
             courseId,
+            label: normalizeText(course?.label || courseId),
             enrollmentId: normalizeText(course?.enrollmentId || ''),
             roleInCourse: normalizeTextLower(course?.roleInCourse || 'student') || 'student',
           }] as const;
@@ -1818,7 +1821,7 @@ const sortAdminEnrollmentCourses = (courses: AdminEnrollmentCourse[]) =>
   ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
 
 const formatAdminEnrollmentSummary = (courses: AdminEnrollmentCourse[]) =>
-  courses.length ? courses.map((course) => course.courseId).join(' · ') : '—';
+  courses.length ? courses.map((course) => normalizeText(course.label || course.courseId)).join(' · ') : '—';
 
 const buildAdminEnrollmentSearchBlob = (rowData: any, courses: AdminEnrollmentCourse[]) =>
   [
@@ -1827,6 +1830,7 @@ const buildAdminEnrollmentSearchBlob = (rowData: any, courses: AdminEnrollmentCo
     rowData?.globalRole,
     rowData?.courseRole,
     ...courses.map((course) => course.courseId),
+    ...courses.map((course) => course.label),
     rowData?.lastActivityAt,
   ]
     .map((value) => normalizeTextLower(value))
@@ -1877,6 +1881,17 @@ const updateAdminEnrollmentRowData = (row: any, meta: DashboardMeta, nextCourses
   });
 };
 
+const getAdminEnrollmentCourseLabel = (rowData: any, courseId: string) => {
+  const normalizedCourseId = normalizeText(courseId);
+  if (!normalizedCourseId) return '';
+  const enrolled = getAdminEnrollmentCourses(rowData)
+    .find((course) => normalizeText(course.courseId) === normalizedCourseId);
+  if (enrolled?.label) return normalizeText(enrolled.label);
+  const catalog = getAdminEnrollmentCourseCatalog(rowData)
+    .find((course) => normalizeText(course.courseId) === normalizedCourseId);
+  return normalizeText(catalog?.label || normalizedCourseId);
+};
+
 const renderEnrollmentCoursesMarkup = (cell: any) => {
   const data = cell.getData() || {};
   const userName = escapeHtml(data.name || data.email || '');
@@ -1896,10 +1911,11 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
     ? `<div class="dashboard-enrollment-chip-list">${courses
       .map(({ courseId, enrollmentId, roleInCourse }) => {
         const cid = escapeHtml(courseId);
+        const label = escapeHtml(getAdminEnrollmentCourseLabel(data, courseId));
         const eid = escapeHtml(enrollmentId);
         const role = escapeHtml(roleInCourse);
         const uname = userName;
-        return `<span class="enrollment-chip" data-course-id="${cid}">${cid}<button type="button" class="enrollment-chip-remove" data-dashboard-unenroll data-enrollment-id="${eid}" data-enrollment-role="${role}" data-user-name="${uname}" title="Desinscribir de ${cid}" aria-label="Desinscribir de ${cid}">×</button></span>`;
+        return `<span class="enrollment-chip" data-course-id="${cid}">${label}<button type="button" class="enrollment-chip-remove" data-dashboard-unenroll data-enrollment-id="${eid}" data-enrollment-role="${role}" data-user-name="${uname}" title="Desinscribir de ${label}" aria-label="Desinscribir de ${label}">×</button></span>`;
       })
       .join('')}</div>`
     : '<span class="dashboard-enrollment-empty">—</span>';
@@ -1930,6 +1946,7 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
           ${availableCourseOptions
             .map((course) => {
               const courseId = escapeHtml(course.courseId);
+              const label = escapeHtml(course.label || course.courseId);
               return `
                 <button
                   type="button"
@@ -1940,7 +1957,7 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
                   data-user-email="${userEmail}"
                   data-user-name="${userName}"
                   role="menuitem"
-                >${courseId}</button>
+                >${label}</button>
               `;
             })
             .join('')}
@@ -1955,6 +1972,168 @@ const renderEnrollmentCoursesMarkup = (cell: any) => {
   }
 
   return `<div class="dashboard-enrollment-cell">${chipsMarkup}${controlsMarkup}</div>`;
+};
+
+const addAdminEnrollmentToRow = async (
+  row: any,
+  meta: DashboardMeta,
+  courseIdInput: string,
+  control?: HTMLButtonElement | null,
+) => {
+  const rowData = row?.getData?.() || {};
+  const userId = normalizeText(rowData.id || rowData.userId || '');
+  const userEmail = normalizeText(rowData.email || '');
+  const userName = normalizeText(rowData.name || rowData.email || 'este usuario') || 'este usuario';
+  const courseId = normalizeText(courseIdInput);
+  if (!row) throw new Error('No se encontró la fila del usuario.');
+  if (!courseId) throw new Error('Elegí un curso para inscribir.');
+
+  if (!userId && (!userEmail || !userEmail.includes('@'))) {
+    throw new Error('No se encontró un usuario válido para inscribir.');
+  }
+
+  if (control) control.disabled = true;
+
+  try {
+    const response = await fetch('/api/admin/add-student-manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseId,
+        year: meta.year,
+        userId,
+        email: userEmail,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || 'No se pudo inscribir');
+
+    const enrollment = payload?.enrollment && typeof payload.enrollment === 'object'
+      ? payload.enrollment
+      : null;
+    const nextEnrollment: AdminEnrollmentCourse = {
+      courseId: normalizeText(enrollment?.courseId || courseId),
+      label: getAdminEnrollmentCourseLabel(rowData, courseId),
+      enrollmentId: normalizeText(enrollment?.id || ''),
+      roleInCourse: normalizeTextLower(enrollment?.roleInCourse || 'student') || 'student',
+    };
+
+    const nextCourses = sortAdminEnrollmentCourses([
+      ...getAdminEnrollmentCourses(rowData),
+      nextEnrollment,
+    ]);
+    updateAdminEnrollmentRowData(row, meta, nextCourses);
+
+    const courseLabel = getAdminEnrollmentCourseLabel({ ...rowData, enrollmentCourses: nextCourses }, nextEnrollment.courseId);
+    showToast(
+      payload?.status === 'already_enrolled'
+        ? `${userName} ya estaba inscripto en ${courseLabel}.`
+        : `${userName} fue inscripto en ${courseLabel}.`,
+      'success',
+      2800,
+    );
+  } catch (error) {
+    if (control) control.disabled = false;
+    throw error;
+  }
+};
+
+const removeAdminEnrollmentFromRow = async (
+  table: Tabulator | null | undefined,
+  row: any,
+  meta: DashboardMeta,
+  enrollmentIdInput: string,
+  control?: HTMLButtonElement | null,
+) => {
+  const enrollmentId = normalizeText(enrollmentIdInput);
+  if (!enrollmentId) return;
+
+  const fallbackRow = row || table?.getRows?.('active')?.find((candidate: any) => {
+    const data = candidate.getData?.() || {};
+    return getAdminEnrollmentCourses(data).some((course) => course.enrollmentId === enrollmentId);
+  });
+  if (!fallbackRow) return;
+
+  if (control) control.disabled = true;
+
+  try {
+    const response = await fetch('/api/enroll', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enrollmentId }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || 'No se pudo desinscribir');
+
+    const data = fallbackRow.getData?.() || {};
+    const nextCourses = getAdminEnrollmentCourses(data)
+      .filter((course: AdminEnrollmentCourse) => course.enrollmentId !== enrollmentId);
+    updateAdminEnrollmentRowData(fallbackRow, meta, nextCourses);
+  } catch (error) {
+    if (control) control.disabled = false;
+    throw error;
+  }
+};
+
+const buildAdminEnrollmentContextMenu = (meta: DashboardMeta) => {
+  return (_event: MouseEvent, cell: any) => {
+    const row = cell?.getRow?.();
+    const rowData = row?.getData?.() || cell?.getData?.() || {};
+    const userName = normalizeText(rowData.name || rowData.email || 'este usuario') || 'este usuario';
+    const courses = getAdminEnrollmentCourses(rowData);
+    const courseCatalog = getAdminEnrollmentCourseCatalog(rowData);
+    const enrolledCourseIds = new Set(courses.map((course) => normalizeText(course.courseId)));
+    const availableCourseOptions = courseCatalog.filter((course) => !enrolledCourseIds.has(normalizeText(course.courseId)));
+    const menuItems: any[] = [];
+
+    if (availableCourseOptions.length > 0) {
+      menuItems.push({
+        label: 'Inscribir en...',
+        disabled: true,
+      });
+      availableCourseOptions.forEach((course) => {
+        const label = normalizeText(course.label || course.courseId);
+        menuItems.push({
+          label,
+          action: async () => {
+            try {
+              await addAdminEnrollmentToRow(row, meta, course.courseId);
+            } catch (error: any) {
+              console.warn(error?.message || 'No se pudo inscribir');
+            }
+          },
+        });
+      });
+    }
+
+    if (courses.length > 0) {
+      if (menuItems.length > 0) menuItems.push({ separator: true });
+      menuItems.push({
+        label: 'Borrar inscripción...',
+        disabled: true,
+      });
+      courses.forEach((course) => {
+        const label = getAdminEnrollmentCourseLabel(rowData, course.courseId);
+        menuItems.push({
+          label,
+          disabled: !normalizeText(course.enrollmentId),
+          action: async () => {
+            const confirmMsg = normalizeTextLower(course.roleInCourse) === 'teacher'
+              ? `¿Quitar inscripción docente de ${userName} en ${label}?`
+              : `¿Desinscribir a ${userName} de ${label}?`;
+            if (!window.confirm(confirmMsg)) return;
+            try {
+              await removeAdminEnrollmentFromRow(cell?.getTable?.(), row, meta, course.enrollmentId);
+            } catch (error: any) {
+              console.warn(error?.message || 'No se pudo desinscribir');
+            }
+          },
+        });
+      });
+    }
+
+    return menuItems.length > 0 ? menuItems : [{ label: 'Sin cursos disponibles', disabled: true }];
+  };
 };
 
 const buildCellSelectionKey = (cell: any) => {
@@ -3758,6 +3937,7 @@ const configureColumns = (
       baseFormatter = renderEnrollmentCoursesMarkup;
       nextColumn.cssClass = appendCssClass(nextColumn.cssClass, 'dashboard-cell--enrollment-courses');
       nextColumn.headerSort = false;
+      nextColumn.contextMenu = buildAdminEnrollmentContextMenu(context.meta);
     } else if (kind === 'admin-actions') {
       baseFormatter = renderAdminActionsMarkup;
       nextColumn.headerHozAlign = nextColumn.headerHozAlign || 'center';
@@ -5629,53 +5809,13 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
         return;
       }
 
-      addEnrollmentButton.disabled = true;
       if (trigger) trigger.disabled = true;
 
       try {
-        const response = await fetch('/api/admin/add-student-manual', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            courseId,
-            year: meta.year,
-            userId,
-            email: userEmail,
-          }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload?.error || 'No se pudo inscribir');
-
-        const enrollment = payload?.enrollment && typeof payload.enrollment === 'object'
-          ? payload.enrollment
-          : null;
-        const nextEnrollment: AdminEnrollmentCourse = {
-          courseId: normalizeText(enrollment?.courseId || courseId),
-          enrollmentId: normalizeText(enrollment?.id || ''),
-          roleInCourse: normalizeTextLower(enrollment?.roleInCourse || 'student') || 'student',
-        };
-
         const row = resolveAdminRow();
-        if (row) {
-          const rowData = row.getData?.() || {};
-          const nextCourses = sortAdminEnrollmentCourses([
-            ...getAdminEnrollmentCourses(rowData),
-            nextEnrollment,
-          ]);
-          updateAdminEnrollmentRowData(row, meta, nextCourses);
-        } else {
-          addEnrollmentButton.disabled = false;
-          if (trigger) trigger.disabled = false;
-        }
-
-        if (payload?.status === 'already_enrolled') {
-          showToast(`${userName} ya estaba inscripto en ${courseId}.`, 'success', 2800);
-        } else {
-          showToast(`${userName} fue inscripto en ${courseId}.`, 'success', 2800);
-        }
+        await addAdminEnrollmentToRow(row, meta, courseId, addEnrollmentButton);
       } catch (err: any) {
         console.warn(err?.message || 'No se pudo inscribir');
-        addEnrollmentButton.disabled = false;
         if (trigger) trigger.disabled = false;
       }
       return;
@@ -5693,27 +5833,13 @@ const bindAdminActions = (host: HTMLElement, table: Tabulator, meta: DashboardMe
         ? `¿Quitar inscripción docente de ${userName} en ${courseId || 'este curso'}?`
         : `¿Desinscribir a ${userName} de ${courseId || 'este curso'}?`;
       if (!window.confirm(confirmMsg)) return;
-      unenrollButton.disabled = true;
       try {
-        const response = await fetch('/api/enroll', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enrollmentId }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload?.error || 'No se pudo desinscribir');
-
         const row = resolveAdminRow() || table.getRows('active').find((r: any) => {
           const d = r.getData?.() || {};
           return getAdminEnrollmentCourses(d).some((e: AdminEnrollmentCourse) => e.enrollmentId === enrollmentId);
         });
-        if (row) {
-          const d = row.getData?.() || {};
-          const nextCourses = getAdminEnrollmentCourses(d).filter((e: AdminEnrollmentCourse) => e.enrollmentId !== enrollmentId);
-          updateAdminEnrollmentRowData(row, meta, nextCourses);
-        }
+        await removeAdminEnrollmentFromRow(table, row, meta, enrollmentId, unenrollButton);
       } catch (err: any) {
-        unenrollButton.disabled = false;
         console.warn(err?.message || 'No se pudo desinscribir');
       }
       return;

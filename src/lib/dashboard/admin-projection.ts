@@ -89,11 +89,12 @@ export function buildAdminProjection({
               if (!courseId) return null;
               return [courseId, {
                 courseId,
+                label: courseId,
                 enrollmentId,
                 roleInCourse: normalizeRole(item?.roleInCourse || 'student'),
               }] as const;
             })
-            .filter(Boolean) as [string, { courseId: string; enrollmentId: string; roleInCourse: string }][],
+            .filter(Boolean) as [string, { courseId: string; label: string; enrollmentId: string; roleInCourse: string }][],
         ).values(),
       ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
       const teacherByEnrollment = enrollmentCourses.some((item) => normalizeRole(item.roleInCourse) === 'teacher');

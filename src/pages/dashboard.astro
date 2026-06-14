@@ -5553,6 +5553,14 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         word-break: break-word;
         scrollbar-width: none; /* Ocultar scrollbar en Firefox */
       }
+      .agenda-event-label,
+      .agenda-student-block[data-agenda-block-id] {
+        cursor: grab;
+      }
+      .is-agenda-dragging .agenda-event-label,
+      .is-agenda-dragging .agenda-student-block[data-agenda-block-id] {
+        cursor: grabbing;
+      }
       .agenda-event-label::-webkit-scrollbar {
         display: none; /* Ocultar scrollbar en Chrome/Safari */
       }
@@ -5875,6 +5883,17 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       .agenda-cell.is-selected .agenda-cell__fill {
         background: rgba(14, 165, 233, 0.18);
         box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.36);
+      }
+      .agenda-cell.is-drag-target .agenda-cell__fill {
+        background: rgba(34, 197, 94, 0.18);
+        box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.46);
+      }
+      .is-agenda-dragging .agenda-cell {
+        user-select: none;
+      }
+      .is-agenda-dragging .agenda-cell:not(.is-drag-target) .agenda-student-block,
+      .is-agenda-dragging .agenda-cell:not(.is-drag-target) .agenda-event-label {
+        opacity: 0.72;
       }
       .agenda-cell--busy .agenda-cell__fill {
         background: rgba(148, 163, 184, 0.07);

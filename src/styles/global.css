@@ -679,86 +679,63 @@ hr {
 }
 
 .dark .mermaid {
-  --mermaid-bg: rgba(0, 0, 20, 0.9);
-  --mermaid-node-bg: rgba(0, 50, 100, 0.8);
-  --mermaid-node-border: #00ffff;
-  --mermaid-edge-color: #00ff00;
-  --mermaid-label-color: #ffffff;
-  --mermaid-cluster-bg: rgba(100, 0, 100, 0.6);
-  --mermaid-cluster-border: #ff00ff;
+  --mermaid-edge-color: #8dd9ff;
+  --mermaid-edge-label-bg: rgba(9, 14, 24, 0.92);
+  --mermaid-label-color: #f8fafc;
+  --mermaid-cluster-border: rgba(196, 181, 253, 0.9);
 }
 
 .dark .mermaid svg {
   background: transparent !important;
 }
 
-.dark .mermaid .node rect,
-.dark .mermaid .node circle,
-.dark .mermaid .node ellipse,
-.dark .mermaid .node polygon,
-.dark .mermaid .node path {
-  fill: var(--mermaid-node-bg) !important;
-  stroke: var(--mermaid-node-border) !important;
-  stroke-width: 2px !important;
-  filter: drop-shadow(0 0 6px var(--mermaid-node-border)) !important;
-}
-
-.dark .mermaid .edgePath .path {
+.dark .mermaid .edgePath .path,
+.dark .mermaid .flowchart-link,
+.dark .mermaid .messageLine0,
+.dark .mermaid .messageLine1,
+.dark .mermaid .relation,
+.dark .mermaid .transition {
   stroke: var(--mermaid-edge-color) !important;
-  stroke-width: 3px !important;
-  filter: drop-shadow(0 0 4px var(--mermaid-edge-color)) !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 3px rgba(141, 217, 255, 0.45)) !important;
 }
 
-.dark .mermaid text {
-  fill: var(--mermaid-label-color) !important;
-  font-weight: bold !important;
-  text-shadow: 0 0 6px var(--mermaid-label-color) !important;
-}
-
-.dark .mermaid .edgeLabel text,
-.dark .mermaid .node text,
-.dark .mermaid .cluster text,
-.dark .mermaid .flowchartLabel text,
-.dark .mermaid .pieLabel text,
-.dark .mermaid .actor text,
-.dark .mermaid .note text {
-  fill: var(--mermaid-label-color) !important;
-  text-shadow: 0 0 6px var(--mermaid-label-color) !important;
-}
-
-.dark .mermaid span,
-.dark .mermaid .label,
-.dark .mermaid .nodeLabel,
-.dark .mermaid .nodetext,
-.dark .mermaid foreignObject span,
-.dark .mermaid text.node-label,
-.dark .mermaid text.cluster-label {
-  fill: var(--mermaid-label-color) !important;
-  color: var(--mermaid-label-color) !important;
-  text-shadow: 0 0 6px var(--mermaid-label-color) !important;
+.dark .mermaid .marker,
+.dark .mermaid .arrowheadPath,
+.dark .mermaid marker path {
+  fill: var(--mermaid-edge-color) !important;
+  stroke: var(--mermaid-edge-color) !important;
 }
 
 .dark .mermaid span.edge-label,
 .dark .mermaid .edge-label,
 .dark .mermaid .edgeLabel {
-  background-color: #1f1919 !important;
-  fill: #ffffff !important;
-  color: #ffffff !important;
+  background-color: var(--mermaid-edge-label-bg) !important;
+  fill: var(--mermaid-label-color) !important;
+  color: var(--mermaid-label-color) !important;
   text-shadow: none !important;
 }
 
 .dark .mermaid [id*="edgeLabel"] rect,
-.dark .mermaid [id*="edgeLabel"] {
-  fill: #1f1919 !important;
+.dark .mermaid [id*="edgeLabel"],
+.dark .mermaid .edgeLabel rect,
+.dark .mermaid .labelBkg {
+  fill: var(--mermaid-edge-label-bg) !important;
   stroke: none !important;
+}
+
+.dark .mermaid .edgeLabel text,
+.dark .mermaid .edgeLabel span,
+.dark .mermaid .edgeLabel p {
+  fill: var(--mermaid-label-color) !important;
+  color: var(--mermaid-label-color) !important;
 }
 
 .dark .mermaid .cluster rect,
 .dark .mermaid .cluster polygon {
-  fill: var(--mermaid-cluster-bg) !important;
   stroke: var(--mermaid-cluster-border) !important;
   stroke-width: 2px !important;
-  filter: drop-shadow(0 0 8px var(--mermaid-cluster-border)) !important;
+  filter: drop-shadow(0 0 5px rgba(196, 181, 253, 0.35)) !important;
 }
 
 .tag {
