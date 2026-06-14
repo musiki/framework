@@ -3954,9 +3954,10 @@ const configureColumns = (
     }
 
     const isAnnotationCell = isAnnotationContextKind(context.kind) && normalizeText(nextColumn.field);
-    const keepAnnotationWrapper = isAnnotationCell && !isNativeDashboardEditableKind(kind) && !['row-select', 'admin-actions'].includes(kind);
+    const ownsItsOwnInteractions = ['row-select', 'admin-actions', 'enrollment-courses'].includes(kind);
+    const keepAnnotationWrapper = isAnnotationCell && !isNativeDashboardEditableKind(kind) && !ownsItsOwnInteractions;
 
-    if (isAnnotationCell && kind !== 'row-select') {
+    if (isAnnotationCell && !ownsItsOwnInteractions) {
       nextColumn.contextMenu = buildCellContextMenu(context.kind, context.meta, annotationState, modalRef);
     }
 
@@ -5197,7 +5198,7 @@ const isInteractiveDashboardTarget = (target: EventTarget | null) =>
   || target instanceof SVGPathElement
   || (target instanceof HTMLElement && Boolean(
     target.closest(
-      '.dashboard-admin-actions, .tabulator-editing, .enrollment-chip-remove, .dashboard-enrollment-cell, .dashboard-enrollment-controls',
+      '.dashboard-admin-actions, .tabulator-editing, .enrollment-chip-remove, .dashboard-enrollment-controls',
     ),
   ));
 
