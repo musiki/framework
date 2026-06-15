@@ -18,5 +18,8 @@
     "@fastify/rate-limit": "^10.3.0",
     "dotenv": "^16.6.1",
     "fastify": "^5.8.5"
+  },
+  "overrides": {
+    "fast-uri": "^4.0.0"
   }
 }
