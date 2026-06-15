@@ -2923,7 +2923,7 @@ const loginLogRows = isTeacher
 
 const loginLogProjection = { columns: loginLogColumns, rows: loginLogRows, emptyMessage: 'No hay ingresos registrados.' };
 
-const teacherTabulatorMetaJson = toDashboardProjectionJson({
+const teacherSheetsMetaJson = toDashboardProjectionJson({
   userId: String(dbUser?.id || ''),
   courseId: activeCourseId,
   year: activeYear,
@@ -4100,7 +4100,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         flex-direction: column;
       }
 
-      .teacher-grid-shell > .dashboard-tabulator {
+      .teacher-grid-shell > .dashboard-sheet-host {
         min-height: 0;
         height: 100%;
       }
@@ -4156,6 +4156,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         margin-left: auto;
         flex: 0 0 auto;
       }
+      .dashboard-course-tag,
       .enrollment-chip {
         display: inline-flex;
         align-items: center;
@@ -4600,20 +4601,23 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         border-color: #dc2626;
         color: #dc2626;
       }
-      .dashboard-tabulator .tabulator-col.dashboard-admin-row-select,
-      .dashboard-tabulator .tabulator-cell.dashboard-admin-row-select {
+      .dashboard-sheet .handsontable th.dashboard-admin-row-select,
+      .dashboard-sheet .handsontable td.dashboard-admin-row-select {
         padding-left: 0;
         padding-right: 0;
       }
       .dashboard-cell--selected {
         box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-link) 60%, transparent);
       }
-      .dashboard-tabulator {
+      .dashboard-sheet-host {
         min-height: 460px;
         border: 1px solid var(--c-border);
         background: var(--c-bg);
         border-radius: 0;
         overflow: hidden;
+        overscroll-behavior-x: none;
+      }
+      :global(body:has(.dashboard-shell)) {
         overscroll-behavior-x: none;
       }
       .dashboard-sheet {
@@ -4786,20 +4790,48 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       }
       .dashboard-sheet .dashboard-enrollment-cell {
         display: flex;
-        gap: 0.25rem;
+        align-items: center;
+        gap: 0.22rem;
         flex-wrap: wrap;
+        width: 100%;
+        min-width: 0;
+        line-height: 1;
       }
-      .dashboard-sheet .enrollment-chip {
+      .dashboard-sheet .dashboard-hot-cell[data-kind="enrollment-courses"] {
+        overflow: visible;
+        line-height: 1;
+      }
+      .dashboard-sheet .dashboard-course-tag {
         display: inline-flex;
         align-items: center;
-        gap: 0.25rem;
-        border: 1px solid var(--c-border);
-        border-radius: 4px;
-        padding: 0.05rem 0.32rem;
+        justify-content: center;
+        max-width: 100%;
+        min-height: 18px;
+        padding: 0 0.42rem;
+        border: 1px solid color-mix(in srgb, var(--course-tag-accent, var(--c-link)) 35%, var(--c-border));
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--course-tag-accent, var(--c-link)) 12%, var(--c-bg) 88%);
+        color: color-mix(in srgb, var(--course-tag-accent, var(--c-link)) 72%, var(--c-fg) 28%);
+        font-size: 0.7rem;
+        font-weight: 700;
+        line-height: 18px;
+        letter-spacing: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        box-shadow: inset 2px 0 0 color-mix(in srgb, var(--course-tag-accent, var(--c-link)) 76%, transparent);
       }
-      .dashboard-sheet .enrollment-chip small {
-        color: var(--c-fg-dim);
-        font-size: 0.68rem;
+      .dashboard-sheet .dashboard-course-tag--tone-0 { --course-tag-accent: #2563eb; }
+      .dashboard-sheet .dashboard-course-tag--tone-1 { --course-tag-accent: #059669; }
+      .dashboard-sheet .dashboard-course-tag--tone-2 { --course-tag-accent: #d97706; }
+      .dashboard-sheet .dashboard-course-tag--tone-3 { --course-tag-accent: #7c3aed; }
+      .dashboard-sheet .dashboard-course-tag--tone-4 { --course-tag-accent: #db2777; }
+      .dashboard-sheet .dashboard-course-tag--tone-5 { --course-tag-accent: #0891b2; }
+      .dashboard-grade-check {
+        display: inline-block;
+        font-size: 1rem;
+        color: var(--c-link);
+        line-height: 1;
       }
       .dashboard-sheet .handsontable .current,
       .dashboard-sheet .handsontable .area,
@@ -4845,345 +4877,6 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       .htDropdownMenu .ht_master .wtHolder {
         border: 1px solid var(--c-border);
         box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
-      }
-      .dashboard-tabulator .tabulator-tableholder {
-        overscroll-behavior-x: none;
-      }
-      :global(body:has(.dashboard-shell)) {
-        overscroll-behavior-x: none;
-      }
-      .dashboard-tabulator .tabulator {
-        border: none;
-        background: var(--c-bg);
-        color: var(--c-fg);
-        font-size: 0.84rem;
-      }
-      .dashboard-tabulator .tabulator-header {
-        border-bottom: 1px solid var(--c-border);
-        background: var(--c-bg);
-      }
-      .dashboard-tabulator .tabulator-col,
-      .dashboard-tabulator .tabulator-row,
-      .dashboard-tabulator .tabulator-cell,
-      .dashboard-tabulator .tabulator-footer,
-      .dashboard-tabulator .tabulator-tableholder {
-        border-color: var(--c-border);
-      }
-      .dashboard-tabulator .tabulator-col {
-        background: var(--c-bg) !important;
-        color: var(--c-fg);
-      }
-      .dashboard-tabulator .tabulator-cell.dashboard-grade-sub-avg { 
-        background-color: var(--c-link-faded, rgba(11, 108, 255, 0.05)) !important; 
-        font-weight: 700;
-      }
-      .dashboard-tabulator .tabulator-cell.dashboard-grade-lesson-avg { 
-        background-color: var(--c-link-faded, rgba(11, 108, 255, 0.15)) !important;
-        font-weight: 800;
-        border-right: 2px solid var(--c-border) !important;
-      }
-      .dashboard-tabulator .dashboard-grade-col-even { background-color: transparent !important; }
-      .dashboard-tabulator .dashboard-grade-col-odd { background-color: transparent !important; }
-      /* Unfolded/expanded grade columns: allow text to wrap */
-      .dashboard-tabulator .tabulator-cell.dashboard-grade-col-even,
-      .dashboard-tabulator .tabulator-cell.dashboard-grade-col-odd {
-        white-space: normal;
-        word-break: break-word;
-        overflow: visible;
-      }
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--enrollment-courses {
-        overflow: visible;
-      }
-      .dashboard-grade-check {
-        display: inline-block;
-        font-size: 1rem;
-        color: var(--c-link);
-        line-height: 1;
-      }
-      .dashboard-tabulator .tabulator-col-title,
-      .dashboard-tabulator .tabulator-col-content,
-      .dashboard-tabulator .tabulator-row,
-      .dashboard-tabulator .tabulator-cell {
-        color: var(--c-fg);
-      }
-      .dashboard-tabulator .tabulator-frozen,
-      .dashboard-tabulator .tabulator-frozen-left,
-      .dashboard-tabulator .tabulator-frozen-right {
-        background: var(--c-bg) !important;
-      }
-      .dashboard-tabulator .tabulator-col.tabulator-col-group {
-        background: var(--c-bg) !important;
-        min-width: min-content !important;
-      }
-      .dashboard-tabulator .tabulator-col.tabulator-col-group .tabulator-col-group-cols {
-        background: var(--c-bg) !important;
-        min-width: 100% !important;
-      }
-
-      .dashboard-tabulator .tabulator-col-title {
-        text-overflow: ellipsis;
-        overflow: hidden;
-        white-space: nowrap;
-        padding: 0 4px;
-      }
-      .dashboard-tabulator .tabulator-col-content {
-        padding: 4px 0 !important;
-      }
-      .dashboard-tabulator .tabulator-col-sorter {
-        display: none !important;
-      }
-      .group-header-content {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        width: 100%;
-        padding: 0 4px;
-        overflow: hidden;
-      }
-      .group-header-title {
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-weight: 600;
-      }
-      .tabulator-col.group-folded .group-header-title {
-        text-overflow: clip;
-      }
-      .fold-header-label {
-        display: block;
-        overflow: hidden;
-        text-overflow: clip;
-        white-space: nowrap;
-      }
-      .group-header-icon {
-        width: 0;
-        height: 0;
-        border-top: 5px solid transparent;
-        border-bottom: 5px solid transparent;
-        border-right: 7px solid var(--c-fg-dim, #666);
-        margin-left: 8px;
-        transition: transform 0.2s ease;
-        cursor: pointer;
-      }
-      .tabulator-col.group-folded .group-header-icon {
-        transform: rotate(180deg);
-      }
-      .tabulator-col.tabulator-col-group:hover .group-header-icon {
-        border-right-color: var(--c-link);
-      }
-      .dashboard-tabulator .tabulator-col.tabulator-sortable:hover {
-        background: color-mix(in srgb, var(--c-link) 6%, transparent);
-      }
-      .dashboard-tabulator .tabulator-row {
-        background: var(--c-bg) !important;
-      }
-      .dashboard-tabulator .tabulator-row:nth-child(even) {
-        background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%) !important;
-      }
-      .dashboard-tabulator .tabulator-row:nth-child(odd) .tabulator-cell {
-        background: transparent !important;
-      }
-      .dashboard-tabulator .tabulator-row:nth-child(even) .tabulator-cell {
-        background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%) !important;
-      }
-      .dashboard-tabulator .tabulator-row:hover {
-        background: color-mix(in srgb, var(--c-link) 2%, var(--c-bg) 98%);
-      }
-      .dashboard-tabulator .tabulator-row:hover .tabulator-cell {
-        background: color-mix(in srgb, var(--c-link) 2%, var(--c-bg) 98%) !important;
-      }
-      .dashboard-tabulator .tabulator-cell {
-        padding: 0.18rem 0.22rem;
-        background: transparent !important;
-        vertical-align: middle !important;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-cell,
-      .dashboard-tabulator[data-dashboard-grid="admin"] .tabulator-cell {
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-        line-height: 24px;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .dashboard-annotation-shell,
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .dashboard-annotation-shell__content,
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .dashboard-attendance-chip,
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .dashboard-pill,
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .role-badge,
-      .dashboard-tabulator[data-dashboard-grid="admin"] .dashboard-annotation-shell,
-      .dashboard-tabulator[data-dashboard-grid="admin"] .dashboard-annotation-shell__content,
-      .dashboard-tabulator[data-dashboard-grid="admin"] .role-badge {
-        line-height: 1;
-      }
-      
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable {
-        background: color-mix(in srgb, transparent 92%, var(--c-fg) 8%) !important;
-      }
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing {
-        padding: 0 !important;
-        background: color-mix(in srgb, var(--c-link) 8%, transparent) !important;
-      }
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing > input,
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing > textarea,
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing > select {
-        width: 100%;
-        min-height: 100%;
-        border: 0;
-        outline: none;
-        box-sizing: border-box;
-        background: transparent;
-        color: var(--c-fg);
-        font: inherit;
-        font-size: 0.74rem;
-        line-height: 1.2;
-        padding: 0.2rem 0.32rem;
-        border-radius: 0;
-      }
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable.tabulator-editing > textarea {
-        resize: none;
-      }
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--turno,
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--course-role,
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--grupo,
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--concepto,
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--final-grade {
-        text-align: center;
-      }
-      .dashboard-tabulator .tabulator-cell.dashboard-cell--editable--notes {
-        text-align: left;
-      }
-      .dashboard-tabulator[data-range-selection="true"] .tabulator-row,
-      .dashboard-tabulator[data-range-selection="true"] .tabulator-cell,
-      .dashboard-tabulator[data-range-selection="true"] .dashboard-annotation-shell,
-      .dashboard-tabulator[data-range-selection="true"] .dashboard-annotation-shell__content {
-        user-select: none;
-        -webkit-user-select: none;
-      }
-      .dashboard-tabulator[data-range-selection="true"] .tabulator-editing,
-      .dashboard-tabulator[data-range-selection="true"] .tabulator-editing *,
-      .dashboard-tabulator[data-range-selection="true"] input,
-      .dashboard-tabulator[data-range-selection="true"] textarea,
-      .dashboard-tabulator[data-range-selection="true"] select,
-      .dashboard-tabulator[data-range-selection="true"] button,
-      .dashboard-tabulator[data-range-selection="true"] a {
-        user-select: text;
-        -webkit-user-select: text;
-      }
-      .dashboard-tabulator .tabulator-col-content {
-        padding: 0.24rem 0.22rem;
-      }
-      .dashboard-tabulator .tabulator-col:not(.tabulator-col-group) > .tabulator-col-content {
-        display: flex;
-        align-items: flex-end;
-        justify-content: flex-start;
-        padding: 0 0.22rem 0.14rem !important;
-      }
-      .dashboard-tabulator .tabulator-tableholder {
-        background: var(--c-bg) !important;
-      }
-      .dashboard-tabulator .tabulator-table {
-        background: var(--c-bg) !important;
-        width: 100%;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-col[tabulator-field="lastName"] {
-        position: sticky;
-        left: 0;
-        z-index: 8;
-        background: var(--c-bg) !important;
-        box-shadow: 1px 0 0 var(--c-border);
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-cell[tabulator-field="lastName"] {
-        position: sticky;
-        left: 0;
-        z-index: 4;
-        background: var(--c-bg) !important;
-        box-shadow: 1px 0 0 var(--c-border);
-      }
-     
-
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row:nth-child(even) .tabulator-cell[tabulator-field="lastName"] {
-        background: color-mix(in srgb, var(--c-bg) 95%, var(--c-fg) 5%) !important;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row:hover .tabulator-cell[tabulator-field="lastName"] {
-        background: color-mix(in srgb, var(--c-link) 2%, var(--c-bg) 98%) !important;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row.dashboard-row-abandoned {
-        background: color-mix(in srgb, var(--c-fg) 30%, var(--c-bg) 70%) !important;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row.dashboard-row-abandoned .tabulator-cell {
-        background: color-mix(in srgb, var(--c-fg) 30%, var(--c-bg) 70%) !important;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row.dashboard-row-abandoned:hover,
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row.dashboard-row-abandoned:hover .tabulator-cell {
-        background: color-mix(in srgb, var(--c-fg) 34%, var(--c-bg) 66%) !important;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row.dashboard-row-abandoned .tabulator-cell[tabulator-field="lastName"],
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row.dashboard-row-abandoned:hover .tabulator-cell[tabulator-field="lastName"] {
-        background: color-mix(in srgb, var(--c-fg) 30%, var(--c-bg) 70%) !important;
-      }
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row.dashboard-row-abandoned .tabulator-cell[tabulator-field="lastName"],
-      .dashboard-tabulator[data-dashboard-grid="teacher-main"] .tabulator-row.dashboard-row-abandoned .tabulator-cell[tabulator-field="firstName"] {
-        text-decoration: line-through;
-        text-decoration-thickness: 1.5px;
-        text-decoration-color: color-mix(in srgb, var(--c-fg) 55%, transparent);
-        opacity: 0.72;
-      }
-      .dashboard-tabulator .tabulator-row:nth-child(odd) .tabulator-cell.dashboard-grade-sub-avg {
-        background-color: var(--c-link-faded, rgba(11, 108, 255, 0.05)) !important;
-      }
-      .dashboard-tabulator .tabulator-row:nth-child(even) .tabulator-cell.dashboard-grade-sub-avg {
-        background-color: color-mix(in srgb, var(--c-link-faded, rgba(11, 108, 255, 0.05)) 78%, var(--c-bg) 22%) !important;
-      }
-      .dashboard-tabulator .tabulator-row:nth-child(odd) .tabulator-cell.dashboard-grade-lesson-avg {
-        background-color: var(--c-link-faded, rgba(11, 108, 255, 0.15)) !important;
-      }
-      .dashboard-tabulator .tabulator-row:nth-child(even) .tabulator-cell.dashboard-grade-lesson-avg {
-        background-color: color-mix(in srgb, var(--c-link-faded, rgba(11, 108, 255, 0.15)) 82%, var(--c-bg) 18%) !important;
-      }
-      .dashboard-tabulator .tabulator-menu,
-      .dashboard-tabulator .tabulator-popup {
-        border: 1px solid var(--c-border);
-        background: var(--c-bg);
-        color: var(--c-fg);
-        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
-      }
-      .dashboard-tabulator .tabulator-menu-item {
-        display: flex;
-        align-items: center;
-        gap: 0.45rem;
-        font-size: 0.82rem;
-      }
-      .dashboard-tabulator .tabulator-menu-item:hover {
-        background: color-mix(in srgb, var(--c-link) 10%, var(--c-bg) 90%);
-      }
-      .dashboard-tabulator .tabulator-menu-item-disabled {
-        opacity: 0.45;
-      }
-      .dashboard-tabulator .tabulator-footer {
-        position: sticky;
-        bottom: 0;
-        z-index: 4;
-        background: color-mix(in srgb, var(--c-bg) 94%, transparent);
-        color: var(--c-fg);
-        border-top: 1px solid var(--c-border);
-      }
-      .dashboard-tabulator .tabulator-page {
-        border: 1px solid var(--c-border);
-        background: transparent;
-        color: var(--c-fg);
-        border-radius: 0;
-      }
-      .dashboard-tabulator .tabulator-page.active {
-        border-color: var(--c-link);
-        color: var(--c-link);
-      }
-      .dashboard-tabulator .tabulator-editing {
-        background: color-mix(in srgb, var(--c-link) 8%, var(--c-bg) 92%);
-      }
-      .dashboard-tabulator input,
-      .dashboard-tabulator textarea,
-      .dashboard-tabulator select {
-        background: var(--c-bg);
-        color: var(--c-fg);
       }
       .dashboard-muted {
         color: var(--c-fg-dim);
@@ -6123,7 +5816,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         background: var(--agenda-bullet, currentColor);
         pointer-events: none;
       }
-      .dashboard-tabulator .dashboard-attendance-month-group .tabulator-col-title {
+      .dashboard-sheet .handsontable th.dashboard-attendance-month-group .colHeader {
         font-size: 0.76rem;
         letter-spacing: 0.02em;
         text-transform: none;
@@ -6131,10 +5824,10 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .dashboard-tabulator .dashboard-attendance-month-group {
+      .dashboard-sheet .handsontable th.dashboard-attendance-month-group {
         min-width: 0 !important;
       }
-      .dashboard-tabulator .dashboard-attendance-day-col .tabulator-col-title {
+      .dashboard-sheet .handsontable th.dashboard-attendance-day-col .colHeader {
         font-size: 0.74rem;
         font-weight: 600;
         display: block;
@@ -6203,7 +5896,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         opacity: 0;
         transition: opacity 120ms, color 120ms, background 120ms;
       }
-      .dashboard-tabulator .dashboard-attendance-day-col:hover .dashboard-attendance-fill-btn {
+      .dashboard-sheet .handsontable th.dashboard-attendance-day-col:hover .dashboard-attendance-fill-btn {
         opacity: 0.6;
       }
       .dashboard-attendance-fill-btn:hover {
@@ -6220,32 +5913,32 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         font-weight: 600;
         line-height: 1.02;
       }
-      .dashboard-tabulator .tabulator-col.tabulator-col-vertical {
+      .dashboard-sheet .handsontable th.dashboard-hot-header--vertical {
         height: 79px !important;
       }
-      .dashboard-tabulator .tabulator-col.tabulator-col-vertical .tabulator-col-content {
+      .dashboard-sheet .handsontable th.dashboard-hot-header--vertical .relative {
         min-height: 79px !important;
         height: 79px !important;
         overflow: hidden;
       }
-      .dashboard-tabulator .tabulator-col.tabulator-col-vertical .tabulator-col-title {
+      .dashboard-sheet .handsontable th.dashboard-hot-header--vertical .colHeader {
         max-height: 79px;
         overflow: hidden;
       }
-      .dashboard-tabulator .tabulator-col.dashboard-grade-col-even.tabulator-col-vertical .tabulator-col-content,
-      .dashboard-tabulator .tabulator-col.dashboard-grade-col-odd.tabulator-col-vertical .tabulator-col-content {
+      .dashboard-sheet .handsontable th.dashboard-grade-col-even.dashboard-hot-header--vertical .relative,
+      .dashboard-sheet .handsontable th.dashboard-grade-col-odd.dashboard-hot-header--vertical .relative {
         padding: 0 0 0.14rem 0 !important;
       }
-      .dashboard-tabulator .tabulator-col.dashboard-grade-col-even.tabulator-col-vertical .tabulator-col-title,
-      .dashboard-tabulator .tabulator-col.dashboard-grade-col-odd.tabulator-col-vertical .tabulator-col-title {
+      .dashboard-sheet .handsontable th.dashboard-grade-col-even.dashboard-hot-header--vertical .colHeader,
+      .dashboard-sheet .handsontable th.dashboard-grade-col-odd.dashboard-hot-header--vertical .colHeader {
         padding: 0 !important;
       }
-      .dashboard-tabulator .tabulator-col.dashboard-grade-meta-compact > .tabulator-col-content {
+      .dashboard-sheet .handsontable th.dashboard-grade-meta-compact .relative {
         min-height: 79px !important;
         height: 79px !important;
         padding: 0 !important;
       }
-      .dashboard-tabulator .tabulator-col.dashboard-grade-meta-compact .tabulator-col-title {
+      .dashboard-sheet .handsontable th.dashboard-grade-meta-compact .colHeader {
         display: flex;
         align-items: stretch;
         justify-content: center;
@@ -6253,7 +5946,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         height: 100%;
         padding: 0 !important;
       }
-      .dashboard-tabulator .tabulator-col.dashboard-grade-meta-compact {
+      .dashboard-sheet .handsontable th.dashboard-grade-meta-compact {
         border-right: 2px solid var(--c-border) !important;
       }
       .dashboard-grade-meta-title {
@@ -6282,25 +5975,25 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         font-weight: 600;
         line-height: 1.02;
       }
-      .dashboard-tabulator .tabulator-col-resize-handle {
+      .dashboard-sheet .handsontable .manualColumnResizer {
         opacity: 0.42;
       }
-      .dashboard-tabulator .tabulator-col:hover .tabulator-col-resize-handle {
+      .dashboard-sheet .handsontable th:hover .manualColumnResizer {
         opacity: 0.88;
       }
-      .dashboard-tabulator .dashboard-attendance-day-col .tabulator-col-content,
-      .dashboard-tabulator .dashboard-attendance-day-col {
+      .dashboard-sheet .handsontable th.dashboard-attendance-day-col .relative,
+      .dashboard-sheet .handsontable th.dashboard-attendance-day-col {
         justify-content: center;
       }
-      .dashboard-tabulator [tabulator-field^="day_"] {
+      .dashboard-sheet .handsontable td[data-field^="day_"] {
         text-align: center;
         padding: 0 !important;
       }
-      .dashboard-tabulator [tabulator-field^="day_"] .dashboard-annotation-shell {
+      .dashboard-sheet .handsontable td[data-field^="day_"] .dashboard-annotation-shell {
         min-height: 27px;
         padding: 0;
       }
-      .dashboard-tabulator [tabulator-field^="day_"] .dashboard-attendance-chip {
+      .dashboard-sheet .handsontable td[data-field^="day_"] .dashboard-attendance-chip {
         min-width: 27px;
         min-height: 27px;
         padding: 0;
@@ -6313,50 +6006,6 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
       }
       :root.dark .dashboard-grid-icon-btn--subtle {
         color: var(--c-fg-dim);
-      }
-      :root.dark .dashboard-tabulator .tabulator,
-      :root.dark .dashboard-tabulator .tabulator-header,
-      :root.dark .dashboard-tabulator .tabulator-col,
-      :root.dark .dashboard-tabulator .tabulator-row,
-      :root.dark .dashboard-tabulator .tabulator-cell,
-      :root.dark .dashboard-tabulator .tabulator-tableholder,
-      :root.dark .dashboard-tabulator .tabulator-table {
-        background: var(--c-bg) !important;
-      }
-      :root.dark .dashboard-tabulator .tabulator-col-title,
-      :root.dark .dashboard-tabulator .tabulator-col-content,
-      :root.dark .dashboard-tabulator .tabulator-row,
-      :root.dark .dashboard-tabulator .tabulator-cell {
-        color: var(--c-fg) !important;
-      }
-      :root.dark .dashboard-tabulator .tabulator-menu,
-      :root.dark .dashboard-tabulator .tabulator-popup,
-      :root.dark .tabulator-menu,
-      :root.dark .tabulator-popup {
-        background: color-mix(in srgb, var(--c-bg) 94%, #000 6%);
-        color: var(--c-fg);
-        border-color: var(--c-border);
-      }
-      :root.dark .dashboard-tabulator .tabulator-menu-item,
-      :root.dark .tabulator-menu-item {
-        color: var(--c-fg);
-      }
-      :root.dark .dashboard-tabulator .tabulator-menu-item:hover,
-      :root.dark .tabulator-menu-item:hover {
-        background: color-mix(in srgb, var(--c-link) 14%, var(--c-bg) 86%);
-        color: var(--c-fg);
-      }
-      :root.dark .dashboard-tabulator .tabulator-menu-item-disabled,
-      :root.dark .tabulator-menu-item-disabled {
-        color: color-mix(in srgb, var(--c-fg) 40%, transparent);
-      }
-      :root.dark .dashboard-tabulator input,
-      :root.dark .dashboard-tabulator textarea,
-      :root.dark .dashboard-tabulator select {
-        background: color-mix(in srgb, var(--c-bg) 94%, #000 6%);
-      }
-      :root.dark .dashboard-tabulator .tabulator-footer {
-        background: color-mix(in srgb, var(--c-bg) 88%, #000 12%);
       }
       :root.dark .dashboard-sheet,
       :root.dark .dashboard-sheet .handsontable,
@@ -6494,15 +6143,6 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         }
       }
       @media (max-width: 499px) {
-        .dashboard-tabulator .tabulator-frozen,
-        .dashboard-tabulator .tabulator-frozen-left,
-        .dashboard-tabulator .tabulator-frozen-right {
-          position: relative !important;
-          left: auto !important;
-        }
-        .dashboard-tabulator .tabulator-tableholder {
-          overflow-x: auto !important;
-        }
         .teacher-grid-shell {
           overflow-x: auto;
         }
@@ -6943,7 +6583,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
             hidden={initialTeacherDashboardTab !== 'main'}
           >
             <div class="teacher-grid-shell">
-              <div class="dashboard-tabulator" data-dashboard-grid="teacher-main"></div>
+              <div class="dashboard-sheet-host" data-dashboard-grid="teacher-main"></div>
             </div>
           </div>
 
@@ -6991,7 +6631,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
                       </button>
                     </div>
                   </div>
-                  <div class="dashboard-tabulator" data-dashboard-grid="attendance-log"></div>
+                  <div class="dashboard-sheet-host" data-dashboard-grid="attendance-log"></div>
                 </div>
                 <div class="log-subtab-panel" data-log-subtab-panel="anotaciones" hidden>
                   <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
@@ -7015,7 +6655,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
                     </div>
                   </div>
                   <p class="teacher-grid-note">Observaciones operativas compartidas entre docentes del curso activo.</p>
-                  <div class="dashboard-tabulator" data-dashboard-grid="comments"></div>
+                  <div class="dashboard-sheet-host" data-dashboard-grid="comments"></div>
                 </div>
                 <div class="log-subtab-panel" data-log-subtab-panel="ingresos" hidden>
                   <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
@@ -7039,7 +6679,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
                     </div>
                   </div>
                   <p class="teacher-grid-note">Un registro por usuario cada 4 horas.</p>
-                  <div class="dashboard-tabulator" data-dashboard-grid="login-log"></div>
+                  <div class="dashboard-sheet-host" data-dashboard-grid="login-log"></div>
                 </div>
                 <div class="log-subtab-panel" data-log-subtab-panel="evals" hidden>
                   <div class="teacher-grid-toolbar teacher-grid-toolbar--section">
@@ -7063,7 +6703,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
                     </div>
                   </div>
                   <p class="teacher-grid-note">Registro de evals completados por docentes y administradores.</p>
-                  <div class="dashboard-tabulator" data-dashboard-grid="teacher-eval"></div>
+                  <div class="dashboard-sheet-host" data-dashboard-grid="teacher-eval"></div>
                 </div>
               </div>
             </div>
@@ -7075,7 +6715,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
             hidden={initialTeacherDashboardTab !== 'admin'}
           >
             <div class="teacher-grid-shell">
-              <div class="dashboard-tabulator" data-dashboard-grid="admin"></div>
+              <div class="dashboard-sheet-host" data-dashboard-grid="admin"></div>
             </div>
           </div>
 
@@ -7394,7 +7034,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
 
     </main>
     <script type="application/json" id="dashboard-log-data" set:html={dashboardLogDataJson}></script>
-    <script type="application/json" id="dashboard-teacher-tabulator-meta" set:html={teacherTabulatorMetaJson}></script>
+    <script type="application/json" id="dashboard-teacher-sheets-meta" set:html={teacherSheetsMetaJson}></script>
     <script type="application/json" id="dashboard-teacher-main" set:html={teacherMainProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-overview" set:html={teacherOverviewProjectionJson}></script>
     <script type="application/json" id="dashboard-teacher-gradebook" set:html={teacherGradebookProjectionJson}></script>
@@ -7940,7 +7580,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         const setSidebarOpen = (isOpen) => {
           shell.setAttribute('data-left-open', isOpen ? 'true' : 'false');
           localStorage.setItem(STORAGE_KEY, isOpen ? 'true' : 'false');
-          // Trigger window resize for Tabulator to adjust
+          // Trigger window resize for Handsontable to adjust
           window.dispatchEvent(new Event('resize'));
         };
 

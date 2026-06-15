@@ -46,11 +46,15 @@ export function buildAdminProjection({
         .map((course) => {
           const courseId = normalizeText(course?.courseId || '');
           if (!courseId) return null;
-          return [courseId, { courseId, label: courseId }] as const;
+          return [courseId, {
+            courseId,
+            label: normalizeText(course?.title || course?.code || courseId),
+          }] as const;
         })
         .filter(Boolean) as [string, { courseId: string; label: string }][],
     ).values(),
-  ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
+  ).sort((left, right) => String(left.label || left.courseId).localeCompare(String(right.label || right.courseId), 'es'));
+  const enrollmentCourseCatalogById = new Map(enrollmentCourseCatalog.map((course) => [course.courseId, course]));
   const userIdsFromUsers = (allUsers || [])
     .map((user: any) => String(user?.id || ''))
     .filter(Boolean);
@@ -89,7 +93,7 @@ export function buildAdminProjection({
               if (!courseId) return null;
               return [courseId, {
                 courseId,
-                label: courseId,
+                label: normalizeText(enrollmentCourseCatalogById.get(courseId)?.label || courseId),
                 enrollmentId,
                 roleInCourse: normalizeRole(item?.roleInCourse || 'student'),
               }] as const;
@@ -116,7 +120,7 @@ export function buildAdminProjection({
         globalRole,
         courseRoleLabel: roleInCourse ? getRoleBadgeLabel(roleInCourse) : '—',
         courseRole: roleInCourse,
-        enrollmentSummary: enrollmentCourses.length ? enrollmentCourses.map((e) => e.courseId).join(' · ') : '—',
+        enrollmentSummary: enrollmentCourses.length ? enrollmentCourses.map((e) => e.label || e.courseId).join(' · ') : '—',
         enrollmentCourses,
         enrollmentCourseCatalog,
         lastActivityAt: latestActivityAt,
@@ -126,6 +130,7 @@ export function buildAdminProjection({
           globalRole,
           roleInCourse,
           ...enrollmentCourses.map((e) => e.courseId),
+          ...enrollmentCourses.map((e) => e.label),
           latestActivityAt,
         ]),
       };

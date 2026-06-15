@@ -73,6 +73,17 @@ type DashboardSheet = {
   userWidths: Map<string, number>;
   annotationState?: AnnotationState;
   modalRef?: { current: AnnotationModalApi | null };
+  contextMenuCoords?: { row: number; col: number } | null;
+};
+type AdminEnrollmentCourse = {
+  courseId: string;
+  label?: string;
+  enrollmentId: string;
+  roleInCourse: string;
+};
+type AdminEnrollmentCourseOption = {
+  courseId: string;
+  label?: string;
 };
 
 const VALID_TEACHER_TABS = ['main', 'log', 'admin', 'agenda'];
@@ -1010,6 +1021,506 @@ const createAnnotationContextMenu = (
   },
 });
 
+const getAdminEnrollmentCourses = (rowData: any): AdminEnrollmentCourse[] =>
+  (Array.isArray(rowData?.enrollmentCourses) ? rowData.enrollmentCourses : [])
+    .map((item: any) => ({
+      courseId: normalizeText(item?.courseId),
+      label: normalizeText(item?.label || item?.courseId),
+      enrollmentId: normalizeText(item?.enrollmentId),
+      roleInCourse: normalizeTextLower(item?.roleInCourse || 'student') || 'student',
+    }))
+    .filter((item: AdminEnrollmentCourse) => item.courseId);
+
+const getAdminEnrollmentCourseCatalog = (rowData: any): AdminEnrollmentCourseOption[] =>
+  (Array.isArray(rowData?.enrollmentCourseCatalog) ? rowData.enrollmentCourseCatalog : [])
+    .map((item: any) => ({
+      courseId: normalizeText(item?.courseId),
+      label: normalizeText(item?.label || item?.courseId),
+    }))
+    .filter((item: AdminEnrollmentCourseOption) => item.courseId);
+
+const sortAdminEnrollmentCourses = (courses: AdminEnrollmentCourse[]) =>
+  Array.from(
+    new Map(
+      (courses || [])
+        .map((course) => {
+          const courseId = normalizeText(course?.courseId);
+          if (!courseId) return null;
+          return [courseId, {
+            courseId,
+            label: normalizeText(course?.label || courseId),
+            enrollmentId: normalizeText(course?.enrollmentId),
+            roleInCourse: normalizeTextLower(course?.roleInCourse || 'student') || 'student',
+          }] as const;
+        })
+        .filter(Boolean) as [string, AdminEnrollmentCourse][],
+    ).values(),
+  ).sort((left, right) => String(left.label || left.courseId).localeCompare(String(right.label || right.courseId), 'es'));
+
+const formatAdminEnrollmentSummary = (courses: AdminEnrollmentCourse[]) =>
+  courses.length ? courses.map((course) => normalizeText(course.label || course.courseId)).join(' · ') : '—';
+
+const buildAdminEnrollmentSearchBlob = (rowData: any, courses: AdminEnrollmentCourse[]) =>
+  [
+    rowData?.name,
+    rowData?.email,
+    rowData?.globalRole,
+    rowData?.courseRole,
+    ...courses.map((course) => course.courseId),
+    ...courses.map((course) => course.label),
+    rowData?.lastActivityAt,
+  ]
+    .map((value) => normalizeTextLower(value))
+    .filter(Boolean)
+    .join(' ');
+
+const getAdminEnrollmentCourseLabel = (rowData: any, courseId: string) => {
+  const normalizedCourseId = normalizeText(courseId);
+  if (!normalizedCourseId) return '';
+  const enrolled = getAdminEnrollmentCourses(rowData)
+    .find((course) => normalizeText(course.courseId) === normalizedCourseId);
+  if (enrolled?.label) return normalizeText(enrolled.label);
+  const catalog = getAdminEnrollmentCourseCatalog(rowData)
+    .find((course) => normalizeText(course.courseId) === normalizedCourseId);
+  return normalizeText(catalog?.label || normalizedCourseId);
+};
+
+const resolveActiveAdminEnrollmentCourse = (
+  rowData: any,
+  meta?: DashboardMeta,
+): AdminEnrollmentCourse | null => {
+  const courses = getAdminEnrollmentCourses(rowData);
+  if (!courses.length) return null;
+
+  const activeCourseId = normalizeText(meta?.courseId);
+  if (activeCourseId) {
+    const activeCourse = courses.find((course) => normalizeText(course.courseId) === activeCourseId) || null;
+    if (activeCourse) return activeCourse;
+  }
+
+  const enrollmentId = normalizeText(rowData?.enrollmentId);
+  if (enrollmentId) {
+    const byEnrollmentId = courses.find((course) => normalizeText(course.enrollmentId) === enrollmentId) || null;
+    if (byEnrollmentId) return byEnrollmentId;
+  }
+
+  return courses.length === 1 ? courses[0] : null;
+};
+
+const updateAdminEnrollmentRowData = (
+  sheet: DashboardSheet,
+  rowData: Record<string, any>,
+  meta: DashboardMeta,
+  nextCoursesInput: AdminEnrollmentCourse[],
+) => {
+  const nextCourses = sortAdminEnrollmentCourses(nextCoursesInput);
+  const activeEnrollment = resolveActiveAdminEnrollmentCourse(
+    {
+      ...rowData,
+      enrollmentCourses: nextCourses,
+    },
+    meta,
+  );
+  const nextCourseRole = normalizeTextLower(activeEnrollment?.roleInCourse || '');
+  const nextValues = {
+    enrollmentId: normalizeText(activeEnrollment?.enrollmentId || ''),
+    enrollmentCourses: nextCourses,
+    enrollmentSummary: formatAdminEnrollmentSummary(nextCourses),
+    courseRole: nextCourseRole,
+    courseRoleLabel: nextCourseRole ? (nextCourseRole === 'teacher' ? 'Teacher' : 'Student') : '—',
+    __search: buildAdminEnrollmentSearchBlob({ ...rowData, courseRole: nextCourseRole }, nextCourses),
+  };
+
+  Object.assign(rowData, nextValues);
+  const rowId = normalizeText(rowData.id || rowData.userId);
+  sheet.allRows.forEach((candidate) => {
+    if (candidate === rowData || (rowId && normalizeText(candidate.id || candidate.userId) === rowId)) {
+      Object.assign(candidate, nextValues);
+    }
+  });
+  sheet.activeRows.forEach((candidate) => {
+    if (candidate === rowData || (rowId && normalizeText(candidate.id || candidate.userId) === rowId)) {
+      Object.assign(candidate, nextValues);
+    }
+  });
+  sheet.hot.render();
+};
+
+const getAdminEnrollmentContext = (sheet: DashboardSheet | null | undefined) => {
+  if (!sheet || sheet.kind !== 'admin') return null;
+  const coords = sheet.contextMenuCoords || null;
+  const selected = coords ? null : sheet.hot.getSelectedLast?.();
+  const visualRow = Number(coords?.row ?? selected?.[0]);
+  const visualCol = Number(coords?.col ?? selected?.[1]);
+  if (!Number.isInteger(visualRow) || !Number.isInteger(visualCol) || visualRow < 0 || visualCol < 0) return null;
+
+  const physicalCol = sheet.hot.toPhysicalColumn(visualCol);
+  const leaf = sheet.leafColumns[physicalCol] || sheet.leafColumns[visualCol];
+  if (normalizeText(leaf?.kind) !== 'enrollment-courses') return null;
+
+  const physicalRow = sheet.hot.toPhysicalRow(visualRow);
+  const rowData = sheet.activeRows[physicalRow];
+  if (!rowData) return null;
+  return { rowData };
+};
+
+const getAdminContextRow = (sheet: DashboardSheet | null | undefined) => {
+  if (!sheet || sheet.kind !== 'admin') return null;
+  const coords = sheet.contextMenuCoords || null;
+  const selected = coords ? null : sheet.hot.getSelectedLast?.();
+  const visualRow = Number(coords?.row ?? selected?.[0]);
+  if (!Number.isInteger(visualRow) || visualRow < 0) return null;
+  return sheet.activeRows[sheet.hot.toPhysicalRow(visualRow)] || null;
+};
+
+const getAdminRowId = (rowData: any) => normalizeText(rowData?.userId || rowData?.id || rowData?.studentId);
+
+const getAdminRowLabel = (rowData: any) =>
+  normalizeText(rowData?.name || rowData?.email || getAdminRowId(rowData) || 'este usuario') || 'este usuario';
+
+const getComparableUserName = (rowData: any) => {
+  const name = normalizeText(rowData?.name);
+  if (!name || name.includes('@') || name === '—') return '';
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+};
+
+const getComparableUserEmail = (rowData: any) => {
+  const email = normalizeText(rowData?.email).toLowerCase();
+  return email && email !== '—' && email.includes('@') ? email : '';
+};
+
+const getSelectedAdminRows = (sheet: DashboardSheet) => {
+  const rowsById = new Map<string, Record<string, any>>();
+  const addRow = (rowData: any) => {
+    const rowId = getAdminRowId(rowData);
+    if (rowId) rowsById.set(rowId, rowData);
+  };
+
+  sheet.activeRows.forEach((rowData) => {
+    if (rowData?.__rowSelect === true) addRow(rowData);
+  });
+  if (rowsById.size > 0) return Array.from(rowsById.values());
+
+  (sheet.hot.getSelectedRange?.() || []).forEach((range: any) => {
+    const from = range.getTopStartCorner?.();
+    const to = range.getBottomEndCorner?.();
+    const startRow = Math.max(0, Math.min(Number(from?.row ?? 0), Number(to?.row ?? 0)));
+    const endRow = Math.max(0, Math.max(Number(from?.row ?? 0), Number(to?.row ?? 0)));
+    for (let visualRow = startRow; visualRow <= endRow; visualRow += 1) {
+      addRow(sheet.activeRows[sheet.hot.toPhysicalRow(visualRow)]);
+    }
+  });
+
+  return Array.from(rowsById.values());
+};
+
+const isVisualCellInSelection = (sheet: DashboardSheet, visualRow: number, visualCol: number) =>
+  (sheet.hot.getSelectedRange?.() || []).some((range: any) => {
+    const from = range.getTopStartCorner?.();
+    const to = range.getBottomEndCorner?.();
+    const startRow = Math.min(Number(from?.row ?? 0), Number(to?.row ?? 0));
+    const endRow = Math.max(Number(from?.row ?? 0), Number(to?.row ?? 0));
+    const startCol = Math.min(Number(from?.col ?? 0), Number(to?.col ?? 0));
+    const endCol = Math.max(Number(from?.col ?? 0), Number(to?.col ?? 0));
+    return visualRow >= startRow && visualRow <= endRow && visualCol >= startCol && visualCol <= endCol;
+  });
+
+const collectAdminEnrollmentCourseOptions = (rows: Record<string, any>[]) =>
+  Array.from<AdminEnrollmentCourseOption>(
+    rows.reduce((acc, row) => {
+      getAdminEnrollmentCourseCatalog(row).forEach((course) => {
+        if (!course.courseId || acc.has(course.courseId)) return;
+        acc.set(course.courseId, course);
+      });
+      getAdminEnrollmentCourses(row).forEach((course) => {
+        if (!course.courseId || acc.has(course.courseId)) return;
+        acc.set(course.courseId, { courseId: course.courseId, label: course.label || course.courseId });
+      });
+      return acc;
+    }, new Map<string, AdminEnrollmentCourseOption>()).values(),
+  ).sort((left, right) => String(left.label || left.courseId).localeCompare(String(right.label || right.courseId), 'es'));
+
+const getCourseToneClass = (courseIdInput: string) => {
+  const courseId = normalizeText(courseIdInput);
+  let hash = 0;
+  for (let index = 0; index < courseId.length; index += 1) {
+    hash = (hash * 31 + courseId.charCodeAt(index)) % 6;
+  }
+  return `dashboard-course-tag--tone-${hash}`;
+};
+
+const sanitizeHandsontableHtml = (content: string, source: 'innerHTML' | 'CopyPaste.paste') =>
+  source === 'CopyPaste.paste' ? escapeHtml(content) : content;
+
+const addAdminEnrollmentToSheetRow = async (
+  sheet: DashboardSheet,
+  rowData: Record<string, any>,
+  meta: DashboardMeta,
+  courseIdInput: string,
+) => {
+  const userId = normalizeText(rowData.id || rowData.userId);
+  const userEmail = normalizeText(rowData.email);
+  const userName = normalizeText(rowData.name || rowData.email || 'este usuario') || 'este usuario';
+  const courseId = normalizeText(courseIdInput);
+  if (!courseId) throw new Error('Elegí un curso para inscribir.');
+  if (!userId && (!userEmail || !userEmail.includes('@'))) {
+    throw new Error('No se encontró un usuario válido para inscribir.');
+  }
+
+  const response = await fetch('/api/admin/add-student-manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      courseId,
+      year: meta.year,
+      userId,
+      email: userEmail,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'No se pudo inscribir');
+
+  const enrollment = payload?.enrollment && typeof payload.enrollment === 'object'
+    ? payload.enrollment
+    : null;
+  const nextEnrollment: AdminEnrollmentCourse = {
+    courseId: normalizeText(enrollment?.courseId || courseId),
+    label: getAdminEnrollmentCourseLabel(rowData, courseId),
+    enrollmentId: normalizeText(enrollment?.id),
+    roleInCourse: normalizeTextLower(enrollment?.roleInCourse || 'student') || 'student',
+  };
+  const nextCourses = sortAdminEnrollmentCourses([
+    ...getAdminEnrollmentCourses(rowData).filter((course) => course.courseId !== nextEnrollment.courseId),
+    nextEnrollment,
+  ]);
+  updateAdminEnrollmentRowData(sheet, rowData, meta, nextCourses);
+
+  const courseLabel = getAdminEnrollmentCourseLabel({ ...rowData, enrollmentCourses: nextCourses }, nextEnrollment.courseId);
+  showToast(
+    payload?.status === 'already_enrolled'
+      ? `${userName} ya estaba inscripto en ${courseLabel}.`
+      : `${userName} fue inscripto en ${courseLabel}.`,
+    'success',
+    2800,
+  );
+};
+
+const removeAdminEnrollmentFromSheetRow = async (
+  sheet: DashboardSheet,
+  rowData: Record<string, any>,
+  meta: DashboardMeta,
+  enrollmentIdInput: string,
+) => {
+  const enrollmentId = normalizeText(enrollmentIdInput);
+  if (!enrollmentId) throw new Error('No se encontró la inscripción.');
+
+  const response = await fetch('/api/enroll', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enrollmentId }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'No se pudo desinscribir');
+
+  updateAdminEnrollmentRowData(
+    sheet,
+    rowData,
+    meta,
+    getAdminEnrollmentCourses(rowData).filter((course) => normalizeText(course.enrollmentId) !== enrollmentId),
+  );
+};
+
+const mergeAdminEnrollmentCourseLists = (keepRow: any, mergeRow: any) => {
+  const byCourseId = new Map<string, AdminEnrollmentCourse>();
+  getAdminEnrollmentCourses(keepRow).forEach((course) => byCourseId.set(course.courseId, course));
+  getAdminEnrollmentCourses(mergeRow).forEach((course) => {
+    if (!byCourseId.has(course.courseId)) byCourseId.set(course.courseId, course);
+  });
+  return sortAdminEnrollmentCourses(Array.from(byCourseId.values()));
+};
+
+const getAdminMergeContext = (sheet: DashboardSheet) => {
+  const selectedRows = getSelectedAdminRows(sheet);
+  if (selectedRows.length !== 2) return null;
+
+  const [firstRow, secondRow] = selectedRows;
+  const firstName = getComparableUserName(firstRow);
+  const secondName = getComparableUserName(secondRow);
+  const firstEmail = getComparableUserEmail(firstRow);
+  const secondEmail = getComparableUserEmail(secondRow);
+  const nameMatch = Boolean(firstName && secondName && firstName === secondName);
+  const emailMatch = Boolean(firstEmail && secondEmail && firstEmail === secondEmail);
+  const contextRow = getAdminContextRow(sheet);
+  const contextRowId = getAdminRowId(contextRow);
+  const firstRowId = getAdminRowId(firstRow);
+  const secondRowId = getAdminRowId(secondRow);
+  const contextIsSelected = contextRowId && (contextRowId === firstRowId || contextRowId === secondRowId);
+  if (!contextIsSelected) {
+    return { valid: false, reason: 'Click derecho sobre uno de los dos usuarios seleccionados.' };
+  }
+  if (!nameMatch && !emailMatch) {
+    return { valid: false, reason: 'Los usuarios no comparten nombre ni email.' };
+  }
+
+  const keepRow = contextRowId === firstRowId ? firstRow : secondRow;
+  const mergeRow = contextRowId === firstRowId ? secondRow : firstRow;
+  return {
+    valid: true,
+    keepRow,
+    mergeRow,
+    matchLabel: emailMatch ? 'email igual' : 'nombre repetido',
+  };
+};
+
+const mergeAdminUsersInSheet = async (
+  sheet: DashboardSheet,
+  meta: DashboardMeta,
+  keepRow: Record<string, any>,
+  mergeRow: Record<string, any>,
+  matchLabel: string,
+) => {
+  const keepId = getAdminRowId(keepRow);
+  const mergeId = getAdminRowId(mergeRow);
+  const keepName = getAdminRowLabel(keepRow);
+  const mergeName = getAdminRowLabel(mergeRow);
+  if (!keepId || !mergeId || keepId === mergeId) throw new Error('No se encontraron dos usuarios distintos para fusionar.');
+  const confirmMessage = [
+    `¿Fusionar "${mergeName}" dentro de "${keepName}"?`,
+    `Se conservará "${keepName}" porque hiciste click derecho sobre ese usuario.`,
+    `Motivo: ${matchLabel}.`,
+  ].join('\n');
+  if (!window.confirm(confirmMessage)) return;
+
+  const response = await fetch('/api/admin/users/merge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keepId, mergeId }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'No se pudo fusionar usuarios');
+
+  updateAdminEnrollmentRowData(sheet, keepRow, meta, mergeAdminEnrollmentCourseLists(keepRow, mergeRow));
+  const removeMergedRow = (rows: Record<string, any>[]) => rows.filter((row) => getAdminRowId(row) !== mergeId);
+  sheet.allRows.splice(0, sheet.allRows.length, ...removeMergedRow(sheet.allRows));
+  sheet.activeRows.splice(0, sheet.activeRows.length, ...removeMergedRow(sheet.activeRows));
+  setSheetRows(sheet, sheet.activeRows, 'filter');
+  showToast(
+    `Usuarios fusionados. ${payload?.transferredEmails || 0} emails, ${payload?.transferredEnrollments || 0} matrículas y ${payload?.transferredSubmissions || 0} entregas transferidas.`,
+    'success',
+    4200,
+  );
+};
+
+const buildAdminEnrollmentContextMenuItems = (
+  sheet: DashboardSheet,
+  rows: Record<string, any>[],
+  meta: DashboardMeta,
+) => {
+  const context = getAdminEnrollmentContext(sheet);
+  if (!context) return null;
+
+  const courseOptions = collectAdminEnrollmentCourseOptions(rows);
+  const enrolledCourses = getAdminEnrollmentCourses(context.rowData);
+  const enrolledCourseIds = new Set(enrolledCourses.map((course) => normalizeText(course.courseId)));
+  const availableCourses = courseOptions.filter((course) => !enrolledCourseIds.has(normalizeText(course.courseId)));
+  const userName = normalizeText(context.rowData.name || context.rowData.email || 'este usuario') || 'este usuario';
+  const menuItems: any[] = [
+    { key: 'admin_enroll_header', name: 'Inscribir en curso', disabled: true },
+  ];
+
+  if (availableCourses.length) {
+    availableCourses.forEach((course, index) => {
+      const label = getAdminEnrollmentCourseLabel(context.rowData, course.courseId);
+      menuItems.push({
+        key: `admin_enroll_${index}`,
+        name: `Inscribir en ${escapeHtml(label)}`,
+        callback: () => {
+          void addAdminEnrollmentToSheetRow(sheet, context.rowData, meta, course.courseId)
+            .catch((error) => {
+              console.warn(error?.message || 'No se pudo inscribir');
+              showToast(error?.message || 'No se pudo inscribir', 'error', 4000);
+            });
+        },
+      });
+    });
+  } else {
+    menuItems.push({ key: 'admin_enroll_empty', name: 'Sin cursos disponibles', disabled: true });
+  }
+
+  menuItems.push(Handsontable.plugins.ContextMenu.SEPARATOR);
+  menuItems.push({ key: 'admin_unenroll_header', name: 'Borrar inscripción activa', disabled: true });
+
+  if (enrolledCourses.length) {
+    enrolledCourses.forEach((course, index) => {
+      const label = getAdminEnrollmentCourseLabel(context.rowData, course.courseId);
+      menuItems.push({
+        key: `admin_unenroll_${index}`,
+        name: `Borrar inscripción en ${escapeHtml(label)}`,
+        disabled: !normalizeText(course.enrollmentId),
+        callback: () => {
+          const confirmMsg = normalizeTextLower(course.roleInCourse) === 'teacher'
+            ? `¿Quitar inscripción docente de ${userName} en ${label}?`
+            : `¿Desinscribir a ${userName} de ${label}?`;
+          if (!window.confirm(confirmMsg)) return;
+          void removeAdminEnrollmentFromSheetRow(sheet, context.rowData, meta, course.enrollmentId)
+            .then(() => showToast(`${userName} fue desinscripto de ${label}.`, 'success', 2800))
+            .catch((error) => {
+              console.warn(error?.message || 'No se pudo desinscribir');
+              showToast(error?.message || 'No se pudo desinscribir', 'error', 4000);
+            });
+        },
+      });
+    });
+  } else {
+    menuItems.push({ key: 'admin_unenroll_empty', name: 'Sin inscripciones activas', disabled: true });
+  }
+
+  return menuItems;
+};
+
+const buildAdminMergeContextMenuItems = (sheet: DashboardSheet, meta: DashboardMeta) => {
+  const mergeContext = getAdminMergeContext(sheet);
+  if (!mergeContext) return null;
+  if (mergeContext.valid) {
+    const keepName = getAdminRowLabel(mergeContext.keepRow);
+    const mergeName = getAdminRowLabel(mergeContext.mergeRow);
+    return [{
+      key: 'admin_merge_users',
+      name: `Fusionar usuarios: ${escapeHtml(mergeName)} → ${escapeHtml(keepName)}`,
+      callback: () => {
+        void mergeAdminUsersInSheet(
+          sheet,
+          meta,
+          mergeContext.keepRow,
+          mergeContext.mergeRow,
+          mergeContext.matchLabel,
+        ).catch((error) => {
+          console.warn(error?.message || 'No se pudo fusionar usuarios');
+          showToast(error?.message || 'No se pudo fusionar usuarios', 'error', 4500);
+        });
+      },
+    }];
+  }
+  return [{
+    key: 'admin_merge_users_disabled',
+    name: `Fusionar usuarios (${escapeHtml(mergeContext.reason)})`,
+    disabled: true,
+  }];
+};
+
+const createDashboardContextMenu = (
+  kind: GridKind,
+  getSheet: () => DashboardSheet | null,
+  rows: Record<string, any>[],
+  meta: DashboardMeta,
+  annotationState?: AnnotationState,
+  modalRef?: { current: AnnotationModalApi | null },
+) => {
+  if (isAnnotationGridKind(kind)) return createAnnotationContextMenu(annotationState, modalRef);
+  if (kind === 'admin') return true;
+  return true;
+};
+
 const resolveAttendanceMeta = (rowData: any, field: string) => rowData?.__attendanceCellMeta?.[field] || null;
 
 const computeAttendanceSummaryFields = (rowData: any) => {
@@ -1176,10 +1687,10 @@ const renderTinyValue = (value: unknown, kind: string) => {
 };
 
 const renderEnrollmentCourses = (rowData: any) => {
-  const courses = Array.isArray(rowData?.enrollmentCourses) ? rowData.enrollmentCourses : [];
+  const courses = getAdminEnrollmentCourses(rowData);
   if (!courses.length) return '<span class="dashboard-val-empty">—</span>';
   return `<div class="dashboard-enrollment-cell">${courses.map((course: any) =>
-    `<span class="enrollment-chip" data-course-id="${escapeHtml(course.courseId)}">${escapeHtml(course.courseId)}<small>${escapeHtml(course.roleInCourse || 'student')}</small></span>`
+    `<span class="dashboard-course-tag enrollment-chip ${getCourseToneClass(course.courseId)}" data-course-id="${escapeHtml(course.courseId)}" title="${escapeHtml(getAdminEnrollmentCourseLabel(rowData, course.courseId))}">${escapeHtml(getAdminEnrollmentCourseLabel(rowData, course.courseId))}</span>`
   ).join('')}</div>`;
 };
 
@@ -1307,6 +1818,7 @@ const createSheet = (
     data: activeRows,
     columns: buildHotColumns(leafColumns, compactWidths, userWidths),
     nestedHeaders: buildNestedHeaders(leafColumns, kind),
+    sanitizer: sanitizeHandsontableHtml,
     rowHeaders: true,
     rowHeaderWidth,
     rowHeights: DASHBOARD_ROW_HEIGHT - 5,
@@ -1334,9 +1846,14 @@ const createSheet = (
     modifyRowHeaderWidth: () => rowHeaderWidth,
     modifyRowHeight: () => DASHBOARD_ROW_HEIGHT,
     licenseKey: 'non-commercial-and-evaluation',
-    contextMenu: isAnnotationGridKind(kind)
-      ? createAnnotationContextMenu(annotationState, modalRef)
-      : true,
+    contextMenu: createDashboardContextMenu(
+      kind,
+      () => sheetRef,
+      allRows,
+      meta,
+      annotationState,
+      modalRef,
+    ),
     dropdownMenu: true,
     filters: true,
     manualColumnMove: true,
@@ -1361,6 +1878,9 @@ const createSheet = (
       const sourceCol = sheetRef?.hot.toPhysicalColumn(visualCol) ?? visualCol;
       const leaf = leafColumns[sourceCol] || leafColumns[visualCol];
       if (!leaf) return;
+      if (leaf.cssClass) {
+        leaf.cssClass.split(/\s+/).filter(Boolean).forEach((className) => th.classList.add(className));
+      }
       if (normalizeText(leaf.kind) === 'row-select') {
         th.dataset.field = leaf.field;
         th.title = '';
@@ -1404,6 +1924,29 @@ const createSheet = (
       annotationState.selectedCoords = { row, col };
       annotationState.selectedContext = buildScopeContextFromCoords(sheetRef, row, col);
     },
+    beforeContextMenuSetItems: (menuItems) => {
+      if (!sheetRef || sheetRef.kind !== 'admin') return;
+      const enrollmentMenuItems = buildAdminEnrollmentContextMenuItems(sheetRef, allRows, meta);
+      const mergeMenuItems = buildAdminMergeContextMenuItems(sheetRef, meta);
+      if (enrollmentMenuItems && mergeMenuItems) {
+        menuItems.splice(0, menuItems.length, ...enrollmentMenuItems, Handsontable.plugins.ContextMenu.SEPARATOR, ...mergeMenuItems);
+      } else if (enrollmentMenuItems) {
+        menuItems.splice(0, menuItems.length, ...enrollmentMenuItems);
+      } else if (mergeMenuItems) {
+        menuItems.splice(0, menuItems.length, ...mergeMenuItems);
+      }
+    },
+    beforeOnCellContextMenu: (_event, coords) => {
+      if (!sheetRef) return;
+      if (coords.row < 0 || coords.col < 0) {
+        sheetRef.contextMenuCoords = null;
+        return;
+      }
+      sheetRef.contextMenuCoords = { row: coords.row, col: coords.col };
+      if (sheetRef.kind === 'admin' && !isVisualCellInSelection(sheetRef, coords.row, coords.col)) {
+        sheetRef.hot.selectCell(coords.row, coords.col, coords.row, coords.col, false, false);
+      }
+    },
     afterOnCellContextMenu: (_event, coords) => {
       if (!sheetRef || !annotationState || coords.row < 0 || coords.col < 0) return;
       annotationState.selectedSheet = sheetRef;
@@ -1412,7 +1955,7 @@ const createSheet = (
     },
   });
 
-  const sheet = { hot, kind, element, projectionColumns, allRows, activeRows, leafColumns, hiddenFields, compactWidths, userWidths, annotationState, modalRef };
+  const sheet = { hot, kind, element, projectionColumns, allRows, activeRows, leafColumns, hiddenFields, compactWidths, userWidths, annotationState, modalRef, contextMenuCoords: null };
   sheetRef = sheet;
   (hot as any).__musikiSheet = sheet;
   (element as any).__handsontableInstance = hot;
@@ -1809,7 +2352,7 @@ export const mountDashboardSheets = (root: HTMLElement) => {
   if (!shell.querySelector('[data-dashboard-tab]') && !root.querySelector('[data-dashboard-grid]')) return () => {};
 
   bindScopeSelectors(shell);
-  const meta = parseJsonScript<DashboardMeta>('dashboard-teacher-tabulator-meta', {});
+  const meta = parseJsonScript<DashboardMeta>('dashboard-teacher-sheets-meta', {});
   const initialAnnotations = parseJsonScript<DashboardAnnotationRecord[]>('dashboard-teacher-annotations', []);
   const annotationState: AnnotationState = {
     annotations: [],
