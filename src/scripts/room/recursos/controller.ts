@@ -9,6 +9,7 @@ import {
 import {
   type ResourceType,
   typeFromUrl,
+  isVideoUrl,
   nameFromFile,
   quickNameFromUrl,
   resolveNameFromUrl,
@@ -771,6 +772,11 @@ export class RecursosController {
   }
 
   private requestResourceOpen(item: ResourceItem, options: { forceNew?: boolean } = {}): void {
+    if (this.isExternalMediaLink(item)) {
+      this.requestExternalMediaLoad(item);
+      return;
+    }
+
     const sentVisual = this.isVisualMedia(item) && this.canSendVisual();
     const sentSonic = this.isSonicMedia(item) && this.canSendSonic();
     if (sentVisual) {
@@ -897,7 +903,11 @@ export class RecursosController {
   }
 
   private canOpenInAssociatedPod(item: ResourceItem): boolean {
-    return this.isSonicMedia(item) || this.isVisualMedia(item);
+    return this.isExternalMediaLink(item) || this.isSonicMedia(item) || this.isVisualMedia(item);
+  }
+
+  private isExternalMediaLink(item: ResourceItem): boolean {
+    return isVideoUrl(item.url);
   }
 
   private isSonicMedia(item: ResourceItem): boolean {
@@ -926,6 +936,12 @@ export class RecursosController {
   private requestVisualLoad(item: ResourceItem, options: { forceNew?: boolean } = {}): void {
     window.dispatchEvent(new CustomEvent('musiki:visual:load-url', {
       detail: { url: item.url, name: item.name, source: 'recursos', forceNew: Boolean(options.forceNew) },
+    }));
+  }
+
+  private requestExternalMediaLoad(item: ResourceItem): void {
+    window.dispatchEvent(new CustomEvent('musiki:external-media:open-url', {
+      detail: { url: item.url, name: item.name, source: 'recursos' },
     }));
   }
 

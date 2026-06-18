@@ -516,16 +516,22 @@ export class RoomWorkspaceManager {
     options: { forceNew?: boolean; title?: string } = {},
   ): string | null {
     if (!this.dockview) return null;
+    const fromRecursos = referencePanelId === "recursos";
     const existing = options.forceNew ? null : this.findPanelByBaseId("sonic-visualizer");
     if (existing) {
       existing.api.setActive();
+      if (fromRecursos) {
+        const reference = this.findPrimaryWorkspacePanel(["sonic-visualizer"]);
+        if (reference) this.movePanelRelative(existing.id, reference.id, "within");
+      }
       return existing.id;
     }
 
     const referencePanel =
-      (referencePanelId
+      (fromRecursos ? null : referencePanelId
         ? this.dockview.getGroupPanel(referencePanelId)
         : null) ??
+      (fromRecursos ? this.findPrimaryWorkspacePanel(["sonic-visualizer"]) : null) ??
       this.findPanelByBaseId("recursos") ??
       this.findPanelByBaseId("sonic-analyzer") ??
       this.dockview.panels[0] ??
@@ -539,7 +545,7 @@ export class RoomWorkspaceManager {
       component: "sonic-visualizer",
       title: options.title ?? "SV",
       position: referencePanel
-        ? { referencePanel: referencePanel.id, direction: "below" }
+        ? { referencePanel: referencePanel.id, direction: fromRecursos ? "within" : "below" }
         : undefined,
       initialHeight: 110,
     });
@@ -1184,6 +1190,43 @@ export class RoomWorkspaceManager {
     );
   }
 
+  private findPrimaryWorkspacePanel(excludeBaseIds: string[] = []) {
+    if (!this.dockview) return null;
+    const excluded = new Set([
+      "recursos",
+      "roster",
+      "chat",
+      ...excludeBaseIds,
+    ]);
+    const matchesBase = (panelId: string, baseId: string) =>
+      panelId === baseId || panelId.startsWith(`${baseId}-`);
+    const isExcluded = (panelId: string) =>
+      Array.from(excluded).some((baseId) => matchesBase(panelId, baseId));
+    const primaryOrder = [
+      "presentation",
+      "clase",
+      "teacher",
+      "screen",
+      "grid-videos",
+      "whiteboard",
+      "lily-render",
+      "lily-code",
+      "notes",
+      "external-media",
+      "visualizer",
+      "sonic-visualizer",
+      "forum",
+      "concept",
+      "graph",
+    ];
+    for (const baseId of primaryOrder) {
+      if (excluded.has(baseId)) continue;
+      const panel = this.findPanelByBaseId(baseId);
+      if (panel && !isExcluded(panel.id)) return panel;
+    }
+    return this.dockview.panels.find((panel) => !isExcluded(panel.id)) ?? this.dockview.panels[0] ?? null;
+  }
+
   public focusOrOpenChat() {
     if (!this.dockview) return;
     const existing = this.findPanelByBaseId("chat");
@@ -1220,16 +1263,22 @@ export class RoomWorkspaceManager {
     options: { forceNew?: boolean; title?: string } = {},
   ): string | null {
     if (!this.dockview) return null;
+    const fromRecursos = source === "recursos";
     const existing = options.forceNew ? null : this.findPanelByBaseId("visualizer");
     if (existing) {
       existing.api.setActive();
+      if (fromRecursos) {
+        const reference = this.findPrimaryWorkspacePanel(["visualizer"]);
+        if (reference) this.movePanelRelative(existing.id, reference.id, "within");
+      }
       return existing.id;
     }
 
     const reference =
-      this.findPanelByBaseId(
-        source === "recursos" ? "recursos" : "presentation",
-      ) ?? this.dockview.panels.find((panel) => panel.id !== "visualizer");
+      (fromRecursos
+        ? this.findPrimaryWorkspacePanel(["visualizer"])
+        : this.findPanelByBaseId("presentation")) ??
+      this.dockview.panels.find((panel) => panel.id !== "visualizer");
     const rect = this.container.getBoundingClientRect();
     const W = rect.width || this.container.offsetWidth || 1280;
     const panelId = options.forceNew
@@ -1240,7 +1289,7 @@ export class RoomWorkspaceManager {
       component: "visualizer",
       title: options.title ?? "VS",
       position: reference
-        ? { referencePanel: reference.id, direction: "left" }
+        ? { referencePanel: reference.id, direction: fromRecursos ? "within" : "left" }
         : undefined,
       initialWidth: Math.round(W * 0.45),
     });
@@ -1253,15 +1302,20 @@ export class RoomWorkspaceManager {
 
   public focusOrOpenExternalMedia(referencePanelId = "recursos"): void {
     if (!this.dockview) return;
+    const fromRecursos = referencePanelId === "recursos";
     const existing = this.findPanelByBaseId("external-media");
     if (existing) {
       existing.api.setActive();
+      if (fromRecursos) {
+        const reference = this.findPrimaryWorkspacePanel(["external-media"]);
+        if (reference) this.movePanelRelative(existing.id, reference.id, "within");
+      }
       return;
     }
 
     const reference =
-      this.findPanelByBaseId(referencePanelId) ??
-      this.findPanelByBaseId("recursos") ??
+      (fromRecursos ? null : this.findPanelByBaseId(referencePanelId)) ??
+      this.findPrimaryWorkspacePanel(["external-media"]) ??
       this.dockview.panels[0] ??
       null;
 
@@ -1270,7 +1324,7 @@ export class RoomWorkspaceManager {
       component: "external-media",
       title: "MEDIA",
       position: reference
-        ? { referencePanel: reference.id, direction: "right" }
+        ? { referencePanel: reference.id, direction: fromRecursos ? "within" : "right" }
         : undefined,
       initialWidth: Math.round((this.container.getBoundingClientRect().width || 1280) * 0.46),
     });
