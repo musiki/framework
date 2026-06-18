@@ -47,6 +47,10 @@ export type ConferenceMessage =
       layout: LayoutMode;
     }
   | {
+      type: 'screenshare-started';
+      identity: string;
+    }
+  | {
       type: 'graph';
       open: boolean;
     }
@@ -367,6 +371,13 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       return {
         type: 'layout',
         layout: normalizeLayoutMode((parsed as { layout?: string }).layout),
+      };
+    }
+
+    if (parsed.type === 'screenshare-started') {
+      return {
+        type: 'screenshare-started',
+        identity: normalizeText((parsed as { identity?: string }).identity),
       };
     }
 

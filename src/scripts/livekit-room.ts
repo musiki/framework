@@ -4040,6 +4040,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let layoutBeforeAutoScreenshare = normalizeLayoutMode(layoutInput.value);
   let autoSwitchedToScreenshare = false;
   let screenshareWasActive = false;
+  let screenshareLayoutHoldUntil = 0;
   let currentSlideState: SlideState | null = null;
   let pendingRemoteSlideState: SlideState | null = null;
   let lastPublishedSlideKey = '';
@@ -6624,7 +6625,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const openExternalMediaFromInput = async (valueOverride?: string) => {
+  const openExternalMediaFromInput = async (
+    valueOverride?: string,
+    options: { captureInRecursos?: boolean } = {},
+  ) => {
+    const captureInRecursos = options.captureInRecursos ?? true;
     const inputValue = valueOverride ?? (externalMediaInput instanceof HTMLInputElement ? externalMediaInput.value : '');
     if (!inputValue) return;
     if (externalMediaInput instanceof HTMLInputElement) {
@@ -6656,12 +6661,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       },
       'local',
     );
-    window.dispatchEvent(new CustomEvent('musiki:recursos:external-media', {
-      detail: {
-        url: provider === 'vimeo' ? `https://vimeo.com/${parsedMedia.mediaId}` : `https://www.youtube.com/watch?v=${parsedMedia.mediaId}`,
-        name: inputValue,
-      },
-    }));
+    if (captureInRecursos) {
+      window.dispatchEvent(new CustomEvent('musiki:recursos:external-media', {
+        detail: {
+          url: provider === 'vimeo' ? `https://vimeo.com/${parsedMedia.mediaId}` : `https://www.youtube.com/watch?v=${parsedMedia.mediaId}`,
+          name: inputValue,
+        },
+      }));
+    }
   };
 
   const toggleExternalMediaPlayback = () => {
@@ -10003,6 +10010,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (Date.now() < screenshareLayoutHoldUntil) {
+      return;
+    }
+
     if (autoSwitchedToScreenshare && currentLayout === 'screenshare') {
       layoutInput.value = setLayout(stage, layoutBeforeAutoScreenshare);
       writeQueryState();
@@ -10011,6 +10022,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     autoSwitchedToScreenshare = false;
     screenshareWasActive = false;
     syncLayoutChoiceButtons();
+  };
+
+  const activateScreenshareLayout = async (options: { broadcast?: boolean } = {}) => {
+    const currentLayout = normalizeLayoutMode(layoutInput.value);
+    if (currentLayout !== 'screenshare') {
+      layoutBeforeAutoScreenshare = currentLayout;
+    }
+    screenshareLayoutHoldUntil = Date.now() + 8000;
+    layoutInput.value = setLayout(stage, 'screenshare');
+    autoSwitchedToScreenshare = true;
+    screenshareWasActive = true;
+    writeQueryState();
+    syncLayoutChoiceButtons();
+    syncAllParticipants();
+
+    if (options.broadcast === false || room.state !== ConnectionState.Connected) return;
+    await publishMessage({
+      type: 'screenshare-started',
+      identity: room.localParticipant?.identity ?? identityInput.value.trim(),
+    });
   };
 
   const canChangeLayoutLocally = () => true;
@@ -11581,11 +11612,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     window.addEventListener('musiki:external-media:open-url', (e: Event) => {
-      const { url } = (e as CustomEvent<{ url: string; name?: string }>).detail ?? {};
+      const { url, source } = (e as CustomEvent<{ url: string; name?: string; source?: string }>).detail ?? {};
       if (!url) return;
       workspaceManager.focusOrOpenExternalMedia('recursos');
       window.setTimeout(() => {
-        void openExternalMediaFromInput(url);
+        void openExternalMediaFromInput(url, { captureInRecursos: source !== 'recursos' });
       }, 120);
     });
 
@@ -13522,9 +13553,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         if (nextLayout !== 'screenshare') {
           layoutBeforeAutoScreenshare = nextLayout;
           autoSwitchedToScreenshare = false;
+          screenshareLayoutHoldUntil = 0;
         }
         screenshareWasActive = hasActiveScreenShare();
         syncAllParticipants();
+        return;
+      }
+
+      if (message.type === 'screenshare-started') {
+        void activateScreenshareLayout({ broadcast: false });
         return;
       }
 
@@ -14123,17 +14160,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     try {
       if (room.localParticipant.isScreenShareEnabled) {
         await room.localParticipant.setScreenShareEnabled(false);
-        if (localRole === 'student' && screenshareAudioInput instanceof HTMLInputElement) {
-          screenshareAudioInput.checked = false;
-        }
       } else {
-        if (localRole === 'student' && screenshareAudioInput instanceof HTMLInputElement) {
+        if (screenshareAudioInput instanceof HTMLInputElement && !screenshareAudioInput.checked) {
           screenshareAudioInput.checked = true;
+          persistSetupState();
         }
         const includeScreenAudio = screenshareAudioInput instanceof HTMLInputElement && screenshareAudioInput.checked;
         await room.localParticipant.setScreenShareEnabled(true, {
-          // Plan A: audio: false by default — no ScreenShareAudio track published, zero echo risk.
-          // Only capture system audio if the user explicitly enables it in Setup.
+          // Screen share opens in shared presentation mode, so include system audio by default.
           audio: includeScreenAudio
             ? ({
                 echoCancellation: false,
@@ -14153,6 +14187,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           selfBrowserSurface: 'include',
           surfaceSwitching: 'include',
         });
+        await activateScreenshareLayout({ broadcast: true });
       }
       syncAllParticipants();
       setControlState();

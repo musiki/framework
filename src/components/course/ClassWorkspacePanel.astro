@@ -1302,12 +1302,11 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       state.hoveredNodeId = ids.has(String(state.hoveredNodeId || '')) ? '' : state.hoveredNodeId;
     };
 
-    const r2Prefixes = () => ([
-      { id: 'r2-prefix:room/', prefix: 'room/', name: 'S2 room' },
-      { id: `r2-prefix:class-workspace/${courseId}/`, prefix: `class-workspace/${courseId}/`, name: 'S2 class-workspace' },
-    ]);
+    const r2Prefixes = () => [];
 
     const loadR2Objects = async () => {
+      // Raw S2 prefixes are storage internals; the workspace should show linked resources only.
+      if (!r2Prefixes().length) return { nodes: [], assets: [], error: '' };
       if (!state.canManage) return { nodes: [], assets: [], error: '' };
       const linkedUrls = new Set((state.assets || []).map((asset) => String(asset.externalUrl || '')).filter(Boolean));
       const linkedKeys = new Set((state.assets || []).map((asset) => String(asset.objectKey || '')).filter(Boolean));

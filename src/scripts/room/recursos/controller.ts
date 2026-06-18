@@ -368,14 +368,13 @@ export class RecursosController {
   private async addCompartido(url: string, name: string, source: ResourceItem['source'], folder = 'compartidos') {
     if (!url) return;
     const sid = await this.ensureSession();
-    this.items = addItem(this.items, {
+    const nextItems = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
       type: typeFromUrl(url), folder, source,
       createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       sessionId: sid || null,
     });
-    this.render(); this.scheduleAutosave(); this.broadcastSync();
-    void this.saveNow();
+    this.commitItemsIfChanged(nextItems);
   }
 
   // ── SA media file ─────────────────────────────────────────────────────────────
@@ -383,27 +382,33 @@ export class RecursosController {
   private async addSaFile(url: string, name: string): Promise<void> {
     if (!url) return;
     const sid = await this.ensureSession();
-    this.items = addItem(this.items, {
+    const nextItems = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
       type: typeFromUrl(url), folder: 'media', source: 'sa',
       createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       sessionId: sid || null,
     });
-    this.render(); this.scheduleAutosave(); this.broadcastSync();
-    void this.saveNow();
+    this.commitItemsIfChanged(nextItems);
   }
 
   private async addVisualFile(url: string, name: string): Promise<void> {
     if (!url) return;
     const sid = await this.ensureSession();
-    this.items = addItem(this.items, {
+    const nextItems = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
       type: typeFromUrl(url), folder: 'DOC', source: 'vs',
       createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
       sessionId: sid || null,
     });
+    this.commitItemsIfChanged(nextItems);
+  }
+
+  private commitItemsIfChanged(nextItems: ResourceItem[]): boolean {
+    if (nextItems === this.items) return false;
+    this.items = nextItems;
     this.render(); this.scheduleAutosave(); this.broadcastSync();
     void this.saveNow();
+    return true;
   }
 
   // ── Session management ────────────────────────────────────────────────────────
@@ -579,9 +584,7 @@ export class RecursosController {
         createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
         sessionId: sid || null,
       };
-      this.items = addItem(this.items, newItem);
-      this.render(); this.scheduleAutosave(); this.broadcastSync();
-      void this.saveNow();
+      this.commitItemsIfChanged(addItem(this.items, newItem));
     } catch (e) { console.error('[Re] upload error', e); }
   }
 
@@ -615,9 +618,8 @@ export class RecursosController {
         createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
         sessionId: sid || null,
       };
-      this.items = addItem(this.items, item);
-      this.render(); this.scheduleAutosave(); this.broadcastSync();
-      void this.saveNow();
+      const added = this.commitItemsIfChanged(addItem(this.items, item));
+      if (!added) return;
       void resolveNameFromUrl(text).then(name => {
         this.items = this.items.map(i => i.id === item.id ? { ...i, name } : i);
         this.render(); this.scheduleAutosave();

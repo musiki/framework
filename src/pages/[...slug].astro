@@ -1889,6 +1889,14 @@ function renderLessonsTreeHTML(
         margin-top: 0.16rem;
         margin-bottom: 0.22rem;
         margin-left: 0.8rem;
+        min-height: 1.5rem;
+        border-radius: 5px;
+      }
+
+      :global(.sidebar--left .recursos-sidebar-tree.recursos-sidebar-drop-root) {
+        outline: 1px dashed color-mix(in srgb, var(--accent) 52%, transparent);
+        outline-offset: 2px;
+        background: color-mix(in srgb, var(--accent) 5%, transparent);
       }
 
       :global(.sidebar--left .recursos-sidebar-session) {
@@ -1934,6 +1942,12 @@ function renderLessonsTreeHTML(
       :global(.sidebar--left .recursos-sidebar-resource-item) {
         list-style: none;
         margin: 0;
+      }
+      :global(.sidebar--left .recursos-sidebar-resource-item[draggable="true"]) {
+        cursor: grab;
+      }
+      :global(.sidebar--left .recursos-sidebar-resource-item[data-dragging="true"]) {
+        opacity: 0.38;
       }
       :global(.sidebar--left .recursos-sidebar-resource-item::before) {
         content: none !important;
@@ -2007,6 +2021,12 @@ function renderLessonsTreeHTML(
       }
       :global(.sidebar--left .recursos-sidebar-folder[open] > .recursos-sidebar-folder-name .recursos-sidebar-folder-caret) {
         transform: rotate(90deg);
+      }
+      :global(.sidebar--left .recursos-sidebar-session[data-drop-target="true"] > .recursos-sidebar-session-name),
+      :global(.sidebar--left .recursos-sidebar-folder[data-drop-target="true"] > .recursos-sidebar-folder-name) {
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        color: var(--accent);
+        outline: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
       }
       :global(.sidebar--left .recursos-sidebar-folder-items) {
         display: grid;
@@ -5658,8 +5678,8 @@ function renderLessonsTreeHTML(
 	          const name = String(node?.name || 'Recurso');
 	          const ic = recursosSidebarIcon(String(asset?.resourceType || node?.kind || ''), url, name);
 	          return `
-	            <li class="recursos-sidebar-resource-item" data-id="${recursosSidebarEsc(node.id)}">
-	              <a href="${recursosSidebarEsc(url)}" class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title="${recursosSidebarEsc(url)}">
+	            <li class="recursos-sidebar-resource-item" data-id="${recursosSidebarEsc(node.id)}" draggable="true">
+	              <a href="${recursosSidebarEsc(url)}" class="recursos-sidebar-resource-link" target="_blank" rel="noreferrer" title="${recursosSidebarEsc(url)}" draggable="false">
 	                <span class="recursos-sidebar-resource-icon" style="color:${recursosSidebarEsc(ic.color)}">${recursosSidebarEsc(ic.char)}</span>
 	                <span class="recursos-sidebar-resource-name">${recursosSidebarEsc(name)}</span>
 	              </a>
@@ -5704,15 +5724,7 @@ function renderLessonsTreeHTML(
 	          `;
 	        }).filter(Boolean);
 	        if (unsessioned.trim()) {
-	          groups.push(`
-	            <details class="recursos-sidebar-session" data-node-id="" data-node-kind="">
-	              <summary class="recursos-sidebar-session-name">
-	                <span class="recursos-sidebar-session-caret">▸</span>
-	                Sin sesión
-	              </summary>
-	              <ul class="recursos-sidebar-resource-list">${unsessioned}</ul>
-	            </details>
-	          `);
+	          groups.unshift(`<ul class="recursos-sidebar-resource-list recursos-sidebar-resource-list--root">${unsessioned}</ul>`);
 	        }
 	        tree.innerHTML = groups.length
 	          ? groups.join('')
@@ -5795,6 +5807,7 @@ function renderLessonsTreeHTML(
 	      document.addEventListener('click', recursosFoldWin.__musikiRecursosFoldClickHandler, true);
 
 	      bootRecursosSidebarFolding();
+	      window.setTimeout(() => refreshRecursosSidebars(''), 0);
 	      document.addEventListener('astro:page-load', bootRecursosSidebarFolding);
 	      window.addEventListener('notes-sidebar-refresh', () => window.setTimeout(bootRecursosSidebarFolding, 0));
 	      window.addEventListener('musiki:recursos-sidebar-mounted', () => window.setTimeout(bootRecursosSidebarFolding, 0));
@@ -5981,18 +5994,91 @@ function renderLessonsTreeHTML(
         document.addEventListener('click', closeRecursosMenu);
         document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRecursosMenu(); });
 
+        function clearRecursosSidebarDropState(tree: HTMLElement) {
+          tree.classList.remove('recursos-sidebar-drop-root');
+          tree.querySelectorAll<HTMLElement>('[data-drop-target="true"]').forEach(el => {
+            el.dataset.dropTarget = 'false';
+          });
+        }
+
+        function recursosSidebarDropTarget(rawTarget: Element | null, tree: HTMLElement) {
+          const folder = rawTarget?.closest<HTMLElement>('details.recursos-sidebar-folder[data-node-id]');
+          if (folder?.dataset.nodeId) return { element: folder, parentId: folder.dataset.nodeId };
+          const session = rawTarget?.closest<HTMLElement>('details.recursos-sidebar-session[data-node-id]');
+          if (session?.dataset.nodeId) return { element: session, parentId: session.dataset.nodeId };
+          return { element: tree, parentId: '' };
+        }
+
+        async function moveRecursosSidebarResource(tree: HTMLElement, resourceId: string, parentId: string) {
+          const courseId = recursosSidebarCourseIdFor(tree);
+          if (!courseId || !resourceId) return;
+          await recursosWorkspaceCommand(courseId, {
+            type: 'node.move',
+            nodeIds: [resourceId],
+            targetParentId: parentId || null,
+          });
+          recursosSidebarBroadcastRefresh(courseId);
+        }
+
         function bootRecursosSidebar() {
           document.querySelectorAll<HTMLElement>('[data-recursos-sidebar]').forEach(tree => {
             const courseId = recursosSidebarCourseIdFor(tree);
             if (!courseId) return;
             if (tree.dataset.recursosContextBound) return;
             tree.dataset.recursosContextBound = 'true';
+            tree.querySelectorAll<HTMLElement>('.recursos-sidebar-resource-item[data-id]').forEach(item => {
+              item.draggable = true;
+              item.querySelectorAll<HTMLAnchorElement>('a').forEach(anchor => {
+                anchor.draggable = false;
+              });
+            });
             tree.addEventListener('contextmenu', e => {
               const target = recursosSidebarMenuTarget(e.target instanceof Element ? e.target : null);
               if (!target?.id) return;
               e.preventDefault();
               e.stopPropagation();
               showRecursosMenu(e.clientX, e.clientY, target, courseId);
+            });
+            tree.addEventListener('dragstart', e => {
+              const target = e.target instanceof Element ? e.target.closest<HTMLElement>('.recursos-sidebar-resource-item[data-id]') : null;
+              if (!target?.dataset.id) return;
+              target.dataset.dragging = 'true';
+              e.dataTransfer?.setData('application/x-musiki-recurso-id', target.dataset.id);
+              e.dataTransfer?.setData('text/plain', target.dataset.id);
+              if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.dropEffect = 'move';
+              }
+            });
+            tree.addEventListener('dragend', e => {
+              const target = e.target instanceof Element ? e.target.closest<HTMLElement>('.recursos-sidebar-resource-item[data-id]') : null;
+              if (target) target.dataset.dragging = 'false';
+              clearRecursosSidebarDropState(tree);
+            });
+            tree.addEventListener('dragover', e => {
+              const resourceId = e.dataTransfer?.getData('application/x-musiki-recurso-id') || '';
+              if (!resourceId && !Array.from(e.dataTransfer?.types || []).includes('application/x-musiki-recurso-id')) return;
+              e.preventDefault();
+              if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+              clearRecursosSidebarDropState(tree);
+              const target = recursosSidebarDropTarget(e.target instanceof Element ? e.target : null, tree);
+              if (target.element === tree) tree.classList.add('recursos-sidebar-drop-root');
+              else target.element.dataset.dropTarget = 'true';
+            });
+            tree.addEventListener('dragleave', e => {
+              const related = e.relatedTarget instanceof Node ? e.relatedTarget : null;
+              if (related && tree.contains(related)) return;
+              clearRecursosSidebarDropState(tree);
+            });
+            tree.addEventListener('drop', e => {
+              const resourceId = e.dataTransfer?.getData('application/x-musiki-recurso-id') || '';
+              if (!resourceId) return;
+              e.preventDefault();
+              const target = recursosSidebarDropTarget(e.target instanceof Element ? e.target : null, tree);
+              clearRecursosSidebarDropState(tree);
+              moveRecursosSidebarResource(tree, resourceId, target.parentId).catch((error) => {
+                alert((error as Error)?.message || 'No se pudo mover el recurso.');
+              });
             });
           });
         }

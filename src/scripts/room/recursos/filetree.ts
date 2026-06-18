@@ -54,9 +54,37 @@ export function removeItem(items: ResourceItem[], id: string): ResourceItem[] {
   return items.filter(i => i.id !== id);
 }
 
+function normalizedMaterialUrl(rawUrl: string): string {
+  const raw = String(rawUrl || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw, 'https://musiki.local');
+    url.hash = '';
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (host === 'youtu.be') {
+      const videoId = url.pathname.split('/').filter(Boolean)[0] || '';
+      return videoId ? `youtube:${videoId}` : raw;
+    }
+    if (host === 'youtube.com' || host === 'youtube-nocookie.com' || host.endsWith('.youtube.com')) {
+      const parts = url.pathname.split('/').filter(Boolean);
+      const videoId = url.searchParams.get('v') || (parts[0] === 'embed' || parts[0] === 'shorts' ? parts[1] : '');
+      return videoId ? `youtube:${videoId}` : raw;
+    }
+    if (host === 'vimeo.com' || host.endsWith('.vimeo.com')) {
+      const videoId = url.pathname.split('/').filter(Boolean).find((part) => /^\d+$/.test(part)) || '';
+      return videoId ? `vimeo:${videoId}` : raw;
+    }
+    url.searchParams.sort();
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 export function addItem(items: ResourceItem[], item: ResourceItem): ResourceItem[] {
   const sessionId = item.sessionId ?? '';
-  if (items.some(i => i.url === item.url && (i.sessionId ?? '') === sessionId && i.folder === item.folder)) return items;
+  const itemUrl = normalizedMaterialUrl(item.url);
+  if (items.some(i => normalizedMaterialUrl(i.url) === itemUrl && (i.sessionId ?? '') === sessionId)) return items;
   return [...items, item];
 }
 
