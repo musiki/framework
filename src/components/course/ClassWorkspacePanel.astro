@@ -24,6 +24,8 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       <input class="cw-search" data-cw-search placeholder="Buscar" />
       <select class="cw-sort" data-cw-sort aria-label="Ordenar recursos">
         <option value="name">Nombre</option>
+        <option value="type">Tipo</option>
+        <option value="size-desc">Tamaño</option>
         <option value="date-desc">Fecha ↓</option>
         <option value="date-asc">Fecha ↑</option>
       </select>
@@ -62,6 +64,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
           <button type="button" class="cw-size-btn" data-cw-size="small" title="Previews compactas" aria-label="Previews compactas">▦</button>
           <button type="button" class="cw-size-btn" data-cw-size="medium" title="Previews medianas" aria-label="Previews medianas">▥</button>
           <button type="button" class="cw-size-btn" data-cw-size="large" title="Previews grandes" aria-label="Previews grandes">▣</button>
+          <button type="button" class="cw-size-btn" data-cw-size="list" title="Vista lista" aria-label="Vista lista">☰</button>
         </span>
         <span data-cw-current>Workspace</span>
       </div>
@@ -108,6 +111,10 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
 
   .cw-panel[data-cw-preview-size="large"] {
     --cw-card-size: 152px;
+  }
+
+  .cw-panel[data-cw-preview-size="list"] {
+    --cw-card-size: auto;
   }
 
   .cw-panel[data-dragging-files="true"] {
@@ -306,6 +313,12 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     padding: 0;
   }
 
+  .cw-panel[data-cw-preview-size="list"] .cw-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+    gap: 0.28rem;
+  }
+
   .cw-tree-node {
     display: flex;
     width: 100%;
@@ -412,6 +425,58 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     background: color-mix(in srgb, var(--c-link) 18%, #15171c 82%);
   }
 
+  .cw-card[data-drop-target="true"]::before {
+    position: absolute;
+    z-index: 4;
+    inset: 0.42rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--c-link) 52%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c-bg) 76%, transparent);
+    color: var(--c-link);
+    content: "Mover";
+    font-size: 0.74rem;
+    font-weight: 750;
+    pointer-events: none;
+  }
+
+  .cw-tree-node[data-drop-target="true"]::after {
+    flex: 0 0 auto;
+    margin-left: auto;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--c-link) 16%, transparent);
+    color: var(--c-link);
+    content: "Mover";
+    font-size: 0.62rem;
+    font-weight: 750;
+    line-height: 1;
+    padding: 0.16rem 0.34rem;
+    pointer-events: none;
+  }
+
+  .cw-panel[data-cw-preview-size="list"] .cw-card {
+    display: grid;
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    width: 100%;
+    height: auto;
+    min-height: 2.55rem;
+    min-width: 0;
+    align-items: center;
+    gap: 0.52rem;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--c-fg) 4%, transparent);
+    padding: 0.42rem 2rem 0.42rem 0.48rem;
+  }
+
+  .cw-panel[data-cw-preview-size="list"] .cw-card[data-drop-target="true"]::before {
+    inset: 0.3rem 0.42rem auto auto;
+    width: auto;
+    min-width: 3.2rem;
+    height: 1.35rem;
+    padding: 0 0.42rem;
+  }
+
   .cw-card-select {
     display: none;
   }
@@ -471,6 +536,20 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   }
 
+  .cw-panel[data-cw-preview-size="list"] .cw-card-title {
+    position: static;
+    display: block;
+    overflow: visible;
+    color: var(--c-fg);
+    font-size: 0.8rem;
+    font-weight: 650;
+    line-height: 1.22;
+    -webkit-line-clamp: unset;
+    mix-blend-mode: normal;
+    overflow-wrap: anywhere;
+    text-shadow: none;
+  }
+
   .cw-thumb {
     position: absolute;
     inset: 0;
@@ -485,6 +564,21 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     overflow: hidden;
     font-size: 0.78rem;
     font-weight: 700;
+  }
+
+  .cw-panel[data-cw-preview-size="list"] .cw-thumb {
+    position: static;
+    width: 2.25rem;
+    height: 2.25rem;
+    min-height: 2.25rem;
+    border-radius: 4px;
+    font-size: 0.56rem;
+  }
+
+  .cw-panel[data-cw-preview-size="list"] .cw-thumb img,
+  .cw-panel[data-cw-preview-size="list"] .cw-thumb video,
+  .cw-panel[data-cw-preview-size="list"] .cw-thumb iframe {
+    display: none;
   }
 
   .cw-thumb img,
@@ -588,6 +682,34 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
 
   .cw-card-meta {
     display: none;
+  }
+
+  .cw-panel[data-cw-preview-size="list"] .cw-card-meta {
+    display: block;
+    margin-top: 0.14rem;
+    overflow-wrap: anywhere;
+    color: var(--c-fg-dim);
+    font-size: 0.7rem;
+    line-height: 1.25;
+  }
+
+  .cw-drag-preview {
+    position: fixed;
+    z-index: -1;
+    top: -1000px;
+    left: -1000px;
+    max-width: 16rem;
+    border-radius: 6px;
+    background: var(--c-bg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+    color: var(--c-fg);
+    font-size: 0.78rem;
+    font-weight: 650;
+    line-height: 1.2;
+    overflow: hidden;
+    padding: 0.45rem 0.6rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .cw-context-menu {
@@ -767,11 +889,26 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
   const isResourceLike = (node) => ['resource', 'r2_object', 'snapshot', 'lesson', 'assignment', 'note', 'concept', 'lily_block'].includes(String(node?.kind || ''));
   const isR2Node = (nodeOrId) => String(typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId || '').startsWith('r2-object:');
   const isR2Parent = (id) => String(id || '').startsWith('r2-prefix:');
+  const isLegacyFolderId = (id) => String(id || '').startsWith('legacy-folder:');
+  const parseLegacyFolderId = (id) => {
+    const raw = String(id || '');
+    if (!raw.startsWith('legacy-folder:')) return null;
+    const [, legacyCourseId, parentKey, ...folderParts] = raw.split(':');
+    const folder = folderParts.join(':');
+    if (!legacyCourseId || !folder) return null;
+    return {
+      courseId: legacyCourseId,
+      parentId: parentKey && parentKey !== 'root' ? parentKey : null,
+      folder,
+    };
+  };
+  const legacyFolderId = (courseId, parentId, folder) =>
+    `legacy-folder:${courseId}:${parentId || 'root'}:${String(folder || '').trim() || 'root'}`;
 
   function resourceTypeFromName(name, url = '') {
     const lower = `${name || ''} ${url || ''}`.toLowerCase();
-    if (/\.(png|jpe?g|gif|webp|svg)(\?|$|\s)/.test(lower)) return 'image';
-    if (/\.(mp4|mov|webm)(\?|$|\s)/.test(lower)) return 'video';
+    if (/\.(png|jpe?g|gif|webp|svg|tiff?)(\?|$|\s)/.test(lower)) return 'image';
+    if (/\.(mp4|mov|mpv|webm)(\?|$|\s)/.test(lower)) return 'video';
     if (/\.(mp3|wav|ogg|m4a|aac|flac)(\?|$|\s)/.test(lower)) return 'audio';
     if (/\.pdf(\?|$|\s)/.test(lower)) return 'pdf';
     if (/\.pptx(\?|$|\s)/.test(lower)) return 'pptx';
@@ -780,6 +917,34 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     if (/\.txt(\?|$|\s)/.test(lower)) return 'txt';
     return url ? 'link' : 'other';
   }
+
+  const typeLabel = (node, asset) => {
+    const type = String(asset?.resourceType || node?.kind || 'other').toLowerCase();
+    if (node && isContainer(node)) return node.kind === 'session' ? 'sesion' : 'carpeta';
+    if (type === 'image') return 'imagen';
+    if (type === 'r2_object') return 'S2';
+    return type || 'item';
+  };
+
+  const sizeBytesFor = (node, asset) => {
+    const fromAsset = Number(asset?.sizeBytes);
+    if (Number.isFinite(fromAsset) && fromAsset > 0) return fromAsset;
+    const fromMeta = Number(node?.metadata?.size);
+    return Number.isFinite(fromMeta) && fromMeta > 0 ? fromMeta : 0;
+  };
+
+  const formatBytes = (bytes) => {
+    const value = Number(bytes) || 0;
+    if (value <= 0) return 'sin tamaño';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let amount = value;
+    let unit = 0;
+    while (amount >= 1024 && unit < units.length - 1) {
+      amount /= 1024;
+      unit += 1;
+    }
+    return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
+  };
 
   function previewMarkup(node, asset) {
     if (!node) return '<div class="cw-empty">Selecciona un recurso.</div>';
@@ -885,9 +1050,10 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     };
     let pointerDrag = null;
     let treeLongPress = null;
+    let dragPreviewEl = null;
 
     const applyPreviewSize = () => {
-      const size = ['small', 'medium', 'large'].includes(String(state.previewSize))
+      const size = ['small', 'medium', 'large', 'list'].includes(String(state.previewSize))
         ? String(state.previewSize)
         : 'medium';
       state.previewSize = size;
@@ -908,6 +1074,27 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       gridEl?.querySelectorAll('[data-drop-target="true"]').forEach((node) => {
         if (node instanceof HTMLElement) node.dataset.dropTarget = 'false';
       });
+    };
+
+    const removeDragPreview = () => {
+      if (dragPreviewEl instanceof HTMLElement) dragPreviewEl.remove();
+      dragPreviewEl = null;
+    };
+
+    const setDragPreview = (event, nodeIds) => {
+      const transfer = event.dataTransfer;
+      if (!transfer) return;
+      removeDragPreview();
+      const ids = Array.isArray(nodeIds) ? nodeIds.map(String).filter(Boolean) : [];
+      const label = ids.length > 1
+        ? `${ids.length} elementos`
+        : getNode(ids[0])?.name || 'Moviendo';
+      const preview = document.createElement('div');
+      preview.className = 'cw-drag-preview';
+      preview.textContent = label;
+      document.body.appendChild(preview);
+      dragPreviewEl = preview;
+      transfer.setDragImage(preview, 14, 14);
     };
 
     const parentTargetAtPoint = (clientX, clientY) => {
@@ -943,6 +1130,13 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     const compareNodes = (a, b) => {
       if (state.sortMode === 'date-asc') return sortTimestamp(a) - sortTimestamp(b) || compareByName(a, b);
       if (state.sortMode === 'date-desc') return sortTimestamp(b) - sortTimestamp(a) || compareByName(a, b);
+      if (state.sortMode === 'type') {
+        const typeDiff = typeLabel(a, getAsset(a.id)).localeCompare(typeLabel(b, getAsset(b.id)), 'es', { sensitivity: 'base', numeric: true });
+        return typeDiff || compareByName(a, b);
+      }
+      if (state.sortMode === 'size-desc') {
+        return sizeBytesFor(b, getAsset(b.id)) - sizeBytesFor(a, getAsset(a.id)) || compareByName(a, b);
+      }
       return compareByName(a, b);
     };
 
@@ -979,6 +1173,133 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       }
       const single = event.dataTransfer?.getData('application/x-cw-node') || '';
       return single ? [single] : [];
+    };
+
+    const replaceNodeIdReferences = (oldId, newId) => {
+      if (!oldId || !newId || oldId === newId) return;
+      state.nodes = (state.nodes || []).map((node) => {
+        const next = { ...node };
+        if (String(next.id) === oldId) next.id = newId;
+        if (String(next.parentId || '') === oldId) next.parentId = newId;
+        return next;
+      });
+      state.assets = (state.assets || []).map((asset) => {
+        if (String(asset.nodeId) !== oldId) return asset;
+        return {
+          ...asset,
+          id: String(asset.id) === oldId ? newId : asset.id,
+          nodeId: newId,
+        };
+      });
+      const swap = (id) => (String(id || '') === oldId ? newId : id);
+      state.selectedParentId = swap(state.selectedParentId);
+      state.selectedNodeId = swap(state.selectedNodeId);
+      state.hoveredNodeId = swap(state.hoveredNodeId);
+      state.selectedIds = new Set(selectedIds().map(swap));
+      if (contextMenuEl instanceof HTMLElement && contextMenuEl.dataset.nodeId === oldId) {
+        contextMenuEl.dataset.nodeId = newId;
+      }
+    };
+
+    const mergeNode = (node) => {
+      if (!node?.id) return;
+      const nodeId = String(node.id);
+      let found = false;
+      state.nodes = (state.nodes || []).map((item) => {
+        if (String(item.id) !== nodeId) return item;
+        found = true;
+        return { ...item, ...node };
+      });
+      if (!found) state.nodes = [...(state.nodes || []), node];
+    };
+
+    const mergeAsset = (asset) => {
+      if (!asset?.nodeId) return;
+      const nodeId = String(asset.nodeId);
+      let found = false;
+      state.assets = (state.assets || []).map((item) => {
+        if (String(item.nodeId) !== nodeId) return item;
+        found = true;
+        return { ...item, ...asset };
+      });
+      if (!found) state.assets = [...(state.assets || []), asset];
+    };
+
+    const localParentAfterContainerDelete = (node) => {
+      if (!node) return null;
+      if (node.kind === 'session') return null;
+      if (isLegacyFolderId(node.id)) {
+        return parseLegacyFolderId(node.id)?.parentId || null;
+      }
+      return node.parentId ? String(node.parentId) : null;
+    };
+
+    const applyRenameLocally = (nodeId, name, result) => {
+      const current = getNode(nodeId);
+      const nextName = String(result?.node?.name || result?.legacy?.name || name || current?.name || '').trim();
+      if (isLegacyFolderId(nodeId)) {
+        const parsed = parseLegacyFolderId(nodeId);
+        const nextId = parsed ? legacyFolderId(parsed.courseId, parsed.parentId, nextName) : nodeId;
+        replaceNodeIdReferences(nodeId, nextId);
+        state.nodes = (state.nodes || []).map((node) => (
+          String(node.id) === nextId
+            ? { ...node, name: nextName, slug: nextName, sortKey: nextName, updatedAt: new Date().toISOString() }
+            : node
+        ));
+        return nextId;
+      }
+      if (result?.node?.id) mergeNode(result.node);
+      if (current) {
+        state.nodes = (state.nodes || []).map((node) => (
+          String(node.id) === String(nodeId)
+            ? {
+                ...node,
+                name: nextName,
+                slug: node.kind === 'folder' ? nextName : node.slug,
+                sortKey: node.kind === 'folder' || node.kind === 'session' ? nextName : node.sortKey,
+                updatedAt: result?.node?.updatedAt || new Date().toISOString(),
+              }
+            : node
+        ));
+      }
+      return nodeId;
+    };
+
+    const applyMoveLocally = (nodeIds, targetParentId, result) => {
+      const targetId = targetParentId || null;
+      const ids = new Set(nodeIds.map(String).filter(Boolean));
+      state.nodes = (state.nodes || []).map((node) => (
+        ids.has(String(node.id))
+          ? { ...node, parentId: targetId, updatedAt: new Date().toISOString() }
+          : node
+      ));
+      const returned = Array.isArray(result) ? result : [];
+      returned.forEach((entry) => {
+        if (entry?.node?.id) mergeNode({ ...entry.node, parentId: ids.has(String(entry.node.id)) ? targetId : entry.node.parentId });
+        else if (entry?.id) mergeNode({ ...entry, parentId: ids.has(String(entry.id)) ? targetId : entry.parentId });
+      });
+    };
+
+    const applyDeleteLocally = (nodeIds) => {
+      const ids = new Set(nodeIds.map(String).filter(Boolean));
+      const moveChildrenTo = new Map();
+      (state.nodes || []).forEach((node) => {
+        const id = String(node.id);
+        if (ids.has(id) && isContainer(node)) moveChildrenTo.set(id, localParentAfterContainerDelete(node));
+      });
+      state.nodes = (state.nodes || [])
+        .filter((node) => !ids.has(String(node.id)) && !isR2Node(node))
+        .concat((state.nodes || []).filter((node) => isR2Node(node) && !ids.has(String(node.id))))
+        .map((node) => {
+          const parentId = String(node.parentId || '');
+          if (!moveChildrenTo.has(parentId)) return node;
+          return { ...node, parentId: moveChildrenTo.get(parentId) || null };
+        });
+      state.assets = (state.assets || []).filter((asset) => !ids.has(String(asset.nodeId)) && !ids.has(String(asset.id)));
+      if (ids.has(String(state.selectedNodeId || ''))) state.selectedNodeId = '';
+      if (ids.has(String(state.selectedParentId || ''))) state.selectedParentId = '';
+      state.selectedIds = new Set(selectedIds().filter((id) => !ids.has(id)));
+      state.hoveredNodeId = ids.has(String(state.hoveredNodeId || '')) ? '' : state.hoveredNodeId;
     };
 
     const r2Prefixes = () => ([
@@ -1082,7 +1403,8 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       const r2Node = isR2Node(node);
       state.selectedNodeId = nodeId;
       if (canEdit && !state.selectedIds.has(nodeId)) state.selectedIds = new Set([nodeId]);
-      render();
+      renderPreviewPane();
+      updateSelectionUi();
       contextMenuEl.dataset.nodeId = nodeId;
       contextMenuEl.querySelectorAll('[data-requires-edit]').forEach((button) => {
         if (button instanceof HTMLElement) button.hidden = !canEdit;
@@ -1115,8 +1437,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
 
     const setSingleSelection = (nodeId) => {
       state.selectedIds = nodeId ? new Set([nodeId]) : new Set();
-      updateBulkBar();
-      render();
+      updateSelectionUi();
     };
 
     const toggleSelection = (nodeId, checked) => {
@@ -1124,14 +1445,12 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       if (checked) next.add(nodeId);
       else next.delete(nodeId);
       state.selectedIds = next;
-      updateBulkBar();
-      render();
+      updateSelectionUi();
     };
 
     const clearSelection = () => {
       state.selectedIds = new Set();
-      updateBulkBar();
-      render();
+      updateSelectionUi();
     };
 
     const renameHoveredOrSelected = async () => {
@@ -1183,22 +1502,32 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         const node = getNode(nodeId);
         const asset = getAsset(nodeId);
         if (!node || !asset?.externalUrl) continue;
-        await command(courseId, roomName, {
+        const payload = await command(courseId, roomName, {
           type: 'resource.link.create',
           parentId: targetParentId || null,
           url: asset.externalUrl,
           name: node.name,
         });
+        if (payload?.result?.node) mergeNode({ ...payload.result.node, parentId: targetParentId || payload.result.node.parentId || null });
+        if (payload?.result?.asset) mergeAsset(payload.result.asset);
       }
+      let movedResult = [];
       if (regularIds.length) {
-        await command(courseId, roomName, {
+        const payload = await command(courseId, roomName, {
           type: 'node.move',
           nodeIds: regularIds,
           targetParentId: targetParentId || null,
         });
+        movedResult = Array.isArray(payload?.result) ? payload.result : [];
+        applyMoveLocally(regularIds, targetParentId || null, movedResult);
       }
       state.selectedIds = new Set();
-      await load();
+      clearDropTargets();
+      renderTree();
+      renderGrid();
+      renderPreviewPane();
+      setStatus('Movido.');
+      broadcastSidebarRefresh('resources');
     };
 
     const moveNodeToParent = async (nodeId, targetParentId) => moveNodesToParent([nodeId], targetParentId);
@@ -1227,7 +1556,13 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       }
       state.selectedNodeId = '';
       state.selectedIds = new Set();
-      await load();
+      applyDeleteLocally(ids);
+      renderChrome();
+      renderTree();
+      renderGrid();
+      renderPreviewPane();
+      setStatus('Borrado.');
+      broadcastSidebarRefresh('resources');
     };
 
     const previewNode = (nodeId) => {
@@ -1238,7 +1573,8 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       hideContextMenu();
       if (modalBodyEl instanceof HTMLElement) modalBodyEl.innerHTML = previewMarkup(node, asset);
       if (modalEl instanceof HTMLElement) modalEl.hidden = false;
-      render();
+      renderPreviewPane();
+      updateSelectionUi();
     };
 
     const openNode = (nodeId) => {
@@ -1251,8 +1587,15 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       const name = prompt('Nuevo nombre', node?.name || '');
       if (!name) return;
       setStatus('Renombrando...');
-      await command(courseId, roomName, { type: 'node.rename', nodeId, name });
-      await load();
+      const payload = await command(courseId, roomName, { type: 'node.rename', nodeId, name });
+      const renamedId = applyRenameLocally(nodeId, name, payload?.result || {});
+      state.selectedNodeId = renamedId || state.selectedNodeId;
+      renderChrome();
+      renderTree();
+      renderGrid();
+      renderPreviewPane();
+      setStatus('Renombrado.');
+      broadcastSidebarRefresh('resources');
     };
 
     const handleContextAction = async (action) => {
@@ -1266,22 +1609,24 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       if (action === 'delete') await deleteNodes([nodeId]);
     };
 
-    const render = () => {
+    const visibleNodes = () => {
       const nodes = state.nodes || [];
-      const nodeMap = byId(nodes);
-      const assets = assetByNode(state.assets || []);
       const selectedParentId = state.selectedParentId || '';
       const search = String(state.search || '').trim().toLowerCase();
-      const containers = nodes.filter(isContainer);
       const visibleInParent = selectedParentId
         ? nodes.filter((node) => String(node.parentId || '') === selectedParentId)
         : nodes.filter((node) => isR2Node(node) || !node.parentId || node.kind === 'resource' || node.kind === 'snapshot');
       const visible = search
         ? visibleInParent.filter((node) => String(node.name || node.kind || '').toLowerCase().includes(search))
         : visibleInParent;
-      visible.sort(compareNodes);
+      return visible.slice().sort(compareNodes);
+    };
+
+    const renderChrome = () => {
+      const nodes = state.nodes || [];
+      const nodeMap = byId(nodes);
+      const selectedParentId = state.selectedParentId || '';
       const selectedParent = selectedParentId ? nodeMap.get(selectedParentId) : null;
-      const selectedNode = state.selectedNodeId ? nodeMap.get(state.selectedNodeId) : null;
 
       if (currentEl) {
         const r2Parent = r2Prefixes().find((entry) => entry.id === selectedParentId);
@@ -1289,7 +1634,13 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       }
       applyPreviewSize();
       if (upEl instanceof HTMLElement) upEl.hidden = !selectedParent && !isR2Parent(selectedParentId);
+    };
+
+    const renderTree = () => {
       if (treeEl) {
+        const nodes = state.nodes || [];
+        const selectedParentId = state.selectedParentId || '';
+        const containers = nodes.filter(isContainer);
         const childrenFor = (parentId) => containers
           .filter((node) => String(node.parentId || '') === String(parentId || ''))
           .sort((a, b) => String(a.sortKey || a.name || '').localeCompare(String(b.sortKey || b.name || '')));
@@ -1328,8 +1679,12 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
           r2Tree,
         ].join('');
       }
+    };
 
+    const renderGrid = () => {
       if (gridEl) {
+        const assets = assetByNode(state.assets || []);
+        const visible = visibleNodes();
         const cards = visible.filter((node) => isResourceLike(node) || isContainer(node)).map((node) => {
           const asset = assets.get(String(node.id));
           const canEdit = canEditNode(node);
@@ -1342,7 +1697,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
               ${canSelect ? `<label class="cw-card-select" title="Seleccionar"><input type="checkbox" data-cw-select ${isSelected ? 'checked' : ''} /></label>` : ''}
               ${thumbMarkup(node, asset)}
               <div class="cw-card-title">${esc(node.name || node.kind)}</div>
-              <div class="cw-card-meta">${isR2Node(node) ? 'S2 object' : esc(node.kind)}${asset?.uploadStatus ? ` / ${esc(asset.uploadStatus)}` : ''}</div>
+              <div class="cw-card-meta">${esc(typeLabel(node, asset))} · ${esc(formatBytes(sizeBytesFor(node, asset)))}${asset?.uploadStatus ? ` · ${esc(asset.uploadStatus)}` : ''}</div>
               <div class="cw-card-actions">
                 ${isFolderCard ? '<button type="button" class="cw-btn" data-cw-open-container>Abrir</button>' : ''}
                 ${asset?.externalUrl ? `<a class="cw-btn" href="${esc(asset.externalUrl)}" target="_blank" rel="noreferrer">Abrir</a>` : ''}
@@ -1356,8 +1711,34 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         });
         gridEl.innerHTML = cards.length ? cards.join('') : '<div class="cw-empty">Sin elementos en esta vista.</div>';
       }
+      updateSelectionUi();
+    };
 
-      if (previewEl) previewEl.innerHTML = previewMarkup(selectedNode, selectedNode ? assets.get(String(selectedNode.id)) : null);
+    const renderPreviewPane = () => {
+      if (!previewEl) return;
+      const selectedNode = state.selectedNodeId ? getNode(state.selectedNodeId) : null;
+      previewEl.innerHTML = previewMarkup(selectedNode, selectedNode ? getAsset(selectedNode.id) : null);
+    };
+
+    const updateSelectionUi = () => {
+      if (gridEl) {
+        gridEl.querySelectorAll('[data-node-id]').forEach((card) => {
+          if (!(card instanceof HTMLElement)) return;
+          const nodeId = card.dataset.nodeId || '';
+          const selected = state.selectedIds?.has(nodeId);
+          card.dataset.selected = selected ? 'true' : 'false';
+          const input = card.querySelector('[data-cw-select]');
+          if (input instanceof HTMLInputElement) input.checked = Boolean(selected);
+        });
+      }
+      updateBulkBar();
+    };
+
+    const render = () => {
+      renderChrome();
+      renderTree();
+      renderGrid();
+      renderPreviewPane();
       updateBulkBar();
     };
 
@@ -1403,8 +1784,16 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         claseId: courseId,
       });
       const node = payload?.result?.node;
-      if (node?.id) state.selectedParentId = node.id;
-      await load();
+      if (node?.id) {
+        mergeNode(node);
+        state.selectedParentId = node.id;
+        renderChrome();
+        renderTree();
+        renderGrid();
+        renderPreviewPane();
+        setStatus('Sesion creada.');
+        broadcastSidebarRefresh('resources');
+      }
     };
 
     const createFolder = async () => {
@@ -1417,8 +1806,16 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         name,
       });
       const node = payload?.result;
-      if (node?.id) state.selectedParentId = node.id;
-      await load();
+      if (node?.id) {
+        mergeNode({ ...node, parentId: state.selectedParentId || node.parentId || null });
+        state.selectedParentId = node.id;
+        renderChrome();
+        renderTree();
+        renderGrid();
+        renderPreviewPane();
+        setStatus('Carpeta creada.');
+        broadcastSidebarRefresh('resources');
+      }
     };
 
     const createLink = async () => {
@@ -1433,8 +1830,16 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         name,
       });
       const node = payload?.result?.node;
-      if (node?.id) state.selectedNodeId = node.id;
-      await load();
+      if (node?.id) {
+        mergeNode({ ...node, parentId: state.selectedParentId || node.parentId || null });
+        if (payload?.result?.asset) mergeAsset(payload.result.asset);
+        state.selectedNodeId = node.id;
+        renderTree();
+        renderGrid();
+        renderPreviewPane();
+        setStatus('Link creado.');
+        broadcastSidebarRefresh('resources');
+      }
     };
 
     const uploadFiles = async (files) => {
@@ -1452,6 +1857,12 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         })),
       });
       const intents = Array.isArray(prepared?.result) ? prepared.result : [];
+      intents.forEach((intent) => {
+        if (intent?.node) mergeNode({ ...intent.node, parentId: state.selectedParentId || intent.node.parentId || null });
+        if (intent?.asset) mergeAsset(intent.asset);
+      });
+      renderTree();
+      renderGrid();
       for (let index = 0; index < fileList.length; index += 1) {
         const file = fileList[index];
         const intent = intents[index];
@@ -1464,14 +1875,22 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
         const uploadedPayload = await requestJson('/api/live/recursos/r2', { method: 'POST', body: form });
         const uploaded = Array.isArray(uploadedPayload.uploaded) ? uploadedPayload.uploaded[0] : null;
         if (!uploaded?.key) throw new Error(`Upload failed for ${file.name}`);
-        await command(courseId, roomName, {
+        const completed = await command(courseId, roomName, {
           type: 'resource.upload.complete',
           uploadId: intent.uploadId,
           objectKey: uploaded.key,
         });
+        if (completed?.result?.node) {
+          mergeNode({ ...completed.result.node, parentId: state.selectedParentId || completed.result.node.parentId || null });
+          state.selectedNodeId = completed.result.node.id;
+        }
+        if (completed?.result?.asset) mergeAsset(completed.result.asset);
+        renderTree();
+        renderGrid();
+        renderPreviewPane();
       }
       setStatus('Upload completo.');
-      await load();
+      broadcastSidebarRefresh('resources');
     };
 
     treeEl?.addEventListener('click', (event) => {
@@ -1539,7 +1958,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     sizeButtons.forEach((button) => {
       button.addEventListener('click', () => {
         const size = button.dataset.cwSize || 'medium';
-        if (!['small', 'medium', 'large'].includes(size)) return;
+        if (!['small', 'medium', 'large', 'list'].includes(size)) return;
         state.previewSize = size;
         try {
           localStorage.setItem(`cw:preview-size:${courseId}`, size);
@@ -1564,7 +1983,22 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     });
 
     treeEl?.addEventListener('dragover', (event) => {
-      if (state.canContribute) event.preventDefault();
+      if (!state.canContribute) return;
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-parent]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      clearDropTargets();
+      target.dataset.dropTarget = 'true';
+    });
+
+    treeEl?.addEventListener('dragleave', (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-parent]') : null;
+      if (!(target instanceof HTMLElement)) return;
+      const dragEvent = event instanceof DragEvent ? event : null;
+      const related = dragEvent?.relatedTarget instanceof Node ? dragEvent.relatedTarget : null;
+      if (related && target.contains(related)) return;
+      target.dataset.dropTarget = 'false';
     });
 
     treeEl?.addEventListener('drop', async (event) => {
@@ -1705,15 +2139,26 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       const target = event.target instanceof HTMLElement ? event.target.closest('[data-node-id]') : null;
       if (!(target instanceof HTMLElement)) return;
       const ids = dragIdsForNode(target.dataset.nodeId || '');
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.dropEffect = 'move';
+      }
       event.dataTransfer?.setData('application/x-cw-node', target.dataset.nodeId || '');
       event.dataTransfer?.setData('application/x-cw-nodes', JSON.stringify(ids));
+      setDragPreview(event, ids);
       if (ids.length > 1) setStatus(`Moviendo ${ids.length} seleccionados...`);
+    });
+
+    gridEl?.addEventListener('dragend', () => {
+      removeDragPreview();
+      clearDropTargets();
     });
 
     gridEl?.addEventListener('dragover', (event) => {
       const target = event.target instanceof HTMLElement ? event.target.closest('[data-container="true"][data-node-id]') : null;
       if (!(target instanceof HTMLElement)) return;
       event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
       clearDropTargets();
       target.dataset.dropTarget = 'true';
     });
@@ -1732,6 +2177,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
       if (!(target instanceof HTMLElement)) return;
       event.preventDefault();
       clearDropTargets();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
       const nodeIds = dragNodeIdsFromEvent(event).filter((id) => id !== target.dataset.nodeId);
       if (!nodeIds.length) return;
       await moveNodesToParent(nodeIds, target.dataset.nodeId || null);
@@ -1855,12 +2301,12 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     root.querySelector('[data-cw-search]')?.addEventListener('input', (event) => {
       const target = event.target instanceof HTMLInputElement ? event.target : null;
       state.search = target?.value || '';
-      render();
+      renderGrid();
     });
     root.querySelector('[data-cw-sort]')?.addEventListener('change', (event) => {
       const target = event.target instanceof HTMLSelectElement ? event.target : null;
       state.sortMode = target?.value || 'name';
-      render();
+      renderGrid();
     });
     uploadEl?.addEventListener('change', async () => {
       if (!(uploadEl instanceof HTMLInputElement)) return;
@@ -1881,6 +2327,7 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     root.addEventListener('dragover', (event) => {
       if (!state.canContribute || !event.dataTransfer?.types?.includes('Files')) return;
       event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
       root.dataset.draggingFiles = 'true';
     });
 

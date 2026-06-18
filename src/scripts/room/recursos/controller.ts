@@ -5,7 +5,6 @@ import {
   removeItem,
   moveItem,
   foldersFromItems,
-  itemsInFolder,
 } from './filetree';
 import {
   type ResourceType,
@@ -41,7 +40,7 @@ export class RecursosController {
   private getRecursosAutoOpen?: () => boolean;
 
   private items: ResourceItem[] = [];
-  private allowStudents = false;
+  private allowStudents = true;
   private collapsedFolders = new Set<string>();
   private emptyFolders = new Set<string>();
   private draggedItemId: string | null = null;
@@ -61,26 +60,19 @@ export class RecursosController {
   private dropOverlayEl!: HTMLElement;
   private ctxMenuEl!: HTMLElement;
   private ctxNewFolderBtn!: HTMLButtonElement;
+  private ctxPasteBtn!: HTMLButtonElement;
+  private ctxDownloadBtn!: HTMLButtonElement;
+  private ctxOpenNewBtn!: HTMLButtonElement;
   private ctxRenameBtn!: HTMLButtonElement;
   private ctxMoveBtn!: HTMLButtonElement;
   private ctxDeleteBtn!: HTMLButtonElement;
-  private ctxSendToSaBtn!: HTMLButtonElement;
-  private ctxSendToVsBtn!: HTMLButtonElement;
-  private ctxSendToMeBtn!: HTMLButtonElement;
   private sessionCtxEl!: HTMLElement;
   private sessionCtxNewBtn!: HTMLButtonElement;
   private sessionCtxRenameBtn!: HTMLButtonElement;
   private sessionCtxListBtn!: HTMLButtonElement;
   private sessionCtxDeleteBtn!: HTMLButtonElement;
-  private bottomSessionListBtn!: HTMLButtonElement;
   private sessionsModalEl!: HTMLElement;
   private sessionsListEl!: HTMLElement;
-  private collabBtn!: HTMLButtonElement;
-  private saveRepoBtn!: HTMLButtonElement;
-  private foldBtn!: HTMLButtonElement;
-  private newFolderBtn!: HTMLButtonElement;
-  private pasteBtn!: HTMLButtonElement;
-  private bottombarEl!: HTMLElement;
 
   constructor(opts: RecursosOptions) {
     this.container = opts.container;
@@ -102,29 +94,19 @@ export class RecursosController {
     this.dropOverlayEl      = q('[data-re-drop-overlay]');
     this.ctxMenuEl          = q('[data-re-ctx-menu]');
     this.ctxNewFolderBtn    = q('[data-re-ctx-new-folder]');
+    this.ctxPasteBtn        = q('[data-re-ctx-paste]');
+    this.ctxDownloadBtn     = q('[data-re-ctx-download]');
+    this.ctxOpenNewBtn      = q('[data-re-ctx-open-new]');
     this.ctxRenameBtn       = q('[data-re-ctx-rename]');
     this.ctxMoveBtn         = q('[data-re-ctx-move]');
     this.ctxDeleteBtn       = q('[data-re-ctx-delete]');
-    this.ctxSendToSaBtn     = q('[data-re-ctx-send-to-sa]');
-    this.ctxSendToVsBtn     = q('[data-re-ctx-send-to-vs]');
-    this.ctxSendToMeBtn     = q('[data-re-ctx-send-to-me]');
     this.sessionCtxEl       = q('[data-re-session-ctx]');
     this.sessionCtxNewBtn   = q('[data-re-sctx-new]');
     this.sessionCtxRenameBtn = q('[data-re-sctx-rename]');
     this.sessionCtxListBtn  = q('[data-re-sctx-list]');
     this.sessionCtxDeleteBtn = q('[data-re-sctx-delete]');
-    this.bottomSessionListBtn = q('[data-re-session-list]');
     this.sessionsModalEl    = q('[data-re-sessions-modal]');
     this.sessionsListEl     = q('[data-re-sessions-list]');
-    this.collabBtn          = q('[data-re-collab]');
-    this.saveRepoBtn        = q('[data-re-save-repo]');
-    this.foldBtn            = q('[data-re-fold]');
-    this.newFolderBtn       = q('[data-re-new-folder]');
-    this.pasteBtn           = q('[data-re-paste]');
-    this.bottombarEl        = q('[data-re-bottombar]');
-
-    if (!this.isTeacher) this.bottombarEl.hidden = true;
-    if (this.isTeacher)  this.collabBtn.style.display = '';
   }
 
   private async bootstrap() {
@@ -137,13 +119,7 @@ export class RecursosController {
       const raw = localStorage.getItem(`re:collapsed:${claseId ?? '_'}`);
       if (raw) JSON.parse(raw).forEach((f: string) => this.collapsedFolders.add(f));
     } catch { /**/ }
-    try {
-      const raw = localStorage.getItem(this.emptyFoldersStorageKey());
-      if (raw) JSON.parse(raw).forEach((f: string) => {
-        const folder = String(f || '').trim();
-        if (folder) this.emptyFolders.add(folder);
-      });
-    } catch { /**/ }
+    this.loadEmptyFoldersFromStorage();
 
     try {
       const params = new URLSearchParams({ roomName, claseId: claseId ?? '' });
@@ -157,6 +133,7 @@ export class RecursosController {
     } catch { /**/ }
 
     await this.loadSession();
+    this.loadEmptyFoldersFromStorage();
     this.render();
   }
 
@@ -178,7 +155,6 @@ export class RecursosController {
         if (session) {
           this.sessionId = session.id;
           this.sessionName = session.name;
-          if (this.sessionName) this.emptyFolders.add(this.sessionName);
           await this.loadSessionResources([session.id]);
         }
       }
@@ -220,7 +196,6 @@ export class RecursosController {
         const { session } = await resp.json();
         this.sessionId = session.id;
         this.sessionName = session.name;
-        if (this.sessionName) this.emptyFolders.add(this.sessionName);
         this.updateSessionBar();
       }
     } catch { /**/ }
@@ -266,23 +241,19 @@ export class RecursosController {
       void this.addCompartido(url, name || quickNameFromUrl(url), source || 'external-media', folder);
     });
 
-    this.foldBtn.addEventListener('click', () => this.toggleFoldAll());
-    this.saveRepoBtn.addEventListener('click', () => void this.saveToRepo());
-    this.newFolderBtn.addEventListener('click', () => this.startNewFolder());
-    this.bottomSessionListBtn.addEventListener('click', () => void this.showSessionsList());
-    this.pasteBtn.addEventListener('click', () => void this.pasteClipboard());
-    this.collabBtn.addEventListener('click', () => this.toggleAllowStudents());
-
     this.ctxNewFolderBtn.addEventListener('click', () => {
       this.closeCtxMenu();
       this.startNewFolder();
     });
+    this.ctxPasteBtn.addEventListener('click', () => {
+      this.closeCtxMenu();
+      void this.pasteClipboard();
+    });
+    this.ctxDownloadBtn.addEventListener('click', () => this.downloadCtxTarget());
+    this.ctxOpenNewBtn.addEventListener('click', () => this.openCtxTargetInNewInstance());
     this.ctxRenameBtn.addEventListener('click', () => this.startInlineRename());
     this.ctxDeleteBtn.addEventListener('click', () => this.deleteCtxTarget());
     this.ctxMoveBtn.addEventListener('click', () => this.showMoveSubmenu());
-    this.ctxSendToSaBtn.addEventListener('click', (e) => { e.stopPropagation(); this.sendCtxItemToSa(); });
-    this.ctxSendToVsBtn.addEventListener('click', (e) => { e.stopPropagation(); this.sendCtxItemToVs(); });
-    this.ctxSendToMeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.sendCtxItemToMe(); });
 
     this.sessionCtxNewBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.newSession(); });
     this.sessionCtxRenameBtn.addEventListener('click', () => { this.closeSessionCtx(); void this.renameSession(); });
@@ -295,7 +266,6 @@ export class RecursosController {
     });
 
     this.container.addEventListener('dragenter', (e) => {
-      console.log('[Re:drop] dragenter types=', e.dataTransfer?.types);
       if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); this.dropOverlayEl.dataset.active = 'true'; }
     });
     this.container.addEventListener('dragleave', (e) => {
@@ -303,10 +273,8 @@ export class RecursosController {
     });
     this.container.addEventListener('dragover', (e) => {
       if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
-      console.log('[Re:drop] dragover types=', e.dataTransfer?.types, 'effectAllowed=', e.dataTransfer?.effectAllowed, 'dropEffect=', e.dataTransfer?.dropEffect);
     });
     this.container.addEventListener('drop', (e) => {
-      console.log('[Re:drop] DROP fired! files=', e.dataTransfer?.files?.length, 'canEdit=', this.canEdit());
       e.preventDefault();
       this.dropOverlayEl.dataset.active = 'false';
       Array.from(e.dataTransfer?.files ?? []).forEach(f => void this.uploadFile(f));
@@ -331,9 +299,9 @@ export class RecursosController {
     });
   }
 
-  private canEdit() { return this.isTeacher || this.allowStudents; }
-  private canSendSonic() { return this.isTeacher || this.allowStudents; }
-  private canSendVisual() { return this.isTeacher || this.allowStudents; }
+  private canEdit() { return true; }
+  private canSendSonic() { return true; }
+  private canSendVisual() { return true; }
 
   // ── Header ──────────────────────────────────────────────────────────────────
 
@@ -457,7 +425,7 @@ export class RecursosController {
         const { session } = await resp.json();
         this.sessionId = session.id;
         this.sessionName = session.name;
-        if (this.sessionName) this.emptyFolders.add(this.sessionName);
+        this.loadEmptyFoldersFromStorage();
         this.updateSessionBar();
       }
     } catch { /**/ }
@@ -468,9 +436,9 @@ export class RecursosController {
     try {
       await fetch(`/api/live/session?id=${encodeURIComponent(this.sessionId)}`, { method: 'DELETE' });
     } catch { /**/ }
-    if (this.sessionName) this.emptyFolders.delete(this.sessionName);
     this.sessionId = null;
     this.sessionName = '';
+    this.loadEmptyFoldersFromStorage();
     this.updateSessionBar();
   }
 
@@ -485,9 +453,7 @@ export class RecursosController {
         body: JSON.stringify({ id: this.sessionId, name }),
       });
       if (resp.ok) {
-        if (this.sessionName) this.emptyFolders.delete(this.sessionName);
         this.sessionName = name.trim();
-        if (this.sessionName) this.emptyFolders.add(this.sessionName);
         this.updateSessionBar();
       }
     } catch { /**/ }
@@ -547,7 +513,7 @@ export class RecursosController {
           }
           this.sessionId = s.id;
           this.sessionName = s.name;
-          if (this.sessionName) this.emptyFolders.add(this.sessionName);
+          this.loadEmptyFoldersFromStorage();
           await this.loadSessionResources([s.id]);
           this.sessionsModalEl.setAttribute('hidden', '');
           this.render();
@@ -574,35 +540,29 @@ export class RecursosController {
       .replace(/'/g, '&#39;');
   }
 
-  // ── Enviar a SA ───────────────────────────────────────────────────────────────
-
-  private sendCtxItemToSa(): void {
+  private downloadCtxTarget(): void {
     const item = this.ctxTargetItem;
     this.closeCtxMenu();
-    if (!item) return;
-    this.requestSonicLoad(item);
+    if (!item?.url) return;
+    const anchor = document.createElement('a');
+    anchor.href = item.url;
+    anchor.download = item.name || item.url.split('/').pop() || 'recurso';
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   }
 
-  private sendCtxItemToVs(): void {
+  private openCtxTargetInNewInstance(): void {
     const item = this.ctxTargetItem;
     this.closeCtxMenu();
     if (!item) return;
-    this.requestVisualLoad(item);
-  }
-
-  private sendCtxItemToMe(): void {
-    const item = this.ctxTargetItem;
-    this.closeCtxMenu();
-    if (!item) return;
-    window.dispatchEvent(new CustomEvent('musiki:external-media:open-url', {
-      detail: { url: item.url, name: item.name },
-    }));
+    this.requestResourceOpen(item, { forceNew: true });
   }
 
   // ── Upload ───────────────────────────────────────────────────────────────────
 
   private async uploadFile(file: File) {
-    console.log('[Re:drop] uploadFile', file.name, 'canEdit=', this.canEdit());
     if (!this.canEdit()) return;
     const form = new FormData();
     form.append('file', file);
@@ -621,13 +581,29 @@ export class RecursosController {
       this.items = addItem(this.items, newItem);
       this.render(); this.scheduleAutosave(); this.broadcastSync();
       void this.saveNow();
-      if (type === 'video') this.requestResourceOpen(newItem);
     } catch (e) { console.error('[Re] upload error', e); }
   }
 
   private async pasteClipboard() {
     if (!this.canEdit()) return;
     try {
+      const clipboard = navigator.clipboard as Clipboard & {
+        read?: () => Promise<ClipboardItem[]>;
+      };
+      if (typeof clipboard.read === 'function') {
+        const entries = await clipboard.read();
+        for (const entry of entries) {
+          const type = entry.types.find((candidate) =>
+            candidate.startsWith('image/') || candidate.startsWith('audio/') || candidate.startsWith('video/') || candidate === 'application/pdf'
+          );
+          if (!type) continue;
+          const blob = await entry.getType(type);
+          const ext = type.split('/').pop()?.replace('jpeg', 'jpg') || 'bin';
+          const file = new File([blob], `clipboard-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`, { type });
+          await this.uploadFile(file);
+          return;
+        }
+      }
       const text = (await navigator.clipboard.readText()).trim();
       if (!/^https?:\/\//i.test(text)) return;
       const sid = await this.ensureSession();
@@ -667,14 +643,14 @@ export class RecursosController {
 
   applyRemoteMessage(msg: RecursosMessage) {
     if (msg.type === 'recursos:sync') {
-      this.items = this.dedupeItems(msg.items); this.allowStudents = msg.allowStudents;
+      this.items = this.dedupeItems(msg.items); this.allowStudents = true;
       this.emptyFolders = new Set((msg.emptyFolders ?? []).map((folder) => String(folder || '').trim()).filter(Boolean));
       this.persistEmptyFolders();
-      this.updateCollabBtn(); this.render();
+      this.render();
       void this.saveNow();
       this.emitAllowStudentsChanged();
     } else if (msg.type === 'recursos:allow-students') {
-      this.allowStudents = msg.allow; this.updateCollabBtn();
+      this.allowStudents = true;
       this.emitAllowStudentsChanged();
     }
   }
@@ -685,37 +661,6 @@ export class RecursosController {
     this.autosaveDirty = true;
     if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
     this.autosaveTimer = setTimeout(() => void this.save(), 5000);
-  }
-
-  private async saveToRepo() {
-    const roomName = this.getRoomName() ?? '';
-    if (!roomName) return;
-    
-    this.saveRepoBtn.disabled = true;
-    const oldText = this.saveRepoBtn.textContent;
-    this.saveRepoBtn.textContent = '...';
-    
-    try {
-      const payload = {
-        ...this.buildSavePayload(roomName),
-        persist: true,
-        courseRootId: this.getCourseRootId?.() ?? null,
-      };
-      const resp = await fetch('/api/live/recursos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (resp.ok) {
-        this.autosaveDirty = false;
-        console.log('[Re] Saved to Markdown repository.');
-      }
-    } catch (e) {
-      console.error('[Re] Manual save failed', e);
-    } finally {
-      this.saveRepoBtn.disabled = false;
-      this.saveRepoBtn.textContent = oldText;
-    }
   }
 
   private async save() {
@@ -787,10 +732,14 @@ export class RecursosController {
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  private render() {
-    const visibleItems = this.sessionId
+  private visibleItems(): ResourceItem[] {
+    return this.sessionId
       ? this.itemsForSession(this.sessionId)
-      : this.items;
+      : this.items.filter((item) => !item.sessionId);
+  }
+
+  private render() {
+    const visibleItems = this.visibleItems();
     renderFiletree(this.contentEl, visibleItems, this.collapsedFolders, this.emptyFolders, {
       headerEl: this.buildHeaderEl(),
       canEdit: this.canEdit(),
@@ -811,23 +760,24 @@ export class RecursosController {
         if (row) row.dataset.dragOver = 'true';
       },
       onDrop: (targetFolder) => {
-        if (this.draggedItemId) {
+      if (this.draggedItemId) {
           this.items = moveItem(this.items, this.draggedItemId, targetFolder);
           this.draggedItemId = null;
           this.render(); this.scheduleAutosave(); this.broadcastSync();
+          void this.saveNow();
         }
       },
     });
   }
 
-  private requestResourceOpen(item: ResourceItem): void {
+  private requestResourceOpen(item: ResourceItem, options: { forceNew?: boolean } = {}): void {
     const sentVisual = this.isVisualMedia(item) && this.canSendVisual();
     const sentSonic = this.isSonicMedia(item) && this.canSendSonic();
     if (sentVisual) {
-      this.requestVisualLoad(item);
+      this.requestVisualLoad(item, options);
     }
     if (sentSonic) {
-      this.requestSonicLoad(item);
+      this.requestSonicLoad(item, options);
     }
     if (sentVisual || sentSonic) return;
     window.open(item.url, '_blank', 'noopener');
@@ -838,15 +788,6 @@ export class RecursosController {
   private toggleFolder(folder: string) {
     if (this.collapsedFolders.has(folder)) this.collapsedFolders.delete(folder);
     else this.collapsedFolders.add(folder);
-    localStorage.setItem(`re:collapsed:${this.getCourseId() ?? '_'}`, JSON.stringify([...this.collapsedFolders]));
-    this.render();
-  }
-
-  private toggleFoldAll() {
-    const folders = [...new Set([...foldersFromItems(this.items), ...this.emptyFolders])];
-    const allCollapsed = folders.every(f => this.collapsedFolders.has(f));
-    if (allCollapsed) this.collapsedFolders.clear();
-    else folders.forEach(f => this.collapsedFolders.add(f));
     localStorage.setItem(`re:collapsed:${this.getCourseId() ?? '_'}`, JSON.stringify([...this.collapsedFolders]));
     this.render();
   }
@@ -883,8 +824,20 @@ export class RecursosController {
     input.addEventListener('keydown', onKey);
   }
 
-  private emptyFoldersStorageKey(): string {
-    return `re:empty-folders:${this.getRoomName() ?? '_'}:${this.getEffectiveCourseId() ?? '_'}`;
+  private emptyFoldersStorageKey(sessionId = this.sessionId): string {
+    const scope = sessionId ? `session:${sessionId}` : 'hold-root';
+    return `re:empty-folders:${this.getRoomName() ?? '_'}:${this.getEffectiveCourseId() ?? '_'}:${scope}`;
+  }
+
+  private loadEmptyFoldersFromStorage(): void {
+    this.emptyFolders = new Set();
+    try {
+      const raw = localStorage.getItem(this.emptyFoldersStorageKey());
+      if (raw) JSON.parse(raw).forEach((f: string) => {
+        const folder = String(f || '').trim();
+        if (folder) this.emptyFolders.add(folder);
+      });
+    } catch { /**/ }
   }
 
   private persistEmptyFolders(): void {
@@ -897,18 +850,16 @@ export class RecursosController {
 
   private openItemCtxMenu(item: ResourceItem, e: MouseEvent) {
     const canEdit = this.canEdit();
-    const canSendToSa = this.isSonicMedia(item) && this.canSendSonic();
-    const canSendToVs = this.isVisualMedia(item) && this.canSendVisual();
-    const canSendToMe = this.isExternalMediaLink(item);
-    if (!canEdit && !canSendToSa && !canSendToVs && !canSendToMe) return;
+    const canOpenInPod = this.canOpenInAssociatedPod(item);
+    if (!canEdit && !canOpenInPod) return;
     this.ctxTargetItem = item; this.ctxTargetFolder = null;
-    this.ctxNewFolderBtn.style.display = canEdit ? '' : 'none';
-    this.ctxMoveBtn.style.display = canEdit ? '' : 'none';
+    this.ctxNewFolderBtn.style.display = 'none';
+    this.ctxPasteBtn.style.display = 'none';
+    this.ctxDownloadBtn.style.display = '';
+    this.ctxOpenNewBtn.style.display = canOpenInPod ? '' : 'none';
+    this.ctxMoveBtn.style.display = 'none';
     this.ctxRenameBtn.style.display = canEdit ? '' : 'none';
     this.ctxDeleteBtn.style.display = canEdit ? '' : 'none';
-    this.ctxSendToSaBtn.hidden = !canSendToSa;
-    this.ctxSendToVsBtn.hidden = !canSendToVs;
-    this.ctxSendToMeBtn.hidden = !canSendToMe;
     this.ctxMenuEl.removeAttribute('hidden');
     this.ctxMenuEl.style.left = `${e.clientX}px`;
     this.ctxMenuEl.style.top  = `${e.clientY}px`;
@@ -919,12 +870,12 @@ export class RecursosController {
     const isPinnedFolder = folder === 'DOC' || folder === 'compartidos' || folder === 'media';
     this.ctxTargetFolder = folder; this.ctxTargetItem = null;
     this.ctxNewFolderBtn.style.display = '';
+    this.ctxPasteBtn.style.display = '';
+    this.ctxDownloadBtn.style.display = 'none';
+    this.ctxOpenNewBtn.style.display = 'none';
     this.ctxMoveBtn.style.display = 'none';
     this.ctxRenameBtn.style.display = isPinnedFolder ? 'none' : '';
     this.ctxDeleteBtn.style.display = isPinnedFolder ? 'none' : '';
-    this.ctxSendToSaBtn.hidden = true;
-    this.ctxSendToVsBtn.hidden = true;
-    this.ctxSendToMeBtn.hidden = true;
     this.ctxMenuEl.removeAttribute('hidden');
     this.ctxMenuEl.style.left = `${e.clientX}px`;
     this.ctxMenuEl.style.top  = `${e.clientY}px`;
@@ -934,15 +885,19 @@ export class RecursosController {
     if (!this.canEdit()) return;
     this.ctxTargetFolder = null; this.ctxTargetItem = null;
     this.ctxNewFolderBtn.style.display = '';
+    this.ctxPasteBtn.style.display = '';
+    this.ctxDownloadBtn.style.display = 'none';
+    this.ctxOpenNewBtn.style.display = 'none';
     this.ctxMoveBtn.style.display = 'none';
     this.ctxRenameBtn.style.display = 'none';
     this.ctxDeleteBtn.style.display = 'none';
-    this.ctxSendToSaBtn.hidden = true;
-    this.ctxSendToVsBtn.hidden = true;
-    this.ctxSendToMeBtn.hidden = true;
     this.ctxMenuEl.removeAttribute('hidden');
     this.ctxMenuEl.style.left = `${e.clientX}px`;
     this.ctxMenuEl.style.top  = `${e.clientY}px`;
+  }
+
+  private canOpenInAssociatedPod(item: ResourceItem): boolean {
+    return this.isSonicMedia(item) || this.isVisualMedia(item);
   }
 
   private isSonicMedia(item: ResourceItem): boolean {
@@ -956,28 +911,21 @@ export class RecursosController {
       || inferred === 'pdf' || inferred === 'pptx' || inferred === 'img' || inferred === 'video';
   }
 
-  private isExternalMediaLink(item: ResourceItem): boolean {
-    return /youtu\.be|youtube\.com|youtube-nocookie\.com|vimeo\.com/i.test(item.url);
-  }
-
   private defaultFolderForType(type: ResourceType | 'other'): string {
-    if (this.sessionId && this.sessionName) {
-      return this.sessionName;
-    }
     if (type === 'audio') return 'media';
     if (type === 'pdf' || type === 'pptx' || type === 'img' || type === 'video') return 'DOC';
     return '';
   }
 
-  private requestSonicLoad(item: ResourceItem): void {
+  private requestSonicLoad(item: ResourceItem, options: { forceNew?: boolean } = {}): void {
     window.dispatchEvent(new CustomEvent('musiki:sonic:load-url', {
-      detail: { url: item.url, name: item.name, source: 'recursos' },
+      detail: { url: item.url, name: item.name, source: 'recursos', forceNew: Boolean(options.forceNew) },
     }));
   }
 
-  private requestVisualLoad(item: ResourceItem): void {
+  private requestVisualLoad(item: ResourceItem, options: { forceNew?: boolean } = {}): void {
     window.dispatchEvent(new CustomEvent('musiki:visual:load-url', {
-      detail: { url: item.url, name: item.name, source: 'recursos' },
+      detail: { url: item.url, name: item.name, source: 'recursos', forceNew: Boolean(options.forceNew) },
     }));
   }
 
@@ -1037,86 +985,41 @@ export class RecursosController {
   // ── Delete / move ──────────────────────────────────────────────────────────────
 
   private async deleteCtxTarget() {
-    if (!this.isTeacher) return;
     const item = this.ctxTargetItem;
     const folder = this.ctxTargetFolder;
     this.closeCtxMenu();
 
-    const courseId = this.getCourseId();
-    const roomName = this.getRoomName();
-    if (!courseId || !roomName) return;
-
     if (item) {
-      if (!confirm(`¿Eliminar físicamente "${item.name}"?`)) return;
-      
-      try {
-        const resp = await fetch(`/api/live/recursos/editor?id=${item.id}&courseId=${courseId}`, {
-          method: 'DELETE'
-        });
-        if (resp.ok) {
-          this.items = removeItem(this.items, item.id);
-          this.render(); this.broadcastSync();
-        } else {
-          const err = await resp.json();
-          alert(`Error al borrar: ${err.error}`);
-        }
-      } catch (e) {
-        console.error('[Re] delete failed', e);
-      }
+      if (!confirm(`¿Borrar "${item.name}" de RECURSOS?`)) return;
+      this.items = removeItem(this.items, item.id);
+      this.render(); this.scheduleAutosave(); this.broadcastSync();
+      void this.saveNow();
     } else if (folder) {
-      if (!confirm(`¿Eliminar la carpeta "${folder}" y TODO su contenido físicamente?`)) return;
-
-      try {
-        const resp = await fetch(`/api/live/recursos/editor?folder=${encodeURIComponent(folder)}&roomName=${encodeURIComponent(roomName)}&courseId=${courseId}`, {
-          method: 'DELETE'
-        });
-        if (resp.ok) {
-          this.items = this.items.filter(i => i.folder !== folder);
-          this.emptyFolders.delete(folder);
-          this.persistEmptyFolders();
-          this.render(); this.broadcastSync();
-        } else {
-          const err = await resp.json();
-          alert(`Error al borrar carpeta: ${err.error}`);
-        }
-      } catch (e) {
-        console.error('[Re] folder delete failed', e);
-      }
+      if (!confirm(`¿Borrar la carpeta "${folder}" y quitar sus recursos de esta sesión?`)) return;
+      const visibleIds = new Set(this.visibleItems().filter((i) => i.folder === folder).map((i) => i.id));
+      this.items = this.items.filter((i) => !visibleIds.has(i.id));
+      this.emptyFolders.delete(folder);
+      this.persistEmptyFolders();
+      this.render(); this.scheduleAutosave(); this.broadcastSync();
+      void this.saveNow();
     }
   }
 
   private showMoveSubmenu() {
     const item = this.ctxTargetItem; this.closeCtxMenu();
     if (!item) return;
-    const folders = foldersFromItems(this.items).filter(f => f !== item.folder);
+    const folders = foldersFromItems(this.visibleItems()).filter(f => f !== item.folder);
     const target = prompt(`Mover a carpeta:\n${['(raíz)', ...folders].join('\n')}`);
     if (target === null) return;
     this.items = moveItem(this.items, item.id, target === '(raíz)' ? '' : target.trim());
     this.render(); this.scheduleAutosave(); this.broadcastSync();
-  }
-
-  // ── Collab ────────────────────────────────────────────────────────────────────
-
-  private toggleAllowStudents() {
-    if (!this.isTeacher) return;
-    this.allowStudents = !this.allowStudents;
-    this.updateCollabBtn();
-    this.emitAllowStudentsChanged();
-    this.broadcastSync();
+    void this.saveNow();
   }
 
   private emitAllowStudentsChanged(): void {
     window.dispatchEvent(new CustomEvent('musiki:recursos:allow-students-changed', {
       detail: { allow: this.allowStudents },
     }));
-  }
-
-  private updateCollabBtn() {
-    this.collabBtn.dataset.active = String(this.allowStudents);
-    this.collabBtn.title = this.allowStudents
-      ? 'Alumnos pueden agregar recursos (activo)'
-      : 'Alumnos pueden agregar recursos (desactivado)';
-    if (!this.isTeacher) this.bottombarEl.hidden = !this.allowStudents;
   }
 
   dispose() {

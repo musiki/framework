@@ -25,12 +25,13 @@ const ACCEPTED_TYPES = [
   'image/gif',
   'image/webp',
   'image/svg+xml',
+  'image/tiff',
   'video/quicktime',
   'video/mp4',
   'video/webm',
 ];
 
-const ACCEPTED_EXTS = ['.pdf', '.pptx', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.mov', '.mp4', '.webm'];
+const ACCEPTED_EXTS = ['.pdf', '.pptx', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.tif', '.tiff', '.mov', '.mp4', '.mpv', '.webm'];
 
 const emptyState = (): VisualizerState => ({
   url: null,
@@ -48,8 +49,8 @@ const kindFromUrl = (url: string): VisualKind | null => {
   const ext = extFromName(url);
   if (ext === '.pdf') return 'pdf';
   if (ext === '.pptx') return 'pptx';
-  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) return 'img';
-  if (['.mov', '.mp4', '.webm'].includes(ext)) return 'video';
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.tif', '.tiff'].includes(ext)) return 'img';
+  if (['.mov', '.mp4', '.mpv', '.webm'].includes(ext)) return 'video';
   return null;
 };
 

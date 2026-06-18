@@ -29,7 +29,7 @@ const ACCEPTED_TYPES = [
   'video/mp4',
   'video/webm',
 ];
-const ACCEPTED_EXTS  = ['.wav','.ogg','.mp3','.m4a','.aac','.flac','.mov','.mp4','.webm'];
+const ACCEPTED_EXTS  = ['.wav','.ogg','.mp3','.m4a','.aac','.flac','.mov','.mp4','.mpv','.webm'];
 
 export type SAFilePayload = {
   buffer: AudioBuffer;

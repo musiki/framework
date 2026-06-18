@@ -4212,7 +4212,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     GRAVITY_BALL_EARTH_MS2,
   );
   let sessionAllowsInstruments = true;
-  let recursosAllowsStudents = false;
+  let recursosAllowsStudents = true;
   let sidebarCollapsed = root.dataset.sidebarCollapsed === 'true';
   let graphVisible = false;
   let externalMediaSession: ExternalMediaSessionState | null = null;
@@ -10815,9 +10815,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     return audioCtx.decodeAudioData(await file.arrayBuffer());
   };
 
-  const dispatchDecodedSonicFile = (buffer: AudioBuffer, fileName: string, key = '', scale = '', bpm = 0) => {
+  const dispatchDecodedSonicFile = (
+    buffer: AudioBuffer,
+    fileName: string,
+    key = '',
+    scale = '',
+    bpm = 0,
+    options: { targetPanelId?: string | null } = {},
+  ) => {
     const peaks = computeWaveformPeaks(buffer);
-    const detail = { buffer, fileName, peaks, melspec: [], chroma: [], pitches: [], key, scale, bpm };
+    const targetPanelId = normalizeText(options.targetPanelId);
+    const eventName = targetPanelId ? 'musiki:sv:load-decoded' : 'sa:file-ready';
+    const detail = { buffer, fileName, peaks, melspec: [], chroma: [], pitches: [], key, scale, bpm, targetPanelId };
     mediaSession.sonic = {
       url: mediaSession.sonic?.url ?? '',
       fileName,
@@ -10827,7 +10836,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       bpm,
       buffer,
     };
-    const emit = () => window.dispatchEvent(new CustomEvent('sa:file-ready', { detail }));
+    const emit = () => window.dispatchEvent(new CustomEvent(eventName, { detail }));
     emit();
     [180, 700, 1600].forEach((delay) => window.setTimeout(emit, delay));
   };
@@ -11024,6 +11033,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let sonicVisualizerController: SonicVisualizerController | null = null;
   let visualizerController: VisualizerController | null = null;
   const visualizerControllers = new Set<VisualizerController>();
+  const visualizerControllersByPanel = new Map<string, VisualizerController>();
   let recursosController: RecursosController | null = null;
   let notesController: ReturnType<typeof createRoomNotesController> | null = null;
   let recursosCurrentLessonId: string | null = null;
@@ -11431,7 +11441,6 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     };
 
     const onSonicVisualizerInit = (container: HTMLElement) => {
-      sonicVisualizerController?.dispose();
       const controller = new SonicVisualizerController({
         container,
         publish: (msg) => void publishMessage(msg),
@@ -11454,7 +11463,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         container,
         publish: (msg) => void publishMessage(msg),
       });
+      const panelId = normalizeText(container.dataset.panelId);
       visualizerControllers.add(controller);
+      if (panelId) visualizerControllersByPanel.set(panelId, controller);
       visualizerController = controller;
       controller.setRole(localRole === 'teacher' ? 'teacher' : 'student');
       controller.setAllowStudents(recursosAllowsStudents);
@@ -11464,6 +11475,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         dispose: () => {
           controller.dispose();
           visualizerControllers.delete(controller);
+          if (panelId) visualizerControllersByPanel.delete(panelId);
           if (visualizerController === controller) {
             const remainingVisualizers = Array.from(visualizerControllers);
             visualizerController = remainingVisualizers[remainingVisualizers.length - 1] ?? null;
@@ -11525,7 +11537,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     window.addEventListener('musiki:recursos:allow-students-changed', (e: Event) => {
-      recursosAllowsStudents = Boolean((e as CustomEvent<{ allow: boolean }>).detail?.allow);
+      recursosAllowsStudents = true;
       sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
       sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
       visualizerControllers.forEach((controller) => controller.setAllowStudents(recursosAllowsStudents));
@@ -11533,45 +11545,38 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     window.addEventListener('musiki:sonic:load-url', (e: Event) => {
-      const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail ?? {};
+      const { url, name, forceNew } = (e as CustomEvent<{ url: string; name: string; forceNew?: boolean }>).detail ?? {};
       if (!url) return;
       const fileName = normalizeText(name) || 'audio';
-      workspaceManager.focusOrOpenSonicVisualizer('recursos');
+      const targetPanelId = workspaceManager.focusOrOpenSonicVisualizer('recursos', {
+        forceNew: Boolean(forceNew),
+        title: fileName,
+      });
       window.setTimeout(() => {
-        if (sonicAnalyzerController) {
-          void sonicAnalyzerController.loadFileFromUrl(url, fileName, { suppressRoomPublish: true })
-            .then(() => reinforceSonicVisualizer())
-            .catch((error) => console.warn('[room] local sonic load error', error));
-        } else {
-          void decodeSonicUrl(url)
-            .then((buffer) => dispatchDecodedSonicFile(buffer, fileName))
-            .catch((error) => console.warn('[room] local sonic decode error', error));
-        }
+        void decodeSonicUrl(url)
+          .then((buffer) => dispatchDecodedSonicFile(buffer, fileName, '', '', 0, { targetPanelId }))
+          .catch((error) => console.warn('[room] local sonic decode error', error));
       }, 80);
       publishSonicFileSync(url, fileName);
     });
 
     window.addEventListener('musiki:sonic:load-file', (e: Event) => {
-      const { file } = (e as CustomEvent<{ file: File }>).detail ?? {};
+      const { file, targetPanelId } = (e as CustomEvent<{ file: File; targetPanelId?: string }>).detail ?? {};
       if (!(file instanceof File)) return;
-      workspaceManager.focusOrOpenSonicVisualizer('sonic-visualizer');
-      if (sonicAnalyzerController) {
-        window.dispatchEvent(new CustomEvent('musiki:sa:load-file', { detail: { file } }));
-        reinforceSonicVisualizer();
-        return;
-      }
+      const panelId = normalizeText(targetPanelId) || workspaceManager.focusOrOpenSonicVisualizer('sonic-visualizer');
       void decodeSonicFile(file)
-        .then((buffer) => dispatchDecodedSonicFile(buffer, file.name))
+        .then((buffer) => dispatchDecodedSonicFile(buffer, file.name, '', '', 0, { targetPanelId: panelId }))
         .catch((error) => console.warn('[room] local sonic file decode error', error));
     });
 
     window.addEventListener('musiki:visual:load-url', (e: Event) => {
-      const { url, name } = (e as CustomEvent<{ url: string; name: string }>).detail ?? {};
+      const { url, name, forceNew } = (e as CustomEvent<{ url: string; name: string; forceNew?: boolean }>).detail ?? {};
       if (!url) return;
       const fileName = normalizeText(name) || 'document';
-      workspaceManager.focusOrOpenVisualizer('recursos', { forceNew: true, title: fileName });
+      const panelId = workspaceManager.focusOrOpenVisualizer('recursos', { forceNew: Boolean(forceNew), title: fileName });
       window.setTimeout(() => {
-        visualizerController?.loadUrl(url, fileName);
+        (panelId ? visualizerControllersByPanel.get(panelId) : null)?.loadUrl(url, fileName);
+        if (!panelId || !visualizerControllersByPanel.has(panelId)) visualizerController?.loadUrl(url, fileName);
       }, 120);
     });
 
@@ -13466,7 +13471,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       if (message.type === 'recursos:sync' || message.type === 'recursos:allow-students') {
         if (!canAcceptSonicControl(participant)) return;
-        recursosAllowsStudents = message.type === 'recursos:sync' ? message.allowStudents : message.allow;
+        recursosAllowsStudents = true;
         sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
         sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
         visualizerControllers.forEach((controller) => controller.setAllowStudents(recursosAllowsStudents));

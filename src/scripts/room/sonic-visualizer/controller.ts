@@ -18,7 +18,7 @@ const ACCEPTED_TYPES = [
   'video/mp4',
   'video/webm',
 ];
-const ACCEPTED_EXTS = ['.wav', '.ogg', '.mp3', '.m4a', '.aac', '.flac', '.mov', '.mp4', '.webm'];
+const ACCEPTED_EXTS = ['.wav', '.ogg', '.mp3', '.m4a', '.aac', '.flac', '.mov', '.mp4', '.mpv', '.webm'];
 
 const CURVE_COLORS: Record<string, string> = {
   enr: 'rgba(69,211,132,0.7)',
@@ -122,20 +122,36 @@ export class SonicVisualizerController {
   // Bound handlers (for window events cleanup)
   private onFrame: (e: Event) => void;
   private onFileReady: (e: Event) => void;
+  private onTargetedFileReady: (e: Event) => void;
+  private panelId = '';
 
   constructor(options: SVOptions) {
     this.container = options.container;
     this.publish   = options.publish;
+    this.panelId = this.resolvePanelId();
     this.bindDOM();
     this.bindDropzone();
     this.bindResize();
 
     this.onFrame     = (e) => this.handleFrame((e as CustomEvent<{ results: SAResults }>).detail);
     this.onFileReady = (e) => this.handleFileReady((e as CustomEvent<SAFilePayload>).detail);
+    this.onTargetedFileReady = (e) => {
+      const detail = (e as CustomEvent<SAFilePayload & { targetPanelId?: string }>).detail;
+      const targetPanelId = String(detail?.targetPanelId || '').trim();
+      if (targetPanelId && targetPanelId !== this.panelId) return;
+      this.handleFileReady(detail);
+    };
 
     window.addEventListener('sa:frame',      this.onFrame);
     window.addEventListener('sa:file-ready', this.onFileReady);
+    window.addEventListener('musiki:sv:load-decoded', this.onTargetedFileReady);
     window.dispatchEvent(new CustomEvent('sv:request-state'));
+  }
+
+  private resolvePanelId(): string {
+    return this.container.dataset.panelId
+      || this.container.closest<HTMLElement>('.pod-diy-shell')?.dataset.panelId
+      || '';
   }
 
   private bindDropzone(): void {
@@ -155,7 +171,7 @@ export class SonicVisualizerController {
       pod.classList.remove('sv-pod--drag-over');
       const file = this.extractAudioFile(e.dataTransfer);
       if (!file) return;
-      window.dispatchEvent(new CustomEvent('musiki:sonic:load-file', { detail: { file } }));
+      window.dispatchEvent(new CustomEvent('musiki:sonic:load-file', { detail: { file, targetPanelId: this.panelId } }));
     }, { signal: sig });
   }
 
@@ -1096,6 +1112,7 @@ export class SonicVisualizerController {
     this.resizeObserver?.disconnect();
     window.removeEventListener('sa:frame',      this.onFrame);
     window.removeEventListener('sa:file-ready', this.onFileReady);
+    window.removeEventListener('musiki:sv:load-decoded', this.onTargetedFileReady);
     this.worker?.terminate();
     if (this.audioCtx) { try { this.audioCtx.close(); } catch {} this.audioCtx = null; }
     this.outputGainNode = null;

@@ -13,9 +13,9 @@ import './recursos.css';
     <!-- Context menu (item / folder / root right-click) -->
     <div class="re-ctx-menu" data-re-ctx-menu hidden>
       <button type="button" class="re-ctx-item" data-re-ctx-new-folder>Nueva carpeta</button>
-      <button type="button" class="re-ctx-item" data-re-ctx-send-to-sa hidden>Enviar a SA</button>
-      <button type="button" class="re-ctx-item" data-re-ctx-send-to-vs hidden>Enviar a VS</button>
-      <button type="button" class="re-ctx-item" data-re-ctx-send-to-me hidden>Enviar a ME</button>
+      <button type="button" class="re-ctx-item" data-re-ctx-paste>Pegar desde clipboard</button>
+      <button type="button" class="re-ctx-item" data-re-ctx-download>Bajar archivo</button>
+      <button type="button" class="re-ctx-item" data-re-ctx-open-new>Abrir en nueva instancia</button>
       <button type="button" class="re-ctx-item" data-re-ctx-rename>Renombrar</button>
       <button type="button" class="re-ctx-item" data-re-ctx-move>Mover a…</button>
       <button type="button" class="re-ctx-item re-ctx-item--danger" data-re-ctx-delete>Borrar</button>
@@ -37,28 +37,6 @@ import './recursos.css';
 
     <!-- Filetree (header rendered as first row by JS) -->
     <div class="re-content" data-re-content></div>
-
-    <!-- Bottom bar — teacher-only, hidden via JS for students -->
-    <div class="musiki-pod-toolbar re-bottombar" data-re-bottombar>
-      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-new-folder title="Nueva carpeta">📁</button>
-      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-fold title="Plegar/desplegar todo">⊟</button>
-      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-save-repo title="Guardar cambios en el repositorio (Markdown)">💾</button>
-      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-session-list title="Lista de sesiones">▤</button>
-      <button type="button" class="musiki-pod-btn re-bb-btn" data-re-paste title="Pegar clipboard">⎘</button>
-      <div style="flex:1;"></div>
-      <button
-        type="button"
-        class="musiki-pod-btn re-bb-btn re-collab-btn"
-        data-re-collab
-        data-active="false"
-        title="Permitir a estudiantes agregar recursos (desactivado)"
-        style="display:none;"
-      >
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13" aria-hidden="true">
-          <path d="M5.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5ZM1.5 14.5c0-2 1.5-3.5 3.5-3.5h1c2 0 3.5 1.5 3.5 3.5M10.5 5.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z"/>
-        </svg>
-      </button>
-    </div>
 
   </div>
 </div>

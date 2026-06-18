@@ -291,21 +291,6 @@
   cursor: text;
 }
 
-/* ── Bottom bar ───────────────────────────────────────────── */
-.re-bottombar {
-  flex-shrink: 0;
-  border-top: none !important;
-}
-
-.re-bb-btn {
-  font-size: 10px;
-}
-
-.re-collab-btn[data-active="true"] {
-  color: #45d384;
-  border-color: #2a4a38;
-}
-
 [data-re-dropzone][data-dragging="true"] .re-drop-overlay {
   opacity: 1;
   pointer-events: auto;

@@ -336,6 +336,7 @@ export class RoomWorkspaceManager {
               // ALWAYS CLONE from template storage so we never exhaust the source
               element = element.cloneNode(true) as HTMLElement;
               element.removeAttribute("hidden");
+              element.dataset.panelId = options.id;
               element.style.display = "block";
             } else {
               console.warn(
@@ -510,12 +511,15 @@ export class RoomWorkspaceManager {
     return Boolean(this.findPanelByBaseId(id));
   }
 
-  public focusOrOpenSonicVisualizer(referencePanelId?: string): void {
-    if (!this.dockview) return;
-    const existing = this.findPanelByBaseId("sonic-visualizer");
+  public focusOrOpenSonicVisualizer(
+    referencePanelId?: string,
+    options: { forceNew?: boolean; title?: string } = {},
+  ): string | null {
+    if (!this.dockview) return null;
+    const existing = options.forceNew ? null : this.findPanelByBaseId("sonic-visualizer");
     if (existing) {
       existing.api.setActive();
-      return;
+      return existing.id;
     }
 
     const referencePanel =
@@ -527,15 +531,23 @@ export class RoomWorkspaceManager {
       this.dockview.panels[0] ??
       null;
 
+    const panelId = options.forceNew
+      ? `sonic-visualizer-${Date.now().toString(36)}`
+      : "sonic-visualizer";
     this.dockview.addPanel({
-      id: "sonic-visualizer",
+      id: panelId,
       component: "sonic-visualizer",
-      title: "SV",
+      title: options.title ?? "SV",
       position: referencePanel
         ? { referencePanel: referencePanel.id, direction: "below" }
         : undefined,
       initialHeight: 110,
     });
+    window.setTimeout(
+      () => this.dockview?.getGroupPanel(panelId)?.api.setActive(),
+      80,
+    );
+    return panelId;
   }
 
   private initPodGallery() {
@@ -1134,10 +1146,11 @@ export class RoomWorkspaceManager {
         "lily-code",
         "lily-render",
         "visualizer",
+        "sonic-visualizer",
       ].includes(id);
-      const existing = this.dockview.getGroupPanel(id);
+      const existing = this.findPanelByBaseId(id);
 
-      if (existing && !canHaveMultiple) {
+      if (existing && (forceOpen || !canHaveMultiple)) {
         if (forceOpen) {
           existing.api.setActive();
           if (position) {
@@ -1205,12 +1218,12 @@ export class RoomWorkspaceManager {
   public focusOrOpenVisualizer(
     source: "recursos" | "visualizer" = "visualizer",
     options: { forceNew?: boolean; title?: string } = {},
-  ) {
-    if (!this.dockview) return;
+  ): string | null {
+    if (!this.dockview) return null;
     const existing = options.forceNew ? null : this.findPanelByBaseId("visualizer");
     if (existing) {
       existing.api.setActive();
-      return;
+      return existing.id;
     }
 
     const reference =
@@ -1235,6 +1248,7 @@ export class RoomWorkspaceManager {
       () => this.dockview?.getGroupPanel(panelId)?.api.setActive(),
       80,
     );
+    return panelId;
   }
 
   public focusOrOpenExternalMedia(referencePanelId = "recursos"): void {

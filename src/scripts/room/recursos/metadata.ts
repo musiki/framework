@@ -4,10 +4,10 @@ export type ResourceType = 'pdf' | 'pptx' | 'img' | 'md' | 'tex' | 'ly' | 'audio
 
 const EXT_TYPE_MAP: Record<string, ResourceType> = {
   pdf: 'pdf', pptx: 'pptx', ppt: 'pptx', ptx: 'pptx',
-  jpg: 'img', jpeg: 'img', png: 'img', gif: 'img', webp: 'img', svg: 'img',
+  jpg: 'img', jpeg: 'img', png: 'img', gif: 'img', webp: 'img', svg: 'img', tif: 'img', tiff: 'img',
   md: 'md', markdown: 'md', tex: 'tex', ly: 'ly',
   mp3: 'audio', wav: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', flac: 'audio',
-  mov: 'video', mp4: 'video', webm: 'video',
+  mov: 'video', mp4: 'video', mpv: 'video', webm: 'video',
 };
 
 export function typeFromExt(ext: string): ResourceType {
