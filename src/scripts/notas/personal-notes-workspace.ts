@@ -4,6 +4,7 @@ import { EditorView } from '@codemirror/view';
 import { buildShell, injectWorkspaceCss } from '../course/dockview-shell';
 import { createLiveMdEditor } from '../course/notes/live-md-editor';
 import { enhanceCourseNotesContent } from '../course/notes/content';
+import { markdownToLatex } from './markdown-latex-export.ts';
 import type { TraceMarginHandle } from '../course/notes/trace-margin';
 
 export interface PersonalNotesWorkspace {
@@ -790,6 +791,23 @@ export async function mountDbNoteEditor(
       const basename = downloadBaseName();
       if (target.dataset.downloadFormat === 'markdown') {
         downloadTextFile(markdown, `${basename}.md`, 'text/markdown;charset=utf-8');
+        return;
+      }
+      if (target.dataset.downloadFormat === 'latex') {
+        downloadTextFile(
+          markdownToLatex(markdown, String(note.title || basename)),
+          `${basename}.tex`,
+          'application/x-tex;charset=utf-8',
+        );
+        return;
+      }
+      if (target.dataset.downloadFormat === 'latex-template') {
+        const templateId = target.dataset.latexTemplate || 'direct';
+        downloadTextFile(
+          markdownToLatex(markdown, String(note.title || basename), { templateId }),
+          `${basename}-${templateId}.tex`,
+          'application/x-tex;charset=utf-8',
+        );
         return;
       }
       if (target.dataset.downloadFormat === 'pdf') {

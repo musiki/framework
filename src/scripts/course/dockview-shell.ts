@@ -709,6 +709,9 @@ export function buildShell(
   downloadMenu.className = 'cnw-hud-download-menu';
   downloadMenu.innerHTML = `
     <button type="button" data-download-format="markdown">Bajar como Markdown</button>
+    <button type="button" data-download-format="latex">Bajar como LaTeX</button>
+    <button type="button" data-download-format="latex-template" data-latex-template="asignacion-seminario">Bajar LaTeX: asignación-seminario</button>
+    <button type="button" data-download-format="latex-template" data-latex-template="tesina-seminario">Bajar LaTeX: tesina-seminario</button>
     <button type="button" data-download-format="pdf">Bajar como PDF</button>
   `;
   downloadWrap.append(downloadBtn, downloadMenu);
