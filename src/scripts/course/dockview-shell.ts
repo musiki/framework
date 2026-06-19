@@ -790,7 +790,7 @@ export function buildShell(
     hud.appendChild(traceBtn);
 
     const infoBtn = document.createElement('button');
-    infoBtn.className = 'cnw-hud-icon-btn';
+    infoBtn.className = 'cnw-hud-icon-btn cnw-hud-info-btn';
     infoBtn.title = 'Ayuda e Información Teórica de TraceCode';
     infoBtn.style.cssText = 'background:none;border:none;color:var(--c-fg);opacity:.6;cursor:pointer;padding:0 4px;font-family:var(--font-mono,monospace);font-weight:bold;font-size:14px;line-height:16px;display:flex;align-items:center;justify-content:center;';
     infoBtn.innerHTML = '?';
