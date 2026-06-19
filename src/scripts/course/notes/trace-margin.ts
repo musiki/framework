@@ -54,6 +54,7 @@ export function normalizeMode(mode: string | undefined): TraceMode {
 }
 
 type RhetoricalRole =
+  | 'excluir'
   | 'afirmacion' | 'definicion' | 'contexto' | 'literatura'
   | 'ejemplo' | 'analisis' | 'contraste' | 'transicion'
   | 'sintesis' | 'metodo' | 'reflexion' | 'conclusion'
@@ -66,6 +67,8 @@ type RhetoricalRole =
   | 'public_artifact' | 'analysis' | 'method' | 'synthesis' | 'reflection';
 
 const ROLE_PRESENTATION: Record<RhetoricalRole, { label: string; short: string; hue: number; definition?: string }> = {
+  excluir: { label: 'Excluir', short: 'EXC', hue: 0, definition: 'Excluir este párrafo del análisis TRACE, estructura, códigos y métricas derivadas.' },
+
   // Academic / Rhetorical (Spanish keys)
   afirmacion: { label: 'afirmación', short: 'AFI', hue: 15, definition: 'Afirmación central, tesis o argumento principal.' },
   definicion: { label: 'definición', short: 'DEF', hue: 205, definition: 'Definición de un concepto o término clave.' },
@@ -142,6 +145,7 @@ const roleSets: Record<TraceMode, RhetoricalRole[]> = {
 };
 
 const RHETORICAL_ROLES = Object.keys(ROLE_PRESENTATION) as RhetoricalRole[];
+const EXCLUDED_ROLE: RhetoricalRole = 'excluir';
 
 const MODE_LABELS: Record<TraceMode, string> = {
   academic: 'Académico',
@@ -256,15 +260,32 @@ type MonitorState = {
   mode: TraceMode;
 };
 
+function roleCodeValue(code: TraceCode | undefined): RhetoricalRole | '' {
+  const value = code?.label.replace(/^(role|rol):/, '') ?? '';
+  return (LEGACY_ROLES[value] ?? value) as RhetoricalRole | '';
+}
+
+function excludedParagraphIndices(codes: TraceCode[]): Set<number> {
+  return new Set(
+    codes
+      .filter(code => code.dimension === 'rhetorical' && roleCodeValue(code) === EXCLUDED_ROLE)
+      .map(code => code.paraIndex),
+  );
+}
+
 function analyticalCodes(codes: TraceCode[]): TraceCode[] {
   // Older Stage 1 builds materialized local NLP as index-only codes. They are
   // intentionally ignored now: derived concepts live in hash-keyed traces.
-  return codes.filter(code => code.dimension !== 'rhetorical' && code.source !== 'local_nlp');
+  const excluded = excludedParagraphIndices(codes);
+  return codes.filter(code =>
+    code.dimension !== 'rhetorical'
+    && code.source !== 'local_nlp'
+    && !excluded.has(code.paraIndex),
+  );
 }
 
 function roleValue(code: TraceCode | undefined): RhetoricalRole | '' {
-  const value = code?.label.replace(/^(role|rol):/, '') ?? '';
-  return (LEGACY_ROLES[value] ?? value) as RhetoricalRole | '';
+  return roleCodeValue(code);
 }
 
 // ── Pure functions (mirrored in trace-utils.mjs for testing) ───────────────
@@ -331,10 +352,12 @@ function approximateParagraphLines(text: string): number {
   );
 }
 
-export function paragraphsForAnalysis(paras: Paragraph[], mode: TraceMode): Paragraph[] {
+export function paragraphsForAnalysis(paras: Paragraph[], mode: TraceMode, codes: TraceCode[] = []): Paragraph[] {
   const norm = normalizeMode(mode);
-  if (norm !== 'lit_art') return paras;
-  return paras.filter(para => approximateParagraphLines(para.text) > 2);
+  const excluded = excludedParagraphIndices(codes);
+  const included = paras.filter(para => !excluded.has(para.index));
+  if (norm !== 'lit_art') return included;
+  return included.filter(para => approximateParagraphLines(para.text) > 2);
 }
 
 const CONNECTORS = [
@@ -730,7 +753,7 @@ async function computeLocalTraces(
   mode: TraceMode,
 ): Promise<ParagraphTrace[]> {
   const normMode = normalizeMode(mode);
-  const analyzedParas = paragraphsForAnalysis(paras, normMode);
+  const analyzedParas = paragraphsForAnalysis(paras, normMode, codes);
   const keywordsByParagraph = analyzedParas.map(para => ({
     index: para.index,
     keywords: extractKeywords(para.text),
@@ -1259,6 +1282,10 @@ function renderTraceGraph(
   const W = 52;
   const h = paras.length * SPACING + 20;
   const graphPositions = new Map(paras.map((para, position) => [para.index, position]));
+  const displayNumber = (paraIndex: number) => {
+    const position = graphPositions.get(paraIndex);
+    return position === undefined ? paraIndex + 1 : position + 1;
+  };
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${h}`);
@@ -1285,7 +1312,7 @@ function renderTraceGraph(
         path.setAttribute('stroke', 'var(--c-link, #3b82f6)');
         path.setAttribute('stroke-width', '1.2');
         path.setAttribute('opacity', '0.3');
-        path.setAttribute('aria-label', `P${trace.paraIndex} retoma P${relation.indiceObjetivo}: ${relation.evidencia}`);
+        path.setAttribute('aria-label', `P${displayNumber(trace.paraIndex)} retoma P${displayNumber(relation.indiceObjetivo)}: ${relation.evidencia}`);
         path.classList.add('tc-graph-link');
         path.dataset.from = String(relation.indiceObjetivo);
         path.dataset.to = String(trace.paraIndex);
@@ -1310,7 +1337,7 @@ function renderTraceGraph(
     circle.setAttribute('stroke-width', '1');
     circle.setAttribute('role', 'button');
     circle.setAttribute('tabindex', '0');
-    circle.setAttribute('aria-label', `Ir al párrafo ${para.index}`);
+    circle.setAttribute('aria-label', `Ir al párrafo ${position + 1}`);
     circle.classList.add('tc-graph-node');
     circle.dataset.paraIndex = String(para.index);
     circle.addEventListener('mouseenter', () => onHoverParagraph(para.index));
@@ -1332,7 +1359,7 @@ function renderTraceGraph(
     text.setAttribute('fill', 'var(--c-fg, currentColor)');
     text.setAttribute('opacity', '0.7');
     text.classList.add('tc-graph-label');
-    text.textContent = `P${para.index}`;
+    text.textContent = `P${position + 1}`;
     svg.appendChild(text);
   }
 
@@ -1588,14 +1615,15 @@ function appendQaSection(
   const body = createMonitorSection(monitor, 'qa', 'QA', state);
   const analyzedIndices = new Set(analyzedParas.map(para => para.index));
   const traceCodes = analyticalCodes(codes).filter(code => analyzedIndices.has(code.paraIndex));
+  const activeTraces = traces.filter(trace => analyzedIndices.has(trace.paraIndex));
   const metrics = document.createElement('div');
   metrics.className = 'tc-qa-metrics';
-  const emergent = traces.reduce(
+  const emergent = activeTraces.reduce(
     (total, trace) => total + trace.conceptos.filter(concept => concept.estado === 'reutilizado').length,
     0,
   );
-  const roles = traces.filter(trace => trace.rolRetorico).length;
-  const warnings = traces.reduce((total, trace) => total + trace.diagnosticos.length, 0);
+  const roles = activeTraces.filter(trace => trace.rolRetorico && trace.rolRetorico !== EXCLUDED_ROLE).length;
+  const warnings = activeTraces.reduce((total, trace) => total + trace.diagnosticos.length, 0);
   const values = [
     `${traceCodes.length} códigos`,
     `${emergent} emergentes`,
@@ -1655,7 +1683,10 @@ function renderMargin(
 ) {
   traceCol.innerHTML = '';
   analysisCol.innerHTML = '';
-  const analyzedParas = paragraphsForAnalysis(paras, state.mode);
+  const analyzedParas = paragraphsForAnalysis(paras, state.mode, codes);
+  const analyzedIndices = new Set(analyzedParas.map(para => para.index));
+  const activeTraces = traces.filter(trace => analyzedIndices.has(trace.paraIndex));
+  const displayNumberByPara = new Map(analyzedParas.map((para, index) => [para.index, index + 1]));
   const traceCodes = analyticalCodes(codes);
   const orphans = computeOrphanLabels(traceCodes);
   const traceMonitor = document.createElement('div');
@@ -1766,7 +1797,7 @@ function renderMargin(
   for (const para of analyzedParas) {
     const paraCodes = traceCodes.filter(c => c.paraIndex === para.index);
     const rhetoricalCode = codes.find(c => c.paraIndex === para.index && c.dimension === 'rhetorical');
-    const localTrace = traces.find(trace => trace.paraIndex === para.index);
+    const localTrace = activeTraces.find(trace => trace.paraIndex === para.index);
     const currentRole = localTrace?.rolRetorico ?? (roleValue(rhetoricalCode) || null);
     const diagnosticLabels = new Set((localTrace?.diagnosticos ?? [])
       .map(diagnostic => diagnostic.etiqueta ?? diagnostic.mensaje?.match(/^"(.+?)"/)?.[1])
@@ -1794,20 +1825,20 @@ function renderMargin(
     paraLabel.type = 'button';
     paraLabel.className = 'tc-para-label';
     paraLabel.title = 'Ir al párrafo';
-    paraLabel.textContent = `P${para.index}`;
+    paraLabel.textContent = `P${displayNumberByPara.get(para.index) ?? para.index + 1}`;
     paraLabel.addEventListener('click', () => jumpToParagraph(para));
     head.appendChild(paraLabel);
 
     const roleSelect = document.createElement('select');
     roleSelect.className = 'tc-role-select';
     roleSelect.title = 'Rol retórico del párrafo';
-    roleSelect.setAttribute('aria-label', `Rol retórico de P${para.index}`);
+    roleSelect.setAttribute('aria-label', `Rol retórico de P${displayNumberByPara.get(para.index) ?? para.index + 1}`);
     const emptyRole = document.createElement('option');
     emptyRole.value = '';
     emptyRole.textContent = '— rol';
     roleSelect.appendChild(emptyRole);
     
-    const activeRoles = roleSets[state.mode] || roleSets.academic;
+    const activeRoles = [EXCLUDED_ROLE, ...(roleSets[state.mode] || roleSets.academic)];
     for (const role of activeRoles) {
       const option = document.createElement('option');
       option.value = role;
@@ -2072,15 +2103,13 @@ function renderMargin(
   const graph = document.createElement('div');
   graph.className = 'tc-graph';
   if (analyzedParas.length > 0) {
-    graph.appendChild(renderTraceGraph(analyzedParas, traces, jumpToParagraph, hoverParagraph));
+    graph.appendChild(renderTraceGraph(analyzedParas, activeTraces, jumpToParagraph, hoverParagraph));
   }
   structureBody.appendChild(graph);
 
-  const text = state.mode === 'artistico'
-    ? analyzedParas.map(para => para.text).join('\n\n')
-    : editorView.state.doc.toString();
+  const text = analyzedParas.map(para => para.text).join('\n\n');
   appendFreqZipfSection(analysisMonitor, text, state);
-  appendQaSection(analysisMonitor, codes, traces, state, analyzedParas);
+  appendQaSection(analysisMonitor, codes, activeTraces, state, analyzedParas);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────

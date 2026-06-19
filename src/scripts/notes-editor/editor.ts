@@ -3,6 +3,7 @@ import { EditorState } from '@codemirror/state';
 import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { markdownFormattingKeymap } from '../course/notes/markdown-shortcuts.ts';
 
 let view: EditorView | null = null;
 
@@ -23,6 +24,7 @@ export function createEditor(container: HTMLElement, initialContent: string, onC
     extensions: [
       lineNumbers(),
       history(),
+      markdownFormattingKeymap(),
       keymap.of([
         { key: 'Mod-ArrowUp', run: cursorDocStart },
         { key: 'Mod-ArrowDown', run: cursorDocEnd },

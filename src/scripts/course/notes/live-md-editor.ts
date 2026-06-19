@@ -15,6 +15,7 @@ import { EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirr
 import { syntaxTree } from '@codemirror/language';
 import { markdown } from '@codemirror/lang-markdown';
 import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
+import { markdownFormattingKeymap } from './markdown-shortcuts.ts';
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -211,6 +212,7 @@ export function createLiveMdEditor(
         { key: 'Mod-s', run: v => { flushSave(v.state.doc.toString()); return true; } },
       ]),
       markdown(),
+      markdownFormattingKeymap(),
       EditorView.lineWrapping,
       blockPlugin,
       inlinePlugin,

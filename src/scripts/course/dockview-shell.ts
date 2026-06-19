@@ -184,6 +184,44 @@ export function injectWorkspaceCss(containerId: string) {
       font-family: var(--font-ui, system-ui, sans-serif);
     }
     .cnw-hud-icon-btn:hover::after { opacity: 1; }
+    .cnw-hud-download {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .cnw-hud-download-menu {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 6px);
+      min-width: 148px;
+      padding: 4px;
+      border: 1px solid var(--c-border, rgba(120,120,140,.3));
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--c-bg, #111) 94%, var(--c-fg) 6%);
+      box-shadow: 0 8px 22px rgba(0,0,0,.22);
+      z-index: 260;
+      display: none;
+    }
+    .cnw-hud-download.is-open .cnw-hud-download-menu {
+      display: grid;
+      gap: 2px;
+    }
+    .cnw-hud-download-menu button {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--c-fg);
+      text-align: left;
+      font: inherit;
+      font-size: .74rem;
+      padding: 5px 7px;
+      border-radius: 3px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .cnw-hud-download-menu button:hover {
+      background: color-mix(in srgb, var(--c-link, #3b82f6) 16%, transparent);
+    }
 
     /* Panel body */
     .cnw-body {
@@ -608,7 +646,7 @@ export function buildShell(
   title: string,
   dockview: DockviewComponent,
   showHud = false,
-): { shell: HTMLElement; bodyEl: HTMLElement; statusDot: HTMLElement; pencilBtn: HTMLButtonElement; splitRightBtn: HTMLButtonElement; splitBelowBtn: HTMLButtonElement; traceBtn: HTMLButtonElement } {
+): { shell: HTMLElement; bodyEl: HTMLElement; statusDot: HTMLElement; pencilBtn: HTMLButtonElement; splitRightBtn: HTMLButtonElement; splitBelowBtn: HTMLButtonElement; traceBtn: HTMLButtonElement; downloadBtn: HTMLButtonElement; downloadMenu: HTMLElement } {
   const shell = document.createElement('div');
   shell.className = 'cnw-shell';
   shell.dataset.panelId = panelId;
@@ -658,6 +696,22 @@ export function buildShell(
   traceBtn.title = 'Monitor de análisis';
   traceBtn.dataset.tooltip = 'Monitor — Trace, Léxico, Zipf y QA';
   traceBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.3" fill="currentColor" stroke="none"/></svg>`;
+
+  const downloadWrap = document.createElement('span');
+  downloadWrap.className = 'cnw-hud-download';
+  const downloadBtn = document.createElement('button');
+  downloadBtn.className = 'cnw-hud-icon-btn cnw-hud-download-btn';
+  downloadBtn.type = 'button';
+  downloadBtn.title = 'Descargar nota';
+  downloadBtn.dataset.tooltip = 'Descargar';
+  downloadBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>`;
+  const downloadMenu = document.createElement('div');
+  downloadMenu.className = 'cnw-hud-download-menu';
+  downloadMenu.innerHTML = `
+    <button type="button" data-download-format="markdown">Bajar como Markdown</button>
+    <button type="button" data-download-format="pdf">Bajar como PDF</button>
+  `;
+  downloadWrap.append(downloadBtn, downloadMenu);
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'cnw-mode-btn cnw-close-btn';
@@ -729,6 +783,7 @@ export function buildShell(
     stats.className = 'cnw-hud-stats';
     stats.style.cssText = 'font-size:.784rem;opacity:.7;font-family:var(--font-mono,monospace);flex:1';
     hud.appendChild(stats);
+    hud.appendChild(downloadWrap);
     hud.appendChild(traceBtn);
 
     const infoBtn = document.createElement('button');
@@ -747,5 +802,5 @@ export function buildShell(
     shell.appendChild(hud);
   }
 
-  return { shell, bodyEl: body, statusDot, pencilBtn, splitRightBtn, splitBelowBtn, traceBtn };
+  return { shell, bodyEl: body, statusDot, pencilBtn, splitRightBtn, splitBelowBtn, traceBtn, downloadBtn, downloadMenu };
 }

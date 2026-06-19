@@ -110,10 +110,13 @@ export function normalizeMode(mode) {
   return mapping[mode] || 'academic';
 }
 
-export function paragraphsForAnalysis(paras, mode) {
+export const EXCLUDED_ROLE = 'excluir';
+
+export function paragraphsForAnalysis(paras, mode, roleByParagraph = new Map()) {
   const norm = normalizeMode(mode);
-  if (norm !== 'lit_art') return paras;
-  return paras.filter(para => approximateParagraphLines(para.text) > 2);
+  const included = paras.filter(para => roleByParagraph.get(para.index) !== EXCLUDED_ROLE);
+  if (norm !== 'lit_art') return included;
+  return included.filter(para => approximateParagraphLines(para.text) > 2);
 }
 
 const CONNECTORS = [
@@ -411,7 +414,7 @@ export function computeDiagnostics(mode, para, occurrences, analyzedParas, roleB
 
 export function analyzeLocalTraces(paras, roleByParagraph = new Map(), mode = 'borrador') {
   const normMode = normalizeMode(mode);
-  const analyzedParas = paragraphsForAnalysis(paras, normMode);
+  const analyzedParas = paragraphsForAnalysis(paras, normMode, roleByParagraph);
   const keywordsByParagraph = analyzedParas.map(para => ({
     index: para.index,
     keywords: extractKeywords(para.text),

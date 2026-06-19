@@ -10,6 +10,7 @@ import { buildShell, injectWorkspaceCss, type NoteMode } from './dockview-shell'
 import type { LiveMdEditor } from './notes/live-md-editor';
 import type { TraceMarginHandle } from './notes/trace-margin';
 import { deferYouTubeEmbeds, hydrateLazyYouTubeEmbeds } from './lazy-youtube';
+import { enhanceCourseNotesContent } from './notes/content';
 
 export type { NoteMode } from './dockview-shell';
 
@@ -355,7 +356,8 @@ function loadPreviewContent(courseId: string, slug: string): Promise<PreviewCont
 }
 
 function runMermaidIn(bodyEl: HTMLElement) {
-  const nodes = bodyEl.querySelectorAll('.cnw-mermaid');
+  const nodes = Array.from(bodyEl.querySelectorAll<HTMLElement>('.cnw-mermaid, .mermaid'))
+    .filter(node => node.dataset.mermaidRendered !== 'true' && node.dataset.mermaidRendering !== 'true');
   if (!nodes.length) return;
   try {
     const result = (window as any).mermaid?.run({ nodes });
@@ -378,6 +380,7 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
     if (preview.renderedHtml?.trim()) {
       bodyEl.innerHTML = `<div class="cnw-md">${preview.renderedHtml}</div>`;
       hydrateLazyYouTubeEmbeds(bodyEl);
+      enhanceCourseNotesContent(bodyEl);
       bodyEl.dataset.renderedSlug = slug;
       bodyEl.dataset.lastContent = content;
       return content;
@@ -394,13 +397,14 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
     const html = deferYouTubeEmbeds(String(marked.parse(cleanBody, { async: false })));
     bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
     hydrateLazyYouTubeEmbeds(bodyEl);
+    enhanceCourseNotesContent(bodyEl);
     // Lazy-load mermaid if any diagrams present
-    if (bodyEl.querySelector('.cnw-mermaid') && !('mermaid' in window)) {
+    if (bodyEl.querySelector('.cnw-mermaid, .mermaid') && !('mermaid' in window)) {
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
       s.onload = () => runMermaidIn(bodyEl);
       document.head.appendChild(s);
-    } else if (bodyEl.querySelector('.cnw-mermaid')) {
+    } else if (bodyEl.querySelector('.cnw-mermaid, .mermaid')) {
       runMermaidIn(bodyEl);
     }
     bodyEl.dataset.renderedSlug = slug;
@@ -677,6 +681,7 @@ async function loadDbNotePreview(state: DbNotePanelState) {
     }
     state.bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
     hydrateLazyYouTubeEmbeds(state.bodyEl);
+    enhanceCourseNotesContent(state.bodyEl);
     updateDbNoteHud(state, note.body ?? '');
   } catch {
     state.bodyEl.innerHTML = '<p style="padding:1rem;color:#c87e7e;font-size:.85rem;">Error al cargar</p>';
@@ -944,11 +949,38 @@ export function initDockviewWorkspace(
   _activeCtrl = ctrl;
   const { signal } = ctrl;
 
-  // Global drag-and-drop cleanup to release preview rectangles on drag end or drop
-  const cleanupDragOver = () => {
+  const cleanupDockviewDropArtifacts = () => {
     container.querySelectorAll('.cnw-external-drag-over, .cnw-drag-over').forEach(el => {
       el.classList.remove('cnw-external-drag-over', 'cnw-drag-over');
     });
+    container.querySelectorAll('.dv-drop-target, .dv-dragged').forEach(el => {
+      el.classList.remove('dv-drop-target', 'dv-dragged');
+    });
+    container.querySelectorAll('.dv-drop-target-dropzone').forEach(el => {
+      el.remove();
+    });
+    container.querySelectorAll('.dv-drop-target-selection').forEach(el => {
+      el.classList.remove(
+        'dv-drop-target-left',
+        'dv-drop-target-right',
+        'dv-drop-target-top',
+        'dv-drop-target-bottom',
+        'dv-drop-target-center',
+        'dv-drop-target-small-vertical',
+        'dv-drop-target-small-horizontal',
+      );
+    });
+  };
+
+  const scheduleDockviewDropCleanup = () => {
+    cleanupDockviewDropArtifacts();
+    window.requestAnimationFrame(cleanupDockviewDropArtifacts);
+    window.setTimeout(cleanupDockviewDropArtifacts, 80);
+  };
+
+  // Global drag-and-drop cleanup to release preview rectangles on drag end or drop
+  const cleanupDragOver = () => {
+    scheduleDockviewDropCleanup();
   };
   window.addEventListener('dragend', cleanupDragOver, { signal });
   window.addEventListener('drop', cleanupDragOver, { signal });
@@ -976,13 +1008,13 @@ export function initDockviewWorkspace(
       }
 
       if (params.kind === 'db-note') {
-        const { shell, bodyEl, pencilBtn, statusDot, traceBtn } = buildShell(
+        const { shell, bodyEl, pencilBtn, statusDot, traceBtn, downloadBtn, downloadMenu } = buildShell(
           panelId, params.noteId, params.title, dockview, true,
         );
         bindExternalNoteDrop(shell, panelId);
 
         // Mount the comprehensive personal notes editor with highlighting and commenting support
-        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId, pencilBtn);
+        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId, pencilBtn, downloadBtn, downloadMenu);
         
         return { element: shell, init: () => {} };
       }
@@ -1068,6 +1100,7 @@ export function initDockviewWorkspace(
   setDockviewActive(false);
   dockview.onDidAddPanel(() => {
     setDockviewActive(true);
+    scheduleDockviewDropCleanup();
   });
 
   // Open initial panel
@@ -1317,6 +1350,7 @@ export function initDockviewWorkspace(
         console.error('[cnw] drop openNote failed:', err);
       }
     }
+    scheduleDockviewDropCleanup();
   });
 
   bindWorkspaceExternalDrop();

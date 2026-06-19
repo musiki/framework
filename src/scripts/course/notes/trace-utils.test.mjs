@@ -220,6 +220,22 @@ describe('analyzeLocalTraces', () => {
     assert.deepEqual(analyzeLocalTraces(literaryParas, new Map(), 'artistico').map(trace => trace.paraIndex), [1]);
   });
 
+  test('excludes paragraphs marked with rol:excluir from TRACE analysis', () => {
+    const roleByParagraph = new Map([[1, 'excluir']]);
+    const traces = analyzeLocalTraces(paras, roleByParagraph);
+    assert.deepEqual(traces.map(trace => trace.paraIndex), [0, 2]);
+    assert.equal(traces.some(trace => trace.paraIndex === 1), false);
+    assert.equal(traces[1].relaciones.some(rel => rel.indiceObjetivo === 1), false);
+  });
+
+  test('paragraphsForAnalysis applies exclusion before mode-specific filters', () => {
+    const literaryParas = segmentParagraphs(
+      'Y dijo:\n\nLa habitación sostenía una vibración larga, obstinada, que parecía venir de la pared y atravesaba los cuerpos mientras la conversación se volvía lentamente irreconocible y adquiría otra forma.',
+    );
+    const analyzed = paragraphsForAnalysis(literaryParas, 'artistico', new Map([[1, 'excluir']]));
+    assert.deepEqual(analyzed, []);
+  });
+
   test('keeps manually assigned rhetorical roles', () => {
     const traces = analyzeLocalTraces(paras, new Map([[1, 'contraste']]));
     assert.equal(traces[1].rolRetorico, 'contraste');

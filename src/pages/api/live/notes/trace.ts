@@ -5,6 +5,7 @@ import { query } from '../../../../lib/db/pool';
 const LABEL_MAX = 120;
 const VALID_DIMENSIONS = new Set(['thematic', 'rhetorical', 'emergent', 'manual']);
 const ALL_ROLES = [
+  'excluir',
   'afirmacion', 'definicion', 'contexto', 'literatura', 'ejemplo', 'analisis', 'contraste', 'transicion', 'sintesis', 'metodo', 'conclusion',
   'reflection', 'method', 'example', 'analysis', 'synthesis', 'closure',
   'scene_opening', 'image', 'motif_introduction', 'motif_return', 'variation', 'voice_shift', 'interruption', 'description', 'action', 'memory', 'dialogue', 'tension', 'turn', 'ellipsis', 'montage', 'resonance',

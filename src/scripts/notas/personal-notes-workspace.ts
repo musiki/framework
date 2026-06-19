@@ -42,12 +42,12 @@ export function initPersonalNotesWorkspace(container: HTMLElement): PersonalNote
       }
 
       if (params.kind === 'db-note') {
-        const { shell, bodyEl, pencilBtn, statusDot, splitRightBtn, splitBelowBtn, traceBtn } = buildShell(
+        const { shell, bodyEl, pencilBtn, statusDot, splitRightBtn, splitBelowBtn, traceBtn, downloadBtn, downloadMenu } = buildShell(
           options.id, params.noteId, params.title, dockview, true,
         );
         splitRightBtn.style.display = 'none';
         splitBelowBtn.style.display = 'none';
-        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId, pencilBtn);
+        void mountDbNoteEditor(bodyEl, statusDot, traceBtn, params.noteId, pencilBtn, downloadBtn, downloadMenu);
         return { element: shell, init: () => {} };
       }
 
@@ -230,6 +230,70 @@ function updateHud(bodyEl: HTMLElement, content: string, mode: DbNoteViewMode = 
 
 function escHtml(s: string) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function filenamePart(value: string, fallback = 'nota'): string {
+  return String(value || fallback)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9_-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+    || fallback;
+}
+
+function downloadTextFile(content: string, filename: string, type: string): void {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function renderMarkdownForExport(markdown: string): Promise<string> {
+  const res = await fetch('/api/live/preview-markdown', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markdown }),
+  });
+  if (!res.ok) throw new Error('preview failed');
+  const data = await res.json() as { html?: string };
+  return data.html || `<pre>${escHtml(markdown)}</pre>`;
+}
+
+function openPrintablePdf(html: string, title: string): void {
+  const printWindow = window.open('', '_blank', 'width=960,height=720');
+  if (!printWindow) return;
+  printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${escHtml(title)}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; background: #fff; margin: 0; }
+    main { max-width: 760px; margin: 0 auto; padding: 42px 44px; line-height: 1.62; }
+    h1, h2, h3 { line-height: 1.22; margin: 1.35em 0 .45em; }
+    pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre { white-space: pre-wrap; background: #f3f4f6; padding: 12px; border-radius: 4px; overflow-wrap: anywhere; }
+    img, svg, video { max-width: 100%; height: auto; }
+    blockquote { border-left: 3px solid #d1d5db; margin-left: 0; padding-left: 14px; color: #4b5563; }
+    @page { margin: 18mm; }
+  </style>
+</head>
+<body>
+  <main>${html}</main>
+  <script>
+    window.addEventListener('load', () => {
+      window.setTimeout(() => window.print(), 160);
+    });
+  <\/script>
+</body>
+</html>`);
+  printWindow.document.close();
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -486,6 +550,8 @@ export async function mountDbNoteEditor(
   traceBtn: HTMLButtonElement,
   noteId: string,
   pencilBtn?: HTMLButtonElement,
+  downloadBtn?: HTMLButtonElement,
+  downloadMenu?: HTMLElement,
 ) {
   const localCleanups: Array<() => void> = [];
   (bodyEl as any).__editorCleanups = localCleanups;
@@ -699,6 +765,49 @@ export async function mountDbNoteEditor(
   let editor: any;
   let currentSelectionColor: string | null = null;
   let traceHandle: TraceMarginHandle | null = null;
+
+  const currentMarkdown = () => {
+    if (editor) currentContent = editor.getContent();
+    return currentContent;
+  };
+  const downloadBaseName = () => filenamePart(String(note.title || 'nota'));
+
+  if (downloadBtn && downloadMenu) {
+    const downloadWrap = downloadBtn.closest('.cnw-hud-download');
+    downloadBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      downloadWrap?.classList.toggle('is-open');
+    });
+
+    downloadMenu.addEventListener('click', async (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest<HTMLButtonElement>('[data-download-format]') : null;
+      if (!target) return;
+      event.preventDefault();
+      event.stopPropagation();
+      downloadWrap?.classList.remove('is-open');
+      const markdown = currentMarkdown();
+      const basename = downloadBaseName();
+      if (target.dataset.downloadFormat === 'markdown') {
+        downloadTextFile(markdown, `${basename}.md`, 'text/markdown;charset=utf-8');
+        return;
+      }
+      if (target.dataset.downloadFormat === 'pdf') {
+        try {
+          const html = await renderMarkdownForExport(markdown);
+          openPrintablePdf(html, String(note.title || basename));
+        } catch {
+          openPrintablePdf(`<pre>${escHtml(markdown)}</pre>`, String(note.title || basename));
+        }
+      }
+    });
+
+    const closeDownloadMenu = (event: MouseEvent) => {
+      if (!downloadWrap?.contains(event.target as Node)) downloadWrap?.classList.remove('is-open');
+    };
+    document.addEventListener('click', closeDownloadMenu);
+    localCleanups.push(() => document.removeEventListener('click', closeDownloadMenu));
+  }
 
   const selectionToolbar = document.createElement('div');
   selectionToolbar.className = 'pnw-selection-toolbar';
