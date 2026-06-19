@@ -22,6 +22,82 @@ export type NoteListItem = {
   filePath: string;
 };
 
+const LATEX_TEMPLATE_NOTES = [
+  {
+    slug: 'latex-templates/asignacion-seminario',
+    title: 'asignación-seminario',
+    order: 9001,
+    templateId: 'asignacion-seminario',
+    body: [
+      '# asignación-seminario',
+      '',
+      'Plantilla base para trabajos breves del seminario.',
+      '',
+      '```latex',
+      '\\documentclass[sigconf]{acmart}',
+      '\\settopmatter{printacmref=false}',
+      '\\renewcommand\\footnotetextcopyrightpermission[1]{}',
+      '\\usepackage[utf8]{inputenc}',
+      '\\usepackage[T1]{fontenc}',
+      '\\usepackage{hyperref}',
+      '\\usepackage{graphicx}',
+      '\\usepackage[most]{tcolorbox}',
+      '',
+      '\\title{{{title}}}',
+      '\\author{{{author}}}',
+      '\\date{}',
+      '',
+      '\\begin{document}',
+      '\\maketitle',
+      '',
+      '{{{body}}}',
+      '',
+      '\\end{document}',
+      '```',
+    ].join('\n'),
+  },
+  {
+    slug: 'latex-templates/tesina-seminario',
+    title: 'tesina-seminario',
+    order: 9002,
+    templateId: 'tesina-seminario',
+    body: [
+      '# tesina-seminario',
+      '',
+      'Plantilla base para tesina de grado con estructura moderna.',
+      '',
+      '```latex',
+      '\\documentclass[12pt,a4paper]{report}',
+      '\\usepackage[utf8]{inputenc}',
+      '\\usepackage[T1]{fontenc}',
+      '\\usepackage[spanish]{babel}',
+      '\\usepackage{hyperref}',
+      '\\usepackage{graphicx}',
+      '\\usepackage{geometry}',
+      '\\usepackage{setspace}',
+      '\\usepackage{titlesec}',
+      '\\usepackage{fancyhdr}',
+      '\\usepackage[most]{tcolorbox}',
+      '\\geometry{top=2.8cm,bottom=2.8cm,left=3.2cm,right=2.6cm}',
+      '\\onehalfspacing',
+      '',
+      '\\title{{{title}}}',
+      '\\author{{{author}}}',
+      '\\date{\\today}',
+      '',
+      '\\begin{document}',
+      '\\maketitle',
+      '\\tableofcontents',
+      '\\clearpage',
+      '',
+      '{{{body}}}',
+      '',
+      '\\end{document}',
+      '```',
+    ].join('\n'),
+  },
+] as const;
+
 export function notesPreflightError(courseId: string): string | null {
   if (!isLocalContentAdminEnabled()) {
     return 'Local content admin not enabled. Set CONTENT_ADMIN_LOCAL_WRITE=true.';
@@ -91,6 +167,27 @@ export function listCourseNotes(courseId: string): NoteListItem[] {
 
   scanDir(baseDir, '');
   return notes.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+}
+
+export function ensureCourseLatexTemplateNotes(courseId: string): void {
+  const source = resolveCourseSource(courseId);
+  if (!source) throw new Error(`Course not found: ${courseId}`);
+
+  for (const template of LATEX_TEMPLATE_NOTES) {
+    const repoPath = sanitizeRepoMarkdownPath(`cursos/${courseId}/${template.slug}.md`);
+    if (!repoPath) continue;
+    if (getEditableLocalRepoFile(source, repoPath)) continue;
+
+    const content = matter.stringify(`${template.body}\n`, {
+      title: template.title,
+      type: 'latex-template',
+      templateId: template.templateId,
+      chapter: '90 NOTAS',
+      status: 'draft',
+      order: template.order,
+    });
+    writeEditableLocalRepoFile(source, repoPath, content);
+  }
 }
 
 function slugifyFilename(name: string): string {

@@ -1502,7 +1502,7 @@ export async function mountDbNoteEditor(
       return;
     }
     const { mountTraceMargin } = await import('../course/notes/trace-margin');
-    traceHandle = await mountTraceMargin(editor.getView(), noteId, bodyEl);
+    traceHandle = await mountTraceMargin(editor.getView(), noteId, bodyEl, { canWrite: canComment });
     traceBtn.classList.add('is-active');
   };
   traceBtn.addEventListener('click', () => { void toggleTrace(); });

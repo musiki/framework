@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { cleanString, ensureDbUserFromSession, json } from '../../../../lib/forum-server';
 import { query } from '../../../../lib/db/pool';
+import { getNoteAccess } from './annotations';
 
 const LABEL_MAX = 120;
 const VALID_DIMENSIONS = new Set(['thematic', 'rhetorical', 'emergent', 'manual']);
@@ -32,12 +33,10 @@ function safeJsonRecords(value: unknown, maxItems = 50): object[] {
     .slice(0, maxItems);
 }
 
-async function ownsNote(noteId: string, userId: string): Promise<boolean> {
-  const { data } = await query(
-    `SELECT id FROM "LiveClassNote" WHERE id = $1 AND "userId" = $2`,
-    [noteId, userId],
-  );
-  return Boolean(data?.length);
+type NoteAccess = Awaited<ReturnType<typeof getNoteAccess>>;
+
+function canWriteTrace(access: NoteAccess): boolean {
+  return access === 'comment' || access === 'edit';
 }
 
 export const GET: APIRoute = async ({ locals, url }) => {
@@ -48,7 +47,8 @@ export const GET: APIRoute = async ({ locals, url }) => {
   const noteId = cleanString(url.searchParams.get('noteId') ?? '', 36);
   if (!noteId) return json({ error: 'noteId required' }, 400);
 
-  if (!await ownsNote(noteId, user.id)) return json({ error: 'Not found' }, 403);
+  const access = await getNoteAccess(noteId, user.id);
+  if (!access) return json({ error: 'Forbidden' }, 403);
 
   const { data: codes, error: codesError } = await query(
     `SELECT id, note_id AS "noteId", para_index AS "paraIndex", label,
@@ -101,7 +101,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: 'Invalid rhetorical role' }, 400);
   }
 
-  if (!await ownsNote(noteId, user.id)) return json({ error: 'Not found' }, 403);
+  const access = await getNoteAccess(noteId, user.id);
+  if (!canWriteTrace(access)) return json({ error: 'Forbidden' }, 403);
 
   const upsertSql = dimension === 'rhetorical'
     ? `INSERT INTO "LiveClassNoteCode" (id, note_id, para_index, label, dimension, source, confidence, mode)
@@ -133,7 +134,8 @@ export const PUT: APIRoute = async ({ request, locals }) => {
   const noteId = cleanString(body.noteId ?? '', 36);
   const rawTraces = Array.isArray(body.traces) ? body.traces.slice(0, 250) : [];
   if (!noteId || rawTraces.length === 0) return json({ error: 'noteId and traces required' }, 400);
-  if (!await ownsNote(noteId, user.id)) return json({ error: 'Not found' }, 403);
+  const access = await getNoteAccess(noteId, user.id);
+  if (!canWriteTrace(access)) return json({ error: 'Forbidden' }, 403);
 
   const saved = [];
   for (const raw of rawTraces) {
@@ -208,11 +210,20 @@ export const DELETE: APIRoute = async ({ locals, url }) => {
   const id = cleanString(url.searchParams.get('id') ?? '', 36);
   if (!id) return json({ error: 'id required' }, 400);
 
+  const { data: codeRows, error: codeError } = await query(
+    `SELECT note_id AS "noteId" FROM "LiveClassNoteCode" WHERE id = $1 LIMIT 1`,
+    [id],
+  );
+  if (codeError) return json({ error: codeError.message }, 500);
+  const noteId = codeRows?.[0]?.noteId;
+  if (!noteId) return json({ error: 'Not found' }, 404);
+
+  const access = await getNoteAccess(noteId, user.id);
+  if (!canWriteTrace(access)) return json({ error: 'Forbidden' }, 403);
+
   const { error } = await query(
-    `DELETE FROM "LiveClassNoteCode" nc
-     USING "LiveClassNote" n
-     WHERE nc.id = $1 AND nc.note_id = n.id AND n."userId" = $2`,
-    [id, user.id],
+    `DELETE FROM "LiveClassNoteCode" WHERE id = $1`,
+    [id],
   );
   if (error) return json({ error: error.message }, 500);
   return json({ ok: true });

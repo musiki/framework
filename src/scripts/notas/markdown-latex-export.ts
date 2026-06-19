@@ -1,4 +1,5 @@
 type LatexListState = 'itemize' | 'enumerate';
+type LatexCalloutKind = 'tip' | 'info' | 'summary';
 
 export type LatexTemplateId = 'direct' | 'asignacion-seminario' | 'tesina-seminario';
 
@@ -84,6 +85,33 @@ function remoteImageLatex(alt: string, url: string, index: number): string {
   ].join('\n');
 }
 
+function calloutTitle(kind: LatexCalloutKind, title: string): string {
+  const explicit = String(title || '').trim();
+  if (explicit) return explicit;
+  if (kind === 'tip') return 'Tip';
+  if (kind === 'info') return 'Info';
+  return 'Resumen';
+}
+
+function calloutOptions(kind: LatexCalloutKind): string {
+  if (kind === 'tip') return 'colback=green!5,colframe=green!45!black';
+  if (kind === 'info') return 'colback=blue!5,colframe=blue!45!black';
+  return 'colback=gray!10,colframe=black';
+}
+
+function closeCallout(
+  lines: string[],
+  callout: { kind: LatexCalloutKind; title: string; content: string[] } | null,
+): null {
+  if (!callout) return null;
+  const body = markdownToLatexBody(callout.content.join('\n'));
+  lines.push(`\\begin{musikinotebox}[${calloutOptions(callout.kind)}]{${escapeLatex(calloutTitle(callout.kind, callout.title))}}`);
+  if (body) lines.push(body);
+  lines.push('\\end{musikinotebox}');
+  lines.push('');
+  return null;
+}
+
 function inlineMarkdownToLatex(markdown: string): string {
   const placeholders: string[] = [];
   const hold = (value: string) => {
@@ -123,6 +151,7 @@ export function markdownToLatexBody(markdown: string): string {
   const output: string[] = [];
 
   let activeList: LatexListState | null = null;
+  let activeCallout: { kind: LatexCalloutKind; title: string; content: string[] } | null = null;
   let inCodeFence = false;
   let codeBuffer: string[] = [];
 
@@ -143,6 +172,15 @@ export function markdownToLatexBody(markdown: string): string {
         codeBuffer = [];
       }
       continue;
+    }
+
+    if (activeCallout) {
+      const quoted = line.match(/^>\s?(.*)$/);
+      if (quoted) {
+        activeCallout.content.push(quoted[1]);
+        continue;
+      }
+      activeCallout = closeCallout(output, activeCallout);
     }
 
     if (inCodeFence) {
@@ -196,6 +234,15 @@ export function markdownToLatexBody(markdown: string): string {
     const quote = line.match(/^>\s?(.+)$/);
     if (quote) {
       activeList = closeList(output, activeList);
+      const callout = quote[1].match(/^\[!(tip|info|summary)\]\s*(.*)$/i);
+      if (callout) {
+        activeCallout = {
+          kind: callout[1].toLowerCase() as LatexCalloutKind,
+          title: callout[2] || '',
+          content: [],
+        };
+        continue;
+      }
       output.push('\\begin{quote}');
       output.push(inlineMarkdownToLatex(quote[1]));
       output.push('\\end{quote}');
@@ -216,7 +263,21 @@ export function markdownToLatexBody(markdown: string): string {
   }
 
   closeList(output, activeList);
+  closeCallout(output, activeCallout);
   return output.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function tcolorboxCommands(): string[] {
+  return [
+    '\\usepackage[most]{tcolorbox}',
+    '\\tcbuselibrary{skins,breakable}',
+    '\\newtcolorbox{musikinotebox}[2][]{%',
+    '  enhanced,breakable,sharp corners,boxrule=0pt,leftrule=2pt,',
+    '  boxsep=1mm,left=2mm,right=2mm,top=1mm,bottom=1mm,',
+    '  colback=gray!8,colframe=black,coltitle=black,fonttitle=\\bfseries,',
+    '  title={#2},#1',
+    '}',
+  ];
 }
 
 function untrefLogoCommands(): string[] {
@@ -237,6 +298,7 @@ function directLatexDocument(body: string, title: string): string {
     '\\usepackage{graphicx}',
     '\\usepackage{enumitem}',
     '\\usepackage{geometry}',
+    ...tcolorboxCommands(),
     '\\geometry{margin=2.7cm}',
     `\\title{${escapeLatex(title || 'Nota')}}`,
     '\\date{}',
@@ -263,6 +325,7 @@ function asignacionSeminarioDocument(body: string, title: string): string {
     '\\usepackage{graphicx}',
     '\\usepackage{enumitem}',
     '\\usepackage{fancyhdr}',
+    ...tcolorboxCommands(),
     ...untrefLogoCommands(),
     '\\fancypagestyle{seminario}{%',
     '  \\fancyhf{}%',
@@ -298,6 +361,7 @@ function tesinaSeminarioDocument(body: string, title: string): string {
     '\\usepackage{setspace}',
     '\\usepackage{titlesec}',
     '\\usepackage{fancyhdr}',
+    ...tcolorboxCommands(),
     '\\geometry{top=2.8cm,bottom=2.8cm,left=3.2cm,right=2.6cm}',
     '\\onehalfspacing',
     ...untrefLogoCommands(),

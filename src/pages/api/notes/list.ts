@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { json } from '../../../lib/forum-server';
 import { resolveLiveManageAccess } from '../../../lib/live/access';
-import { listCourseNotes, notesPreflightError } from '../../../lib/notes-fs';
+import { ensureCourseLatexTemplateNotes, listCourseNotes, notesPreflightError } from '../../../lib/notes-fs';
 
 export const prerender = false;
 
@@ -20,6 +20,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   if (err) return json({ error: err }, 503);
 
   try {
+    ensureCourseLatexTemplateNotes(courseId);
     const notes = listCourseNotes(courseId);
     return json({ notes });
   } catch (e: any) {

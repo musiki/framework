@@ -250,6 +250,10 @@ export interface TraceMarginHandle {
   destroy(): void;
 }
 
+export interface TraceMarginOptions {
+  canWrite?: boolean;
+}
+
 type MonitorSectionKey = 'trace' | 'estructura' | 'zipf' | 'qa';
 
 type MonitorState = {
@@ -1680,6 +1684,7 @@ function renderMargin(
   onCodesChange: (codes: TraceCode[]) => void,
   onModeChange: (mode: TraceMode) => void,
   state: MonitorState,
+  canWriteTrace = true,
 ) {
   traceCol.innerHTML = '';
   analysisCol.innerHTML = '';
@@ -1703,6 +1708,7 @@ function renderMargin(
     autoBtn.className = 'tc-autocode-btn';
     autoBtn.textContent = '⚡ Auto';
     autoBtn.title = 'Generar codificación automática (NLP)';
+    autoBtn.disabled = !canWriteTrace;
     const liveBadge = summary.querySelector('.tc-live-badge');
     if (liveBadge) {
       summary.insertBefore(autoBtn, liveBadge);
@@ -1710,6 +1716,7 @@ function renderMargin(
       summary.appendChild(autoBtn);
     }
     autoBtn.addEventListener('click', async () => {
+      if (!canWriteTrace) return;
       const suggestions = computeSuggestions(analyzedParas, codes);
       if (suggestions.length === 0) {
         const originalText = autoBtn.textContent;
@@ -1859,14 +1866,18 @@ function renderMargin(
     }
     
     roleSelect.value = currentRole ?? '';
+    roleSelect.disabled = !canWriteTrace;
     const updateRoleTooltip = () => {
       const selected = roleSelect.value as RhetoricalRole;
       const meta = selected ? ROLE_PRESENTATION[selected] : null;
-      roleSelect.title = meta?.definition || 'Rol retórico del párrafo';
+      roleSelect.title = !canWriteTrace
+        ? 'Rol retórico del párrafo (solo lectura)'
+        : meta?.definition || 'Rol retórico del párrafo';
     };
     updateRoleTooltip();
     
     roleSelect.addEventListener('change', async () => {
+      if (!canWriteTrace) return;
       updateRoleTooltip();
       const previousValue = currentRole ?? '';
       const nextValue = roleSelect.value;
@@ -1913,6 +1924,7 @@ function renderMargin(
     addBtn.className = 'tc-add-btn';
     addBtn.title = 'Añadir código';
     addBtn.textContent = '⊕';
+    addBtn.disabled = !canWriteTrace;
     head.appendChild(addBtn);
 
     row.appendChild(head);
@@ -2024,6 +2036,7 @@ function renderMargin(
       delBtn.className = 'tc-chip-del';
       delBtn.title = 'Eliminar';
       delBtn.textContent = '×';
+      delBtn.disabled = !canWriteTrace;
       chip.appendChild(delBtn);
 
       chip.addEventListener('click', (e) => {
@@ -2040,6 +2053,7 @@ function renderMargin(
 
       delBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        if (!canWriteTrace) return;
         const origBg = chip.style.background;
         try {
           const res = await fetch(`/api/live/notes/trace?id=${code.id}`, { method: 'DELETE' });
@@ -2064,12 +2078,14 @@ function renderMargin(
     row.appendChild(input);
 
     addBtn.addEventListener('click', () => {
+      if (!canWriteTrace) return;
       input.style.display = 'block';
       input.focus();
     });
 
     input.addEventListener('keydown', async (ev) => {
       if (ev.key === 'Enter') {
+        if (!canWriteTrace) return;
         const label = input.value.trim();
         input.style.display = 'none';
         input.value = '';
@@ -2118,10 +2134,12 @@ export async function mountTraceMargin(
   editorView: EditorView,
   noteId: string,
   panelBodyEl: HTMLElement,
+  options: TraceMarginOptions = {},
 ): Promise<TraceMarginHandle> {
   injectTraceCss();
 
   const paras = segmentParagraphs(editorView.state.doc.toString());
+  const canWriteTrace = options.canWrite !== false;
   let currentCodes: TraceCode[] = [];
   let currentTraces: ParagraphTrace[] = [];
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2202,6 +2220,7 @@ export async function mountTraceMargin(
         void analyzeAndRender(currentCodes);
       },
       monitorState,
+      canWriteTrace,
     );
     syncEditorActivity(editorView, false);
     const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
@@ -2215,7 +2234,9 @@ export async function mountTraceMargin(
   const analyzeAndRender = async (nextCodes: TraceCode[]) => {
     const locallyAnalyzed = await computeLocalTraces(paras, nextCodes, monitorState.mode);
     if (!active) return;
-    const storedTraces = await persistLocalTraces(noteId, locallyAnalyzed);
+    const storedTraces = canWriteTrace
+      ? await persistLocalTraces(noteId, locallyAnalyzed)
+      : locallyAnalyzed;
     if (!active) return;
     rerender(nextCodes, storedTraces);
   };

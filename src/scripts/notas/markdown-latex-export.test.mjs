@@ -34,9 +34,29 @@ test('markdownToLatex keeps remote markdown images as LaTeX asset placeholders',
   assert.match(tex, /\\caption\{Logo UNTREF\}/);
 });
 
+test('markdownToLatex converts markdown callouts to tcolorbox blocks', () => {
+  const tex = markdownToLatex([
+    '> [!tip] Escucha',
+    '> Texto con **énfasis**.',
+    '',
+    '>[!info]',
+    '> Dato.',
+    '',
+    '> [!summary]',
+    '> Cierre.',
+  ].join('\n'), 'Callouts');
+  assert.match(tex, /\\usepackage\[most\]\{tcolorbox\}/);
+  assert.match(tex, /\\newtcolorbox\{musikinotebox\}/);
+  assert.match(tex, /\\begin\{musikinotebox\}\[colback=green!5,colframe=green!45!black\]\{Escucha\}/);
+  assert.match(tex, /Texto con \\textbf\{énfasis\}\./);
+  assert.match(tex, /\\begin\{musikinotebox\}\[colback=blue!5,colframe=blue!45!black\]\{Info\}/);
+  assert.match(tex, /\\begin\{musikinotebox\}\[colback=gray!10,colframe=black\]\{Resumen\}/);
+});
+
 test('markdownToLatex exports asignacion-seminario as an acmart paper template', () => {
   const tex = markdownToLatex('# Resumen\n\nContenido.', 'Entrega', { templateId: 'asignacion-seminario' });
   assert.match(tex, /\\documentclass\[sigconf\]\{acmart\}/);
+  assert.match(tex, /\\usepackage\[most\]\{tcolorbox\}/);
   assert.match(tex, new RegExp(UNTREF_LOGO_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(tex, /\\fancyhead\[L\]\{\\small\\untreflogo\}/);
   assert.match(tex, /\\section\{Resumen\}/);
