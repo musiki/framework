@@ -20,4 +20,11 @@ declare module 'tabulator-tables' {
   export const TabulatorFull: any;
 }
 
+declare module 'superdough' {
+  export function setAudioContext(context: AudioContext): AudioContext;
+  export function getSuperdoughAudioController(): {
+    output: { destinationGain: GainNode };
+  };
+}
+
 export {};

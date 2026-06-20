@@ -8,6 +8,7 @@ import Ribbon from '../components/Ribbon.astro';
 import GraphModal from '../components/GraphModal.astro';
 import Search from '../components/Search.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
+import CoursePodWorkspace from '../components/course/CoursePodWorkspace.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
   getPublicContentStaticPaths,
@@ -5455,6 +5456,7 @@ function renderLessonsTreeHTML(
         ) : null}
       </aside>
 
+      {!isPublicReaderMode && <CoursePodWorkspace />}
     </main>
     <script>
       import { hydrateLazyYouTubeEmbeds } from '../scripts/course/lazy-youtube.ts';

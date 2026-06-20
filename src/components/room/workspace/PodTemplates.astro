@@ -8,6 +8,7 @@ import SonicAnalyzerPanel from '../panels/sonic-analyzer/SonicAnalyzerPanel.astr
 import SonicVisualizerPanel from '../panels/sonic-visualizer/SonicVisualizerPanel.astro';
 import VisualizerPanel from '../panels/visualizer/VisualizerPanel.astro';
 import RecursosPanel from '../panels/recursos/RecursosPanel.astro';
+import StrudelPanel from '../generators/strudel/StrudelPanel.astro';
 
 type Props = {
   presentationOptions?: any[];
@@ -165,6 +166,9 @@ const { presentationOptions = [] } = Astro.props;
       </div>
     </section>
   </div>
+
+  <!-- ST: STRUDEL -->
+  <StrudelPanel />
 
   <!-- Fo: FORO -->
   <div class="musiki-pod" data-pod="forum" data-pod-title="FORO">

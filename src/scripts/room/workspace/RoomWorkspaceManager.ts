@@ -22,6 +22,7 @@ export class RoomWorkspaceManager {
   private onVisualizerInit?: (element: HTMLElement) => PodDisposable;
   private onRecursosInit?: (element: HTMLElement) => PodDisposable;
   private onNotesInit?: (element: HTMLElement) => PodDisposable;
+  private onStrudelInit?: (element: HTMLElement) => PodDisposable;
   private isApplyingRemoteLayout = false;
   private isBatchLayoutUpdate = false;
   private panelCache = new Map<
@@ -218,6 +219,14 @@ export class RoomWorkspaceManager {
       color: "#6fa8dc",
       cat: "comm",
     },
+    {
+      id: "strudel",
+      title: "STRUDEL",
+      icon: "ST",
+      atomic: 23,
+      color: "#F6B26B",
+      cat: "tools",
+    },
   ];
 
   constructor(
@@ -238,6 +247,7 @@ export class RoomWorkspaceManager {
     onVisualizerInit?: (element: HTMLElement) => PodDisposable,
     onRecursosInit?: (element: HTMLElement) => PodDisposable,
     onNotesInit?: (element: HTMLElement) => PodDisposable,
+    onStrudelInit?: (element: HTMLElement) => PodDisposable,
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -256,6 +266,7 @@ export class RoomWorkspaceManager {
     this.onVisualizerInit = onVisualizerInit;
     this.onRecursosInit = onRecursosInit;
     this.onNotesInit = onNotesInit;
+    this.onStrudelInit = onStrudelInit;
   }
 
   private rememberPodController(panelId: string, controller: PodDisposable) {
@@ -421,6 +432,16 @@ export class RoomWorkspaceManager {
               if (id === "notes" && this.onNotesInit) {
                 controller = this.onNotesInit(element);
                 this.rememberPodController(options.id, controller);
+              }
+              if (id === "strudel" && this.onStrudelInit) {
+                controller = this.onStrudelInit(element);
+                this.rememberPodController(options.id, controller);
+                const transport = shell.querySelector<HTMLButtonElement>("[data-strudel-transport]");
+                transport?.addEventListener("pointerdown", (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (typeof controller?.toggle === "function") void controller.toggle();
+                });
               }
               if (id === "graph") {
                 delete element.dataset.graphPodReady;
@@ -995,6 +1016,20 @@ export class RoomWorkspaceManager {
 
     const actions = document.createElement("div");
     actions.className = "pod-diy-actions";
+
+    if (element?.dataset.pod === "strudel") {
+      const transportBtn = document.createElement("button");
+      transportBtn.className = "pod-diy-btn pod-diy-btn--strudel-transport";
+      transportBtn.type = "button";
+      transportBtn.dataset.strudelTransport = "";
+      transportBtn.dataset.playing = "false";
+      transportBtn.textContent = "▶";
+      transportBtn.title = "Play Strudel";
+      transportBtn.setAttribute("aria-label", "Play Strudel");
+      transportBtn.setAttribute("aria-pressed", "false");
+      transportBtn.addEventListener("mousedown", (event) => event.stopPropagation());
+      actions.appendChild(transportBtn);
+    }
 
     const closeBtn = document.createElement("button");
     closeBtn.className = "pod-diy-btn pod-diy-btn--close";

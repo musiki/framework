@@ -179,6 +179,11 @@ export type PersistedRoomSetup = {
   mixerSynthReverbSend?: number;
   mixerIncomingDelaySend?: number;
   mixerIncomingReverbSend?: number;
+  mixerStrudelGain?: number;
+  mixerStrudelDelaySend?: number;
+  mixerStrudelMuted?: boolean;
+  mixerStrudelPan?: number;
+  mixerStrudelReverbSend?: number;
   videoBypassed?: boolean;
   videoBrightness?: number;
   videoContrast?: number;

@@ -14,7 +14,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
     id="course-pod-workspace-root"
     class="dockview-theme-dark"
     data-workspace-root
-    data-no-default-layout
+    data-no-default-layout="true"
   ></div>
   <PodTemplates />
 </div>
@@ -58,9 +58,9 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
 
   .course-pod-workspace-close {
     position: absolute;
-    top: 6px;
+    bottom: 8px;
     right: 8px;
-    z-index: 10;
+    z-index: 1000;
     width: 28px;
     height: 28px;
     border: 1px solid var(--c-border);
@@ -111,6 +111,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
   import { HyperpianoController } from '../../scripts/room/hyperpiano/HyperpianoController';
   import { SonicAnalyzerController } from '../../scripts/room/sonic-analyzer';
   import { SonicVisualizerController } from '../../scripts/room/sonic-visualizer';
+  import { StrudelController } from '../../scripts/room/strudel/StrudelController';
 
   function boot() {
     const overlay = document.getElementById('course-pod-workspace') as HTMLElement | null;
@@ -118,6 +119,8 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
 
     const root = document.getElementById('course-pod-workspace-root') as HTMLElement | null;
     if (!root) return;
+    if (overlay.dataset.booted === 'true') return;
+    overlay.dataset.booted = 'true';
 
     let manager: RoomWorkspaceManager | null = null;
     let isReady = false;
@@ -186,6 +189,21 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
       return { dispose: () => controller.dispose() };
     };
 
+    const ensureCourseAudio = async () => {
+      if (!courseAudioCtx) {
+        courseAudioCtx = new AudioContext();
+        courseOutputGain = courseAudioCtx.createGain();
+        courseOutputGain.connect(courseAudioCtx.destination);
+      }
+      return courseAudioCtx;
+    };
+
+    const onStrudelInit = (container: HTMLElement) => new StrudelController({
+      container,
+      getAudioContext: ensureCourseAudio,
+      getOutputNode: () => courseOutputGain,
+    });
+
     function ensureInit() {
       if (manager) return;
       manager = new RoomWorkspaceManager(
@@ -195,6 +213,8 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
         undefined, undefined, undefined, undefined,  // clase, chat, orf, score
         onSonicAnalyzerInit,
         onSonicVisualizerInit,
+        undefined, undefined, undefined, // visualizer, recursos, notes
+        onStrudelInit,
       );
       manager.init();
       // RoomWorkspaceManager.init() defers 200ms; give extra buffer
@@ -228,6 +248,7 @@ import PodTemplates from '../room/workspace/PodTemplates.astro';
     window.addEventListener('musiki:open-hyperpiano', () => open('hyperpiano'));
     window.addEventListener('musiki:open-sa', () => open('sonic-analyzer'));
     window.addEventListener('musiki:open-sv', () => open('sonic-visualizer'));
+    window.addEventListener('musiki:open-strudel', () => open('strudel'));
 
     const closeBtn = document.getElementById('course-pod-workspace-close');
     if (closeBtn && !closeBtn.dataset.bound) {

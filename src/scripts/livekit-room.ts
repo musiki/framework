@@ -30,6 +30,7 @@ import { SonicVisualizerController } from './room/sonic-visualizer';
 import { VisualizerController } from './room/visualizer';
 import { RecursosController } from './room/recursos';
 import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
+import { StrudelController } from './room/strudel/StrudelController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
 import { buildRoomQueryUrl } from './room/layout';
@@ -3760,6 +3761,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     mixerHpReverbSendKnob,
     mixerHpDelaySendInput,
     mixerHpDelaySendKnob,
+    mixerStrudelGainInput,
+    mixerStrudelMeter,
+    mixerStrudelMuteButton,
+    mixerStrudelPanInput,
+    mixerStrudelPanKnob,
+    mixerStrudelReverbSendInput,
+    mixerStrudelReverbSendKnob,
+    mixerStrudelDelaySendInput,
+    mixerStrudelDelaySendKnob,
     mixerMasterGainInput,
     mixerMasterMeter,
     mixerMasterMuteButton,
@@ -4258,6 +4268,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let hpAudioGroupMeterData: Uint8Array | null = null;
   let hpAudioReverbSendNode: GainNode | null = null;
   let hpAudioDelaySendNode: GainNode | null = null;
+  let strudelAudioGroupGainNode: GainNode | null = null;
+  let strudelAudioGroupPannerNode: StereoPannerNode | null = null;
+  let strudelAudioGroupAnalyser: AnalyserNode | null = null;
+  let strudelAudioGroupMeterData: Uint8Array | null = null;
+  let strudelAudioReverbSendNode: GainNode | null = null;
+  let strudelAudioDelaySendNode: GainNode | null = null;
   let fmSynthMonitorSource: MediaStreamAudioSourceNode | null = null;
   let incomingAudioReverbConvolverNode: ConvolverNode | null = null;
   let incomingAudioReverbReturnGainNode: GainNode | null = null;
@@ -4302,6 +4318,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let mixerHpDelaySend = clampNumber(persistedSetup.mixerHpDelaySend, 0, 1, 0, 2);
   let mixerHpMuted = Boolean(persistedSetup.mixerHpMuted);
   let mixerHpPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerHpPan) || 0));
+  let mixerStrudelGain = normalizeMasterGain(persistedSetup.mixerStrudelGain, 0.5);
+  let mixerStrudelReverbSend = clampNumber(persistedSetup.mixerStrudelReverbSend, 0, 1, 0, 2);
+  let mixerStrudelDelaySend = clampNumber(persistedSetup.mixerStrudelDelaySend, 0, 1, 0, 2);
+  let mixerStrudelMuted = Boolean(persistedSetup.mixerStrudelMuted);
+  let mixerStrudelPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerStrudelPan) || 0));
   let mixerMasterGain = normalizeMasterGain(persistedSetup.mixerMasterGain, 0.5);
   let mixerMasterMuted = Boolean(persistedSetup.mixerMasterMuted);
   let mixerMasterPan = Math.min(1, Math.max(-1, Number(persistedSetup.mixerMasterPan) || 0));
@@ -7227,6 +7248,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     if (mixerHpDelaySendInput instanceof HTMLInputElement) {
       mixerHpDelaySendInput.value = mixerHpDelaySend.toFixed(2);
     }
+    if (mixerStrudelGainInput instanceof HTMLInputElement) {
+      mixerStrudelGainInput.value = mixerStrudelGain.toFixed(2);
+    }
+    if (mixerStrudelPanInput instanceof HTMLInputElement) {
+      mixerStrudelPanInput.value = mixerStrudelPan.toFixed(2);
+    }
+    if (mixerStrudelReverbSendInput instanceof HTMLInputElement) {
+      mixerStrudelReverbSendInput.value = mixerStrudelReverbSend.toFixed(2);
+    }
+    if (mixerStrudelDelaySendInput instanceof HTMLInputElement) {
+      mixerStrudelDelaySendInput.value = mixerStrudelDelaySend.toFixed(2);
+    }
     if (mixerMasterGainInput instanceof HTMLInputElement) {
       mixerMasterGainInput.value = mixerMasterGain.toFixed(2);
     }
@@ -7249,6 +7282,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mixerHpMuteButton.dataset.active = mixerHpMuted ? 'false' : 'true';
       mixerHpMuteButton.setAttribute('aria-pressed', mixerHpMuted ? 'true' : 'false');
     }
+    if (mixerStrudelMuteButton instanceof HTMLButtonElement) {
+      mixerStrudelMuteButton.dataset.active = mixerStrudelMuted ? 'false' : 'true';
+      mixerStrudelMuteButton.setAttribute('aria-pressed', mixerStrudelMuted ? 'true' : 'false');
+    }
     if (mixerMasterMuteButton instanceof HTMLButtonElement) {
       mixerMasterMuteButton.dataset.active = mixerMasterMuted ? 'false' : 'true';
       mixerMasterMuteButton.setAttribute('aria-pressed', mixerMasterMuted ? 'true' : 'false');
@@ -7258,6 +7295,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     syncPanKnob(mixerBallPanKnob, mixerBallPan);
     syncPanKnob(mixerIncomingPanKnob, mixerIncomingPan);
     syncPanKnob(mixerHpPanKnob, mixerHpPan);
+    syncPanKnob(mixerStrudelPanKnob, mixerStrudelPan);
     syncPanKnob(mixerMasterPanKnob, mixerMasterPan);
     syncValueKnob(mixerSynthReverbSendKnob, mixerSynthReverbSendInput, mixerSynthReverbSend);
     syncValueKnob(mixerSynthDelaySendKnob, mixerSynthDelaySendInput, mixerSynthDelaySend);
@@ -7267,6 +7305,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     syncValueKnob(mixerIncomingDelaySendKnob, mixerIncomingDelaySendInput, mixerIncomingDelaySend);
     syncValueKnob(mixerHpReverbSendKnob, mixerHpReverbSendInput, mixerHpReverbSend);
     syncValueKnob(mixerHpDelaySendKnob, mixerHpDelaySendInput, mixerHpDelaySend);
+    syncValueKnob(mixerStrudelReverbSendKnob, mixerStrudelReverbSendInput, mixerStrudelReverbSend);
+    syncValueKnob(mixerStrudelDelaySendKnob, mixerStrudelDelaySendInput, mixerStrudelDelaySend);
 
     fmSynth.setChannelGain(mixerSynthMuted ? 0 : mixerSynthGain);
     fmSynth.setChannelPan(mixerSynthPan);
@@ -7288,6 +7328,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     if (hpAudioDelaySendNode) {
         hpAudioDelaySendNode.gain.setTargetAtTime(mixerHpDelaySend, incomingAudioContext!.currentTime, 0.03);
+    }
+    if (strudelAudioGroupGainNode && incomingAudioContext) {
+      strudelAudioGroupGainNode.gain.setTargetAtTime(
+        mixerStrudelMuted ? 0 : mixerStrudelGain,
+        incomingAudioContext.currentTime,
+        0.03,
+      );
+    }
+    if (strudelAudioGroupPannerNode && incomingAudioContext) {
+      strudelAudioGroupPannerNode.pan.setTargetAtTime(mixerStrudelPan, incomingAudioContext.currentTime, 0.03);
+    }
+    if (strudelAudioReverbSendNode && incomingAudioContext) {
+      strudelAudioReverbSendNode.gain.setTargetAtTime(mixerStrudelReverbSend, incomingAudioContext.currentTime, 0.03);
+    }
+    if (strudelAudioDelaySendNode && incomingAudioContext) {
+      strudelAudioDelaySendNode.gain.setTargetAtTime(mixerStrudelDelaySend, incomingAudioContext.currentTime, 0.03);
     }
     gravityBallRenderer?.setAudioChannelGain(
       Math.min(1, Math.max(0, (mixerBallMuted ? 0 : mixerBallGain) * (mixerMasterMuted ? 0 : mixerMasterGain))),
@@ -7394,12 +7450,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const ballLevel = gravityBallRenderer?.getAudioMeterLevel() || 0;
     const incomingLevel = readAnalyserLevel(incomingAudioGroupAnalyser, incomingAudioGroupMeterData, 4.2);
     const hpLevel = readAnalyserLevel(hpAudioGroupAnalyser, hpAudioGroupMeterData, 4.2);
+    const strudelLevel = readAnalyserLevel(strudelAudioGroupAnalyser, strudelAudioGroupMeterData, 4.2);
     const incomingMasterLevel = readAnalyserLevel(incomingAudioMasterAnalyser, incomingAudioMasterMeterData, 4.2);
     setMixerMeterLevel(mixerSynthMeter, synthLevels.channel);
     setMixerMeterLevel(mixerBallMeter, ballLevel);
     setMixerMeterLevel(mixerIncomingMeter, incomingLevel);
     setMixerMeterLevel(mixerHpMeter, hpLevel);
-    setMixerMeterLevel(mixerMasterMeter, Math.max(synthLevels.master, ballLevel, incomingMasterLevel, hpLevel));
+    setMixerMeterLevel(mixerStrudelMeter, strudelLevel);
+    setMixerMeterLevel(mixerMasterMeter, Math.max(synthLevels.master, ballLevel, incomingMasterLevel, hpLevel, strudelLevel));
     mixerMeterAnimationId = window.requestAnimationFrame(renderMixerMeters);
   };
 
@@ -7419,6 +7477,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     setMixerMeterLevel(mixerBallMeter, 0);
     setMixerMeterLevel(mixerIncomingMeter, 0);
     setMixerMeterLevel(mixerHpMeter, 0);
+    setMixerMeterLevel(mixerStrudelMeter, 0);
     setMixerMeterLevel(mixerMasterMeter, 0);
   };
 
@@ -7585,6 +7644,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       hpAudioGroupAnalyser.fftSize = 256;
       hpAudioGroupMeterData = new Uint8Array(hpAudioGroupAnalyser.frequencyBinCount);
 
+      strudelAudioGroupGainNode = incomingAudioContext.createGain();
+      strudelAudioGroupPannerNode = incomingAudioContext.createStereoPanner();
+      strudelAudioReverbSendNode = incomingAudioContext.createGain();
+      strudelAudioDelaySendNode = incomingAudioContext.createGain();
+      strudelAudioGroupAnalyser = incomingAudioContext.createAnalyser();
+      strudelAudioGroupAnalyser.fftSize = 256;
+      strudelAudioGroupMeterData = new Uint8Array(strudelAudioGroupAnalyser.frequencyBinCount);
+
       incomingAudioReverbConvolverNode = incomingAudioContext.createConvolver();
       incomingAudioReverbConvolverNode.buffer = createImpulseResponseBuffer(
         incomingAudioContext,
@@ -7622,14 +7689,22 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       hpAudioGroupGainNode.connect(hpAudioReverbSendNode);
       hpAudioGroupGainNode.connect(hpAudioDelaySendNode);
 
+      strudelAudioGroupGainNode.connect(strudelAudioGroupPannerNode);
+      strudelAudioGroupPannerNode.connect(incomingAudioMasterGainNode);
+      strudelAudioGroupPannerNode.connect(strudelAudioGroupAnalyser);
+      strudelAudioGroupGainNode.connect(strudelAudioReverbSendNode);
+      strudelAudioGroupGainNode.connect(strudelAudioDelaySendNode);
+
       incomingAudioGroupGainNode.connect(incomingAudioGroupPannerNode);
       incomingAudioGroupPannerNode.connect(incomingAudioDryGainNode);
       incomingAudioGroupPannerNode.connect(incomingAudioReverbSendNode);
       incomingAudioReverbSendNode.connect(incomingAudioReverbConvolverNode);
       hpAudioReverbSendNode.connect(incomingAudioReverbConvolverNode);
+      strudelAudioReverbSendNode.connect(incomingAudioReverbConvolverNode);
       incomingAudioReverbConvolverNode.connect(incomingAudioReverbReturnGainNode);
       incomingAudioGroupPannerNode.connect(incomingAudioDelaySendNode);
       hpAudioDelaySendNode.connect(incomingAudioDelayNode);
+      strudelAudioDelaySendNode.connect(incomingAudioDelayNode);
       incomingAudioDelaySendNode.connect(incomingAudioDelayNode);
       incomingAudioDelayNode.connect(incomingAudioDelayFilterNode);
       incomingAudioDelayFilterNode.connect(incomingAudioDelayReturnGainNode);
@@ -8232,6 +8307,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       mixerHpMuted,
       mixerHpPan,
       mixerHpReverbSend,
+      mixerStrudelGain,
+      mixerStrudelDelaySend,
+      mixerStrudelMuted,
+      mixerStrudelPan,
+      mixerStrudelReverbSend,
       mixerSynthGain,
       mixerSynthDelaySend,
       mixerSynthMuted,
@@ -11236,6 +11316,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return hp;
     };
 
+    const onStrudelInit = (container: HTMLElement) => new StrudelController({
+      container,
+      getAudioContext: ensureIncomingAudioContext,
+      getOutputNode: () => strudelAudioGroupGainNode,
+      onCodeChange: (code) => {
+        if (localRole !== 'teacher') return;
+        void publishMessage({ type: 'strudel-live', code });
+      },
+      onTransportChange: (playing, code) => {
+        if (localRole !== 'teacher') return;
+        void publishMessage({ type: 'strudel-transport', playing, code });
+      },
+    });
+
     const onLilypondInit = (container: HTMLElement) => {
       lilypondLive.init(container, localRole === 'teacher', setStatus);
       if (localRole === 'teacher') reinforceLilypondSession([180, 900]);
@@ -11713,7 +11807,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onSonicVisualizerInit,
     onVisualizerInit,
     onRecursosInit,
-    onNotesInit
+    onNotesInit,
+    onStrudelInit,
   );
 
 
@@ -13226,6 +13321,46 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         else ctrl.removeNote(message.note);
       });
       
+      return;
+    }
+
+    if (message.type === 'strudel-transport') {
+      if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+
+      const applyTransport = () => {
+        const controllers = workspaceManager.getActivePods()
+          .map((pod) => pod.controller)
+          .filter((controller): controller is StrudelController => controller instanceof StrudelController);
+        controllers.forEach((controller) => {
+          void controller.setPlaying(message.playing, message.code, false);
+        });
+        return controllers.length > 0;
+      };
+
+      if (!applyTransport()) {
+        workspaceManager.togglePod('strudel', true);
+        window.setTimeout(applyTransport, 180);
+      }
+      return;
+    }
+
+    if (message.type === 'strudel-live') {
+      if (readParticipantRole(room, participant, localRole) !== 'teacher') return;
+
+      const applyCode = () => {
+        const controllers = workspaceManager.getActivePods()
+          .map((pod) => pod.controller)
+          .filter((controller): controller is StrudelController => controller instanceof StrudelController);
+        controllers.forEach((controller) => {
+          void controller.setCode(message.code);
+        });
+        return controllers.length > 0;
+      };
+
+      if (!applyCode()) {
+        workspaceManager.togglePod('strudel', true);
+        window.setTimeout(applyCode, 180);
+      }
       return;
     }
 
@@ -14913,9 +15048,45 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     persistSetupState();
   });
 
+  bindMixerRange(mixerStrudelGainInput, () => {
+    if (!(mixerStrudelGainInput instanceof HTMLInputElement)) return;
+    mixerStrudelGain = normalizeMasterGain(mixerStrudelGainInput.value, mixerStrudelGain);
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerStrudelPanInput, () => {
+    if (!(mixerStrudelPanInput instanceof HTMLInputElement)) return;
+    mixerStrudelPan = Math.min(1, Math.max(-1, Number(mixerStrudelPanInput.value) || 0));
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerStrudelReverbSendInput, () => {
+    if (!(mixerStrudelReverbSendInput instanceof HTMLInputElement)) return;
+    mixerStrudelReverbSend = clampNumber(mixerStrudelReverbSendInput.value, 0, 1, mixerStrudelReverbSend);
+    applyMixerState();
+    persistSetupState();
+  });
+
+  bindMixerRange(mixerStrudelDelaySendInput, () => {
+    if (!(mixerStrudelDelaySendInput instanceof HTMLInputElement)) return;
+    mixerStrudelDelaySend = clampNumber(mixerStrudelDelaySendInput.value, 0, 1, mixerStrudelDelaySend);
+    applyMixerState();
+    persistSetupState();
+  });
+
   if (mixerHpMuteButton instanceof HTMLButtonElement) {
     mixerHpMuteButton.addEventListener('click', () => {
       mixerHpMuted = !mixerHpMuted;
+      applyMixerState();
+      persistSetupState();
+    });
+  }
+
+  if (mixerStrudelMuteButton instanceof HTMLButtonElement) {
+    mixerStrudelMuteButton.addEventListener('click', () => {
+      mixerStrudelMuted = !mixerStrudelMuted;
       applyMixerState();
       persistSetupState();
     });
@@ -15047,6 +15218,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       return;
     }
 
+    if (scope === 'strudel') {
+      mixerStrudelPan = 0;
+      mixerStrudelGain = 0;
+      mixerStrudelReverbSend = 0;
+      mixerStrudelDelaySend = 0;
+      mixerStrudelMuted = false;
+      applyMixerState();
+      persistSetupState();
+      setStatus('STRD reset.');
+      return;
+    }
+
     if (scope === 'video') {
       videoMix = createNeutralVideoMix();
       void handleVideoMixerInput();
@@ -15109,6 +15292,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   bindRangeKnob(mixerBallPanKnob, mixerBallPanInput, 0);
   bindRangeKnob(mixerIncomingPanKnob, mixerIncomingPanInput, 0);
   bindRangeKnob(mixerHpPanKnob, mixerHpPanInput, 0);
+  bindRangeKnob(mixerStrudelPanKnob, mixerStrudelPanInput, 0);
   bindRangeKnob(mixerMasterPanKnob, mixerMasterPanInput, 0);
   bindRangeKnob(mixerSynthReverbSendKnob, mixerSynthReverbSendInput, 0);
   bindRangeKnob(mixerSynthDelaySendKnob, mixerSynthDelaySendInput, 0);
@@ -15118,6 +15302,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   bindRangeKnob(mixerIncomingDelaySendKnob, mixerIncomingDelaySendInput, 0);
   bindRangeKnob(mixerHpReverbSendKnob, mixerHpReverbSendInput, 0);
   bindRangeKnob(mixerHpDelaySendKnob, mixerHpDelaySendInput, 0);
+  bindRangeKnob(mixerStrudelReverbSendKnob, mixerStrudelReverbSendInput, 0);
+  bindRangeKnob(mixerStrudelDelaySendKnob, mixerStrudelDelaySendInput, 0);
   bindRangeKnob(mixerVideoLumaKnob, mixerVideoLumaInput, 0);
   bindRangeKnob(mixerVideoTintKnob, mixerVideoTintInput, 0);
   bindRangeKnob(mixerVideoSaturationKnob, mixerVideoSaturationInput, 0);

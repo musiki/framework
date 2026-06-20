@@ -178,6 +178,15 @@ export type ConferenceMessage =
       action: 'on' | 'off';
     }
   | {
+      type: 'strudel-transport';
+      playing: boolean;
+      code?: string;
+    }
+  | {
+      type: 'strudel-live';
+      code: string;
+    }
+  | {
       type: 'lilypond-setup';
       allowStudents: boolean;
     }
@@ -726,6 +735,24 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         note: Number((parsed as { note: number }).note) || 0,
         velocity: Number((parsed as { velocity: number }).velocity) || 0,
         action: action === 'on' ? 'on' : 'off',
+      };
+    }
+
+    if (parsed.type === 'strudel-transport') {
+      const rawCode = (parsed as { code?: unknown }).code;
+      return {
+        type: 'strudel-transport',
+        playing: Boolean((parsed as { playing?: boolean }).playing),
+        code: typeof rawCode === 'string' ? rawCode.slice(0, 50_000) : undefined,
+      };
+    }
+
+    if (parsed.type === 'strudel-live') {
+      const code = (parsed as { code?: unknown }).code;
+      if (typeof code !== 'string') return null;
+      return {
+        type: 'strudel-live',
+        code: code.slice(0, 50_000),
       };
     }
 
