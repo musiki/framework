@@ -40,10 +40,21 @@
   }
 
   .strudel-pod-host > div:not(.strudel-pod-status) {
+    position: relative;
+    z-index: 1;
     flex: 1;
     min-height: 0;
     overflow: hidden;
     background: transparent !important;
+  }
+
+  .strudel-pod-host > #hydra-canvas {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: none !important;
   }
 
   .strudel-pod-host .cm-editor,

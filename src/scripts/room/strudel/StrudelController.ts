@@ -17,6 +17,10 @@ type StrudelEditorElement = HTMLElement & {
 
 type StrudelConsoleLevel = 'ready' | 'info' | 'error';
 
+type HydraInstance = {
+  setResolution?: (width: number, height: number) => void;
+};
+
 type StrudelControllerOptions = {
   container: HTMLElement;
   getAudioContext?: () => AudioContext | null | Promise<AudioContext | null>;
@@ -40,6 +44,8 @@ export class StrudelController {
   private playing = false;
   private disposed = false;
   private routedOutput: AudioNode | null = null;
+  private hydraResizeObserver: ResizeObserver | null = null;
+  private clearHydra: (() => void) | null = null;
   private codeBroadcastTimer = 0;
   private lastBroadcastCode = '';
 
@@ -78,7 +84,7 @@ export class StrudelController {
     const detail = event.detail ?? {};
     const type = typeof detail.type === 'string' ? detail.type.toLowerCase() : '';
     const message = typeof detail.message === 'string' ? detail.message : '';
-    if (!message || (type && type !== 'error' && type !== 'warning' && type !== 'warn')) return;
+    if (!message || !['error', 'warning', 'warn'].includes(type)) return;
     this.writeConsole(message, type === 'error' ? 'error' : 'info');
   };
 
@@ -105,7 +111,13 @@ export class StrudelController {
       await this.waitForEditor(editor);
       this.editor = editor.editor ?? null;
       await this.editor?.prebaked;
-      const xen = await import('@strudel/xen');
+      const globalScope = globalThis as typeof globalThis & Record<string, unknown>;
+      globalScope.global = globalThis;
+      const [xen, hydra, hydraSynth] = await Promise.all([
+        import('@strudel/xen'),
+        import('@strudel/hydra'),
+        import('hydra-synth'),
+      ]);
       const evalScope = (globalThis as typeof globalThis & {
         evalScope?: (...modules: unknown[]) => Promise<unknown>;
       }).evalScope;
@@ -113,9 +125,15 @@ export class StrudelController {
         register?: (name: string, transform: (value: unknown, pattern: unknown) => unknown) => unknown;
       }).register;
       if (!evalScope || !register) throw new Error('Strudel evaluation scope is unavailable');
-      await evalScope(xen);
+      globalScope.Hydra = hydraSynth.default;
+      const initHydra = async (options: Record<string, unknown> = {}) => {
+        const instance = await hydra.initHydra({ src: import.meta.url, ...options }) as HydraInstance;
+        this.mountHydraCanvas(instance, Number(options.pixelRatio) || 1);
+        return instance;
+      };
+      this.clearHydra = hydra.clearHydra;
+      await evalScope({ ...hydra, initHydra }, xen);
       // Attach Xen to the REPL's active Pattern class even when Vite prebundles it with an isolated core.
-      const globalScope = globalThis as typeof globalThis & Record<string, unknown>;
       globalScope.xen = register('xen', (scale, pattern) => xen.xen(scale, pattern));
       globalScope.tuning = register('tuning', (scale, pattern) => xen.tuning(scale, pattern));
       this.routeOutput(superdough);
@@ -159,6 +177,34 @@ export class StrudelController {
       this.writeConsole(error, 'error');
       console.warn('[StrudelController] could not route output to STRD mixer channel', error);
     }
+  }
+
+  private mountHydraCanvas(instance: HydraInstance, pixelRatio: number) {
+    const host = this.container.querySelector<HTMLElement>('[data-strudel-host]');
+    const canvas = document.getElementById('hydra-canvas') as HTMLCanvasElement | null;
+    if (!host || !canvas) return;
+
+    host.prepend(canvas);
+    canvas.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'z-index:0',
+      'width:100%',
+      'height:100%',
+      'pointer-events:none',
+      'image-rendering:pixelated',
+    ].join(';');
+
+    const resize = () => {
+      const bounds = host.getBoundingClientRect();
+      const width = Math.max(1, Math.round(bounds.width * pixelRatio));
+      const height = Math.max(1, Math.round(bounds.height * pixelRatio));
+      instance.setResolution?.(width, height);
+    };
+    this.hydraResizeObserver?.disconnect();
+    this.hydraResizeObserver = new ResizeObserver(resize);
+    this.hydraResizeObserver.observe(host);
+    resize();
   }
 
   private handleEditorUpdate = (event: CustomEvent<Record<string, unknown>>) => {
@@ -211,11 +257,13 @@ export class StrudelController {
         await editor.evaluate(true);
       } else {
         await editor.stop();
+        this.stopHydra();
         this.writeConsole('stopped', 'ready');
       }
     } catch (error) {
       this.playing = false;
       this.syncTransport();
+      this.stopHydra();
       this.writeConsole(error, 'error');
       console.error('[StrudelController] transport failed', error);
     }
@@ -260,6 +308,12 @@ export class StrudelController {
     this.consoleElement.dataset.level = level;
   }
 
+  private stopHydra() {
+    this.hydraResizeObserver?.disconnect();
+    this.hydraResizeObserver = null;
+    this.clearHydra?.();
+  }
+
   dispose() {
     this.disposed = true;
     window.clearTimeout(this.codeBroadcastTimer);
@@ -268,6 +322,8 @@ export class StrudelController {
     document.removeEventListener('strudel.log', this.handleStrudelLog as EventListener);
     this.editorElement?.removeEventListener('update', this.handleEditorUpdate as EventListener);
     void this.editor?.stop();
+    this.stopHydra();
+    this.clearHydra = null;
     if (this.routedOutput) {
       try { this.routedOutput.disconnect(); } catch { /* already disconnected */ }
     }
