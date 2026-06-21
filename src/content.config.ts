@@ -10,6 +10,7 @@ const courseNoteTypes = [
 	'lesson-presentation',
 	'app-dataviewjs',
 	'public-note',
+	'latex-template',
 	'info',
 	'concept',
 	'glossary',
