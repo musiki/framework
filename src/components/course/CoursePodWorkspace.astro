@@ -1,264 +1,209 @@
 ---
-import PodTemplates from '../room/workspace/PodTemplates.astro';
+import StrudelPanel from '../room/generators/strudel/StrudelPanel.astro';
 ---
 
-<div class="course-pod-workspace" id="course-pod-workspace" aria-hidden="true">
-  <button
-    type="button"
-    class="course-pod-workspace-close"
-    id="course-pod-workspace-close"
-    aria-label="Cerrar workspace (Esc)"
-    title="Cerrar (Esc)"
-  >×</button>
-  <div
-    id="course-pod-workspace-root"
-    class="dockview-theme-dark"
-    data-workspace-root
-    data-no-default-layout="true"
-  ></div>
-  <PodTemplates />
+<div class="course-strudel-workspace" id="course-strudel-workspace" aria-hidden="true">
+  <section class="course-strudel-shell">
+    <header class="course-strudel-header">
+      <span class="course-strudel-title">STRUDEL</span>
+      <div class="course-strudel-actions">
+        <button
+          type="button"
+          class="course-strudel-header-btn course-strudel-transport"
+          data-strudel-transport
+          data-playing="false"
+          aria-label="Play Strudel"
+          aria-pressed="false"
+          title="Play Strudel"
+        >▶</button>
+        <button
+          type="button"
+          class="course-strudel-header-btn course-strudel-close"
+          data-course-strudel-close
+          aria-label="Cerrar Strudel (Esc)"
+          title="Cerrar (Esc)"
+        >×</button>
+      </div>
+    </header>
+    <div class="course-strudel-body">
+      <StrudelPanel />
+    </div>
+  </section>
 </div>
 
 <style>
-  .course-pod-workspace {
-    /* Bridge conference CSS vars to site theme */
-    --conference-fg: var(--c-fg);
-    --conference-muted: color-mix(in srgb, var(--c-fg) 58%, transparent);
-    --conference-dim: color-mix(in srgb, var(--c-fg) 32%, transparent);
-    --conference-line: var(--c-border);
-    --conference-line-soft: color-mix(in srgb, var(--c-fg) 6%, transparent);
-    --conference-accent: var(--c-link, #2a87ff);
-    --conference-accent-hi: #76d3ff;
-    --conference-green: #25cf6b;
-    --conference-red: #ff4d4d;
-    --conference-font-ui: inherit;
-    --conference-font-body: inherit;
-    --conference-font-caption: inherit;
-
+  .course-strudel-workspace {
     position: fixed;
     inset: 0 0 0 var(--ribbon-width, 44px);
     z-index: 30;
+    display: flex;
     pointer-events: none;
     transform: translateY(100%);
     transition: transform 0.25s ease;
     background: var(--c-bg);
-    display: flex;
-    flex-direction: column;
-  }
-
-  .course-pod-workspace.is-open {
-    transform: translateY(0);
-    pointer-events: auto;
-  }
-
-  #course-pod-workspace-root {
-    flex: 1;
-    min-height: 0;
-  }
-
-  .course-pod-workspace-close {
-    position: absolute;
-    bottom: 8px;
-    right: 8px;
-    z-index: 1000;
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--c-border);
-    border-radius: 4px;
-    background: var(--c-bg);
     color: var(--c-fg);
-    font-size: 1rem;
+  }
+
+  .course-strudel-workspace.is-open {
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .course-strudel-shell {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--c-bg);
+  }
+
+  .course-strudel-header {
+    display: flex;
+    height: 22px;
+    flex: 0 0 22px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    background: transparent;
+  }
+
+  .course-strudel-title {
+    flex: 1;
+    overflow: hidden;
+    color: #f6b26b;
+    font-size: 0.5rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
     line-height: 1;
-    cursor: pointer;
+    opacity: 0.75;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .course-strudel-actions {
     display: flex;
     align-items: center;
+    gap: 4px;
+  }
+
+  .course-strudel-header-btn {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
     justify-content: center;
-    opacity: 0.55;
-    transition: opacity 0.15s;
-  }
-  .course-pod-workspace-close:hover { opacity: 1; }
-
-  /* Override hardcoded dark colors from conference components */
-  .course-pod-workspace .pod-diy-shell { background: var(--c-bg) !important; }
-  .course-pod-workspace .pod-diy-header { color: var(--c-fg) !important; }
-  .course-pod-workspace .pod-diy-btn { color: var(--c-fg) !important; }
-  .course-pod-workspace .pod-diy-handle-dot { background: var(--c-fg) !important; }
-  .course-pod-workspace .musiki-pod { background: var(--c-bg) !important; color: var(--c-fg) !important; }
-  .course-pod-workspace .dv-separator { background: var(--c-border) !important; }
-  .course-pod-workspace .conference-notes-body {
-    background: var(--c-bg) !important;
-    color: var(--c-fg) !important;
-  }
-  .course-pod-workspace .conference-sidebar-panel-body {
-    background: var(--c-bg) !important;
-    color: var(--c-fg) !important;
-  }
-  .course-pod-workspace .musiki-pod-btn {
-    background: color-mix(in srgb, var(--c-fg) 8%, transparent) !important;
-    color: var(--c-fg) !important;
+    padding: 0;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--c-fg);
+    cursor: pointer;
+    line-height: 1;
+    opacity: 0.68;
   }
 
-  /* Mobile: slide from bottom, account for ribbon at bottom */
+  .course-strudel-header-btn:hover,
+  .course-strudel-header-btn:focus-visible {
+    opacity: 1;
+  }
+
+  .course-strudel-transport {
+    font-size: 9px;
+  }
+
+  .course-strudel-transport[data-playing='true'] {
+    color: #f6b26b;
+    opacity: 1;
+  }
+
+  .course-strudel-close {
+    font-size: 16px;
+  }
+
+  .course-strudel-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .course-strudel-body :global(.musiki-pod),
+  .course-strudel-body :global(.conference-stage-panel--strudel) {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+
   @media (max-width: 500px) {
-    .course-pod-workspace {
+    .course-strudel-workspace {
       inset: 0 0 var(--ribbon-mobile-clearance, 64px) 0;
     }
   }
 </style>
 
 <script>
-  import { RoomWorkspaceManager } from '../../scripts/room/workspace/RoomWorkspaceManager';
-  import { HyperpianoController } from '../../scripts/room/hyperpiano/HyperpianoController';
-  import { SonicAnalyzerController } from '../../scripts/room/sonic-analyzer';
-  import { SonicVisualizerController } from '../../scripts/room/sonic-visualizer';
   import { StrudelController } from '../../scripts/room/strudel/StrudelController';
 
   function boot() {
-    const overlay = document.getElementById('course-pod-workspace') as HTMLElement | null;
-    if (!overlay) return;
-
-    const root = document.getElementById('course-pod-workspace-root') as HTMLElement | null;
-    if (!root) return;
-    if (overlay.dataset.booted === 'true') return;
+    const overlay = document.getElementById('course-strudel-workspace') as HTMLElement | null;
+    if (!overlay || overlay.dataset.booted === 'true') return;
     overlay.dataset.booted = 'true';
 
-    let manager: RoomWorkspaceManager | null = null;
-    let isReady = false;
-    let pendingPod: string | null = null;
+    const strudelContainer = overlay.querySelector<HTMLElement>('.musiki-pod[data-pod="strudel"]');
+    const transport = overlay.querySelector<HTMLButtonElement>('[data-strudel-transport]');
+    const closeButton = overlay.querySelector<HTMLButtonElement>('[data-course-strudel-close]');
+    if (!strudelContainer || !transport || !closeButton) return;
 
-    // Shared audio context for standalone Hyperpiano (lazy-created on first user gesture)
-    let courseAudioCtx: AudioContext | null = null;
-    let courseOutputGain: GainNode | null = null;
+    let controller: StrudelController | null = null;
+    let audioContext: AudioContext | null = null;
+    let outputGain: GainNode | null = null;
 
-    // Mic audio tap for standalone SA (lazy-created on first SA interaction)
-    let micCtx: AudioContext | null = null;
-    let micAnalyser: AnalyserNode | null = null;
-    let micStream: MediaStream | null = null;
-
-    const startMic = async () => {
-      if (micCtx && micAnalyser) return;
-      try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        micCtx = new AudioContext();
-        const source = micCtx.createMediaStreamSource(micStream);
-        micAnalyser = micCtx.createAnalyser();
-        micAnalyser.fftSize = 2048;
-        source.connect(micAnalyser);
-      } catch {
-        // mic denied — SA will remain in idle state
+    const ensureAudio = async () => {
+      if (!audioContext) {
+        audioContext = new AudioContext();
+        outputGain = audioContext.createGain();
+        outputGain.connect(audioContext.destination);
       }
+      return audioContext;
     };
 
-    const onHyperpianoInit = (container: HTMLElement) => {
-      const hp = new HyperpianoController({
-        audioContext: null,
-        container,
-        outputNode: null,
-        getMidiInputId: () => null,
+    const ensureController = () => {
+      if (controller) return controller;
+      controller = new StrudelController({
+        container: strudelContainer,
+        getAudioContext: ensureAudio,
+        getOutputNode: () => outputGain,
+        transportButton: transport,
       });
-      hp.init();
-
-      // Defer AudioContext creation to first interaction (browser autoplay policy)
-      container.addEventListener('pointerdown', async () => {
-        if (!courseAudioCtx) {
-          courseAudioCtx = new AudioContext();
-          courseOutputGain = courseAudioCtx.createGain();
-          courseOutputGain!.connect(courseAudioCtx.destination);
-        }
-        if (courseAudioCtx.state === 'suspended') await courseAudioCtx.resume();
-        hp.setAudio(courseAudioCtx, courseOutputGain!);
-      }, { once: true });
-
-      return hp;
+      return controller;
     };
 
-    const onSonicAnalyzerInit = (container: HTMLElement) => {
-      const controller = new SonicAnalyzerController({
-        container,
-        getAudioTap: () => micCtx && micAnalyser
-          ? { context: micCtx, masterAnalyser: micAnalyser }
-          : null,
-      });
-      // Request mic on first container interaction
-      container.addEventListener('pointerdown', () => void startMic(), { once: true });
-      return { dispose: () => controller.dispose() };
+    const open = () => {
+      overlay.classList.add('is-open');
+      overlay.setAttribute('aria-hidden', 'false');
+      ensureController();
     };
 
-    const onSonicVisualizerInit = (container: HTMLElement) => {
-      const controller = new SonicVisualizerController({ container });
-      return { dispose: () => controller.dispose() };
+    const close = () => {
+      overlay.classList.remove('is-open');
+      overlay.setAttribute('aria-hidden', 'true');
     };
 
-    const ensureCourseAudio = async () => {
-      if (!courseAudioCtx) {
-        courseAudioCtx = new AudioContext();
-        courseOutputGain = courseAudioCtx.createGain();
-        courseOutputGain.connect(courseAudioCtx.destination);
-      }
-      return courseAudioCtx;
-    };
-
-    const onStrudelInit = (container: HTMLElement) => new StrudelController({
-      container,
-      getAudioContext: ensureCourseAudio,
-      getOutputNode: () => courseOutputGain,
+    transport.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void ensureController().toggle();
     });
-
-    function ensureInit() {
-      if (manager) return;
-      manager = new RoomWorkspaceManager(
-        root!, () => false, () => {},
-        onHyperpianoInit,
-        undefined, undefined, undefined, undefined,  // whiteboard, lily, concept, media
-        undefined, undefined, undefined, undefined,  // clase, chat, orf, score
-        onSonicAnalyzerInit,
-        onSonicVisualizerInit,
-        undefined, undefined, undefined, // visualizer, recursos, notes
-        onStrudelInit,
-      );
-      manager.init();
-      // RoomWorkspaceManager.init() defers 200ms; give extra buffer
-      setTimeout(() => {
-        isReady = true;
-        if (pendingPod) {
-          manager?.togglePod(pendingPod, true);
-          pendingPod = null;
-        }
-      }, 320);
-    }
-
-    function open(podType: string) {
-      overlay!.classList.add('is-open');
-      overlay!.setAttribute('aria-hidden', 'false');
-      if (!manager) {
-        pendingPod = podType;
-        ensureInit();
-      } else if (isReady) {
-        manager.togglePod(podType, true);
-      } else {
-        pendingPod = podType;
-      }
-    }
-
-    function close() {
-      overlay!.classList.remove('is-open');
-      overlay!.setAttribute('aria-hidden', 'true');
-    }
-
-    window.addEventListener('musiki:open-hyperpiano', () => open('hyperpiano'));
-    window.addEventListener('musiki:open-sa', () => open('sonic-analyzer'));
-    window.addEventListener('musiki:open-sv', () => open('sonic-visualizer'));
-    window.addEventListener('musiki:open-strudel', () => open('strudel'));
-
-    const closeBtn = document.getElementById('course-pod-workspace-close');
-    if (closeBtn && !closeBtn.dataset.bound) {
-      closeBtn.dataset.bound = 'true';
-      closeBtn.addEventListener('click', close);
-    }
-
-    // Close on Escape
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && overlay!.classList.contains('is-open')) close();
+    closeButton.addEventListener('click', close);
+    window.addEventListener('musiki:open-strudel', open);
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && overlay.classList.contains('is-open')) close();
     });
   }
 

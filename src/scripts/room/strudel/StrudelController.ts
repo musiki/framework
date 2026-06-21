@@ -6,6 +6,7 @@ s("bd sd [~ bd] sd")
 type StrudelMirror = {
   code?: string;
   evaluate: (autostart?: boolean) => Promise<void>;
+  prebaked?: Promise<unknown>;
   setCode: (code: string) => void;
   stop: () => Promise<void>;
 };
@@ -14,12 +15,15 @@ type StrudelEditorElement = HTMLElement & {
   editor?: StrudelMirror | null;
 };
 
+type StrudelConsoleLevel = 'ready' | 'info' | 'error';
+
 type StrudelControllerOptions = {
   container: HTMLElement;
   getAudioContext?: () => AudioContext | null | Promise<AudioContext | null>;
   getOutputNode?: () => AudioNode | null;
   onCodeChange?: (code: string) => void;
   onTransportChange?: (playing: boolean, code: string) => void;
+  transportButton?: HTMLButtonElement | null;
 };
 
 export class StrudelController {
@@ -30,6 +34,7 @@ export class StrudelController {
   private onTransportChange?: StrudelControllerOptions['onTransportChange'];
   private editorElement: StrudelEditorElement | null = null;
   private editor: StrudelMirror | null = null;
+  private consoleElement: HTMLElement | null = null;
   private transportButton: HTMLButtonElement | null = null;
   private initializing: Promise<void> | null = null;
   private playing = false;
@@ -44,10 +49,12 @@ export class StrudelController {
     this.getOutputNode = options.getOutputNode;
     this.onCodeChange = options.onCodeChange;
     this.onTransportChange = options.onTransportChange;
-    this.transportButton = this.container
+    this.transportButton = options.transportButton ?? this.container
       .closest('.pod-diy-shell')
       ?.querySelector<HTMLButtonElement>('[data-strudel-transport]') ?? null;
     this.container.addEventListener('musiki:strudel-transport-toggle', this.handleTransport as EventListener);
+    this.container.addEventListener('keydown', this.handleKeyboardTransport, true);
+    document.addEventListener('strudel.log', this.handleStrudelLog as EventListener);
     this.initializing = this.initialize();
   }
 
@@ -55,9 +62,30 @@ export class StrudelController {
     void this.toggle();
   };
 
+  private handleKeyboardTransport = (event: KeyboardEvent) => {
+    if ((!event.ctrlKey && !event.metaKey) || event.altKey) return;
+
+    const play = event.key === 'Enter';
+    const stop = event.key === '.' || event.code === 'Period';
+    if (!play && !stop) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void this.setPlaying(play, undefined, true);
+  };
+
+  private handleStrudelLog = (event: CustomEvent<Record<string, unknown>>) => {
+    const detail = event.detail ?? {};
+    const type = typeof detail.type === 'string' ? detail.type.toLowerCase() : '';
+    const message = typeof detail.message === 'string' ? detail.message : '';
+    if (!message || (type && type !== 'error' && type !== 'warning' && type !== 'warn')) return;
+    this.writeConsole(message, type === 'error' ? 'error' : 'info');
+  };
+
   private async initialize() {
     const host = this.container.querySelector<HTMLElement>('[data-strudel-host]');
     if (!host) return;
+    this.consoleElement = this.container.querySelector<HTMLElement>('[data-strudel-console]');
 
     try {
       const roomContext = await this.getAudioContext?.();
@@ -76,12 +104,28 @@ export class StrudelController {
 
       await this.waitForEditor(editor);
       this.editor = editor.editor ?? null;
+      await this.editor?.prebaked;
+      const xen = await import('@strudel/xen');
+      const evalScope = (globalThis as typeof globalThis & {
+        evalScope?: (...modules: unknown[]) => Promise<unknown>;
+      }).evalScope;
+      const register = (globalThis as typeof globalThis & {
+        register?: (name: string, transform: (value: unknown, pattern: unknown) => unknown) => unknown;
+      }).register;
+      if (!evalScope || !register) throw new Error('Strudel evaluation scope is unavailable');
+      await evalScope(xen);
+      // Attach Xen to the REPL's active Pattern class even when Vite prebundles it with an isolated core.
+      const globalScope = globalThis as typeof globalThis & Record<string, unknown>;
+      globalScope.xen = register('xen', (scale, pattern) => xen.xen(scale, pattern));
+      globalScope.tuning = register('tuning', (scale, pattern) => xen.tuning(scale, pattern));
       this.routeOutput(superdough);
       host.dataset.ready = 'true';
       this.syncTransport();
+      this.writeConsole('ready · cmd/ctrl+enter play · cmd/ctrl+. stop', 'ready');
     } catch (error) {
       const status = host.querySelector<HTMLElement>('[data-strudel-status]');
       if (status) status.textContent = 'STRUDEL ERROR';
+      this.writeConsole(error, 'error');
       console.error('[StrudelController] initialization failed', error);
     }
   }
@@ -112,6 +156,7 @@ export class StrudelController {
       destinationGain.connect(outputNode);
       this.routedOutput = destinationGain;
     } catch (error) {
+      this.writeConsole(error, 'error');
       console.warn('[StrudelController] could not route output to STRD mixer channel', error);
     }
   }
@@ -126,10 +171,21 @@ export class StrudelController {
         this.onCodeChange?.(code);
       }, 120);
     }
+
+    const error = detail.error ?? detail.evalError ?? detail.schedulerError;
+    if (error) {
+      this.writeConsole(error, 'error');
+    } else if (detail.pending === true) {
+      this.writeConsole('evaluating…', 'info');
+    }
+
     const next = detail.started ?? detail.playing ?? detail.running;
     if (typeof next === 'boolean') {
       this.playing = next;
       this.syncTransport();
+      if (!error && detail.pending !== true) {
+        this.writeConsole(next ? 'playing' : 'ready', next ? 'info' : 'ready');
+      }
     }
   };
 
@@ -149,14 +205,18 @@ export class StrudelController {
       if (broadcast) this.onTransportChange?.(playing, editor.code ?? code ?? '');
       if (playing) {
         const context = await this.getAudioContext?.();
-        if (context?.state === 'suspended') await context.resume();
+        if (context?.state === 'suspended') {
+          void context.resume().catch((error) => this.writeConsole(error, 'error'));
+        }
         await editor.evaluate(true);
       } else {
         await editor.stop();
+        this.writeConsole('stopped', 'ready');
       }
     } catch (error) {
       this.playing = false;
       this.syncTransport();
+      this.writeConsole(error, 'error');
       console.error('[StrudelController] transport failed', error);
     }
   }
@@ -178,10 +238,34 @@ export class StrudelController {
     this.transportButton.setAttribute('aria-pressed', String(this.playing));
   }
 
+  private writeConsole(value: unknown, level: StrudelConsoleLevel) {
+    if (!this.consoleElement) return;
+
+    let message: string;
+    if (value instanceof Error) {
+      message = `${value.name}: ${value.message}`;
+    } else if (value && typeof value === 'object' && 'message' in value) {
+      message = String((value as { message: unknown }).message);
+    } else {
+      message = String(value ?? '');
+    }
+
+    const lines = message
+      .replace(/\s+at\s+[^\n]+/g, '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(-2);
+    this.consoleElement.textContent = lines.join('\n');
+    this.consoleElement.dataset.level = level;
+  }
+
   dispose() {
     this.disposed = true;
     window.clearTimeout(this.codeBroadcastTimer);
     this.container.removeEventListener('musiki:strudel-transport-toggle', this.handleTransport as EventListener);
+    this.container.removeEventListener('keydown', this.handleKeyboardTransport, true);
+    document.removeEventListener('strudel.log', this.handleStrudelLog as EventListener);
     this.editorElement?.removeEventListener('update', this.handleEditorUpdate as EventListener);
     void this.editor?.stop();
     if (this.routedOutput) {
@@ -189,5 +273,6 @@ export class StrudelController {
     }
     this.editorElement = null;
     this.editor = null;
+    this.consoleElement = null;
   }
 }
