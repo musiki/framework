@@ -1,7 +1,5 @@
 import { visit } from 'unist-util-visit';
 
-const DEFAULT_LABEL = 'STRUDEL';
-
 function encodeBase64Url(value) {
   return Buffer.from(String(value || ''), 'utf8')
     .toString('base64')
@@ -19,15 +17,12 @@ function renderStrudelBlock(source) {
 
   return `<figure class="strudel-note-block" data-strudel-block data-strudel-code="${encodedSource}">
   <header class="strudel-note-header">
-    <span class="strudel-note-title">${DEFAULT_LABEL}</span>
     <button type="button" class="strudel-note-transport" data-strudel-transport data-playing="false" aria-label="Play Strudel" aria-pressed="false" title="Play Strudel">▶</button>
   </header>
   <div class="strudel-note-stage">
-    <div class="strudel-note-host" data-strudel-host>
-      <div class="strudel-note-status" data-strudel-status>STRUDEL READY</div>
-    </div>
+    <div class="strudel-note-host" data-strudel-host></div>
   </div>
-  <div class="strudel-note-console" data-strudel-console data-level="ready" role="status" aria-live="polite">ready · cmd/ctrl+enter play · cmd/ctrl+. stop</div>
+  <div class="strudel-note-console" data-strudel-console data-level="ready" role="status" aria-live="polite" hidden></div>
 </figure>`;
 }
 

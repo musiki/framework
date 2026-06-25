@@ -389,53 +389,43 @@ const resolvedSlideTheme =
         min-height: 18rem;
         margin: 0.6rem auto;
         overflow: hidden;
-        border: 1px solid color-mix(in srgb, #f6b26b 50%, rgba(255, 255, 255, 0.22));
-        border-radius: 10px;
-        background:
-          linear-gradient(180deg, rgba(246, 178, 107, 0.1), transparent 38%),
-          rgba(14, 9, 3, 0.86);
-        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
         color: #f8f4ec;
       }
 
       .reveal .slides .strudel-note-header {
         display: flex;
-        flex: 0 0 24px;
+        flex: 0 0 20px;
         align-items: center;
-        gap: 0.45rem;
-        padding: 0 0.45rem;
-        border-bottom: 1px solid rgba(246, 178, 107, 0.24);
+        justify-content: flex-start;
+        gap: 0;
+        padding: 0;
+        border-bottom: 0;
         background: transparent;
       }
 
       .reveal .slides .strudel-note-title {
-        flex: 1;
-        overflow: hidden;
-        color: #f6b26b;
-        font-size: 0.55rem;
-        font-weight: 900;
-        letter-spacing: 0.14em;
-        line-height: 1;
-        opacity: 0.86;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        display: none;
       }
 
       .reveal .slides .strudel-note-transport {
         display: inline-flex;
-        width: 17px;
-        height: 17px;
+        width: 18px;
+        height: 18px;
         align-items: center;
         justify-content: center;
         padding: 0;
         border: 0;
-        border-radius: 3px;
+        border-radius: 0;
         background: transparent;
         color: #f8f4ec;
         cursor: pointer;
-        font-size: 9px;
+        font-size: 10px;
         line-height: 1;
-        opacity: 0.72;
+        opacity: 0.62;
       }
 
       .reveal .slides .strudel-note-transport:hover,
@@ -494,7 +484,7 @@ const resolvedSlideTheme =
       }
 
       .reveal .slides .strudel-note-host .cm-editor {
-        background: rgba(0, 0, 0, 0.38);
+        background: transparent;
         font-size: 0.72rem;
         text-align: left;
       }
@@ -505,16 +495,7 @@ const resolvedSlideTheme =
       }
 
       .reveal .slides .strudel-note-status {
-        position: absolute;
-        top: 0.55rem;
-        left: 0.6rem;
-        z-index: 2;
-        color: #f6b26b;
-        font-size: 0.55rem;
-        font-weight: 800;
-        letter-spacing: 0.11em;
-        opacity: 0.68;
-        pointer-events: none;
+        display: none;
       }
 
       .reveal .slides .strudel-note-host[data-ready='true'] .strudel-note-status {
@@ -522,6 +503,7 @@ const resolvedSlideTheme =
       }
 
       .reveal .slides .strudel-note-console {
+        display: none;
         flex: 0 0 2.45em;
         min-height: 2.45em;
         padding: 0.28rem 0.5rem;
@@ -538,7 +520,12 @@ const resolvedSlideTheme =
       }
 
       .reveal .slides .strudel-note-console[data-level='error'] {
+        display: block;
         color: #ff9a7c;
+      }
+
+      .reveal .slides .strudel-note-console[hidden] {
+        display: none;
       }
 
       .slide-grid-block :is(.lily-score, .lilypond-block) {
@@ -2458,15 +2445,12 @@ const resolvedSlideTheme =
           figure.dataset.strudelCode = encodeBase64Url(sourceValue);
           figure.innerHTML = `
             <header class="strudel-note-header">
-              <span class="strudel-note-title">STRUDEL</span>
               <button type="button" class="strudel-note-transport" data-strudel-transport data-playing="false" aria-label="Play Strudel" aria-pressed="false" title="Play Strudel">▶</button>
             </header>
             <div class="strudel-note-stage">
-              <div class="strudel-note-host" data-strudel-host>
-                <div class="strudel-note-status" data-strudel-status>STRUDEL READY</div>
-              </div>
+              <div class="strudel-note-host" data-strudel-host></div>
             </div>
-            <div class="strudel-note-console" data-strudel-console data-level="ready" role="status" aria-live="polite">ready · cmd/ctrl+enter play · cmd/ctrl+. stop</div>
+            <div class="strudel-note-console" data-strudel-console data-level="ready" role="status" aria-live="polite" hidden></div>
           `;
           return figure;
         };

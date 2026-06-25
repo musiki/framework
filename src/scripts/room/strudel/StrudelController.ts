@@ -142,7 +142,7 @@ export class StrudelController {
       this.routeOutput(superdough);
       host.dataset.ready = 'true';
       this.syncTransport();
-      this.writeConsole('ready · cmd/ctrl+enter play · cmd/ctrl+. stop', 'ready');
+      this.clearConsole('ready');
     } catch (error) {
       const status = host.querySelector<HTMLElement>('[data-strudel-status]');
       if (status) status.textContent = 'STRUDEL ERROR';
@@ -225,7 +225,7 @@ export class StrudelController {
     if (error) {
       this.writeConsole(error, 'error');
     } else if (detail.pending === true) {
-      this.writeConsole('evaluating…', 'info');
+      this.clearConsole('info');
     }
 
     const next = detail.started ?? detail.playing ?? detail.running;
@@ -233,7 +233,7 @@ export class StrudelController {
       this.playing = next;
       this.syncTransport();
       if (!error && detail.pending !== true) {
-        this.writeConsole(next ? 'playing' : 'ready', next ? 'info' : 'ready');
+        this.clearConsole(next ? 'info' : 'ready');
       }
     }
   };
@@ -261,7 +261,7 @@ export class StrudelController {
       } else {
         await editor.stop();
         this.stopHydra();
-        this.writeConsole('stopped', 'ready');
+        this.clearConsole('ready');
       }
     } catch (error) {
       this.playing = false;
@@ -309,6 +309,14 @@ export class StrudelController {
       .slice(-2);
     this.consoleElement.textContent = lines.join('\n');
     this.consoleElement.dataset.level = level;
+    this.consoleElement.hidden = level !== 'error' || lines.length === 0;
+  }
+
+  private clearConsole(level: StrudelConsoleLevel = 'ready') {
+    if (!this.consoleElement) return;
+    this.consoleElement.textContent = '';
+    this.consoleElement.dataset.level = level;
+    this.consoleElement.hidden = true;
   }
 
   private stopHydra() {

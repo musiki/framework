@@ -2693,53 +2693,43 @@ function renderLessonsTreeHTML(
         width: 100%;
         min-height: clamp(18rem, 36vh, 26rem);
         overflow: hidden;
-        border: 1px solid color-mix(in srgb, #f6b26b 42%, var(--c-border));
-        border-radius: 10px;
-        background:
-          linear-gradient(180deg, color-mix(in srgb, #f6b26b 7%, transparent), transparent 38%),
-          color-mix(in srgb, var(--c-bg) 92%, #1d1204);
-        box-shadow: 0 14px 36px color-mix(in srgb, #000 16%, transparent);
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
         color: var(--c-fg);
       }
 
       .class-content .strudel-note-header {
         display: flex;
-        flex: 0 0 24px;
+        flex: 0 0 20px;
         align-items: center;
-        gap: 0.45rem;
-        padding: 0 0.45rem;
-        border-bottom: 1px solid color-mix(in srgb, #f6b26b 26%, transparent);
+        justify-content: flex-start;
+        gap: 0;
+        padding: 0;
+        border-bottom: 0;
         background: transparent;
       }
 
       .class-content .strudel-note-title {
-        flex: 1;
-        overflow: hidden;
-        color: #f6b26b;
-        font-size: 0.55rem;
-        font-weight: 900;
-        letter-spacing: 0.14em;
-        line-height: 1;
-        opacity: 0.82;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        display: none;
       }
 
       .class-content .strudel-note-transport {
         display: inline-flex;
-        width: 17px;
-        height: 17px;
+        width: 18px;
+        height: 18px;
         align-items: center;
         justify-content: center;
         padding: 0;
         border: 0;
-        border-radius: 3px;
+        border-radius: 0;
         background: transparent;
         color: var(--c-fg);
         cursor: pointer;
-        font-size: 9px;
+        font-size: 10px;
         line-height: 1;
-        opacity: 0.68;
+        opacity: 0.62;
       }
 
       .class-content .strudel-note-transport:hover,
@@ -2802,7 +2792,7 @@ function renderLessonsTreeHTML(
       }
 
       .class-content .strudel-note-host .cm-editor {
-        background: color-mix(in srgb, var(--c-bg) 86%, transparent);
+        background: transparent;
         font-size: 0.78rem;
       }
 
@@ -2812,16 +2802,7 @@ function renderLessonsTreeHTML(
       }
 
       .class-content .strudel-note-status {
-        position: absolute;
-        top: 0.55rem;
-        left: 0.6rem;
-        z-index: 2;
-        color: #f6b26b;
-        font-size: 0.55rem;
-        font-weight: 800;
-        letter-spacing: 0.11em;
-        opacity: 0.64;
-        pointer-events: none;
+        display: none;
       }
 
       .class-content .strudel-note-host[data-ready='true'] .strudel-note-status {
@@ -2829,6 +2810,7 @@ function renderLessonsTreeHTML(
       }
 
       .class-content .strudel-note-console {
+        display: none;
         flex: 0 0 2.45em;
         min-height: 2.45em;
         padding: 0.28rem 0.5rem;
@@ -2844,7 +2826,12 @@ function renderLessonsTreeHTML(
       }
 
       .class-content .strudel-note-console[data-level='error'] {
+        display: block;
         color: #ff9a7c;
+      }
+
+      .class-content .strudel-note-console[hidden] {
+        display: none;
       }
 
       .content-area > p + p {
