@@ -3,6 +3,7 @@ import '../styles/ribbon.css';
 import { getCollection } from 'astro:content';
 import { isElevatedGlobalRole } from '../lib/roles';
 import { buildCourseHref } from '../lib/course-routing';
+import { getSession } from 'auth-astro/server';
 
 interface Props {
   courseId?: string;
@@ -26,10 +27,31 @@ const {
 
 const isPublicReaderMode = Boolean(publicReaderMode);
 
-const userInitial = (session?.user?.name || session?.user?.email || '?')
-  .trim()
-  .charAt(0)
-  .toUpperCase();
+type RibbonSessionUser = {
+  name?: string;
+  email?: string;
+  image?: string;
+  picture?: string;
+  avatarUrl?: string;
+  imageUrl?: string;
+};
+
+const pickUserImage = (user: RibbonSessionUser | null | undefined) =>
+  String(user?.image || user?.picture || user?.avatarUrl || user?.imageUrl || '').trim();
+
+const propUser = (session?.user || null) as RibbonSessionUser | null;
+const directSession = propUser && pickUserImage(propUser)
+  ? null
+  : await getSession(Astro.request).catch(() => null);
+const directUser = (directSession?.user || null) as RibbonSessionUser | null;
+const requestUser = directUser || propUser;
+
+let ribbonUserName = String(requestUser?.name || requestUser?.email || '').trim();
+let ribbonUserImage = pickUserImage(requestUser) || pickUserImage(propUser);
+let ribbonAvatarSource = ribbonUserImage
+  ? (pickUserImage(directUser) ? 'session-direct' : 'session-prop')
+  : 'fallback';
+
 const hasVivo = Boolean(performativeRoomHref);
 const badgeLabel = activeCourseCode.slice(0, 4) || '···';
 const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseId)}` : '/dashboard';
@@ -52,18 +74,31 @@ const coursesData = allCourseFiles
 
 let userCourses: typeof coursesData = [];
 
-if (session?.user?.email) {
+if (requestUser?.email) {
   try {
     const { query } = await import('../lib/db/pool');
-    const email = String(session.user.email).trim().toLowerCase();
+    const email = String(requestUser.email).trim().toLowerCase();
+    const { resolveUserIdByEmail } = await import('../lib/user-email');
+    const resolvedUserId = await resolveUserIdByEmail(email).catch(() => null);
 
-    const { data: users } = await query(
-      `SELECT id, role FROM "User" WHERE "email" ILIKE $1`,
-      [email]
-    );
+    const { data: users } = resolvedUserId
+      ? await query(
+          `SELECT id, role, name, image FROM "User" WHERE "id" = $1`,
+          [resolvedUserId]
+        )
+      : await query(
+          `SELECT id, role, name, image FROM "User" WHERE "email" ILIKE $1`,
+          [email]
+        );
     const user = users?.[0];
 
     if (user) {
+      ribbonUserName = String(user.name || ribbonUserName || email).trim();
+      const dbImage = String(user.image || '').trim();
+      if (dbImage) {
+        ribbonUserImage = dbImage;
+        ribbonAvatarSource = 'db';
+      }
       const isTeacher = isElevatedGlobalRole(user.role);
 
       if (isTeacher) {
@@ -83,6 +118,11 @@ if (session?.user?.email) {
 } else {
   userCourses = coursesData.filter(c => c.public);
 }
+
+const userInitial = (ribbonUserName || requestUser?.email || '?')
+  .trim()
+  .charAt(0)
+  .toUpperCase();
 ---
 
 <!-- Desktop ribbon / Mobile bottom bar -->
@@ -112,14 +152,29 @@ if (session?.user?.email) {
   <div class="ribbon-divider"></div>
 
   <!-- Profile -->
-  {session?.user && (
+  {requestUser && (
     <a
       href={dashboardHref}
       class="ribbon-item ribbon-item--avatar"
       aria-label="Mi perfil"
       title="Mi perfil / Dashboard"
+      data-avatar-source={ribbonAvatarSource}
     >
-      {userInitial}
+      {ribbonUserImage ? (
+        <>
+          <img
+            src={ribbonUserImage}
+            alt=""
+            class="ribbon-avatar-img"
+            loading="lazy"
+            decoding="async"
+            onerror="this.hidden=true;this.nextElementSibling.hidden=false"
+          />
+          <span class="ribbon-avatar-fallback" aria-hidden="true" hidden>{userInitial}</span>
+        </>
+      ) : (
+        <span class="ribbon-avatar-fallback" aria-hidden="true">{userInitial}</span>
+      )}
     </a>
   )}
 
