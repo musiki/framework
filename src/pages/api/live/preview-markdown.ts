@@ -5,6 +5,7 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const payload = await request.json();
     const markdown = String(payload?.markdown || '');
+    const interactiveBlocks = payload?.interactiveBlocks === true;
     
     if (!markdown.trim()) {
       return new Response(JSON.stringify({ html: '' }), {
@@ -13,7 +14,10 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
-    const html = await renderForumMarkdown(markdown, { remoteLilypond: true });
+    const html = await renderForumMarkdown(markdown, {
+      remoteLilypond: true,
+      strudelBlocks: interactiveBlocks,
+    });
 
     return new Response(JSON.stringify({ html }), {
       status: 200,

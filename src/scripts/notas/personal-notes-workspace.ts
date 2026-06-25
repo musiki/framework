@@ -602,7 +602,7 @@ export async function mountDbNoteEditor(
       const res = await fetch('/api/live/preview-markdown', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown: currentContent }),
+        body: JSON.stringify({ markdown: currentContent, interactiveBlocks: true }),
       });
       if (!res.ok) throw new Error('preview failed');
       const data = await res.json();

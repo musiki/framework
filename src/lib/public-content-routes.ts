@@ -75,7 +75,9 @@ const hasPresentationTheme = (entry: ContentEntry) => {
   return Boolean(
     typeof data.theme === 'string' && data.theme.trim()
     || typeof data.slideTheme === 'string' && data.slideTheme.trim()
-    || typeof data.revealTheme === 'string' && data.revealTheme.trim(),
+    || typeof data.revealTheme === 'string' && data.revealTheme.trim()
+    || data.reveal === true
+    || data.reveal === 'true',
   );
 };
 

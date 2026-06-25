@@ -21,6 +21,7 @@ import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 import remarkForumMathMacros from '../plugins/remark-forum-math-macros.mjs';
 import remarkDataviewLite from '../plugins/remark-dataview-lite.mjs';
 import remarkObsidianHighlight from '../plugins/remark-obsidian-highlight.mjs';
+import remarkStrudelBlocks from '../plugins/remark-strudel-blocks.mjs';
 
 const forumHighlightAliases = {
   javascript: ['js'],
@@ -34,15 +35,22 @@ const forumHighlightAliases = {
 
 export type RenderForumMarkdownOptions = {
   remoteLilypond?: boolean;
+  strudelBlocks?: boolean;
 };
 
 function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) {
-  const processor = unified()
+  let processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(slugMathRemark)
     .use(remarkMath)
-    .use(remarkForumMathMacros)
+    .use(remarkForumMathMacros);
+
+  if (options.strudelBlocks === true) {
+    processor = processor.use(remarkStrudelBlocks);
+  }
+
+  processor = processor
     .use(remarkMermaid)
     .use(remarkWikiLink)
     .use(remarkMediaEmbed)

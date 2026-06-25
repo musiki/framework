@@ -1,4 +1,5 @@
 import { hydrateLilypondBlocks, setupLilypondAutoHydration } from '../../../lib/lilypond-player';
+import { initStrudelBlocks } from '../strudel-blocks';
 
 type MermaidRenderResult = {
   svg?: string;
@@ -349,4 +350,5 @@ export function enhanceCourseNotesContent(container: ParentNode | null | undefin
   renderCourseNotesMermaid(root);
   applyCourseNotesMermaidContrast(root);
   hydrateCourseNotesLilypond(root);
+  initStrudelBlocks(root);
 }

@@ -1,0 +1,49 @@
+---
+title: Reveal desde notas
+description: Cómo convertir una nota en presentación.
+audience: all
+area: presentaciones
+featureStatus: beta
+lastVerified: 2026-06-25
+---
+
+Una nota puede abrirse como presentación Reveal cuando declara intención de slides en el frontmatter.
+
+## Campos que habilitan el monitor
+
+```yaml
+reveal: true
+```
+
+```yaml
+theme: zztt
+```
+
+También funcionan:
+
+```yaml
+slideTheme: zztt
+revealTheme: zztt
+```
+
+## Separar diapositivas
+
+Usá separadores Markdown:
+
+```md
+# Primera slide
+
+---
+
+# Segunda slide
+```
+
+## Strudel en Reveal
+
+Los bloques `strudel` también se renderizan dentro de Reveal:
+
+````md
+```strudel
+n("0 1 2 3").scale("C:major").s("piano")
+```
+````

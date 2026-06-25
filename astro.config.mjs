@@ -15,6 +15,7 @@ import remarkDataviewLite from './src/plugins/remark-dataview-lite.mjs'
 import remarkWikiLink from './src/plugins/remark-wiki-link.mjs'
 import remarkLily from './src/plugins/remark-lily.mjs'
 import remarkCoverBlock from './src/plugins/remark-cover-block.mjs'
+import remarkStrudelBlocks from './src/plugins/remark-strudel-blocks.mjs'
 import rehypeLazyYouTube from './src/plugins/rehype-lazy-youtube.mjs'
 import rehypeCodeSyntax from './src/plugins/rehype-code-syntax.mjs'
 import remarkObsidianHighlight from './src/plugins/remark-obsidian-highlight.mjs'
@@ -125,6 +126,7 @@ export default defineConfig({
         'lily': 'scheme',
         'lilypond': 'scheme',
         'ly': 'scheme',
+        'strudel': 'javascript',
       }
     },
     remarkPlugins: [
@@ -132,6 +134,7 @@ export default defineConfig({
       remarkCoverBlock,
       slugMathRemark,         // primero traducís $<
       remarkMath,
+      remarkStrudelBlocks,    // convierte ```strudel en bloques interactivos antes de Shiki
       remarkMermaid,          // luego procesá mermaid si aparece dentro
       remarkEvalBlocks,       // procesa bloques eval
       remarkDataviewLite,     // procesa bloques dataview

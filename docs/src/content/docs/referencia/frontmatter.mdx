@@ -1,0 +1,32 @@
+---
+title: Frontmatter
+description: Campos comunes de las notas Musiki.
+audience: all
+area: referencia
+featureStatus: beta
+lastVerified: 2026-06-25
+---
+
+El frontmatter es el bloque YAML inicial de una nota.
+
+```yaml
+---
+title: Mi clase
+type: lesson
+status: published
+reveal: true
+theme: zztt
+---
+```
+
+## Campos comunes
+
+| Campo | Uso |
+| --- | --- |
+| `title` | Título visible. |
+| `type` | Tipo de contenido: `lesson`, `assignment`, `public-note`, etc. |
+| `status` | Estado de publicación: `draft`, `private`, `published`, `public`. |
+| `chapter` | Capítulo o sección del curso. |
+| `order` | Orden dentro del capítulo. |
+| `reveal` | Habilita presentación cuando es `true`. |
+| `theme` | Tema visual de Reveal. |

@@ -1,0 +1,46 @@
+---
+title: Pod Strudel
+description: Usar Strudel como pod o como bloque dentro de una nota.
+audience: all
+area: pods
+featureStatus: experimental
+lastVerified: 2026-06-25
+---
+
+Strudel permite escribir patrones musicales con código y escucharlos desde Musiki.
+
+## Abrir el pod
+
+En la vista normal del curso, usá el botón **ST** de la ribbon. En la sala en vivo, el pod Strudel puede conectarse al mixer como canal **STRD**.
+
+## Atajos
+
+- `Cmd/Ctrl + Enter`: reproducir.
+- `Cmd/Ctrl + .`: detener.
+
+En sala en vivo, cuando quien toca es docente, los cambios y el transporte se castean a las demás personas conectadas.
+
+## Bloques Strudel en notas
+
+Podés escribir un bloque:
+
+````md
+```strudel
+stack(
+  note("c d e g").sound("piano"),
+  s("bd ~ sd ~").bank("RolandTR909")
+)
+```
+````
+
+Musiki lo renderiza con editor, botón play/stop y una consola de dos líneas.
+
+## Hydra y visuales
+
+Si el bloque usa Hydra, llamá primero a:
+
+```js
+await initHydra()
+```
+
+Luego podés combinar visuales y audio en el mismo bloque.

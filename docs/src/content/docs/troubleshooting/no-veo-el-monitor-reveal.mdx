@@ -1,0 +1,30 @@
+---
+title: No veo el monitor de Reveal
+description: Qué revisar si una nota no muestra el botón de presentación.
+audience: all
+area: troubleshooting
+featureStatus: stable
+lastVerified: 2026-06-25
+---
+
+El icono de monitor aparece cuando la nota declara que puede presentarse.
+
+Revisá que el frontmatter tenga uno de estos campos:
+
+```yaml
+reveal: true
+```
+
+```yaml
+theme: zztt
+```
+
+También sirven `slideTheme` o `revealTheme`.
+
+Si la nota es pública, verificá además que su estado sea:
+
+```yaml
+status: public
+```
+
+Después de guardar, recargá la vista normal del slug.

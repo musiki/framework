@@ -17,12 +17,14 @@ export type { NoteMode } from './dockview-shell';
 export interface CourseNotesWorkspace {
   openNote(slug: string, mode: NoteMode, split?: boolean): void;
   openMedia(url: string, title: string, position?: 'bottom' | 'right'): void;
+  openHelp(path?: string, title?: string, split?: boolean): void;
   destroy(): void;
 }
 
 type PanelParams =
   | { kind?: 'note'; slug: string; courseId: string; mode: NoteMode }
   | { kind: 'media'; url: string; title: string }
+  | { kind: 'help'; url: string; title: string }
   | { kind: 'db-note'; noteId: string; title: string; courseId?: string }
   | { kind: 'qa-analyzer'; noteId?: string; noteTitle?: string };
 
@@ -238,6 +240,17 @@ function escAttr(s: string) {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function resolveDocsUrl(pathOrUrl = '/pods/ayuda-contextual/'): string {
+  const configuredBase = String(import.meta.env.PUBLIC_DOCS_URL || 'https://doc.musiki.org.ar').trim();
+  const fallbackBase = configuredBase || 'https://doc.musiki.org.ar';
+  const raw = String(pathOrUrl || '/pods/ayuda-contextual/').trim() || '/pods/ayuda-contextual/';
+  try {
+    return new URL(raw, fallbackBase.endsWith('/') ? fallbackBase : `${fallbackBase}/`).toString();
+  } catch {
+    return new URL('/pods/ayuda-contextual/', fallbackBase).toString();
+  }
+}
+
 // ── Async LilyPond hydration ──────────────────────────────────────────────
 async function hydrateLilyPlaceholders(bodyEl: HTMLElement, slug: string) {
   const pending = Array.from(bodyEl.querySelectorAll<HTMLElement>('.cnw-lily-pending'));
@@ -367,6 +380,21 @@ function runMermaidIn(bodyEl: HTMLElement) {
   } catch (err) {
     console.warn('[cnw] Mermaid render skipped:', err);
   }
+}
+
+function mountHelpBody(bodyEl: HTMLElement, url: string) {
+  const safeUrl = resolveDocsUrl(url);
+  bodyEl.classList.add('cnw-help-body');
+  bodyEl.innerHTML = `
+    <iframe
+      class="cnw-help-frame"
+      src="${escAttr(safeUrl)}"
+      title="Musiki Docs"
+      loading="lazy"
+      referrerpolicy="strict-origin-when-cross-origin"
+      sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms"
+    ></iframe>
+  `;
 }
 
 async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string): Promise<string> {
@@ -1007,6 +1035,16 @@ export function initDockviewWorkspace(
         return { element: shell, init: () => {} };
       }
 
+      if (params.kind === 'help') {
+        const { shell, bodyEl, pencilBtn, splitRightBtn, splitBelowBtn } = buildShell(panelId, params.url, params.title, dockview);
+        bindExternalNoteDrop(shell, panelId);
+        pencilBtn.style.display = 'none';
+        splitRightBtn.style.display = 'none';
+        splitBelowBtn.style.display = 'none';
+        mountHelpBody(bodyEl, params.url);
+        return { element: shell, init: () => {} };
+      }
+
       if (params.kind === 'db-note') {
         const { shell, bodyEl, pencilBtn, statusDot, traceBtn, downloadBtn, downloadMenu } = buildShell(
           panelId, params.noteId, params.title, dockview, true,
@@ -1181,6 +1219,28 @@ export function initDockviewWorkspace(
       component: 'note-panel',
       position: referencePanel
         ? { referencePanel: referencePanel.id, direction }
+        : undefined,
+    });
+  }
+
+  function openHelp(path = '/pods/ayuda-contextual/', title = 'Ayuda Musiki', split = false): void {
+    const url = resolveDocsUrl(path);
+    const existing = dockview.getGroupPanel('musiki-help');
+    if (existing && !split) {
+      const bodyEl = container.querySelector<HTMLElement>('[data-panel-id="musiki-help"] .cnw-body');
+      if (bodyEl) mountHelpBody(bodyEl, url);
+      existing.api.setActive();
+      return;
+    }
+
+    const panelId = split ? `musiki-help-${Date.now()}` : 'musiki-help';
+    const referencePanel = dockview.activePanel ?? dockview.panels[dockview.panels.length - 1] ?? undefined;
+    pendingParams.set(panelId, { kind: 'help', url, title });
+    dockview.addPanel({
+      id: panelId,
+      component: 'note-panel',
+      position: referencePanel
+        ? { referencePanel: referencePanel.id, direction: 'right' }
         : undefined,
     });
   }
@@ -1415,6 +1475,11 @@ export function initDockviewWorkspace(
     }
   }, { signal });
 
+  window.addEventListener('musiki:open-help', (e: Event) => {
+    const ev = e as CustomEvent<{ path?: string; title?: string; split?: boolean }>;
+    openHelp(ev.detail?.path || '/pods/ayuda-contextual/', ev.detail?.title || 'Ayuda Musiki', ev.detail?.split ?? false);
+  }, { signal });
+
   // Cleanup on panel removal
   dockview.onDidRemovePanel(event => {
     const state = panelStates.get(event.id);
@@ -1443,6 +1508,7 @@ export function initDockviewWorkspace(
   const workspace: CourseNotesWorkspace = {
     openNote,
     openMedia,
+    openHelp,
     destroy: () => {
       ro.disconnect();
       // Run cleanups for any open panel editors

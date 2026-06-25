@@ -33,6 +33,7 @@ const userInitial = (session?.user?.name || session?.user?.email || '?')
 const hasVivo = Boolean(performativeRoomHref);
 const badgeLabel = activeCourseCode.slice(0, 4) || '···';
 const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseId)}` : '/dashboard';
+const docsBaseUrl = String(import.meta.env.PUBLIC_DOCS_URL || 'https://doc.musiki.org.ar').replace(/\/$/, '');
 
 // Get all courses from the content collection
 const allCourseFiles = await getCollection('cursos').catch(() => []);
@@ -248,8 +249,21 @@ if (session?.user?.email) {
     </svg>
   </button>
 
-  <!-- Reveal / Slides — only when this note has a presentation theme -->
-  {revealHref && !isPublicReaderMode && (
+  <!-- Contextual help — opens inside Dockview when available -->
+  <button
+    type="button"
+    class="ribbon-item ribbon-item--circle ribbon-item--help"
+    id="ribbon-help-btn"
+    data-docs-url={docsBaseUrl}
+    data-docs-path="/pods/ayuda-contextual/"
+    aria-label="Ayuda Musiki"
+    title="Ayuda Musiki"
+  >
+    <span aria-hidden="true" class="ribbon-help-mark">?</span>
+  </button>
+
+  <!-- Reveal / Slides — shown whenever this note declares reveal/theme metadata -->
+  {revealHref && (
     <a
       href={revealHref}
       class="ribbon-item ribbon-item--reveal"
@@ -462,6 +476,17 @@ if (session?.user?.email) {
   .ribbon-item--reveal:hover {
     color: var(--c-accent, #7c6ff7);
   }
+  .ribbon-item--help {
+    color: color-mix(in srgb, var(--c-fg) 62%, #f6b26b 38%);
+  }
+  .ribbon-item--help:hover {
+    color: #f6b26b;
+  }
+  .ribbon-help-mark {
+    font-size: 0.78rem;
+    font-weight: 850;
+    line-height: 1;
+  }
 
 </style>
 
@@ -537,6 +562,27 @@ if (session?.user?.email) {
     const notasBtn = document.getElementById('ribbon-notas-btn');
     const openNotas = () => window.dispatchEvent(new CustomEvent('musiki:open-notas'));
     if (notasBtn && !notasBtn.dataset.bound) { notasBtn.dataset.bound = 'true'; notasBtn.addEventListener('click', openNotas); }
+
+    const helpBtn = document.getElementById('ribbon-help-btn');
+    const openHelp = () => {
+      const btn = document.getElementById('ribbon-help-btn');
+      const path = btn?.dataset.docsPath || '/pods/ayuda-contextual/';
+      const title = 'Ayuda Musiki';
+      const ws = (window as any).__cnwWorkspace;
+      if (ws && typeof ws.openHelp === 'function') {
+        ws.openHelp(path, title);
+        return;
+      }
+      window.dispatchEvent(new CustomEvent('musiki:open-help', { detail: { path, title } }));
+      const maybeWs = (window as any).__cnwWorkspace;
+      if (maybeWs && typeof maybeWs.openHelp === 'function') return;
+      const docsBase = btn?.dataset.docsUrl || 'https://doc.musiki.org.ar';
+      window.open(new URL(path, `${docsBase.replace(/\/$/, '')}/`).toString(), '_blank', 'noopener,noreferrer');
+    };
+    if (helpBtn && !helpBtn.dataset.bound) {
+      helpBtn.dataset.bound = 'true';
+      helpBtn.addEventListener('click', openHelp);
+    }
 
     const strudelBtn = document.getElementById('ribbon-strudel-btn');
     if (strudelBtn && !strudelBtn.dataset.bound) {

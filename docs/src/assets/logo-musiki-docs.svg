@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Musiki Docs">
+  <rect width="128" height="128" rx="28" fill="#0f1115"/>
+  <circle cx="38" cy="42" r="12" fill="#f6b26b"/>
+  <circle cx="72" cy="34" r="9" fill="#8dd9ff"/>
+  <path d="M34 80c18-30 37-30 60 0" fill="none" stroke="#f8f4ec" stroke-width="10" stroke-linecap="round"/>
+  <path d="M32 94h64" stroke="#f6b26b" stroke-width="8" stroke-linecap="round"/>
+</svg>

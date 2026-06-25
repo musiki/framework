@@ -230,6 +230,17 @@ export function injectWorkspaceCss(containerId: string) {
       min-height: 0;
       position: relative;
     }
+    .cnw-help-body {
+      overflow: hidden;
+      background: #0f1115;
+    }
+    .cnw-help-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+    }
 
     /* Recovery banner */
     .cnw-recovery {

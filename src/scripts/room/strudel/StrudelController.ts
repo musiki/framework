@@ -23,6 +23,7 @@ type HydraInstance = {
 
 type StrudelControllerOptions = {
   container: HTMLElement;
+  initialCode?: string;
   getAudioContext?: () => AudioContext | null | Promise<AudioContext | null>;
   getOutputNode?: () => AudioNode | null;
   onCodeChange?: (code: string) => void;
@@ -36,6 +37,7 @@ export class StrudelController {
   private getOutputNode?: StrudelControllerOptions['getOutputNode'];
   private onCodeChange?: StrudelControllerOptions['onCodeChange'];
   private onTransportChange?: StrudelControllerOptions['onTransportChange'];
+  private initialCode: string;
   private editorElement: StrudelEditorElement | null = null;
   private editor: StrudelMirror | null = null;
   private consoleElement: HTMLElement | null = null;
@@ -55,6 +57,7 @@ export class StrudelController {
     this.getOutputNode = options.getOutputNode;
     this.onCodeChange = options.onCodeChange;
     this.onTransportChange = options.onTransportChange;
+    this.initialCode = typeof options.initialCode === 'string' ? options.initialCode : DEFAULT_STRUDEL_CODE;
     this.transportButton = options.transportButton ?? this.container
       .closest('.pod-diy-shell')
       ?.querySelector<HTMLButtonElement>('[data-strudel-transport]') ?? null;
@@ -103,7 +106,7 @@ export class StrudelController {
 
       await customElements.whenDefined('strudel-editor');
       const editor = document.createElement('strudel-editor') as StrudelEditorElement;
-      editor.setAttribute('code', DEFAULT_STRUDEL_CODE);
+      editor.setAttribute('code', this.initialCode);
       editor.addEventListener('update', this.handleEditorUpdate as EventListener);
       host.appendChild(editor);
       this.editorElement = editor;

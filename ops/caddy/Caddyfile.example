@@ -9,3 +9,16 @@ musiki.org.ar, www.musiki.org.ar {
 
   reverse_proxy 127.0.0.1:4321
 }
+
+doc.musiki.org.ar {
+  encode zstd gzip
+  root * /opt/musiki/framework/docs/dist
+  try_files {path} {path}/index.html /404.html
+  file_server
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+}
