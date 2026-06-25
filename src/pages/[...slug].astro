@@ -2774,6 +2774,7 @@ function renderLessonsTreeHTML(
         z-index: 1;
         flex: 1;
         min-height: 0;
+        background: transparent !important;
       }
 
       .class-content .strudel-note-host > #hydra-canvas {
@@ -2792,13 +2793,41 @@ function renderLessonsTreeHTML(
       }
 
       .class-content .strudel-note-host .cm-editor {
-        background: transparent;
+        background: transparent !important;
         font-size: 0.78rem;
       }
 
       .class-content .strudel-note-host .cm-scroller {
         font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
         line-height: 1.32;
+      }
+
+      .class-content .strudel-note-host strudel-editor,
+      .class-content .strudel-note-host .cm-editor,
+      .class-content .strudel-note-host .cm-scroller,
+      .class-content .strudel-note-host .cm-content,
+      .class-content .strudel-note-host .cm-gutters,
+      .class-content .strudel-note-host .cm-line,
+      .class-content .strudel-note-host .cm-activeLine,
+      .class-content .strudel-note-host .cm-activeLineGutter,
+      .class-content .strudel-note-host .cm-panels,
+      .class-content .strudel-note-host .cm-tooltip,
+      .class-content .strudel-note-host [style*='background'] {
+        background: transparent !important;
+        background-color: transparent !important;
+      }
+
+      .class-content .strudel-note-host .cm-gutters {
+        border-right-color: color-mix(in srgb, var(--c-border) 45%, transparent) !important;
+      }
+
+      .class-content .strudel-note-host > #test-canvas {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        pointer-events: none !important;
       }
 
       .class-content .strudel-note-status {

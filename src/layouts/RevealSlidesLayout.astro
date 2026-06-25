@@ -466,6 +466,7 @@ const resolvedSlideTheme =
         z-index: 1;
         flex: 1;
         min-height: 0;
+        background: transparent !important;
       }
 
       .reveal .slides .strudel-note-host > #hydra-canvas {
@@ -484,7 +485,7 @@ const resolvedSlideTheme =
       }
 
       .reveal .slides .strudel-note-host .cm-editor {
-        background: transparent;
+        background: transparent !important;
         font-size: 0.72rem;
         text-align: left;
       }
@@ -492,6 +493,34 @@ const resolvedSlideTheme =
       .reveal .slides .strudel-note-host .cm-scroller {
         font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
         line-height: 1.3;
+      }
+
+      .reveal .slides .strudel-note-host strudel-editor,
+      .reveal .slides .strudel-note-host .cm-editor,
+      .reveal .slides .strudel-note-host .cm-scroller,
+      .reveal .slides .strudel-note-host .cm-content,
+      .reveal .slides .strudel-note-host .cm-gutters,
+      .reveal .slides .strudel-note-host .cm-line,
+      .reveal .slides .strudel-note-host .cm-activeLine,
+      .reveal .slides .strudel-note-host .cm-activeLineGutter,
+      .reveal .slides .strudel-note-host .cm-panels,
+      .reveal .slides .strudel-note-host .cm-tooltip,
+      .reveal .slides .strudel-note-host [style*='background'] {
+        background: transparent !important;
+        background-color: transparent !important;
+      }
+
+      .reveal .slides .strudel-note-host .cm-gutters {
+        border-right-color: rgba(255, 255, 255, 0.12) !important;
+      }
+
+      .reveal .slides .strudel-note-host > #test-canvas {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        pointer-events: none !important;
       }
 
       .reveal .slides .strudel-note-status {

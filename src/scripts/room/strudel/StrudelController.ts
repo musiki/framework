@@ -47,6 +47,7 @@ export class StrudelController {
   private disposed = false;
   private routedOutput: AudioNode | null = null;
   private hydraResizeObserver: ResizeObserver | null = null;
+  private drawResizeObserver: ResizeObserver | null = null;
   private clearHydra: (() => void) | null = null;
   private codeBroadcastTimer = 0;
   private lastBroadcastCode = '';
@@ -140,6 +141,7 @@ export class StrudelController {
       globalScope.xen = register('xen', (scale, pattern) => xen.xen(scale, pattern));
       globalScope.tuning = register('tuning', (scale, pattern) => xen.tuning(scale, pattern));
       this.routeOutput(superdough);
+      this.mountDrawCanvas();
       host.dataset.ready = 'true';
       this.syncTransport();
       this.clearConsole('ready');
@@ -257,6 +259,7 @@ export class StrudelController {
         if (context?.state === 'suspended') {
           void context.resume().catch((error) => this.writeConsole(error, 'error'));
         }
+        this.mountDrawCanvas();
         await editor.evaluate(true);
       } else {
         await editor.stop();
@@ -325,6 +328,34 @@ export class StrudelController {
     this.clearHydra?.();
   }
 
+  private mountDrawCanvas(pixelRatio = window.devicePixelRatio || 1) {
+    const host = this.container.querySelector<HTMLElement>('[data-strudel-host]');
+    const canvas = document.getElementById('test-canvas') as HTMLCanvasElement | null;
+    if (!host || !canvas) return;
+
+    host.prepend(canvas);
+    canvas.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'z-index:0',
+      'width:100%',
+      'height:100%',
+      'pointer-events:none',
+    ].join(';');
+
+    const resize = () => {
+      const bounds = host.getBoundingClientRect();
+      const width = Math.max(1, Math.round(bounds.width * pixelRatio));
+      const height = Math.max(1, Math.round(bounds.height * pixelRatio));
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+    };
+    this.drawResizeObserver?.disconnect();
+    this.drawResizeObserver = new ResizeObserver(resize);
+    this.drawResizeObserver.observe(host);
+    resize();
+  }
+
   dispose() {
     this.disposed = true;
     window.clearTimeout(this.codeBroadcastTimer);
@@ -333,6 +364,8 @@ export class StrudelController {
     document.removeEventListener('strudel.log', this.handleStrudelLog as EventListener);
     this.editorElement?.removeEventListener('update', this.handleEditorUpdate as EventListener);
     void this.editor?.stop();
+    this.drawResizeObserver?.disconnect();
+    this.drawResizeObserver = null;
     this.stopHydra();
     this.clearHydra = null;
     if (this.routedOutput) {
