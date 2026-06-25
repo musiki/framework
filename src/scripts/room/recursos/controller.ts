@@ -181,8 +181,11 @@ export class RecursosController {
   }
 
   private async ensureSession(): Promise<string> {
-    if (!this.isTeacher) return '';
     if (this.sessionId) return this.sessionId;
+    if (!this.isTeacher) {
+      await this.loadSession();
+      return this.sessionId ?? '';
+    }
     const roomName = this.getRoomName() ?? '';
     const claseId  = this.getCourseId();
     const courseId = this.getCourseRootId?.() ?? null;
@@ -278,7 +281,8 @@ export class RecursosController {
     this.container.addEventListener('drop', (e) => {
       e.preventDefault();
       this.dropOverlayEl.dataset.active = 'false';
-      Array.from(e.dataTransfer?.files ?? []).forEach(f => void this.uploadFile(f));
+      const targetFolder = this.folderFromDropTarget(e.target);
+      Array.from(e.dataTransfer?.files ?? []).forEach(f => void this.uploadFile(f, targetFolder));
     });
     this.contentEl.addEventListener('touchstart', (e) => {
       const el = (e.target as Element).closest('[data-item-id]');
@@ -568,7 +572,13 @@ export class RecursosController {
 
   // ── Upload ───────────────────────────────────────────────────────────────────
 
-  private async uploadFile(file: File) {
+  private folderFromDropTarget(target: EventTarget | null): string | undefined {
+    if (!(target instanceof Element)) return undefined;
+    const folderEl = target.closest<HTMLElement>('[data-folder]');
+    return folderEl?.dataset.folder?.trim() || undefined;
+  }
+
+  private async uploadFile(file: File, targetFolder?: string) {
     if (!this.canEdit()) return;
     const form = new FormData();
     form.append('file', file);
@@ -580,7 +590,7 @@ export class RecursosController {
       const sid = await this.ensureSession();
       const newItem: ResourceItem = {
         id: crypto.randomUUID(), url, name: nameFromFile(file),
-        type, folder: this.defaultFolderForType(type), source: 'upload',
+        type, folder: targetFolder ?? this.defaultFolderForType(type), source: 'upload',
         createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
         sessionId: sid || null,
       };

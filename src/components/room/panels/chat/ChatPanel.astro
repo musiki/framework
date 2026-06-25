@@ -108,6 +108,12 @@
     pointer-events: none;
   }
 
+  .musiki-pod[data-pod="chat"][data-file-drag-active="true"] .conference-chat {
+    outline: 1px solid var(--conference-accent, #76d3ff);
+    outline-offset: -3px;
+    background: color-mix(in srgb, var(--conference-accent, #76d3ff) 10%, transparent);
+  }
+
   .musiki-chat-actions-toolbar {
     display: flex;
     gap: 0.5rem;

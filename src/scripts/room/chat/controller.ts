@@ -275,6 +275,7 @@ export const createRoomChatController = ({
   let currentChatUnreadDot = chatUnreadDot;
   const boundInputs = new WeakSet<HTMLInputElement | HTMLTextAreaElement>();
   const boundButtons = new WeakSet<HTMLButtonElement>();
+  const boundDropZones = new WeakSet<HTMLElement>();
   let unsubscribeAppearance: (() => void) | null = null;
 
   const syncUnreadDot = () => {
@@ -486,6 +487,105 @@ export const createRoomChatController = ({
     }
   };
 
+  const uploadChatFile = async (file: File): Promise<string> => {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await fetch('/api/room/re-store', { method: 'POST', body: form });
+    if (!response.ok) {
+      let detail = '';
+      try {
+        detail = normalizeText((await response.json())?.error);
+      } catch {
+        detail = '';
+      }
+      throw new Error(detail || `Upload failed (${response.status})`);
+    }
+    const payload = await response.json();
+    const url = normalizeText(payload?.url);
+    if (!url) throw new Error('Upload did not return a URL.');
+    return url;
+  };
+
+  const publishFileMessage = async (file: File, url: string) => {
+    const identity = normalizeText(getIdentity());
+    const safeName = normalizeText(file.name) || 'archivo';
+    const message: ChatMessage = {
+      type: 'chat',
+      id: `chat-${crypto.randomUUID()}`,
+      identity,
+      name: normalizeText(getName()) || identity || 'Participant',
+      role: getRole(),
+      sentAt: new Date().toISOString(),
+      text: `${safeName}\n${url}`,
+    };
+
+    appendMessage(message, true);
+    await publishMessage(message);
+  };
+
+  const handleFileDrop = async (files: File[]) => {
+    if (!files.length) return;
+    if (!isConnected()) {
+      reportStatus('Conectate al room para enviar archivos en el chat.');
+      return;
+    }
+
+    for (const file of files) {
+      try {
+        if (currentChatStatus) {
+          currentChatStatus.textContent = `Subiendo ${normalizeText(file.name) || 'archivo'}...`;
+          currentChatStatus.hidden = false;
+          scrollToEnd();
+        }
+        const url = await uploadChatFile(file);
+        await publishFileMessage(file, url);
+      } catch (error) {
+        reportStatus(formatError(error));
+      } finally {
+        if (currentChatStatus) {
+          currentChatStatus.hidden = true;
+          currentChatStatus.textContent = '';
+        }
+      }
+    }
+  };
+
+  const bindFileDropZone = () => {
+    const zone = currentChatSection instanceof HTMLElement
+      ? currentChatSection
+      : currentChatScroller instanceof HTMLElement
+        ? currentChatScroller
+        : currentChatList;
+    if (!(zone instanceof HTMLElement) || boundDropZones.has(zone)) return;
+    boundDropZones.add(zone);
+
+    zone.addEventListener('dragenter', (event) => {
+      if (!event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+      zone.dataset.fileDragActive = 'true';
+      if (currentChatStatus) {
+        currentChatStatus.textContent = 'Soltar archivo para enviar';
+        currentChatStatus.hidden = false;
+      }
+    });
+    zone.addEventListener('dragleave', (event) => {
+      if (zone.contains(event.relatedTarget as Node)) return;
+      delete zone.dataset.fileDragActive;
+      if (currentChatStatus) currentChatStatus.hidden = true;
+    });
+    zone.addEventListener('dragover', (event) => {
+      if (!event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = isConnected() ? 'copy' : 'none';
+    });
+    zone.addEventListener('drop', (event) => {
+      if (!event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+      delete zone.dataset.fileDragActive;
+      void handleFileDrop(Array.from(event.dataTransfer.files ?? []));
+    });
+  };
+
   const bind = () => {
     if (!unsubscribeAppearance) {
       unsubscribeAppearance = participantAppearanceStore.subscribeAll(() => {
@@ -545,6 +645,8 @@ export const createRoomChatController = ({
         downloadTranscript();
       });
     }
+
+    bindFileDropZone();
   };
 
   const bindElements: RoomChatController['bindElements'] = (elements) => {
