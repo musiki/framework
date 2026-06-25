@@ -295,7 +295,14 @@ export type ConferenceMessage =
       zoomMode: 'fit' | 'width' | 'actual' | 'custom';
       zoom: number;
     }
-  | { type: 'recursos:sync'; items: any[]; allowStudents: boolean; emptyFolders?: string[] }
+  | {
+      type: 'recursos:sync';
+      items: any[];
+      allowStudents: boolean;
+      emptyFolders?: string[];
+      sessionId?: string | null;
+      sessionName?: string;
+    }
   | { type: 'recursos:allow-students'; allow: boolean }
   | { type: 'notes-sidebar-refresh' };
 
@@ -880,11 +887,14 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
     }
 
     if (parsed.type === 'recursos:sync') {
+      const rawSessionId = normalizeText((parsed as any).sessionId);
       return {
         type: 'recursos:sync',
         items: Array.isArray((parsed as any).items) ? (parsed as any).items : [],
         allowStudents: Boolean((parsed as any).allowStudents),
         emptyFolders: Array.isArray((parsed as any).emptyFolders) ? (parsed as any).emptyFolders : [],
+        sessionId: rawSessionId || null,
+        sessionName: normalizeText((parsed as any).sessionName),
       };
     }
 

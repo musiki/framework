@@ -27,7 +27,14 @@ type RecursosOptions = {
 };
 
 type RecursosMessage =
-  | { type: 'recursos:sync'; items: ResourceItem[]; allowStudents: boolean; emptyFolders?: string[] }
+  | {
+      type: 'recursos:sync';
+      items: ResourceItem[];
+      allowStudents: boolean;
+      emptyFolders?: string[];
+      sessionId?: string | null;
+      sessionName?: string;
+    }
   | { type: 'recursos:allow-students'; allow: boolean };
 
 export class RecursosController {
@@ -201,6 +208,7 @@ export class RecursosController {
         this.sessionId = session.id;
         this.sessionName = session.name;
         this.updateSessionBar();
+        this.broadcastSync();
       }
     } catch { /**/ }
     return this.sessionId ?? '';
@@ -436,7 +444,9 @@ export class RecursosController {
         this.sessionId = session.id;
         this.sessionName = session.name;
         this.loadEmptyFoldersFromStorage();
+        await this.loadSessionResources([session.id]);
         this.updateSessionBar();
+        this.broadcastSync();
       }
     } catch { /**/ }
   }
@@ -450,6 +460,7 @@ export class RecursosController {
     this.sessionName = '';
     this.loadEmptyFoldersFromStorage();
     this.updateSessionBar();
+    this.broadcastSync();
   }
 
   private async renameSession(): Promise<void> {
@@ -465,6 +476,7 @@ export class RecursosController {
       if (resp.ok) {
         this.sessionName = name.trim();
         this.updateSessionBar();
+        this.broadcastSync();
       }
     } catch { /**/ }
   }
@@ -527,6 +539,7 @@ export class RecursosController {
           await this.loadSessionResources([s.id]);
           this.sessionsModalEl.setAttribute('hidden', '');
           this.render();
+          this.broadcastSync();
         });
         this.sessionsListEl.appendChild(item);
       }
@@ -647,6 +660,8 @@ export class RecursosController {
       items: this.items,
       allowStudents: this.allowStudents,
       emptyFolders: [...this.emptyFolders],
+      sessionId: this.sessionId,
+      sessionName: this.sessionName,
     });
   }
 
@@ -656,9 +671,20 @@ export class RecursosController {
 
   applyRemoteMessage(msg: RecursosMessage) {
     if (msg.type === 'recursos:sync') {
-      this.items = this.dedupeItems(msg.items); this.allowStudents = true;
+      const nextSessionId = typeof msg.sessionId === 'string' && msg.sessionId.trim()
+        ? msg.sessionId.trim()
+        : null;
+      const nextSessionName = typeof msg.sessionName === 'string' ? msg.sessionName.trim() : '';
+      const sessionChanged = nextSessionId !== this.sessionId || nextSessionName !== this.sessionName;
+      this.sessionId = nextSessionId;
+      this.sessionName = nextSessionName;
+      this.items = this.dedupeItems(msg.items);
+      this.allowStudents = msg.allowStudents;
       this.emptyFolders = new Set((msg.emptyFolders ?? []).map((folder) => String(folder || '').trim()).filter(Boolean));
       this.persistEmptyFolders();
+      if (sessionChanged && this.sessionId) {
+        this.sessionResources.set(this.sessionId, this.items.filter((item) => item.sessionId === this.sessionId));
+      }
       this.render();
       void this.saveNow();
       this.emitAllowStudentsChanged();

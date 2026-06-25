@@ -543,7 +543,7 @@ export class RoomWorkspaceManager {
       existing.api.setActive();
       if (fromRecursos) {
         const reference = this.findPrimaryWorkspacePanel(["sonic-visualizer"]);
-        if (reference) this.movePanelRelative(existing.id, reference.id, "within");
+        if (reference) this.movePanelRelative(existing.id, reference.id, "below");
       }
       return existing.id;
     }
@@ -566,7 +566,7 @@ export class RoomWorkspaceManager {
       component: "sonic-visualizer",
       title: options.title ?? "SV",
       position: referencePanel
-        ? { referencePanel: referencePanel.id, direction: fromRecursos ? "within" : "below" }
+        ? { referencePanel: referencePanel.id, direction: "below" }
         : undefined,
       initialHeight: 110,
     });
@@ -1304,7 +1304,7 @@ export class RoomWorkspaceManager {
       existing.api.setActive();
       if (fromRecursos) {
         const reference = this.findPrimaryWorkspacePanel(["visualizer"]);
-        if (reference) this.movePanelRelative(existing.id, reference.id, "within");
+        if (reference) this.movePanelRelative(existing.id, reference.id, "right");
       }
       return existing.id;
     }
@@ -1324,7 +1324,7 @@ export class RoomWorkspaceManager {
       component: "visualizer",
       title: options.title ?? "VS",
       position: reference
-        ? { referencePanel: reference.id, direction: fromRecursos ? "within" : "left" }
+        ? { referencePanel: reference.id, direction: fromRecursos ? "right" : "left" }
         : undefined,
       initialWidth: Math.round(W * 0.45),
     });
@@ -1343,7 +1343,7 @@ export class RoomWorkspaceManager {
       existing.api.setActive();
       if (fromRecursos) {
         const reference = this.findPrimaryWorkspacePanel(["external-media"]);
-        if (reference) this.movePanelRelative(existing.id, reference.id, "within");
+        if (reference) this.movePanelRelative(existing.id, reference.id, "right");
       }
       return;
     }
@@ -1359,7 +1359,7 @@ export class RoomWorkspaceManager {
       component: "external-media",
       title: "MEDIA",
       position: reference
-        ? { referencePanel: reference.id, direction: fromRecursos ? "within" : "right" }
+        ? { referencePanel: reference.id, direction: "right" }
         : undefined,
       initialWidth: Math.round((this.container.getBoundingClientRect().width || 1280) * 0.46),
     });
