@@ -354,6 +354,25 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       const id = getFolderIdentity(folder);
       html += makeItem(folder, id.label, id.color, id.shape);
     }
+
+    // Relation-type guide (non-clickable: no data-layer).
+    const relLine = (color, dash, arrow) => {
+      const dashAttr = dash ? `stroke-dasharray="${dash}"` : '';
+      const head = arrow
+        ? `<path d="M20,7 L15,4.5 L15,9.5 Z" fill="${color}" />`
+        : '';
+      return `<svg width="24" height="14" viewBox="0 0 24 14" aria-hidden="true">
+        <line x1="2" y1="7" x2="${arrow ? 16 : 22}" y2="7" stroke="${color}" stroke-width="2" ${dashAttr} />
+        ${head}
+      </svg>`;
+    };
+    html += '<div class="legend-rel-group">';
+    html += `<div class="legend-rel"><span class="legend-rel-title">Relaciones</span></div>`;
+    html += `<div class="legend-rel">${relLine(colors.relHier, '', true)}<span>hypo / hyper</span></div>`;
+    html += `<div class="legend-rel">${relLine(colors.relLateral, '2,4', false)}<span>connect</span></div>`;
+    html += `<div class="legend-rel">${relLine(colors.tagLink, '4,6', false)}<span>tag</span></div>`;
+    html += '</div>';
+
     legend.innerHTML = html;
   }
 
@@ -402,6 +421,8 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       current: '#f87171',
       link: '#6b7280',
       tagLink: '#059669',
+      relHier: '#a78bfa',   // hypo/hyper (hierarchy)
+      relLateral: '#22d3ee', // connect (lateral)
       highlight: '#fbbf24',
       hover: '#f87171',
       labelColor: '#e0e0e0',
@@ -412,6 +433,8 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       current: '#dc2626',
       link: '#9ca3af',
       tagLink: '#10b981',
+      relHier: '#7c3aed',   // hypo/hyper (hierarchy)
+      relLateral: '#0891b2', // connect (lateral)
       highlight: '#f59e0b',
       hover: '#dc2626',
       labelColor: '#4a4a4a',
@@ -504,15 +527,34 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
             : 'rgba(150,150,150,0.12)';
         }
         if (highlightLinks.has(link)) return colors.highlight;
-        return link.type === 'tag' ? colors.tagLink : colors.link;
+        if (link.type === 'tag') return colors.tagLink;
+        if (link.type === 'rel') {
+          return link.relType === 'connect' ? colors.relLateral : colors.relHier;
+        }
+        return colors.link;
       })
       .linkWidth(link => {
         if (activeFolders.size > 0 && !isLinkActive(link)) return 0.5;
-        return highlightLinks.has(link) ? 3 : 1.5;
+        if (highlightLinks.has(link)) return 3;
+        // Hierarchy (hypo/hyper) reads as the structural backbone → a touch thicker.
+        if (link.type === 'rel' && link.relType !== 'connect') return 2;
+        return 1.5;
       })
       .linkDirectionalParticles(link => highlightLinks.has(link) ? 4 : 0)
       .linkDirectionalParticleWidth(link => highlightLinks.has(link) ? 3 : 0)
-      .linkLineDash(link => link.type === 'tag' && [4, 6])
+      // Hierarchy edges are directed (source → target): show an arrowhead.
+      .linkDirectionalArrowLength(link => {
+        if (activeFolders.size > 0 && !isLinkActive(link)) return 0;
+        return link.type === 'rel' && link.relType !== 'connect' ? 3.5 : 0;
+      })
+      .linkDirectionalArrowRelPos(0.95)
+      .linkDirectionalArrowColor(() => colors.relHier)
+      .linkLineDash(link => {
+        if (link.type === 'tag') return [4, 6];
+        // Lateral relations (connect) read as associative → dotted.
+        if (link.type === 'rel' && link.relType === 'connect') return [2, 4];
+        return null;
+      })
       .d3AlphaDecay(0.02)
       .d3VelocityDecay(0.3)
       .autoPauseRedraw(false)
@@ -974,6 +1016,35 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   .graph-legend :global(.legend-item.is-active span) {
     text-decoration: underline;
     text-underline-offset: 3px;
+  }
+
+  .graph-legend :global(.legend-rel-group) {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding-left: 0.9rem;
+    margin-left: 0.3rem;
+    border-left: 1px solid rgba(140, 140, 140, 0.35);
+  }
+
+  .graph-legend :global(.legend-rel) {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: default;
+    user-select: none;
+    opacity: 0.85;
+  }
+
+  .graph-legend :global(.legend-rel-title) {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.6;
+  }
+
+  .graph-legend :global(.legend-rel svg) {
+    flex-shrink: 0;
   }
 
   :global(.graph-legend svg) {
