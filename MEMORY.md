@@ -1,5 +1,13 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 eval-combinatoria-srs> <br>
+Nuevo tipo de eval `combinatoria` y capa de repetición espaciada SRS (worktree actual sobre HEAD f06a6d0, sin commit).
+- `combinatoria` con dos subtipos: `wordbank` (reconstruir frase desde banco de palabras + distractores, orden estricto o laxo) y `sorting` (clasificar ítems en cubetas, estilo DDS). Parser en `src/lib/eval/parse-eval-block.mjs` (`normalizeCombinatoria`), renderer cliente `renderCombinatoria` + dispatch + CSS en `src/pages/[...slug].astro`. Corrección en cliente; persiste vía `/api/eval/submit` (`answer`/`isCorrect`/`score`), sin tocar el contrato de persistencia.
+- Passthrough de `spaced` en `common` del parser y en `evalSnapshot` (`src/lib/eval-catalog.ts`), para que `mcq/msq/combinatoria/short_ai` puedan optar a repetición espaciada.
+- SRS SM-2: `src/lib/eval/srs.ts` (`sm2`, `qualityFromOutcome`), migración `postgres-patches/migrations/20260628140227_srs_state.sql` (tabla `"SrsState"`), hook best-effort en `submit.ts` (envuelto en try/catch: nunca rompe la entrega), y endpoint `GET /api/srs/due`.
+- `short_ai`/`reference_ai` ya estaban implementados (parser + `renderTextAI` + `/api/ai/correct`); no se tocaron.
+- Pendiente operativo: aplicar la migración SQL en Postgres; smoke test en dev de los bloques `combinatoria` en una nota de `public/`. Spec de referencia: `s123/EVALUATION.md`.
+
 <2026-05-25 notas-p0-trazas-locales> <br>
 P0 de análisis local y anotación manual de NOTAS (worktree actual, sin commit).
 - Agregada persistencia `"LiveClassNoteTrace"` en PostgreSQL para trazas por párrafo y versión (`note_id + para_index + text_hash`), con conceptos, relaciones, diagnósticos y modo.

@@ -3,6 +3,59 @@ import { query } from '../../../lib/db/pool';
 import { buildEvalCatalog, type EvalCatalogEntry } from '../../../lib/eval-catalog';
 import { canonicalizeCourseId, canonicalizeCourseSlugPath } from '../../../lib/course-alias';
 import { isElevatedGlobalRole } from '../../../lib/roles';
+import { sm2, qualityFromOutcome } from '../../../lib/eval/srs';
+
+// Spaced-repetition side-channel. Must never break the submission flow:
+// callers invoke it after the submission is persisted, wrapped in try/catch.
+async function updateSrsState(params: {
+  userId: string;
+  evalId: string;
+  spaced: any;
+  isCorrect?: boolean;
+  score: number | null;
+  confidence: number | null;
+}): Promise<void> {
+  const { userId, evalId, spaced, isCorrect, score, confidence } = params;
+  if (!spaced || typeof spaced !== 'object' || spaced.enabled !== true) return;
+  if (!userId || !evalId) return;
+  if (typeof isCorrect !== 'boolean') return; // open/ungraded items don't reschedule
+
+  const deck = typeof spaced.deck === 'string' && spaced.deck.trim() ? spaced.deck.trim() : 'default';
+  const seedEase =
+    typeof spaced.easeFactor === 'number' && Number.isFinite(spaced.easeFactor)
+      ? spaced.easeFactor
+      : 2.5;
+
+  const { data: rows } = await query(
+    'SELECT "reps", "easeFactor", "intervalDays" FROM "SrsState" WHERE "userId" = $1 AND "evalId" = $2',
+    [userId, evalId],
+  );
+  const current = rows?.[0];
+  const state = {
+    reps: current ? Number(current.reps) || 0 : 0,
+    easeFactor: current ? Number(current.easeFactor) || seedEase : seedEase,
+    intervalDays: current ? Number(current.intervalDays) || 0 : 0,
+  };
+
+  const quality = qualityFromOutcome(isCorrect, { score, confidence });
+  const next = sm2(state, quality);
+  const now = new Date();
+
+  await query(
+    `INSERT INTO "SrsState" ("userId", "evalId", "deck", "reps", "easeFactor", "intervalDays", "dueAt", "lastQuality", "lastReviewedAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+     ON CONFLICT ("userId", "evalId") DO UPDATE SET
+       "deck" = EXCLUDED."deck",
+       "reps" = EXCLUDED."reps",
+       "easeFactor" = EXCLUDED."easeFactor",
+       "intervalDays" = EXCLUDED."intervalDays",
+       "dueAt" = EXCLUDED."dueAt",
+       "lastQuality" = EXCLUDED."lastQuality",
+       "lastReviewedAt" = EXCLUDED."lastReviewedAt",
+       "updatedAt" = EXCLUDED."updatedAt"`,
+    [userId, evalId, deck, next.reps, next.easeFactor, next.intervalDays, next.dueAt, next.quality, now],
+  );
+}
 
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -588,6 +641,26 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
       if (insertError) throw insertError;
       submissionId = createdSubmissions?.[0]?.id;
+    }
+
+    // Spaced-repetition scheduling (best-effort; never blocks the response).
+    try {
+      const spacedSpec = (catalogEntry?.evalSnapshot as Record<string, unknown> | undefined)?.spaced;
+      if (spacedSpec) {
+        const confidenceRaw = (payload as Record<string, unknown>)?.confidence;
+        const confidence =
+          typeof confidenceRaw === 'number' && Number.isFinite(confidenceRaw) ? confidenceRaw : null;
+        await updateSrsState({
+          userId: targetUser.id,
+          evalId,
+          spaced: spacedSpec,
+          isCorrect,
+          score: finalScore,
+          confidence,
+        });
+      }
+    } catch (srsError: any) {
+      console.warn('[SRS] update skipped:', srsError?.message || srsError);
     }
 
     return json(

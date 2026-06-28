@@ -10189,6 +10189,261 @@ function renderLessonsTreeHTML(
         renderEvalMath(container);
       }
 
+      function renderCombinatoria(wrapper, data, position) {
+        const previousSubmission = getSubmission(data.id);
+        const wasCorrect = isSubmissionCorrect(previousSubmission);
+        const allowEdit = Boolean(data.allowEdit);
+        const isSorting = data.subtype === 'sorting';
+
+        registerProgress(data, position, wasCorrect);
+
+        const shuffleArray = (input) => {
+          const arr = Array.from(input);
+          if (data.shuffle === false) return arr;
+          for (let i = arr.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          return arr;
+        };
+
+        const container = document.createElement('div');
+        container.className = 'eval-block eval-combinatoria';
+        container.dataset.evalId = data.id;
+        container.id = `eval-${data.id}`;
+
+        const prompt = document.createElement('h4');
+        prompt.className = 'eval-prompt';
+        prompt.textContent = data.prompt || 'Actividad';
+        container.appendChild(prompt);
+
+        if (allowEdit) {
+          const editableHint = document.createElement('p');
+          editableHint.className = 'feedback-explanation';
+          editableHint.textContent = 'Puedes editar y reenviar tu respuesta.';
+          container.appendChild(editableHint);
+        }
+
+        const feedback = document.createElement('div');
+        feedback.className = 'eval-feedback';
+        feedback.style.display = 'none';
+        const message = document.createElement('p');
+        message.className = 'feedback-message';
+        feedback.appendChild(message);
+        if (data.explanation) {
+          const explanation = document.createElement('p');
+          explanation.className = 'feedback-explanation';
+          explanation.textContent = data.explanation;
+          feedback.appendChild(explanation);
+        }
+
+        // evaluate() returns { isCorrect, score, answer, meta } or null if incomplete.
+        let evaluate = () => null;
+        let resetView = () => {};
+
+        if (isSorting) {
+          const itemsWrap = document.createElement('div');
+          itemsWrap.className = 'combinatoria-sorting';
+          const rows = [];
+
+          shuffleArray(data.items).forEach((item) => {
+            const row = document.createElement('div');
+            row.className = 'combinatoria-row';
+
+            const label = document.createElement('span');
+            label.className = 'combinatoria-item-text';
+            label.textContent = item.text;
+
+            const select = document.createElement('select');
+            select.className = 'combinatoria-select';
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '— elegí —';
+            select.appendChild(placeholder);
+            shuffleArray(data.buckets).forEach((bucket) => {
+              const opt = document.createElement('option');
+              opt.value = bucket;
+              opt.textContent = bucket;
+              select.appendChild(opt);
+            });
+
+            row.appendChild(label);
+            row.appendChild(select);
+            itemsWrap.appendChild(row);
+            rows.push({ row, select, item });
+          });
+
+          container.appendChild(itemsWrap);
+
+          evaluate = () => {
+            if (rows.some(({ select }) => !select.value)) return null;
+            let correct = 0;
+            const placements = rows.map(({ row, select, item }) => {
+              const ok = select.value === item.bucket;
+              if (ok) correct += 1;
+              row.classList.toggle('is-correct', ok);
+              row.classList.toggle('is-incorrect', !ok);
+              return { text: item.text, chosen: select.value, expected: item.bucket, correct: ok };
+            });
+            const total = rows.length;
+            return {
+              isCorrect: correct === total,
+              score: total > 0 ? correct / total : 0,
+              answer: placements.map((p) => `${p.text}→${p.chosen}`),
+              meta: {
+                answerText: `${correct}/${total}`,
+                placements,
+                correctCount: correct,
+                total,
+              },
+            };
+          };
+
+          resetView = () => {
+            rows.forEach(({ row, select }) => {
+              select.value = '';
+              row.classList.remove('is-correct', 'is-incorrect');
+            });
+          };
+        } else {
+          // wordbank
+          const answerRow = document.createElement('div');
+          answerRow.className = 'combinatoria-answer';
+          const bankRow = document.createElement('div');
+          bankRow.className = 'combinatoria-bank';
+
+          const norm = (text) => (data.caseSensitive ? text : String(text).toLowerCase());
+          const chips = shuffleArray(
+            [...data.tokens, ...data.distractors].map((text, index) => ({ key: `chip-${index}`, text })),
+          );
+
+          const makeChip = ({ key, text }, location) => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'combinatoria-chip';
+            chip.dataset.key = key;
+            chip.textContent = text;
+            chip.addEventListener('click', () => {
+              if (location === 'bank') {
+                answerRow.appendChild(makeChip({ key, text }, 'answer'));
+                chip.remove();
+              } else {
+                bankRow.appendChild(makeChip({ key, text }, 'bank'));
+                chip.remove();
+              }
+            });
+            return chip;
+          };
+
+          chips.forEach((chip) => bankRow.appendChild(makeChip(chip, 'bank')));
+
+          const answerLabel = document.createElement('p');
+          answerLabel.className = 'feedback-explanation';
+          answerLabel.textContent = 'Tocá las palabras en orden para construir la frase:';
+          container.appendChild(answerLabel);
+          container.appendChild(answerRow);
+          const bankLabel = document.createElement('p');
+          bankLabel.className = 'feedback-explanation';
+          bankLabel.textContent = 'Banco de palabras:';
+          container.appendChild(bankLabel);
+          container.appendChild(bankRow);
+
+          evaluate = () => {
+            const built = Array.from(answerRow.querySelectorAll('.combinatoria-chip')).map((chip) => chip.textContent);
+            if (built.length === 0) return null;
+            let isCorrect;
+            if (data.strictOrder === false) {
+              const a = built.map(norm).sort();
+              const b = data.tokens.map(norm).sort();
+              isCorrect = a.length === b.length && a.every((value, idx) => value === b[idx]);
+            } else {
+              isCorrect = built.length === data.tokens.length
+                && built.every((value, idx) => norm(value) === norm(data.tokens[idx]));
+            }
+            answerRow.classList.toggle('is-correct', isCorrect);
+            answerRow.classList.toggle('is-incorrect', !isCorrect);
+            return {
+              isCorrect,
+              score: isCorrect ? 1 : 0,
+              answer: built.join(' '),
+              meta: { answerText: built.join(' '), expected: data.solution },
+            };
+          };
+
+          resetView = () => {
+            answerRow.classList.remove('is-correct', 'is-incorrect');
+            Array.from(answerRow.querySelectorAll('.combinatoria-chip')).forEach((chip) => {
+              bankRow.appendChild(chip);
+            });
+          };
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'combinatoria-actions';
+
+        const submitButton = document.createElement('button');
+        submitButton.type = 'button';
+        submitButton.className = 'eval-submit';
+        submitButton.textContent = previousSubmission && allowEdit ? 'Guardar cambios' : 'Verificar';
+
+        const retryButton = document.createElement('button');
+        retryButton.type = 'button';
+        retryButton.className = 'eval-submit combinatoria-retry';
+        retryButton.textContent = 'Reintentar';
+
+        actions.appendChild(submitButton);
+        actions.appendChild(retryButton);
+        container.appendChild(actions);
+        container.appendChild(feedback);
+
+        if (previousSubmission) {
+          message.textContent = wasCorrect ? '✅ ¡Correcto!' : '❌ Revisá tu respuesta';
+          message.className = `feedback-message ${wasCorrect ? 'correct' : 'incorrect'}`;
+          feedback.style.display = 'block';
+        }
+
+        submitButton.addEventListener('click', async () => {
+          const result = evaluate();
+          if (!result) {
+            message.textContent = isSorting ? 'Completá todas las categorías.' : 'Construí la frase antes de verificar.';
+            message.className = 'feedback-message incorrect';
+            feedback.style.display = 'block';
+            return;
+          }
+
+          message.textContent = result.isCorrect
+            ? '✅ ¡Correcto!'
+            : (isSorting ? `Parcial: ${result.meta.answerText}` : '❌ Revisá el orden');
+          message.className = `feedback-message ${result.isCorrect ? 'correct' : 'incorrect'}`;
+          feedback.style.display = 'block';
+
+          const saved = await saveSubmission({
+            evalId: data.id,
+            answer: result.answer,
+            isCorrect: result.isCorrect,
+            score: typeof result.score === 'number' ? result.score : null,
+            meta: { ...result.meta, subtype: data.subtype },
+          });
+
+          if (!saved) {
+            console.warn('No se pudo guardar tu respuesta. Intenta nuevamente.');
+            return;
+          }
+
+          setProgressCompletion(data.id, result.isCorrect);
+          if (allowEdit) submitButton.textContent = 'Guardar cambios';
+        });
+
+        retryButton.addEventListener('click', () => {
+          resetView();
+          feedback.style.display = 'none';
+          message.textContent = '';
+        });
+
+        wrapper.appendChild(container);
+        renderEvalMath(container);
+      }
+
       function renderUnsupported(wrapper, data, position) {
         registerProgress(data, position, false);
 
@@ -14509,6 +14764,11 @@ a[node] -->|edge| b[hub]
               return;
             }
 
+            if (evalData.type === 'combinatoria') {
+              renderCombinatoria(wrapper, evalData, index);
+              return;
+            }
+
             if (evalData.type === 'form-msq') {
               renderFormMsq(wrapper, evalData, index);
               return;
@@ -14950,6 +15210,73 @@ a[node] -->|edge| b[hub]
       .eval-submit:disabled {
         opacity: 0.5;
         cursor: not-allowed;
+      }
+      .combinatoria-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .combinatoria-retry {
+        background: transparent;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+        box-shadow: none;
+      }
+      .combinatoria-bank,
+      .combinatoria-answer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        min-height: 2.4rem;
+        padding: 0.5rem;
+        border: 1px dashed var(--c-border, rgba(127,127,127,0.4));
+        border-radius: 6px;
+        margin: 0.25rem 0 0.5rem 0;
+      }
+      .combinatoria-answer.is-correct {
+        border-color: #4caf50;
+        border-style: solid;
+      }
+      .combinatoria-answer.is-incorrect {
+        border-color: #f44336;
+        border-style: solid;
+      }
+      .combinatoria-chip {
+        padding: 0.35rem 0.7rem;
+        background: var(--c-bg);
+        color: var(--c-fg, inherit);
+        border: 1px solid var(--c-border, rgba(127,127,127,0.4));
+        border-radius: 999px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .combinatoria-chip:hover {
+        border-color: var(--accent);
+      }
+      .combinatoria-sorting {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+      .combinatoria-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.4rem 0.6rem;
+        border: 1px solid var(--c-border, rgba(127,127,127,0.4));
+        border-radius: 6px;
+      }
+      .combinatoria-row.is-correct {
+        border-color: #4caf50;
+      }
+      .combinatoria-row.is-incorrect {
+        border-color: #f44336;
+      }
+      .combinatoria-select {
+        font: inherit;
+        padding: 0.25rem 0.4rem;
+        border-radius: 4px;
       }
       .eval-feedback {
         margin-top: 1rem;

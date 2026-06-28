@@ -178,6 +178,11 @@ const buildEvalSnapshot = (parsed: Record<string, unknown>): Record<string, unkn
     model: asText((parsed as Record<string, unknown>).model),
     passScore: Number((parsed as Record<string, unknown>).passScore || 0) || 0,
     minChars: Number((parsed as Record<string, unknown>).minChars || 0) || 0,
+    spaced:
+      (parsed as Record<string, unknown>).spaced
+        && typeof (parsed as Record<string, unknown>).spaced === 'object'
+        ? (parsed as Record<string, unknown>).spaced
+        : null,
   }) as Record<string, unknown>;
 };
 

@@ -164,6 +164,86 @@ const loadEvalYaml = (blockValue) => {
   }
 };
 
+const normalizeSpaced = (raw) => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (!asBoolean(raw.enabled, false)) return null;
+  const algorithm = asText(raw.algorithm, 'sm2').toLowerCase() || 'sm2';
+  return {
+    enabled: true,
+    deck: asText(raw.deck || raw.mazo, 'default') || 'default',
+    algorithm: algorithm === 'fsrs' ? 'fsrs' : 'sm2',
+    initialIntervalDays: asPositiveInteger(raw.initialIntervalDays ?? raw.initial_interval_days, 1),
+    easeFactor: asPositiveNumber(raw.easeFactor ?? raw.ease_factor, 2.5),
+  };
+};
+
+const parseSortingItem = (item, index) => {
+  if (typeof item !== 'object' || item === null) return null;
+  const text = asText(item.text || item.label);
+  const bucket = asText(item.bucket || item.category || item.cubeta);
+  if (!text || !bucket) return null;
+  return { id: `item-${index + 1}`, text, bucket };
+};
+
+const normalizeCombinatoria = (raw, common) => {
+  const subtype = asText(raw.subtype, 'wordbank').toLowerCase() || 'wordbank';
+  const base = {
+    ...common,
+    type: 'combinatoria',
+    subtype: subtype === 'sorting' ? 'sorting' : 'wordbank',
+    prompt: asText(raw.prompt || raw.question || raw.title || ''),
+    explanation: asText(raw.explanation),
+    hint: asText(raw.hint),
+    shuffle: asBoolean(raw.shuffle, true),
+  };
+
+  if (base.subtype === 'sorting') {
+    const buckets = toList(raw.buckets || raw.cubetas)
+      .map((bucket) => asText(bucket))
+      .filter(Boolean);
+    const items = toList(raw.items)
+      .map((item, index) => parseSortingItem(item, index))
+      .filter(Boolean);
+
+    if (buckets.length < 2) {
+      throw new Error(`Combinatoria ${common.id} (sorting) requires at least 2 buckets`);
+    }
+    if (items.length < 1) {
+      throw new Error(`Combinatoria ${common.id} (sorting) requires at least 1 item`);
+    }
+    const bucketSet = new Set(buckets);
+    items.forEach((item) => {
+      if (!bucketSet.has(item.bucket)) {
+        throw new Error(`Combinatoria ${common.id}: item bucket "${item.bucket}" is not declared in buckets`);
+      }
+    });
+
+    return { ...base, buckets, items };
+  }
+
+  // wordbank
+  const solution = asText(raw.solution || raw.answer || raw.respuesta);
+  if (!solution) {
+    throw new Error(`Combinatoria ${common.id} (wordbank) requires a solution`);
+  }
+  const tokens = solution.split(/\s+/g).filter(Boolean);
+  if (tokens.length < 2) {
+    throw new Error(`Combinatoria ${common.id} (wordbank) solution needs at least 2 tokens`);
+  }
+  const distractors = toList(raw.distractors || raw.distractores)
+    .map((token) => asText(token))
+    .filter(Boolean);
+
+  return {
+    ...base,
+    solution,
+    tokens,
+    distractors,
+    caseSensitive: asBoolean(raw.caseSensitive ?? raw.case_sensitive, false),
+    strictOrder: asBoolean(raw.strictOrder ?? raw.strict_order, true),
+  };
+};
+
 const parseMcqOption = (option, index) => {
   if (typeof option === 'object' && option !== null) {
     const text = asText(option.text || option.label);
@@ -439,9 +519,11 @@ export function parseEvalBlock(blockValue, options = {}) {
     title: asText(parsed.title),
     group: asText(parsed.group || parsed.tarea),
     allowEdit: asBoolean(parsed.allowEdit ?? parsed.allowedit ?? parsed.allow_edit ?? parsed.editable, false),
+    spaced: normalizeSpaced(parsed.spaced),
   };
 
   if (type === 'mcq') return normalizeMcq(parsed, common);
+  if (type === 'combinatoria') return normalizeCombinatoria(parsed, common);
   if (type === 'msq') return normalizeMcq(parsed, common, { forceMultiple: true });
   if (type === 'mcc') return normalizeMcc(parsed, common);
   if (type === 'poll') return normalizePoll(parsed, common);
