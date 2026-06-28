@@ -203,7 +203,8 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   let hoverNode = null;
   const labelOpacity = new Map();
   let showAll = false; // default: only public notes + their tags
-  const hiddenLayers = new Set();
+  const hiddenLayers = new Set();   // layers removed from the dataset (hide)
+  const activeFolders = new Set();  // layers soloed: highlighted while the rest is muted
 
   function getNodeLayer(node) {
     const isCurrent = node.id === currentSlug || node.canonicalSlug === currentSlug;
@@ -211,6 +212,22 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     if (node.type === 'tag') return 'tags';
     if (node.type === 'document' && node.publicFolder) return node.publicFolder;
     return 'documentos';
+  }
+
+  // Solo/highlight mode: when activeFolders has entries, only those layers stay
+  // fully drawn; everything else is muted.
+  function isNodeActive(node) {
+    if (activeFolders.size === 0) return true;
+    if (node.id === currentSlug || node.canonicalSlug === currentSlug) return true;
+    return activeFolders.has(getNodeLayer(node));
+  }
+
+  function isLinkActive(link) {
+    if (activeFolders.size === 0) return true;
+    const src = typeof link.source === 'object' ? link.source : null;
+    const tgt = typeof link.target === 'object' ? link.target : null;
+    if (!src || !tgt) return false;
+    return isNodeActive(src) && isNodeActive(tgt);
   }
 
   function applyLayerFilters(data) {
@@ -311,13 +328,18 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     const foldersData = graphData ? graphData : data;
     const folders = [...new Set(foldersData.nodes.map(n => n.publicFolder).filter(Boolean))].sort();
 
+    const soloing = activeFolders.size > 0;
     const makeItem = (layerKey, label, defaultColor, shape) => {
       const isHidden = hiddenLayers.has(layerKey);
-      const color = isHidden ? '#888888' : defaultColor;
-      const opacityStyle = isHidden ? 'style="opacity: 0.45;"' : '';
-      const disabledClass = isHidden ? 'is-disabled' : '';
+      const isActive = activeFolders.has(layerKey);
+      const isMuted = isHidden || (soloing && !isActive);
+      const color = isMuted ? '#888888' : defaultColor;
+      const opacityStyle = isMuted ? 'style="opacity: 0.45;"' : '';
+      const classes = ['legend-item'];
+      if (isHidden) classes.push('is-disabled');
+      if (isActive) classes.push('is-active');
       return `
-        <div class="legend-item ${disabledClass}" data-layer="${layerKey}" ${opacityStyle}>
+        <div class="${classes.join(' ')}" data-layer="${layerKey}" ${opacityStyle}>
           ${getShapeSvg(shape, color, 14)}
           <span>${label}</span>
         </div>
@@ -476,10 +498,18 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         return node.type === 'tag' ? 3 : 6;
       })
       .linkColor(link => {
+        if (activeFolders.size > 0 && !isLinkActive(link)) {
+          return document.documentElement.classList.contains('dark')
+            ? 'rgba(120,120,120,0.10)'
+            : 'rgba(150,150,150,0.12)';
+        }
         if (highlightLinks.has(link)) return colors.highlight;
         return link.type === 'tag' ? colors.tagLink : colors.link;
       })
-      .linkWidth(link => highlightLinks.has(link) ? 3 : 1.5)
+      .linkWidth(link => {
+        if (activeFolders.size > 0 && !isLinkActive(link)) return 0.5;
+        return highlightLinks.has(link) ? 3 : 1.5;
+      })
       .linkDirectionalParticles(link => highlightLinks.has(link) ? 4 : 0)
       .linkDirectionalParticleWidth(link => highlightLinks.has(link) ? 3 : 0)
       .linkLineDash(link => link.type === 'tag' && [4, 6])
@@ -500,16 +530,20 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         // Folder identity (null for tags and current node)
         const identity = !isTag && !isCurrent ? getFolderIdentity(node.publicFolder) : null;
 
+        // Solo/highlight: mute nodes outside the active topos.
+        const muted = activeFolders.size > 0 && !isNodeActive(node);
+
         // Fill color
         let fillColor;
-        if (isCurrent)        fillColor = colors.current;
+        if (muted)            fillColor = '#888888';
+        else if (isCurrent)   fillColor = colors.current;
         else if (isHighlight) fillColor = isHover ? colors.hover : colors.highlight;
         else if (identity)    fillColor = identity.color;
         else if (isTag)       fillColor = colors.tag;
         else                  fillColor = colors.document;
 
-        // Glow ring on highlight
-        if (isHighlight) {
+        // Glow ring on highlight (not when muted)
+        if (isHighlight && !muted) {
           ctx.beginPath();
           ctx.arc(node.x, node.y, r * 2.0, 0, 2 * Math.PI);
           ctx.fillStyle = (isHover ? colors.hover : colors.highlight) + '2e';
@@ -517,8 +551,11 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         }
 
         // Node shape
+        const prevAlpha = ctx.globalAlpha;
+        if (muted) ctx.globalAlpha = 0.18;
         ctx.fillStyle = fillColor;
         drawShape(ctx, identity ? identity.shape : 'circle', node.x, node.y, r);
+        ctx.globalAlpha = prevAlpha;
 
         // Fade-in label when zoomed (> 0.8 globalScale)
         const shouldShowLabels = globalScale > 0.8;
@@ -535,7 +572,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.globalAlpha = opacity;
+          ctx.globalAlpha = muted ? opacity * 0.15 : opacity;
           ctx.fillStyle = colors.labelColor;
           ctx.fillText(node.name, node.x, node.y + r * 2.2);
           ctx.globalAlpha = 1;
@@ -742,12 +779,18 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     const layer = item.dataset.layer;
     if (!layer) return;
 
-    if (hiddenLayers.has(layer)) {
-      hiddenLayers.delete(layer);
-    } else {
-      hiddenLayers.add(layer);
+    // Shift/Alt-click: hide the layer (remove from dataset) — previous behavior.
+    if (e.shiftKey || e.altKey) {
+      if (hiddenLayers.has(layer)) hiddenLayers.delete(layer);
+      else hiddenLayers.add(layer);
+      applyGraphFilter();
+      return;
     }
-    applyGraphFilter();
+
+    // Plain click: solo/highlight this topos and mute the rest. Click again to release.
+    if (activeFolders.has(layer)) activeFolders.delete(layer);
+    else activeFolders.add(layer);
+    updateLegend(graphData);
   });
 
   document.addEventListener(
@@ -921,6 +964,16 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
 
   .graph-legend :global(.legend-item.is-disabled):hover {
     opacity: 0.6;
+  }
+
+  .graph-legend :global(.legend-item.is-active) {
+    font-weight: 700;
+    transform: translateY(-1px);
+  }
+
+  .graph-legend :global(.legend-item.is-active span) {
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   :global(.graph-legend svg) {

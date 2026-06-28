@@ -1,5 +1,11 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 graph-topoi-hypo-hyper> <br>
+Grafo: relaciones jerárquicas en datos + highlight/mute por topos (worktree sobre HEAD f06a6d0, sin commit).
+- `src/scripts/build-graph-data.mjs`: ahora emite enlaces tipados desde frontmatter `hypo`/`hyper`/`connect` (helper `extractRelationTargets`), con `type: 'rel'` y `relType`. Antes solo se leían wikilinks `[[...]]` del cuerpo, así que la estructura hypo/hyper de las notas atómicas no llegaba al grafo. Verificado contra el frontmatter real de s123 (resuelve targets por slug/base).
+- `src/components/GraphModal.astro`: nuevo modo solo/highlight por topos acoplado a la leyenda existente. Click normal en un item de la leyenda (que ya lista los topoi = `publicFolder` con su color/forma) highlightea ese topos y mutea el resto (nodos/labels/links atenuados); Shift/Alt-click conserva el ocultar por capa (`hiddenLayers`). Estado nuevo `activeFolders` + helpers `isNodeActive`/`isLinkActive`; clase `.legend-item.is-active`.
+- Pendiente: ensamblar contenido (content:assemble) para que las notas de s123 entren a `src/content` y se vean los rel-links; opcional: portar el mismo modo a `GraphPod.astro` (pod de sala) para paridad.
+
 <2026-06-28 eval-combinatoria-srs> <br>
 Nuevo tipo de eval `combinatoria` y capa de repetición espaciada SRS (worktree actual sobre HEAD f06a6d0, sin commit).
 - `combinatoria` con dos subtipos: `wordbank` (reconstruir frase desde banco de palabras + distractores, orden estricto o laxo) y `sorting` (clasificar ítems en cubetas, estilo DDS). Parser en `src/lib/eval/parse-eval-block.mjs` (`normalizeCombinatoria`), renderer cliente `renderCombinatoria` + dispatch + CSS en `src/pages/[...slug].astro`. Corrección en cliente; persiste vía `/api/eval/submit` (`answer`/`isCorrect`/`score`), sin tocar el contrato de persistencia.

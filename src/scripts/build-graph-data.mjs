@@ -38,6 +38,26 @@ function extractWikilinks(content) {
   return links;
 }
 
+// Targets declared in frontmatter relation fields (hypo / hyper / connect).
+// Accepts an array or a single value; entries may be `[[wikilink]]`, `[[a|alias]]`
+// or a bare slug/title.
+function extractRelationTargets(value) {
+  if (!value) return [];
+  const items = Array.isArray(value) ? value : [value];
+  const out = [];
+  for (const item of items) {
+    const s = String(item || '').trim();
+    if (!s) continue;
+    const wl = extractWikilinks(s);
+    if (wl.length) {
+      out.push(...wl);
+    } else {
+      out.push(s.replace(/^\[\[|\]\]$/g, '').split('|')[0].split('#')[0].trim());
+    }
+  }
+  return out.filter(Boolean);
+}
+
 const isPublicStatus = (data) => String(data?.status || '').trim().toLowerCase() === 'public';
 
 export function buildGraphData({ publicOnly = false } = {}) {
@@ -156,6 +176,27 @@ export function buildGraphData({ publicOnly = false } = {}) {
             type: 'link'
           });
           linkSet.add(linkId);
+        }
+      }
+    }
+
+    // Typed relations from frontmatter (hypo / hyper / connect).
+    // These power branch isolation and topos highlighting in the graph.
+    for (const relType of ['hypo', 'hyper', 'connect']) {
+      const relTargets = extractRelationTargets(fm.data?.[relType]);
+      for (const ref of relTargets) {
+        const targetSlug = slugMap.get(norm(ref));
+        if (targetSlug && targetSlug !== slug) {
+          const linkId = `${slug}->${targetSlug}:${relType}`;
+          if (!linkSet.has(linkId)) {
+            links.push({
+              source: slug,
+              target: targetSlug,
+              type: 'rel',
+              relType,
+            });
+            linkSet.add(linkId);
+          }
         }
       }
     }
