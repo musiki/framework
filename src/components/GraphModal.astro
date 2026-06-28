@@ -8,6 +8,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
 
 <div id="graph-modal" class="graph-modal">
   <div id="graph-canvas"></div>
+  <div id="graph-focus-hud" class="graph-focus-hud hidden"></div>
   <div class="graph-hud">
     <div class="graph-legend">
       <!-- Dynamically generated legend -->
@@ -20,10 +21,11 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       <div id="node-preview" class="node-preview">
         <img id="preview-img" src="" alt="" />
         <div id="preview-title"></div>
+        <div id="preview-excerpt" class="node-preview-excerpt"></div>
       </div>
-      {isLoggedIn && (
-        <button id="graph-toggle-filter" title="Mostrar todo / solo público (T)">público</button>
-      )}
+      <select id="graph-view-select" class="graph-view-select" title="Filtrar (público / todo / curso)" aria-label="Filtrar vista">
+        <option value="public">público</option>
+      </select>
       <button id="graph-center" title="Center on current page">⊙</button>
       <button id="graph-close" title="Close">✕</button>
     </div>
@@ -202,9 +204,133 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   const highlightLinks = new Set();
   let hoverNode = null;
   const labelOpacity = new Map();
-  let showAll = false; // default: only public notes + their tags
+  // viewMode: 'public' | 'all' | '<courseId>' (e.g. s123, i1, cym, i2)
+  let viewMode = 'public';
   const hiddenLayers = new Set();   // layers removed from the dataset (hide)
   const activeFolders = new Set();  // layers soloed: highlighted while the rest is muted
+
+  // ── Folding (collapsible hierarchy over hypo/hyper) ────────────────────────
+  const collapsedNodes = new Set(); // nodes whose descendants are hidden
+  let foldLevel = Infinity;         // max hierarchy depth shown from roots
+  let foldMaxDepth = 0;             // deepest level in the current hierarchy
+
+  // Build parent→child hierarchy from rel links: hypo => parent=source/child=target,
+  // hyper => parent=target/child=source. `connect` (lateral) is ignored.
+  function buildHierarchy(data) {
+    const childrenOf = new Map();
+    const parentsOf = new Map();
+    const addEdge = (parent, child) => {
+      if (parent === child) return;
+      if (!childrenOf.has(parent)) childrenOf.set(parent, new Set());
+      childrenOf.get(parent).add(child);
+      if (!parentsOf.has(child)) parentsOf.set(child, new Set());
+      parentsOf.get(child).add(parent);
+    };
+    for (const l of data.links) {
+      if (l.type !== 'rel' || l.relType === 'connect') continue;
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      if (l.relType === 'hyper') addEdge(t, s);
+      else addEdge(s, t); // hypo (default)
+    }
+    return { childrenOf, parentsOf };
+  }
+
+  function nodeHasChildren(id) {
+    const h = buildHierarchy(graphInstance ? graphInstance.graphData() : { links: [] });
+    return (h.childrenOf.get(id)?.size || 0) > 0;
+  }
+
+  // Compute which nodes survive folding: hierarchical nodes must be within
+  // foldLevel of a root and not under a collapsed ancestor; non-hierarchical
+  // nodes (no parent/child) stay; tags follow their connected documents.
+  function applyFolding(data) {
+    const { childrenOf, parentsOf } = buildHierarchy(data);
+    const hierarchical = new Set([...childrenOf.keys(), ...parentsOf.keys()]);
+    if (hierarchical.size === 0) { foldMaxDepth = 0; return data; }
+
+    const roots = [...hierarchical].filter(id => !(parentsOf.get(id)?.size));
+    const depth = new Map();
+    const visible = new Set();
+    foldMaxDepth = 0;
+    const queue = roots.map(id => ({ id, d: 0 }));
+    for (const r of roots) depth.set(r, 0);
+    while (queue.length) {
+      const { id, d } = queue.shift();
+      foldMaxDepth = Math.max(foldMaxDepth, d);
+      if (d > foldLevel) continue;
+      visible.add(id);
+      if (collapsedNodes.has(id)) continue; // hide descendants
+      for (const child of (childrenOf.get(id) || [])) {
+        if (!depth.has(child)) { depth.set(child, d + 1); queue.push({ id: child, d: d + 1 }); }
+      }
+    }
+
+    const keep = new Set();
+    for (const n of data.nodes) {
+      if (n.type === 'tag') continue;            // decided after, by connectivity
+      if (!hierarchical.has(n.id)) { keep.add(n.id); continue; } // standalone node
+      if (visible.has(n.id)) keep.add(n.id);
+    }
+    // tags stay if connected to a kept document
+    for (const l of data.links) {
+      if (l.type !== 'tag') continue;
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      if (keep.has(s) && String(t).startsWith('tag:')) keep.add(t);
+      if (keep.has(t) && String(s).startsWith('tag:')) keep.add(s);
+    }
+
+    return {
+      nodes: data.nodes.filter(n => keep.has(n.id)),
+      links: data.links.filter(l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        return keep.has(s) && keep.has(t);
+      }),
+    };
+  }
+
+  function updateFoldHud() {
+    const hud = document.getElementById('graph-focus-hud');
+    if (!hud) return;
+    const collapsedCount = collapsedNodes.size;
+    const folded = foldLevel !== Infinity || collapsedCount > 0;
+    if (!folded) { hud.classList.add('hidden'); hud.innerHTML = ''; return; }
+    const levelLabel = foldLevel === Infinity ? 'todo' : `${foldLevel}/${foldMaxDepth}`;
+    hud.innerHTML = `
+      <span class="focus-name">⌖ niveles ${levelLabel}</span>
+      ${collapsedCount ? `<span class="focus-depth">${collapsedCount} ramas cerradas</span>` : ''}
+      <span class="focus-hint">[ pliega · ] despliega · Esc reset</span>
+    `;
+    hud.classList.remove('hidden');
+  }
+
+  function resetFolding() {
+    collapsedNodes.clear();
+    foldLevel = Infinity;
+    if (graphInstance) applyGraphFilter();
+    updateFoldHud();
+  }
+
+  // [ folds one level toward the roots; ] unfolds one level.
+  function stepFold(delta) {
+    const ceil = Math.max(0, foldMaxDepth);
+    let current = foldLevel === Infinity ? ceil : foldLevel;
+    current = Math.max(0, Math.min(ceil, current + delta));
+    foldLevel = (delta > 0 && current >= ceil) ? Infinity : current;
+    if (graphInstance) applyGraphFilter();
+    updateFoldHud();
+  }
+
+  function toggleNodeBranch(id) {
+    if (!nodeHasChildren(id)) return false;
+    if (collapsedNodes.has(id)) collapsedNodes.delete(id);
+    else collapsedNodes.add(id);
+    applyGraphFilter();
+    updateFoldHud();
+    return true;
+  }
 
   function getNodeLayer(node) {
     const isCurrent = node.id === currentSlug || node.canonicalSlug === currentSlug;
@@ -218,12 +344,16 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   // fully drawn; everything else is muted.
   function isNodeActive(node) {
     if (activeFolders.size === 0) return true;
-    if (node.id === currentSlug || node.canonicalSlug === currentSlug) return true;
-    return activeFolders.has(getNodeLayer(node));
+    const isCurrent = node.id === currentSlug || node.canonicalSlug === currentSlug;
+    return isCurrent || activeFolders.has(getNodeLayer(node));
+  }
+
+  function isSoloing() {
+    return activeFolders.size > 0;
   }
 
   function isLinkActive(link) {
-    if (activeFolders.size === 0) return true;
+    if (!isSoloing()) return true;
     const src = typeof link.source === 'object' ? link.source : null;
     const tgt = typeof link.target === 'object' ? link.target : null;
     if (!src || !tgt) return false;
@@ -320,6 +450,45 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     };
   }
 
+  // Keep documents of a given course (node.course) plus their connected tags.
+  function filterByCourse(data, course) {
+    const allowedIds = new Set(
+      data.nodes.filter(n => n.type === 'document' && n.course === course).map(n => n.id)
+    );
+    const tagIds = new Set();
+    for (const link of data.links) {
+      const s = typeof link.source === 'object' ? link.source.id : link.source;
+      const t = typeof link.target === 'object' ? link.target.id : link.target;
+      if (allowedIds.has(s) && String(t).startsWith('tag:')) tagIds.add(t);
+      if (allowedIds.has(t) && String(s).startsWith('tag:')) tagIds.add(s);
+    }
+    const allowed = new Set([...allowedIds, ...tagIds]);
+    return {
+      nodes: data.nodes.filter(n => allowed.has(n.id)),
+      links: data.links.filter(l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        return allowed.has(s) && allowed.has(t);
+      }),
+    };
+  }
+
+  // Pick the dataset for the current viewMode ('public' | 'all' | courseId).
+  function selectDataset(raw) {
+    if (viewMode === 'all') return raw;
+    if (viewMode === 'public') return filterVisibleData(raw);
+    return filterByCourse(raw, viewMode);
+  }
+
+  // Available course ids in the dataset, ordered by preference.
+  const COURSE_ORDER = ['s123', 'i1', 'cym', 'i2'];
+  function availableCourses() {
+    const set = new Set((graphData?.nodes || []).map(n => n.course).filter(Boolean));
+    const ordered = COURSE_ORDER.filter(c => set.has(c));
+    const extras = [...set].filter(c => !COURSE_ORDER.includes(c)).sort();
+    return [...ordered, ...extras];
+  }
+
   function updateLegend(data) {
     const legend = document.querySelector('.graph-legend');
     if (!legend) return;
@@ -377,10 +546,18 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   }
 
   function updateFilterButton() {
-    const btn = document.getElementById('graph-toggle-filter');
-    if (!btn) return;
-    btn.textContent = showAll ? 'todo' : 'público';
-    btn.dataset.all = showAll ? 'true' : 'false';
+    const select = document.getElementById('graph-view-select');
+    if (!select) return;
+    const opts = [];
+    opts.push({ value: 'public', label: 'público' });
+    if (isLoggedIn) opts.push({ value: 'all', label: 'todo' });
+    for (const course of availableCourses()) opts.push({ value: course, label: course });
+    // If the current viewMode is no longer available, fall back to 'public'.
+    if (!opts.some(o => o.value === viewMode)) viewMode = 'public';
+    select.innerHTML = opts
+      .map(o => `<option value="${o.value}"${o.value === viewMode ? ' selected' : ''}>${o.label}</option>`)
+      .join('');
+    select.value = viewMode;
   }
 
   // Show/hide modal
@@ -445,8 +622,9 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   // Render the graph
   async function renderGraph() {
     const [raw, ForceGraphCtor] = await Promise.all([initGraph(), ensureForceGraph()]);
-    let data = showAll ? raw : filterVisibleData(raw);
+    let data = selectDataset(raw);
     data = applyLayerFilters(data);
+    data = applyFolding(data);
     crossLinkNodes(data);
     const container = document.getElementById('graph-canvas');
 
@@ -521,7 +699,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         return node.type === 'tag' ? 3 : 6;
       })
       .linkColor(link => {
-        if (activeFolders.size > 0 && !isLinkActive(link)) {
+        if (isSoloing() && !isLinkActive(link)) {
           return document.documentElement.classList.contains('dark')
             ? 'rgba(120,120,120,0.10)'
             : 'rgba(150,150,150,0.12)';
@@ -534,7 +712,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         return colors.link;
       })
       .linkWidth(link => {
-        if (activeFolders.size > 0 && !isLinkActive(link)) return 0.5;
+        if (isSoloing() && !isLinkActive(link)) return 0.5;
         if (highlightLinks.has(link)) return 3;
         // Hierarchy (hypo/hyper) reads as the structural backbone → a touch thicker.
         if (link.type === 'rel' && link.relType !== 'connect') return 2;
@@ -544,7 +722,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       .linkDirectionalParticleWidth(link => highlightLinks.has(link) ? 3 : 0)
       // Hierarchy edges are directed (source → target): show an arrowhead.
       .linkDirectionalArrowLength(link => {
-        if (activeFolders.size > 0 && !isLinkActive(link)) return 0;
+        if (isSoloing() && !isLinkActive(link)) return 0;
         return link.type === 'rel' && link.relType !== 'connect' ? 3.5 : 0;
       })
       .linkDirectionalArrowRelPos(0.95)
@@ -572,8 +750,8 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         // Folder identity (null for tags and current node)
         const identity = !isTag && !isCurrent ? getFolderIdentity(node.publicFolder) : null;
 
-        // Solo/highlight: mute nodes outside the active topos.
-        const muted = activeFolders.size > 0 && !isNodeActive(node);
+        // Solo/highlight: mute nodes outside the active topos or focused branch.
+        const muted = isSoloing() && !isNodeActive(node);
 
         // Fill color
         let fillColor;
@@ -609,7 +787,7 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         labelOpacity.set(node.id, opacity);
 
         if (opacity > 0) {
-          const baseFontSize = isTag ? 10.2 : 12; // 15% smaller for tags
+          const baseFontSize = isTag ? 14.3 : 16.8; // +40% vs. previous (10.2 / 12)
           const fontSize = baseFontSize / globalScale;
           ctx.font = `${fontSize}px Sans-Serif`;
           ctx.textAlign = 'center';
@@ -641,7 +819,8 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         const preview = document.getElementById('node-preview');
         const previewImg = document.getElementById('preview-img');
         const previewTitle = document.getElementById('preview-title');
-        
+        const previewExcerpt = document.getElementById('preview-excerpt');
+
         if (node && node.type === 'document') {
           previewTitle.textContent = node.name;
           if (node.img) {
@@ -649,6 +828,11 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
             previewImg.style.display = 'block';
           } else {
             previewImg.style.display = 'none';
+          }
+          if (previewExcerpt) {
+            const text = (node.excerpt || node.def || '').trim();
+            previewExcerpt.textContent = text;
+            previewExcerpt.style.display = text ? 'block' : 'none';
           }
           preview.classList.add('visible');
         } else {
@@ -668,18 +852,21 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         }
       })
       .onNodeClick((node, event) => {
-        // Shift+Click to center and zoom on node
+        // Shift+Click: open the note (or tag page).
         if (event.shiftKey) {
-          graphInstance.centerAt(node.x, node.y, 1000);
-          graphInstance.zoom(8, 2000);
-        } else {
-          // Regular click to navigate
           if (node.type === 'document') {
             window.location.href = '/' + (node.canonicalSlug || node.id);
           } else if (node.type === 'tag') {
             const tag = node.id.replace('tag:', '');
             window.location.href = '/' + encodeURIComponent(tag);
           }
+          return;
+        }
+        // Plain click: open/close this node's branch if it has children;
+        // otherwise just center on it.
+        const toggled = node.type === 'document' && toggleNodeBranch(node.id);
+        if (!toggled) {
+          graphInstance.centerAt(node.x, node.y, 800);
         }
       });
     
@@ -695,19 +882,24 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       }
     }, 1000);
     
-    // Animate dashed lines for tag links
-    const dashLen = 4;
-    const gapLen = 6;
+    // Animate the dashed tag links as small marching dots (subtle, not invasive).
+    // Other link types keep their static style (connect dotted, hierarchy solid).
+    const dashLen = 1;   // dot
+    const gapLen = 4;    // spacing between dots
     const st = +new Date();
-    const dashAnimateTime = 800; // time to animate a single dash cycle
-    
+    const dashAnimateTime = 1200; // ms per cycle
+
     (function animateDashes() {
       const t = ((+new Date() - st) % dashAnimateTime) / dashAnimateTime;
-      const lineDash = t < 0.5 
-        ? [0, gapLen * t * 2, dashLen, gapLen * (1 - t * 2)] 
+      const lineDash = t < 0.5
+        ? [0, gapLen * t * 2, dashLen, gapLen * (1 - t * 2)]
         : [dashLen * (t - 0.5) * 2, gapLen, dashLen * (1 - (t - 0.5) * 2), 0];
-      
-      graphInstance.linkLineDash(link => link.type === 'tag' && lineDash);
+
+      graphInstance.linkLineDash(link => {
+        if (link.type === 'tag') return lineDash;
+        if (link.type === 'rel' && link.relType === 'connect') return [1, 4];
+        return null;
+      });
       requestAnimationFrame(animateDashes);
     })();
     
@@ -728,11 +920,12 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     });
   }
 
-  // Toggle public/all filter while graph is open
+  // Rebuild the displayed dataset (view mode + layer hide + folding).
   function applyGraphFilter() {
     if (!graphInstance || !graphData) return;
-    let data = showAll ? graphData : filterVisibleData(graphData);
+    let data = selectDataset(graphData);
     data = applyLayerFilters(data);
+    data = applyFolding(data);
     crossLinkNodes(data);
     highlightNodes.clear();
     highlightLinks.clear();
@@ -765,11 +958,25 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
       e.preventDefault();
       toggleModal();
     } else if (e.key.toLowerCase() === 't' && isOpen && isLoggedIn) {
+      // Toggle público <-> todo quickly.
       e.preventDefault();
-      showAll = !showAll;
+      viewMode = viewMode === 'all' ? 'public' : 'all';
       applyGraphFilter();
+    } else if (isOpen && (e.key === '[' )) {
+      // Fold one hierarchy level toward the roots.
+      e.preventDefault();
+      stepFold(-1);
+    } else if (isOpen && (e.key === ']')) {
+      // Unfold one hierarchy level.
+      e.preventDefault();
+      stepFold(+1);
     } else if (e.key === 'Escape' && isOpen) {
-      toggleModal();
+      // Escape resets folding first, then closes the modal.
+      if (foldLevel !== Infinity || collapsedNodes.size > 0) {
+        resetFolding();
+      } else {
+        toggleModal();
+      }
     }
   };
 
@@ -802,12 +1009,20 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     void setModalOpen(false, 'local');
   });
   document.getElementById('graph-center')?.addEventListener('click', centerOnCurrent);
-  if (isLoggedIn) {
-    document.getElementById('graph-toggle-filter')?.addEventListener('click', () => {
-      showAll = !showAll;
-      applyGraphFilter();
+  document.getElementById('graph-view-select')?.addEventListener('change', (e) => {
+    viewMode = e.target.value || 'public';
+    applyGraphFilter();
+  });
+
+  // Keep the canvas sized to the window (resizable / responsive).
+  let resizeRaf = 0;
+  window.addEventListener('resize', () => {
+    if (!graphInstance) return;
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => {
+      graphInstance.width(window.innerWidth).height(window.innerHeight);
     });
-  }
+  });
   
   document.getElementById('graph-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'graph-modal') {
@@ -953,14 +1168,30 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   }
 
   .node-preview {
+    position: fixed;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 0.5rem;
+    gap: 0.6rem;
     opacity: 0;
-    transition: opacity 1s ease;
+    transition: opacity 0.45s ease;
     pointer-events: none;
-    max-width: 200px;
+    width: min(34vw, 360px);
+    padding: 1.4rem 1.6rem 1.4rem 2.4rem;
+    z-index: 2;
+    /* Blurred panel that fades out toward the left. */
+    background: linear-gradient(
+      to left,
+      color-mix(in srgb, var(--c-bg, #000) 78%, transparent) 0%,
+      color-mix(in srgb, var(--c-bg, #000) 60%, transparent) 55%,
+      transparent 100%
+    );
+    backdrop-filter: blur(7px);
+    -webkit-mask-image: linear-gradient(to left, #000 60%, transparent 100%);
+    mask-image: linear-gradient(to left, #000 60%, transparent 100%);
   }
 
   .node-preview.visible {
@@ -968,18 +1199,27 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   }
 
   .node-preview img {
-    width: 120px;
-    height: 80px;
+    width: 160px;
+    height: 100px;
     object-fit: cover;
-    border-radius: 4px;
+    border-radius: 6px;
     display: none;
   }
 
   .node-preview #preview-title {
-    color: #888;
-    font-size: 0.85rem;
+    color: var(--c-fg, #eee);
+    font-size: 1rem;
+    font-weight: 600;
     text-align: right;
-    line-height: 1.3;
+    line-height: 1.25;
+  }
+
+  .node-preview-excerpt {
+    color: var(--c-fg-dim, #aaa);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    text-align: right;
+    display: none;
   }
 
   .graph-legend {
@@ -1016,6 +1256,33 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
   .graph-legend :global(.legend-item.is-active span) {
     text-decoration: underline;
     text-underline-offset: 3px;
+  }
+
+  .graph-focus-hud {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(20, 20, 20, 0.72);
+    color: #f0f0f0;
+    font-size: 0.8rem;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+  }
+  .graph-focus-hud.hidden { display: none; }
+  .graph-focus-hud :global(.focus-name) { font-weight: 700; }
+  .graph-focus-hud :global(.focus-depth) { opacity: 0.85; }
+  .graph-focus-hud :global(.focus-hint) { opacity: 0.55; font-size: 0.72rem; }
+  :global(:not(.dark)) .graph-focus-hud {
+    background: rgba(255, 255, 255, 0.82);
+    color: #222;
   }
 
   .graph-legend :global(.legend-rel-group) {
@@ -1068,19 +1335,24 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     transition: all 0.2s;
   }
 
-  #graph-toggle-filter {
-    width: auto;
+  .graph-view-select {
+    height: 2rem;
     padding: 0 0.6rem;
     font-size: 0.72rem;
     letter-spacing: 0.04em;
     font-weight: 600;
     text-transform: lowercase;
-    opacity: 0.7;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+    cursor: pointer;
   }
 
-  #graph-toggle-filter[data-all="true"] {
-    opacity: 1;
-    border-color: rgba(255, 255, 255, 0.5);
+  :global(:not(.dark)) .graph-view-select {
+    border-color: rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.05);
+    color: rgb(30 30 30);
   }
 
   .graph-hud-right button:hover {
@@ -1109,12 +1381,62 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     color: rgb(30 30 30);
   }
 
-  :global(:not(.dark)) #graph-toggle-filter[data-all="true"] {
-    border-color: rgba(0, 0, 0, 0.35);
-  }
-
   :global(:not(.dark)) .graph-hud-right button:hover {
     background: rgba(0, 0, 0, 0.1);
     border-color: rgba(0, 0, 0, 0.2);
+  }
+
+  /* ── Responsive HUD ──────────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    .graph-hud {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.6rem;
+      padding: 0.75rem 1rem;
+    }
+    .graph-hud-right {
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .graph-legend {
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+    .node-preview {
+      width: min(60vw, 320px);
+      padding: 1rem 1.1rem 1rem 1.8rem;
+    }
+  }
+
+  /* Under 500px: legend shows icons only, preview hidden, compact HUD. */
+  @media (max-width: 500px) {
+    .graph-legend {
+      gap: 0.55rem;
+    }
+    .graph-legend :global(.legend-item span),
+    .graph-legend :global(.legend-rel span),
+    .graph-legend :global(.legend-rel-title) {
+      display: none;
+    }
+    .graph-legend :global(.legend-rel-group) {
+      border-left: none;
+      padding-left: 0;
+      margin-left: 0;
+      gap: 0.55rem;
+    }
+    .node-preview {
+      display: none;
+    }
+    .graph-focus-hud {
+      font-size: 0.7rem;
+      gap: 0.5rem;
+      padding: 0.3rem 0.6rem;
+    }
+    .graph-focus-hud :global(.focus-hint) {
+      display: none;
+    }
+    .graph-search input {
+      width: 9rem;
+    }
   }
 </style>

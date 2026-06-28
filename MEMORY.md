@@ -1,10 +1,27 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 graph-refinos> <br>
+GraphModal.astro — 6 mejoras (worktree sobre HEAD f06a6d0, sin commit):
+1. Labels +40% (tag 10.2→14.3, doc 12→16.8).
+2. Filtro pasó de botón público/todo a `<select#graph-view-select>` con `viewMode` = público | todo | curso. Builder agrega `node.course` (cursos/<id> o frontmatter `project`); `selectDataset`/`filterByCourse`/`availableCourses` (orden s123,i1,cym,i2). Disponible sin login (el dataset anon ya es publicOnly; 'todo' solo para logueados).
+3. Tag links animados como puntos finos (dashLen 1 / gap 4, ciclo 1200ms) preservando `connect` punteado y jerarquía sólida (se corrigió que `animateDashes` pisaba el dash de connect).
+4. Preview de nota en hover: panel derecho fijo con `backdrop-filter` y máscara/gradiente que desvanece a la izquierda; muestra título + `excerpt` (nuevo campo en builder, body→texto plano limpiando html/obsidian/md, ~300 chars; fallback `def`).
+5. Grafo resizable (listener `resize` con rAF) y HUD responsive: @media ≤768px apila HUD; ≤500px leyenda solo-iconos, preview oculto, HUD compacto.
+6. Folding reescrito: se quitó el modelo Alt-click/focus. Ahora click en nodo = abre/cierra su rama (`collapsedNodes`, sobre jerarquía hypo/hyper), shift+click = abre la nota; `[` pliega y `]` despliega un nivel global (`foldLevel`/`foldMaxDepth`, hasta root de categorías), `Esc` resetea folding y luego cierra. `applyFolding` filtra el dataset (no solo mutea); pipeline: selectDataset→applyLayerFilters→applyFolding. HUD `#graph-focus-hud` reusado para nivel/ramas.
+Validado: script y builder sin errores de sintaxis; artefacto público regenerado. Los rel-links y mis notas s123 aparecen tras `content:assemble`. Falta smoke test visual en dev.
+
+<2026-06-28 page-info-propiedades> <br>
+Sidebar derecho (`src/pages/[...slug].astro`): nueva sección "Propiedades" que muestra el YAML/frontmatter de la nota, ubicada en el panel Page info entre la meta (Fuente/autor/commit) y "History".
+- Frontmatter (script): `pageProperties` deriva de `currentEntry.data` con orden preferente (`type, def, alias, status, project, person, year, tags, hyper, hypo, connect, …`), oculta campos de routing/presentación (`title, slug, theme, reveal, coverImage, updatedAt, …`), y clasifica cada valor: `links` (hypo/hyper/connect/parent → chips `[[..]]` enlazadas a `/<slug>`), `list` (arrays como tags → chips estáticos), `json` (objetos como `spaced`), `text` (escalares).
+- Template + CSS: `.page-info-properties` / `.page-info-props` / `.page-info-prop-chip` siguiendo el estilo de `.page-info-meta`/`.page-info-history`.
+- Validado: frontmatter TS sin errores de sintaxis (typescript.transpileModule). Falta smoke test visual en dev.
+
 <2026-06-28 graph-topoi-hypo-hyper> <br>
 Grafo: relaciones jerárquicas en datos + highlight/mute por topos (worktree sobre HEAD f06a6d0, sin commit).
 - `src/scripts/build-graph-data.mjs`: ahora emite enlaces tipados desde frontmatter `hypo`/`hyper`/`connect` (helper `extractRelationTargets`), con `type: 'rel'` y `relType`. Antes solo se leían wikilinks `[[...]]` del cuerpo, así que la estructura hypo/hyper de las notas atómicas no llegaba al grafo. Verificado contra el frontmatter real de s123 (resuelve targets por slug/base).
 - `src/components/GraphModal.astro`: nuevo modo solo/highlight por topos acoplado a la leyenda existente. Click normal en un item de la leyenda (que ya lista los topoi = `publicFolder` con su color/forma) highlightea ese topos y mutea el resto (nodos/labels/links atenuados); Shift/Alt-click conserva el ocultar por capa (`hiddenLayers`). Estado nuevo `activeFolders` + helpers `isNodeActive`/`isLinkActive`; clase `.legend-item.is-active`.
 - Estilo por `relType` en el mismo componente: `hypo`/`hyper` = jerarquía (línea sólida más gruesa + flecha direccional source→target, color `relHier`), `connect` = lateral (punteada, color `relLateral`), distinto de wikilinks de cuerpo y de tags (dash). Colores nuevos `relHier`/`relLateral` en `getThemeColors` (claro/oscuro) y guía de relaciones no-clickeable en la leyenda. API force-graph usada (`linkDirectionalArrow*`, `linkLineDash`) confirmada en `public/scripts/force-graph.min.js`.
+- Aislar rama por nodo + folding con shortcuts (mismo componente): Alt/Option-click en un nodo aísla su rama jerárquica (BFS sobre `hypo`/`hyper` no dirigido, excluye `connect`), muteando el resto; toggle con Alt-click de nuevo. Estado `focusNode`/`foldDepth`/`focusSet` (`computeFocusSet`, `setFoldDepth`, `clearFocus`); `isNodeActive` ahora compone topos-solo Y foco; helper `isSoloing`. Shortcuts con el modal abierto: `]`/`+` expande un nivel, `[`/`−` pliega, `Esc` limpia el foco (y recién después cierra). HUD `#graph-focus-hud` con nombre, profundidad y nº de nodos. `applyGraphFilter` recomputa el foco al cambiar el dataset.
 - Pendiente: ensamblar contenido (content:assemble) para que las notas de s123 entren a `src/content` y se vean los rel-links; opcional: portar el mismo modo a `GraphPod.astro` (pod de sala) para paridad.
 
 <2026-06-28 eval-combinatoria-srs> <br>

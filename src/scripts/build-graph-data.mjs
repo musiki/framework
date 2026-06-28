@@ -60,6 +60,28 @@ function extractRelationTargets(value) {
 
 const isPublicStatus = (data) => String(data?.status || '').trim().toLowerCase() === 'public';
 
+// Short plain-text excerpt from markdown body: drops frontmatter leftovers,
+// headings, code fences, images and wikilink/link syntax; keeps the first
+// paragraphs up to ~300 chars for the graph hover preview.
+function makeExcerpt(content, maxChars = 300) {
+  let text = String(content || '');
+  text = text.replace(/```[\s\S]*?```/g, ' ');           // code fences
+  text = text.replace(/<[^>]+>/g, ' ');                   // html tags (grids, img, iframe)
+  text = text.replace(/%%[\s\S]*?%%/g, ' ');             // obsidian comments
+  text = text.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');      // images
+  text = text.replace(/^#{1,6}\s+.*$/gm, ' ');            // headings
+  text = text.replace(/\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g, '$1'); // wikilinks
+  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');    // md links
+  text = text.replace(/[*_`>#]/g, ' ');                   // residual md marks
+  text = text.replace(/\s+/g, ' ').trim();
+  if (text.length > maxChars) {
+    const cut = text.slice(0, maxChars);
+    const lastSpace = cut.lastIndexOf(' ');
+    text = (lastSpace > 60 ? cut.slice(0, lastSpace) : cut) + '…';
+  }
+  return text;
+}
+
 export function buildGraphData({ publicOnly = false } = {}) {
   const ROOT = path.resolve('src/content');
   const files = [];
@@ -125,15 +147,23 @@ export function buildGraphData({ publicOnly = false } = {}) {
       const base = slug.split('/').pop() || slug;
       const canonicalSlug = normalizeSlug(fm.data.slug || fm.data.shortSlug || base);
 
+      // Course identity for the view filter: cursos/<courseId>/… or frontmatter project.
+      const course = (parts[0] === 'cursos' && parts.length > 1)
+        ? parts[1]
+        : (fm.data.project ? String(fm.data.project).trim() : null);
+
       nodes.push({
         id: slug,
         name: title,
         type: 'document',
         group: slug.split('/')[0] || 'root',
         publicFolder: publicFolder || null,
+        course: course || null,
         isPublic: record.isPublic,
         status: String(fm.data.status || '').trim().toLowerCase(),
         canonicalSlug,
+        def: fm.data.def ? String(fm.data.def).trim() : '',
+        excerpt: makeExcerpt(fm.content),
         img: fm.data.img || fm.data.coverUrl || fm.data.image || fm.data.photo || ''
       });
       nodeIds.add(slug);

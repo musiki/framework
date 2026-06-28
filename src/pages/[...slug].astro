@@ -737,6 +737,48 @@ if (parts.length === 1) {
 
 const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
 
+// Frontmatter shown as "Propiedades" in the page-info sidebar.
+// Relation fields render as wikilink chips; arrays as lists; objects as JSON.
+const PROPERTY_ORDER = [
+  'type', 'def', 'alias', 'status', 'project', 'person', 'year',
+  'tags', 'hyper', 'hypo', 'connect', 'author', 'source', 'work', 'parent', 'spaced',
+];
+const PROPERTY_HIDDEN = new Set([
+  'title', 'slug', 'shortSlug', 'summary', 'description', 'theme', 'slideTheme',
+  'revealTheme', 'reveal', 'coverImage', 'coverUrl', 'img', 'image', 'photo',
+  'url', 'visibility', 'order', 'chapter', 'updatedAt', 'updatedBy', 'editSummary',
+]);
+const RELATION_KEYS = new Set(['hypo', 'hyper', 'connect', 'parent']);
+const stripWikilink = (value: string): string =>
+  String(value).replace(/^\[\[|\]\]$/g, '').split('|')[0].split('#')[0].trim();
+const pageProperties = (() => {
+  const data = (currentEntry?.data || {}) as Record<string, unknown>;
+  const keys = Object.keys(data);
+  const ordered = [
+    ...PROPERTY_ORDER.filter((k) => keys.includes(k)),
+    ...keys.filter((k) => !PROPERTY_ORDER.includes(k)),
+  ];
+  const out: Array<{ key: string; kind: 'links' | 'list' | 'text' | 'json'; value: string; items: string[] }> = [];
+  for (const key of ordered) {
+    if (PROPERTY_HIDDEN.has(key)) continue;
+    const raw = data[key];
+    if (raw === undefined || raw === null || raw === '') continue;
+    if (Array.isArray(raw)) {
+      const items = raw.map((v) => String(v ?? '').trim()).filter(Boolean);
+      if (items.length === 0) continue;
+      if (RELATION_KEYS.has(key)) out.push({ key, kind: 'links', value: '', items: items.map(stripWikilink) });
+      else out.push({ key, kind: 'list', value: '', items });
+    } else if (typeof raw === 'object') {
+      out.push({ key, kind: 'json', value: JSON.stringify(raw), items: [] });
+    } else if (RELATION_KEYS.has(key)) {
+      out.push({ key, kind: 'links', value: '', items: [stripWikilink(String(raw))] });
+    } else {
+      out.push({ key, kind: 'text', value: String(raw), items: [] });
+    }
+  }
+  return out;
+})();
+
 // Info type requires login
 if (currentEntryType === 'info' && !session) {
   const lessonLoginRedirectTarget = `${courseHref}/${encodePathSegments(resolvedLessonRoutePath || requestedLessonPath)}${Astro.url.search}`;
@@ -1479,6 +1521,76 @@ function renderLessonsTreeHTML(
       .page-info-history-link:hover,
       .page-info-meta a:hover {
         text-decoration: underline;
+      }
+
+      .page-info-properties {
+        display: grid;
+        gap: 0.5rem;
+      }
+
+      .page-info-properties-title {
+        margin: 0;
+        font-size: 0.86rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+      }
+
+      .page-info-props {
+        display: grid;
+        gap: 0.35rem;
+        margin: 0;
+      }
+
+      .page-info-prop-row {
+        display: grid;
+        grid-template-columns: minmax(0, 7rem) minmax(0, 1fr);
+        gap: 0.35rem 0.7rem;
+        align-items: baseline;
+      }
+
+      .page-info-prop-row dt {
+        font-size: 0.78rem;
+        color: var(--c-fg-dim);
+        font-family: var(--font-mono, ui-monospace, monospace);
+      }
+
+      .page-info-prop-row dd {
+        margin: 0;
+        min-width: 0;
+        word-break: break-word;
+        font-size: 0.82rem;
+      }
+
+      .page-info-prop-row dd code {
+        font-size: 0.75rem;
+        word-break: break-all;
+      }
+
+      .page-info-prop-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+      }
+
+      .page-info-prop-chip {
+        display: inline-block;
+        padding: 0.1rem 0.45rem;
+        border-radius: 999px;
+        border: 1px solid var(--c-border);
+        background: color-mix(in srgb, var(--c-bg) 88%, var(--c-bg-mute) 12%);
+        font-size: 0.75rem;
+        line-height: 1.5;
+        text-decoration: none;
+        color: var(--accent);
+      }
+
+      .page-info-prop-chip.is-static {
+        color: var(--c-fg-dim);
+      }
+
+      .page-info-prop-chip:not(.is-static):hover {
+        border-color: var(--accent);
       }
 
       .page-info-history {
@@ -5495,6 +5607,38 @@ function renderLessonsTreeHTML(
                 )}
               </dd>
             </dl>
+
+            {pageProperties.length > 0 && (
+              <section class="page-info-properties" aria-label="Propiedades">
+                <h3 class="page-info-properties-title">Propiedades</h3>
+                <dl class="page-info-props">
+                  {pageProperties.map((prop) => (
+                    <div class="page-info-prop-row">
+                      <dt>{prop.key}</dt>
+                      <dd>
+                        {prop.kind === 'links' ? (
+                          <span class="page-info-prop-chips">
+                            {prop.items.map((item) => (
+                              <a class="page-info-prop-chip" href={`/${item}`}>{item}</a>
+                            ))}
+                          </span>
+                        ) : prop.kind === 'list' ? (
+                          <span class="page-info-prop-chips">
+                            {prop.items.map((item) => (
+                              <span class="page-info-prop-chip is-static">{item}</span>
+                            ))}
+                          </span>
+                        ) : prop.kind === 'json' ? (
+                          <code>{prop.value}</code>
+                        ) : (
+                          <span>{prop.value}</span>
+                        )}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            )}
 
             <section class="page-info-history" aria-label="Historial de commits">
               <h3 class="page-info-history-title">History ({pageHistory.historyEntries.length})</h3>
