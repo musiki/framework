@@ -15104,74 +15104,51 @@ a[node] -->|edge| b[hub]
           console.error('Lesson note-prefix-strip error:', error);
         }
 
-        const evalWrappers = document.querySelectorAll('.eval-block-wrapper');
-        hasEvalBlocks = evalWrappers.length > 0;
+        // Hydrate eval blocks within a given scope (document, or a Dockview
+        // panel body). Idempotent: skips already-hydrated wrappers, so it can
+        // be re-invoked whenever new note content is injected client-side.
+        async function hydrateEvalScope(scope) {
+          const root = scope || document;
+          const evalWrappers = Array.from(root.querySelectorAll('.eval-block-wrapper'))
+            .filter((w) => w instanceof HTMLElement && w.dataset.evalHydrated !== 'true');
+          if (evalWrappers.length === 0) return;
+          hasEvalBlocks = true;
 
-        if (hasEvalBlocks && isAuthenticatedUser) {
-          try {
-            await loadUserSubmissions();
-          } catch (error) {
-            console.error('User submission bootstrap error:', error);
+          if (isAuthenticatedUser) {
+            try {
+              await loadUserSubmissions();
+            } catch (error) {
+              console.error('User submission bootstrap error:', error);
+            }
           }
-        } else {
-          userSubmissions = {};
+
+          evalWrappers.forEach((wrapper, index) => {
+            try {
+              const evalData = parseEvalData(wrapper);
+              if (!evalData || !evalData.id || !evalData.type) return;
+              wrapper.dataset.evalHydrated = 'true';
+
+              if (evalData.type === 'mcq') { renderMCQ(wrapper, evalData, index); return; }
+              if (evalData.type === 'mcc') { renderMCC(wrapper, evalData, index); return; }
+              if (evalData.type === 'poll') { renderPoll(wrapper, evalData, index); return; }
+              if (evalData.type === 'wordcloud') { renderWordcloud(wrapper, evalData, index); return; }
+              if (evalData.type === 'patch_ai') { renderPatchAI(wrapper, evalData, index); return; }
+              if (evalData.type === 'short_ai' || evalData.type === 'reference_ai') { renderTextAI(wrapper, evalData, index); return; }
+              if (evalData.type === 'combinatoria') { renderCombinatoria(wrapper, evalData, index); return; }
+              if (evalData.type === 'form-msq') { renderFormMsq(wrapper, evalData, index); return; }
+              if (evalData.type === 'form-text') { renderFormText(wrapper, evalData, index); return; }
+
+              renderUnsupported(wrapper, evalData, index);
+            } catch (error) {
+              console.error('Eval block bootstrap error:', error);
+            }
+          });
         }
 
-        evalWrappers.forEach((wrapper, index) => {
-          try {
-            const evalData = parseEvalData(wrapper);
-            if (!evalData || !evalData.id || !evalData.type) return;
-
-            if (evalData.type === 'mcq') {
-              renderMCQ(wrapper, evalData, index);
-              return;
-            }
-
-            if (evalData.type === 'mcc') {
-              renderMCC(wrapper, evalData, index);
-              return;
-            }
-
-            if (evalData.type === 'poll') {
-              renderPoll(wrapper, evalData, index);
-              return;
-            }
-
-            if (evalData.type === 'wordcloud') {
-              renderWordcloud(wrapper, evalData, index);
-              return;
-            }
-
-            if (evalData.type === 'patch_ai') {
-              renderPatchAI(wrapper, evalData, index);
-              return;
-            }
-
-            if (evalData.type === 'short_ai' || evalData.type === 'reference_ai') {
-              renderTextAI(wrapper, evalData, index);
-              return;
-            }
-
-            if (evalData.type === 'combinatoria') {
-              renderCombinatoria(wrapper, evalData, index);
-              return;
-            }
-
-            if (evalData.type === 'form-msq') {
-              renderFormMsq(wrapper, evalData, index);
-              return;
-            }
-
-            if (evalData.type === 'form-text') {
-              renderFormText(wrapper, evalData, index);
-              return;
-            }
-
-            renderUnsupported(wrapper, evalData, index);
-          } catch (error) {
-            console.error('Eval block bootstrap error:', error);
-          }
-        });
+        // Expose for the Dockview workspace, which injects note content into
+        // panels client-side (outside this page's server-rendered content-area).
+        (window as any).__musikiHydrateEvals = hydrateEvalScope;
+        await hydrateEvalScope(document);
 
         setupConceptLinks();
         setupFoldableH2Sections();
@@ -16081,6 +16058,59 @@ a[node] -->|edge| b[hub]
         color: var(--c-fg-dim);
         font-size: 0.82rem;
       }
+
+      /* ── GLOBAL overrides for raw-HTML-injected sidebar/content ────────────
+         The lessons tree and note content are injected as raw HTML (no Astro
+         scope attribute), so scoped rules don't match them. These must be
+         global and come after the earlier sidebar rules to win. */
+      .sidebar--left .lesson-link.active {
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        color: var(--accent);
+        font-weight: 600;
+        box-shadow: inset 2px 0 0 0 var(--accent);
+        border-radius: 0 4px 4px 0;
+      }
+      .lesson-state {
+        font-size: 0.72rem;
+        line-height: 1;
+        width: 1em;
+        text-align: center;
+        flex: 0 0 auto;
+        opacity: 0.9;
+      }
+      .lesson-link.is-completed .lesson-state { color: #22c55e; }
+      .lesson-link.is-evaluated:not(.is-completed) .lesson-state { color: var(--accent); }
+      .lesson-link.is-read:not(.is-evaluated):not(.is-completed) .lesson-state { color: var(--c-fg-dim); }
+      .lesson-link.is-read:not(.active) .lesson-link-text { color: var(--c-fg-dim); }
+      .reading-end-sentinel { height: 1px; width: 100%; pointer-events: none; }
+
+      .class-toc--inline {
+        margin: 0.15rem 0 0.4rem 0;
+        padding-left: 0.55rem;
+        border-left: 1px solid color-mix(in srgb, var(--accent) 35%, var(--c-border));
+      }
+      .class-toc--inline > details > summary.chapter-title {
+        font-size: 0.7rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+        padding: 0.15rem 0;
+      }
+      .class-toc--inline .class-toc-list { margin: 0.1rem 0 0 0; }
+      .class-toc--inline .class-toc-link { font-size: 0.85rem; padding: 0.12rem 0.3rem; }
+      .class-toc.class-toc--inline[hidden] { display: none; }
+
+      /* Starlight-aligned reading column (also for Dockview panel content). */
+      .content-area > .class-content,
+      .cnw-md {
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .content-area > .class-content :is(p, li, blockquote),
+      .cnw-md :is(p, li, blockquote) { line-height: 1.75; }
+      .content-area > .class-content :is(h1, h2, h3, h4),
+      .cnw-md :is(h1, h2, h3, h4) { line-height: 1.25; letter-spacing: -0.01em; }
+      .content-area > .class-content :is(h2, h3),
+      .cnw-md :is(h2, h3) { margin-top: 2.2rem; }
     </style>
     <GraphModal />
     <Search searchEndpoint={isPublicReaderMode ? '/public-search.json' : '/search.json'} />

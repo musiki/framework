@@ -1,5 +1,13 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 dockview-evals-css-fix> <br>
+Diagnóstico raíz: las notas se renderizan dentro de paneles Dockview (`renderPreview` en `src/scripts/course/dockview-workspace.ts`), no en el `#cnw-root` server-rendered. Consecuencias y fixes (worktree sobre HEAD f06a6d0, sin commit):
+- CSS del sidebar/lectura "no aparecía" porque estaba en el `<style>` SCOPED y los `lesson-link`/contenido se inyectan como HTML crudo (sin atributo de scope). Movido a `<style is:global>`: overrides globales para `.sidebar--left .lesson-link.active` (riel Starlight), `.lesson-state`, `.class-toc--inline`, sentinel y tipografía de lectura (ahora también `.cnw-md` de los paneles).
+- Evals "rara vez renderean": `renderPreview` inyecta `renderedHtml` (con los `.eval-block-wrapper`) pero nunca los hidrataba; el bootstrap de `[...slug].astro` solo corría sobre el documento. Refactorizado a `hydrateEvalScope(scope)` idempotente (marca `data-eval-hydrated`), expuesto como `window.__musikiHydrateEvals`, y llamado desde `renderPreview` tras inyectar el contenido del panel.
+- Rótulo de sección: `# evaluación` → `# ACTIVAR!` en las 49 notas de s123 y en `MANUAL.md` (convención).
+- PENDIENTE (no resuelto): Page Info no reacciona al cambiar de nota porque las notas abren como paneles Dockview sin re-render del shell (la URL queda en el _index). Falta despachar el frontmatter de la nota activa (evento `musiki:active-note`) y reconstruir la sección "Propiedades" client-side; el historial de commits requeriría endpoint server. Nota: dentro de paneles, el contexto de submission usa la URL del índice (tracking por-curso, no por-nota) — a revisar.
+- Validado: scripts de `[...slug].astro` y `dockview-workspace.ts` sin errores de sintaxis.
+
 <2026-06-28 right-sidebar-pods> <br>
 Sidebar derecho de `src/pages/[...slug].astro` unificado como stack de pods tipo Obsidian (Foro + Info):
 - Causa del bug: `#page-info-sidebar` es un overlay (`position:absolute; inset:0; z-index:18`) dentro de `aside.sidebar--right` (cuya base es el foro). Foro y Page Info competían por la columna sin coordinarse: el botón del foro no "switcheaba" porque el overlay de info quedaba abierto encima; y el Page Info parecía congelado.

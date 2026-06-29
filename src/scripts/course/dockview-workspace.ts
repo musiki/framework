@@ -409,6 +409,8 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
       bodyEl.innerHTML = `<div class="cnw-md">${preview.renderedHtml}</div>`;
       hydrateLazyYouTubeEmbeds(bodyEl);
       enhanceCourseNotesContent(bodyEl);
+      // Hydrate eval blocks injected into this panel (handled by [...slug].astro).
+      try { (window as any).__musikiHydrateEvals?.(bodyEl); } catch { /* noop */ }
       bodyEl.dataset.renderedSlug = slug;
       bodyEl.dataset.lastContent = content;
       return content;
