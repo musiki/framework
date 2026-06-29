@@ -1,5 +1,18 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 progress-endpoint-markers> <br>
+Log de evals + markers del sidebar confiables (worktree sobre HEAD f06a6d0, sin commit):
+- Aclaración de arquitectura: el dashboard `?tab=log` (`buildTeacherEvalProjection`) lista la tabla `Submission` (1 fila por entrega, type-agnóstica: mcq/combinatoria/short_ai aparecen igual). Captura todos los evals RESPONDIDOS. El inventario de todos los evals DEFINIDOS es el catálogo → tabla `Assignment` (poblada por `npm run eval:sync:db`), y requiere `content:assemble` de las notas s123.
+- Nuevo endpoint `GET /api/progress/me[?courseId]`: cruza `Submission` ⋈ `buildEvalCatalog` (evalId→nota) y devuelve por nota `{completed, evaluated, submissions, noteSlug, ...}` + totals. Server-authoritative, accesible directo por URL para "certeza".
+- Sidebar markers: refactor `setLessonMarker()` + `applyServerProgress()` que consume `/api/progress/me` y marca TODAS las notas respondidas (no solo las visitadas), por coincidencia de slug (último segmento del href), merge con read-state local. Llamado en init y tras cada `saveSubmission`. `read` sigue en localStorage (no hay campo server).
+- Validado: endpoint y script sin errores de sintaxis. Pendiente: smoke test del match de slug y que el catálogo vea las notas s123 (assemble).
+
+<2026-06-28 sidebar-active-link-fix> <br>
+TOC inline, estilo activo Starlight y markers de progreso no aparecían porque dependían de `.lesson-link.active`, que el server NO setea para notas de concepto (public/*). Fix en `src/pages/[...slug].astro`: helper `getCurrentLessonLink()` que ubica el link de la nota actual por coincidencia de `href` con `location.pathname` (fallback de `.active`) y le agrega `.active`. Usado por `injectInlineToc()` y `currentPageKey()`. Con esto se encienden a la vez: riel-acento activo, TOC inline bajo la nota, y la clave del store de progreso (markers leído/completado/evaluado).
+- El warning de consola "interactive element inside <summary>" / "Disallowed descendant" (7) es PREEXISTENTE: botones `.chapter-editor-link` dentro de `<summary class="chapter-title">` en el árbol del sidebar; no proviene de estos cambios (se puede arreglar moviendo el botón fuera del summary si molesta).
+- Los markers requieren haber leído/respondido (el store se llena por visita/submission). Caso multi-panel Dockview aún sin tracking de nota activa.
+- Validado: script sin errores de sintaxis.
+
 <2026-06-28 dockview-evals-css-fix> <br>
 Diagnóstico raíz: las notas se renderizan dentro de paneles Dockview (`renderPreview` en `src/scripts/course/dockview-workspace.ts`), no en el `#cnw-root` server-rendered. Consecuencias y fixes (worktree sobre HEAD f06a6d0, sin commit):
 - CSS del sidebar/lectura "no aparecía" porque estaba en el `<style>` SCOPED y los `lesson-link`/contenido se inyectan como HTML crudo (sin atributo de scope). Movido a `<style is:global>`: overrides globales para `.sidebar--left .lesson-link.active` (riel Starlight), `.lesson-state`, `.class-toc--inline`, sentinel y tipografía de lectura (ahora también `.cnw-md` de los paneles).

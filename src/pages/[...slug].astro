@@ -8461,6 +8461,7 @@ function renderLessonsTreeHTML(
           await loadUserSubmissions();
           // Reflect the new result in the course progress map / sidebar log.
           try { updateCourseProgress(); } catch {}
+          try { void applyServerProgress(); } catch {}
 
           return true;
         } catch (error) {
@@ -11619,10 +11620,29 @@ function renderLessonsTreeHTML(
 
       // Moodle-style: relocate the note's "Contenido" TOC right under the active
       // lesson item in the course tree, so it doesn't get lost at the bottom.
+      // Find the sidebar link of the current note: prefer the server-set
+      // .active, else match the link href to the current URL (concept notes
+      // aren't always marked active server-side). Reflects .active so the
+      // Starlight rail + inline TOC + progress markers all light up.
+      function getCurrentLessonLink() {
+        let link = document.querySelector('.lesson-link.active');
+        if (link instanceof HTMLElement) return link;
+        const here = decodeURIComponent(location.pathname.replace(/\/+$/, ''));
+        const links = Array.from(document.querySelectorAll('.lesson-link[href]'));
+        link = links.find((a) => {
+          try {
+            const href = decodeURIComponent(new URL(a.getAttribute('href'), location.origin).pathname.replace(/\/+$/, ''));
+            return href === here;
+          } catch { return false; }
+        }) || null;
+        if (link instanceof HTMLElement) link.classList.add('active');
+        return link instanceof HTMLElement ? link : null;
+      }
+
       function injectInlineToc() {
         const tocRoot = document.getElementById('class-toc');
         if (!tocRoot) return;
-        const activeLink = document.querySelector('.lesson-link.active');
+        const activeLink = getCurrentLessonLink();
         const activeItem = activeLink ? activeLink.closest('.lesson-item') : null;
         if (!activeItem) {
           tocRoot.classList.remove('class-toc--inline');
@@ -11651,7 +11671,7 @@ function renderLessonsTreeHTML(
         try { localStorage.setItem(courseProgressStoreKey(), JSON.stringify(store)); } catch {}
       }
       function currentPageKey() {
-        const active = document.querySelector('.lesson-link.active');
+        const active = getCurrentLessonLink();
         return active instanceof HTMLElement ? (active.dataset.lessonPageSlug || null) : null;
       }
       function computeCurrentPageEvalState() {
@@ -11666,33 +11686,63 @@ function renderLessonsTreeHTML(
         });
         return { completed, evaluated };
       }
+      function setLessonMarker(link, st) {
+        const read = Boolean(st && st.read);
+        const completed = Boolean(st && st.completed);
+        const evaluated = Boolean(st && st.evaluated);
+        link.classList.toggle('is-read', read);
+        link.classList.toggle('is-completed', completed);
+        link.classList.toggle('is-evaluated', evaluated);
+        const trailing = link.querySelector('.lesson-link-trailing');
+        let marker = link.querySelector('.lesson-state');
+        if (read || completed || evaluated) {
+          if (!marker && trailing) {
+            marker = document.createElement('span');
+            marker.className = 'lesson-state';
+            trailing.prepend(marker);
+          }
+          if (marker) {
+            marker.textContent = completed ? '✓' : evaluated ? '◑' : '◷';
+            marker.title = [read && 'leído', completed && 'completado', evaluated && 'evaluado']
+              .filter(Boolean).join(' · ');
+          }
+        } else if (marker) {
+          marker.remove();
+        }
+      }
       function applyCourseProgressToSidebar(store) {
         store = store || loadProgressStore();
         document.querySelectorAll('.lesson-link[data-lesson-page-slug]').forEach((link) => {
-          const st = store[link.dataset.lessonPageSlug];
-          const read = Boolean(st && st.read);
-          const completed = Boolean(st && st.completed);
-          const evaluated = Boolean(st && st.evaluated);
-          link.classList.toggle('is-read', read);
-          link.classList.toggle('is-completed', completed);
-          link.classList.toggle('is-evaluated', evaluated);
-          const trailing = link.querySelector('.lesson-link-trailing');
-          let marker = link.querySelector('.lesson-state');
-          if (read || completed || evaluated) {
-            if (!marker && trailing) {
-              marker = document.createElement('span');
-              marker.className = 'lesson-state';
-              trailing.prepend(marker);
-            }
-            if (marker) {
-              marker.textContent = completed ? '✓' : evaluated ? '◑' : '◷';
-              marker.title = [read && 'leído', completed && 'completado', evaluated && 'evaluado']
-                .filter(Boolean).join(' · ');
-            }
-          } else if (marker) {
-            marker.remove();
-          }
+          setLessonMarker(link, store[link.dataset.lessonPageSlug]);
         });
+      }
+      const lessonLinkSlug = (link) => {
+        try {
+          const path = decodeURIComponent(new URL(link.getAttribute('href'), location.origin).pathname);
+          return (path.split('/').filter(Boolean).pop() || '').toLowerCase().replace(/\.(md|mdx)$/, '');
+        } catch { return ''; }
+      };
+      // Server-authoritative markers: completed/evaluated come from the DB
+      // (Submission ⋈ eval catalog), merged with the local read-state. This
+      // marks ALL notes the user answered, not only visited ones.
+      async function applyServerProgress() {
+        if (!isAuthenticatedUser) return;
+        try {
+          const { courseId } = getPageContext();
+          const res = await fetch('/api/progress/me' + (courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''));
+          if (!res.ok) return;
+          const data = await res.json();
+          const bySlug = new Map();
+          (data.notes || []).forEach((n) => { if (n && n.noteSlug) bySlug.set(String(n.noteSlug).toLowerCase(), n); });
+          if (bySlug.size === 0) return;
+          const store = loadProgressStore();
+          document.querySelectorAll('.lesson-link[href]').forEach((link) => {
+            const n = bySlug.get(lessonLinkSlug(link));
+            if (!n) return;
+            const localRead = Boolean((store[link.dataset.lessonPageSlug] || {}).read);
+            setLessonMarker(link, { read: localRead, completed: Boolean(n.completed), evaluated: Boolean(n.evaluated) });
+          });
+        } catch { /* noop */ }
       }
       function updateCourseProgress(patch) {
         const key = currentPageKey();
@@ -15154,6 +15204,7 @@ a[node] -->|edge| b[hub]
         setupFoldableH2Sections();
         buildClassToc();
         applyCourseProgressToSidebar();
+        void applyServerProgress();
         updateCourseProgress();
         setupReadTracking();
         mountLivePollTransport();

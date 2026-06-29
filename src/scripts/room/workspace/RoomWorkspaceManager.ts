@@ -298,6 +298,8 @@ export class RoomWorkspaceManager {
         if (this.dockview) return;
 
         this.dockview = new DockviewComponent(this.container, {
+          disableDnd: !this.canLeadSession(),
+          locked: !this.canLeadSession(),
           createComponent: (options) => {
             const rawId = options.id;
             // Find which pod type this is by checking if the ID starts with any known POD_TYPE id
@@ -514,6 +516,7 @@ export class RoomWorkspaceManager {
         if (!this.container.dataset.noDefaultLayout) this.setupDefaultLayout();
         this.bindBottomBarButtons();
         this.initPodGallery();
+        this.syncAuthority();
       } catch (err) {
         console.error("Dockview init failed:", err);
       }
@@ -526,6 +529,22 @@ export class RoomWorkspaceManager {
       id: p.id,
       controller: this.podControllers.get(p.id),
     }));
+  }
+
+  public syncAuthority() {
+    const canControl = this.canLeadSession();
+    this.container.dataset.layoutLocked = canControl ? "false" : "true";
+    this.dockview?.updateOptions({
+      disableDnd: !canControl,
+      locked: !canControl,
+    });
+    this.container.querySelectorAll<HTMLElement>(".pod-diy-handle").forEach((handle) => {
+      handle.draggable = canControl;
+      handle.setAttribute("aria-disabled", canControl ? "false" : "true");
+    });
+    this.container
+      .querySelectorAll<HTMLButtonElement>(".pod-diy-btn--close")
+      .forEach((button) => { button.disabled = !canControl; });
   }
 
   public hasPod(id: string): boolean {
@@ -593,6 +612,10 @@ export class RoomWorkspaceManager {
       `;
 
       item.addEventListener("dragstart", (e) => {
+        if (!this.canLeadSession()) {
+          e.preventDefault();
+          return;
+        }
         if (e.dataTransfer) {
           e.dataTransfer.setData("musiki/pod-id", type.id);
           e.dataTransfer.effectAllowed = "move";
@@ -607,6 +630,7 @@ export class RoomWorkspaceManager {
       });
 
       item.addEventListener("click", () => {
+        if (!this.canLeadSession()) return;
         this.togglePod(type.id);
       });
       gallery.appendChild(item);
@@ -614,11 +638,8 @@ export class RoomWorkspaceManager {
 
     // Handle dropping into the dockview container
     this.container.addEventListener("dragover", (e) => {
-      if (e.dataTransfer?.types.includes("Files"))
-        console.log(
-          "[WS:drag] workspace dragover with Files — effectAllowed=",
-          e.dataTransfer?.effectAllowed,
-        );
+      if (e.dataTransfer?.types.includes("Files")) return;
+      if (!this.canLeadSession()) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
 
@@ -676,12 +697,8 @@ export class RoomWorkspaceManager {
     });
 
     this.container.addEventListener("drop", (e) => {
-      console.log(
-        "[WS:drop] workspace drop fired files=",
-        e.dataTransfer?.files?.length,
-        "podId=",
-        e.dataTransfer?.getData("musiki/pod-id"),
-      );
+      if (e.dataTransfer?.types.includes("Files")) return;
+      if (!this.canLeadSession()) return;
       e.preventDefault();
 
       const shellEl = (e.target as HTMLElement).closest(
@@ -970,6 +987,7 @@ export class RoomWorkspaceManager {
     arrow.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!this.canLeadSession()) return;
       const panels = this.dockview?.panels || [];
       const targetPanel = panels.find((p) => p.id === panelId);
       if (targetPanel) this.showPodPicker(arrow, targetPanel);
@@ -978,8 +996,12 @@ export class RoomWorkspaceManager {
     const handle = document.createElement("div");
     handle.className = "pod-diy-handle";
     handle.innerHTML = `<div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div><div class="pod-diy-handle-dot"></div>`;
-    handle.draggable = true;
+    handle.draggable = this.canLeadSession();
     handle.addEventListener("dragstart", (e) => {
+      if (!this.canLeadSession()) {
+        e.preventDefault();
+        return;
+      }
       if (e.dataTransfer) {
         e.dataTransfer.setData("musiki/panel-id", panelId);
         e.dataTransfer.setData("text/plain", panelId);
@@ -1043,6 +1065,7 @@ export class RoomWorkspaceManager {
     closeBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!this.canLeadSession()) return;
       const panel = this.dockview?.getGroupPanel(panelId);
       if (panel) {
         panel.api.close();
@@ -1117,6 +1140,7 @@ export class RoomWorkspaceManager {
         btn.addEventListener(
           "click",
           (e: MouseEvent) => {
+            if (!this.canLeadSession()) return;
             if (master) {
               e.preventDefault();
               e.stopPropagation();
@@ -1398,11 +1422,17 @@ export class RoomWorkspaceManager {
   }
 
   private setupDefaultLayout() {
-    this.applyLayoutByKey(window.innerWidth <= 500 ? "mobile" : "presentation");
+    this.isApplyingRemoteLayout = true;
+    try {
+      this.applyLayoutByKey(window.innerWidth <= 500 ? "mobile" : "presentation");
+    } finally {
+      this.isApplyingRemoteLayout = false;
+    }
   }
 
   public applyLayoutByKey(key: string) {
     if (!this.dockview) return;
+    if (!this.isApplyingRemoteLayout && !this.canLeadSession()) return;
     this.isBatchLayoutUpdate = true;
     try {
 
@@ -2032,6 +2062,16 @@ style.textContent = `
     opacity: 1 !important;
     pointer-events: auto !important;
     background: rgba(255, 255, 255, 0.05) !important;
+  }
+  .dockview-container[data-layout-locked="true"] .dv-separator {
+    pointer-events: none !important;
+  }
+  .dockview-container[data-layout-locked="true"] .pod-diy-arrow,
+  .dockview-container[data-layout-locked="true"] .pod-diy-handle,
+  .dockview-container[data-layout-locked="true"] .pod-diy-btn--close {
+    opacity: 0.25 !important;
+    cursor: default !important;
+    pointer-events: none !important;
   }
 
   .musiki-pod[data-pod="lily-code"] .conference-stage-panel--lilypond,

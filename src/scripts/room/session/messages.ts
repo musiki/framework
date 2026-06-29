@@ -303,6 +303,10 @@ export type ConferenceMessage =
       sessionId?: string | null;
       sessionName?: string;
     }
+  | {
+      type: 'recursos:upload';
+      item: any;
+    }
   | { type: 'recursos:allow-students'; allow: boolean }
   | { type: 'notes-sidebar-refresh' };
 
@@ -895,6 +899,27 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         emptyFolders: Array.isArray((parsed as any).emptyFolders) ? (parsed as any).emptyFolders : [],
         sessionId: rawSessionId || null,
         sessionName: normalizeText((parsed as any).sessionName),
+      };
+    }
+
+    if (parsed.type === 'recursos:upload') {
+      const rawItem = (parsed as any).item;
+      const url = normalizeText(rawItem?.url);
+      if (!rawItem || typeof rawItem !== 'object' || !url) return null;
+      return {
+        type: 'recursos:upload',
+        item: {
+          id: normalizeText(rawItem.id) || crypto.randomUUID(),
+          url,
+          name: normalizeText(rawItem.name) || 'recurso',
+          type: normalizeText(rawItem.type) || 'other',
+          folder: normalizeText(rawItem.folder),
+          source: 'upload',
+          createdBy: normalizeText(rawItem.createdBy),
+          sortOrder: Math.max(0, Math.round(Number(rawItem.sortOrder) || 0)),
+          createdAt: normalizeText(rawItem.createdAt) || new Date().toISOString(),
+          sessionId: normalizeText(rawItem.sessionId) || null,
+        },
       };
     }
 

@@ -17,7 +17,7 @@ import {
 
 type RecursosOptions = {
   container: HTMLElement;
-  isTeacher: boolean;
+  canControl: () => boolean;
   getCourseId: () => string | null;
   getCourseRootId?: () => string | null;
   getRoomName: () => string | null;
@@ -35,11 +35,12 @@ type RecursosMessage =
       sessionId?: string | null;
       sessionName?: string;
     }
-  | { type: 'recursos:allow-students'; allow: boolean };
+  | { type: 'recursos:allow-students'; allow: boolean }
+  | { type: 'recursos:upload'; item: ResourceItem };
 
 export class RecursosController {
   private container: HTMLElement;
-  private isTeacher: boolean;
+  private canControl: () => boolean;
   private getCourseId: () => string | null;
   private getCourseRootId?: () => string | null;
   private getRoomName: () => string | null;
@@ -48,7 +49,7 @@ export class RecursosController {
   private getRecursosAutoOpen?: () => boolean;
 
   private items: ResourceItem[] = [];
-  private allowStudents = true;
+  private allowStudents = false;
   private collapsedFolders = new Set<string>();
   private emptyFolders = new Set<string>();
   private draggedItemId: string | null = null;
@@ -84,7 +85,7 @@ export class RecursosController {
 
   constructor(opts: RecursosOptions) {
     this.container = opts.container;
-    this.isTeacher = opts.isTeacher;
+    this.canControl = opts.canControl;
     this.getCourseId = opts.getCourseId;
     this.getCourseRootId = opts.getCourseRootId;
     this.getRoomName = opts.getRoomName;
@@ -189,7 +190,7 @@ export class RecursosController {
 
   private async ensureSession(): Promise<string> {
     if (this.sessionId) return this.sessionId;
-    if (!this.isTeacher) {
+    if (!this.canControl()) {
       await this.loadSession();
       return this.sessionId ?? '';
     }
@@ -312,9 +313,9 @@ export class RecursosController {
     });
   }
 
-  private canEdit() { return true; }
-  private canSendSonic() { return true; }
-  private canSendVisual() { return true; }
+  private canEdit() { return this.canControl(); }
+  private canSendSonic() { return this.canControl(); }
+  private canSendVisual() { return this.canControl(); }
 
   // ── Header ──────────────────────────────────────────────────────────────────
 
@@ -342,8 +343,7 @@ export class RecursosController {
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (this.isTeacher) this.openSessionCtx(e as MouseEvent);
-      else this.startHeaderInlineEdit(el);
+      if (this.canControl()) this.openSessionCtx(e as MouseEvent);
     });
     return el;
   }
@@ -378,7 +378,7 @@ export class RecursosController {
   // ── Compartidos ──────────────────────────────────────────────────────────────
 
   private async addCompartido(url: string, name: string, source: ResourceItem['source'], folder = 'compartidos') {
-    if (!url) return;
+    if (!url || !this.canControl()) return;
     const sid = await this.ensureSession();
     const nextItems = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
@@ -392,7 +392,7 @@ export class RecursosController {
   // ── SA media file ─────────────────────────────────────────────────────────────
 
   private async addSaFile(url: string, name: string): Promise<void> {
-    if (!url) return;
+    if (!url || !this.canControl()) return;
     const sid = await this.ensureSession();
     const nextItems = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
@@ -404,7 +404,7 @@ export class RecursosController {
   }
 
   private async addVisualFile(url: string, name: string): Promise<void> {
-    if (!url) return;
+    if (!url || !this.canControl()) return;
     const sid = await this.ensureSession();
     const nextItems = addItem(this.items, {
       id: crypto.randomUUID(), url, name,
@@ -426,7 +426,7 @@ export class RecursosController {
   // ── Session management ────────────────────────────────────────────────────────
 
   private async newSession(): Promise<void> {
-    if (!this.isTeacher) return;
+    if (!this.canControl()) return;
     const roomName = this.getRoomName() ?? '';
     const claseId  = this.getEffectiveCourseId();
     const courseId = this.getCourseRootId?.() ?? null;
@@ -452,7 +452,7 @@ export class RecursosController {
   }
 
   private async deleteSession(): Promise<void> {
-    if (!this.sessionId) return;
+    if (!this.canControl() || !this.sessionId) return;
     try {
       await fetch(`/api/live/session?id=${encodeURIComponent(this.sessionId)}`, { method: 'DELETE' });
     } catch { /**/ }
@@ -464,7 +464,7 @@ export class RecursosController {
   }
 
   private async renameSession(): Promise<void> {
-    if (!this.sessionId) return;
+    if (!this.canControl() || !this.sessionId) return;
     const name = window.prompt('Nombre de sesión', this.sessionName || new Date().toISOString().slice(0, 10) + '-sesión');
     if (!name?.trim()) return;
     try {
@@ -530,9 +530,10 @@ export class RecursosController {
           const target = event.target;
           if (target instanceof HTMLElement && target.matches('[data-item-id]')) {
             const resource = this.items.find((candidate) => candidate.id === target.dataset.itemId);
-            if (resource) this.requestResourceOpen(resource);
+            if (resource && this.canControl()) this.requestResourceOpen(resource);
             return;
           }
+          if (!this.canControl()) return;
           this.sessionId = s.id;
           this.sessionName = s.name;
           this.loadEmptyFoldersFromStorage();
@@ -592,22 +593,51 @@ export class RecursosController {
   }
 
   private async uploadFile(file: File, targetFolder?: string) {
-    if (!this.canEdit()) return;
+    const sid = await this.ensureSession();
+    const type = typeFromUrl(file.name);
+    const folder = targetFolder ?? this.defaultFolderForType(type);
     const form = new FormData();
     form.append('file', file);
+    form.append('scope', 'recursos');
+    form.append('roomName', this.getRoomName() ?? '');
+    form.append('claseId', this.getEffectiveCourseId() ?? '');
+    form.append('sessionId', sid);
+    form.append('folder', folder);
     try {
       const resp = await fetch('/api/room/re-store', { method: 'POST', body: form });
       if (!resp.ok) { console.error('[Re] upload failed', resp.status); return; }
-      const { url } = await resp.json();
-      const type = typeFromUrl(url);
-      const sid = await this.ensureSession();
-      const newItem: ResourceItem = {
+      const payload = await resp.json();
+      const url = String(payload?.url ?? '').trim();
+      if (!url) return;
+      const storedItem = payload?.item && typeof payload.item === 'object' ? payload.item : null;
+      const newItem: ResourceItem = storedItem ? {
+        id: String(storedItem.id || crypto.randomUUID()),
+        url: String(storedItem.url || url),
+        name: String(storedItem.name || nameFromFile(file)),
+        type: storedItem.type || typeFromUrl(url),
+        folder: String(storedItem.folder ?? folder),
+        source: 'upload',
+        createdBy: String(storedItem.createdBy || this.getIdentity()),
+        sortOrder: Number(storedItem.sortOrder) || 0,
+        createdAt: String(storedItem.createdAt || new Date().toISOString()),
+        sessionId: storedItem.sessionId ? String(storedItem.sessionId) : null,
+      } : {
         id: crypto.randomUUID(), url, name: nameFromFile(file),
-        type, folder: targetFolder ?? this.defaultFolderForType(type), source: 'upload',
+        type: typeFromUrl(url), folder, source: 'upload',
         createdBy: this.getIdentity(), sortOrder: this.items.length, createdAt: new Date().toISOString(),
         sessionId: sid || null,
       };
-      this.commitItemsIfChanged(addItem(this.items, newItem));
+      const nextItems = addItem(this.items, newItem);
+      if (nextItems === this.items) return;
+      this.items = nextItems;
+      this.render();
+      if (this.canControl()) {
+        this.scheduleAutosave();
+        this.broadcastSync();
+        void this.saveNow();
+      } else {
+        this.publish({ type: 'recursos:upload', item: newItem });
+      }
     } catch (e) { console.error('[Re] upload error', e); }
   }
 
@@ -654,6 +684,7 @@ export class RecursosController {
   // ── Sync ─────────────────────────────────────────────────────────────────────
 
   private broadcastSync() {
+    if (!this.canControl()) return;
     this.items = this.dedupeItems(this.items);
     this.publish({
       type: 'recursos:sync',
@@ -679,19 +710,50 @@ export class RecursosController {
       this.sessionId = nextSessionId;
       this.sessionName = nextSessionName;
       this.items = this.dedupeItems(msg.items);
-      this.allowStudents = msg.allowStudents;
+      this.allowStudents = false;
       this.emptyFolders = new Set((msg.emptyFolders ?? []).map((folder) => String(folder || '').trim()).filter(Boolean));
       this.persistEmptyFolders();
       if (sessionChanged && this.sessionId) {
         this.sessionResources.set(this.sessionId, this.items.filter((item) => item.sessionId === this.sessionId));
       }
       this.render();
-      void this.saveNow();
+      if (this.canControl()) void this.saveNow();
       this.emitAllowStudentsChanged();
     } else if (msg.type === 'recursos:allow-students') {
-      this.allowStudents = true;
+      this.allowStudents = false;
       this.emitAllowStudentsChanged();
+    } else if (msg.type === 'recursos:upload') {
+      void this.applyVerifiedUpload(msg.item);
     }
+  }
+
+  private async applyVerifiedUpload(messageItem: ResourceItem): Promise<void> {
+    const roomName = this.getRoomName() ?? '';
+    if (!roomName || !messageItem?.id) return;
+    try {
+      const params = new URLSearchParams({
+        roomName,
+        claseId: this.getEffectiveCourseId() ?? '',
+      });
+      const response = await fetch(`/api/live/recursos?${params}`);
+      if (!response.ok) return;
+      const payload = await response.json();
+      const serverItems = Array.isArray(payload?.items) ? payload.items : [];
+      const verifiedItem = serverItems.find((item: ResourceItem) =>
+        String(item?.id || '') === String(messageItem.id) &&
+        String(item?.url || '') === String(messageItem.url || '')
+      );
+      if (!verifiedItem) return;
+      const nextItems = addItem(this.items, verifiedItem);
+      if (nextItems === this.items) return;
+      this.items = nextItems;
+      this.render();
+      if (this.canControl()) {
+        this.scheduleAutosave();
+        this.broadcastSync();
+        void this.saveNow();
+      }
+    } catch { /**/ }
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────────
@@ -704,7 +766,7 @@ export class RecursosController {
 
   private async save() {
     const roomName = this.getRoomName() ?? '';
-    if (!roomName || !this.autosaveDirty) return;
+    if (!this.canControl() || !roomName || !this.autosaveDirty) return;
     try {
       const resp = await fetch('/api/live/recursos', {
         method: 'POST',
@@ -728,7 +790,7 @@ export class RecursosController {
 
   private flushSave() {
     const roomName = this.getRoomName() ?? '';
-    if (!roomName || !this.autosaveDirty) return;
+    if (!this.canControl() || !roomName || !this.autosaveDirty) return;
     if (this.autosaveTimer) {
       clearTimeout(this.autosaveTimer);
       this.autosaveTimer = null;
@@ -810,6 +872,7 @@ export class RecursosController {
   }
 
   private requestResourceOpen(item: ResourceItem, options: { forceNew?: boolean } = {}): void {
+    if (!this.canControl()) return;
     if (this.isExternalMediaLink(item)) {
       this.requestExternalMediaLoad(item);
       return;
@@ -894,7 +957,7 @@ export class RecursosController {
 
   private openItemCtxMenu(item: ResourceItem, e: MouseEvent) {
     const canEdit = this.canEdit();
-    const canOpenInPod = this.canOpenInAssociatedPod(item);
+    const canOpenInPod = this.canControl() && this.canOpenInAssociatedPod(item);
     if (!canEdit && !canOpenInPod) return;
     this.ctxTargetItem = item; this.ctxTargetFolder = null;
     this.ctxNewFolderBtn.style.display = 'none';

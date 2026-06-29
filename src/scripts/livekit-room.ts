@@ -4223,7 +4223,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     GRAVITY_BALL_EARTH_MS2,
   );
   let sessionAllowsInstruments = true;
-  let recursosAllowsStudents = true;
+  let recursosAllowsStudents = false;
   let sidebarCollapsed = root.dataset.sidebarCollapsed === 'true';
   let graphVisible = false;
   let externalMediaSession: ExternalMediaSessionState | null = null;
@@ -4550,6 +4550,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     return overlay ? normalizeLayoutMode(overlay) : null;
   };
   const applyStageOverlayLayout = (overlay: LayoutMode | null, broadcast = false) => {
+    if (broadcast && !canLeadSession()) return;
     setOverlayLayout(stage, overlay);
     if (broadcast && room.state === ConnectionState.Connected && canLeadSession()) {
       void publishMessage({
@@ -7956,6 +7957,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       sessionLeaderSelect.value = sessionLeaderIdentity;
       sessionLeaderSelect.disabled = localRole !== 'teacher';
     }
+    workspaceManager.syncAuthority();
+    syncMediaControlAuthority();
     syncPresentationSessionControl();
   };
 
@@ -10124,7 +10127,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
-  const canChangeLayoutLocally = () => true;
+  const canChangeLayoutLocally = () => canLeadSession();
 
   const resolveParticipantTargetSlot = (participant: Participant): HTMLElement | null => {
     // Show/Hide floating circle wrapper
@@ -10903,11 +10906,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
   };
 
-  const canAcceptSonicControl = (participant: any) =>
-    readParticipantRole(room, participant, localRole) === 'teacher' || recursosAllowsStudents;
+  const canAcceptSessionControl = (participant: any) =>
+    readParticipantRole(room, participant, localRole) === 'teacher' && isSessionLeader(participant);
 
-  const canPublishSonicControl = () => localRole === 'teacher' || recursosAllowsStudents;
-  const canAcceptVisualControl = canAcceptSonicControl;
+  const canAcceptSonicControl = canAcceptSessionControl;
+  const canPublishSonicControl = () => canLeadSession();
+  const canAcceptVisualControl = canAcceptSessionControl;
 
   const sonicFetchUrl = (url: string) =>
     url.startsWith('http') && !url.startsWith(location.origin)
@@ -11148,6 +11152,16 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let recursosController: RecursosController | null = null;
   let notesController: ReturnType<typeof createRoomNotesController> | null = null;
   let recursosCurrentLessonId: string | null = null;
+
+  const syncMediaControlAuthority = () => {
+    const role = canLeadSession() ? 'teacher' : 'student';
+    sonicAnalyzerController?.setRole(role);
+    sonicVisualizerController?.setRole(role);
+    visualizerControllers.forEach((controller) => controller.setRole(role));
+    sonicAnalyzerController?.setAllowStudents(false);
+    sonicVisualizerController?.setAllowStudents(false);
+    visualizerControllers.forEach((controller) => controller.setAllowStudents(false));
+  };
   let lastAppliedSonicCacheKey = '';
   let lastDispatchedSonicCacheKey = '';
   let lastRemoteWorkspaceAppliedAt = 0;
@@ -11553,7 +11567,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         getSenderName: () => nameInput.value.trim() || room.localParticipant?.name || '',
       });
       sonicAnalyzerController = controller;
-      sonicAnalyzerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
+      sonicAnalyzerController.setRole(canLeadSession() ? 'teacher' : 'student');
       sonicAnalyzerController.setAllowStudents(recursosAllowsStudents);
       lastAppliedSonicCacheKey = '';
       scheduleMediaRehydrate([140, 520, 1200]);
@@ -11571,7 +11585,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         publish: (msg) => void publishMessage(msg),
       });
       sonicVisualizerController = controller;
-      sonicVisualizerController.setRole(localRole === 'teacher' ? 'teacher' : 'student');
+      sonicVisualizerController.setRole(canLeadSession() ? 'teacher' : 'student');
       sonicVisualizerController.setAllowStudents(recursosAllowsStudents);
       lastDispatchedSonicCacheKey = '';
       scheduleMediaRehydrate([120, 420, 1000]);
@@ -11592,7 +11606,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       visualizerControllers.add(controller);
       if (panelId) visualizerControllersByPanel.set(panelId, controller);
       visualizerController = controller;
-      controller.setRole(localRole === 'teacher' ? 'teacher' : 'student');
+      controller.setRole(canLeadSession() ? 'teacher' : 'student');
       controller.setAllowStudents(recursosAllowsStudents);
       scheduleMediaRehydrate([100, 360, 900]);
       window.setTimeout(() => window.dispatchEvent(new CustomEvent('vs:request-state')), 100);
@@ -11662,7 +11676,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     window.addEventListener('musiki:recursos:allow-students-changed', (e: Event) => {
-      recursosAllowsStudents = true;
+      recursosAllowsStudents = false;
       sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
       sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
       visualizerControllers.forEach((controller) => controller.setAllowStudents(recursosAllowsStudents));
@@ -11670,6 +11684,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     window.addEventListener('musiki:sonic:load-url', (e: Event) => {
+      if (!canLeadSession()) return;
       const { url, name, forceNew } = (e as CustomEvent<{ url: string; name: string; forceNew?: boolean }>).detail ?? {};
       if (!url) return;
       const fileName = normalizeText(name) || 'audio';
@@ -11686,6 +11701,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     window.addEventListener('musiki:sonic:load-file', (e: Event) => {
+      if (!canLeadSession()) return;
       const { file, targetPanelId } = (e as CustomEvent<{ file: File; targetPanelId?: string }>).detail ?? {};
       if (!(file instanceof File)) return;
       const panelId = normalizeText(targetPanelId) || workspaceManager.focusOrOpenSonicVisualizer('sonic-visualizer');
@@ -11695,6 +11711,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     window.addEventListener('musiki:visual:load-url', (e: Event) => {
+      if (!canLeadSession()) return;
       const { url, name, forceNew } = (e as CustomEvent<{ url: string; name: string; forceNew?: boolean }>).detail ?? {};
       if (!url) return;
       const fileName = normalizeText(name) || 'document';
@@ -11706,6 +11723,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     window.addEventListener('musiki:external-media:open-url', (e: Event) => {
+      if (!canLeadSession()) return;
       const { url, source } = (e as CustomEvent<{ url: string; name?: string; source?: string }>).detail ?? {};
       if (!url) return;
       workspaceManager.focusOrOpenExternalMedia('recursos');
@@ -11718,7 +11736,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       recursosController?.dispose();
       recursosController = new RecursosController({
         container,
-        isTeacher: localRole === 'teacher',
+        canControl: canLeadSession,
         getCourseId: () => recursosCurrentLessonId,
         getCourseRootId: () => courseId || null,
         getRoomName: () => roomInput.value.trim() || null,
@@ -13426,11 +13444,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'layout-split') {
+        if (!canAcceptSessionControl(participant)) return;
         setSplitLayout(stage, message.left, message.right);
         return;
       }
 
       if (message.type === 'layout-overlay') {
+        if (!canAcceptSessionControl(participant)) return;
         applyStageOverlayLayout(message.overlay, false);
         return;
       }
@@ -13467,6 +13487,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
 
       if (message.type === 'session-workspace') {
+        if (!canAcceptSessionControl(participant)) return;
         if (message.sentAt && message.sentAt < lastRemoteWorkspaceSentAt) return;
         if (message.sentAt) lastRemoteWorkspaceSentAt = message.sentAt;
         const incomingJson = JSON.stringify(message.layout);
@@ -13635,9 +13656,23 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         return;
       }
 
+      if (message.type === 'recursos:upload') {
+        window.dispatchEvent(new CustomEvent('musiki:recursos:receive', {
+          detail: {
+            ...message,
+            item: {
+              ...message.item,
+              source: 'upload',
+              createdBy: participant.identity,
+            },
+          },
+        }));
+        return;
+      }
+
       if (message.type === 'recursos:sync' || message.type === 'recursos:allow-students') {
-        if (!canAcceptSonicControl(participant)) return;
-        recursosAllowsStudents = true;
+        if (!canAcceptSessionControl(participant)) return;
+        recursosAllowsStudents = false;
         sonicAnalyzerController?.setAllowStudents(recursosAllowsStudents);
         sonicVisualizerController?.setAllowStudents(recursosAllowsStudents);
         visualizerControllers.forEach((controller) => controller.setAllowStudents(recursosAllowsStudents));
@@ -15525,6 +15560,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   const launchConcept = (mode: 'split' | 'overlay') => {
+    if (!canLeadSession()) return;
     const href = conceptSearchInput instanceof HTMLInputElement ? conceptSearchInput.dataset.href : '';
     if (href) {
       concepts.launch(href, mode);
@@ -15545,6 +15581,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   panelCloseButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (!canLeadSession()) return;
       const panel = btn.closest('[data-panel]');
       if (panel instanceof HTMLElement) {
         const panelType = panel.dataset.panel;
@@ -15751,6 +15788,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   });
 
   layoutInput.addEventListener('change', () => {
+    if (!canLeadSession()) {
+      layoutInput.value = normalizeLayoutMode(stage.dataset.layout || 'presentation');
+      syncLayoutChoiceButtons();
+      return;
+    }
     const nextLayout = setLayout(stage, layoutInput.value);
     layoutInput.value = nextLayout;
     if (nextLayout !== 'screenshare') {
@@ -15771,6 +15813,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   if (presentationButton instanceof HTMLButtonElement) {
     presentationButton.addEventListener('click', () => {
+      if (!canLeadSession()) return;
       const selectedHref = normalizeText(presentationSelect.value) || null;
       schedulePresentationLoad({
         broadcast: canLeadSession(),
@@ -15783,6 +15826,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   root.addEventListener('change', (e) => {
     const target = e.target as HTMLElement;
     if (target.closest('[data-presentation-select]')) {
+      if (!canLeadSession()) return;
       const sel = target.closest('[data-presentation-select]') as HTMLSelectElement;
       const selectedHref = normalizeText(sel.value) || null;
       schedulePresentationLoad({
@@ -15846,6 +15890,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   if (presentationClearButton instanceof HTMLButtonElement) {
     presentationClearButton.addEventListener('click', () => {
+      if (!canLeadSession()) return;
       presentationSelect.value = '';
       syncPresentationComboboxes(true);
       schedulePresentationLoad({
@@ -16233,6 +16278,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   };
 
   searchWindow.handleSearchNavigation = async ({ href }) => {
+    if (!canLeadSession()) return false;
     const nextHref = normalizeRoomSearchHref(href);
     if (!nextHref) return false;
 

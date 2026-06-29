@@ -1,8 +1,9 @@
 import type { APIRoute } from 'astro';
-import { cleanString, ensureDbUserFromSession, json } from '../../../lib/forum-server';
+import { cleanString, ensureDbUserFromSession, getForumCourseAccess, json } from '../../../lib/forum-server';
 import { query } from '../../../lib/db/pool';
 import { normalizeResourceProjectionItems } from '../../../lib/live/recursos-markdown';
 import { normalizeDbResourceSource, normalizeDbResourceType } from '../../../lib/live/resource-db-enums';
+import { isElevatedGlobalRole } from '../../../lib/roles';
 
 // GET /api/live/recursos?roomName=...&claseId=...
 export const GET: APIRoute = async ({ request, locals, url }) => {
@@ -49,9 +50,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const roomName = cleanString(String(body?.roomName ?? ''), 120);
   const claseId  = body?.claseId == null ? null : cleanString(String(body.claseId), 240) || null;
+  const courseRootId = cleanString(String(body?.courseRootId ?? ''), 240) || null;
   const items = normalizeResourceProjectionItems(Array.isArray(body?.items) ? body.items : []);
 
   if (!roomName) return json({ error: 'roomName required' }, 400);
+
+  const canReplace = courseRootId
+    ? (await getForumCourseAccess(user, courseRootId)).isTeacher
+    : isElevatedGlobalRole(user.role);
+  if (!canReplace) {
+    return json({ error: 'Only teachers can replace or remove room resources' }, 403);
+  }
 
   const incomingIds = items.map(i => String(i.id)).filter(Boolean);
 
@@ -118,7 +127,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // Coherence: only auto-persist to Markdown in production.
   // In development, the teacher must use the "Save to Repo" button to avoid reload loops.
   if (process.env.NODE_ENV === 'production' || body?.persist === true) {
-    const courseRootId = cleanString(String(body?.courseRootId ?? ''), 120) || null;
     await persistProjection({ courseRootId, claseId, roomName, items: rows }).catch(err => {
       console.error('[recursos] background markdown sync failed', err);
     });

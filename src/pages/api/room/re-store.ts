@@ -1,7 +1,9 @@
 import type { APIRoute } from 'astro';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { json } from '../../../lib/forum-server';
+import { cleanString, json } from '../../../lib/forum-server';
+import { query } from '../../../lib/db/pool';
 import { getR2BucketName, getR2Client, getR2PublicObjectUrl } from '../../../lib/r2';
+import { normalizeDbResourceType } from '../../../lib/live/resource-db-enums';
 
 const MAX_BYTES = 256 * 1024 * 1024;
 
@@ -34,6 +36,25 @@ function guessType(ext: string): string {
   if (ext === 'webm') return 'video/webm';
   if (['md', 'tex', 'ly', 'txt'].includes(ext)) return 'text/plain';
   return 'application/octet-stream';
+}
+
+function resourceTypeFromExt(ext: string): string {
+  if (ext === 'pdf') return 'pdf';
+  if (ext === 'pptx') return 'pptx';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'img';
+  if (ext === 'md' || ext === 'txt') return 'md';
+  if (ext === 'tex') return 'tex';
+  if (ext === 'ly') return 'ly';
+  if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) return 'audio';
+  if (['mov', 'mp4', 'webm'].includes(ext)) return 'video';
+  return 'other';
+}
+
+function optionalUuid(value: FormDataEntryValue | null): string | null {
+  const normalized = cleanString(String(value ?? ''), 40);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)
+    ? normalized
+    : null;
 }
 
 function buildKey(file: File, identity: string): string {
@@ -73,7 +94,38 @@ export const POST: APIRoute = async ({ request, locals }) => {
       CacheControl: 'public, max-age=31536000, immutable',
     }));
 
-    return json({ success: true, url: getR2PublicObjectUrl(key), key, ext });
+    const url = getR2PublicObjectUrl(key);
+    const scope = cleanString(String(form.get('scope') ?? ''), 20);
+    const roomName = cleanString(String(form.get('roomName') ?? ''), 120);
+    let item: Record<string, unknown> | null = null;
+
+    // Recursos uploads are append-only at the server. This lets students add a
+    // file without granting them the full-list replace/delete permission.
+    if (scope === 'recursos' && roomName) {
+      const id = crypto.randomUUID();
+      const claseId = cleanString(String(form.get('claseId') ?? ''), 240) || null;
+      const sessionId = optionalUuid(form.get('sessionId'));
+      const folder = cleanString(String(form.get('folder') ?? ''), 120);
+      const resourceType = await normalizeDbResourceType(resourceTypeFromExt(ext));
+      const name = cleanString(String(file.name || ''), 500) || 'recurso';
+      const insert = await query(
+        `INSERT INTO "LiveClassResource"
+           (id, "claseId", "sessionId", "roomName", url, name, type, folder, source, "createdBy", "sortOrder", "createdAt")
+         VALUES
+           ($1, $2, $3, $4, $5, $6, $7, $8, 'upload', $9,
+            COALESCE((SELECT MAX("sortOrder") + 1 FROM "LiveClassResource" WHERE "roomName" = $4 AND "claseId" IS NOT DISTINCT FROM $2), 0),
+            now())
+         RETURNING id, "claseId", "sessionId", "roomName", url, name, type, folder, source, "createdBy", "sortOrder", "createdAt"`,
+        [id, claseId, sessionId, roomName, url, name, resourceType, folder, email],
+      );
+      if (insert.error) {
+        console.error('[recursos-upload] metadata insert failed', insert.error);
+        return json({ error: 'File uploaded, but the resource could not be registered.' }, 500);
+      }
+      item = insert.data?.[0] ?? null;
+    }
+
+    return json({ success: true, url, key, ext, item });
   } catch (e: any) {
     console.error('[recursos-upload]', e);
     if (String(e?.message || '').includes('R2_NOT_CONFIGURED'))
