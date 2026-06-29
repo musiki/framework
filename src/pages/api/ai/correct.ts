@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { buildPatchEvaluationPrompt } from '../../../lib/ai/patch-prompt';
+import { buildCorrectionApiUrl } from '../../../lib/ai/correction-api-url';
 
 const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 65000);
 const maxTextChars = 12000;
@@ -537,7 +538,7 @@ async function handleOllama({ texto, rubrica, model, promptOverride }: Correctio
   }
 
   try {
-    const response = await fetch(`${correctionApiUrl}/api/correct`, {
+    const response = await fetch(buildCorrectionApiUrl(correctionApiUrl, '/api/correct'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -562,13 +563,15 @@ async function handleOllama({ texto, rubrica, model, promptOverride }: Correctio
     }
 
     if (!response.ok) {
+      const upstream = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
       return json(
         {
-          error: 'Correction backend failed',
+          error: ensureText(upstream.error) || 'Correction backend failed',
+          code: ensureText(upstream.code) || undefined,
           upstreamStatus: response.status,
           upstreamBody: parsed,
         },
-        502,
+        response.status === 400 || response.status === 422 ? response.status : 502,
       );
     }
 

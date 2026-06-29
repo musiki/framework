@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { buildCorrectionApiUrl } from '../../../lib/ai/correction-api-url';
 
 const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 65000);
 
@@ -27,7 +28,7 @@ export const GET: APIRoute = async ({ locals }) => {
   }
 
   try {
-    const response = await fetch(`${correctionApiUrl}/api/models`, {
+    const response = await fetch(buildCorrectionApiUrl(correctionApiUrl, '/api/models'), {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${correctionApiToken}`,

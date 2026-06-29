@@ -25,6 +25,7 @@ src/content/.obsidian/
 .env.*
 *.env
 *.env.*
+!services/ollama-api/.env.example
 .env copy
 .env*.copy
 

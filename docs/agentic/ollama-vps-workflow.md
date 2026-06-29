@@ -24,8 +24,8 @@ sudo apt install -y nodejs
 curl -fsSL https://ollama.com/install.sh | sh
 sudo systemctl enable --now ollama
 
-# Modelo base
-ollama pull llama3.2
+# Modelo base usado por los evals de texto
+ollama pull gemma4:31b-cloud
 ```
 
 Verifica:
@@ -56,7 +56,7 @@ Edita variables de producción:
 ```env
 API_TOKEN=<token_largo_random>
 ALLOWED_ORIGINS=https://tu-campus.vercel.app
-OLLAMA_MODEL=llama3.2
+OLLAMA_MODEL=gemma4:31b-cloud
 ```
 
 Reinicia servicio:

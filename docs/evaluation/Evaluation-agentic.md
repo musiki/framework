@@ -41,7 +41,7 @@ rubric: |
   uso de ejemplo verificable;
   coherencia argumental
 provider: ollama
-model: llama3.2:latest
+model: gemma4:31b-cloud
 minChars: 180
 passScore: 6
 points: 3
@@ -132,7 +132,7 @@ Para `short_ai`, guardar en `answer`:
     "calificacion": { "nota": 7.8, "justificacion": "..." }
   },
   "provider": "ollama",
-  "model": "llama3.2:latest"
+  "model": "gemma4:31b-cloud"
 }
 ```
 

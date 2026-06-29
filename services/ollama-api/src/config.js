@@ -22,7 +22,7 @@ export const config = {
   allowedOrigins: ALLOWED_ORIGINS,
   allowAnyOrigin: ALLOWED_ORIGINS.includes('*'),
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
-  ollamaModel: process.env.OLLAMA_MODEL || 'llama3.2',
+  ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:31b-cloud',
   ollamaTimeoutMs: parseNumber(process.env.OLLAMA_TIMEOUT_MS, 60000),
   temperature: parseNumber(process.env.TEMPERATURE, 0.1),
   numPredict: parseNumber(process.env.NUM_PREDICT, 512),

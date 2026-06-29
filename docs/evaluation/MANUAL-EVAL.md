@@ -410,7 +410,7 @@ checks:
   - "Ignorar posicion visual si la logica coincide"
   - "Penalizar conexiones faltantes o outlets mal conectados"
 provider: ollama
-model: llama3.2:latest
+model: gemma4:31b-cloud
 passScore: 6
 allowEdit: true
 evaluationPrompt: |
@@ -483,7 +483,7 @@ rubric: |
   uso de ejemplo verificable;
   coherencia argumental
 provider: ollama
-model: llama3.2:latest
+model: gemma4:31b-cloud
 minChars: 180
 passScore: 6
 points: 3
@@ -527,7 +527,7 @@ rubric: |
   claridad;
   uso correcto del vocabulario
 provider: ollama
-model: llama3.2:latest
+model: gemma4:31b-cloud
 passScore: 6
 allowEdit: true
 ```

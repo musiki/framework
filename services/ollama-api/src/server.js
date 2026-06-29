@@ -8,6 +8,7 @@ import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
 import { createCorrectionPrompt } from './prompt.js';
 import { normalizeModelResponse } from './parser.js';
+import { resolveOllamaModel } from './model-resolver.js';
 
 const app = Fastify({
   logger: {
@@ -59,27 +60,11 @@ app.get('/health', async () => {
 
 app.get('/api/models', async (_request, reply) => {
   try {
-    const response = await fetch(`${config.ollamaBaseUrl}/api/tags`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(config.ollamaTimeoutMs),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return reply.code(502).send({ ok: false, error: `Ollama error: ${text}` });
-    }
-
-    const data = await response.json();
-    const models = Array.isArray(data.models)
-      ? data.models.map((item) => ({
-          name: item.name,
-          size: item.size,
-          modified_at: item.modified_at,
-        }))
-      : [];
+    const models = await fetchOllamaModels();
 
     return {
       ok: true,
+      default_model: config.ollamaModel,
       models,
     };
   } catch (error) {
@@ -128,10 +113,19 @@ app.post('/api/correct', {
     });
   }
 
-  const selectedModel = model || config.ollamaModel;
+  const requestedModel = model || config.ollamaModel;
   const prompt = promptOverride || createCorrectionPrompt({ studentText: texto, rubricText: rubrica });
 
   try {
+    const modelResolution = await resolveAvailableModel(requestedModel);
+    if (!modelResolution.model) {
+      return reply.code(422).send({
+        ok: false,
+        code: 'MODEL_NOT_AVAILABLE',
+        error: `Requested model '${requestedModel}' is unavailable and default model '${config.ollamaModel}' is not installed.`,
+      });
+    }
+    const selectedModel = modelResolution.model;
     const ollamaResponse = await fetch(`${config.ollamaBaseUrl}/api/generate`, {
       method: 'POST',
       headers: {
@@ -164,6 +158,8 @@ app.post('/api/correct', {
     return {
       ok: true,
       model: raw.model || selectedModel,
+      requested_model: modelResolution.requestedModel,
+      model_fallback: modelResolution.fallbackFrom,
       created_at: raw.created_at || null,
       evaluation: normalized,
       timing_ms: {
@@ -229,9 +225,18 @@ app.post('/api/run', {
     });
   }
 
-  const selectedModel = model || config.ollamaModel;
+  const requestedModel = model || config.ollamaModel;
 
   try {
+    const modelResolution = await resolveAvailableModel(requestedModel);
+    if (!modelResolution.model) {
+      return reply.code(422).send({
+        ok: false,
+        code: 'MODEL_NOT_AVAILABLE',
+        error: `Requested model '${requestedModel}' is unavailable and default model '${config.ollamaModel}' is not installed.`,
+      });
+    }
+    const selectedModel = modelResolution.model;
     const ollamaResponse = await fetch(`${config.ollamaBaseUrl}/api/generate`, {
       method: 'POST',
       headers: {
@@ -264,6 +269,8 @@ app.post('/api/run', {
       ok: true,
       task,
       model: raw.model || selectedModel,
+      requested_model: modelResolution.requestedModel,
+      model_fallback: modelResolution.fallbackFrom,
       created_at: raw.created_at || null,
       output: raw.response || '',
       timing_ms: {
@@ -301,6 +308,45 @@ app.setErrorHandler((error, _request, reply) => {
     error: 'Internal server error',
   });
 });
+
+async function fetchOllamaModels() {
+  const response = await fetch(`${config.ollamaBaseUrl}/api/tags`, {
+    method: 'GET',
+    signal: AbortSignal.timeout(config.ollamaTimeoutMs),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Ollama /api/tags failed (${response.status}): ${text}`);
+  }
+
+  const data = await response.json();
+  return Array.isArray(data.models)
+    ? data.models.map((item) => ({
+        name: item.name,
+        size: item.size,
+        modified_at: item.modified_at,
+      }))
+    : [];
+}
+
+async function resolveAvailableModel(requestedModel) {
+  try {
+    const models = await fetchOllamaModels();
+    return resolveOllamaModel({
+      requestedModel,
+      defaultModel: config.ollamaModel,
+      availableModels: models.map((item) => item.name),
+    });
+  } catch (error) {
+    app.log.warn({ err: error }, 'Could not discover Ollama models; generation will use requested model directly');
+    return resolveOllamaModel({
+      requestedModel,
+      defaultModel: config.ollamaModel,
+      availableModels: [],
+    });
+  }
+}
 
 function nanosecondsToMs(value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;

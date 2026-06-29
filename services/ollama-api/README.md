@@ -14,7 +14,7 @@ API Node.js/Fastify para corrección de textos con Ollama local.
 {
   "texto": "Texto del estudiante",
   "rubrica": "Opcional. Rúbrica custom",
-  "model": "Opcional. Ejemplo: llama3.2",
+  "model": "Opcional. Ejemplo: gemma4:31b-cloud",
   "promptOverride": "Opcional. Prompt completo ya construido por el caller"
 }
 ```
@@ -26,7 +26,7 @@ API Node.js/Fastify para corrección de textos con Ollama local.
 ```json
 {
   "ok": true,
-  "model": "llama3.2",
+  "model": "gemma4:31b-cloud",
   "evaluation": {
     "resumen": "...",
     "tesis": { "clara": true, "explicacion": "..." },
