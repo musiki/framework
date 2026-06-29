@@ -1,5 +1,8 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 page-info-reorder> <br>
+Reorden del panel Info (`#page-info-sidebar` en `[...slug].astro`): se quitó el kicker "Page info" y el título redundante "Historial y versiones" (header `--bare`, solo ×). Orden: PROPIEDADES primero (sin cambios), luego HISTORIAL como `<details>` plegado por defecto que reusa el estilo de Propiedades (`.page-info-props`) y unifica la meta antigua (fuente/subido/fecha/actualizado/autor/commit) + la lista de commits. Cada commit en UNA línea (autor · fecha) con los enlaces Commit/Comparar reemplazados por íconos GitHub (octicons git-commit / git-compare) `.page-info-gh-link`. CSS viejo de `.page-info-meta`/kicker/title queda como dead-code inocuo. Sin cambios de script; estructura JSX balanceada.
+
 <2026-06-28 progress-endpoint-markers> <br>
 Log de evals + markers del sidebar confiables (worktree sobre HEAD f06a6d0, sin commit):
 - Aclaración de arquitectura: el dashboard `?tab=log` (`buildTeacherEvalProjection`) lista la tabla `Submission` (1 fila por entrega, type-agnóstica: mcq/combinatoria/short_ai aparecen igual). Captura todos los evals RESPONDIDOS. El inventario de todos los evals DEFINIDOS es el catálogo → tabla `Assignment` (poblada por `npm run eval:sync:db`), y requiere `content:assemble` de las notas s123.
