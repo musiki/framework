@@ -1,5 +1,20 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 eval-blocks-restyle> <br>
+Restyle de los bloques `eval` en `src/pages/[...slug].astro` (CSS en el `<style>`, sin tocar renderers):
+- Código de colores por tipo vía `.eval-block-wrapper[data-eval-type]` (mcq/msq azul, combinatoria cian, short_ai/reference_ai violeta, mcc verde, poll ámbar, wordcloud verde-agua, patch_ai naranja) con var `--eval-accent`/`--eval-accent-soft`, alineado a la paleta del grafo.
+- `.eval-block`: card con riel-acento izquierdo, borde tintado y fondo suave; token geométrico `::before` por tipo (círculo/diamante/triángulo/cuadrado/pentágono/hexágono) replicando el lenguaje de formas del grafo.
+- `.eval-submit`: botón pill con relleno acento, sombra de color, hover lift y punto circular (gamificación). `.mcq-option`: controles geométricos custom (radio=círculo, checkbox=cuadrado) con relleno acento al marcar; hover con tinte. Combinatoria y feedback alineados a `--eval-accent`.
+- Tracking: tras `saveSubmission` exitoso se llama `updateCourseProgress()` para reflejar al instante el resultado en el mapa de progreso/sidebar (evaluado/completado) y en el log del usuario (Submission ya persiste answer/isCorrect/score/meta por `/api/eval/submit`).
+- Validado: script grande sin errores de sintaxis. Pendiente smoke test visual.
+
+<2026-06-28 sidebar-toc-progress-starlight> <br>
+Sidebar izquierdo de `src/pages/[...slug].astro` (worktree sobre HEAD f06a6d0, sin commit):
+- TOC inline estilo Moodle: `injectInlineToc()` reubica el bloque `#class-toc` ("Contenido") debajo del `li.lesson-item` de la nota activa tras `buildClassToc()`; CSS `.class-toc--inline` (guía izquierda + indent). Resuelve que el TOC se perdía al fondo en courses grandes.
+- Mapa de progreso por entry: store localStorage `musiki:progress:<user>:<courseId>` con `{read, completed, evaluated}`. `read` = IntersectionObserver sobre un `.reading-end-sentinel` al final de `.content-area`; `completed` = algún `mcc` completo en la página; `evaluated` = alguna submission no-mcc en la página. `applyCourseProgressToSidebar()` pinta marcadores `.lesson-state` (✓ completado verde / ◑ evaluado acento / ◷ leído dim) en cada `.lesson-link[data-lesson-page-slug]`. Se acumula a medida que el estudiante navega (client-side, por navegador; NO es un join server-wide). Llamadas añadidas tras `buildClassToc()`.
+- Estilo Starlight (parcial): item activo con riel-acento izquierdo + tinte; tipografía de lectura (.content-area > .class-content: Inter, line-height 1.75, ritmo de h2/h3). No se tocaron iconos de tipo, puntitos de progreso mcc ni drag/resize.
+- Validado: script grande sin errores de sintaxis (typescript.transpileModule). Pendiente: smoke test visual; para un mapa de completado/evaluado autoritativo de todo el course conviene un endpoint server que cruce submissions+eval-catalog (hoy es por-visita/localStorage).
+
 <2026-06-28 graph-refinos> <br>
 GraphModal.astro — 6 mejoras (worktree sobre HEAD f06a6d0, sin commit):
 1. Labels +40% (tag 10.2→14.3, doc 12→16.8).

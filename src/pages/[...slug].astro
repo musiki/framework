@@ -2186,11 +2186,72 @@ function renderLessonsTreeHTML(
         background: var(--c-bg-mute);
       }
 
+      /* Starlight-style current item: accent left rail + subtle tint. */
       .lesson-link.active {
-        background: transparent;
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
         color: var(--accent);
-        font-weight: 500;
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 78%, transparent);
+        font-weight: 600;
+        box-shadow: inset 2px 0 0 0 var(--accent);
+        border-radius: 0 4px 4px 0;
+      }
+
+      /* ── Course progress state markers (read / completed / evaluated) ─────── */
+      .lesson-state {
+        font-size: 0.72rem;
+        line-height: 1;
+        width: 1em;
+        text-align: center;
+        flex: 0 0 auto;
+        opacity: 0.9;
+      }
+      .lesson-link.is-completed .lesson-state { color: #22c55e; }
+      .lesson-link.is-evaluated:not(.is-completed) .lesson-state { color: var(--accent); }
+      .lesson-link.is-read:not(.is-evaluated):not(.is-completed) .lesson-state { color: var(--c-fg-dim); }
+      .lesson-link.is-read:not(.active) .lesson-link-text { color: var(--c-fg-dim); }
+
+      .reading-end-sentinel {
+        height: 1px;
+        width: 100%;
+        margin: 0;
+        pointer-events: none;
+      }
+
+      /* ── Moodle-style inline TOC nested under the active lesson ───────────── */
+      .class-toc--inline {
+        margin: 0.15rem 0 0.4rem 0;
+        padding-left: 0.55rem;
+        border-left: 1px solid color-mix(in srgb, var(--accent) 35%, var(--c-border));
+      }
+      .class-toc--inline > details > summary.chapter-title {
+        font-size: 0.7rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--c-fg-dim);
+        padding: 0.15rem 0;
+      }
+      .class-toc--inline .class-toc-list {
+        margin: 0.1rem 0 0 0;
+      }
+      .class-toc--inline .class-toc-link {
+        font-size: 0.85rem;
+        padding: 0.12rem 0.3rem;
+      }
+      /* The "Contenido" block is hidden until reparented under a lesson. */
+      .class-toc.class-toc--inline[hidden] { display: none; }
+
+      /* ── Starlight-aligned reading column ────────────────────────────────── */
+      .content-area > .class-content {
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .content-area > .class-content :is(p, li, blockquote) {
+        line-height: 1.75;
+      }
+      .content-area > .class-content :is(h1, h2, h3, h4) {
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+      }
+      .content-area > .class-content :is(h2, h3) {
+        margin-top: 2.2rem;
       }
 
       :global(.lesson-icon) {
@@ -8329,6 +8390,8 @@ function renderLessonsTreeHTML(
 
           if (!response.ok) return false;
           await loadUserSubmissions();
+          // Reflect the new result in the course progress map / sidebar log.
+          try { updateCourseProgress(); } catch {}
 
           return true;
         } catch (error) {
@@ -11482,6 +11545,118 @@ function renderLessonsTreeHTML(
           tocDetails.open = true;
         }
         tocRoot.hidden = tocList.children.length === 0;
+        injectInlineToc();
+      }
+
+      // Moodle-style: relocate the note's "Contenido" TOC right under the active
+      // lesson item in the course tree, so it doesn't get lost at the bottom.
+      function injectInlineToc() {
+        const tocRoot = document.getElementById('class-toc');
+        if (!tocRoot) return;
+        const activeLink = document.querySelector('.lesson-link.active');
+        const activeItem = activeLink ? activeLink.closest('.lesson-item') : null;
+        if (!activeItem) {
+          tocRoot.classList.remove('class-toc--inline');
+          return;
+        }
+        if (tocRoot.parentElement !== activeItem) {
+          activeItem.appendChild(tocRoot);
+        }
+        tocRoot.classList.add('class-toc--inline');
+      }
+
+      // ── Course progress map: read / completed / evaluated per entry ────────
+      function courseProgressStoreKey() {
+        const root = document.querySelector('[data-course-layout-root]');
+        const userKey = root instanceof HTMLElement
+          ? String(root.dataset.userKey || '').trim().toLowerCase() || 'guest'
+          : 'guest';
+        const { courseId } = getPageContext();
+        return `musiki:progress:${userKey}:${courseId || 'x'}`;
+      }
+      function loadProgressStore() {
+        try { return JSON.parse(localStorage.getItem(courseProgressStoreKey()) || '{}') || {}; }
+        catch { return {}; }
+      }
+      function saveProgressStore(store) {
+        try { localStorage.setItem(courseProgressStoreKey(), JSON.stringify(store)); } catch {}
+      }
+      function currentPageKey() {
+        const active = document.querySelector('.lesson-link.active');
+        return active instanceof HTMLElement ? (active.dataset.lessonPageSlug || null) : null;
+      }
+      function computeCurrentPageEvalState() {
+        let completed = false, evaluated = false;
+        document.querySelectorAll('.eval-block-wrapper').forEach((wrapper) => {
+          const data = parseEvalData(wrapper);
+          if (!data || !data.id) return;
+          const sub = getSubmission(data.id);
+          if (!sub) return;
+          if (data.type === 'mcc') { if (isCompletionSubmission(sub)) completed = true; }
+          else { evaluated = true; }
+        });
+        return { completed, evaluated };
+      }
+      function applyCourseProgressToSidebar(store) {
+        store = store || loadProgressStore();
+        document.querySelectorAll('.lesson-link[data-lesson-page-slug]').forEach((link) => {
+          const st = store[link.dataset.lessonPageSlug];
+          const read = Boolean(st && st.read);
+          const completed = Boolean(st && st.completed);
+          const evaluated = Boolean(st && st.evaluated);
+          link.classList.toggle('is-read', read);
+          link.classList.toggle('is-completed', completed);
+          link.classList.toggle('is-evaluated', evaluated);
+          const trailing = link.querySelector('.lesson-link-trailing');
+          let marker = link.querySelector('.lesson-state');
+          if (read || completed || evaluated) {
+            if (!marker && trailing) {
+              marker = document.createElement('span');
+              marker.className = 'lesson-state';
+              trailing.prepend(marker);
+            }
+            if (marker) {
+              marker.textContent = completed ? '✓' : evaluated ? '◑' : '◷';
+              marker.title = [read && 'leído', completed && 'completado', evaluated && 'evaluado']
+                .filter(Boolean).join(' · ');
+            }
+          } else if (marker) {
+            marker.remove();
+          }
+        });
+      }
+      function updateCourseProgress(patch) {
+        const key = currentPageKey();
+        if (!key) return;
+        const store = loadProgressStore();
+        const prev = store[key] || {};
+        const evalState = computeCurrentPageEvalState();
+        store[key] = {
+          read: Boolean((patch && patch.read) || prev.read),
+          completed: Boolean(evalState.completed || prev.completed),
+          evaluated: Boolean(evalState.evaluated || prev.evaluated),
+        };
+        saveProgressStore(store);
+        applyCourseProgressToSidebar(store);
+      }
+      function setupReadTracking() {
+        const content = getPrimaryScroller();
+        if (!content || typeof IntersectionObserver === 'undefined') return;
+        let sentinel = content.querySelector('.reading-end-sentinel');
+        if (!sentinel) {
+          sentinel = document.createElement('div');
+          sentinel.className = 'reading-end-sentinel';
+          sentinel.setAttribute('aria-hidden', 'true');
+          content.appendChild(sentinel);
+        }
+        const scrolls = content.scrollHeight > content.clientHeight + 4;
+        const io = new IntersectionObserver((entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            updateCourseProgress({ read: true });
+            io.disconnect();
+          }
+        }, { root: scrolls ? content : null, threshold: 0.05 });
+        io.observe(sentinel);
       }
 
       async function initLessonForum() {
@@ -14932,6 +15107,9 @@ a[node] -->|edge| b[hub]
         setupConceptLinks();
         setupFoldableH2Sections();
         buildClassToc();
+        applyCourseProgressToSidebar();
+        updateCourseProgress();
+        setupReadTracking();
         mountLivePollTransport();
 
         const scrollTopBtn = document.getElementById('scroll-top-btn');
@@ -15299,61 +15477,135 @@ a[node] -->|edge| b[hub]
     </script>
 
     <style is:global>
-      .eval-block {
-        margin: 2rem 0;
-        padding: 1.5rem;
-        border: 2px solid var(--c-border);
-        border-radius: 8px;
-        background: var(--c-bg-mute);
+      /* ── Eval blocks: per-type colour code (echoes the graph palette) ─────── */
+      .eval-block-wrapper {
+        --eval-accent: var(--accent);
+        --eval-accent-soft: color-mix(in srgb, var(--eval-accent) 13%, transparent);
       }
+      .eval-block-wrapper[data-eval-type="mcq"],
+      .eval-block-wrapper[data-eval-type="msq"] { --eval-accent: #4f83ff; }
+      .eval-block-wrapper[data-eval-type="combinatoria"] { --eval-accent: #22d3ee; }
+      .eval-block-wrapper[data-eval-type="short_ai"],
+      .eval-block-wrapper[data-eval-type="reference_ai"] { --eval-accent: #a78bfa; }
+      .eval-block-wrapper[data-eval-type="mcc"] { --eval-accent: #22c55e; }
+      .eval-block-wrapper[data-eval-type="poll"] { --eval-accent: #f59e0b; }
+      .eval-block-wrapper[data-eval-type="wordcloud"] { --eval-accent: #34d399; }
+      .eval-block-wrapper[data-eval-type="patch_ai"] { --eval-accent: #fb923c; }
+
+      .eval-block {
+        position: relative;
+        margin: 2rem 0;
+        padding: 1.3rem 1.5rem 1.4rem;
+        border: 1px solid color-mix(in srgb, var(--eval-accent) 26%, var(--c-border));
+        border-left: 3px solid var(--eval-accent);
+        border-radius: 12px;
+        background:
+          linear-gradient(var(--eval-accent-soft), var(--eval-accent-soft)),
+          var(--c-bg-mute);
+      }
+
+      /* Geometric type token, top-right — same shape language as the graph. */
+      .eval-block::before {
+        content: "";
+        position: absolute;
+        top: 1.05rem;
+        right: 1.1rem;
+        width: 12px;
+        height: 12px;
+        background: var(--eval-accent);
+        opacity: 0.92;
+      }
+      .eval-block-wrapper[data-eval-type="mcq"] .eval-block::before,
+      .eval-block-wrapper[data-eval-type="msq"] .eval-block::before { border-radius: 50%; }
+      .eval-block-wrapper[data-eval-type="combinatoria"] .eval-block::before { border-radius: 2px; transform: rotate(45deg); }
+      .eval-block-wrapper[data-eval-type="short_ai"] .eval-block::before,
+      .eval-block-wrapper[data-eval-type="reference_ai"] .eval-block::before { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+      .eval-block-wrapper[data-eval-type="mcc"] .eval-block::before { border-radius: 3px; }
+      .eval-block-wrapper[data-eval-type="poll"] .eval-block::before { clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); }
+      .eval-block-wrapper[data-eval-type="wordcloud"] .eval-block::before { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+
       .eval-prompt {
-        margin: 0 0 1rem 0;
-        font-size: 1.1rem;
+        margin: 0 1.6rem 1rem 0;
+        font-size: 1.08rem;
         font-weight: 600;
+        line-height: 1.3;
       }
       .mcq-form {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.45rem;
       }
       .mcq-option {
         display: flex;
         align-items: center;
-        padding: 0.75rem;
+        gap: 0.7rem;
+        padding: 0.7rem 0.85rem;
         border: 1px solid var(--c-border);
-        border-radius: 6px;
+        border-radius: 10px;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: background 0.18s, border-color 0.18s, transform 0.1s;
       }
       .mcq-option:hover {
-        background: var(--c-bg);
-        border-color: var(--c-link);
+        background: var(--eval-accent-soft);
+        border-color: var(--eval-accent);
       }
+      .mcq-option:active { transform: scale(0.995); }
+      /* Geometric custom controls: circle (radio) / square (checkbox). */
       .mcq-option input {
-        margin-right: 0.75rem;
+        appearance: none;
+        -webkit-appearance: none;
+        width: 1.05rem;
+        height: 1.05rem;
+        margin: 0;
+        flex: 0 0 auto;
+        border: 2px solid color-mix(in srgb, var(--eval-accent) 55%, var(--c-border));
+        background: transparent;
         cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
       }
-      .mcq-option span {
-        flex: 1;
+      .mcq-option input[type="radio"] { border-radius: 50%; }
+      .mcq-option input[type="checkbox"] { border-radius: 5px; }
+      .mcq-option input:checked {
+        background: var(--eval-accent);
+        border-color: var(--eval-accent);
+        box-shadow: inset 0 0 0 3px var(--c-bg-mute);
       }
+      .mcq-option span { flex: 1; }
+
+      /* Pill submit button with a gamified accent. */
       .eval-submit {
-        margin-top: 1rem;
-        padding: 0.75rem 1.5rem;
-        background: var(--accent);
-        color: white;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1.1rem;
+        padding: 0.55rem 1.35rem;
+        background: var(--eval-accent);
+        color: #fff;
         border: none;
-        border-radius: 6px;
+        border-radius: 999px;
         cursor: pointer;
         font-weight: 600;
-        transition: opacity 0.2s;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        letter-spacing: 0.01em;
+        transition: transform 0.12s ease, box-shadow 0.2s ease, opacity 0.2s;
+        box-shadow: 0 4px 14px color-mix(in srgb, var(--eval-accent) 42%, transparent);
+      }
+      .eval-submit::before {
+        content: "";
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.9);
+        flex: 0 0 auto;
       }
       .eval-submit:hover:not(:disabled) {
-        opacity: 0.9;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px color-mix(in srgb, var(--eval-accent) 52%, transparent);
       }
+      .eval-submit:active:not(:disabled) { transform: translateY(0); }
       .eval-submit:disabled {
-        opacity: 0.5;
+        opacity: 0.45;
         cursor: not-allowed;
+        box-shadow: none;
       }
       .combinatoria-actions {
         display: flex;
@@ -15362,10 +15614,11 @@ a[node] -->|edge| b[hub]
       }
       .combinatoria-retry {
         background: transparent;
-        color: var(--accent);
-        border: 1px solid var(--accent);
+        color: var(--eval-accent);
+        border: 1px solid var(--eval-accent);
         box-shadow: none;
       }
+      .combinatoria-retry::before { background: var(--eval-accent); }
       .combinatoria-bank,
       .combinatoria-answer {
         display: flex;
@@ -15395,7 +15648,8 @@ a[node] -->|edge| b[hub]
         font: inherit;
       }
       .combinatoria-chip:hover {
-        border-color: var(--accent);
+        border-color: var(--eval-accent);
+        background: var(--eval-accent-soft);
       }
       .combinatoria-sorting {
         display: flex;
@@ -15424,14 +15678,18 @@ a[node] -->|edge| b[hub]
       }
       .eval-feedback {
         margin-top: 1rem;
-        padding: 1rem;
-        border-radius: 6px;
+        padding: 0.85rem 1rem;
+        border-radius: 8px;
         background: var(--c-bg);
+        border: 1px solid color-mix(in srgb, var(--eval-accent) 22%, var(--c-border));
       }
       .feedback-message {
         margin: 0 0 0.5rem 0;
         font-weight: 600;
-        font-size: 1.05rem;
+        font-size: 1.02rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
       }
       .feedback-message.correct {
         color: #4caf50;
