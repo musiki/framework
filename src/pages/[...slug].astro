@@ -1419,9 +1419,42 @@ function renderLessonsTreeHTML(
         overflow-y: hidden;
       }
 
+      /* Obsidian-like pod tab bar for the right sidebar (Foro / Info). */
+      .right-pod-tabs {
+        position: relative;
+        z-index: 20;
+        display: flex;
+        gap: 0.25rem;
+        padding: 0.4rem 0.6rem 0.3rem;
+        border-bottom: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
+        background: var(--c-bg);
+      }
+      .right-pod-tab {
+        appearance: none;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--c-fg-dim);
+        font: inherit;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 0.25rem 0.7rem;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
+      }
+      .right-pod-tab:hover { color: var(--c-fg); background: var(--c-bg-mute); }
+      .right-pod-tab.is-active {
+        color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+      }
+      /* Right column with no forum still shows the tabs only if there are ≥2 pods. */
+      .course-container[data-has-right-sidebar='false'] .right-pod-tabs { display: none; }
+
       .page-info-sidebar-panel {
         position: absolute;
-        inset: 0;
+        inset: 2.55rem 0 0 0;
         z-index: 18;
         display: grid;
         align-content: start;
@@ -5484,7 +5517,13 @@ function renderLessonsTreeHTML(
         </div>
       </article>
 
-      <aside class="sidebar sidebar--right" data-course-sidebar="right" aria-label="Foros de clase">
+      <aside class="sidebar sidebar--right" data-course-sidebar="right" aria-label="Panel derecho">
+        <div class="right-pod-tabs" role="tablist" aria-label="Paneles del lado derecho">
+          {hasForumSidebar && (
+            <button type="button" class="right-pod-tab" data-right-pod="forum" aria-pressed="false">Foro</button>
+          )}
+          <button type="button" class="right-pod-tab" data-right-pod="info" aria-pressed="false">Info</button>
+        </div>
         <div class:list={['sidebar-panel-actions', { 'sidebar-panel-actions--forum': hasForumSidebar }]}>
           <div class="sidebar-panel-actions-group sidebar-panel-actions-group--edge">
             <button
@@ -6725,7 +6764,8 @@ function renderLessonsTreeHTML(
         rightButtons.forEach((button) => {
           if (!(button instanceof HTMLElement) || button.dataset.boundCourseSidebar === 'true') return;
           button.dataset.boundCourseSidebar = 'true';
-          button.addEventListener('click', () => toggleSidebar('right'));
+          // The edge/forum button switches to (or toggles) the forum pod.
+          button.addEventListener('click', () => toggleRightPod('forum'));
         });
 
         rightMaximizeButtons.forEach((button) => {
@@ -6761,38 +6801,67 @@ function renderLessonsTreeHTML(
           document.removeEventListener('keydown', window.__musikiCourseLayoutKeyHandler);
         }
 
-        // Page info panel helpers
-        const togglePageInfo = () => {
-          const currentlyOpen = rightOpen && root.dataset.pageInfoOpen === 'true';
-          if (currentlyOpen) {
+        // ── Right sidebar pods (Obsidian-like stack: "forum" + "info") ───────
+        // Single source of truth for which pod is visible: data-page-info-open
+        // ('true' = info pod overlay, 'false' = forum pod base). `rightOpen`
+        // controls whether the column shows at all.
+        const podOf = () => (root.dataset.pageInfoOpen === 'true' ? 'info' : 'forum');
+        const syncRightPodTabs = () => {
+          const pod = podOf();
+          document.querySelectorAll('[data-right-pod]').forEach((tab) => {
+            if (!(tab instanceof HTMLElement)) return;
+            tab.classList.toggle('is-active', rightOpen && tab.dataset.rightPod === pod);
+            tab.setAttribute('aria-pressed', rightOpen && tab.dataset.rightPod === pod ? 'true' : 'false');
+          });
+          const panel = document.getElementById('page-info-sidebar');
+          if (panel) panel.setAttribute('aria-hidden', pod === 'info' && rightOpen ? 'false' : 'true');
+        };
+        // Switch to a pod (open the column, no close).
+        const setRightPod = (pod) => {
+          rightOpen = true;
+          root.dataset.pageInfoOpen = pod === 'info' ? 'true' : 'false';
+          persistLayoutState();
+          syncLayoutState();
+          syncRightPodTabs();
+        };
+        // Pod-aware toggle for the edge buttons: open+show, switch, or close.
+        const toggleRightPod = (pod) => {
+          const targetPod = (pod === 'forum' && !hasRightSidebar) ? 'info' : pod;
+          if (rightOpen && podOf() === targetPod) {
             rightOpen = false;
             rightMaximized = false;
-            root.dataset.pageInfoOpen = 'false';
-            const panel = document.getElementById('page-info-sidebar');
-            if (panel) panel.setAttribute('aria-hidden', 'true');
           } else {
             rightOpen = true;
-            root.dataset.pageInfoOpen = 'true';
-            const panel = document.getElementById('page-info-sidebar');
-            if (panel) panel.removeAttribute('aria-hidden');
+            root.dataset.pageInfoOpen = targetPod === 'info' ? 'true' : 'false';
           }
           persistLayoutState();
           syncLayoutState();
+          syncRightPodTabs();
         };
-        const closePageInfo = () => {
-          root.dataset.pageInfoOpen = 'false';
-          const panel = document.getElementById('page-info-sidebar');
-          if (panel) panel.setAttribute('aria-hidden', 'true');
-        };
+        const closePageInfo = () => { toggleRightPod('forum'); };
 
         document.querySelectorAll('[data-page-info-close]').forEach((btn) => {
           if (btn instanceof HTMLElement && !btn.dataset.boundPageInfo) {
             btn.dataset.boundPageInfo = 'true';
-            btn.addEventListener('click', closePageInfo);
+            btn.addEventListener('click', () => {
+              // From the info pod, the × returns to the forum pod if present,
+              // otherwise closes the column.
+              if (hasRightSidebar) setRightPod('forum');
+              else { rightOpen = false; persistLayoutState(); syncLayoutState(); syncRightPodTabs(); }
+            });
           }
         });
 
-        window.addEventListener('musiki:open-page-info', togglePageInfo);
+        // Pod tab bar (Foro / Info).
+        document.querySelectorAll('[data-right-pod]').forEach((tab) => {
+          if (tab instanceof HTMLElement && !tab.dataset.boundRightPod) {
+            tab.dataset.boundRightPod = 'true';
+            tab.addEventListener('click', () => setRightPod(tab.dataset.rightPod || 'forum'));
+          }
+        });
+
+        window.addEventListener('musiki:open-page-info', () => toggleRightPod('info'));
+        syncRightPodTabs();
 
         const keyHandler = (event: KeyboardEvent) => {
           if (event.defaultPrevented) return;
@@ -6835,8 +6904,8 @@ function renderLessonsTreeHTML(
               toggleSidebar('left');
             }
           } else if (isKeyI) {
-            // c+i toggles right INFO sidebar
-            togglePageInfo();
+            // ⌘/Ctrl+I toggles the right INFO pod
+            toggleRightPod('info');
           }
         };
 

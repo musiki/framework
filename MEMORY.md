@@ -1,5 +1,13 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 right-sidebar-pods> <br>
+Sidebar derecho de `src/pages/[...slug].astro` unificado como stack de pods tipo Obsidian (Foro + Info):
+- Causa del bug: `#page-info-sidebar` es un overlay (`position:absolute; inset:0; z-index:18`) dentro de `aside.sidebar--right` (cuya base es el foro). Foro y Page Info competían por la columna sin coordinarse: el botón del foro no "switcheaba" porque el overlay de info quedaba abierto encima; y el Page Info parecía congelado.
+- Fix: estado único = `data-page-info-open` ('true'=pod info, 'false'=pod foro); `rightOpen` controla visibilidad de la columna. Helpers nuevos `podOf`/`setRightPod`/`toggleRightPod`/`syncRightPodTabs` reemplazan a `togglePageInfo`/`closePageInfo`. El botón de borde derecho ahora hace `toggleRightPod('forum')`; ⌘/Ctrl+I y `musiki:open-page-info` hacen `toggleRightPod('info')`; la × del Page Info vuelve al foro.
+- UI: barra de tabs `.right-pod-tabs` (Foro / Info) sobre el overlay (z-index 20), con estado activo; el panel info arranca bajo la barra (`inset: 2.55rem 0 0 0`). Tabs ocultas si no hay foro.
+- Page Info reacciona a cada nota porque el `<section>` se server-renderiza por página (ClientRouter full-swap) y ya no queda tapado por un overlay desincronizado.
+- Validado: script grande sin errores de sintaxis. Pendiente: smoke test; y decouplar `rightOpen` de `hasRightSidebar` si se quiere abrir Info en páginas sin foro.
+
 <2026-06-28 eval-blocks-restyle> <br>
 Restyle de los bloques `eval` en `src/pages/[...slug].astro` (CSS en el `<style>`, sin tocar renderers):
 - Código de colores por tipo vía `.eval-block-wrapper[data-eval-type]` (mcq/msq azul, combinatoria cian, short_ai/reference_ai violeta, mcc verde, poll ámbar, wordcloud verde-agua, patch_ai naranja) con var `--eval-accent`/`--eval-accent-soft`, alineado a la paleta del grafo.
