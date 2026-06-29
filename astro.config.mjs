@@ -8,6 +8,7 @@ import rehypeRaw from 'rehype-raw'
 
 import slugMathRemark from './src/plugins/slug-math-remark.js'
 import rehypeObsidianCallouts from './src/plugins/remark-obsidian-callouts.mjs'
+import remarkDefCallout from './src/plugins/remark-def-callout.mjs'
 import remarkMermaid from './src/plugins/remark-mermaid.mjs'
 import remarkRefsApa from './src/plugins/remark-refs-apa.mjs'
 import remarkEvalBlocks from './src/plugins/remark-eval-blocks.mjs'
@@ -131,6 +132,7 @@ export default defineConfig({
     },
     remarkPlugins: [
       remarkGfm,
+      remarkDefCallout,       // inserta el def del frontmatter como callout [!def]
       remarkCoverBlock,
       slugMathRemark,         // primero traducís $<
       remarkMath,

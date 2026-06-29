@@ -38,6 +38,7 @@ import {
   isCourseLessonEntryForCourse,
 } from '../lib/course-routing';
 import { getCoursePageHistory } from '../lib/page-history';
+import { buildPageProperties } from '../lib/page-properties';
 
 import { getRuntimeDynamicContent, getRuntimeDynamicContentByFilePath } from '../lib/runtime-content';
 import { normalizeContentSlug, getContentCanonicalSlug } from '../lib/content-slug';
@@ -737,47 +738,9 @@ if (parts.length === 1) {
 
 const currentEntryType = String(currentEntry.data.type || '').trim().toLowerCase();
 
-// Frontmatter shown as "Propiedades" in the page-info sidebar.
-// Relation fields render as wikilink chips; arrays as lists; objects as JSON.
-const PROPERTY_ORDER = [
-  'type', 'def', 'alias', 'status', 'project', 'person', 'year',
-  'tags', 'hyper', 'hypo', 'connect', 'author', 'source', 'work', 'parent', 'spaced',
-];
-const PROPERTY_HIDDEN = new Set([
-  'title', 'slug', 'shortSlug', 'summary', 'description', 'theme', 'slideTheme',
-  'revealTheme', 'reveal', 'coverImage', 'coverUrl', 'img', 'image', 'photo',
-  'url', 'visibility', 'order', 'chapter', 'updatedAt', 'updatedBy', 'editSummary',
-]);
-const RELATION_KEYS = new Set(['hypo', 'hyper', 'connect', 'parent']);
-const stripWikilink = (value: string): string =>
-  String(value).replace(/^\[\[|\]\]$/g, '').split('|')[0].split('#')[0].trim();
-const pageProperties = (() => {
-  const data = (currentEntry?.data || {}) as Record<string, unknown>;
-  const keys = Object.keys(data);
-  const ordered = [
-    ...PROPERTY_ORDER.filter((k) => keys.includes(k)),
-    ...keys.filter((k) => !PROPERTY_ORDER.includes(k)),
-  ];
-  const out: Array<{ key: string; kind: 'links' | 'list' | 'text' | 'json'; value: string; items: string[] }> = [];
-  for (const key of ordered) {
-    if (PROPERTY_HIDDEN.has(key)) continue;
-    const raw = data[key];
-    if (raw === undefined || raw === null || raw === '') continue;
-    if (Array.isArray(raw)) {
-      const items = raw.map((v) => String(v ?? '').trim()).filter(Boolean);
-      if (items.length === 0) continue;
-      if (RELATION_KEYS.has(key)) out.push({ key, kind: 'links', value: '', items: items.map(stripWikilink) });
-      else out.push({ key, kind: 'list', value: '', items });
-    } else if (typeof raw === 'object') {
-      out.push({ key, kind: 'json', value: JSON.stringify(raw), items: [] });
-    } else if (RELATION_KEYS.has(key)) {
-      out.push({ key, kind: 'links', value: '', items: [stripWikilink(String(raw))] });
-    } else {
-      out.push({ key, kind: 'text', value: String(raw), items: [] });
-    }
-  }
-  return out;
-})();
+// Frontmatter shown as "Propiedades" in the page-info sidebar (shared builder,
+// also used by /api/get-note-content so the panel can refresh client-side).
+const pageProperties = buildPageProperties(currentEntry?.data as Record<string, unknown>);
 
 // Info type requires login
 if (currentEntryType === 'info' && !session) {
@@ -11783,6 +11746,67 @@ function renderLessonsTreeHTML(
         saveProgressStore(store);
         applyCourseProgressToSidebar(store);
       }
+      // ── Refresh the Info sidebar (Propiedades + Historial) for the active
+      // note. Notes open in Dockview panels without re-rendering the shell, so
+      // we rebuild from the `musiki:active-note` event (or a fallback fetch). ──
+      function pageInfoEsc(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+      const PAGE_INFO_GH_COMMIT = '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M11.93 8.5a4.002 4.002 0 0 1-7.86 0H.75a.75.75 0 0 1 0-1.5h3.32a4.002 4.002 0 0 1 7.86 0h3.32a.75.75 0 0 1 0 1.5Zm-1.43-.75a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0Z"></path></svg>';
+      const PAGE_INFO_GH_COMPARE = '<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.494 2.494 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"></path></svg>';
+      function buildPropertiesHtml(properties) {
+        if (!Array.isArray(properties) || properties.length === 0) return '';
+        const rows = properties.map((p) => {
+          let dd;
+          if (p.kind === 'links') dd = `<span class="page-info-prop-chips">${(p.items || []).map((it) => `<a class="page-info-prop-chip" href="/${pageInfoEsc(it)}">${pageInfoEsc(it)}</a>`).join('')}</span>`;
+          else if (p.kind === 'list') dd = `<span class="page-info-prop-chips">${(p.items || []).map((it) => `<span class="page-info-prop-chip is-static">${pageInfoEsc(it)}</span>`).join('')}</span>`;
+          else if (p.kind === 'json') dd = `<code>${pageInfoEsc(p.value)}</code>`;
+          else dd = `<span>${pageInfoEsc(p.value)}</span>`;
+          return `<div class="page-info-prop-row"><dt>${pageInfoEsc(p.key)}</dt><dd>${dd}</dd></div>`;
+        }).join('');
+        return `<section class="page-info-properties" aria-label="Propiedades"><h3 class="page-info-properties-title">Propiedades</h3><dl class="page-info-props">${rows}</dl></section>`;
+      }
+      function buildHistoryHtml(h) {
+        h = h || {};
+        const entries = Array.isArray(h.historyEntries) ? h.historyEntries : [];
+        const commitDd = h.commitUrl
+          ? `<a class="page-info-gh-link" href="${pageInfoEsc(h.commitUrl)}" target="_blank" rel="noopener noreferrer">${PAGE_INFO_GH_COMMIT}<code>${pageInfoEsc(String(h.commitSha || '').slice(0, 7))}</code></a>`
+          : `<code>${pageInfoEsc(String(h.commitSha || 'Unknown').slice(0, 7))}</code>`;
+        const list = entries.length
+          ? `<ol class="page-info-history-list">${entries.map((e) => `<li class="page-info-history-item"><span class="page-info-history-line"><span class="page-info-history-author">${pageInfoEsc(e.author)}</span><span class="page-info-history-sep">·</span><span class="page-info-history-date">${pageInfoEsc(e.date)}</span></span><span class="page-info-history-actions">${e.url ? `<a class="page-info-gh-link" href="${pageInfoEsc(e.url)}" target="_blank" rel="noopener noreferrer" title="Commit ${pageInfoEsc(e.shortSha)}">${PAGE_INFO_GH_COMMIT}</a>` : ''}${e.compareUrl ? `<a class="page-info-gh-link" href="${pageInfoEsc(e.compareUrl)}" target="_blank" rel="noopener noreferrer" title="Comparar">${PAGE_INFO_GH_COMPARE}</a>` : ''}</span></li>`).join('')}</ol>`
+          : '<p class="course-sidebar-state-note">Sin historial disponible.</p>';
+        return `<details class="page-info-properties page-info-history" aria-label="Historial"><summary class="page-info-properties-title">Historial</summary><dl class="page-info-props"><div class="page-info-prop-row"><dt>fuente</dt><dd><code>${pageInfoEsc(h.sourcePath)}</code></dd></div><div class="page-info-prop-row"><dt>subido por</dt><dd>${pageInfoEsc(h.uploaderAuthor)}</dd></div><div class="page-info-prop-row"><dt>fecha</dt><dd>${pageInfoEsc(h.uploaderDate)}</dd></div><div class="page-info-prop-row"><dt>actualizado</dt><dd>${pageInfoEsc(h.lastDate)}</dd></div><div class="page-info-prop-row"><dt>autor</dt><dd>${pageInfoEsc(h.lastAuthor)}</dd></div><div class="page-info-prop-row"><dt>commit</dt><dd>${commitDd}</dd></div></dl>${list}</details>`;
+      }
+      function applyPageInfo(pageInfo) {
+        const panel = document.getElementById('page-info-sidebar');
+        if (!panel || !pageInfo) return;
+        panel.querySelector('.page-info-properties:not(.page-info-history)')?.remove();
+        panel.querySelector('details.page-info-history')?.remove();
+        const header = panel.querySelector('.page-info-sidebar-header');
+        const html = buildPropertiesHtml(pageInfo.properties) + buildHistoryHtml(pageInfo.history);
+        if (header) header.insertAdjacentHTML('afterend', html);
+        else panel.insertAdjacentHTML('beforeend', html);
+      }
+      async function refreshPageInfo(detail) {
+        try {
+          if (detail && detail.pageInfo) { applyPageInfo(detail.pageInfo); return; }
+          const slug = detail && detail.slug;
+          if (!slug) return;
+          const courseId = (detail && detail.courseId) || '';
+          const path = String(slug).includes('/') ? slug : (courseId ? `${courseId}/${slug}` : slug);
+          const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && data.pageInfo) applyPageInfo(data.pageInfo);
+        } catch { /* noop */ }
+      }
+      if (!window.__musikiPageInfoBound) {
+        window.__musikiPageInfoBound = true;
+        window.addEventListener('musiki:active-note', (e) => { refreshPageInfo(e && e.detail ? e.detail : {}); });
+      }
+
       function setupReadTracking() {
         const content = getPrimaryScroller();
         if (!content || typeof IntersectionObserver === 'undefined') return;

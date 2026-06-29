@@ -2885,9 +2885,12 @@ const allAssignmentsById = new Map<string, any>(
   (allAssignments || []).map((a: any) => [String(a?.id || ''), a]),
 );
 
+// Eval log = centralised source of truth for ALL eval submissions of every
+// type and course (NOT scoped by the active course/year selector). Uses the
+// non-meta full set so a submission from any note appears here.
 const teacherEvalProjection = isTeacher
   ? buildTeacherEvalProjection({
-      submissions: scopedTeacherSubmissions,
+      submissions: teacherDataSubmissions,
       allUsersById,
       allAssignmentsById,
     })

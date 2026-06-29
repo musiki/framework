@@ -298,6 +298,7 @@ function toCourseContentPath(courseId: string, slug: string): string {
 type PreviewContent = {
   content: string;
   renderedHtml?: string;
+  pageInfo?: any;
 };
 
 const previewContentRequests = new Map<string, Promise<PreviewContent>>();
@@ -328,10 +329,11 @@ function loadPreviewContent(courseId: string, slug: string): Promise<PreviewCont
       const path = toCourseContentPath(courseId, slug);
       const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}&rendered=true`);
       if (!res.ok) throw new Error('Note not found');
-      const data = await res.json() as { body?: string; renderedHtml?: string };
+      const data = await res.json() as { body?: string; renderedHtml?: string; pageInfo?: any };
       return {
         content: data.body ?? '',
         renderedHtml: data.renderedHtml,
+        pageInfo: data.pageInfo,
       };
     }
 
@@ -339,10 +341,11 @@ function loadPreviewContent(courseId: string, slug: string): Promise<PreviewCont
       const path = toCourseContentPath(courseId, slug);
       const res = await fetch(`/api/get-note-content?slug=${encodeURIComponent(path)}&rendered=true`);
       if (!res.ok) throw new Error('Note not found');
-      const data = await res.json() as { body?: string; renderedHtml?: string };
+      const data = await res.json() as { body?: string; renderedHtml?: string; pageInfo?: any };
       return {
         content: data.body ?? '',
         renderedHtml: data.renderedHtml,
+        pageInfo: data.pageInfo,
       };
     }
 
@@ -411,6 +414,12 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
       enhanceCourseNotesContent(bodyEl);
       // Hydrate eval blocks injected into this panel (handled by [...slug].astro).
       try { (window as any).__musikiHydrateEvals?.(bodyEl); } catch { /* noop */ }
+      // Tell the page shell which note is now active so the Info sidebar refreshes.
+      try {
+        window.dispatchEvent(new CustomEvent('musiki:active-note', {
+          detail: { slug, courseId, pageInfo: preview.pageInfo ?? null },
+        }));
+      } catch { /* noop */ }
       bodyEl.dataset.renderedSlug = slug;
       bodyEl.dataset.lastContent = content;
       return content;
@@ -1142,6 +1151,18 @@ export function initDockviewWorkspace(
     setDockviewActive(true);
     scheduleDockviewDropCleanup();
   });
+
+  // When the focused panel changes (switching between already-open notes),
+  // notify the page shell so the Info sidebar follows the active note.
+  try {
+    dockview.onDidActivePanelChange((panel: any) => {
+      const state = panelStates.get(panel?.id ?? '');
+      if (!state?.slug) return;
+      window.dispatchEvent(new CustomEvent('musiki:active-note', {
+        detail: { slug: state.slug, courseId: state.courseId ?? courseId, pageInfo: null },
+      }));
+    });
+  } catch { /* onDidActivePanelChange may not exist on older builds */ }
 
   // Open initial panel
   if (initialSlug) {

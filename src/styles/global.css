@@ -536,6 +536,44 @@ hr {
   --c-icon-bg: rgba(100, 116, 139, 0.2);
   --c-icon-border: rgba(100, 116, 139, 0.34);
 }
+
+/* Definición (def del frontmatter): marco tenue, sin fondo, sombra suave.
+   Pensado como tarjeta de memorización — discreta pero presente. */
+.callout-def {
+  --c-accent: var(--accent, #7c3aed);
+  --c-border: color-mix(in srgb, currentColor 16%, transparent);
+  --c-bg: transparent;
+  --c-icon: "≝";
+  --c-icon-bg: transparent;
+  --c-icon-border: transparent;
+  border: 1px solid var(--c-border);
+  border-left: 1px solid var(--c-border); /* anula la barra de 4px del base */
+  border-radius: 12px;
+  background: transparent;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 6px 18px rgba(0, 0, 0, 0.05);
+  padding: 0.95rem 1.1rem;
+  margin: 0 0 1.4rem 0;
+}
+.callout-def::before {
+  color: var(--c-accent);
+  font-size: 0.95rem;
+  opacity: 0.7;
+}
+.callout-def .callout-body {
+  font-size: 1.03em;
+  line-height: 1.6;
+  color: var(--c-fg);
+}
+.callout-def .callout-body > :first-child { margin-top: 0; }
+.callout-def .callout-body > :last-child { margin-bottom: 0; }
+.dark .callout-def {
+  --c-border: color-mix(in srgb, currentColor 22%, transparent);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    0 6px 20px rgba(0, 0, 0, 0.28);
+}
 .callout-info {
   --c-accent: #2563eb;
   --c-border: rgba(37, 99, 235, 0.36);

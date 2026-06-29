@@ -23,12 +23,31 @@ export function buildTeacherEvalProjection({
       const assignmentSlug = String(assignment?.slug || sub?.assignmentId || '');
       const assignmentLabel = assignmentSlug.split('/').pop() || assignmentSlug;
       const answerText = getSubmissionAnswerText(sub, allAssignmentsById);
-      
+
+      const payload = (sub?.payload && typeof sub.payload === 'object') ? sub.payload : {};
+      const courseId = String(
+        assignment?.courseId || payload?.courseId || payload?.audit?.courseId || '',
+      ) || '—';
+      // Type: from the synced Assignment if present, else inferred from the eval id.
+      const evalId = String(sub?.assignmentId || '');
+      const inferredType = /-(mcq)-/i.test(evalId) ? 'mcq'
+        : /-(msq)-/i.test(evalId) ? 'msq'
+        : /-(combinatoria)-/i.test(evalId) ? 'combinatoria'
+        : /-(short[-_]?ai|reference[-_]?ai)-/i.test(evalId) ? 'short_ai'
+        : /-(mcc)-/i.test(evalId) ? 'mcc'
+        : /-(poll)-/i.test(evalId) ? 'poll'
+        : /-(wordcloud)-/i.test(evalId) ? 'wordcloud'
+        : /-(patch[-_]?ai)-/i.test(evalId) ? 'patch_ai'
+        : '';
+      const evalType = String(assignment?.evalType || payload?.type || inferredType || '—');
+
       return {
         id: sub.id,
         submittedAt: sub.submittedAt,
         userName: user?.name || user?.email || '—',
         email: user?.email || '—',
+        courseId,
+        evalType,
         assignmentLabel,
         assignmentId: sub.assignmentId,
         answerText,
@@ -37,6 +56,8 @@ export function buildTeacherEvalProjection({
         __search: buildSearchBlob([
           user?.name,
           user?.email,
+          courseId,
+          evalType,
           assignmentLabel,
           sub.assignmentId,
           answerText,
@@ -49,15 +70,17 @@ export function buildTeacherEvalProjection({
   return {
     columns: [
       { title: 'Fecha', field: 'submittedAt', minWidth: 150, kind: 'datetime' },
-      { title: 'Docente', field: 'userName', minWidth: 180 },
-      { title: 'Email', field: 'email', minWidth: 200 },
-      { title: 'Clase', field: 'assignmentLabel', minWidth: 150 },
+      { title: 'Usuario', field: 'userName', minWidth: 170 },
+      { title: 'Email', field: 'email', minWidth: 190 },
+      { title: 'Curso', field: 'courseId', minWidth: 90 },
+      { title: 'Tipo', field: 'evalType', minWidth: 110 },
+      { title: 'Nota', field: 'assignmentLabel', minWidth: 150 },
       { title: 'ID Eval', field: 'assignmentId', minWidth: 120 },
       { title: 'Respuesta', field: 'answerText', minWidth: 220 },
       { title: 'Puntaje', field: 'score', width: 80, hozAlign: 'center', headerHozAlign: 'center' },
-      { title: 'Feedback', field: 'feedback', minWidth: 200 },
+      { title: 'Feedback', field: 'feedback', minWidth: 180 },
     ],
     rows,
-    emptyMessage: 'No hay actividad de docentes registrada en evals para este curso.',
+    emptyMessage: 'No hay entregas de evals registradas todavía.',
   };
 }

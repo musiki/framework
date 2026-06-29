@@ -1,5 +1,16 @@
 # MEMORY.md — Project Activity Log
 
+<2026-06-28 page-info-active-note-sync> <br>
+Info sidebar ahora sigue a la nota activa dentro del SPA Dockview (antes quedaba congelado en _index porque las notas abren en paneles sin re-render del shell):
+- Lib compartido `src/lib/page-properties.ts` (`buildPageProperties`) extraído del IIFE inline de `[...slug].astro` (que ahora lo importa).
+- `src/pages/api/get-note-content.ts` devuelve `pageInfo: { properties, history, sourcePath }` (usa `buildPageProperties` + `getCoursePageHistory`).
+- `dockview-workspace.ts`: `loadPreviewContent` propaga `pageInfo`; `renderPreview` despacha `musiki:active-note` {slug, courseId, pageInfo}; `onDidActivePanelChange` lo despacha al cambiar de panel (con pageInfo null → fallback fetch).
+- `[...slug].astro` (cliente): listener `musiki:active-note` reconstruye Propiedades + Historial del `#page-info-sidebar` (`buildPropertiesHtml`/`buildHistoryHtml`/`applyPageInfo`/`refreshPageInfo`), usando el pageInfo del evento o un fetch a get-note-content. Guard `window.__musikiPageInfoBound` para no duplicar el listener.
+- Validado: frontmatter, script, lib, endpoint y dockview transpilan sin errores; test del lib OK.
+
+<2026-06-28 dashboard-eval-log-centralizado> <br>
+El log de evals del dashboard (`buildTeacherEvalProjection`) usaba `scopedTeacherSubmissions` (filtrado por curso activo + año del selector), por eso una entrega de una nota pública no aparecía. Fix en `src/pages/dashboard.astro`: alimentar el log desde `teacherDataSubmissions` (todas las entregas no-meta, sin scope de curso/año) → fuente de verdad centralizada con TODO tipo de eval (mcq/combinatoria/short_ai/…). En `src/lib/dashboard/teacher-eval-projection.ts` se agregaron columnas **Curso** (de `assignment.courseId`/`payload.courseId`) y **Tipo** (de `assignment.evalType`/`payload.type`, con fallback inferido del patrón del evalId `<slug>-<tipo>-NN`), más search. Validado: proyección sin errores de sintaxis. Nota: el inventario de evals DEFINIDOS (aunque nadie responda) sigue siendo `eval:sync:db` → tabla `Assignment` (requiere content:assemble de s123).
+
 <2026-06-28 page-info-reorder> <br>
 Reorden del panel Info (`#page-info-sidebar` en `[...slug].astro`): se quitó el kicker "Page info" y el título redundante "Historial y versiones" (header `--bare`, solo ×). Orden: PROPIEDADES primero (sin cambios), luego HISTORIAL como `<details>` plegado por defecto que reusa el estilo de Propiedades (`.page-info-props`) y unifica la meta antigua (fuente/subido/fecha/actualizado/autor/commit) + la lista de commits. Cada commit en UNA línea (autor · fecha) con los enlaces Commit/Comparar reemplazados por íconos GitHub (octicons git-commit / git-compare) `.page-info-gh-link`. CSS viejo de `.page-info-meta`/kicker/title queda como dead-code inocuo. Sin cambios de script; estructura JSX balanceada.
 

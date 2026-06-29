@@ -139,11 +139,26 @@ export const GET: APIRoute = async ({ request }) => {
       })
     : null;
 
+  // Page-info payload so the right sidebar can refresh for the active note
+  // (Dockview opens notes in panels without re-rendering the page shell).
+  let pageInfo: unknown = null;
+  try {
+    const { buildPageProperties } = await import('../../lib/page-properties');
+    const { getCoursePageHistory } = await import('../../lib/page-history');
+    const sourcePath = String((note as any).filePath || (note as any).id || cleanSlug);
+    const properties = buildPageProperties(note.data as Record<string, unknown>);
+    const history = getCoursePageHistory(requestedCourseId, sourcePath);
+    pageInfo = { properties, history, sourcePath };
+  } catch (error) {
+    console.warn('[get-note-content] pageInfo build failed:', (error as any)?.message || error);
+  }
+
   return new Response(JSON.stringify({
     body,
     renderedHtml: rendered?.html || '',
     reveal,
-    title: note.data.title || cleanSlug
+    title: note.data.title || cleanSlug,
+    pageInfo,
   }), {
     headers: { 'Content-Type': 'application/json' },
   });
