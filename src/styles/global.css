@@ -1210,6 +1210,76 @@ ol ol ol ol > li::marker {
   z-index: 40;
 }
 
+.cm-tooltip-autocomplete {
+  color: var(--c-fg) !important;
+  background: var(--c-bg-surface, var(--c-bg)) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: 6px;
+  box-shadow: 0 12px 30px color-mix(in srgb, #000 24%, transparent);
+  font-family: var(--font-family-primary);
+  overflow: hidden;
+}
+
+.cm-tooltip-autocomplete > ul {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+.cm-tooltip-autocomplete > ul > li {
+  color: var(--c-fg-dim, var(--c-fg)) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 60%, transparent);
+  padding: 0.3rem 0.55rem;
+}
+
+.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  color: var(--c-fg) !important;
+  background: color-mix(in srgb, var(--c-link) 16%, var(--c-bg)) !important;
+}
+
+.cm-tooltip-autocomplete .cm-completionLabel {
+  color: inherit;
+}
+
+.cm-tooltip-autocomplete .cm-completionDetail {
+  color: var(--c-fg-subtle, var(--c-fg-dim));
+  font-style: normal;
+  margin-left: 0.75rem;
+}
+
+.cm-tooltip.cm-completionInfo {
+  color: var(--c-fg) !important;
+  background: var(--c-bg-surface, var(--c-bg)) !important;
+  border: 1px solid var(--c-border) !important;
+}
+
+.seshat-citation-info {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 32rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.seshat-citation-info span {
+  color: var(--c-fg-dim);
+  font-size: 0.82em;
+}
+
+.seshat-citation {
+  white-space: nowrap;
+}
+
+.seshat-references {
+  margin-block: 0.75rem 1.5rem;
+  font-size: 0.94em;
+}
+
+.seshat-references .csl-entry {
+  margin-block: 0.65rem;
+  padding-left: 2rem;
+  text-indent: -2rem;
+  line-height: 1.55;
+}
+
 .musiki-codemirror-host .cm-panels {
   background: inherit;
   color: inherit;

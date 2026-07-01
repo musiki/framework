@@ -39,6 +39,8 @@
     "@astrojs/sitemap": "^3.7.2",
     "@auth/core": "^0.37.4",
     "@aws-sdk/client-s3": "^3.1004.0",
+    "@citation-js/core": "^0.7.21",
+    "@citation-js/plugin-csl": "^0.7.22",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.3",

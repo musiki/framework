@@ -26,6 +26,7 @@ import remarkCoverBlock from '../plugins/remark-cover-block.mjs';
 import remarkStrudelBlocks from '../plugins/remark-strudel-blocks.mjs';
 import rehypeLazyYouTube from '../plugins/rehype-lazy-youtube.mjs';
 import remarkObsidianHighlight from '../plugins/remark-obsidian-highlight.mjs';
+import remarkSeshatCitations from '../plugins/remark-seshat-citations.mjs';
 
 const CONTENT_DIR = path.resolve(process.cwd(), 'src/content/cursos');
 const runtimeHighlightAliases = {
@@ -54,6 +55,7 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
     .use(remarkWikiLink)
     .use(remarkLily)
     .use(remarkObsidianHighlight)
+    .use(remarkSeshatCitations)
     .use(remarkRemoteLilypond, { enabled: true, timeoutMs: 10000, preferRemote: true })
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeObsidianCallouts)

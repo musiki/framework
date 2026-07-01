@@ -10,7 +10,7 @@ import slugMathRemark from './src/plugins/slug-math-remark.js'
 import rehypeObsidianCallouts from './src/plugins/remark-obsidian-callouts.mjs'
 import remarkDefCallout from './src/plugins/remark-def-callout.mjs'
 import remarkMermaid from './src/plugins/remark-mermaid.mjs'
-import remarkRefsApa from './src/plugins/remark-refs-apa.mjs'
+import remarkSeshatCitations from './src/plugins/remark-seshat-citations.mjs'
 import remarkEvalBlocks from './src/plugins/remark-eval-blocks.mjs'
 import remarkDataviewLite from './src/plugins/remark-dataview-lite.mjs'
 import remarkWikiLink from './src/plugins/remark-wiki-link.mjs'
@@ -143,6 +143,7 @@ export default defineConfig({
       remarkWikiLink,         // procesa wiki links [[Link]]
       remarkLily,             // usa renderer local de lilypond
       remarkObsidianHighlight,
+      remarkSeshatCitations,
     ],
     rehypePlugins: [
       rehypeObsidianCallouts, // detecta y transforma callouts tipo GitHub/Obsidian
