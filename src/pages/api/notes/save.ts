@@ -19,6 +19,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const content = typeof body?.content === 'string' ? body.content : null;
 
   if (!courseId || !slug || content === null) {
+    console.warn('[notes/save] invalid payload', {
+      hasCourseId: Boolean(courseId),
+      hasSlug: Boolean(slug),
+      hasContent: content !== null,
+    });
     return json({ error: 'courseId, slug, and content are required' }, 400);
   }
 
@@ -32,6 +37,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const result = saveCourseNote(courseId, slug, content);
     return json({ ok: true, slug, filePath: result.filePath });
   } catch (e: any) {
+    console.warn('[notes/save] rejected', {
+      courseId,
+      slug,
+      error: String(e?.message || e),
+    });
     return json({ error: e.message }, 400);
   }
 };

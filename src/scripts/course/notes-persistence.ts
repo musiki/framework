@@ -5,6 +5,7 @@ type Status = 'idle' | 'pending' | 'saving' | 'error';
 
 export type PersistenceState = {
   status: Status;
+  error?: string;
 };
 
 export type PersistenceOptions = {
@@ -36,9 +37,9 @@ export class NotesPersistence {
     return `${DRAFT_PREFIX}${this.courseId}::${this.slug}`;
   }
 
-  private setStatus(s: Status) {
+  private setStatus(s: Status, error?: string) {
     this.status = s;
-    this.onStatusChange({ status: s });
+    this.onStatusChange({ status: s, error });
   }
 
   onChange(content: string): void {
@@ -69,8 +70,14 @@ export class NotesPersistence {
       // Clear localStorage draft on successful save
       try { localStorage.removeItem(this.storageKey); } catch {}
       this.setStatus('idle');
-    } catch {
-      this.setStatus('error');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo guardar la nota.';
+      console.error('[notes-persistence] save failed', {
+        courseId: this.courseId,
+        slug: this.slug,
+        error: message,
+      });
+      this.setStatus('error', message);
     } finally {
       // Resolve any flush() waiters
       this.flushResolvers.forEach(r => r());

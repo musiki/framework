@@ -625,8 +625,9 @@ async function enterEditMode(state: PanelState) {
 
   state.persistence = new NotesPersistence(state.courseId, state.slug, {
     debounceMs: 1500,
-    onStatusChange: ({ status }) => {
+    onStatusChange: ({ status, error }) => {
       state.statusDot.className = 'cnw-status ' + (status === 'idle' ? '' : status);
+      state.statusDot.title = error || status;
     },
   });
 
