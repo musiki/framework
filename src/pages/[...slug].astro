@@ -10709,6 +10709,153 @@ function renderLessonsTreeHTML(
         renderEvalMath(container);
       }
 
+      // Renderer unificado de los tipos de la cátedra-recorrido.
+      // conexion (conectivismo) · coloquio (autodeterminación) · proyecto (4C) · peer_rubric (estigmergia)
+      function renderCatedra(wrapper, data, position) {
+        const prev = getSubmission(data.id);
+        const prevPayload = getSubmissionPayload(prev) || {};
+        const prevAnswer = (prevPayload.answer && typeof prevPayload.answer === 'object')
+          ? prevPayload.answer
+          : prevPayload;
+        const already = Boolean(prev);
+        registerProgress(data, position, already);
+
+        const container = document.createElement('div');
+        container.className = 'eval-block catedra-block';
+        container.dataset.evalId = data.id;
+        container.id = `eval-${data.id}`;
+
+        const prompt = document.createElement('h4');
+        prompt.className = 'eval-prompt';
+        prompt.textContent = data.prompt || data.title || 'Actividad';
+        container.appendChild(prompt);
+
+        const chip = document.createElement('p');
+        chip.className = 'feedback-explanation';
+        chip.textContent = ({
+          conexion: 'Conexión · conectivismo (declará el vínculo y justificá)',
+          coloquio: 'Coloquio · autodeterminación (video + fuentes + presentación)',
+          peer_rubric: 'Estigmergia · evaluación de pares',
+          proyecto: 'Obra · 4C (entrega evaluada por el docente)',
+        })[data.type] || data.type;
+        container.appendChild(chip);
+
+        const form = document.createElement('form');
+        form.className = 'catedra-form';
+        form.style.display = 'flex';
+        form.style.flexDirection = 'column';
+        form.style.gap = '0.5rem';
+
+        const mkInput = (placeholder, value) => {
+          const el = document.createElement('input');
+          el.type = 'text'; el.placeholder = placeholder; el.value = value || '';
+          el.className = 'catedra-input';
+          el.style.padding = '0.45rem 0.6rem';
+          return el;
+        };
+        const mkArea = (placeholder, value) => {
+          const el = document.createElement('textarea');
+          el.rows = 3; el.placeholder = placeholder; el.value = value || '';
+          el.className = 'patch-ai-textarea';
+          return el;
+        };
+
+        const inputs = { dims: [] };
+        const minChars = Number(data.minChars) > 0 ? Number(data.minChars) : 80;
+
+        if (data.type === 'conexion') {
+          const from = mkInput('Concepto A', ensureEvalText(data.from) || ensureEvalText(prevAnswer.from));
+          const to = mkInput('Concepto B', ensureEvalText(data.to) || ensureEvalText(prevAnswer.to));
+          if (ensureEvalText(data.from)) from.readOnly = true;
+          if (ensureEvalText(data.to)) to.readOnly = true;
+          const just = mkArea(`Justificá por qué conectan (mínimo ${minChars} caracteres)…`, ensureEvalText(prevAnswer.justificacion));
+          inputs.from = from; inputs.to = to; inputs.justificacion = just;
+          form.append(from, to, just);
+        } else if (data.type === 'coloquio') {
+          const url = mkInput(`URL del video (${ensureEvalText(data.platform) || 'youtube'})`, ensureEvalText(prevAnswer.videoUrl));
+          inputs.videoUrl = url; form.append(url);
+          if (data.requireSources) { const s = mkInput('Fuentes citadas (separadas por ;)', ensureEvalText(prevAnswer.sources)); inputs.sources = s; form.append(s); }
+          if (data.requireSlides) { const p = mkInput('URL de la presentación', ensureEvalText(prevAnswer.slides)); inputs.slides = p; form.append(p); }
+        } else if (data.type === 'proyecto') {
+          const url = mkInput(data.submissionKind === 'file' ? 'Enlace al archivo de la obra' : 'URL de la obra', ensureEvalText(prevAnswer.url));
+          const note = mkArea('Descripción breve de la obra…', ensureEvalText(prevAnswer.note));
+          inputs.url = url; inputs.note = note; form.append(url, note);
+          const c4 = document.createElement('p'); c4.className = 'feedback-explanation';
+          c4.textContent = `Nivel 4C objetivo: ${ensureEvalText(data.c4Target) || 'little-c'} (lo confirma el docente).`;
+          form.append(c4);
+        } else if (data.type === 'peer_rubric') {
+          const dims = Array.isArray(data.rubricDimensions) ? data.rubricDimensions : [];
+          if (data.selfAssessment) {
+            const h = document.createElement('p'); h.className = 'feedback-explanation'; h.textContent = 'Autoevaluación (1–4):'; form.append(h);
+            dims.forEach((d) => {
+              const row = document.createElement('label');
+              row.style.display = 'flex'; row.style.gap = '0.5rem'; row.style.alignItems = 'center';
+              const sp = document.createElement('span'); sp.textContent = d.label; sp.style.flex = '1';
+              const sel = document.createElement('select');
+              [1, 2, 3, 4].forEach((n) => { const o = document.createElement('option'); o.value = String(n); o.textContent = String(n); sel.append(o); });
+              row.append(sp, sel); form.append(row);
+              inputs.dims.push({ id: d.id, label: d.label, sel });
+            });
+          }
+          const note = mkArea('Comentario a pares / amigo crítico…', ensureEvalText(prevAnswer.note));
+          inputs.note = note; form.append(note);
+        }
+
+        const submit = document.createElement('button');
+        submit.type = 'submit'; submit.className = 'eval-submit';
+        submit.textContent = already ? (ensureEvalText(data.submitLabel) || 'Reenviar') : (ensureEvalText(data.submitLabel) || 'Enviar');
+        form.append(submit);
+        container.appendChild(form);
+
+        const feedback = document.createElement('div');
+        feedback.className = 'eval-feedback'; feedback.hidden = true;
+        const msg = document.createElement('p'); msg.className = 'feedback-message'; feedback.appendChild(msg);
+        container.appendChild(feedback);
+
+        const fail = (t) => { feedback.hidden = false; feedback.classList.remove('correct'); feedback.classList.add('incorrect'); msg.textContent = t; };
+        const okMsg = (t) => { feedback.hidden = false; feedback.classList.remove('incorrect'); feedback.classList.add('correct'); msg.textContent = t; };
+
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!isAuthenticatedUser) { fail('Iniciá sesión para enviar.'); return; }
+
+          let answer = {};
+          let isCorrect = false;
+          const meta = { paradigm: data.paradigm || '', catedra: true, achievement: data.type };
+
+          if (data.type === 'conexion') {
+            const from = inputs.from.value.trim(), to = inputs.to.value.trim(), just = inputs.justificacion.value.trim();
+            if (!from || !to) { fail('Indicá ambos conceptos.'); return; }
+            if (data.requireJustification && just.length < minChars) { fail(`La justificación necesita al menos ${minChars} caracteres.`); return; }
+            answer = { from, to, justificacion: just }; isCorrect = true;
+          } else if (data.type === 'coloquio') {
+            const videoUrl = inputs.videoUrl.value.trim();
+            if (!/^https?:\/\//i.test(videoUrl)) { fail('Pegá una URL de video válida.'); return; }
+            answer = { videoUrl, sources: inputs.sources ? inputs.sources.value.trim() : '', slides: inputs.slides ? inputs.slides.value.trim() : '' };
+          } else if (data.type === 'proyecto') {
+            const url = inputs.url.value.trim();
+            if (!/^https?:\/\//i.test(url)) { fail('Pegá el enlace de tu obra.'); return; }
+            answer = { url, note: inputs.note.value.trim(), c4Target: ensureEvalText(data.c4Target) || 'little-c' };
+          } else if (data.type === 'peer_rubric') {
+            const scores = inputs.dims.map((d) => ({ id: d.id, label: d.label, self: Number(d.sel.value) }));
+            answer = { self: scores, note: inputs.note.value.trim() };
+          }
+
+          submit.disabled = true; submit.textContent = 'Enviando…';
+          const saved = await saveSubmission({ evalId: data.id, answer, isCorrect, meta, markAsGraded: false });
+          submit.disabled = false; submit.textContent = ensureEvalText(data.submitLabel) || 'Reenviar';
+          if (saved) {
+            okMsg(data.type === 'conexion' ? 'Conexión registrada.' : 'Entrega registrada. Queda pendiente de revisión docente.');
+            registerProgress(data, position, true);
+          } else {
+            fail('No se pudo guardar. Reintentá.');
+          }
+        });
+
+        wrapper.appendChild(container);
+        renderEvalMath(container);
+      }
+
       function renderUnsupported(wrapper, data, position) {
         registerProgress(data, position, false);
 
@@ -15236,6 +15383,7 @@ a[node] -->|edge| b[hub]
               if (evalData.type === 'combinatoria') { renderCombinatoria(wrapper, evalData, index); return; }
               if (evalData.type === 'form-msq') { renderFormMsq(wrapper, evalData, index); return; }
               if (evalData.type === 'form-text') { renderFormText(wrapper, evalData, index); return; }
+              if (evalData.type === 'conexion' || evalData.type === 'coloquio' || evalData.type === 'proyecto' || evalData.type === 'peer_rubric') { renderCatedra(wrapper, evalData, index); return; }
 
               renderUnsupported(wrapper, evalData, index);
             } catch (error) {
@@ -15637,6 +15785,10 @@ a[node] -->|edge| b[hub]
       .eval-block-wrapper[data-eval-type="poll"] { --eval-accent: #f59e0b; }
       .eval-block-wrapper[data-eval-type="wordcloud"] { --eval-accent: #34d399; }
       .eval-block-wrapper[data-eval-type="patch_ai"] { --eval-accent: #fb923c; }
+      .eval-block-wrapper[data-eval-type="conexion"] { --eval-accent: #c0562b; }
+      .eval-block-wrapper[data-eval-type="coloquio"] { --eval-accent: #e2703f; }
+      .eval-block-wrapper[data-eval-type="peer_rubric"] { --eval-accent: #b8892b; }
+      .eval-block-wrapper[data-eval-type="proyecto"] { --eval-accent: #d0a53f; }
 
       .eval-block {
         position: relative;
