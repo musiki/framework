@@ -1,0 +1,185 @@
+---
+title: Evaluaciones — tipos y laboratorio
+description: Referencia de los bloques eval de Musiki, con la cátedra-recorrido y un laboratorio para probarlos.
+audience: teacher
+area: docentes
+featureStatus: beta
+lastVerified: 2026-07-01
+---
+
+Esta página documenta los tipos de evaluación (`eval`) de Musiki y permite probarlos. Es la referencia docente canónica; la fundamentación pedagógica vive en `docs/evaluation/` (Evaluation MOC, paradigmas-evaluacion, catedra-recorrido).
+
+## Cómo se autoran
+
+Toda evaluación es un bloque cercado con lenguaje `eval` dentro de una nota de clase. El parser (`src/lib/eval/parse-eval-block.mjs`) es la fuente de verdad de las propiedades soportadas.
+
+````markdown
+```eval
+id: acustica-mcq-01
+type: mcq
+mode: self
+prompt: "¿Qué describe mejor una frecuencia?"
+options:
+  - "[x] Ciclos por segundo"
+  - "[ ] Intensidad máxima"
+explanation: "Se mide en Hz."
+```
+````
+
+## El eje 2026: resistencia a la delegación
+
+Si un agente (LLM) resuelve la tarea, la tarea dejó de medir al estudiante. Cada tipo se ubica en tres coordenadas: función pedagógica, resistencia a la delegación (baja/media/alta) y relación con el error. Los de resistencia alta anclan la nota; los de resistencia baja son andamiaje formativo.
+
+## Mapa de tipos
+
+| Tipo | Paradigma | Resistencia | Runtime | Rol en la cátedra-recorrido |
+|---|---|---|---|---|
+| `mcq` / `msq` | memoria / recuperación | baja | vivo | autoestudio |
+| `mcc` | atención / cierre | baja | vivo | consumo (leído/completado) |
+| `poll` / `wordcloud` | aula en vivo | baja | vivo | activación |
+| `combinatoria` | relaciones | media | vivo | consolidación |
+| `short_ai` | co-corrección IA | media | backend | aporte / práctica |
+| `patch_ai` | práctica estructural | media | vivo | práctica técnica |
+| `conexion` | conectivismo (Siemens) | alta | pendiente | las 5 conexiones |
+| `coloquio` | self-determination (Deci-Ryan) | alta | pendiente | los 2 coloquios |
+| `peer_rubric` | estigmergia (Csikszentmihalyi) | alta | pendiente | la estigmergia |
+| `proyecto` | creatividad 4C (Kaufman-Beghetto) | alta | pendiente | la obra final |
+
+"Pendiente" = el parser ya normaliza el tipo (se puede autorar y probar aquí), pero falta el renderer de runtime en el curso.
+
+## Tipos nuevos (cátedra-recorrido)
+
+### conexion — conectivismo
+
+El alumno declara un vínculo entre dos conceptos y lo justifica. Conexión no es hipervínculo: es argumento. En el pod de progreso enciende el rayo.
+
+````markdown
+```eval
+id: conexion-01
+type: conexion
+mode: self
+from: affordance
+to: playability
+prompt: "Conectá affordance con playability y justificá el vínculo."
+minChars: 100
+requireJustification: true
+```
+````
+
+Propiedades: `from`/`to` (opcionales; si faltan, el alumno elige), `count` (conexiones pedidas, def. 1), `requireJustification` (def. true), `minChars` (def. 80).
+
+### coloquio — self-determination
+
+El alumno sube un video explicando un concepto, con fuentes y presentación (el viejo coloquio, asincrónico). Satisface autonomía + competencia + relación.
+
+````markdown
+```eval
+id: playability-coloquio-01
+type: coloquio
+mode: teacherreview
+concepto: playability
+prompt: "Explicá playability en un video, citando al menos 2 fuentes."
+platform: youtube
+requireSources: true
+requireSlides: true
+minMinutes: 4
+maxMinutes: 10
+rubric: |
+  Define el concepto; cita fuentes; usa ejemplos; claridad expositiva
+points: 3
+```
+````
+
+Propiedades: `concepto`, `platform` (def. youtube), `requireSources`/`requireSlides` (def. true), `minMinutes`/`maxMinutes`, `rubric`, `provider`/`model` (pre-revisión IA opcional de la transcripción).
+
+### peer_rubric — estigmergia
+
+Coevaluación entre pares o ciclo de amigo crítico. El conocimiento se valida en el campo social.
+
+````markdown
+```eval
+id: ensayo-peer-01
+type: peer_rubric
+mode: peer
+prompt: "Evaluá el ensayo de dos compañeros según la rúbrica."
+dimensions:
+  - { id: claridad, label: "Claridad conceptual" }
+  - { id: profundidad, label: "Profundidad" }
+peerReviews: 2
+selfAssessment: true
+aggregation: median
+```
+````
+
+Propiedades: `dimensions` (lista `{id,label}`), `peerReviews` (def. 2), `selfAssessment` (def. true), `aggregation` (def. median).
+
+### proyecto — obra 4C
+
+La obra acabada, ápice del recorrido, medida con la escala 4C (mini-c → little-c → Pro-c). En el pod es el halo creciente.
+
+````markdown
+```eval
+id: obra-final-01
+type: proyecto
+mode: teacherreview
+kind: instalación
+prompt: "Realizá una obra que instrumente un concepto del curso."
+c4: pro-c
+rubricDimensions:
+  - { id: concepto, label: "Fundamento conceptual" }
+  - { id: factura, label: "Factura técnica" }
+  - { id: originalidad, label: "Originalidad" }
+submission: url
+points: 10
+```
+````
+
+Propiedades: `kind`, `c4`/`c4Target` (mini-c | little-c | pro-c | big-c), `rubricDimensions`, `submission` (url|file), `rubric`.
+
+## Laboratorio: probar un bloque
+
+Pegá un bloque `eval` (solo el cuerpo YAML, sin las comillas cercadas) y verás la normalización real del parser. Requiere que el laboratorio pueda alcanzar la app (`/api/eval/parse`).
+
+<div style="display:flex;flex-direction:column;gap:.6rem;margin:1rem 0;">
+  <textarea id="lab-in" rows="10" spellcheck="false"
+    style="width:100%;font-family:var(--sl-font-mono,monospace);font-size:.85rem;padding:.6rem;border:1px solid var(--sl-color-gray-5);border-radius:8px;background:var(--sl-color-black);color:var(--sl-color-white);"
+>id: demo-conexion
+type: conexion
+from: affordance
+to: playability
+prompt: "Conectá affordance con playability y justificá."
+minChars: 100</textarea>
+  <div style="display:flex;gap:.5rem;align-items:center;">
+    <button id="lab-run" style="padding:.5rem .9rem;border:1px solid var(--sl-color-accent);border-radius:8px;background:transparent;color:var(--sl-color-accent);cursor:pointer;">Parsear ▸</button>
+    <input id="lab-base" placeholder="base app (ej. https://musiki.org.ar)" style="flex:1;padding:.45rem .6rem;border:1px solid var(--sl-color-gray-5);border-radius:8px;background:transparent;color:var(--sl-color-white);font-size:.8rem;" />
+  </div>
+  <pre id="lab-out" style="margin:0;padding:.7rem;border:1px solid var(--sl-color-gray-5);border-radius:8px;background:var(--sl-color-black);color:var(--sl-color-white);overflow:auto;max-height:340px;font-size:.8rem;">Resultado…</pre>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  async function run() {
+    const block = $('lab-in').value;
+    const base = ($('lab-base').value || '').trim().replace(/\/+$/, '');
+    const url = base + '/api/eval/parse';
+    $('lab-out').textContent = 'Parseando…';
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ block }),
+      });
+      const data = await r.json();
+      if (!data.ok) { $('lab-out').textContent = '⚠ ' + (data.error || 'error'); return; }
+      const head = `type: ${data.type}  ·  ${data.supported ? 'SOPORTADO' : 'NO SOPORTADO (unsupported)'}\n\n`;
+      $('lab-out').textContent = head + JSON.stringify(data.parsed, null, 2);
+    } catch (e) {
+      $('lab-out').textContent = 'No se pudo alcanzar ' + url + '\n(' + e.message + ')\nCargá la base de la app arriba si docs y app están en dominios distintos.';
+    }
+  }
+  $('lab-run')?.addEventListener('click', run);
+</script>
+
+## Probar el render en vivo
+
+El laboratorio de arriba muestra la normalización. Para ver el render interactivo real (con envío y persistencia) usá la nota de curso `eval-lab` en i1, que corre el runtime completo. Los tipos marcados "pendiente" mostrarán un aviso de "tipo no soportado todavía" hasta que se agregue su renderer.

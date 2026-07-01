@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pod de progreso — prototipo</title>
+<style>
+  :root{
+    --paper:#f5f2ec; --ink:#1b1a17; --muted:#8a857b; --line:#d8d2c6;
+    --accent:#c0562b; --accent-soft:#e7bda8; --node:#2a2824; --card:#efeae1;
+    --gold:#b8892b;
+    --font:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --paper:#161513; --ink:#e9e5dc; --muted:#7d786e; --line:#2c2a26;
+      --accent:#e2703f; --accent-soft:#5a3624; --node:#c9c3b6; --card:#1d1c19; --gold:#d0a53f; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;padding:24px;}
+  .pod{max-width:430px;margin:0 auto;border:1px solid var(--line);border-radius:14px;
+    background:var(--card);overflow:hidden;}
+  .pod-head{display:flex;align-items:baseline;justify-content:space-between;
+    padding:16px 18px 10px;border-bottom:1px solid var(--line);}
+  .pod-head h1{font-family:var(--font);font-size:15px;font-weight:600;margin:0;}
+  .pod-head .sub{font-size:11px;color:var(--muted);}
+  .pct{font-family:var(--font);font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums;}
+  /* rúbrica-recorrido */
+  .rubric{padding:12px 18px;border-bottom:1px solid var(--line);}
+  .rubric .t{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+  .req{display:flex;align-items:center;gap:9px;padding:3px 0;font-size:12px;}
+  .req .ic{flex:0 0 20px;height:18px;display:flex;align-items:center;justify-content:center;}
+  .req .lab{flex:1;color:var(--ink);}
+  .req .cnt{font-variant-numeric:tabular-nums;color:var(--muted);font-size:11.5px;}
+  .req.done .cnt{color:var(--accent);}
+  .req .bar{flex:0 0 54px;height:3px;background:var(--line);border-radius:2px;overflow:hidden;}
+  .req .bar>i{display:block;height:100%;background:var(--accent);width:0}
+  .section{padding:12px 10px 4px;}
+  .u-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+    padding:0 10px;margin:8px 0 0;}
+  svg{display:block;width:100%;overflow:visible;}
+  .connect-wrap{border-top:1px solid var(--line);padding:10px 0 4px;}
+  .connect-head{display:flex;justify-content:space-between;align-items:center;padding:2px 18px 6px;}
+  .connect-head .t{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+  .connect-head .d{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
+  #brain{display:block;width:100%;height:180px;}
+  .legend{display:flex;gap:12px 14px;flex-wrap:wrap;padding:8px 18px 14px;font-size:10px;color:var(--muted);}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .foot{display:flex;gap:8px;padding:10px 14px 16px;border-top:1px solid var(--line);}
+  button{font-family:var(--sans);font-size:12px;border:1px solid var(--line);background:transparent;
+    color:var(--ink);padding:7px 12px;border-radius:8px;cursor:pointer;}
+  button:hover{border-color:var(--accent);color:var(--accent);}
+  .glyph-ring{fill:none;stroke:var(--muted);stroke-width:1.4;}
+  .glyph-half{fill:var(--muted);}
+  .glyph-solid{fill:var(--node);stroke:none;}
+  .glyph-eval{fill:var(--accent);}
+  .connector{stroke:var(--line);stroke-width:2;fill:none;}
+  .connector.done{stroke:var(--node);}
+  .plabel{font-size:8.5px;fill:var(--muted);font-family:var(--sans);}
+  .ray{stroke:var(--accent);stroke-width:1.4;fill:none;stroke-linejoin:round;}
+  .badge-play{fill:var(--accent);}
+  .badge-peer{fill:none;stroke:var(--gold);stroke-width:1.3;}
+  .badge-star{fill:var(--gold);}
+  .halo{fill:none;stroke:var(--accent);opacity:.5;}
+  .next{animation:pulse 1.8s ease-in-out infinite;transform-origin:center;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @media (prefers-reduced-motion: reduce){ .next{animation:none;stroke:var(--accent)!important;} }
+</style>
+</head>
+<body>
+<div class="pod" id="pod">
+  <div class="pod-head">
+    <div>
+      <h1>Organología · i1</h1>
+      <div class="sub">Recorrido del alumno · unidad activa: Interfaces</div>
+    </div>
+    <div class="pct" id="pct">0%</div>
+  </div>
+
+  <div class="rubric">
+    <div class="t">Rúbrica-recorrido</div>
+    <div id="reqs"></div>
+  </div>
+
+  <div class="section" id="path"></div>
+
+  <div class="connect-wrap">
+    <div class="connect-head">
+      <span class="t">Connectoma</span>
+      <span class="d" id="dens">densidad 0 · 0 aristas</span>
+    </div>
+    <canvas id="brain"></canvas>
+  </div>
+
+  <div class="legend">
+    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5" class="glyph-ring"/></svg>no leído</span>
+    <span><svg width="14" height="14"><path d="M7 2 a5 5 0 0 1 0 10 z" class="glyph-half"/><circle cx="7" cy="7" r="5" class="glyph-ring"/></svg>leído</span>
+    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5" class="glyph-solid"/></svg>completado</span>
+    <span><svg width="14" height="14"><rect x="3" y="3" width="8" height="8" transform="rotate(45 7 7)" class="glyph-eval"/></svg>evaluado</span>
+    <span><svg width="16" height="14"><path d="M9 2 L5 7 L8 7 L6 12 L12 5 L9 5 Z" class="ray"/></svg>conexión</span>
+    <span><svg width="14" height="14"><path d="M4 3 L11 7 L4 11 Z" class="badge-play"/></svg>coloquio</span>
+    <span><svg width="16" height="14"><path d="M3 9 a4 4 0 0 1 8 0" class="badge-peer"/><path d="M6 5 a4 4 0 0 1 8 0" class="badge-peer"/></svg>estigmergia</span>
+    <span><svg width="14" height="14"><path d="M7 2 L8.4 5.6 L12 5.6 L9.1 8 L10.2 11.6 L7 9.4 L3.8 11.6 L4.9 8 L2 5.6 L5.6 5.6 Z" class="badge-star"/></svg>aporte público</span>
+    <span><svg width="16" height="16"><circle cx="8" cy="8" r="3.2" class="glyph-eval"/><circle cx="8" cy="8" r="6" class="halo"/></svg>obra 4C</span>
+  </div>
+
+  <div class="foot">
+    <button id="step">Simular avance ▸</button>
+    <button id="reset">Reiniciar</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ---- Datos simulados de un curso (curso activo) ----
+// state: 0 no-leído · 1 leído · 2 completado · 3 evaluado
+// logros por concepto: conns (nº conexiones autoradas), coloquio, peer, aporte
+const UNITS = [
+  { name:"Acústica", concepts:[
+      {id:"onda", label:"onda", state:3, conns:1, coloquio:false, peer:false, aporte:false},
+      {id:"armonicos", label:"armónicos", state:3, conns:2, coloquio:true, peer:false, aporte:false},
+      {id:"timbre", label:"timbre", state:2, conns:1, coloquio:false, peer:false, aporte:true},
+  ]},
+  { name:"Organología", concepts:[
+      {id:"clasificacion", label:"clasificación", state:2, conns:1, coloquio:false, peer:true, aporte:false},
+      {id:"mediacion", label:"mediación", state:1, conns:0, coloquio:false, peer:false, aporte:false},
+      {id:"nueva-org", label:"nueva org.", state:1, conns:0, coloquio:true, peer:false, aporte:false},
+  ]},
+  { name:"Interfaces", concepts:[
+      {id:"affordance", label:"affordance", state:1, conns:0, coloquio:false, peer:false, aporte:false},
+      {id:"playability", label:"playability", state:0, conns:0, coloquio:false, peer:false, aporte:false},
+      {id:"liveness", label:"liveness", state:0, conns:0, coloquio:false, peer:false, aporte:false},
+      {id:"performat", label:"performat.", state:0, conns:0, coloquio:false, peer:false, aporte:false},
+  ]},
+];
+// proyecto/obra: nivel 4C (0 ninguno · 1 mini-c · 2 little-c · 3 Pro-c)
+let PROJECT = { label:"obra", c4:1 };
+
+const EDGES = [
+  ["onda","armonicos"],["armonicos","timbre"],["timbre","clasificacion"],
+  ["clasificacion","mediacion"],["mediacion","nueva-org"],["nueva-org","affordance"],
+  ["affordance","playability"],["affordance","performat"],["playability","liveness"],
+  ["liveness","performat"],["playability","performat"],["nueva-org","clasificacion"],
+];
+const flat = () => UNITS.flatMap(u=>u.concepts);
+
+// ---------- Rúbrica-recorrido ----------
+const REQUIRED = { proyecto:1, conexiones:5, coloquios:2, estigmergia:1, aporte:1 };
+function tally(){
+  const all=flat();
+  return {
+    proyecto: PROJECT.c4>0 ? 1 : 0,
+    conexiones: all.reduce((s,c)=>s+(c.conns||0),0),
+    coloquios: all.filter(c=>c.coloquio).length,
+    estigmergia: all.filter(c=>c.peer).length,
+    aporte: all.filter(c=>c.aporte).length,
+  };
+}
+const REQ_ICON = {
+  proyecto:'<svg width="16" height="16"><circle cx="8" cy="8" r="3" class="glyph-eval"/><circle cx="8" cy="8" r="6" class="halo"/></svg>',
+  conexiones:'<svg width="16" height="14"><path d="M9 2 L5 7 L8 7 L6 12 L12 5 L9 5 Z" class="ray"/></svg>',
+  coloquios:'<svg width="14" height="14"><path d="M4 3 L11 7 L4 11 Z" class="badge-play"/></svg>',
+  estigmergia:'<svg width="16" height="14"><path d="M3 9 a4 4 0 0 1 8 0" class="badge-peer"/><path d="M6 5 a4 4 0 0 1 8 0" class="badge-peer"/></svg>',
+  aporte:'<svg width="14" height="14"><path d="M7 2 L8.4 5.6 L12 5.6 L9.1 8 L10.2 11.6 L7 9.4 L3.8 11.6 L4.9 8 L2 5.6 L5.6 5.6 Z" class="badge-star"/></svg>',
+};
+const REQ_LABEL = { proyecto:"proyecto (obra)", conexiones:"conexiones", coloquios:"self-determinations (coloquios)", estigmergia:"estigmergia (pares / amigo crítico)", aporte:"aporte a musiki público" };
+function renderReqs(){
+  const t=tally(); const host=document.getElementById('reqs'); host.innerHTML='';
+  Object.keys(REQUIRED).forEach(k=>{
+    const have=t[k], need=REQUIRED[k], done=have>=need;
+    const row=document.createElement('div'); row.className='req'+(done?' done':'');
+    row.innerHTML=`<span class="ic">${REQ_ICON[k]}</span>
+      <span class="lab">${REQ_LABEL[k]}</span>
+      <span class="bar"><i style="width:${Math.min(100,100*have/need)}%"></i></span>
+      <span class="cnt">${have}/${need}${done?' ✓':''}</span>`;
+    host.appendChild(row);
+  });
+}
+
+// ---------- Capa camino (SVG serpentina + glifos de logro) ----------
+const COLS=3, DX=122, DY=72, X0=42, Y0=34, R=8;
+function badge(svgNS,svg,x,y,cls,d){ const p=document.createElementNS(svgNS,'path'); p.setAttribute('d',d); p.setAttribute('class',cls); p.setAttribute('transform',`translate(${x} ${y})`); svg.appendChild(p); }
+function renderPath(){
+  const host=document.getElementById('path'); host.innerHTML='';
+  let firstNextDone=false; const svgNS="http://www.w3.org/2000/svg";
+  UNITS.forEach(unit=>{
+    const lab=document.createElement('div'); lab.className='u-label'; lab.textContent=unit.name; host.appendChild(lab);
+    const rows=Math.ceil(unit.concepts.length/COLS);
+    const h=Y0+rows*DY-(DY-46);
+    const svg=document.createElementNS(svgNS,'svg');
+    svg.setAttribute('viewBox',`0 0 ${X0*2+(COLS-1)*DX} ${h}`);
+    const pos=unit.concepts.map((c,i)=>{ const row=Math.floor(i/COLS); let col=i%COLS; if(row%2===1)col=COLS-1-col;
+      return {x:X0+col*DX,y:Y0+row*DY,c}; });
+    for(let i=0;i<pos.length-1;i++){ const a=pos[i],b=pos[i+1]; const p=document.createElementNS(svgNS,'path');
+      const mx=(a.x+b.x)/2; p.setAttribute('d',`M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`);
+      p.setAttribute('class','connector'+(a.c.state>=2&&b.c.state>=1?' done':'')); svg.appendChild(p); }
+    pos.forEach(p=>{
+      const st=p.c.state;
+      // rayo de conexión (detrás del glifo)
+      if(p.c.conns>0){ badge(svgNS,svg,p.x+R+1,p.y-R-2,'ray','M4 0 L0 5 L3 5 L1 10 L7 3 L4 3 Z'); }
+      // glifo de estado
+      let glyph;
+      if(st===3){ glyph=document.createElementNS(svgNS,'rect'); glyph.setAttribute('x',p.x-R); glyph.setAttribute('y',p.y-R);
+        glyph.setAttribute('width',R*2); glyph.setAttribute('height',R*2); glyph.setAttribute('transform',`rotate(45 ${p.x} ${p.y})`); glyph.setAttribute('class','glyph-eval'); }
+      else if(st===2){ glyph=document.createElementNS(svgNS,'circle'); glyph.setAttribute('cx',p.x); glyph.setAttribute('cy',p.y); glyph.setAttribute('r',R); glyph.setAttribute('class','glyph-solid'); }
+      else if(st===1){ glyph=document.createElementNS(svgNS,'g');
+        const half=document.createElementNS(svgNS,'path'); half.setAttribute('d',`M ${p.x} ${p.y-R} a ${R} ${R} 0 0 1 0 ${2*R} z`); half.setAttribute('class','glyph-half');
+        const ring=document.createElementNS(svgNS,'circle'); ring.setAttribute('cx',p.x);ring.setAttribute('cy',p.y);ring.setAttribute('r',R); ring.setAttribute('class','glyph-ring');
+        glyph.appendChild(half); glyph.appendChild(ring); }
+      else { glyph=document.createElementNS(svgNS,'circle'); glyph.setAttribute('cx',p.x); glyph.setAttribute('cy',p.y); glyph.setAttribute('r',R); glyph.setAttribute('class','glyph-ring');
+        if(!firstNextDone){ glyph.classList.add('next'); firstNextDone=true; } }
+      svg.appendChild(glyph);
+      // badges de logro (coloquio, peer, aporte) bajo el nodo
+      let bx=p.x-14;
+      if(p.c.coloquio){ badge(svgNS,svg,bx,p.y+R+3,'badge-play','M0 0 L7 4 L0 8 Z'); bx+=11; }
+      if(p.c.peer){ badge(svgNS,svg,bx,p.y+R+3,'badge-peer','M0 6 a4 4 0 0 1 8 0'); bx+=11; }
+      if(p.c.aporte){ badge(svgNS,svg,bx,p.y+R+2,'badge-star','M4 0 L5 2.6 L7.6 2.6 L5.5 4.4 L6.3 7 L4 5.4 L1.7 7 L2.5 4.4 L0.4 2.6 L3 2.6 Z'); }
+      const t=document.createElementNS(svgNS,'text'); t.setAttribute('x',p.x); t.setAttribute('y',p.y+R+22);
+      t.setAttribute('text-anchor','middle'); t.setAttribute('class','plabel'); t.textContent=p.c.label; svg.appendChild(t);
+    });
+    host.appendChild(svg);
+  });
+  // nodo obra (4C) al final: halo creciente
+  const lab=document.createElement('div'); lab.className='u-label'; lab.textContent='Obra · 4C'; host.appendChild(lab);
+  const svg=document.createElementNS(svgNS,'svg'); svg.setAttribute('viewBox',`0 0 ${X0*2+(COLS-1)*DX} 70`);
+  const cx=X0+(COLS-1)*DX/2, cy=34;
+  const c4=['—','mini-c','little-c','Pro-c'][PROJECT.c4]||'—';
+  for(let k=PROJECT.c4;k>=1;k--){ const ring=document.createElementNS(svgNS,'circle'); ring.setAttribute('cx',cx);ring.setAttribute('cy',cy);
+    ring.setAttribute('r',6+k*8); ring.setAttribute('class','halo'); ring.setAttribute('style',`opacity:${0.15+0.18*k}`); svg.appendChild(ring); }
+  const core=document.createElementNS(svgNS,'circle'); core.setAttribute('cx',cx);core.setAttribute('cy',cy);core.setAttribute('r',6);
+  core.setAttribute('class', PROJECT.c4>0?'glyph-eval':'glyph-ring'); svg.appendChild(core);
+  const t=document.createElementNS(svgNS,'text'); t.setAttribute('x',cx);t.setAttribute('y',cy+6+22);t.setAttribute('text-anchor','middle');t.setAttribute('class','plabel');
+  t.textContent=`obra · ${c4}`; svg.appendChild(t); host.appendChild(svg);
+
+  const all=flat(); const done=all.reduce((s,c)=>s+(c.state>=2?1:0),0);
+  document.getElementById('pct').textContent=Math.round(100*done/all.length)+'%';
+  renderReqs();
+}
+
+// ---------- Connectoma (three.js) ----------
+let scene,cam,renderer,lineGroup,nodeObjs={},raf;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function initBrain(){
+  const cv=document.getElementById('brain'); const w=cv.clientWidth||400,h=180;
+  renderer=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true}); renderer.setSize(w,h,false);
+  scene=new THREE.Scene(); cam=new THREE.PerspectiveCamera(45,w/h,0.1,100); cam.position.z=7.5;
+  const ink=getComputedStyle(document.body).getPropertyValue('--node').trim();
+  const acc=getComputedStyle(document.body).getPropertyValue('--accent').trim();
+  const all=flat(); const N=all.length;
+  all.forEach((c,i)=>{ const y=1-(i/(N-1))*2,r=Math.sqrt(1-y*y),th=i*2.399963;
+    const v=new THREE.Vector3(Math.cos(th)*r,y,Math.sin(th)*r).multiplyScalar(2.6);
+    const m=new THREE.Mesh(new THREE.SphereGeometry(0.13,16,16), new THREE.MeshBasicMaterial({color:new THREE.Color(ink)}));
+    m.position.copy(v); scene.add(m); nodeObjs[c.id]={mesh:m,pos:v,accent:new THREE.Color(acc),ink:new THREE.Color(ink)}; });
+  lineGroup=new THREE.Group(); scene.add(lineGroup); refreshBrain();
+  const loop=()=>{ if(!reduce){ scene.rotation.y+=0.0038; scene.rotation.x=0.18; } renderer.render(scene,cam); raf=requestAnimationFrame(loop); };
+  loop();
+}
+function refreshBrain(){
+  const map={}; flat().forEach(c=>map[c.id]=c.state);
+  Object.entries(nodeObjs).forEach(([id,o])=>{ o.mesh.material.color.copy(map[id]>=3?o.accent:o.ink); o.mesh.scale.setScalar(map[id]>=2?1.25:1); });
+  while(lineGroup.children.length) lineGroup.remove(lineGroup.children[0]);
+  const lineInk=new THREE.Color(getComputedStyle(document.body).getPropertyValue('--muted').trim());
+  let active=0;
+  EDGES.forEach(([a,b])=>{ if(map[a]>=2&&map[b]>=2){ const g=new THREE.BufferGeometry().setFromPoints([nodeObjs[a].pos,nodeObjs[b].pos]);
+    lineGroup.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:lineInk,transparent:true,opacity:0.55}))); active++; } });
+  document.getElementById('dens').textContent=`densidad ${(active/EDGES.length).toFixed(2)} · ${active} aristas`;
+}
+
+// ---------- Simulación ----------
+function advance(){
+  const all=flat(); const c=all.find(c=>c.state<3);
+  if(c){ c.state++; if(c.state===2 && c.conns===0 && Math.random()<0.6) c.conns=1; renderPath(); refreshBrain(); return; }
+  if(PROJECT.c4<3){ PROJECT.c4++; renderPath(); }
+}
+document.getElementById('step').onclick=advance;
+document.getElementById('reset').onclick=()=>{ location.reload(); };
+
+renderPath(); initBrain();
+</script>
+</body>
+</html>

@@ -500,6 +500,87 @@ const normalizeReferenceAi = (raw, common) => ({
   submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Evaluar respuesta'),
 });
 
+// ---- Tipos de la cátedra-recorrido (ver docs/evaluation/catedra-recorrido.md) ----
+
+const C4_ALIASES = new Map([
+  ['minic', 'mini-c'], ['mini-c', 'mini-c'], ['mini_c', 'mini-c'],
+  ['littlec', 'little-c'], ['little-c', 'little-c'], ['little_c', 'little-c'],
+  ['proc', 'pro-c'], ['pro-c', 'pro-c'], ['pro_c', 'pro-c'],
+  ['bigc', 'big-c'], ['big-c', 'big-c'], ['big_c', 'big-c'],
+]);
+const normalizeC4 = (value, fallback = 'little-c') => {
+  const v = asText(value).toLowerCase().replace(/\s+/g, '-');
+  return C4_ALIASES.get(v) || fallback;
+};
+const normalizeRubricDimensions = (value) =>
+  toList(value)
+    .map((d) => (d && typeof d === 'object')
+      ? { id: asText(d.id || d.label), label: asText(d.label || d.id) }
+      : { id: asText(d), label: asText(d) })
+    .filter((d) => d.label);
+
+// coloquio: self-determination (Deci & Ryan). El alumno sube un video explicando
+// un concepto, con fuentes y presentacion.
+const normalizeColoquio = (raw, common) => ({
+  ...common,
+  type: 'coloquio',
+  prompt: asText(raw.prompt || raw.question || raw.title || ''),
+  concept: asText(raw.concept || raw.concepto || raw.tema),
+  platform: asText(raw.platform || raw.plataforma, 'youtube').toLowerCase() || 'youtube',
+  videoUrl: asText(raw.videoUrl || raw.video_url || raw.url),
+  requireSources: asBoolean(raw.requireSources ?? raw.require_sources ?? raw.citarFuentes ?? raw.sources, true),
+  requireSlides: asBoolean(raw.requireSlides ?? raw.require_slides ?? raw.presentacion ?? raw.slides, true),
+  minMinutes: asPositiveNumber(raw.minMinutes ?? raw.min_minutes, 3),
+  maxMinutes: asPositiveNumber(raw.maxMinutes ?? raw.max_minutes, 12),
+  rubric: asText(raw.rubric || raw.criteria || raw.rubrica),
+  provider: asText(raw.provider, 'ollama').toLowerCase() || 'ollama',
+  model: asText(raw.model),
+  submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Enviar coloquio'),
+  paradigm: 'self-determination',
+});
+
+// proyecto: obra acabada, medida con escala 4C (Kaufman & Beghetto).
+const normalizeProyecto = (raw, common) => ({
+  ...common,
+  type: 'proyecto',
+  prompt: asText(raw.prompt || raw.question || raw.title || ''),
+  kind: asText(raw.kind || raw.tipo || raw.medium || 'obra'),
+  c4Target: normalizeC4(raw.c4Target || raw.c4 || raw.target4c || raw.nivel4c, 'little-c'),
+  rubric: asText(raw.rubric || raw.rubrica),
+  rubricDimensions: normalizeRubricDimensions(raw.rubricDimensions || raw.rubric_dimensions || raw.dimensions),
+  submissionKind: asText(raw.submissionKind || raw.submission_kind || raw.submission, 'url').toLowerCase() || 'url',
+  submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Entregar obra'),
+  paradigm: '4c-creativity',
+});
+
+// conexion: conectivismo (Siemens). El alumno declara un vinculo entre conceptos
+// y lo justifica (conexion != hipervinculo, es argumento).
+const normalizeConexion = (raw, common) => ({
+  ...common,
+  type: 'conexion',
+  prompt: asText(raw.prompt || raw.question || raw.title || 'Declara una conexion entre dos conceptos y justifica el vinculo.'),
+  from: asText(raw.from || raw.desde || raw.source),
+  to: asText(raw.to || raw.hasta || raw.target),
+  count: asPositiveInteger(raw.count || raw.n || raw.cantidad, 1),
+  requireJustification: asBoolean(raw.requireJustification ?? raw.require_justification ?? raw.justificar, true),
+  minChars: asPositiveInteger(raw.minChars, 80),
+  submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Declarar conexion'),
+  paradigm: 'connectivism',
+});
+
+// peer_rubric: estigmergia / coevaluacion (Csikszentmihalyi; amigo critico).
+const normalizePeerRubric = (raw, common) => ({
+  ...common,
+  type: 'peer_rubric',
+  prompt: asText(raw.prompt || raw.title || ''),
+  rubricDimensions: normalizeRubricDimensions(raw.rubricDimensions || raw.dimensions || raw.criteria),
+  peerReviews: asPositiveInteger(raw.peerReviews ?? raw.peer_reviews, 2),
+  selfAssessment: asBoolean(raw.selfAssessment ?? raw.self_assessment, true),
+  aggregation: asText(raw.aggregation, 'median').toLowerCase() || 'median',
+  submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Evaluar a pares'),
+  paradigm: 'stigmergy',
+});
+
 export function parseEvalBlock(blockValue, options = {}) {
   const { fallbackId = 'eval-item' } = options;
 
@@ -531,6 +612,10 @@ export function parseEvalBlock(blockValue, options = {}) {
   if (type === 'patch_ai') return normalizePatchAi(parsed, common);
   if (type === 'short_ai') return normalizeShortAi(parsed, common);
   if (type === 'reference_ai') return normalizeReferenceAi(parsed, common);
+  if (type === 'coloquio') return normalizeColoquio(parsed, common);
+  if (type === 'proyecto') return normalizeProyecto(parsed, common);
+  if (type === 'conexion' || type === 'conexión') return normalizeConexion(parsed, common);
+  if (type === 'peer_rubric' || type === 'peer-rubric') return normalizePeerRubric(parsed, common);
   if (type === 'form-msq') {
     const base = normalizePoll(parsed, common);
     return { ...base, type: 'form-msq', allowMultiple: true };
