@@ -16,6 +16,7 @@ import { syntaxTree } from '@codemirror/language';
 import { markdown } from '@codemirror/lang-markdown';
 import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
 import { markdownFormattingKeymap } from './markdown-shortcuts.ts';
+import { seshatCitationAutocomplete } from '../../seshat-citations.ts';
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -212,6 +213,7 @@ export function createLiveMdEditor(
         { key: 'Mod-s', run: v => { flushSave(v.state.doc.toString()); return true; } },
       ]),
       markdown(),
+      seshatCitationAutocomplete(),
       markdownFormattingKeymap(),
       EditorView.lineWrapping,
       blockPlugin,

@@ -20,6 +20,7 @@ import {
 } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
+import { seshatCitationAutocomplete } from './seshat-citations';
 
 type EditorTokenSpan = {
   from: number;
@@ -831,6 +832,7 @@ export function enhanceMarkdownCodeMirror(textarea: HTMLTextAreaElement): Markdo
         ),
         basicSetup,
         markdown(),
+        seshatCitationAutocomplete(),
         remoteSelectionField,
         editabilityCompartment.of([
           EditorState.readOnly.of(false),

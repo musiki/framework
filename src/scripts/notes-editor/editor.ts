@@ -4,6 +4,7 @@ import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, se
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { markdownFormattingKeymap } from '../course/notes/markdown-shortcuts.ts';
+import { seshatCitationAutocomplete } from '../seshat-citations.ts';
 
 let view: EditorView | null = null;
 
@@ -34,6 +35,7 @@ export function createEditor(container: HTMLElement, initialContent: string, onC
         ...historyKeymap,
       ]),
       markdown(),
+      seshatCitationAutocomplete(),
       syntaxHighlighting(defaultHighlightStyle),
       EditorView.lineWrapping,
       musikiTheme,
