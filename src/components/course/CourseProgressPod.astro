@@ -1,0 +1,147 @@
+---
+// Motor de render del pod de progreso (cátedra-recorrido).
+// El markup vive inline en el panel #progress-sidebar del sidebar derecho;
+// este componente solo aporta la lógica: fetch /api/progress/pod + camino + connectoma.
+// Expone window.__musikiProgressLoad(), que el shell llama al activar la pestaña Progreso.
+---
+
+<script>
+  import * as THREE from 'three';
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const R = 8, COLS = 3, DX = 122, DY = 64, X0 = 40, Y0 = 28;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let three: any = null;
+  let lastCourse = '';
+
+  const el = (id: string) => document.getElementById(id);
+  const courseFromUrl = () => {
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    return parts[0] === 'cursos' ? (parts[1] || '') : (parts[1] || '');
+  };
+  const stateOf = (c: any) => (c && c.evaluated ? 3 : (c && c.completed ? 2 : 0));
+
+  function renderPath(concepts: any[]) {
+    const host = el('cpp-path');
+    if (!host) return;
+    host.innerHTML = '';
+    const svg = document.createElementNS(SVGNS, 'svg');
+    const rows = Math.max(1, Math.ceil(concepts.length / COLS));
+    svg.setAttribute('viewBox', `0 0 ${X0 * 2 + (COLS - 1) * DX} ${Y0 + rows * DY}`);
+    const pos = concepts.map((c, i) => {
+      const row = Math.floor(i / COLS); let col = i % COLS;
+      if (row % 2 === 1) col = COLS - 1 - col;
+      return { x: X0 + col * DX, y: Y0 + row * DY, c };
+    });
+    for (let i = 0; i < pos.length - 1; i++) {
+      const a = pos[i], b = pos[i + 1];
+      const p = document.createElementNS(SVGNS, 'path');
+      const mx = (a.x + b.x) / 2;
+      p.setAttribute('d', `M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`);
+      p.setAttribute('class', 'cpp-conn' + (stateOf(a.c) >= 2 && stateOf(b.c) >= 1 ? ' done' : ''));
+      svg.appendChild(p);
+    }
+    let nextMarked = false;
+    pos.forEach((p) => {
+      const st = stateOf(p.c);
+      let g: any;
+      if (st === 3) {
+        g = document.createElementNS(SVGNS, 'rect');
+        g.setAttribute('x', String(p.x - R)); g.setAttribute('y', String(p.y - R));
+        g.setAttribute('width', String(R * 2)); g.setAttribute('height', String(R * 2));
+        g.setAttribute('transform', `rotate(45 ${p.x} ${p.y})`); g.setAttribute('class', 'cpp-eval');
+      } else if (st === 2) {
+        g = document.createElementNS(SVGNS, 'circle');
+        g.setAttribute('cx', String(p.x)); g.setAttribute('cy', String(p.y)); g.setAttribute('r', String(R));
+        g.setAttribute('class', 'cpp-solid');
+      } else {
+        g = document.createElementNS(SVGNS, 'circle');
+        g.setAttribute('cx', String(p.x)); g.setAttribute('cy', String(p.y)); g.setAttribute('r', String(R));
+        g.setAttribute('class', 'cpp-ring');
+        if (!nextMarked) { g.classList.add('cpp-next'); nextMarked = true; }
+      }
+      svg.appendChild(g);
+      const t = document.createElementNS(SVGNS, 'text');
+      t.setAttribute('x', String(p.x)); t.setAttribute('y', String(p.y + R + 12));
+      t.setAttribute('text-anchor', 'middle'); t.setAttribute('class', 'cpp-lab');
+      t.textContent = String(p.c.name || p.c.slug || '').slice(0, 16);
+      svg.appendChild(t);
+    });
+    host.appendChild(svg);
+  }
+
+  function renderBrain(concepts: any[], edges: any[]) {
+    const canvas = el('cpp-brain') as HTMLCanvasElement | null;
+    if (!canvas) return;
+    try {
+      const w = canvas.clientWidth || 380, h = 180;
+      if (!three) {
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        renderer.setSize(w, h, false);
+        const scene = new THREE.Scene();
+        const cam = new THREE.PerspectiveCamera(45, w / h, 0.1, 100); cam.position.z = 7.5;
+        three = { renderer, scene, cam, nodes: {}, lineGroup: new THREE.Group() };
+        scene.add(three.lineGroup);
+        const loop = () => { if (!reduce) { scene.rotation.y += 0.0038; scene.rotation.x = 0.18; } renderer.render(scene, cam); three.raf = requestAnimationFrame(loop); };
+        loop();
+      }
+      Object.values(three.nodes).forEach((o: any) => three.scene.remove(o.mesh));
+      three.nodes = {};
+      const cs = getComputedStyle(document.documentElement);
+      const ink = new THREE.Color((cs.getPropertyValue('--c-fg') || '#e9e5dc').trim());
+      const acc = new THREE.Color((cs.getPropertyValue('--accent') || '#e2703f').trim());
+      const lineInk = new THREE.Color((cs.getPropertyValue('--c-border') || '#7d786e').trim());
+      const N = Math.max(1, concepts.length);
+      concepts.forEach((c, i) => {
+        const y = 1 - (i / Math.max(1, N - 1)) * 2, r = Math.sqrt(Math.max(0, 1 - y * y)), th = i * 2.399963;
+        const v = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r).multiplyScalar(2.6);
+        const st = stateOf(c);
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16), new THREE.MeshBasicMaterial({ color: st >= 3 ? acc : ink }));
+        m.position.copy(v); m.scale.setScalar(st >= 2 ? 1.25 : 1);
+        three.scene.add(m); three.nodes[c.id] = { mesh: m, pos: v };
+      });
+      while (three.lineGroup.children.length) three.lineGroup.remove(three.lineGroup.children[0]);
+      const stMap: Record<string, number> = {}; concepts.forEach((c) => { stMap[c.id] = stateOf(c); });
+      let active = 0;
+      edges.forEach((e) => {
+        const a = three.nodes[e.source], b = three.nodes[e.target];
+        if (a && b && (stMap[e.source] || 0) >= 2 && (stMap[e.target] || 0) >= 2) {
+          const geo = new THREE.BufferGeometry().setFromPoints([a.pos, b.pos]);
+          three.lineGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: lineInk, transparent: true, opacity: 0.55 })));
+          active++;
+        }
+      });
+      const densEl = el('cpp-dens');
+      if (densEl) densEl.textContent = `densidad ${(active / Math.max(1, edges.length)).toFixed(2)} · ${active} aristas`;
+    } catch (err) { console.warn('[progress-pod] brain render failed', err); }
+  }
+
+  async function load() {
+    const courseId = courseFromUrl();
+    const noteEl = el('cpp-note'), pctEl = el('cpp-pct'), courseEl = el('cpp-course');
+    if (!courseId) { if (noteEl) noteEl.textContent = 'Abrí un curso para ver el progreso.'; return; }
+    lastCourse = courseId;
+    if (courseEl) courseEl.textContent = `Progreso · ${courseId}`;
+    try {
+      const r = await fetch(`/api/progress/pod?courseId=${encodeURIComponent(courseId)}`, { headers: { Accept: 'application/json' } });
+      if (!r.ok) { if (noteEl) noteEl.textContent = r.status === 401 ? 'Iniciá sesión para ver tu progreso.' : 'No se pudo cargar el progreso.'; return; }
+      const data = await r.json();
+      const concepts = Array.isArray(data.concepts) ? data.concepts : [];
+      const edges = Array.isArray(data.edges) ? data.edges : [];
+      const done = concepts.filter((c: any) => stateOf(c) >= 2).length;
+      if (pctEl) pctEl.textContent = concepts.length ? Math.round(100 * done / concepts.length) + '%' : '0%';
+      renderPath(concepts);
+      renderBrain(concepts, edges);
+      if (noteEl) noteEl.textContent = concepts.length
+        ? 'Los logros de la rúbrica (conexiones, coloquios, obra 4C) se sumarán cuando registres entregas.'
+        : 'Aún no hay conceptos con actividad en este curso.';
+    } catch (err) {
+      if (noteEl) noteEl.textContent = 'Error de red al cargar el progreso.';
+    }
+  }
+
+  (window as any).__musikiProgressLoad = load;
+  const isOpen = () => document.querySelector('.course-container')?.getAttribute('data-progress-open') === 'true';
+  document.addEventListener('musiki:active-note', () => { if (isOpen() && courseFromUrl() !== lastCourse) load(); });
+</script>

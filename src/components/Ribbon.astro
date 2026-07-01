@@ -304,6 +304,22 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     </svg>
   </button>
 
+  <!-- Progreso — pod de la cátedra-recorrido -->
+  <button
+    type="button"
+    class="ribbon-item ribbon-item--circle"
+    data-progress-toggle
+    aria-label="Progreso del recorrido"
+    title="Progreso (recorrido)"
+  >
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="6" cy="18" r="2.4" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="9" r="2.4" stroke="currentColor" stroke-width="2"/>
+      <circle cx="18" cy="14" r="2.4" fill="currentColor"/>
+      <path d="M7.7 16.3 10.6 10.7M13.6 10.3 16.4 12.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+
   <!-- Contextual help — opens inside Dockview when available -->
   <button
     type="button"
