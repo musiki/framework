@@ -12,7 +12,6 @@ function json(payload: unknown, status = 200): Response {
   });
 }
 
-// Normalize a slug/path down to a comparable last segment.
 const normSeg = (value: string): string =>
   String(value || '')
     .split('/')
@@ -26,19 +25,16 @@ const normSeg = (value: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
+const C4_LEVEL: Record<string, number> = { 'mini-c': 1, 'little-c': 2, 'pro-c': 3, 'big-c': 4 };
+const REQUIRED = { proyecto: 1, conexiones: 5, coloquios: 2, estigmergia: 1, aporte: 1 };
+
 /**
  * GET /api/progress/pod?courseId=<id>
- *
- * Composes the progress pod payload for the active course:
- *  - concepts: one record per document node of the course, with server-authoritative
- *    `completed` (MCC) and `evaluated` (any non-mcc submission). `read` is client-side.
- *  - edges: canonical concept-to-concept relations (connect/hyper/hypo + wikilinks),
- *    restricted to concepts of the course. The client lights an edge when both
- *    endpoints reach state >= completed (connectome density).
- *
- * Achievement tallies (connections authored, coloquio, peer, aporte, project 4C)
- * are NOT emitted yet: they depend on eval types still to be implemented
- * (see docs/evaluation/catedra-recorrido.md §6).
+ * Payload del pod de la cátedra-recorrido para el curso activo:
+ *  - concepts: estado (completado/evaluado) + logros por concepto (conns/coloquio/peer/aporte).
+ *  - edges: relaciones canónicas concepto↔concepto del curso.
+ *  - rubric: conteo de logros vs. REQUIRED; project: nivel 4C.
+ * Clasifica cada Submission por el `evalType` del catálogo.
  */
 export const GET: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;
@@ -50,16 +46,14 @@ export const GET: APIRoute = async ({ request, locals }) => {
   if (!courseId) return json({ error: 'courseId required' }, 400);
 
   try {
-    // 1) Canonical graph restricted to this course's document nodes.
-    const graph = buildGraphData({ publicOnly: false }) as {
-      nodes: Array<any>;
-      links: Array<any>;
-    };
-    const courseNodes = graph.nodes.filter(
-      (n) => n?.type === 'document' && n?.course === courseId,
-    );
+    const graph = buildGraphData({ publicOnly: false }) as { nodes: Array<any>; links: Array<any> };
+    const courseNodes = graph.nodes.filter((n) => n?.type === 'document' && n?.course === courseId);
     if (courseNodes.length === 0) {
-      return json({ courseId, concepts: [], edges: [], totals: { concepts: 0, completed: 0, evaluated: 0 } });
+      return json({
+        courseId, concepts: [], edges: [], project: { c4Level: 0 },
+        rubric: { proyecto: 0, conexiones: 0, coloquios: 0, estigmergia: 0, aporte: 0 },
+        required: REQUIRED, totals: { concepts: 0, completed: 0, evaluated: 0 },
+      });
     }
 
     const idSet = new Set(courseNodes.map((n) => n.id));
@@ -74,10 +68,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
         completed: false,
         evaluated: false,
         submissions: 0,
+        conns: 0,
+        coloquio: false,
+        peer: false,
+        aporte: false,
       });
     }
 
-    // Concept-to-concept edges within the course (drop tag edges).
     const edgeSet = new Set<string>();
     const edges: Array<{ source: string; target: string; type: string }> = [];
     for (const l of graph.links) {
@@ -89,7 +86,9 @@ export const GET: APIRoute = async ({ request, locals }) => {
       edges.push({ source: l.source, target: l.target, type: l.type || 'link' });
     }
 
-    // 2) Progress from submissions joined with the eval catalog.
+    const rubric = { proyecto: 0, conexiones: 0, coloquios: 0, estigmergia: 0, aporte: 0 };
+    let projectC4 = 0;
+
     const { data: userRows } = await query(
       'SELECT "id" FROM "User" WHERE "email" = $1 LIMIT 1',
       [currentUser.email],
@@ -103,7 +102,6 @@ export const GET: APIRoute = async ({ request, locals }) => {
       );
       const catalog = await buildEvalCatalog();
 
-      // Index concepts by normalized last segment for fuzzy joining to catalog notes.
       const bySeg = new Map<string, any>();
       for (const c of concepts.values()) {
         bySeg.set(normSeg(c.id), c);
@@ -117,20 +115,43 @@ export const GET: APIRoute = async ({ request, locals }) => {
         if (!entry) continue;
         if (entry.courseId && entry.courseId !== courseId) continue;
 
+        const type = String(entry.evalType || '');
+        const payload = sub?.payload && typeof sub.payload === 'object' ? sub.payload : {};
+        const answer = (payload?.answer && typeof payload.answer === 'object') ? payload.answer : {};
+
+        // Logros de curso (no exigen coincidir con un nodo concepto).
+        if (type === 'proyecto') {
+          rubric.proyecto += 1;
+          const lvl = C4_LEVEL[String(answer?.c4Target || answer?.c4 || '').toLowerCase()] || 0;
+          if (lvl > projectC4) projectC4 = lvl;
+        } else if (type === 'conexion') {
+          rubric.conexiones += 1;
+        } else if (type === 'coloquio') {
+          rubric.coloquios += 1;
+        } else if (type === 'peer_rubric') {
+          rubric.estigmergia += 1;
+        } else if (type === 'short_ai' || type === 'essay_ai' || type === 'reference_ai') {
+          rubric.aporte += 1;
+        }
+
+        // Estado + logro a nivel concepto (por la nota donde vive el bloque).
         const seg = normSeg(entry.entryId || entry.sourcePath || evalId);
         const rec = bySeg.get(seg);
         if (!rec) continue;
-
         rec.submissions += 1;
-        const payload = sub?.payload && typeof sub.payload === 'object' ? sub.payload : {};
-        const isMcc = entry.evalType === 'mcc';
+
         const completedFlag =
           payload?.completed === true ||
-          (payload?.answer && typeof payload.answer === 'object' && payload.answer.completed === true);
-        if (isMcc) {
-          if (completedFlag) rec.completed = true;
-        } else {
-          rec.evaluated = true;
+          (answer && typeof answer === 'object' && (answer as any).completed === true);
+
+        switch (type) {
+          case 'mcc': if (completedFlag) rec.completed = true; break;
+          case 'conexion': rec.conns += 1; rec.completed = true; break;
+          case 'coloquio': rec.coloquio = true; rec.evaluated = true; break;
+          case 'peer_rubric': rec.peer = true; rec.evaluated = true; break;
+          case 'proyecto': rec.evaluated = true; break;
+          case 'short_ai': case 'essay_ai': case 'reference_ai': rec.aporte = true; rec.evaluated = true; break;
+          default: rec.evaluated = true; // mcq, msq, combinatoria, poll, wordcloud, patch_ai…
         }
       }
     }
@@ -140,6 +161,9 @@ export const GET: APIRoute = async ({ request, locals }) => {
       courseId,
       concepts: list,
       edges,
+      project: { c4Level: projectC4 },
+      rubric,
+      required: REQUIRED,
       totals: {
         concepts: list.length,
         completed: list.filter((c) => c.completed).length,

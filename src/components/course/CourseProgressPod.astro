@@ -1,72 +1,105 @@
 ---
 // Motor de render del pod de progreso (cátedra-recorrido).
-// El markup vive inline en el panel #progress-sidebar del sidebar derecho;
-// este componente solo aporta la lógica: fetch /api/progress/pod + camino + connectoma.
-// Expone window.__musikiProgressLoad(), que el shell llama al activar la pestaña Progreso.
+// El markup vive inline en el panel #progress-sidebar del sidebar derecho.
+// Expone window.__musikiProgressLoad(), llamado al activar la pestaña Progreso.
 ---
 
 <script>
   import * as THREE from 'three';
 
   const SVGNS = 'http://www.w3.org/2000/svg';
-  const R = 8, COLS = 3, DX = 122, DY = 64, X0 = 40, Y0 = 28;
+  const R = 8, COLS = 3, DX = 122, DY = 74, X0 = 40, Y0 = 30;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const REQ_LABEL: Record<string, string> = {
+    proyecto: 'proyecto (obra)',
+    conexiones: 'conexiones',
+    coloquios: 'coloquios',
+    estigmergia: 'estigmergia',
+    aporte: 'aporte público',
+  };
 
   let three: any = null;
   let lastCourse = '';
 
   const el = (id: string) => document.getElementById(id);
-  const courseFromUrl = () => {
+  const container = () => document.querySelector('.course-container');
+  const courseId = () => {
+    const fromAttr = (container()?.getAttribute('data-live-course-id') || '').trim();
+    if (fromAttr) return fromAttr;
     const parts = window.location.pathname.split('/').filter(Boolean);
     return parts[0] === 'cursos' ? (parts[1] || '') : (parts[1] || '');
   };
+  const isOpen = () => container()?.getAttribute('data-progress-open') === 'true';
   const stateOf = (c: any) => (c && c.evaluated ? 3 : (c && c.completed ? 2 : 0));
+
+  function svgEl(name: string, attrs: Record<string, string>) {
+    const n = document.createElementNS(SVGNS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  function renderRubric(rubric: any, required: any, project: any) {
+    const host = el('cpp-rubric');
+    if (!host) return;
+    host.innerHTML = '';
+    const order = ['proyecto', 'conexiones', 'coloquios', 'estigmergia', 'aporte'];
+    order.forEach((k) => {
+      const have = k === 'proyecto' ? (project?.c4Level > 0 ? 1 : (rubric?.proyecto || 0)) : (rubric?.[k] || 0);
+      const need = required?.[k] || 1;
+      const done = have >= need;
+      const row = document.createElement('div');
+      row.className = 'cpp-req' + (done ? ' done' : '');
+      const c4 = k === 'proyecto' && project?.c4Level > 0 ? ` · ${['—', 'mini-c', 'little-c', 'pro-c', 'big-c'][project.c4Level]}` : '';
+      row.innerHTML = `<span class="lab">${REQ_LABEL[k]}${c4}</span>` +
+        `<span class="bar"><i style="width:${Math.min(100, Math.round(100 * have / need))}%"></i></span>` +
+        `<span class="cnt">${have}/${need}${done ? ' ✓' : ''}</span>`;
+      host.appendChild(row);
+    });
+  }
 
   function renderPath(concepts: any[]) {
     const host = el('cpp-path');
     if (!host) return;
     host.innerHTML = '';
-    const svg = document.createElementNS(SVGNS, 'svg');
     const rows = Math.max(1, Math.ceil(concepts.length / COLS));
-    svg.setAttribute('viewBox', `0 0 ${X0 * 2 + (COLS - 1) * DX} ${Y0 + rows * DY}`);
+    const svg = svgEl('svg', { viewBox: `0 0 ${X0 * 2 + (COLS - 1) * DX} ${Y0 + rows * DY}` });
     const pos = concepts.map((c, i) => {
       const row = Math.floor(i / COLS); let col = i % COLS;
       if (row % 2 === 1) col = COLS - 1 - col;
       return { x: X0 + col * DX, y: Y0 + row * DY, c };
     });
     for (let i = 0; i < pos.length - 1; i++) {
-      const a = pos[i], b = pos[i + 1];
-      const p = document.createElementNS(SVGNS, 'path');
-      const mx = (a.x + b.x) / 2;
-      p.setAttribute('d', `M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`);
-      p.setAttribute('class', 'cpp-conn' + (stateOf(a.c) >= 2 && stateOf(b.c) >= 1 ? ' done' : ''));
-      svg.appendChild(p);
+      const a = pos[i], b = pos[i + 1], mx = (a.x + b.x) / 2;
+      svg.appendChild(svgEl('path', {
+        d: `M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`,
+        class: 'cpp-conn' + (stateOf(a.c) >= 2 && stateOf(b.c) >= 1 ? ' done' : ''),
+      }));
     }
     let nextMarked = false;
     pos.forEach((p) => {
       const st = stateOf(p.c);
+      // rayo de conexión
+      if (p.c.conns > 0) {
+        const rx = p.x + R + 1, ry = p.y - R - 2;
+        svg.appendChild(svgEl('path', { d: `M ${rx + 4} ${ry} L ${rx} ${ry + 5} L ${rx + 3} ${ry + 5} L ${rx + 1} ${ry + 10} L ${rx + 7} ${ry + 3} L ${rx + 4} ${ry + 3} Z`, class: 'cpp-ray' }));
+      }
       let g: any;
       if (st === 3) {
-        g = document.createElementNS(SVGNS, 'rect');
-        g.setAttribute('x', String(p.x - R)); g.setAttribute('y', String(p.y - R));
-        g.setAttribute('width', String(R * 2)); g.setAttribute('height', String(R * 2));
-        g.setAttribute('transform', `rotate(45 ${p.x} ${p.y})`); g.setAttribute('class', 'cpp-eval');
+        g = svgEl('rect', { x: String(p.x - R), y: String(p.y - R), width: String(R * 2), height: String(R * 2), transform: `rotate(45 ${p.x} ${p.y})`, class: 'cpp-eval' });
       } else if (st === 2) {
-        g = document.createElementNS(SVGNS, 'circle');
-        g.setAttribute('cx', String(p.x)); g.setAttribute('cy', String(p.y)); g.setAttribute('r', String(R));
-        g.setAttribute('class', 'cpp-solid');
+        g = svgEl('circle', { cx: String(p.x), cy: String(p.y), r: String(R), class: 'cpp-solid' });
       } else {
-        g = document.createElementNS(SVGNS, 'circle');
-        g.setAttribute('cx', String(p.x)); g.setAttribute('cy', String(p.y)); g.setAttribute('r', String(R));
-        g.setAttribute('class', 'cpp-ring');
+        g = svgEl('circle', { cx: String(p.x), cy: String(p.y), r: String(R), class: 'cpp-ring' });
         if (!nextMarked) { g.classList.add('cpp-next'); nextMarked = true; }
       }
       svg.appendChild(g);
-      const t = document.createElementNS(SVGNS, 'text');
-      t.setAttribute('x', String(p.x)); t.setAttribute('y', String(p.y + R + 12));
-      t.setAttribute('text-anchor', 'middle'); t.setAttribute('class', 'cpp-lab');
-      t.textContent = String(p.c.name || p.c.slug || '').slice(0, 16);
-      svg.appendChild(t);
+      // badges de logro
+      let bx = p.x - 13;
+      if (p.c.coloquio) { svg.appendChild(svgEl('path', { d: `M ${bx} ${p.y + R + 3} L ${bx + 7} ${p.y + R + 7} L ${bx} ${p.y + R + 11} Z`, class: 'cpp-badge' })); bx += 11; }
+      if (p.c.peer) { svg.appendChild(svgEl('path', { d: `M ${bx} ${p.y + R + 10} a 4 4 0 0 1 8 0`, class: 'cpp-badge-peer' })); bx += 11; }
+      if (p.c.aporte) { svg.appendChild(svgEl('path', { d: `M ${bx + 4} ${p.y + R + 3} l 1 2.6 l 2.6 0 l -2.1 1.8 l 0.8 2.6 l -2.3 -1.6 l -2.3 1.6 l 0.8 -2.6 l -2.1 -1.8 l 2.6 0 Z`, class: 'cpp-badge' })); }
+      svg.appendChild(Object.assign(svgEl('text', { x: String(p.x), y: String(p.y + R + 22), 'text-anchor': 'middle', class: 'cpp-lab' }), { textContent: String(p.c.name || p.c.slug || '').slice(0, 16) }));
     });
     host.appendChild(svg);
   }
@@ -118,30 +151,29 @@
   }
 
   async function load() {
-    const courseId = courseFromUrl();
+    const cid = courseId();
     const noteEl = el('cpp-note'), pctEl = el('cpp-pct'), courseEl = el('cpp-course');
-    if (!courseId) { if (noteEl) noteEl.textContent = 'Abrí un curso para ver el progreso.'; return; }
-    lastCourse = courseId;
-    if (courseEl) courseEl.textContent = `Progreso · ${courseId}`;
+    if (!cid) { if (noteEl) noteEl.textContent = 'Abrí un curso para ver el progreso.'; return; }
+    lastCourse = cid;
+    if (courseEl) courseEl.textContent = `Progreso · ${cid}`;
     try {
-      const r = await fetch(`/api/progress/pod?courseId=${encodeURIComponent(courseId)}`, { headers: { Accept: 'application/json' } });
+      const r = await fetch(`/api/progress/pod?courseId=${encodeURIComponent(cid)}`, { headers: { Accept: 'application/json' } });
       if (!r.ok) { if (noteEl) noteEl.textContent = r.status === 401 ? 'Iniciá sesión para ver tu progreso.' : 'No se pudo cargar el progreso.'; return; }
       const data = await r.json();
       const concepts = Array.isArray(data.concepts) ? data.concepts : [];
       const edges = Array.isArray(data.edges) ? data.edges : [];
       const done = concepts.filter((c: any) => stateOf(c) >= 2).length;
       if (pctEl) pctEl.textContent = concepts.length ? Math.round(100 * done / concepts.length) + '%' : '0%';
+      renderRubric(data.rubric || {}, data.required || {}, data.project || {});
       renderPath(concepts);
       renderBrain(concepts, edges);
-      if (noteEl) noteEl.textContent = concepts.length
-        ? 'Los logros de la rúbrica (conexiones, coloquios, obra 4C) se sumarán cuando registres entregas.'
-        : 'Aún no hay conceptos con actividad en este curso.';
+      if (noteEl) noteEl.textContent = concepts.length ? '' : 'Aún no hay conceptos con actividad en este curso.';
     } catch (err) {
       if (noteEl) noteEl.textContent = 'Error de red al cargar el progreso.';
     }
   }
 
   (window as any).__musikiProgressLoad = load;
-  const isOpen = () => document.querySelector('.course-container')?.getAttribute('data-progress-open') === 'true';
-  document.addEventListener('musiki:active-note', () => { if (isOpen() && courseFromUrl() !== lastCourse) load(); });
+  document.addEventListener('musiki:active-note', () => { if (isOpen() && courseId() !== lastCourse) load(); });
+  window.addEventListener('musiki:progress-changed', () => { if (isOpen()) load(); });
 </script>

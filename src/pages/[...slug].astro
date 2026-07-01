@@ -1475,6 +1475,17 @@ function renderLessonsTreeHTML(
       .cpp-d { font-size: 0.7rem; opacity: 0.55; font-variant-numeric: tabular-nums; }
       #cpp-brain { display: block; width: 100%; height: 180px; }
       .cpp-note { font-size: 0.7rem; opacity: 0.6; }
+      .cpp-rubric { display: flex; flex-direction: column; gap: 0.28rem; padding: 0.2rem 0.1rem 0.1rem; }
+      .cpp-req { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; }
+      .cpp-req .lab { flex: 1; opacity: 0.85; }
+      .cpp-req .bar { flex: 0 0 46px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--c-border) 80%, transparent); overflow: hidden; }
+      .cpp-req .bar > i { display: block; height: 100%; background: var(--accent); width: 0; }
+      .cpp-req .cnt { font-variant-numeric: tabular-nums; opacity: 0.6; min-width: 2.4rem; text-align: right; }
+      .cpp-req.done .cnt { color: var(--accent); opacity: 1; }
+      .cpp-ray { stroke: var(--accent); stroke-width: 1.4; fill: none; }
+      .cpp-badge { fill: var(--accent); }
+      .cpp-badge-peer { fill: none; stroke: var(--accent); stroke-width: 1.2; }
+      .cpp-halo { fill: none; stroke: var(--accent); }
       .cpp-ring { fill: none; stroke: currentColor; stroke-width: 1.4; opacity: 0.5; }
       .cpp-solid { fill: currentColor; opacity: 0.85; }
       .cpp-eval { fill: var(--accent); }
@@ -5725,6 +5736,7 @@ function renderLessonsTreeHTML(
                 </div>
                 <span class="cpp-pct" id="cpp-pct">—</span>
               </div>
+              <div class="cpp-rubric" id="cpp-rubric"></div>
               <div class="cpp-path" id="cpp-path"></div>
               <div class="cpp-connect">
                 <div class="cpp-connect-head">
@@ -8559,6 +8571,8 @@ function renderLessonsTreeHTML(
           // Reflect the new result in the course progress map / sidebar log.
           try { updateCourseProgress(); } catch {}
           try { void applyServerProgress(); } catch {}
+          // Notify the Progreso pod so it can refresh if open.
+          try { window.dispatchEvent(new CustomEvent('musiki:progress-changed')); } catch {}
 
           return true;
         } catch (error) {
