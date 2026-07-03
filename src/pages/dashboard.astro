@@ -5401,6 +5401,18 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         font-size: 0.75rem;
         color: var(--c-fg-dim);
       }
+      .agenda-highlight-dogear {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 0 14px 14px 0;
+        border-color: transparent var(--highlight-color) transparent transparent;
+        cursor: help;
+        z-index: 9;
+      }
       .agenda-title-edit {
         position: relative;
         display: inline-flex;

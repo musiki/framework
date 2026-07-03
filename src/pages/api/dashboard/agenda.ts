@@ -235,7 +235,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (action === 'save-config') {
       if (!canManage) return json({ error: 'Solo teachers pueden configurar la agenda' }, 403);
+      const { data: configRows, error: configError } = await query(
+        'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+        [configAssignmentId]
+      );
+      if (configError) throw configError;
+      const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
+
       const nextConfig = normalizeAgendaConfigPayload(body, courseId, year);
+      const nextHighlights = body.highlights !== undefined ? nextConfig.highlights : currentConfig.highlights;
+
       await ensureMetaAssignment(
         configAssignmentId,
         courseId,
@@ -248,13 +257,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
         payload: {
           __metaKind: COURSE_AGENDA_CONFIG_META_KIND,
           ...nextConfig,
+          highlights: nextHighlights,
           updatedAt: new Date().toISOString(),
           updatedBy: manageAccess.userId || dbUser.id,
           updatedByEmail: normalizeText(session?.user?.email),
         },
       });
 
-      return json({ success: true, config: nextConfig });
+      return json({ success: true, config: { ...nextConfig, highlights: nextHighlights } });
     }
 
     if (action === 'assign-students') {
@@ -754,6 +764,81 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }
       }
       return json({ error: 'Bloque no encontrado' }, 404);
+    }
+
+    if (action === 'add-highlight') {
+      if (!canManage) return json({ error: 'Solo teachers pueden destacar rangos' }, 403);
+      const selection = normalizeSelectedRange(body);
+      if (!selection) return json({ error: 'Rango inválido' }, 400);
+      const text = String(body?.text || '').trim();
+      const color = String(body?.color || '#38bdf8');
+      if (!text) return json({ error: 'Ingresá un texto explicativo' }, 400);
+
+      const { data: configRows, error: configError } = await query(
+        'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+        [configAssignmentId]
+      );
+      if (configError) throw configError;
+      const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
+
+      const newHighlights = [...(currentConfig.highlights || [])];
+      selection.dateKeys.forEach((dateKey) => {
+        newHighlights.push({
+          id: createAgendaBlockId(),
+          dateKey,
+          startMinute: selection.startMinute,
+          endMinute: selection.endMinute,
+          color,
+          text,
+        });
+      });
+
+      await ensureMetaAssignment(configAssignmentId, courseId, `${courseId}/__meta__/agenda-config/${year}`);
+      await upsertSubmission({
+        assignmentId: configAssignmentId,
+        userId: manageAccess.userId || dbUser.id,
+        payload: {
+          __metaKind: COURSE_AGENDA_CONFIG_META_KIND,
+          ...currentConfig,
+          highlights: newHighlights,
+          updatedAt: new Date().toISOString(),
+          updatedBy: manageAccess.userId || dbUser.id,
+        },
+      });
+
+      return json({ success: true, highlights: newHighlights });
+    }
+
+    if (action === 'clear-highlight') {
+      if (!canManage) return json({ error: 'Solo teachers pueden quitar destacados' }, 403);
+      const selection = normalizeSelectedRange(body);
+      if (!selection) return json({ error: 'Rango inválido' }, 400);
+
+      const { data: configRows, error: configError } = await query(
+        'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+        [configAssignmentId]
+      );
+      if (configError) throw configError;
+      const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
+
+      const filteredHighlights = (currentConfig.highlights || []).filter(
+        (h) => !(selection.dateKeys.includes(h.dateKey) && rangesOverlap(h, selection.startMinute, selection.endMinute))
+      );
+
+      await ensureMetaAssignment(configAssignmentId, courseId, `${courseId}/__meta__/agenda-config/${year}`);
+      await upsertSubmission({
+        assignmentId: configAssignmentId,
+        userId: manageAccess.userId || dbUser.id,
+        payload: {
+          __metaKind: COURSE_AGENDA_CONFIG_META_KIND,
+          ...currentConfig,
+          highlights: filteredHighlights,
+          updatedAt: new Date().toISOString(),
+          updatedBy: manageAccess.userId || dbUser.id,
+        },
+      });
+
+      return json({ success: true, highlights: filteredHighlights });
     }
 
     if (action === 'copy-block') {

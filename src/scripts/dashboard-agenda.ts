@@ -124,6 +124,29 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
       }
       break;
     }
+    case 'add-highlight': {
+      if (!d.config.highlights) d.config.highlights = [];
+      for (const dateKey of (p.dateKeys as string[] || [])) {
+        d.config.highlights.push({
+          id: tempId(),
+          dateKey,
+          startMinute: p.startMinute,
+          endMinute: p.endMinute,
+          color: p.color || '#38bdf8',
+          text: p.text || ''
+        });
+      }
+      break;
+    }
+    case 'clear-highlight': {
+      if (d.config.highlights) {
+        const dates = new Set<string>(p.dateKeys || []);
+        d.config.highlights = d.config.highlights.filter(
+          h => !dates.has(h.dateKey) || !blockOverlapsSlot(h, p.startMinute, p.endMinute)
+        );
+      }
+      break;
+    }
     case 'update-block':
     case 'move-block': {
       d.events = d.events.map(e => e.id === p.blockId ? { ...e, text: p.text ?? e.text, virtual: p.virtual !== undefined ? Boolean(p.virtual) : e.virtual, dateKey: p.dateKey ?? e.dateKey, startMinute: p.startMinute ?? e.startMinute, endMinute: p.endMinute ?? e.endMinute } : e);
@@ -309,23 +332,54 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
       );
 
     const MONITOR_SVG = `<svg class="agenda-event-virtual-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-label="evento virtual" title="evento virtual"><path d="M3 4.75A1.75 1.75 0 0 1 4.75 3h14.5A1.75 1.75 0 0 1 21 4.75v10.5A1.75 1.75 0 0 1 19.25 17h-5.5l1.2 3h1.8a.75.75 0 0 1 0 1.5h-9.5a.75.75 0 0 1 0-1.5h1.8l1.2-3h-6.5A1.75 1.75 0 0 1 3 15.25V4.75Zm1.5 0v10.5c0 .14.11.25.25.25h14.5a.25.25 0 0 0 .25-.25V4.75a.25.25 0 0 0-.25-.25H4.75a.25.25 0 0 0-.25.25Zm6.36 15.25h2.28l-1-2.5h-.28l-1 2.5Z"/></svg>`;
-    const slotDur = slot.endMinute - slot.startMinute;
-    const eventMarkup = (isFirstSlotOfEvent && isFirstColOfEvent) ? `<span class="agenda-event-label" style="height: ${((primaryEvent.endMinute - primaryEvent.startMinute) / slotDur) * 100}%">${escapeHtml(primaryEvent.text)}${primaryEvent.virtual ? MONITOR_SVG : ''}</span>` : '';
-  const studentMarkup = studentStarts.map(({ student, block }) => {
+    const eventRowSpan = primaryEvent ? slots.filter(s => blockOverlapsSlot(primaryEvent, s.startMinute, s.endMinute)).length : 0;
+    const eventMarkup = (isFirstSlotOfEvent && isFirstColOfEvent) ? `<span class="agenda-event-label" style="height: ${eventRowSpan * 100}%">${escapeHtml(primaryEvent.text)}${primaryEvent.virtual ? MONITOR_SVG : ''}</span>` : '';
+
+    const activeHighlights = (data.config.highlights || []).filter(h => h.dateKey === dateKey && blockOverlapsSlot(h, slot.startMinute, slot.endMinute));
+    const primaryHighlight = activeHighlights[0] || null;
+    const isHighlightTop = primaryHighlight && !slots.some(s => s.rowIndex < slot.rowIndex && blockOverlapsSlot(primaryHighlight, s.startMinute, s.endMinute));
+    const isHighlightBottom = primaryHighlight && !slots.some(s => s.rowIndex > slot.rowIndex && blockOverlapsSlot(primaryHighlight, s.startMinute, s.endMinute));
+
+    let borderStyles = '';
+    let dogearMarkup = '';
+    if (primaryHighlight) {
+      const color = primaryHighlight.color || '#38bdf8';
+      borderStyles += `border-left: 2.5px solid ${color}; border-right: 2.5px solid ${color};`;
+      if (isHighlightTop) {
+        borderStyles += `border-top: 2.5px solid ${color}; border-top-left-radius: 4px; border-top-right-radius: 4px;`;
+        dogearMarkup = `<span class="agenda-highlight-dogear" style="--highlight-color: ${escapeHtml(color)}" title="${escapeHtml(primaryHighlight.text)}" role="img" aria-label="destacado"></span>`;
+      }
+      if (isHighlightBottom) {
+        borderStyles += `border-bottom: 2.5px solid ${color}; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px;`;
+      }
+    }
+
+    const studentMarkup = studentStarts.map(({ student, block }) => {
       const isOwn = String(student.studentId || '').toLowerCase() === viewerId.toLowerCase();
       const fullName = formatStudentName(student.name);
       const nameParts = fullName.trim().split(/\s+/);
       const nameHtml = nameParts.length > 1
         ? `${escapeHtml(nameParts[0])}<br>${escapeHtml(nameParts.slice(1).join(' '))}`
         : escapeHtml(fullName);
-      return `<span class="agenda-student-block ${isOwn ? 'is-own' : ''}" style="background-color: ${escapeHtml(student.color)}; height: ${((block.endMinute - block.startMinute) / slotDur) * 100}%" ${isTeacher || isOwn ? `data-agenda-block-id="${escapeHtml(block.id)}"` : ''}><span class="agenda-student-block__name">${nameHtml}</span></span>`;
+      const blockRowSpan = slots.filter(s => blockOverlapsSlot(block, s.startMinute, s.endMinute)).length;
+      return `<span class="agenda-student-block ${isOwn ? 'is-own' : ''}" style="background-color: ${escapeHtml(student.color)}; height: ${blockRowSpan * 100}%" ${isTeacher || isOwn ? `data-agenda-block-id="${escapeHtml(block.id)}"` : ''}><span class="agenda-student-block__name">${nameHtml}</span></span>`;
     }).join('');
 
     const effectiveEventColor = primaryEvent
       ? isMutedAgendaEvent(primaryEvent.text) ? '#b8bcc8' : primaryEvent.color || '#f2d0a9'
       : '';
-    const classes = ['agenda-cell', primaryEvent ? 'agenda-cell--event' : '', primaryEvent && isMutedAgendaEvent(primaryEvent.text) ? 'agenda-cell--event-muted' : '', (studentStarts.length > 0) ? 'agenda-cell--busy' : ''].filter(Boolean).join(' ');
-    const style = primaryEvent ? `--agenda-event-color: ${escapeHtml(effectiveEventColor)};` : '';
+    const classes = [
+      'agenda-cell',
+      primaryEvent ? 'agenda-cell--event' : '',
+      primaryEvent && isMutedAgendaEvent(primaryEvent.text) ? 'agenda-cell--event-muted' : '',
+      (studentStarts.length > 0) ? 'agenda-cell--busy' : '',
+      primaryHighlight ? 'agenda-cell--highlighted' : ''
+    ].filter(Boolean).join(' ');
+
+    let style = primaryEvent ? `--agenda-event-color: ${escapeHtml(effectiveEventColor)};` : '';
+    if (borderStyles) {
+      style += ` ${borderStyles}`;
+    }
 
     return { classes, style, markup: `${eventMarkup}${studentMarkup}`, eventId: primaryEvent?.id || null };
   };
@@ -528,6 +582,20 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     });
   };
 
+  const openHighlightModal = (selection: SelectionRect) => {
+    if (!modal) return;
+    modal.hidden = false;
+    modal.innerHTML = `<div class="agenda-modal__backdrop" data-close></div><div class="agenda-modal__dialog"><h3>Destacar Rango</h3><label class="agenda-modal__label">Propósito / Texto explicativo</label><input type="text" class="agenda-modal__input" data-highlight-text placeholder="ej. Anotarse aquí turno mañana..." /><label class="agenda-modal__label">Color</label><select class="agenda-modal__input" data-highlight-color><option value="#38bdf8" style="background-color: #38bdf8; color: #000;">Celeste</option><option value="#34d399" style="background-color: #34d399; color: #000;">Verde</option><option value="#fbbf24" style="background-color: #fbbf24; color: #000;">Amarillo</option><option value="#f87171" style="background-color: #f87171; color: #000;">Rojo</option><option value="#c084fc" style="background-color: #c084fc; color: #000;">Violeta</option></select><div class="agenda-modal__actions"><button type="button" class="dashboard-grid-btn" data-close>Cancelar</button><button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-save>Destacar</button></div></div>`;
+    modal.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => modal.hidden = true));
+    modal.querySelector('[data-save]')?.addEventListener('click', async () => {
+      const text = modal.querySelector<HTMLInputElement>('[data-highlight-text]')?.value || '';
+      const color = modal.querySelector<HTMLSelectElement>('[data-highlight-color]')?.value || '#38bdf8';
+      if (!text) return;
+      modal.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = true; });
+      await reloadAfterAction({ action: 'add-highlight', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute, text, color });
+    });
+  };
+
   const openStudentAssignmentModal = (selection: SelectionRect) => {
     if (!modal) return;
     const selectedIds = new Set<string>();
@@ -581,6 +649,11 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
         html += `<button type="button" class="dashboard-grid-btn" data-act="grupos">Grupos</button>`;
       }
       html += `<button type="button" class="dashboard-grid-btn" data-act="event">Evento</button>`;
+      html += `<button type="button" class="dashboard-grid-btn" data-act="highlight">Destacar</button>`;
+      const hasHighlightOverlap = (data.config.highlights || []).some(h => selection.dateKeys.includes(h.dateKey) && blockOverlapsSlot(h, selection.startMinute, selection.endMinute));
+      if (hasHighlightOverlap) {
+        html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="clear-highlight">Quitar Destacado</button>`;
+      }
       if (ev) html += `<button type="button" class="dashboard-grid-btn" data-act="edit">Editar</button>`;
       html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="clear">Borrar Todo</button>`;
       if (options.targetBlockId || options.targetEventId) {
@@ -614,6 +687,8 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     popover.querySelector('[data-act="grupos"]')?.addEventListener('click', (e) => { stopUiEvent(e); openGrupoAssignmentModal(selection, allGrupos); });
     popover.querySelector('[data-act="event"]')?.addEventListener('click', (e) => { stopUiEvent(e); openEventModal(selection); });
     popover.querySelector('[data-act="edit"]')?.addEventListener('click', (e) => { stopUiEvent(e); openEventModal(selection, ev?.id); });
+    popover.querySelector('[data-act="highlight"]')?.addEventListener('click', (e) => { stopUiEvent(e); openHighlightModal(selection); });
+    popover.querySelector('[data-act="clear-highlight"]')?.addEventListener('click', (e) => { stopUiEvent(e); reloadAfterAction({ action: 'clear-highlight', courseId: data.courseId, year: data.year, dateKeys: selection.dateKeys, startMinute: selection.startMinute, endMinute: selection.endMinute }); });
     popover.querySelector('[data-act="edit-block"]')?.addEventListener('click', (e) => {
       const bid = (e.currentTarget as HTMLElement).dataset.blockId;
       stopUiEvent(e); openBlockModal(selection, bid);
@@ -745,10 +820,52 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
         studentSlotMinutes: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="studentSlotMinutes"]')?.value || `${data.config.studentSlotMinutes}`, 10),
         maxStudentMinutes: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="maxStudentMinutes"]')?.value || `${data.config.maxStudentMinutes}`, 10),
         minMeetings: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="minMeetings"]')?.value || `${data.config.minMeetings}`, 10),
-        comment: data.config.comment
+        comment: data.config.comment,
+        highlights: data.config.highlights
       };
       reloadAfterAction(p);
     }));
+
+    const display = host.querySelector<HTMLElement>('[data-agenda-comment-display]');
+    const input = host.querySelector<HTMLInputElement>('[data-agenda-comment-input-inline]');
+    if (display && input) {
+      display.addEventListener('click', () => {
+        display.hidden = true;
+        input.hidden = false;
+        input.focus();
+        input.select();
+      });
+      const saveTitle = () => {
+        const nextValue = input.value.trim();
+        if (nextValue !== data.config.comment) {
+          const p = {
+            action: 'save-config', courseId: data.courseId, year: data.year,
+            startTime: host.querySelector<HTMLInputElement>('[data-agenda-config="startTime"]')?.value || data.config.startTime,
+            endTime: host.querySelector<HTMLInputElement>('[data-agenda-config="endTime"]')?.value || data.config.endTime,
+            teacherSlotMinutes: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="teacherSlotMinutes"]')?.value || `${data.config.teacherSlotMinutes}`, 10),
+            studentSlotMinutes: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="studentSlotMinutes"]')?.value || `${data.config.studentSlotMinutes}`, 10),
+            maxStudentMinutes: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="maxStudentMinutes"]')?.value || `${data.config.maxStudentMinutes}`, 10),
+            minMeetings: Number.parseInt(host.querySelector<HTMLInputElement>('[data-agenda-config="minMeetings"]')?.value || `${data.config.minMeetings}`, 10),
+            comment: nextValue,
+            highlights: data.config.highlights
+          };
+          reloadAfterAction(p);
+        } else {
+          display.hidden = false;
+          input.hidden = true;
+        }
+      };
+      input.addEventListener('blur', saveTitle);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          saveTitle();
+        } else if (e.key === 'Escape') {
+          input.value = data.config.comment || '';
+          display.hidden = false;
+          input.hidden = true;
+        }
+      });
+    }
 
     host.querySelector<HTMLButtonElement>('[data-agenda-share]')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget as HTMLButtonElement;

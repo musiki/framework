@@ -6,6 +6,15 @@ export const COURSE_AGENDA_CONFIG_PREFIX = '__meta__:course-agenda-config';
 export const COURSE_AGENDA_STUDENT_PREFIX = '__meta__:course-agenda-student';
 export const COURSE_AGENDA_EVENTS_PREFIX = '__meta__:course-agenda-events';
 
+export type AgendaHighlight = {
+  id: string;
+  dateKey: string;
+  startMinute: number;
+  endMinute: number;
+  color: string;
+  text: string;
+};
+
 export type AgendaConfig = {
   courseId: string;
   year: string;
@@ -16,6 +25,7 @@ export type AgendaConfig = {
   maxStudentMinutes: number;
   minMeetings: number;
   comment: string;
+  highlights?: AgendaHighlight[];
   updatedAt: string;
 };
 
@@ -278,6 +288,14 @@ export const normalizeAgendaConfigPayload = (payload: any, courseId: string, yea
     maxStudentMinutes: clampAgendaMaxStudentMinutes(payload?.maxStudentMinutes ?? payload?.assignedMinutes),
     minMeetings: clampAgendaMinMeetings(payload?.minMeetings),
     comment: normalizeAgendaComment(payload?.comment, 50),
+    highlights: Array.isArray(payload?.highlights) ? payload.highlights.map((h: any) => ({
+      id: String(h?.id || ''),
+      dateKey: normalizeAgendaDateKey(h?.dateKey),
+      startMinute: Number.parseInt(String(h?.startMinute || 0), 10),
+      endMinute: Number.parseInt(String(h?.endMinute || 0), 10),
+      color: String(h?.color || '#38bdf8'),
+      text: String(h?.text || ''),
+    })).filter((h: any) => h.id && h.dateKey) : [],
     updatedAt: normalizeText(payload?.updatedAt),
   };
 };
