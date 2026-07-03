@@ -5,6 +5,7 @@ import { buildSearchBlob, type DashboardGridProjection } from './shared';
 interface AdminProjectionInput {
   activeCourseId: string;
   availableCourses: Array<{ courseId: string; title?: string; code?: string }>;
+  studentGroupsByUserId?: Record<string, string>;
   allUsers: any[];
   allEnrollments: any[];
   allSubmissions: any[];
@@ -22,6 +23,7 @@ const getRecordCourseId = (record: any) =>
 export function buildAdminProjection({
   activeCourseId,
   availableCourses,
+  studentGroupsByUserId = {},
   allUsers,
   allEnrollments,
   allSubmissions,
@@ -109,6 +111,14 @@ export function buildAdminProjection({
           ? 'teacher'
           : normalizedGlobalRole;
       const roleInCourse = normalizeRole(enrollment?.roleInCourse || '');
+      const grupo = normalizeText(
+        studentGroupsByUserId[userId]
+          || enrollment?.grupo
+          || enrollment?.group
+          || user?.grupo
+          || user?.group
+          || '',
+      ) || '—';
 
       return {
         id: userId,
@@ -116,6 +126,7 @@ export function buildAdminProjection({
         enrollmentId: String(enrollment?.id || ''),
         name: String(user?.name || user?.email || userId || '—'),
         email: String(user?.email || '—'),
+        grupo,
         globalRoleLabel: getRoleBadgeLabel(globalRole || 'student'),
         globalRole,
         courseRoleLabel: roleInCourse ? getRoleBadgeLabel(roleInCourse) : '—',
@@ -127,6 +138,7 @@ export function buildAdminProjection({
         __search: buildSearchBlob([
           user?.name,
           user?.email,
+          grupo,
           globalRole,
           roleInCourse,
           ...enrollmentCourses.map((e) => e.courseId),
@@ -152,6 +164,7 @@ export function buildAdminProjection({
       },
       { title: 'Nombre', field: 'name', frozen: true, minWidth: 180, kind: 'editable-text' },
       { title: 'Email', field: 'email', minWidth: 220, kind: 'editable-text' },
+      { title: 'Grupo', field: 'grupo', width: 58, minWidth: 58, maxWidth: 58, hozAlign: 'center', headerHozAlign: 'center', kind: 'grupo' },
       { title: 'Rol global', field: 'globalRole', width: 200, minWidth: 200, maxWidth: 200, hozAlign: 'center', headerHozAlign: 'center', kind: 'role' },
       { title: 'Inscripción', field: 'enrollmentSummary', width: 500, minWidth: 500, maxWidth: 500, kind: 'enrollment-courses' },
       { title: 'Última actividad', field: 'lastActivityAt', width: 250, minWidth: 250, maxWidth: 250, kind: 'relative-datetime' },

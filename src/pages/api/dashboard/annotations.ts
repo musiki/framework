@@ -12,7 +12,7 @@ const cleanString = (value: unknown, maxLength = 240) =>
 
 const isMissingRelationError = (error: any) =>
   ['42P01', 'PGRST205'].includes(String(error?.code || ''))
-  || String(error?.message || '').toLowerCase().includes('gradebookannotation');
+  || /relation\s+["']?gradebookannotation["']?\s+does not exist/i.test(String(error?.message || ''));
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const session = (locals as any).session;

@@ -131,6 +131,7 @@ export function buildAttendanceProjection({
     const record: Record<string, any> = {
       id: String(row?.userId || ''),
       studentId: String(row?.userId || ''),
+      enrollmentId: String(row?.enrollmentId || ''),
       firstName: String(row?.firstName || '—'),
       lastName: String(row?.lastName || ''),
       turno: String(row?.turno || '—'),

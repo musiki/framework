@@ -109,7 +109,7 @@ export async function upsertDashboardAnnotation(
     tab: cleanString(input.tab),
     scopeType,
     scopeRef,
-    color: normalizeDashboardAnnotationColor(input.color),
+    color: normalizeDashboardAnnotationColor(input.color) || null,
     comment: normalizeDashboardAnnotationComment(input.comment),
     visibility: normalizeDashboardAnnotationVisibility(input.visibility),
     authorUserId,
@@ -172,7 +172,7 @@ export async function updateDashboardAnnotation(
   const payload: any = {
     updatedAt: new Date().toISOString(),
   };
-  if (input.color !== undefined) payload.color = normalizeDashboardAnnotationColor(input.color);
+  if (input.color !== undefined) payload.color = normalizeDashboardAnnotationColor(input.color) || null;
   if (input.comment !== undefined) payload.comment = normalizeDashboardAnnotationComment(input.comment);
   if (input.visibility !== undefined) payload.visibility = normalizeDashboardAnnotationVisibility(input.visibility);
   if (input.metadata !== undefined) payload.metadata = input.metadata;

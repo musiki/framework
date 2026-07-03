@@ -1508,6 +1508,49 @@ const buildAdminMergeContextMenuItems = (sheet: DashboardSheet, meta: DashboardM
   }];
 };
 
+const buildTeacherMainUnenrollContextMenuItem = (
+  sheet: DashboardSheet,
+) => {
+  const coords = sheet.contextMenuCoords || null;
+  const selected = coords ? null : sheet.hot.getSelectedLast?.();
+  const visualRow = Number(coords?.row ?? selected?.[0]);
+  if (!Number.isInteger(visualRow) || visualRow < 0) return null;
+
+  const rowData = sheet.activeRows[sheet.hot.toPhysicalRow(visualRow)];
+  if (!rowData) return null;
+  const enrollmentId = normalizeText(rowData.enrollmentId);
+  const studentName = normalizeText(
+    [rowData.lastName, rowData.firstName].filter(Boolean).join(' ')
+      || rowData.name
+      || rowData.email
+      || 'este alumno',
+  ) || 'este alumno';
+
+  return {
+    key: 'teacher_main_unenroll',
+    name: 'Desuscribir del curso',
+    disabled: !enrollmentId,
+    callback: () => {
+      if (!enrollmentId || !window.confirm(`¿Desuscribir a ${studentName} de este curso?`)) return;
+      void fetch('/api/enroll', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrollmentId }),
+      })
+        .then(async (response) => {
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload?.error || 'No se pudo desuscribir al alumno');
+          showToast(`${studentName} fue desuscripto del curso.`, 'success', 2200);
+          window.setTimeout(() => window.location.reload(), 450);
+        })
+        .catch((error) => {
+          console.warn(error?.message || 'No se pudo desuscribir al alumno');
+          showToast(error?.message || 'No se pudo desuscribir al alumno', 'error', 4000);
+        });
+    },
+  };
+};
+
 const createDashboardContextMenu = (
   kind: GridKind,
   getSheet: () => DashboardSheet | null,
@@ -1925,7 +1968,15 @@ const createSheet = (
       annotationState.selectedContext = buildScopeContextFromCoords(sheetRef, row, col);
     },
     beforeContextMenuSetItems: (menuItems) => {
-      if (!sheetRef || sheetRef.kind !== 'admin') return;
+      if (!sheetRef) return;
+      if (sheetRef.kind === 'teacher-main') {
+        const unenrollItem = buildTeacherMainUnenrollContextMenuItem(sheetRef);
+        if (unenrollItem) {
+          menuItems.push(Handsontable.plugins.ContextMenu.SEPARATOR, unenrollItem);
+        }
+        return;
+      }
+      if (sheetRef.kind !== 'admin') return;
       const enrollmentMenuItems = buildAdminEnrollmentContextMenuItems(sheetRef, allRows, meta);
       const mergeMenuItems = buildAdminMergeContextMenuItems(sheetRef, meta);
       if (enrollmentMenuItems && mergeMenuItems) {

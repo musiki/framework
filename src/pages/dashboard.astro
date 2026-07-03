@@ -2159,6 +2159,7 @@ const attendanceGridRows = (() => {
 
       return {
         userId,
+        enrollmentId: normalizeText(enrollment?.id || ''),
         name: displayName,
         firstName,
         lastName,
@@ -2896,10 +2897,20 @@ const teacherEvalProjection = isTeacher
     })
   : { columns: [], rows: [], emptyMessage: '' };
 
+const activeAdminStudentGroupsByUserId = (() => {
+  const prefix = `${normalizeTextLower(activeCourseId)}::${activeYear}::`;
+  return Object.fromEntries(
+    Array.from(courseStudentMetaByKey.entries())
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, meta]) => [key.slice(prefix.length), normalizeText(meta?.grupo || '')]),
+  );
+})();
+
 const teacherAdminProjection = isTeacher
   ? buildAdminProjection({
       activeCourseId,
       availableCourses: adminCourseMeta,
+      studentGroupsByUserId: activeAdminStudentGroupsByUserId,
       allUsers: allUsers || [],
       allEnrollments: allEnrollments || [],
       allSubmissions: allSubmissions || [],
