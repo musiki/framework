@@ -756,6 +756,90 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return json({ error: 'Bloque no encontrado' }, 404);
     }
 
+    if (action === 'copy-block') {
+      const blockId = normalizeText(body?.blockId);
+      if (!blockId) return json({ error: 'blockId es requerido' }, 400);
+
+      // Try events
+      const currentEvents = await loadEventsPayload(eventsAssignmentId, courseId, year);
+      const event = currentEvents.events.find((e) => e.id === blockId);
+      if (event) {
+        if (!canManage) return json({ error: 'Solo teachers pueden copiar eventos' }, 403);
+        const nextEvent = {
+          ...event,
+          id: createAgendaBlockId(),
+          dateKey: normalizeAgendaDateKey(body?.dateKey || event.dateKey),
+          startMinute: normalizeMinute(body?.startMinute ?? event.startMinute),
+          endMinute: normalizeMinute(body?.endMinute ?? event.endMinute),
+          updatedAt: new Date().toISOString(),
+        };
+        await ensureMetaAssignment(eventsAssignmentId, courseId, `${courseId}/__meta__/agenda-events/${year}`);
+        await upsertSubmission({
+          assignmentId: eventsAssignmentId,
+          userId: manageAccess.userId || dbUser.id,
+          payload: {
+            __metaKind: COURSE_AGENDA_EVENTS_META_KIND,
+            courseId,
+            year,
+            events: [...currentEvents.events, nextEvent],
+            updatedAt: new Date().toISOString(),
+          },
+        });
+        return json({ success: true });
+      }
+
+      // Try student blocks
+      const studentRows = await loadStudentPayloads(studentAssignmentId);
+      for (const row of studentRows) {
+        const payload = normalizeAgendaStudentPayload(row?.payload || {}, courseId, year, row?.userId || '');
+        if (!payload) continue;
+        const block = payload.blocks.find((b) => b.id === blockId);
+        if (block) {
+          const rowUserId = normalizeText(row?.userId);
+          const isOwnBlock = rowUserId.toLowerCase() === dbUser.id.toLowerCase();
+          if (!canManage && !isOwnBlock) {
+            return json({ error: 'No tenés permiso para copiar este bloque' }, 403);
+          }
+          const nextBlock = {
+            ...block,
+            id: createAgendaBlockId(),
+            dateKey: normalizeAgendaDateKey(body?.dateKey || block.dateKey),
+            startMinute: normalizeMinute(body?.startMinute ?? block.startMinute),
+            endMinute: normalizeMinute(body?.endMinute ?? block.endMinute),
+            updatedAt: new Date().toISOString(),
+          };
+
+          // Check if this student exceeds max minutes!
+          const { data: configRows, error: configError } = await query(
+            'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+            [configAssignmentId]
+          );
+          if (configError) throw configError;
+          const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
+          const mergedBlocks = [...payload.blocks, nextBlock];
+          const totalMinutes = sumBlocksMinutes(mergedBlocks);
+          if (totalMinutes > clampAgendaMaxStudentMinutes(currentConfig.maxStudentMinutes)) {
+            return json({ error: 'Copiar este bloque supera el tiempo máximo asignado' }, 400);
+          }
+
+          await upsertSubmission({
+            assignmentId: studentAssignmentId,
+            userId: rowUserId,
+            payload: {
+              __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+              ...payload,
+              blocks: mergedBlocks,
+              updatedAt: new Date().toISOString(),
+              updatedBy: dbUser.id,
+              updatedByEmail: normalizeText(session?.user?.email),
+            },
+          });
+          return json({ success: true });
+        }
+      }
+      return json({ error: 'Bloque no encontrado' }, 404);
+    }
+
     if (action === 'update-block' || action === 'move-block') {
       const blockId = normalizeText(body?.blockId);
       if (!blockId) return json({ error: 'blockId es requerido' }, 400);

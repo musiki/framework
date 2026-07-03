@@ -132,6 +132,34 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
       });
       break;
     }
+    case 'copy-block': {
+      const originalEvent = d.events.find(e => e.id === p.blockId);
+      if (originalEvent) {
+        d.events.push({
+          ...originalEvent,
+          id: tempId(),
+          dateKey: p.dateKey ?? originalEvent.dateKey,
+          startMinute: p.startMinute ?? originalEvent.startMinute,
+          endMinute: p.endMinute ?? originalEvent.endMinute,
+          updatedAt: new Date().toISOString()
+        });
+      }
+      d.students.forEach(s => {
+        const originalBlock = s.blocks.find(b => b.id === p.blockId);
+        if (originalBlock) {
+          s.blocks.push({
+            ...originalBlock,
+            id: tempId(),
+            dateKey: p.dateKey ?? originalBlock.dateKey,
+            startMinute: p.startMinute ?? originalBlock.startMinute,
+            endMinute: p.endMinute ?? originalBlock.endMinute,
+            updatedAt: new Date().toISOString()
+          });
+          s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+        }
+      });
+      break;
+    }
     case 'clear-range': {
       const dates = new Set<string>(p.dateKeys || []);
       d.students.forEach(s => {
@@ -437,7 +465,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     dragState = null;
   };
 
-  const moveDraggedBlock = async (cell: HTMLElement | null) => {
+  const moveDraggedBlock = async (cell: HTMLElement | null, altKey = false) => {
     if (!dragState || !cell) return;
     const dateKey = getCellDateKey(cell);
     const targetStartMinute = getCellStartMinute(cell);
@@ -448,15 +476,18 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     if (startMinute === null) return;
     const endMinute = startMinute + duration;
     if (
-      dateKey === dragState.item.dateKey
+      !altKey
+      && dateKey === dragState.item.dateKey
       && startMinute === dragState.item.startMinute
       && endMinute === dragState.item.endMinute
     ) {
       return;
     }
 
+    const action = altKey ? 'copy-block' : 'move-block';
+
     await reloadAfterAction({
-      action: 'move-block',
+      action,
       courseId: data.courseId,
       year: data.year,
       blockId: dragState.item.blockId,
@@ -676,7 +707,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
       const dragged = dragState;
       clearDragState();
       dragState = dragged;
-      void moveDraggedBlock(targetCell).finally(() => { dragState = null; });
+      void moveDraggedBlock(targetCell, e.altKey).finally(() => { dragState = null; });
       return;
     }
     if (dragState && dragState.pointerId === e.pointerId) clearDragState();
