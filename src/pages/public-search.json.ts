@@ -3,6 +3,23 @@ import { getPublicContentStaticPaths, type PublicContentRouteProps } from '../li
 
 export const prerender = true;
 
+function cleanMarkdown(md: string): string {
+  if (!md) return '';
+  return md
+    .replace(/^---[\s\S]*?---/, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/<[^>]*>/g, '')
+    .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^\)]+\)/g, '$1')
+    .replace(/[\*_]{1,3}([^*_]+)[\*_]{1,3}/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*>\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function GET() {
   const allPublicPaths = await getPublicContentStaticPaths();
   
@@ -34,8 +51,10 @@ export async function GET() {
     return {
       title,
       slug: '/' + slug,
-      content: item.body || '',
+      content: cleanMarkdown(item.body || ''),
       type: category,
+      def: item.data.def || item.data.definition || '',
+      sinopsis: item.data.sinopsis || item.data.synopsis || item.data.description || '',
     };
   }));
 

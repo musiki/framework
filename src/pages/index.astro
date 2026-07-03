@@ -1,6 +1,177 @@
 ---
+import { getCollection } from 'astro:content';
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
+import { safeGetCollection } from '../lib/safe-content-collection';
+import { isCourseIndexEntry, getCourseEntryCourseId, buildCourseHref } from '../lib/course-routing';
+import { getContentCanonicalSlug } from '../lib/content-slug';
+import { query } from '../lib/db/pool';
+
+// Fetch all public content items
+const [rawContent, rawCursos] = await Promise.all([
+  safeGetCollection('content'),
+  getCollection('cursos'),
+]);
+
+const isItemPublic = (item: any) => {
+  const status = String(item?.data?.status || '').trim().toLowerCase();
+  const isPub = status === 'public' || status === 'published';
+  const isPublicField = item?.data?.public === true || item?.data?.public === 'true';
+  return isPub || isPublicField;
+};
+
+// Fetch comment counts
+let commentCountsByScope = new Map<string, number>();
+try {
+  const { data: commentRows } = await query(
+    `SELECT t."lessonSlug", COUNT(p.id) as cnt
+     FROM "ForumThread" t
+     JOIN "ForumPost" p ON t.id = p."threadId"
+     WHERE p.status IS NULL OR p.status <> 'deleted'
+     GROUP BY t."lessonSlug"`
+  );
+  if (commentRows) {
+    for (const r of commentRows) {
+      if (r.lessonSlug) {
+        commentCountsByScope.set(r.lessonSlug, Number(r.cnt || 0));
+      }
+    }
+  }
+} catch (e) {
+  console.error('Failed to load comment counts for homepage', e);
+}
+
+function cleanMarkdownForSnippet(md: string): string {
+  if (!md) return '';
+  return md
+    .replace(/^---[\s\S]*?---/, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/<[^>]*>/g, '')
+    .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '')
+    .replace(/\[([^\]]*)\]\([^\)]+\)/g, '$1')
+    .replace(/[\*_]{1,3}([^*_]+)[\*_]{1,3}/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*>\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function formatHumanRelativeDate(dateVal: any): string {
+  if (!dateVal) return 'hace tiempo';
+  const date = new Date(dateVal);
+  if (isNaN(date.getTime())) return 'hace tiempo';
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+
+  if (diffDays < 1) return 'hoy';
+  if (diffDays === 1) return 'hace 1 día';
+  if (diffDays < 7) return `hace ${diffDays} días`;
+  if (diffWeeks === 1) return 'esta semana';
+  if (diffWeeks < 4) return `hace ${diffWeeks} semanas`;
+  if (diffMonths === 1) return 'el mes pasado';
+  if (diffMonths < 12) return `hace ${diffMonths} meses`;
+  if (diffYears === 1) return 'hace 1 año';
+  return `hace ${diffYears} años`;
+}
+
+function extractImage(item: any): string | null {
+  if (item.data?.img) return item.data.img;
+  if (item.data?.image) return item.data.image;
+  if (item.data?.thumbnail) return item.data.thumbnail;
+  if (item.data?.coverImage) return item.data.coverImage;
+  
+  const body = item.body || '';
+  const mdMatch = body.match(/!\[.*?\]\((.*?)\)/);
+  if (mdMatch && mdMatch[1]) return mdMatch[1];
+  
+  const htmlMatch = body.match(/<img\s+[^>]*src=["'](.*?)["']/);
+  if (htmlMatch && htmlMatch[1]) return htmlMatch[1];
+
+  return null;
+}
+
+const contentItems = rawContent
+  .filter((item) => {
+    const isPublic = isItemPublic(item);
+    const isFeatured = item.data.home === true || item.data.home === 'true' || item.data.featured === true || item.data.featured === 'true';
+    return isPublic && isFeatured;
+  })
+  .map((item) => {
+    const filename = item.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || '';
+    const title = item.data.title || filename || 'Untitled';
+    const slug = '/' + getContentCanonicalSlug(item);
+    const dateVal = item.data.date || item.data.createdAt || item.data.updatedAt || null;
+    const date = dateVal ? new Date(dateVal) : new Date(0);
+    
+    let description = (item.data.def || item.data.definition || '').trim();
+    if (!description) {
+      const cleanBody = cleanMarkdownForSnippet(item.body || '');
+      description = cleanBody.slice(0, 140) + (cleanBody.length > 140 ? '...' : '');
+    }
+
+    const canonicalSlug = getContentCanonicalSlug(item);
+    const scopeKey = `lesson:public:${canonicalSlug}`;
+    const commentCount = commentCountsByScope.get(scopeKey) || 0;
+
+    return {
+      title,
+      slug,
+      date,
+      dateHuman: formatHumanRelativeDate(dateVal),
+      img: extractImage(item),
+      description,
+      commentCount,
+      isCourse: false,
+    };
+  });
+
+const courseItems = rawCursos
+  .filter((item) => {
+    const isCourseIdx = isCourseIndexEntry(item);
+    const isPublic = isItemPublic(item);
+    const isFeatured = item.data.home === true || item.data.home === 'true' || item.data.featured === true || item.data.featured === 'true';
+    return isCourseIdx && isPublic && isFeatured;
+  })
+  .map((item) => {
+    const courseId = getCourseEntryCourseId(item);
+    const filename = item.id.split('/').pop()?.replace(/\.[^/.]+$/, '') || '';
+    const title = item.data.title || filename || 'Untitled';
+    const slug = buildCourseHref(courseId, item.data || {});
+    const dateVal = item.data.date || item.data.createdAt || item.data.updatedAt || null;
+    const date = dateVal ? new Date(dateVal) : new Date(0);
+
+    let description = (item.data.def || item.data.definition || item.data.summary || item.data.description || '').trim();
+    if (!description) {
+      const cleanBody = cleanMarkdownForSnippet(item.body || '');
+      description = cleanBody.slice(0, 140) + (cleanBody.length > 140 ? '...' : '');
+    }
+
+    const scopeKey = `board:${courseId}:general`;
+    const commentCount = commentCountsByScope.get(scopeKey) || 0;
+
+    return {
+      title,
+      slug,
+      date,
+      dateHuman: formatHumanRelativeDate(dateVal),
+      img: extractImage(item),
+      description,
+      commentCount,
+      isCourse: true,
+    };
+  });
+
+const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.getTime() - a.date.getTime());
 ---
 
 <html lang="es">
@@ -20,24 +191,31 @@ import Header from '../components/Header.astro';
         width: 100%;
         min-height: calc(100vh - var(--musiki-header-height, 4.5rem));
         margin: 0;
-        padding: 0;
+        padding: 4rem 0;
         display: flex;
+        flex-direction: column;
         align-items: center;
-        justify-content: center;
+        box-sizing: border-box;
       }
 
       .panel {
         width: 100%;
         max-width: 640px;
-        padding: 2rem 1.5rem 3rem;
+        padding: 0 1.5rem 1rem;
         text-align: center;
+        box-sizing: border-box;
       }
 
       h1 {
         margin: 0 0 2rem;
-        font-size: clamp(2rem, 5vw, 3.2rem);
+        font-size: clamp(2.2rem, 6vw, 3.8rem);
         line-height: 1;
         text-transform: lowercase;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        background: linear-gradient(135deg, var(--c-fg, #111) 30%, var(--c-link, #2a87ff) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
 
       /* ── Search box ── */
@@ -48,8 +226,8 @@ import Header from '../components/Header.astro';
 
       .home-search-input {
         width: 100%;
-        padding: 0.85rem 1.4rem;
-        font-size: 1rem;
+        padding: 1rem 1.6rem;
+        font-size: 1.05rem;
         font-family: inherit;
         border: 1.5px solid var(--c-border, rgba(0,0,0,0.15));
         border-radius: 9999px;
@@ -58,11 +236,12 @@ import Header from '../components/Header.astro';
         outline: none;
         box-sizing: border-box;
         transition: border-color 0.15s, box-shadow 0.15s;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
       }
 
       .home-search-input:focus {
         border-color: var(--c-link, #2a87ff);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-link, #2a87ff) 15%, transparent);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-link, #2a87ff) 15%, transparent);
       }
 
       .home-search-input::placeholder {
@@ -127,12 +306,182 @@ import Header from '../components/Header.astro';
         padding: 0 1px;
       }
 
+      /* ── Featured Mosaic Gallery ── */
+      .mosaic-section {
+        width: 100%;
+        max-width: 1080px;
+        margin: 4.5rem auto 0;
+        padding: 0 2rem;
+        box-sizing: border-box;
+      }
+
+      .mosaic-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        text-align: left;
+        margin: 0 0 2rem 0;
+        color: var(--c-fg);
+        text-transform: lowercase;
+        border-bottom: 1.5px solid var(--c-border, rgba(0,0,0,0.1));
+        padding-bottom: 0.5rem;
+      }
+
+      .mosaic-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 2.5rem;
+      }
+
+      @media (max-width: 768px) {
+        .mosaic-grid {
+          grid-template-columns: 1fr;
+          gap: 2rem;
+        }
+        .mosaic-section {
+          margin-top: 3.5rem;
+        }
+      }
+
+      /* Vanguardist animated card */
+      .mosaic-card {
+        display: flex;
+        flex-direction: column;
+        background: var(--c-bg-card, var(--c-bg-alt, rgba(255,255,255,0.03)));
+        border: 1px solid var(--c-border, rgba(0,0,0,0.08));
+        border-radius: 1.2rem;
+        overflow: hidden;
+        text-decoration: none;
+        color: inherit;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.02);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
+                    box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                    border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .mosaic-card:hover {
+        transform: translateY(-5px);
+        border-color: var(--c-link, #2a87ff);
+        box-shadow: 0 12px 36px rgba(0,0,0,0.08);
+      }
+
+      .mosaic-img-container {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        background: var(--c-bg-mute, #eaeaea);
+        position: relative;
+        border-bottom: 1px solid var(--c-border, rgba(0,0,0,0.05));
+      }
+
+      .mosaic-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .mosaic-card:hover .mosaic-img {
+        transform: scale(1.04);
+      }
+
+      .mosaic-img-placeholder {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, var(--c-link-dim, #1e3c72) 0%, var(--c-link, #2a87ff) 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        color: white;
+        text-align: center;
+        box-sizing: border-box;
+      }
+
+      .mosaic-placeholder-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        text-transform: lowercase;
+        opacity: 0.9;
+      }
+
+      .mosaic-body {
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        box-sizing: border-box;
+      }
+
+      .mosaic-card-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0 0 0.6rem 0;
+        color: var(--c-fg);
+        line-height: 1.3;
+        transition: color 0.2s;
+        text-transform: lowercase;
+      }
+
+      .mosaic-card:hover .mosaic-card-title {
+        color: var(--c-link, #2a87ff);
+      }
+
+      .mosaic-meta {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        font-size: 0.8rem;
+        color: var(--c-fg-dim, #666);
+        margin-bottom: 1rem;
+      }
+
+      .mosaic-comments-count {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+
+      .mosaic-desc {
+        font-size: 0.88rem;
+        color: var(--c-fg-dim, #555);
+        line-height: 1.45;
+        margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .mosaic-footer {
+        margin-top: 1.25rem;
+        padding-top: 0.75rem;
+        border-top: 1px dashed var(--c-border, rgba(0,0,0,0.06));
+      }
+
+      .mosaic-course-link {
+        display: inline-block;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--c-link, #2a87ff);
+        text-decoration: none;
+        background: color-mix(in srgb, var(--c-link, #2a87ff) 10%, transparent);
+        padding: 0.3rem 0.75rem;
+        border-radius: 6px;
+        transition: background 0.2s, color 0.2s;
+      }
+
+      .mosaic-course-link:hover {
+        background: var(--c-link, #2a87ff);
+        color: white;
+      }
+
       .legal-links {
         display: flex;
-        gap: 1rem;
+        gap: 1.2rem;
         flex-wrap: wrap;
-        margin-top: 2.5rem;
+        margin-top: 4.5rem;
         justify-content: center;
+        width: 100%;
       }
 
       .legal-links a {
@@ -171,16 +520,55 @@ import Header from '../components/Header.astro';
             hidden
           ></div>
         </div>
-
-        <div class="legal-links">
-          <a href="/privacy">Política de privacidad</a>
-          <a href="/terms">Términos del servicio</a>
-        </div>
       </section>
+
+      {featuredItems.length > 0 && (
+        <section class="mosaic-section">
+          <h2 class="mosaic-title">destacados</h2>
+          <div class="mosaic-grid">
+            {featuredItems.map((item) => (
+              <a class="mosaic-card" href={item.slug.replace(/^\/cursos\//, '/')}>
+                <div class="mosaic-img-container">
+                  {item.img ? (
+                    <img src={item.img} alt={item.title} class="mosaic-img" loading="lazy" />
+                  ) : (
+                    <div class="mosaic-img-placeholder">
+                      <span class="mosaic-placeholder-title">{item.title}</span>
+                    </div>
+                  )}
+                </div>
+                <div class="mosaic-body">
+                  <h3 class="mosaic-card-title">{item.title}</h3>
+                  <div class="mosaic-meta">
+                    <time datetime={item.date.toISOString()}>{item.dateHuman}</time>
+                    <span class="mosaic-comments-count" title={`${item.commentCount} comentarios`}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; opacity:0.8;">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                      </svg>
+                      {item.commentCount}
+                    </span>
+                  </div>
+                  <p class="mosaic-desc">{item.description}</p>
+                  {item.isCourse && (
+                    <div class="mosaic-footer">
+                      <span class="mosaic-course-link">Ir al curso público</span>
+                    </div>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div class="legal-links">
+        <a href="/privacy">Política de privacidad</a>
+        <a href="/terms">Términos del servicio</a>
+      </div>
     </main>
 
     <script>
-      type SearchItem = { title: string; slug: string; content: string; type: string };
+      type SearchItem = { title: string; slug: string; content: string; type: string; def?: string; sinopsis?: string };
 
       let searchData: SearchItem[] | null = null;
       let fetchPromise: Promise<void> | null = null;
@@ -209,7 +597,16 @@ import Header from '../components/Header.astro';
         );
       };
 
-      const getSnippet = (content: string, query: string): string => {
+      const getSnippet = (item: SearchItem, query: string): string => {
+        if (item.def) {
+          const raw = `Definición: ${item.def}`;
+          return highlight(raw, query);
+        }
+        if (item.sinopsis) {
+          const raw = `Sinopsis: ${item.sinopsis}`;
+          return highlight(raw, query);
+        }
+        const content = item.content || '';
         if (!content) return '';
         const lower = content.toLowerCase();
         const idx = lower.indexOf(query.toLowerCase());
@@ -247,7 +644,7 @@ import Header from '../components/Header.astro';
 
           results.innerHTML = matched.map((item) => {
             const titleHl = highlight(item.title, query);
-            const snippet = getSnippet(item.content, query);
+            const snippet = getSnippet(item, query);
             const slug = item.slug.replace(/^\/cursos\//, '/');
             return `<a class="home-search-result-item" href="${slug}" role="option">
               <p class="home-search-result-title">${titleHl}</p>

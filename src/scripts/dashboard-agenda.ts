@@ -111,10 +111,25 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
       break;
     }
     case 'delete-block': {
-      d.students.forEach(s => {
-        s.blocks = s.blocks.filter(b => b.id !== p.blockId);
-        s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
-      });
+      let ownerStudent = d.students.find(s => s.blocks.some(b => b.id === p.blockId));
+      let blockToDelete = ownerStudent?.blocks.find(b => b.id === p.blockId);
+      const grupo = ownerStudent?.grupo ? ownerStudent.grupo.trim() : '';
+
+      if (grupo && blockToDelete) {
+        d.students.forEach(s => {
+          if (s.grupo && s.grupo.trim() === grupo) {
+            s.blocks = s.blocks.filter(b => 
+              !(b.dateKey === blockToDelete!.dateKey && b.startMinute === blockToDelete!.startMinute && b.endMinute === blockToDelete!.endMinute)
+            );
+            s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+          }
+        });
+      } else {
+        d.students.forEach(s => {
+          s.blocks = s.blocks.filter(b => b.id !== p.blockId);
+          s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+        });
+      }
       d.events = d.events.filter(e => e.id !== p.blockId);
       break;
     }
@@ -150,9 +165,30 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
     case 'update-block':
     case 'move-block': {
       d.events = d.events.map(e => e.id === p.blockId ? { ...e, text: p.text ?? e.text, virtual: p.virtual !== undefined ? Boolean(p.virtual) : e.virtual, dateKey: p.dateKey ?? e.dateKey, startMinute: p.startMinute ?? e.startMinute, endMinute: p.endMinute ?? e.endMinute } : e);
-      d.students.forEach(s => {
-        s.blocks = s.blocks.map(b => b.id === p.blockId ? { ...b, comment: p.comment ?? b.comment, dateKey: p.dateKey ?? b.dateKey, startMinute: p.startMinute ?? b.startMinute, endMinute: p.endMinute ?? b.endMinute } : b);
-      });
+      
+      let ownerStudent = d.students.find(s => s.blocks.some(b => b.id === p.blockId));
+      let blockToMove = ownerStudent?.blocks.find(b => b.id === p.blockId);
+      const grupo = ownerStudent?.grupo ? ownerStudent.grupo.trim() : '';
+
+      if (grupo && blockToMove) {
+        const oldDateKey = blockToMove.dateKey;
+        const oldStartMinute = blockToMove.startMinute;
+        const oldEndMinute = blockToMove.endMinute;
+
+        d.students.forEach(s => {
+          if (s.grupo && s.grupo.trim() === grupo) {
+            s.blocks = s.blocks.map(b => 
+              (b.dateKey === oldDateKey && b.startMinute === oldStartMinute && b.endMinute === oldEndMinute)
+                ? { ...b, comment: p.comment ?? b.comment, dateKey: p.dateKey ?? b.dateKey, startMinute: p.startMinute ?? b.startMinute, endMinute: p.endMinute ?? b.endMinute }
+                : b
+            );
+          }
+        });
+      } else {
+        d.students.forEach(s => {
+          s.blocks = s.blocks.map(b => b.id === p.blockId ? { ...b, comment: p.comment ?? b.comment, dateKey: p.dateKey ?? b.dateKey, startMinute: p.startMinute ?? b.startMinute, endMinute: p.endMinute ?? b.endMinute } : b);
+        });
+      }
       break;
     }
     case 'copy-block': {
@@ -167,20 +203,48 @@ const applyLocalAction = (src: AgendaData, p: Record<string, any>): AgendaData =
           updatedAt: new Date().toISOString()
         });
       }
-      d.students.forEach(s => {
-        const originalBlock = s.blocks.find(b => b.id === p.blockId);
-        if (originalBlock) {
-          s.blocks.push({
-            ...originalBlock,
-            id: tempId(),
-            dateKey: p.dateKey ?? originalBlock.dateKey,
-            startMinute: p.startMinute ?? originalBlock.startMinute,
-            endMinute: p.endMinute ?? originalBlock.endMinute,
-            updatedAt: new Date().toISOString()
-          });
-          s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
-        }
-      });
+
+      let ownerStudent = d.students.find(s => s.blocks.some(b => b.id === p.blockId));
+      let blockToCopy = ownerStudent?.blocks.find(b => b.id === p.blockId);
+      const grupo = ownerStudent?.grupo ? ownerStudent.grupo.trim() : '';
+
+      if (grupo && blockToCopy) {
+        const oldDateKey = blockToCopy.dateKey;
+        const oldStartMinute = blockToCopy.startMinute;
+        const oldEndMinute = blockToCopy.endMinute;
+
+        d.students.forEach(s => {
+          if (s.grupo && s.grupo.trim() === grupo) {
+            const hasOriginal = s.blocks.some(b => b.dateKey === oldDateKey && b.startMinute === oldStartMinute && b.endMinute === oldEndMinute);
+            if (hasOriginal) {
+              s.blocks.push({
+                id: tempId(),
+                dateKey: p.dateKey ?? oldDateKey,
+                startMinute: p.startMinute ?? oldStartMinute,
+                endMinute: p.endMinute ?? oldEndMinute,
+                comment: blockToCopy!.comment || '',
+                updatedAt: new Date().toISOString()
+              });
+              s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+            }
+          }
+        });
+      } else {
+        d.students.forEach(s => {
+          const originalBlock = s.blocks.find(b => b.id === p.blockId);
+          if (originalBlock) {
+            s.blocks.push({
+              ...originalBlock,
+              id: tempId(),
+              dateKey: p.dateKey ?? originalBlock.dateKey,
+              startMinute: p.startMinute ?? originalBlock.startMinute,
+              endMinute: p.endMinute ?? originalBlock.endMinute,
+              updatedAt: new Date().toISOString()
+            });
+            s.totalMinutes = s.blocks.reduce((acc, b) => acc + blockDuration(b), 0);
+          }
+        });
+      }
       break;
     }
     case 'clear-range': {
@@ -354,13 +418,62 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
       }
     }
 
-    const studentMarkup = studentStarts.map(({ student, block }) => {
-      const isOwn = String(student.studentId || '').toLowerCase() === viewerId.toLowerCase();
-      const fullName = formatStudentName(student.name);
-      const nameParts = fullName.trim().split(/\s+/);
+    const groupedStudentStarts: Array<{
+      student: AgendaStudent;
+      block: AgendaBlock;
+      isGroupBlock: boolean;
+      groupName?: string;
+    }> = [];
+
+    for (const item of studentStarts) {
+      const grupo = item.student.grupo ? item.student.grupo.trim() : '';
+      if (grupo) {
+        // Find if already grouped at this exact time slot and group name
+        const match = groupedStudentStarts.find(g => 
+          g.isGroupBlock && 
+          g.groupName === grupo && 
+          g.block.startMinute === item.block.startMinute && 
+          g.block.endMinute === item.block.endMinute
+        );
+        if (match) {
+          continue;
+        }
+
+        // Count how many studentStarts belong to this same group at this exact slot
+        const fellows = studentStarts.filter(other => 
+          other.student.grupo && 
+          other.student.grupo.trim() === grupo && 
+          other.block.startMinute === item.block.startMinute && 
+          other.block.endMinute === item.block.endMinute
+        );
+
+        if (fellows.length > 1) {
+          groupedStudentStarts.push({
+            student: item.student,
+            block: item.block,
+            isGroupBlock: true,
+            groupName: grupo
+          });
+          continue;
+        }
+      }
+
+      groupedStudentStarts.push({
+        student: item.student,
+        block: item.block,
+        isGroupBlock: false
+      });
+    }
+
+    const studentMarkup = groupedStudentStarts.map(({ student, block, isGroupBlock, groupName }) => {
+      const isOwn = isGroupBlock
+        ? (data.viewer.grupo && String(data.viewer.grupo).trim().toLowerCase() === String(groupName).trim().toLowerCase())
+        : String(student.studentId || '').toLowerCase() === viewerId.toLowerCase();
+      const displayName = isGroupBlock ? `Grupo ${groupName}` : formatStudentName(student.name);
+      const nameParts = displayName.trim().split(/\s+/);
       const nameHtml = nameParts.length > 1
         ? `${escapeHtml(nameParts[0])}<br>${escapeHtml(nameParts.slice(1).join(' '))}`
-        : escapeHtml(fullName);
+        : escapeHtml(displayName);
       const blockRowSpan = slots.filter(s => blockOverlapsSlot(block, s.startMinute, s.endMinute)).length;
       return `<span class="agenda-student-block ${isOwn ? 'is-own' : ''}" style="background-color: ${escapeHtml(student.color)}; height: ${blockRowSpan * 100}%" ${isTeacher || isOwn ? `data-agenda-block-id="${escapeHtml(block.id)}"` : ''}><span class="agenda-student-block__name">${nameHtml}</span></span>`;
     }).join('');
@@ -665,7 +778,11 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
         html += `<button type="button" class="dashboard-grid-btn" data-act="reserve-group" data-grupo="${escapeHtml(viewerGrupo)}">RESERVAR con mi Grupo</button>`;
       }
       if (firstOwnBlockId) {
-        const isOwn = (data.students.find(s => String(s.studentId || '').toLowerCase() === viewerId.toLowerCase())?.blocks || []).some(b => b.id === firstOwnBlockId);
+        const ownerStudent = data.students.find(s => s.blocks.some(b => b.id === firstOwnBlockId));
+        const ownerGrupo = ownerStudent?.grupo ? normalizeText(ownerStudent.grupo) : '';
+        const viewerGrupoNorm = normalizeText(data.viewer.grupo);
+        const isOwn = (String(ownerStudent?.studentId || '').toLowerCase() === viewerId.toLowerCase()) || 
+                      (viewerGrupoNorm && ownerGrupo === viewerGrupoNorm);
         if (isOwn) {
           html += `<button type="button" class="dashboard-grid-btn" data-act="edit-block" data-block-id="${escapeHtml(firstOwnBlockId)}">Editar</button>`;
           html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="delete-block" data-block-id="${escapeHtml(firstOwnBlockId)}">Eliminar Reserva</button>`;
@@ -677,10 +794,28 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
     popover.hidden = false;
 
     if (options.pos) {
-      popover.style.left = `${options.pos.x}px`; popover.style.top = `${options.pos.y}px`;
+      const isNearRightEdge = options.pos.x > window.innerWidth * 0.75;
+      if (isNearRightEdge) {
+        popover.style.left = 'auto';
+        popover.style.right = `${window.innerWidth - options.pos.x}px`;
+      } else {
+        popover.style.left = `${options.pos.x}px`;
+        popover.style.right = 'auto';
+      }
+      popover.style.top = `${options.pos.y}px`;
     } else {
       const rect = getSelectionViewportRect();
-      if (rect) { popover.style.left = `${rect.left}px`; popover.style.top = `${rect.bottom + 8}px`; }
+      if (rect) {
+        const isNearRightEdge = rect.left > window.innerWidth * 0.75;
+        if (isNearRightEdge) {
+          popover.style.left = 'auto';
+          popover.style.right = `${window.innerWidth - rect.right}px`;
+        } else {
+          popover.style.left = `${rect.left}px`;
+          popover.style.right = 'auto';
+        }
+        popover.style.top = `${rect.bottom + 8}px`;
+      }
     }
 
     popover.querySelector('[data-act="students"]')?.addEventListener('click', (e) => { stopUiEvent(e); openStudentAssignmentModal(selection); });

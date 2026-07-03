@@ -95,6 +95,8 @@ const { searchEndpoint = '/search.json' } = Astro.props as { searchEndpoint?: st
     content: typeof item.content === 'string' ? item.content : null,
     type: String(item.type || 'Page'),
     hasDataview: Boolean(item.hasDataview),
+    def: String(item.def || ''),
+    sinopsis: String(item.sinopsis || ''),
   });
 
   function initSearch() {
@@ -143,6 +145,12 @@ const { searchEndpoint = '/search.json' } = Astro.props as { searchEndpoint?: st
       }
     };
 
+    const highlightText = (txt, q) => {
+      if (!q) return txt;
+      const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      return txt.replace(regex, '<span class="search-highlight">$1</span>');
+    };
+
     input.oninput = (e) => {
       const target = e.target;
       if (!(target instanceof HTMLInputElement)) return;
@@ -161,7 +169,9 @@ const { searchEndpoint = '/search.json' } = Astro.props as { searchEndpoint?: st
       if (searchData) {
         contentResults = searchData.filter((item) => {
           return (item.title && item.title.toLowerCase().includes(query))
-            || (item.content && item.content.toLowerCase().includes(query));
+            || (item.content && item.content.toLowerCase().includes(query))
+            || (item.def && item.def.toLowerCase().includes(query))
+            || (item.sinopsis && item.sinopsis.toLowerCase().includes(query));
         });
       }
 
@@ -170,14 +180,18 @@ const { searchEndpoint = '/search.json' } = Astro.props as { searchEndpoint?: st
       resultsContainer.innerHTML = results.slice(0, 10).map((item) => {
         const content = typeof item.content === 'string' ? item.content : '';
         let snippet = '';
-        if (content) {
+        if (item.def) {
+          snippet = `<strong>Definición:</strong> ${highlightText(item.def, query)}`;
+        } else if (item.sinopsis) {
+          snippet = `<strong>Sinopsis:</strong> ${highlightText(item.sinopsis, query)}`;
+        } else if (content) {
           const lowerContent = content.toLowerCase();
           const idx = lowerContent.indexOf(query);
           if (idx !== -1) {
             const start = Math.max(0, idx - 40);
             const end = Math.min(content.length, idx + query.length + 40);
             snippet = content.substring(start, end);
-            const regex = new RegExp(`(${query})`, 'gi');
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
             snippet = '...' + snippet.replace(regex, '<span class="search-highlight">$1</span>') + '...';
           } else {
             snippet = content.substring(0, 80) + '...';

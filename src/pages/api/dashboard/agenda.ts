@@ -175,6 +175,24 @@ const deleteSubmissionIfEmpty = async ({
   if (error) throw error;
 };
 
+const getGroupDetails = async (courseId: string, year: string, userId: string) => {
+  const metaAssignmentId = `__meta__:course-student-profile:${encodeURIComponent(courseId)}:${year}`;
+  const { data: metaRows } = await query(
+    'SELECT "userId", "payload" FROM "Submission" WHERE "assignmentId" = $1',
+    [metaAssignmentId]
+  );
+  const rows = Array.isArray(metaRows) ? metaRows : [];
+  const userRow = rows.find(r => normalizeText(r.userId).toLowerCase() === userId.toLowerCase());
+  const grupo = normalizeText(userRow?.payload?.grupo);
+  if (!grupo) return { grupo: null, memberIds: [] as string[] };
+
+  const memberIds = rows
+    .filter(r => normalizeText(r?.payload?.grupo) === grupo)
+    .map(r => normalizeText(r.userId))
+    .filter(Boolean) as string[];
+  return { grupo, memberIds };
+};
+
 const loadStudentPayloads = async (
   assignmentId: string,
 ) => {
@@ -670,39 +688,80 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (action === 'delete-own') {
       const selection = normalizeSelectedRange(body);
       if (!selection) return json({ error: 'Rango inválido' }, 400);
+
+      const { grupo, memberIds } = await getGroupDetails(courseId, year, dbUser.id);
       const existingRows = await loadStudentPayloads(studentAssignmentId);
-      const existingSubmission = existingRows.find((row) => normalizeText(row?.userId) === dbUser.id) || null;
-      if (!existingSubmission) return json({ success: true });
-      const existingPayload = normalizeAgendaStudentPayload(existingSubmission.payload || {}, courseId, year, dbUser.id);
-      if (!existingPayload) return json({ success: true });
-      const nextBlocks = replaceBlocksInRange(
-        existingPayload.blocks || [],
-        new Set(selection.dateKeys),
-        selection.startMinute,
-        selection.endMinute,
-        [],
-      );
-      if (nextBlocks.length === 0) {
-        await deleteSubmissionIfEmpty({
-          assignmentId: studentAssignmentId,
-          userId: dbUser.id,
-        });
+
+      if (grupo && memberIds.length > 0) {
+        for (const memberRow of existingRows) {
+          const memberUserId = normalizeText(memberRow?.userId);
+          if (memberIds.map(m => m.toLowerCase()).includes(memberUserId.toLowerCase())) {
+            const memberPayload = normalizeAgendaStudentPayload(memberRow?.payload || {}, courseId, year, memberUserId);
+            if (!memberPayload) continue;
+
+            const nextBlocks = replaceBlocksInRange(
+              memberPayload.blocks || [],
+              new Set(selection.dateKeys),
+              selection.startMinute,
+              selection.endMinute,
+              [],
+            );
+
+            if (nextBlocks.length === 0) {
+              await deleteSubmissionIfEmpty({ assignmentId: studentAssignmentId, userId: memberUserId });
+            } else {
+              await upsertSubmission({
+                assignmentId: studentAssignmentId,
+                userId: memberUserId,
+                payload: {
+                  __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+                  courseId,
+                  year,
+                  studentId: memberUserId,
+                  color: memberPayload.color,
+                  blocks: nextBlocks,
+                  updatedAt: new Date().toISOString(),
+                  updatedBy: dbUser.id,
+                  updatedByEmail: normalizeText(session?.user?.email),
+                },
+              });
+            }
+          }
+        }
       } else {
-        await upsertSubmission({
-          assignmentId: studentAssignmentId,
-          userId: dbUser.id,
-          payload: {
-            __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
-            courseId,
-            year,
-            studentId: dbUser.id,
-            color: existingPayload.color,
-            blocks: nextBlocks,
-            updatedAt: new Date().toISOString(),
-            updatedBy: dbUser.id,
-            updatedByEmail: normalizeText(session?.user?.email),
-          },
-        });
+        const existingSubmission = existingRows.find((row) => normalizeText(row?.userId) === dbUser.id) || null;
+        if (!existingSubmission) return json({ success: true });
+        const existingPayload = normalizeAgendaStudentPayload(existingSubmission.payload || {}, courseId, year, dbUser.id);
+        if (!existingPayload) return json({ success: true });
+        const nextBlocks = replaceBlocksInRange(
+          existingPayload.blocks || [],
+          new Set(selection.dateKeys),
+          selection.startMinute,
+          selection.endMinute,
+          [],
+        );
+        if (nextBlocks.length === 0) {
+          await deleteSubmissionIfEmpty({
+            assignmentId: studentAssignmentId,
+            userId: dbUser.id,
+          });
+        } else {
+          await upsertSubmission({
+            assignmentId: studentAssignmentId,
+            userId: dbUser.id,
+            payload: {
+              __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+              courseId,
+              year,
+              studentId: dbUser.id,
+              color: existingPayload.color,
+              blocks: nextBlocks,
+              updatedAt: new Date().toISOString(),
+              updatedBy: dbUser.id,
+              updatedByEmail: normalizeText(session?.user?.email),
+            },
+          });
+        }
       }
       return json({ success: true });
     }
@@ -739,26 +798,63 @@ export const POST: APIRoute = async ({ request, locals }) => {
         const blockIndex = payload.blocks.findIndex((b) => b.id === blockId);
         if (blockIndex !== -1) {
           const rowUserId = normalizeText(row?.userId);
+          const { grupo, memberIds } = await getGroupDetails(courseId, year, rowUserId);
+          const isGroupMember = memberIds.map(m => m.toLowerCase()).includes(dbUser.id.toLowerCase());
           const isOwnBlock = rowUserId.toLowerCase() === dbUser.id.toLowerCase();
-          if (!canManage && !isOwnBlock) {
+          
+          if (!canManage && !isOwnBlock && !isGroupMember) {
             return json({ error: 'No tenés permiso para borrar este bloque' }, 403);
           }
-          const nextBlocks = payload.blocks.filter((b) => b.id !== blockId);
-          if (nextBlocks.length === 0) {
-            await deleteSubmissionIfEmpty({ assignmentId: studentAssignmentId, userId: rowUserId });
+
+          const blockToDelete = payload.blocks[blockIndex];
+
+          // If it is a group reservation, delete it for all group members
+          if (grupo && memberIds.length > 0) {
+            for (const memberRow of studentRows) {
+              const memberUserId = normalizeText(memberRow?.userId);
+              if (memberIds.map(m => m.toLowerCase()).includes(memberUserId.toLowerCase())) {
+                const memberPayload = normalizeAgendaStudentPayload(memberRow?.payload || {}, courseId, year, memberUserId);
+                if (!memberPayload) continue;
+                const nextBlocks = memberPayload.blocks.filter((b) => 
+                  !(b.dateKey === blockToDelete.dateKey && b.startMinute === blockToDelete.startMinute && b.endMinute === blockToDelete.endMinute)
+                );
+                if (nextBlocks.length === 0) {
+                  await deleteSubmissionIfEmpty({ assignmentId: studentAssignmentId, userId: memberUserId });
+                } else {
+                  await upsertSubmission({
+                    assignmentId: studentAssignmentId,
+                    userId: memberUserId,
+                    payload: {
+                      __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+                      ...memberPayload,
+                      blocks: nextBlocks,
+                      updatedAt: new Date().toISOString(),
+                      updatedBy: dbUser.id,
+                      updatedByEmail: normalizeText(session?.user?.email),
+                    },
+                  });
+                }
+              }
+            }
           } else {
-            await upsertSubmission({
-              assignmentId: studentAssignmentId,
-              userId: rowUserId,
-              payload: {
-                __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
-                ...payload,
-                blocks: nextBlocks,
-                updatedAt: new Date().toISOString(),
-                updatedBy: dbUser.id,
-                updatedByEmail: normalizeText(session?.user?.email),
-              },
-            });
+            // Standard single-student delete
+            const nextBlocks = payload.blocks.filter((b) => b.id !== blockId);
+            if (nextBlocks.length === 0) {
+              await deleteSubmissionIfEmpty({ assignmentId: studentAssignmentId, userId: rowUserId });
+            } else {
+              await upsertSubmission({
+                assignmentId: studentAssignmentId,
+                userId: rowUserId,
+                payload: {
+                  __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+                  ...payload,
+                  blocks: nextBlocks,
+                  updatedAt: new Date().toISOString(),
+                  updatedBy: dbUser.id,
+                  updatedByEmail: normalizeText(session?.user?.email),
+                },
+              });
+            }
           }
           return json({ success: true });
         }
@@ -881,44 +977,110 @@ export const POST: APIRoute = async ({ request, locals }) => {
         const block = payload.blocks.find((b) => b.id === blockId);
         if (block) {
           const rowUserId = normalizeText(row?.userId);
+          const { grupo, memberIds } = await getGroupDetails(courseId, year, rowUserId);
+          const isGroupMember = memberIds.map(m => m.toLowerCase()).includes(dbUser.id.toLowerCase());
           const isOwnBlock = rowUserId.toLowerCase() === dbUser.id.toLowerCase();
-          if (!canManage && !isOwnBlock) {
+          
+          if (!canManage && !isOwnBlock && !isGroupMember) {
             return json({ error: 'No tenés permiso para copiar este bloque' }, 403);
           }
-          const nextBlock = {
-            ...block,
-            id: createAgendaBlockId(),
-            dateKey: normalizeAgendaDateKey(body?.dateKey || block.dateKey),
-            startMinute: normalizeMinute(body?.startMinute ?? block.startMinute),
-            endMinute: normalizeMinute(body?.endMinute ?? block.endMinute),
-            updatedAt: new Date().toISOString(),
-          };
 
-          // Check if this student exceeds max minutes!
           const { data: configRows, error: configError } = await query(
             'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
             [configAssignmentId]
           );
           if (configError) throw configError;
           const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
-          const mergedBlocks = [...payload.blocks, nextBlock];
-          const totalMinutes = sumBlocksMinutes(mergedBlocks);
-          if (totalMinutes > clampAgendaMaxStudentMinutes(currentConfig.maxStudentMinutes)) {
-            return json({ error: 'Copiar este bloque supera el tiempo máximo asignado' }, 400);
-          }
+          const limit = clampAgendaMaxStudentMinutes(currentConfig.maxStudentMinutes);
 
-          await upsertSubmission({
-            assignmentId: studentAssignmentId,
-            userId: rowUserId,
-            payload: {
-              __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
-              ...payload,
-              blocks: mergedBlocks,
+          if (grupo && memberIds.length > 0) {
+            // Check time limits for all group members first
+            for (const memberRow of studentRows) {
+              const memberUserId = normalizeText(memberRow?.userId);
+              if (memberIds.map(m => m.toLowerCase()).includes(memberUserId.toLowerCase())) {
+                const memberPayload = normalizeAgendaStudentPayload(memberRow?.payload || {}, courseId, year, memberUserId);
+                if (!memberPayload) continue;
+
+                const nextBlocks = [
+                  ...memberPayload.blocks,
+                  {
+                    id: createAgendaBlockId(),
+                    dateKey: normalizeAgendaDateKey(body?.dateKey || block.dateKey),
+                    startMinute: normalizeMinute(body?.startMinute ?? block.startMinute),
+                    endMinute: normalizeMinute(body?.endMinute ?? block.endMinute),
+                    comment: block.comment || '',
+                    updatedAt: new Date().toISOString(),
+                  }
+                ];
+                const totalMinutes = sumBlocksMinutes(nextBlocks);
+                if (totalMinutes > limit) {
+                  return json({ error: 'Copiar este bloque supera el tiempo máximo para un integrante del grupo' }, 400);
+                }
+              }
+            }
+
+            // Perform copy for all group members
+            for (const memberRow of studentRows) {
+              const memberUserId = normalizeText(memberRow?.userId);
+              if (memberIds.map(m => m.toLowerCase()).includes(memberUserId.toLowerCase())) {
+                const memberPayload = normalizeAgendaStudentPayload(memberRow?.payload || {}, courseId, year, memberUserId);
+                if (!memberPayload) continue;
+
+                const nextBlocks = [
+                  ...memberPayload.blocks,
+                  {
+                    id: createAgendaBlockId(),
+                    dateKey: normalizeAgendaDateKey(body?.dateKey || block.dateKey),
+                    startMinute: normalizeMinute(body?.startMinute ?? block.startMinute),
+                    endMinute: normalizeMinute(body?.endMinute ?? block.endMinute),
+                    comment: block.comment || '',
+                    updatedAt: new Date().toISOString(),
+                  }
+                ];
+
+                await upsertSubmission({
+                  assignmentId: studentAssignmentId,
+                  userId: memberUserId,
+                  payload: {
+                    __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+                    ...memberPayload,
+                    blocks: nextBlocks,
+                    updatedAt: new Date().toISOString(),
+                    updatedBy: dbUser.id,
+                    updatedByEmail: normalizeText(session?.user?.email),
+                  },
+                });
+              }
+            }
+          } else {
+            // Standard single-student copy
+            const nextBlock = {
+              ...block,
+              id: createAgendaBlockId(),
+              dateKey: normalizeAgendaDateKey(body?.dateKey || block.dateKey),
+              startMinute: normalizeMinute(body?.startMinute ?? block.startMinute),
+              endMinute: normalizeMinute(body?.endMinute ?? block.endMinute),
               updatedAt: new Date().toISOString(),
-              updatedBy: dbUser.id,
-              updatedByEmail: normalizeText(session?.user?.email),
-            },
-          });
+            };
+            const mergedBlocks = [...payload.blocks, nextBlock];
+            const totalMinutes = sumBlocksMinutes(mergedBlocks);
+            if (totalMinutes > limit) {
+              return json({ error: 'Copiar este bloque supera el tiempo máximo asignado' }, 400);
+            }
+
+            await upsertSubmission({
+              assignmentId: studentAssignmentId,
+              userId: rowUserId,
+              payload: {
+                __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+                ...payload,
+                blocks: mergedBlocks,
+                updatedAt: new Date().toISOString(),
+                updatedBy: dbUser.id,
+                updatedByEmail: normalizeText(session?.user?.email),
+              },
+            });
+          }
           return json({ success: true });
         }
       }
@@ -968,33 +1130,124 @@ export const POST: APIRoute = async ({ request, locals }) => {
         const blockIndex = payload.blocks.findIndex((b) => b.id === blockId);
         if (blockIndex !== -1) {
           const rowUserId = normalizeText(row?.userId);
+          const { grupo, memberIds } = await getGroupDetails(courseId, year, rowUserId);
+          const isGroupMember = memberIds.map(m => m.toLowerCase()).includes(dbUser.id.toLowerCase());
           const isOwnBlock = rowUserId.toLowerCase() === dbUser.id.toLowerCase();
-          if (!canManage && !isOwnBlock) {
+          
+          if (!canManage && !isOwnBlock && !isGroupMember) {
             return json({ error: 'No tenés permiso para editar este bloque' }, 403);
           }
+
           const block = payload.blocks[blockIndex];
-          const nextBlock = {
-            ...block,
-            comment: normalizeAgendaComment(body?.comment ?? block.comment, 280),
-            dateKey: normalizeAgendaDateKey(body?.dateKey || block.dateKey),
-            startMinute: normalizeMinute(body?.startMinute ?? block.startMinute),
-            endMinute: normalizeMinute(body?.endMinute ?? block.endMinute),
-            updatedAt: new Date().toISOString(),
-          };
-          const nextBlocks = [...payload.blocks];
-          nextBlocks[blockIndex] = nextBlock;
-          await upsertSubmission({
-            assignmentId: studentAssignmentId,
-            userId: rowUserId,
-            payload: {
-              __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
-              ...payload,
-              blocks: nextBlocks,
+          const oldDateKey = block.dateKey;
+          const oldStartMinute = block.startMinute;
+          const oldEndMinute = block.endMinute;
+
+          const nextDateKey = normalizeAgendaDateKey(body?.dateKey || block.dateKey);
+          const nextStartMinute = normalizeMinute(body?.startMinute ?? block.startMinute);
+          const nextEndMinute = normalizeMinute(body?.endMinute ?? block.endMinute);
+          const nextComment = normalizeAgendaComment(body?.comment ?? block.comment, 280);
+
+          if (grupo && memberIds.length > 0) {
+            // Check time limits for all group members first
+            const { data: configRows, error: configError } = await query(
+              'SELECT "payload", "submittedAt" FROM "Submission" WHERE "assignmentId" = $1 ORDER BY "submittedAt" DESC',
+              [configAssignmentId]
+            );
+            if (configError) throw configError;
+            const currentConfig = normalizeAgendaConfigPayload((configRows?.[0] as any)?.payload || {}, courseId, year);
+            const limit = clampAgendaMaxStudentMinutes(currentConfig.maxStudentMinutes);
+
+            for (const memberRow of studentRows) {
+              const memberUserId = normalizeText(memberRow?.userId);
+              if (memberIds.map(m => m.toLowerCase()).includes(memberUserId.toLowerCase())) {
+                const memberPayload = normalizeAgendaStudentPayload(memberRow?.payload || {}, courseId, year, memberUserId);
+                if (!memberPayload) continue;
+
+                const memberBlockIndex = memberPayload.blocks.findIndex(b => 
+                  b.dateKey === oldDateKey && b.startMinute === oldStartMinute && b.endMinute === oldEndMinute
+                );
+                if (memberBlockIndex === -1) continue;
+
+                const nextBlocks = [...memberPayload.blocks];
+                nextBlocks[memberBlockIndex] = {
+                  ...nextBlocks[memberBlockIndex],
+                  dateKey: nextDateKey,
+                  startMinute: nextStartMinute,
+                  endMinute: nextEndMinute,
+                  comment: nextComment,
+                  updatedAt: new Date().toISOString(),
+                };
+
+                const totalMinutes = sumBlocksMinutes(nextBlocks);
+                if (totalMinutes > limit) {
+                  return json({ error: `Mover este bloque supera el tiempo máximo para un integrante del grupo` }, 400);
+                }
+              }
+            }
+
+            // Perform updates for all group members
+            for (const memberRow of studentRows) {
+              const memberUserId = normalizeText(memberRow?.userId);
+              if (memberIds.map(m => m.toLowerCase()).includes(memberUserId.toLowerCase())) {
+                const memberPayload = normalizeAgendaStudentPayload(memberRow?.payload || {}, courseId, year, memberUserId);
+                if (!memberPayload) continue;
+
+                const memberBlockIndex = memberPayload.blocks.findIndex(b => 
+                  b.dateKey === oldDateKey && b.startMinute === oldStartMinute && b.endMinute === oldEndMinute
+                );
+                if (memberBlockIndex === -1) continue;
+
+                const nextBlocks = [...memberPayload.blocks];
+                nextBlocks[memberBlockIndex] = {
+                  ...nextBlocks[memberBlockIndex],
+                  dateKey: nextDateKey,
+                  startMinute: nextStartMinute,
+                  endMinute: nextEndMinute,
+                  comment: nextComment,
+                  updatedAt: new Date().toISOString(),
+                };
+
+                await upsertSubmission({
+                  assignmentId: studentAssignmentId,
+                  userId: memberUserId,
+                  payload: {
+                    __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+                    ...memberPayload,
+                    blocks: nextBlocks,
+                    updatedAt: new Date().toISOString(),
+                    updatedBy: dbUser.id,
+                    updatedByEmail: normalizeText(session?.user?.email),
+                  },
+                });
+              }
+            }
+          } else {
+            // Standard single-student update
+            const nextBlock = {
+              ...block,
+              comment: nextComment,
+              dateKey: nextDateKey,
+              startMinute: nextStartMinute,
+              endMinute: nextEndMinute,
               updatedAt: new Date().toISOString(),
-              updatedBy: dbUser.id,
-              updatedByEmail: normalizeText(session?.user?.email),
-            },
-          });
+            };
+            const nextBlocks = [...payload.blocks];
+            nextBlocks[blockIndex] = nextBlock;
+
+            await upsertSubmission({
+              assignmentId: studentAssignmentId,
+              userId: rowUserId,
+              payload: {
+                __metaKind: COURSE_AGENDA_STUDENT_META_KIND,
+                ...payload,
+                blocks: nextBlocks,
+                updatedAt: new Date().toISOString(),
+                updatedBy: dbUser.id,
+                updatedByEmail: normalizeText(session?.user?.email),
+              },
+            });
+          }
           return json({ success: true });
         }
       }

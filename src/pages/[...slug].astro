@@ -1416,6 +1416,19 @@ function renderLessonsTreeHTML(
       /* Right column with no forum still shows the tabs only if there are ≥2 pods. */
       .course-container[data-has-right-sidebar='false'] .right-pod-tabs { display: none; }
 
+      .article-forum-section {
+        margin-top: 5rem;
+        border-top: 1px solid var(--c-border, rgba(120, 120, 140, 0.15));
+        padding-top: 3rem;
+      }
+      .article-forum-heading {
+        font-size: 1.4rem;
+        font-weight: 700;
+        margin-bottom: 2rem;
+        color: var(--c-fg);
+        text-transform: lowercase;
+      }
+
       .page-info-sidebar-panel {
         position: absolute;
         inset: 2.55rem 0 0 0;
@@ -5544,6 +5557,105 @@ function renderLessonsTreeHTML(
       )}
       <div id="notes-editor-mount" hidden style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;"></div>
 
+      {hasForumSidebar && (
+        <div class="article-forum-section">
+          <h2 class="article-forum-heading">comentarios y discusión</h2>
+          <section
+            class="lesson-forum"
+            id="lesson-forum"
+            data-course-id={canonicalCourseId || courseSlug}
+            data-lesson-slug={lessonSlug}
+            data-is-lesson-page={isLessonPage ? 'true' : 'false'}
+            data-forum-mode="lesson"
+            data-initial-board-slug="lesson"
+            data-has-session={hasSessionUser ? 'true' : 'false'}
+            data-r2-public-url={import.meta.env.R2_PUBLIC_URL || import.meta.env.PUBLIC_R2_URL || ''}
+          >
+            <div id="forum-new-board-panel" class="forum-board-create-panel" hidden>
+              <form id="forum-new-board-form" class="forum-form forum-board-create-form">
+                <input
+                  id="forum-board-title"
+                  class="forum-field"
+                  type="text"
+                  maxlength="90"
+                  placeholder="Nombre del foro"
+                  required
+                />
+                <button
+                  type="submit"
+                  class="forum-secondary-btn forum-action-btn forum-action-f forum-board-create-submit"
+                  data-tooltip="Crear foro"
+                  aria-label="Crear foro"
+                  title="Crear foro"
+                >
+                  +
+                </button>
+              </form>
+            </div>
+
+            <div id="forum-board-context-menu" class="forum-board-context-menu" hidden>
+              <button type="button" id="forum-board-rename" class="forum-board-context-action">
+                Renombrar foro
+              </button>
+              <button type="button" id="forum-board-delete" class="forum-board-context-action forum-board-context-action--danger">
+                Borrar foro
+              </button>
+            </div>
+
+            {hasSessionUser ? (
+              <>
+                <p id="forum-status" class="forum-status" hidden></p>
+                <div class="forum-input-shell">
+                  <div class="forum-grid">
+                    <section class="forum-panel forum-thread-column">
+                      <div id="forum-thread-list" class="forum-thread-list">
+                        <p class="forum-empty">Cargando hilos...</p>
+                      </div>
+                    </section>
+
+                    <section id="forum-thread-stage" class="forum-panel forum-thread-stage" hidden>
+                      <div id="forum-post-list" class="forum-post-list">
+                        <p class="forum-empty">Selecciona un hilo para ver los mensajes.</p>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div id="forum-reply-indicator" class="forum-reply-indicator" hidden>
+                    <button type="button" id="forum-cancel-reply" class="forum-reply-indicator-cancel" aria-label="Cancelar respuesta" title="Cancelar">✕</button>
+                    <span class="forum-reply-indicator-label">↩ Respondiendo a <strong id="forum-reply-author-name"></strong></span>
+                  </div>
+
+                  <div id="forum-new-thread" class="forum-new-thread-bar" hidden>
+                    <input id="forum-parent-post-id" type="hidden" />
+                    <div class="forum-plus-wrap">
+                      <button type="button" id="forum-plus-btn" class="forum-plus-btn" title="Plantillas y archivos" aria-label="Plantillas y archivos" aria-expanded="false">
+                        <svg viewBox="0 0 16 16" aria-hidden="true" width="18" height="18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"><path d="M8 2v12M2 8h12"/></svg>
+                      </button>
+                      <div id="forum-plus-popup" class="forum-plus-popup" hidden>
+                        <div class="forum-form-actions forum-plus-popup-actions" id="forum-thread-plus-actions"></div>
+                      </div>
+                    </div>
+                    <form id="forum-new-thread-form" class="forum-new-thread-form">
+                      <div class="forum-editor-dropzone forum-new-thread-editor">
+                        <textarea id="forum-thread-body" class="forum-textarea forum-textarea--autogrow" maxlength="4000" placeholder="Nuevo hilo… (primera línea = título)" required rows="1"></textarea>
+                      </div>
+                      <button type="submit" class="forum-send-btn" title="Publicar" aria-label="Publicar">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" width="15" height="15"><path d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z" fill="currentColor"/></svg>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div class="forum-login-cta">
+                Inicia sesión para ver y participar del foro.
+                <a href={`/login?redirect=${encodeURIComponent(loginCtaTarget)}`} class="nav-button" style="margin-left: 0.6rem;">Iniciar sesión</a>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
         {isAssignment && (
           <div style="margin-top: 2rem; padding: 1.5rem; background: var(--c-bg-mute); border-radius: 8px;">
             <p><em>Nota: Las respuestas se guardarán en una próxima actualización. Por ahora, puedes trabajar en el ejercicio localmente.</em></p>
@@ -5566,145 +5678,17 @@ function renderLessonsTreeHTML(
 
       <aside class="sidebar sidebar--right" data-course-sidebar="right" aria-label="Panel derecho">
         <div class="right-pod-tabs" role="tablist" aria-label="Paneles del lado derecho">
-          {hasForumSidebar && (
-            <button type="button" class="right-pod-tab" data-right-pod="forum" aria-pressed="false">Foro</button>
-          )}
           <button type="button" class="right-pod-tab" data-right-pod="info" aria-pressed="false">Info</button>
           <button type="button" class="right-pod-tab" data-right-pod="progress" aria-pressed="false">Progreso</button>
         </div>
-        <div class:list={['sidebar-panel-actions', { 'sidebar-panel-actions--forum': hasForumSidebar }]}>
-          <div class="sidebar-panel-actions-group sidebar-panel-actions-group--edge">
-            <button
-              type="button"
-              class="sidebar-toggle-btn sidebar-maximize-btn"
-              data-sidebar-maximize="right"
-              aria-label="Maximizar foros"
-              title="Maximizar foros"
-            >⤢</button>
-          </div>
-          {hasForumSidebar ? (
-            <div class="forum-switcher-shell">
-              <nav
-                id="course-forum-subnav"
-                class="forum-switcher-bar"
-                aria-label="Cambiar de foro"
-                data-course-id={canonicalCourseId || courseSlug}
-                data-forum-base-href={forumShellHref}
-                data-lesson-href={lessonForumHref}
-                data-lesson-slug={lessonSlug}
-                data-lesson-scope-key={isLessonPage ? `lesson:${canonicalCourseId || courseSlug}:${lessonSlug}` : ''}
-                data-lesson-total="0"
-                data-lesson-title={lessonForumHoverTitle}
-                data-has-session={hasSessionUser ? 'true' : 'false'}
-                data-is-lesson-page={isLessonPage ? 'true' : 'false'}
-                data-active-mode={initialSidebarForumMode}
-                data-active-board-slug={initialSidebarBoardSlug}
-              >
-                {hasSessionUser ? (
-                  <>
-                    {generalSidebarForumBoard && (() => {
-                      const boardSlug = normalizeForumBoardSlug(generalSidebarForumBoard.slug);
-                      const isActiveBoard = initialSidebarForumMode === 'board' && boardSlug === initialSidebarBoardSlug;
-                      const boardHref = `${forumShellHref}?board=${encodeURIComponent(boardSlug)}#lesson-forum`;
-                      const boardMark = getForumSwitcherMarkParts(generalSidebarForumBoard.title);
-
-                      return (
-                        <a
-                          href={boardHref}
-                          class:list={['forum-switcher-link', 'forum-switcher-link--board', 'forum-subforum-link', { active: isActiveBoard }]}
-                          data-board-slug={boardSlug}
-                          data-forum-scope-key={`board:${canonicalCourseId || courseSlug}:${boardSlug}`}
-                          data-forum-total={String(Math.max(0, Number((generalSidebarForumBoard as any)?.messageCount ?? 0) || 0))}
-                          style={{ '--forum-switcher-color': GENERAL_FORUM_SWITCHER_COLOR }}
-                          title={generalSidebarForumBoard.title}
-                          aria-label={generalSidebarForumBoard.title}
-                          aria-current={isActiveBoard ? 'page' : undefined}
-                        >
-                          <span class="forum-switcher-mark" aria-hidden="true">
-                            {boardMark.primary}
-                            {boardMark.secondary && <sup class="forum-switcher-sup">{boardMark.secondary}</sup>}
-                          </span>
-                          <span class="forum-switcher-unread-dot" aria-hidden="true"></span>
-                        </a>
-                      );
-                    })()}
-                    {isLessonPage && (() => {
-                      const lessonMark = getForumSwitcherMarkParts('Lección');
-                      return (
-                        <a
-                          href={`${lessonForumHref}#lesson-forum`}
-                          class:list={['forum-switcher-link', 'forum-switcher-link--lesson', 'forum-subforum-link', { active: initialSidebarForumMode === 'lesson' }]}
-                          data-board-slug="lesson"
-                          data-forum-scope-key={isLessonPage ? `lesson:${canonicalCourseId || courseSlug}:${lessonSlug}` : undefined}
-                          data-forum-total="0"
-                          style={{ '--forum-switcher-color': '#7c3aed' }}
-                          title={lessonForumHoverTitle}
-                          aria-label="Lección"
-                          aria-current={initialSidebarForumMode === 'lesson' ? 'page' : undefined}
-                        >
-                          <span class="forum-switcher-mark" aria-hidden="true">
-                            {lessonMark.primary}
-                            {lessonMark.secondary && <sup class="forum-switcher-sup">{lessonMark.secondary}</sup>}
-                          </span>
-                          <span class="forum-switcher-unread-dot" aria-hidden="true"></span>
-                        </a>
-                      );
-                    })()}
-                    {customSidebarForumBoards.map((board, index) => {
-                    const boardSlug = normalizeForumBoardSlug(board.slug);
-                    const isActiveBoard = initialSidebarForumMode === 'board' && boardSlug === initialSidebarBoardSlug;
-                    const boardHref = `${forumShellHref}?board=${encodeURIComponent(boardSlug)}#lesson-forum`;
-                    const boardMark = getForumSwitcherMarkParts(board.title);
-                    const boardColor = getForumSwitcherColor(index);
-
-                    return (
-                      <a
-                        href={boardHref}
-                        class:list={['forum-switcher-link', 'forum-switcher-link--board', 'forum-subforum-link', { active: isActiveBoard }]}
-                        data-board-slug={boardSlug}
-                        data-forum-scope-key={`board:${canonicalCourseId || courseSlug}:${boardSlug}`}
-                        data-forum-total={String(Math.max(0, Number((board as any)?.messageCount ?? 0) || 0))}
-                        style={{ '--forum-switcher-color': boardColor }}
-                        title={board.title}
-                        aria-label={board.title}
-                        aria-current={isActiveBoard ? 'page' : undefined}
-                      >
-                        <span class="forum-switcher-mark" aria-hidden="true">
-                          {boardMark.primary}
-                          {boardMark.secondary && <sup class="forum-switcher-sup">{boardMark.secondary}</sup>}
-                        </span>
-                        <span class="forum-switcher-unread-dot" aria-hidden="true"></span>
-                      </a>
-                    );
-                    })}
-                  </>
-                ) : (
-                  <span class="forum-switcher-link forum-subforum-link is-disabled" title="Inicia sesión para ver subforos" aria-hidden="true">
-                    <span class="forum-switcher-mark">?</span>
-                  </span>
-                )}
-                <button
-                  id="forum-new-board-toggle"
-                  type="button"
-                  class="forum-switcher-link forum-switcher-link--add forum-switcher-add"
-                  title="Agregar foro"
-                  aria-label="Agregar foro"
-                  aria-controls="forum-new-board-panel"
-                  aria-expanded="false"
-                  hidden={!hasSessionUser || !canManageLiveInteractions}
-                >
-                  <span class="forum-switcher-add-mark" aria-hidden="true">+</span>
-                </button>
-              </nav>
-            </div>
-          ) : null}
+        <div class="sidebar-panel-actions">
           <div class="sidebar-panel-actions-group sidebar-panel-actions-group--edge">
             <button
               type="button"
               class="sidebar-toggle-btn"
               data-sidebar-toggle="right"
-              aria-label="Ocultar foros"
-              title="Ocultar foros (⌘/Ctrl + Shift + \\)"
+              aria-label="Ocultar panel"
+              title="Ocultar panel"
             >
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M16.1795 3.26875C15.7889 2.87823 15.1558 2.87823 14.7652 3.26875L8.12078 9.91322C6.94952 11.0845 6.94916 12.9833 8.11996 14.155L14.6903 20.7304C15.0808 21.121 15.714 21.121 16.1045 20.7304C16.495 20.3399 16.495 19.7067 16.1045 19.3162L9.53246 12.7442C9.14194 12.3536 9.14194 11.7205 9.53246 11.33L16.1795 4.68297C16.57 4.29244 16.57 3.65928 16.1795 3.26875Z" fill="currentColor"/>
@@ -6888,9 +6872,7 @@ function renderLessonsTreeHTML(
         // Single source of truth for which pod is visible: data-page-info-open
         // ('true' = info pod overlay, 'false' = forum pod base). `rightOpen`
         // controls whether the column shows at all.
-        const podOf = () => (root.dataset.progressOpen === 'true'
-          ? 'progress'
-          : (root.dataset.pageInfoOpen === 'true' ? 'info' : 'forum'));
+        const podOf = () => (root.dataset.progressOpen === 'true' ? 'progress' : 'info');
         const syncRightPodTabs = () => {
           const pod = podOf();
           document.querySelectorAll('[data-right-pod]').forEach((tab) => {
@@ -6915,7 +6897,7 @@ function renderLessonsTreeHTML(
         };
         // Pod-aware toggle for the edge buttons: open+show, switch, or close.
         const toggleRightPod = (pod) => {
-          const targetPod = (pod === 'forum' && !hasRightSidebar) ? 'info' : pod;
+          const targetPod = (pod === 'forum') ? 'info' : pod;
           if (rightOpen && podOf() === targetPod) {
             rightOpen = false;
             rightMaximized = false;
@@ -6929,25 +6911,25 @@ function renderLessonsTreeHTML(
           syncLayoutState();
           syncRightPodTabs();
         };
-        const closePageInfo = () => { toggleRightPod('forum'); };
+        const closePageInfo = () => { rightOpen = false; persistLayoutState(); syncLayoutState(); syncRightPodTabs(); };
 
         document.querySelectorAll('[data-page-info-close]').forEach((btn) => {
           if (btn instanceof HTMLElement && !btn.dataset.boundPageInfo) {
             btn.dataset.boundPageInfo = 'true';
             btn.addEventListener('click', () => {
-              // From the info pod, the × returns to the forum pod if present,
-              // otherwise closes the column.
-              if (hasRightSidebar) setRightPod('forum');
-              else { rightOpen = false; persistLayoutState(); syncLayoutState(); syncRightPodTabs(); }
+              rightOpen = false;
+              persistLayoutState();
+              syncLayoutState();
+              syncRightPodTabs();
             });
           }
         });
 
-        // Pod tab bar (Foro / Info).
+        // Pod tab bar.
         document.querySelectorAll('[data-right-pod]').forEach((tab) => {
           if (tab instanceof HTMLElement && !tab.dataset.boundRightPod) {
             tab.dataset.boundRightPod = 'true';
-            tab.addEventListener('click', () => setRightPod(tab.dataset.rightPod || 'forum'));
+            tab.addEventListener('click', () => setRightPod(tab.dataset.rightPod || 'info'));
           }
         });
 
@@ -6958,8 +6940,11 @@ function renderLessonsTreeHTML(
           if (btn instanceof HTMLElement && !btn.dataset.boundProgressClose) {
             btn.dataset.boundProgressClose = 'true';
             btn.addEventListener('click', () => {
-              if (hasRightSidebar) setRightPod('forum');
-              else { rightOpen = false; root.dataset.progressOpen = 'false'; persistLayoutState(); syncLayoutState(); syncRightPodTabs(); }
+              rightOpen = false;
+              root.dataset.progressOpen = 'false';
+              persistLayoutState();
+              syncLayoutState();
+              syncRightPodTabs();
             });
           }
         });

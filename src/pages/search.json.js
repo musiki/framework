@@ -12,6 +12,23 @@ import { getContentCanonicalSlug } from '../lib/content-slug';
 
 export const prerender = false;
 
+function cleanMarkdown(md) {
+  if (!md) return '';
+  return md
+    .replace(/^---[\s\S]*?---/, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/<[^>]*>/g, '')
+    .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^\)]+\)/g, '$1')
+    .replace(/[\*_]{1,3}([^*_]+)[\*_]{1,3}/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*>\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const hasPublicStatus = (item) => String(item?.data?.status || '').trim().toLowerCase() === 'public';
 
 export async function GET({ locals }) {
@@ -43,11 +60,13 @@ export async function GET({ locals }) {
     return {
       title,
       slug: '/' + slug,
-      content: item.body || '',
+      content: cleanMarkdown(item.body || ''),
       type,
       hasDataview,
       reveal,
       isPublic: true,
+      def: item.data.def || item.data.definition || '',
+      sinopsis: item.data.sinopsis || item.data.synopsis || item.data.description || '',
     };
   });
 
@@ -103,12 +122,14 @@ export async function GET({ locals }) {
     return {
       title,
       slug,
-      content: item.body || '',
+      content: cleanMarkdown(item.body || ''),
       type,
       hasDataview: false,
       reveal,
       courseId,
       isPublic,
+      def: item.data.def || item.data.definition || '',
+      sinopsis: item.data.sinopsis || item.data.synopsis || item.data.description || '',
     };
   });
 
