@@ -52,31 +52,29 @@ const buildUnifiedSlots = (data: AgendaData, isTeacher: boolean) => {
   const endTime = timeStringToMinutes(data.config.endTime || '18:00');
   const slotMin = isTeacher ? getAgendaTeacherSlotMinutes(data.config) : getAgendaStudentSlotMinutes(data.config);
 
-  // Clamp events to [startTime, endTime] and sort. Overlapping events are handled
-  // by tracking the cursor so each segment only covers non-event time.
-  const eventSegments = (data.events || [])
-    .map(e => ({ start: Math.max(startTime, e.startMinute), end: Math.min(endTime, e.endMinute) }))
-    .filter(e => e.start < e.end)
-    .sort((a, b) => a.start - b.start);
-
   const boundaries = new Set<number>();
   boundaries.add(startTime);
   boundaries.add(endTime);
 
-  // Add event boundaries so each event occupies its own slot(s).
+  // Generate regular-grid boundaries unconditionally across the entire range
+  let cursor = startTime;
+  while (cursor + slotMin <= endTime) {
+    cursor += slotMin;
+    boundaries.add(cursor);
+  }
+
+  // Add event boundaries so each event occupies its own slot(s)
+  const eventSegments = (data.events || [])
+    .map(e => ({ start: Math.max(startTime, e.startMinute), end: Math.min(endTime, e.endMinute) }))
+    .filter(e => e.start < e.end);
   eventSegments.forEach(e => { boundaries.add(e.start); boundaries.add(e.end); });
 
-  // Generate regular-grid boundaries only within free segments (gaps between events).
-  // This resets the quantisation after each event, preventing drift.
-  let cursor = startTime;
-  for (const ev of eventSegments) {
-    // Fill the free gap before this event.
-    while (cursor + slotMin <= ev.start) { cursor += slotMin; boundaries.add(cursor); }
-    // Jump over the event; regular grid resumes from its end.
-    cursor = ev.end;
-  }
-  // Fill any remaining free time after the last event.
-  while (cursor + slotMin <= endTime) { cursor += slotMin; boundaries.add(cursor); }
+  // Add student block boundaries so each reservation occupies its own slot(s)
+  const studentSegments = (data.students || [])
+    .flatMap(s => (s.blocks || []))
+    .map(b => ({ start: Math.max(startTime, b.startMinute), end: Math.min(endTime, b.endMinute) }))
+    .filter(b => b.start < b.end);
+  studentSegments.forEach(b => { boundaries.add(b.start); boundaries.add(b.end); });
 
   const sorted = Array.from(boundaries).sort((a, b) => a - b);
   const slots: AgendaSlot[] = [];
@@ -315,8 +313,8 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
           <div class="agenda-config-bar">
             <label class="agenda-config-field"><span>Inicio</span><input type="time" value="${normalizeAgendaTimeString(data.config.startTime)}" data-agenda-config="startTime" /></label>
             <label class="agenda-config-field"><span>Fin</span><input type="time" value="${normalizeAgendaTimeString(data.config.endTime)}" data-agenda-config="endTime" /></label>
-            <label class="agenda-config-field agenda-config-field--tiny"><span>Dur.T</span><input type="number" step="5" value="${data.config.teacherSlotMinutes}" data-agenda-config="teacherSlotMinutes" /></label>
-            <label class="agenda-config-field agenda-config-field--tiny"><span>Dur.S</span><input type="number" step="5" value="${data.config.studentSlotMinutes}" data-agenda-config="studentSlotMinutes" /></label>
+            <label class="agenda-config-field agenda-config-field--tiny" title="Duración del slot del docente / Cuantización de la grilla (en minutos)"><span>Dur.T</span><input type="number" step="5" value="${data.config.teacherSlotMinutes}" data-agenda-config="teacherSlotMinutes" title="Duración del slot del docente / Cuantización de la grilla (en minutos)" /></label>
+            <label class="agenda-config-field agenda-config-field--tiny" title="Duración del slot de reserva para los estudiantes (en minutos)"><span>Dur.S</span><input type="number" step="5" value="${data.config.studentSlotMinutes}" data-agenda-config="studentSlotMinutes" title="Duración del slot de reserva para los estudiantes (en minutos)" /></label>
             <label class="agenda-config-field agenda-config-field--small"><span>Tope min</span><input type="number" step="5" value="${data.config.maxStudentMinutes}" data-agenda-config="maxStudentMinutes" /></label>
             <label class="agenda-config-field agenda-config-field--small"><span>Cant. mín.</span><input type="number" step="1" value="${data.config.minMeetings || 0}" data-agenda-config="minMeetings" /></label>
             <button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-agenda-share>Compartir</button>

@@ -13,6 +13,7 @@ import {
   type DashboardAnnotationScopeType,
   type DashboardAnnotationVisibility,
 } from '../lib/dashboard/annotations';
+import { splitDashboardName } from '../lib/dashboard/shared';
 import 'handsontable/styles/handsontable.css';
 import 'handsontable/styles/ht-theme-main.css';
 
@@ -1679,13 +1680,44 @@ const persistCellChange = async (sheet: DashboardSheet, meta: DashboardMeta, vis
 
   if (kind === 'editable-text') {
     const userId = normalizeText(rowData.userId || rowData.id || rowData.studentId);
-    const field = prop === 'email' ? 'email' : 'name';
     if (!userId) return;
+
+    let field = '';
+    let valueToSend = '';
+    let nameToSend = '';
+
+    if (prop === 'email') {
+      field = 'email';
+      valueToSend = normalizeText(newValue);
+    } else {
+      field = 'name';
+      if (prop === 'firstName') {
+        const currentLastName = normalizeText(rowData.lastName || '');
+        const newFirstName = normalizeText(newValue);
+        if (!currentLastName && !newFirstName) {
+          nameToSend = '';
+        } else {
+          nameToSend = `${currentLastName}, ${newFirstName}`;
+        }
+      } else if (prop === 'lastName') {
+        const currentFirstName = normalizeText(rowData.firstName || '');
+        const newLastName = normalizeText(newValue);
+        if (!newLastName && !currentFirstName) {
+          nameToSend = '';
+        } else {
+          nameToSend = `${newLastName}, ${currentFirstName}`;
+        }
+      } else {
+        nameToSend = normalizeText(newValue);
+      }
+      valueToSend = nameToSend;
+    }
+
     setDashboardSaveStatus('saving', `Guardando ${field}...`);
     const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courseId: meta.courseId, [field]: normalizeText(newValue) }),
+      body: JSON.stringify({ courseId: meta.courseId, [field]: valueToSend }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -1694,7 +1726,19 @@ const persistCellChange = async (sheet: DashboardSheet, meta: DashboardMeta, vis
       setDashboardSaveStatus('error', payload?.error || `No se pudo guardar ${field}`);
       throw new Error(payload?.error || `No se pudo guardar ${field}`);
     }
-    rowData[prop] = payload?.user?.[field] || newValue;
+
+    if (field === 'email') {
+      rowData.email = payload?.user?.email || valueToSend;
+    } else {
+      const updatedName = payload?.user?.name || nameToSend;
+      const split = splitDashboardName(updatedName);
+      rowData.firstName = split.firstName;
+      rowData.lastName = split.lastName;
+      if ('name' in rowData) {
+        rowData.name = updatedName;
+      }
+    }
+    sheet.hot.render();
     setDashboardSaveStatus('saved', `${field} guardado.`);
   }
 };
