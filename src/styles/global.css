@@ -1265,7 +1265,14 @@ ol ol ol ol > li::marker {
 }
 
 .seshat-citation {
+  color: var(--c-accent, var(--accent-color, #9b4d2b));
+  font-weight: 650;
   white-space: nowrap;
+}
+
+.seshat-references .csl-author {
+  color: var(--c-accent, var(--accent-color, #9b4d2b));
+  font-weight: 650;
 }
 
 .seshat-references {

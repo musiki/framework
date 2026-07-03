@@ -9,6 +9,11 @@ const cache = new Map();
 const normalizeHeading = (node) => String(node?.children?.map((child) => child.value || '').join('') || '')
   .trim().toLocaleLowerCase();
 
+const accentBibliographyAuthors = (html) => String(html).replace(
+  /(<div class="csl-entry">)(.*?)(?=\s+\((?:\d{4}[a-z]?|s\.\s*f\.|n\.d\.)\))/g,
+  '$1<span class="csl-author">$2</span>',
+);
+
 async function resolveCitations(keys) {
   const unique = [...new Set(keys)];
   const now = Date.now();
@@ -103,9 +108,9 @@ export default function remarkSeshatCitations(options = {}) {
     }
     tree.children.push({
       type: 'html',
-      value: `<section class="seshat-references" data-citekeys="${uniqueKeys.join(' ')}">${cite.format('bibliography', {
+      value: `<section class="seshat-references" data-citekeys="${uniqueKeys.join(' ')}">${accentBibliographyAuthors(cite.format('bibliography', {
         format: 'html', template, lang, entry: uniqueKeys,
-      })}</section>`,
+      }))}</section>`,
     });
   };
 }
