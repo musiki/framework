@@ -381,7 +381,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
       style += ` ${borderStyles}`;
     }
 
-    return { classes, style, markup: `${eventMarkup}${studentMarkup}`, eventId: primaryEvent?.id || null };
+    return { classes, style, markup: `${eventMarkup}${studentMarkup}`, dogearMarkup, eventId: primaryEvent?.id || null };
   };
 
   host.innerHTML = `
@@ -418,7 +418,7 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
                 <th class="agenda-grid__time">${escapeHtml(slot.label)}</th>
                 ${dates.map((date, colIndex) => {
                   const cell = renderCellEntries(date.dateKey, slot, colIndex);
-                  return `<td><button type="button" class="${cell.classes}" style="${cell.style}" data-row-index="${slot.rowIndex}" data-col-index="${colIndex}" data-date-key="${escapeHtml(date.dateKey)}" data-start-minute="${slot.startMinute}" data-end-minute="${slot.endMinute}" ${cell.eventId ? `data-agenda-event-id="${escapeHtml(cell.eventId)}"` : ''}><span class="agenda-cell__fill"></span><span class="agenda-cell__content">${cell.markup}</span></button></td>`;
+                  return `<td><button type="button" class="${cell.classes}" style="${cell.style}" data-row-index="${slot.rowIndex}" data-col-index="${colIndex}" data-date-key="${escapeHtml(date.dateKey)}" data-start-minute="${slot.startMinute}" data-end-minute="${slot.endMinute}" ${cell.eventId ? `data-agenda-event-id="${escapeHtml(cell.eventId)}"` : ''}><span class="agenda-cell__fill"></span><span class="agenda-cell__content">${cell.markup}</span>${cell.dogearMarkup || ''}</button></td>`;
                 }).join('')}
               </tr>
             `).join('')}
