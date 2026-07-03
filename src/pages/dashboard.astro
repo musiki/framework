@@ -2318,6 +2318,39 @@ const agendaRosterStudentEnrollments = Array.from(
   return leftName.localeCompare(rightName, 'es');
 });
 
+let studentGroup = '';
+let groupMembers: { name: string; email: string }[] = [];
+const agendaGroupByStudentId = new Map<string, string>();
+
+if (!isTeacher && activeCourseId && activeYear) {
+  const metaAssignmentId = `__meta__:course-student-profile:${encodeURIComponent(activeCourseId)}:${activeYear}`;
+  const { data: groupMetaRows } = await query(
+    `SELECT s."userId", s.payload, u.name, u.email
+     FROM "Submission" s
+     JOIN "User" u ON s."userId" = u.id
+     WHERE s."assignmentId" = $1`,
+    [metaAssignmentId]
+  );
+
+  (groupMetaRows || []).forEach((row: any) => {
+    const payload = asPayloadObject(row.payload);
+    const studentId = normalizeText(row?.userId);
+    const grupo = normalizeText(payload?.grupo || payload?.group || '');
+    if (studentId && grupo) agendaGroupByStudentId.set(studentId, grupo);
+  });
+
+  studentGroup = agendaGroupByStudentId.get(String(dbUser?.id || '')) || '';
+  if (studentGroup) {
+    groupMembers = (groupMetaRows || [])
+      .filter((row: any) => agendaGroupByStudentId.get(normalizeText(row?.userId)) === studentGroup)
+      .map((row: any) => ({
+        name: String(row.name || row.email || 'Estudiante'),
+        email: String(row.email || '')
+      }))
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }
+}
+
 const dashboardAgendaStudents = Array.from(
   new Set([
     ...agendaRosterStudentEnrollments.map((e: any) => normalizeText(e?.userId)),
@@ -2336,7 +2369,7 @@ const dashboardAgendaStudents = Array.from(
     color: String(payload?.color || buildAgendaStudentColor(studentId)),
     totalMinutes: sumAgendaBlocksMinutes(blocks),
     blocks,
-    grupo: studentMeta?.grupo || '',
+    grupo: studentMeta?.grupo || agendaGroupByStudentId.get(studentId) || '',
   };
 });
 
@@ -2346,41 +2379,6 @@ const studentAgendaVisible = Boolean(
     || activeAgendaEventsUpdatedAt
     || dashboardAgendaStudents.some((student: any) => Array.isArray(student?.blocks) && student.blocks.length > 0))
 );
-
-let studentGroup = '';
-let groupMembers: { name: string; email: string }[] = [];
-
-if (!isTeacher && activeCourseId && activeYear) {
-  const metaAssignmentId = `__meta__:course-student-profile:${encodeURIComponent(activeCourseId)}:${activeYear}`;
-  const { data: ownMetaRows } = await query(
-    `SELECT payload FROM "Submission" WHERE "assignmentId" = $1 AND "userId" = $2 LIMIT 1`,
-    [metaAssignmentId, dbUser?.id]
-  );
-  const ownMeta = ownMetaRows?.[0] ? asPayloadObject((ownMetaRows[0] as any).payload) : null;
-  studentGroup = normalizeText(ownMeta?.grupo || '');
-
-  if (studentGroup) {
-    const { data: groupMetaRows } = await query(
-      `SELECT s.payload, u.name, u.email
-       FROM "Submission" s
-       JOIN "User" u ON s."userId" = u.id
-       WHERE s."assignmentId" = $1`,
-      [metaAssignmentId]
-    );
-
-    const members = (groupMetaRows || [])
-      .filter((row: any) => {
-        const payload = asPayloadObject(row.payload);
-        return normalizeText(payload?.grupo) === studentGroup;
-      })
-      .map((row: any) => ({
-        name: String(row.name || row.email || 'Estudiante'),
-        email: String(row.email || '')
-      }));
-    
-    groupMembers = members.sort((a, b) => a.name.localeCompare(b.name));
-  }
-}
 
 const dashboardAgendaData = {
   courseId: activeCourseId,
@@ -5346,8 +5344,12 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         position: relative;
         display: inline-flex;
         align-items: center;
+        justify-content: center;
+        flex: 0 0 100%;
+        width: 100%;
         height: 1.4rem;
         padding: 0 0.45rem;
+        box-sizing: border-box;
         border-radius: 0.35rem;
         font-size: 0.75rem;
         font-weight: 600;
@@ -5355,6 +5357,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         max-width: 100%;
         overflow: hidden;
+        text-align: center;
       }
       /* Student view: blocks fill the cell with 4px margin on all sides. */
       [data-dashboard-agenda-mode="student"] .agenda-student-block {

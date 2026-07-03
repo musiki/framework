@@ -265,43 +265,55 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
 
       .home-search-results[hidden] { display: none; }
 
-      .home-search-result-item {
+      :global(.home-search-result-item) {
         display: block;
-        padding: 0.75rem 1.2rem;
+        padding: 0.85rem 1.2rem;
         text-decoration: none;
-        color: inherit;
-        border-bottom: 1px solid color-mix(in srgb, var(--c-border) 50%, transparent);
+        color: var(--c-fg, #111);
+        border-bottom: 1px solid color-mix(in srgb, var(--c-border) 40%, transparent);
         transition: background 0.1s;
       }
 
-      .home-search-result-item:last-child {
+      :global(.home-search-result-item:visited) {
+        color: var(--c-fg, #111);
+      }
+
+      :global(.home-search-result-item:last-child) {
         border-bottom: none;
       }
 
-      .home-search-result-item:hover,
-      .home-search-result-item:focus {
+      :global(.home-search-result-item:hover),
+      :global(.home-search-result-item:focus) {
         background: var(--c-bg-alt, color-mix(in srgb, var(--c-border) 40%, transparent));
         outline: none;
       }
 
-      .home-search-result-title {
-        font-size: 0.92rem;
-        font-weight: 600;
+      :global(.home-search-result-title) {
+        font-size: 0.68rem;
+        font-weight: 700;
         color: var(--c-fg, #111);
-        margin: 0 0 0.18rem;
-        line-height: 1.3;
-      }
-
-      .home-search-result-meta {
-        font-size: 0.75rem;
-        color: color-mix(in srgb, var(--c-fg) 50%, transparent);
         margin: 0;
         line-height: 1.3;
       }
 
-      .home-search-highlight {
-        background: color-mix(in srgb, var(--c-link, #2a87ff) 18%, transparent);
-        color: var(--c-link, #2a87ff);
+      :global(.home-search-result-meta) {
+        font-size: 0.6375rem;
+        color: color-mix(in srgb, var(--c-fg) 50%, transparent);
+        margin: 0.35rem 0 0;
+        padding-left: 1.2rem;
+        line-height: 1.35;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-clamp: 2;
+        max-height: 2.7em;
+        overflow: hidden;
+      }
+
+      :global(.home-search-highlight) {
+        background: rgba(245, 158, 11, 0.18);
+        color: inherit;
+        font-weight: 700;
         border-radius: 2px;
         padding: 0 1px;
       }
@@ -326,6 +338,17 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
         padding-bottom: 0.5rem;
       }
 
+      @keyframes mosaicFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
       .mosaic-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -334,11 +357,19 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
 
       @media (max-width: 768px) {
         .mosaic-grid {
-          grid-template-columns: 1fr;
+          grid-template-columns: repeat(2, 1fr);
           gap: 2rem;
         }
         .mosaic-section {
           margin-top: 3.5rem;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .mosaic-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
         }
       }
 
@@ -353,15 +384,32 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
         text-decoration: none;
         color: inherit;
         box-shadow: 0 4px 24px rgba(0,0,0,0.02);
+        animation: mosaicFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
         transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
                     box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-                    border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+                    border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                    opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      /* Staggered animation delays for up to 12 items */
+      .mosaic-card:nth-child(1) { animation-delay: 0.05s; }
+      .mosaic-card:nth-child(2) { animation-delay: 0.1s; }
+      .mosaic-card:nth-child(3) { animation-delay: 0.15s; }
+      .mosaic-card:nth-child(4) { animation-delay: 0.2s; }
+      .mosaic-card:nth-child(5) { animation-delay: 0.25s; }
+      .mosaic-card:nth-child(6) { animation-delay: 0.3s; }
+      .mosaic-card:nth-child(7) { animation-delay: 0.35s; }
+      .mosaic-card:nth-child(8) { animation-delay: 0.4s; }
+
+      .mosaic-grid:hover .mosaic-card:not(:hover) {
+        opacity: 0.6;
+        transform: scale(0.98);
       }
 
       .mosaic-card:hover {
-        transform: translateY(-5px);
+        transform: translateY(-6px) scale(1.01);
         border-color: var(--c-link, #2a87ff);
-        box-shadow: 0 12px 36px rgba(0,0,0,0.08);
+        box-shadow: 0 16px 40px rgba(0,0,0,0.12);
       }
 
       .mosaic-img-container {
