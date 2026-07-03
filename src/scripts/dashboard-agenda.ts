@@ -660,9 +660,9 @@ const renderAgenda = (host: HTMLElement, data: AgendaData, rerender?: (nextData:
         html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--danger" data-act="delete-block" data-block-id="${escapeHtml(options.targetBlockId || options.targetEventId || '')}">${options.targetEventId ? 'Eliminar Evento' : 'Eliminar Bloque'}</button>`;
       }
     } else {
-      html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-act="reserve">Reservar</button>`;
+      html += `<button type="button" class="dashboard-grid-btn dashboard-grid-btn--primary" data-act="reserve">RESERVAR (como alumnx)</button>`;
       if (viewerGrupo) {
-        html += `<button type="button" class="dashboard-grid-btn" data-act="reserve-group" data-grupo="${escapeHtml(viewerGrupo)}">Grupo ${escapeHtml(viewerGrupo)}</button>`;
+        html += `<button type="button" class="dashboard-grid-btn" data-act="reserve-group" data-grupo="${escapeHtml(viewerGrupo)}">RESERVAR con mi Grupo</button>`;
       }
       if (firstOwnBlockId) {
         const isOwn = (data.students.find(s => String(s.studentId || '').toLowerCase() === viewerId.toLowerCase())?.blocks || []).some(b => b.id === firstOwnBlockId);

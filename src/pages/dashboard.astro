@@ -2347,6 +2347,41 @@ const studentAgendaVisible = Boolean(
     || dashboardAgendaStudents.some((student: any) => Array.isArray(student?.blocks) && student.blocks.length > 0))
 );
 
+let studentGroup = '';
+let groupMembers: { name: string; email: string }[] = [];
+
+if (!isTeacher && activeCourseId && activeYear) {
+  const metaAssignmentId = `__meta__:course-student-profile:${encodeURIComponent(activeCourseId)}:${activeYear}`;
+  const { data: ownMetaRows } = await query(
+    `SELECT payload FROM "Submission" WHERE "assignmentId" = $1 AND "userId" = $2 LIMIT 1`,
+    [metaAssignmentId, dbUser?.id]
+  );
+  const ownMeta = ownMetaRows?.[0] ? asPayloadObject((ownMetaRows[0] as any).payload) : null;
+  studentGroup = normalizeText(ownMeta?.grupo || '');
+
+  if (studentGroup) {
+    const { data: groupMetaRows } = await query(
+      `SELECT s.payload, u.name, u.email
+       FROM "Submission" s
+       JOIN "User" u ON s."userId" = u.id
+       WHERE s."assignmentId" = $1`,
+      [metaAssignmentId]
+    );
+
+    const members = (groupMetaRows || [])
+      .filter((row: any) => {
+        const payload = asPayloadObject(row.payload);
+        return normalizeText(payload?.grupo) === studentGroup;
+      })
+      .map((row: any) => ({
+        name: String(row.name || row.email || 'Estudiante'),
+        email: String(row.email || '')
+      }));
+    
+    groupMembers = members.sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
+
 const dashboardAgendaData = {
   courseId: activeCourseId,
   courseTitle: String(activeCourseMeta?.title || decodeUriSafe(activeCourseId) || activeCourseId || 'Curso'),
@@ -2359,6 +2394,7 @@ const dashboardAgendaData = {
     userId: String(dbUser?.id || ''),
     isTeacher,
     grupo: (() => {
+      if (!isTeacher) return studentGroup;
       const metaKey = `${normalizeTextLower(activeCourseId)}::${activeYear}::${String(dbUser?.id || '')}`;
       return courseStudentMetaByKey.get(metaKey)?.grupo || '';
     })(),
@@ -6772,6 +6808,26 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
               </div>
             </article>
           </section>
+
+          {studentGroup && (
+            <section class="student-section" id="student-group">
+              <h2 class="group-title">Grupo {studentGroup}</h2>
+              <div class="student-profile-card" style="flex-direction: column; align-items: flex-start; gap: 0.75rem; padding: 1.25rem;">
+                <p style="margin: 0; font-size: 0.92rem; color: var(--c-text-2);">
+                  Perteneces al grupo {studentGroup} de {activeCourseMeta?.title || activeCourseId}, {activeYear}
+                </p>
+                <hr style="width: 100%; border: 0; border-top: 1px solid var(--c-bg-mute); margin: 0.5rem 0;" />
+                <h3 style="margin: 0; font-size: 0.88rem; font-weight: 600; color: var(--c-fg);">Integrantes del grupo</h3>
+                <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.88rem; color: var(--c-text-2); line-height: 1.6;">
+                  {groupMembers.map((member: any) => (
+                    <li>
+                      <strong>{member.name}</strong> <span style="color: var(--c-fg-dim); font-size: 0.8rem; margin-left: 0.5rem;">({member.email})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          )}
 
           <section class="student-section" id="student-deliveries">
             <h2 class="group-title">Entregas</h2>

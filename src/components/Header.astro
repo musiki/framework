@@ -210,7 +210,7 @@ const withActiveCourse = (href: string) => {
 };
 ---
 
-<header data-logged-in={headerDbUserId ? 'true' : undefined}>
+<header data-logged-in={headerDbUserId ? 'true' : undefined} data-user-id={headerDbUserId}>
 	<nav>
 		<h2>
 			<a
@@ -894,6 +894,8 @@ const withActiveCourse = (href: string) => {
 	document.addEventListener('astro:page-load', setupHeaderActivityIndicators);
 </script>
 <script>
+	const ACTIVE_MS = 40_000;
+
 	type PresenceUser = {
 		userId: string;
 		name: string;
@@ -972,40 +974,65 @@ const withActiveCourse = (href: string) => {
 		const count = all.length;
 		if (count === 0) return;
 
-		const activeCount = all.filter(isActive).length;
-
-		if (count <= 8) {
-			// ── Small: individual avatars ──────────────────────────────
+		if (count <= 10) {
+			// Small: individual avatars
 			all.forEach(u => bar.appendChild(makeWrap(u)));
-
-		} else if (count <= 25) {
-			// ── Medium: up to 8 featured + "+N more" ──────────────────
-			const featured = selectFeatured(all, 8);
+		} else {
+			// Medium/Large: up to 9 featured + overflow badge with hover names list
+			const featured = selectFeatured(all, 9);
 			const overflow = count - featured.length;
 			featured.forEach(u => bar.appendChild(makeWrap(u)));
-			if (overflow > 0) bar.appendChild(makeMore(`+${overflow}`, `${overflow} más online`));
-
-		} else if (count <= 100) {
-			// ── Large: pinned teachers + summary ──────────────────────
-			const teachers = all.filter(isTeacher).slice(0, 3);
-			teachers.forEach(u => bar.appendChild(makeWrap(u)));
-			const summaryParts = [`${count} online`];
-			if (activeCount > 0) summaryParts.push(`${activeCount} activos`);
-			bar.appendChild(makeSummary(summaryParts.join(' · ')));
-
-		} else {
-			// ── Massive: text only ────────────────────────────────────
-			const summaryParts = [`${count} online`];
-			if (activeCount > 0) summaryParts.push(`${activeCount} activos`);
-			bar.appendChild(makeSummary(summaryParts.join(' · ')));
+			if (overflow > 0) {
+				const overflowUsers = all.filter(u => !featured.some(f => f.userId === u.userId));
+				const listNames = overflowUsers.map(u => u.name || 'Estudiante').join('\n');
+				bar.appendChild(makeMore(`+${overflow}`, listNames));
+			}
 		}
 	};
 
-	// Module-level state (survives Astro view transitions within the same bundle load)
-	let _selfId = '';
+	let presenceIntervalId: any = null;
 
 	const setupOnlinePresence = () => {
-		// Realtime presence disabled (previously Supabase)
+		if (presenceIntervalId) {
+			clearInterval(presenceIntervalId);
+			presenceIntervalId = null;
+		}
+
+		const bar = document.querySelector<HTMLElement>('[data-online-users-bar]');
+		if (!bar) return;
+
+		const header = document.querySelector('header');
+		const selfId = header instanceof HTMLElement ? header.dataset.userId || '' : '';
+
+		const getCourseId = () => {
+			const root = document.querySelector('[data-course-layout-root]');
+			return root instanceof HTMLElement ? root.dataset.courseId || '' : '';
+		};
+
+		const ping = async () => {
+			try {
+				const response = await fetch('/api/user/presence', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ courseId: getCourseId() }),
+					credentials: 'same-origin',
+				});
+				if (!response.ok) return;
+				const data = await response.json();
+				if (data && Array.isArray(data.users)) {
+					const state: Record<string, PresenceUser[]> = {};
+					data.users.forEach((u: any) => {
+						state[u.userId] = [u];
+					});
+					render(bar, state, selfId);
+				}
+			} catch (err) {
+				// silent catch
+			}
+		};
+
+		ping();
+		presenceIntervalId = setInterval(ping, 15000);
 	};
 
 	if (document.readyState === 'loading') {
