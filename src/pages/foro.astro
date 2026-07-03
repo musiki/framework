@@ -1969,9 +1969,7 @@ if (activeCourse) {
             <div class="forum-input-shell">
               <div class="forum-grid">
                 <section class="forum-panel forum-thread-column">
-                  <div id="forum-thread-list" class="forum-thread-list">
-                    <p class="forum-empty">Cargando hilos...</p>
-                  </div>
+                  <div id="forum-thread-list" class="forum-thread-list"></div>
 
                   {activeForumView === 'board' && (
                     <details id="forum-new-board-details" class="forum-fold" hidden>
@@ -3754,12 +3752,6 @@ a[node] -->|edge| b[hub]
           }
 
           if (forumState.threads.length === 0) {
-            const empty = document.createElement('p');
-            empty.className = 'forum-empty';
-            empty.textContent = forumState.mode === 'board'
-              ? 'Todavía no hay hilos en este foro.'
-              : 'Todavía no hay hilos en esta lección.';
-            threadListEl.appendChild(empty);
             updateThreadQuery('');
             return;
           }
@@ -4139,11 +4131,7 @@ a[node] -->|edge| b[hub]
               updateThreadQuery('');
             }
 
-            if (!forumState.canWrite) {
-              setForumStatus('Puedes leer este foro, pero necesitas inscripción para publicar.', 'info');
-            } else {
-              setForumStatus('');
-            }
+            setForumStatus('');
 
             markForumScopeAsRead(scopeKey, totalMessages);
           } catch (error) {

@@ -1,5 +1,13 @@
-import { getEntry } from 'astro:content';
+import { getCollection, getEntry } from 'astro:content';
 import { getPublicContentStaticPaths, type PublicContentRouteProps } from '../lib/public-content-routes';
+import {
+  buildCourseHref,
+  buildCourseLessonHref,
+  buildCourseLessonPathIndex,
+  getCourseEntryCourseId,
+  isCourseIndexEntry,
+  isCourseLessonEntryForCourse,
+} from '../lib/course-routing';
 
 export const prerender = true;
 
@@ -21,7 +29,10 @@ function cleanMarkdown(md: string): string {
 }
 
 export async function GET() {
-  const allPublicPaths = await getPublicContentStaticPaths();
+  const [allPublicPaths, rawCursos] = await Promise.all([
+    getPublicContentStaticPaths(),
+    getCollection('cursos'),
+  ]);
   
   const items = await Promise.all(allPublicPaths.map(async (routeMatch) => {
     if (routeMatch.props.kind !== 'content') return null;
@@ -58,7 +69,63 @@ export async function GET() {
     };
   }));
 
-  const filteredItems = items.filter(Boolean);
+  const publicCourseIds = new Set(rawCursos.filter((item) => {
+    const status = String(item.data?.status || '').trim().toLowerCase();
+    return isCourseIndexEntry(item)
+      && (status === 'public' || status === 'published' || item.data?.public === true || item.data?.public === 'true');
+  }).map((item) => getCourseEntryCourseId(item)).filter(Boolean));
+  const publicCursos = rawCursos.filter((item) => {
+    const status = String(item.data?.status || '').trim().toLowerCase();
+    return status === 'public'
+      || status === 'published'
+      || item.data?.public === true
+      || item.data?.public === 'true'
+      || publicCourseIds.has(getCourseEntryCourseId(item));
+  });
+  const courseIndexById = new Map<string, any>();
+  publicCursos.forEach((item) => {
+    if (!isCourseIndexEntry(item)) return;
+    const courseId = getCourseEntryCourseId(item);
+    if (courseId) courseIndexById.set(courseId, item);
+  });
+  const lessonPathIndexByCourseId = new Map<string, any>();
+  courseIndexById.forEach((courseEntry, courseId) => {
+    const lessons = publicCursos
+      .filter((item) => isCourseLessonEntryForCourse(item, courseId))
+      .sort((left, right) => Number(left.data?.order || 0) - Number(right.data?.order || 0));
+    lessonPathIndexByCourseId.set(courseId, buildCourseLessonPathIndex(courseId, courseEntry.data || {}, lessons));
+  });
+  const courseItems = publicCursos.map((item) => {
+    const isCourseIndex = isCourseIndexEntry(item);
+    const courseId = getCourseEntryCourseId(item);
+    const filename = item.id.split('/').pop()?.replace(/\.[^/.]+$/, '');
+    const itemType = String(item.data?.type || '').trim().toLowerCase();
+    const slug = isCourseIndex
+      ? buildCourseHref(courseId, item.data || {})
+      : buildCourseLessonHref(courseId, courseIndexById.get(courseId)?.data || {}, item, lessonPathIndexByCourseId.get(courseId));
+    const type = itemType === 'concept'
+      ? 'Concepto'
+      : itemType === 'glossary'
+        ? 'Glosario'
+        : isCourseIndex
+          ? 'Curso'
+          : 'Clase';
+    return {
+      title: item.data?.title || filename || 'Untitled',
+      slug,
+      content: cleanMarkdown(item.body || ''),
+      type,
+      def: item.data?.def || item.data?.definition || '',
+      sinopsis: item.data?.sinopsis || item.data?.synopsis || item.data?.description || '',
+    };
+  });
+
+  const dedupe = new Map<string, any>();
+  [...items.filter(Boolean), ...courseItems].forEach((item: any) => {
+    const key = `${item.slug}::${item.title}`;
+    if (!dedupe.has(key)) dedupe.set(key, item);
+  });
+  const filteredItems = Array.from(dedupe.values());
 
   return new Response(JSON.stringify(filteredItems), {
     headers: { 'Content-Type': 'application/json' },

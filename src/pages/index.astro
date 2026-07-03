@@ -7,6 +7,8 @@ import { isCourseIndexEntry, getCourseEntryCourseId, buildCourseHref } from '../
 import { getContentCanonicalSlug } from '../lib/content-slug';
 import { query } from '../lib/db/pool';
 
+const hasSearchSession = Boolean(Astro.locals.session?.user);
+
 // Fetch all public content items
 const [rawContent, rawCursos] = await Promise.all([
   safeGetCollection('content'),
@@ -246,6 +248,33 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
 
       .home-search-input::placeholder {
         color: color-mix(in srgb, var(--c-fg) 45%, transparent);
+      }
+
+      .home-search-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.65rem;
+        padding: 0 0.35rem;
+      }
+
+      .home-search-filters[hidden] { display: none; }
+
+      :global(.home-search-filter) {
+        border: 1px solid color-mix(in srgb, var(--c-border) 60%, transparent);
+        border-radius: 999px;
+        padding: 0.28rem 0.62rem;
+        background: transparent;
+        color: color-mix(in srgb, var(--c-fg) 65%, transparent);
+        font: 600 0.62rem/1.2 inherit;
+        cursor: pointer;
+      }
+
+      :global(.home-search-filter.is-active),
+      :global(.home-search-filter:hover) {
+        border-color: color-mix(in srgb, var(--c-fg) 65%, transparent);
+        background: color-mix(in srgb, var(--c-fg) 8%, transparent);
+        color: var(--c-fg);
       }
 
       /* ── Results dropdown ── */
@@ -549,7 +578,7 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
       <section class="panel">
         <h1>musiki</h1>
 
-        <div class="home-search-wrap">
+        <div class="home-search-wrap" data-search-endpoint={hasSearchSession ? '/search.json' : '/public-search.json'}>
           <input
             type="search"
             class="home-search-input"
@@ -561,6 +590,7 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
             aria-controls="home-search-results"
             aria-autocomplete="list"
           />
+          <div class="home-search-filters" id="home-search-filters" aria-label="Filtrar resultados por tipo" hidden></div>
           <div
             class="home-search-results"
             id="home-search-results"
@@ -620,11 +650,23 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
 
       let searchData: SearchItem[] | null = null;
       let fetchPromise: Promise<void> | null = null;
+      let activeSearchFilter = 'all';
+
+      const getSearchType = (item: SearchItem) => {
+        const raw = String(item.type || 'Otros').trim().toLocaleLowerCase('es');
+        if (['concept', 'concepto', 'conceptos'].includes(raw)) return { key: 'concepts', label: 'Conceptos' };
+        if (['glossary', 'glosario'].includes(raw)) return { key: 'glossary', label: 'Glosario' };
+        if (['lesson', 'lessons', 'lección', 'lecciones', 'clase', 'clases'].includes(raw)) return { key: 'lessons', label: 'Clases' };
+        const label = String(item.type || 'Otros').trim() || 'Otros';
+        return { key: `type:${raw}`, label };
+      };
 
       const ensureData = () => {
         if (searchData !== null) return Promise.resolve();
         if (!fetchPromise) {
-          fetchPromise = fetch('/public-search.json')
+          const wrap = document.querySelector<HTMLElement>('.home-search-wrap');
+          const endpoint = wrap?.dataset.searchEndpoint || '/public-search.json';
+          fetchPromise = fetch(endpoint)
             .then((r) => r.json())
             .then((payload: unknown) => {
               searchData = Array.isArray(payload)
@@ -668,10 +710,37 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
       const initHomeSearch = () => {
         const input = document.getElementById('home-search-input');
         const results = document.getElementById('home-search-results');
-        if (!(input instanceof HTMLInputElement) || !(results instanceof HTMLElement)) return;
+        const filters = document.getElementById('home-search-filters');
+        if (!(input instanceof HTMLInputElement) || !(results instanceof HTMLElement) || !(filters instanceof HTMLElement)) return;
+        if (input.dataset.searchBound === 'true') return;
+        input.dataset.searchBound = 'true';
+        const wrap = input.closest('.home-search-wrap');
+
+        const renderFilters = () => {
+          if (!searchData) return;
+          const counts = new Map<string, { label: string; count: number }>();
+          searchData.forEach((item) => {
+            const type = getSearchType(item);
+            const current = counts.get(type.key) || { label: type.label, count: 0 };
+            current.count += 1;
+            counts.set(type.key, current);
+          });
+          const preferred = ['concepts', 'glossary', 'lessons'];
+          const entries = Array.from(counts.entries()).sort(([leftKey, left], [rightKey, right]) => {
+            const leftOrder = preferred.indexOf(leftKey);
+            const rightOrder = preferred.indexOf(rightKey);
+            if (leftOrder !== -1 || rightOrder !== -1) return (leftOrder === -1 ? 99 : leftOrder) - (rightOrder === -1 ? 99 : rightOrder);
+            return left.label.localeCompare(right.label, 'es');
+          });
+          filters.innerHTML = [
+            `<button type="button" class="home-search-filter ${activeSearchFilter === 'all' ? 'is-active' : ''}" data-search-filter="all">Todas (${searchData.length})</button>`,
+            ...entries.map(([key, value]) => `<button type="button" class="home-search-filter ${activeSearchFilter === key ? 'is-active' : ''}" data-search-filter="${key}">${value.label} (${value.count})</button>`),
+          ].join('');
+          filters.hidden = false;
+        };
 
         // Prefetch on focus
-        input.addEventListener('focus', () => void ensureData(), { once: true });
+        input.addEventListener('focus', () => void ensureData().then(renderFilters), { once: true });
 
         const clear = () => {
           results.hidden = true;
@@ -683,9 +752,8 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
 
           const q = query.toLowerCase();
           const matched = searchData
-            .filter((item) =>
-              item.title.toLowerCase().includes(q) || item.content.toLowerCase().includes(q),
-            )
+            .filter((item) => activeSearchFilter === 'all' || getSearchType(item).key === activeSearchFilter)
+            .filter((item) => [item.title, item.content, item.def, item.sinopsis].some((value) => String(value || '').toLowerCase().includes(q)))
             .slice(0, 8);
 
           if (matched.length === 0) { clear(); return; }
@@ -709,6 +777,14 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
           void ensureData().then(() => render(q));
         });
 
+        filters.addEventListener('click', (e) => {
+          const button = e.target instanceof Element ? e.target.closest<HTMLButtonElement>('[data-search-filter]') : null;
+          if (!button) return;
+          activeSearchFilter = button.dataset.searchFilter || 'all';
+          renderFilters();
+          render(input.value.trim());
+        });
+
         input.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
@@ -720,7 +796,7 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
 
         document.addEventListener('click', (e) => {
           if (!(e.target instanceof Element)) return;
-          if (!input.contains(e.target) && !results.contains(e.target)) clear();
+          if (!(wrap instanceof HTMLElement) || !wrap.contains(e.target)) clear();
         });
       };
 

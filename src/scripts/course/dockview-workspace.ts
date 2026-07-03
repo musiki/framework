@@ -371,6 +371,40 @@ function loadPreviewContent(courseId: string, slug: string): Promise<PreviewCont
   return request;
 }
 
+function mountNoteForum(bodyEl: HTMLElement, courseId: string, slug: string) {
+  const template = document.getElementById('lesson-forum-template');
+  if (!(template instanceof HTMLTemplateElement)) return;
+
+  const fragment = template.content.cloneNode(true) as DocumentFragment;
+  const forumRoot = fragment.querySelector<HTMLElement>('.lesson-forum');
+  if (!forumRoot) return;
+
+  const lessonSlug = String(slug || '')
+    .replace(/^cursos\//, '')
+    .replace(new RegExp(`^${courseId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`), '')
+    .replace(/\.md$/i, '')
+    .replace(/^\/+|\/+$/g, '');
+
+  forumRoot.id = `note-forum-${lessonSlug.replace(/[^a-z0-9_-]+/gi, '-') || 'lesson'}`;
+  forumRoot.dataset.courseId = courseId;
+  forumRoot.dataset.lessonSlug = lessonSlug;
+  forumRoot.dataset.isLessonPage = 'true';
+  forumRoot.dataset.forumMode = 'lesson';
+  forumRoot.dataset.initialBoardSlug = 'lesson';
+  bodyEl.appendChild(fragment);
+
+  const initForum = (window as typeof window & {
+    __musikiInitLessonForum?: (root: HTMLElement) => void | Promise<void>;
+  }).__musikiInitLessonForum;
+  if (typeof initForum === 'function') {
+    void initForum(forumRoot);
+  } else {
+    window.dispatchEvent(new CustomEvent('musiki:init-forum-surface', {
+      detail: { forumRoot },
+    }));
+  }
+}
+
 function runMermaidIn(bodyEl: HTMLElement) {
   const nodes = Array.from(bodyEl.querySelectorAll<HTMLElement>('.cnw-mermaid, .mermaid'))
     .filter(node => node.dataset.mermaidRendered !== 'true' && node.dataset.mermaidRendering !== 'true');
@@ -412,6 +446,7 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
       bodyEl.innerHTML = `<div class="cnw-md">${preview.renderedHtml}</div>`;
       hydrateLazyYouTubeEmbeds(bodyEl);
       enhanceCourseNotesContent(bodyEl);
+      mountNoteForum(bodyEl, courseId, slug);
       // Hydrate eval blocks injected into this panel (handled by [...slug].astro).
       try { (window as any).__musikiHydrateEvals?.(bodyEl); } catch { /* noop */ }
       // Tell the page shell which note is now active so the Info sidebar refreshes.
@@ -437,6 +472,7 @@ async function renderPreview(bodyEl: HTMLElement, courseId: string, slug: string
     bodyEl.innerHTML = `<div class="cnw-md">${html}</div>`;
     hydrateLazyYouTubeEmbeds(bodyEl);
     enhanceCourseNotesContent(bodyEl);
+    mountNoteForum(bodyEl, courseId, slug);
     // Lazy-load mermaid if any diagrams present
     if (bodyEl.querySelector('.cnw-mermaid, .mermaid') && !('mermaid' in window)) {
       const s = document.createElement('script');
@@ -1143,6 +1179,9 @@ export function initDockviewWorkspace(
   const setDockviewActive = (active: boolean) => {
     container.classList.toggle('is-dockview-active', active);
     if (classContent) classContent.style.display = active ? 'none' : '';
+    container.querySelectorAll<HTMLElement>(':scope > .article-forum-section').forEach((forum) => {
+      forum.style.display = active ? 'none' : '';
+    });
     if (dvRoot) dvRoot.style.display = active ? '' : 'none';
     const shortcuts = container.querySelector<HTMLElement>('.scroll-shortcuts');
     if (shortcuts) shortcuts.style.display = active ? 'none' : '';

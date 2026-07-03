@@ -9,6 +9,9 @@ import {
   isCourseLessonEntryForCourse,
 } from '../lib/course-routing';
 import { getContentCanonicalSlug } from '../lib/content-slug';
+import { ensureDbUserFromSession } from '../lib/forum-server';
+import { isElevatedGlobalRole } from '../lib/roles';
+import { query } from '../lib/db/pool';
 
 export const prerender = false;
 
@@ -29,17 +32,53 @@ function cleanMarkdown(md) {
     .trim();
 }
 
-const hasPublicStatus = (item) => String(item?.data?.status || '').trim().toLowerCase() === 'public';
+const hasPublicStatus = (item) => {
+  const status = String(item?.data?.status || '').trim().toLowerCase();
+  return status === 'public'
+    || status === 'published'
+    || item?.data?.public === true
+    || item?.data?.public === 'true';
+};
 
 export async function GET({ locals }) {
-  const hasSession = Boolean(locals?.session?.user);
+  const session = locals?.session;
+  const hasSession = Boolean(session?.user);
   const [content, cursos] = await Promise.all([
     safeGetCollection('content'),
     getCollection('cursos'),
   ]);
 
+  const enrolledCourseIds = new Set();
+  let canSearchAllCourses = false;
+  if (hasSession) {
+    const dbUser = await ensureDbUserFromSession(session);
+    canSearchAllCourses = Boolean(dbUser && isElevatedGlobalRole(dbUser.role));
+    if (dbUser && !canSearchAllCourses) {
+      const { data: enrollments } = await query(
+        `SELECT "courseId" FROM "Enrollment" WHERE "userId" = $1`,
+        [dbUser.id],
+      );
+      (enrollments || []).forEach((enrollment) => {
+        const courseId = String(enrollment?.courseId || '').trim();
+        if (courseId) enrolledCourseIds.add(courseId);
+      });
+    }
+  }
+
+  const publicCourseIds = new Set(
+    cursos
+      .filter((item) => isCourseIndexEntry(item) && hasPublicStatus(item))
+      .map((item) => getCourseEntryCourseId(item))
+      .filter(Boolean),
+  );
   const visibleContent = hasSession ? content : content.filter(hasPublicStatus);
-  const visibleCursos = hasSession ? cursos : cursos.filter(hasPublicStatus);
+  const visibleCursos = cursos.filter((item) => {
+    const courseId = getCourseEntryCourseId(item);
+    return hasPublicStatus(item)
+      || publicCourseIds.has(courseId)
+      || canSearchAllCourses
+      || enrolledCourseIds.has(courseId);
+  });
 
   const contentItems = visibleContent.map((item) => {
     const filename = item.id.split('/').pop()?.replace(/\.[^/.]+$/, '');
@@ -117,7 +156,7 @@ export async function GET({ locals }) {
       || (isCourseIndex ? 'Course' : 'Lesson');
       
     const reveal = Boolean(item.data.reveal === true || item.data.reveal === 'true' || item.data.theme || item.data.slideTheme || item.data.revealTheme);
-    const isPublic = itemType === 'public-note' || !courseId;
+    const isPublic = itemType === 'public-note' || !courseId || hasPublicStatus(item) || publicCourseIds.has(courseId);
 
     return {
       title,
