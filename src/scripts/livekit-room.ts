@@ -8913,7 +8913,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     });
 
     const option1 = document.createElement('button');
-    option1.innerHTML = '<span>🟢</span> Compartir Porción...';
+    option1.textContent = 'Compartir porción...';
     Object.assign(option1.style, {
       background: 'transparent',
       border: 'none',
@@ -8937,7 +8937,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     };
 
     const option2 = document.createElement('button');
-    option2.innerHTML = '<span>🖥️</span> Pantalla Completa / Ventana...';
+    option2.textContent = 'Pantalla completa / ventana...';
     Object.assign(option2.style, {
       background: 'transparent',
       border: 'none',
