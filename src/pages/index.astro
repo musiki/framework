@@ -709,40 +709,45 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
 
             if (!container) return;
 
-            const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined;
-            const lastCourseRaw = localStorage.getItem('musiki:last-opened-course');
+            // Robust and pure JavaScript Tauri environment check
+            const isTauri = typeof window !== 'undefined' && (
+              window.__TAURI__ !== undefined ||
+              window.__TAURI_INTERNALS__ !== undefined ||
+              /tauri/i.test(navigator.userAgent)
+            );
 
-            let hasLastCourse = false;
+            const lastCourseRaw = localStorage.getItem('musiki:last-opened-course');
+            let lastCourse = null;
             if (lastCourseRaw) {
               try {
-                const lastCourse = JSON.parse(lastCourseRaw);
-                if (lastCourse && lastCourse.title && lastCourse.slug) {
-                  hasLastCourse = true;
-                  if (btnResume && resumeLabel) {
-                    btnResume.href = lastCourse.slug;
-                    resumeLabel.textContent = `Continuar con ${lastCourse.title.toLowerCase()}`;
-                    btnResume.style.display = 'inline-flex';
-                  }
-                }
+                lastCourse = JSON.parse(lastCourseRaw);
               } catch (e) {
-                console.warn('Failed to load last course from storage:', e);
+                console.warn('Failed to parse last opened course:', e);
               }
             }
 
             if (isTauri) {
-              // Hide browser buttons and download portals inside the Tauri desktop wrapper
-              if (btnOpenBrowser) btnOpenBrowser.style.display = 'none';
-              if (divider) divider.style.display = 'none';
-              if (platforms) platforms.style.display = 'none';
+              // Tauri client: Go directly to the last opened course, or /cursos if none.
+              if (lastCourse && lastCourse.slug) {
+                window.location.replace(lastCourse.slug);
+              } else {
+                window.location.replace('/cursos');
+              }
+              return;
+            }
 
-              // If there's no last course, show "Explorar Cursos" instead of leaving it empty
-              if (!hasLastCourse && btnResume && resumeLabel) {
-                btnResume.href = '/cursos';
-                resumeLabel.textContent = 'Explorar Cursos';
+            // Web Browser: Show landing page with downloads
+            if (lastCourse && lastCourse.title && lastCourse.slug) {
+              if (btnResume && resumeLabel) {
+                btnResume.href = lastCourse.slug;
+                resumeLabel.textContent = `Continuar con ${lastCourse.title.toLowerCase()}`;
                 btnResume.style.display = 'inline-flex';
               }
             }
 
+            if (btnOpenBrowser) btnOpenBrowser.style.display = 'inline-flex';
+            if (divider) divider.style.display = 'block';
+            if (platforms) platforms.style.display = 'flex';
             container.style.display = 'flex';
           };
 
