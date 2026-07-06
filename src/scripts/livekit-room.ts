@@ -13406,6 +13406,26 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     })
     .on(RoomEvent.ParticipantConnected, () => {
       syncAllParticipants();
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          const ctx = new AudioContextClass();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(330, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.25);
+          gain.gain.setValueAtTime(0, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.28);
+        }
+      } catch (e) {
+        console.warn("Join sound failed:", e);
+      }
       if (localRole === 'teacher') {
         window.clearTimeout(publishTeacherStateDebounceId);
         publishTeacherStateDebounceId = window.setTimeout(() => {
