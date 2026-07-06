@@ -22,7 +22,7 @@ import {
   participantAppearanceStore,
 } from './appearance';
 
-const ROSTER_SPEAKER_DECAY_MS = 2000;
+const ROSTER_SPEAKER_DECAY_MS = 450;
 const rosterLastSpeakerAt = new Map<string, number>();
 
 export const listRoomParticipants = (room: Room): RoomParticipant[] => {
@@ -308,4 +308,35 @@ export const renderParticipantRoster = ({
 
       participantList.appendChild(item);
     });
+
+  // Start a lightweight loop to update volume levels in real-time for active speaker icons
+  if (!(window as any)._rosterVolumeSyncStarted) {
+    (window as any)._rosterVolumeSyncStarted = true;
+    const updateVolumes = () => {
+      const icons = document.querySelectorAll<HTMLElement>('.conference-roster-speaker-icon');
+      if (icons.length === 0) {
+        (window as any)._rosterVolumeSyncStarted = false;
+        return;
+      }
+      icons.forEach((icon) => {
+        const item = icon.closest<HTMLElement>('.conference-roster-item');
+        const identity = item?.dataset.identity;
+        if (!identity) return;
+        
+        const p = room.activeSpeakers.find(s => s.identity === identity);
+        const volume = p ? p.audioLevel : 0;
+        icon.style.setProperty('--roster-speaker-volume', volume.toFixed(3));
+        
+        const isSpeaking = volume > 0.015;
+        const now = Date.now();
+        if (isSpeaking) {
+          rosterLastSpeakerAt.set(identity, now);
+        }
+        const isSpeakingRecently = (now - (rosterLastSpeakerAt.get(identity) ?? 0)) < ROSTER_SPEAKER_DECAY_MS;
+        icon.dataset.active = isSpeakingRecently ? 'true' : 'false';
+      });
+      requestAnimationFrame(updateVolumes);
+    };
+    requestAnimationFrame(updateVolumes);
+  }
 };

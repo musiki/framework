@@ -8786,6 +8786,106 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
+  // ── Native Screenshare (Tauri) ─────────────────────────────────────────────
+
+  let nativeScreenshareTrack: LocalVideoTrack | null = null;
+  let nativeScreenshareUnlisten: (() => void) | null = null;
+  let nativeScreenshareCanvas: HTMLCanvasElement | null = null;
+
+  const stopNativeScreenshare = async () => {
+    if (nativeScreenshareUnlisten) {
+      nativeScreenshareUnlisten();
+      nativeScreenshareUnlisten = null;
+    }
+    if (nativeScreenshareTrack) {
+      try {
+        await room.localParticipant.unpublishTrack(nativeScreenshareTrack, false);
+      } catch (err) {
+        console.error("Error unpublishing native screen track:", err);
+      }
+      nativeScreenshareTrack.stop();
+      nativeScreenshareTrack = null;
+    }
+    try {
+      const { invoke } = (window as any).__TAURI__.core;
+      await invoke("stop_native_capture");
+    } catch (err) {
+      console.error("Error calling stop_native_capture:", err);
+    }
+    nativeScreenshareCanvas = null;
+    syncAllParticipants();
+    setControlState();
+  };
+
+  const startNativeScreenshare = async () => {
+    if (room.state !== ConnectionState.Connected) return;
+    try {
+      const { invoke } = (window as any).__TAURI__.core;
+      const { listen } = (window as any).__TAURI__.event;
+
+      // 1. Show region selector window
+      await invoke("show_selector");
+
+      // 2. Clear old listener if any
+      if (nativeScreenshareUnlisten) {
+        nativeScreenshareUnlisten();
+        nativeScreenshareUnlisten = null;
+      }
+
+      // 3. Listen to incoming frames
+      let isFirstFrame = true;
+      nativeScreenshareUnlisten = await listen("native-screenshare-frame", async (event: any) => {
+        const payload = event.payload as number[];
+        const bytes = new Uint8Array(payload);
+        const blob = new Blob([bytes], { type: "image/jpeg" });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+
+        img.onload = async () => {
+          if (!nativeScreenshareCanvas) {
+            nativeScreenshareCanvas = document.createElement("canvas");
+          }
+          if (nativeScreenshareCanvas.width !== img.width || nativeScreenshareCanvas.height !== img.height) {
+            nativeScreenshareCanvas.width = img.width;
+            nativeScreenshareCanvas.height = img.height;
+          }
+          const ctx = nativeScreenshareCanvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+          }
+          URL.revokeObjectURL(url);
+
+          // On the first frame, create the MediaStreamTrack and publish it to the room
+          if (isFirstFrame) {
+            isFirstFrame = false;
+            const stream = nativeScreenshareCanvas.captureStream(30);
+            const videoTrack = stream.getVideoTracks()[0];
+            if (videoTrack) {
+              const localTrack = new LocalVideoTrack(videoTrack, undefined, false);
+              localTrack.source = Track.Source.ScreenShare;
+              nativeScreenshareTrack = localTrack;
+              try {
+                await room.localParticipant.publishTrack(localTrack, {
+                  name: "screenshare",
+                  source: Track.Source.ScreenShare,
+                });
+                await activateScreenshareLayout({ broadcast: true });
+                syncAllParticipants();
+                setControlState();
+              } catch (err) {
+                console.error("Error publishing native screenshare track:", err);
+                await stopNativeScreenshare();
+              }
+            }
+          }
+        };
+        img.src = url;
+      });
+    } catch (error) {
+      console.error("Failed to start native screenshare:", error);
+    }
+  };
+
   // ── Compositor stage routing (offline preview) ────────────────────────────
 
   const showCompositorInStage = (stream: MediaStream) => {
@@ -12877,6 +12977,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     closeDevicePanels();
     localHandRaised = false;
     syncRaiseHandUi();
+    const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined;
+    if (isTauri) {
+      void stopNativeScreenshare().catch(() => undefined);
+    }
     room.disconnect();
     participantCards.forEach((_, identity) => removeParticipant(identity));
     removeMount(localPreviewMount ?? undefined);
@@ -14326,6 +14430,21 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   shareScreenButton.addEventListener('click', async () => {
     if (room.state !== ConnectionState.Connected) return;
+
+    const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined;
+    if (isTauri) {
+      try {
+        const isSharing = nativeScreenshareTrack !== null;
+        if (isSharing) {
+          await stopNativeScreenshare();
+        } else {
+          await startNativeScreenshare();
+        }
+      } catch (error) {
+        setStatus(safeErrorMessage(error));
+      }
+      return;
+    }
 
     try {
       if (room.localParticipant.isScreenShareEnabled) {

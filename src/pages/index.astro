@@ -570,6 +570,73 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
       .legal-links a:hover {
         text-decoration: underline;
       }
+
+      /* Welcome Actions & Downloads */
+      .welcome-actions-container {
+        margin: 0.5rem 0 2.5rem 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        width: 100%;
+      }
+
+      .download-platforms {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.65rem;
+        width: 100%;
+      }
+
+      .btn-download {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.55rem 1rem;
+        background: var(--c-bg-card, var(--c-bg-alt, rgba(255,255,255,0.03)));
+        border: 1px solid var(--c-border, rgba(0, 0, 0, 0.08));
+        border-radius: 8px;
+        color: var(--c-fg);
+        text-decoration: none;
+        font-size: 0.8rem;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+
+      .btn-download:hover {
+        background: var(--c-bg-hover, rgba(0, 0, 0, 0.03));
+        border-color: var(--c-link, #2a87ff);
+        transform: translateY(-1px);
+      }
+
+      .btn-browser {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.4rem;
+        background: var(--c-link, #2a87ff);
+        color: white !important;
+        text-decoration: none;
+        font-size: 0.88rem;
+        font-weight: 700;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(42, 135, 255, 0.15);
+        transition: all 0.2s ease;
+      }
+
+      .btn-browser:hover {
+        background: #0066e2;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(42, 135, 255, 0.25);
+      }
+
+      .welcome-divider {
+        font-size: 0.78rem;
+        color: var(--c-fg-dim, #777);
+        text-transform: lowercase;
+        margin: 0.25rem 0;
+      }
     </style>
   </head>
   <body>
@@ -577,6 +644,35 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
     <main class="wrap home-main">
       <section class="panel">
         <h1>musiki</h1>
+
+        <!-- Welcome Actions & Downloads -->
+        <div class="welcome-actions-container">
+          <a href="/cursos" class="btn-browser">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            <span>Abrir Musiki en tu navegador</span>
+          </a>
+
+          <div class="welcome-divider">o descarga la aplicación nativa</div>
+
+          <div class="download-platforms">
+            <a href="/download/musiki-mac.dmg" class="btn-download" title="Descargar para macOS">
+              <span>🍏 macOS</span>
+            </a>
+            <a href="/download/musiki-windows.exe" class="btn-download" title="Descargar para Windows">
+              <span>🪟 Windows</span>
+            </a>
+            <a href="/download/musiki-android.apk" class="btn-download" title="Descargar para Android">
+              <span>🤖 Android</span>
+            </a>
+            <a href="/download/musiki-ios.ipa" class="btn-download" title="Descargar para iOS">
+              <span>📱 iOS</span>
+            </a>
+          </div>
+        </div>
 
         <div class="home-search-wrap" data-search-endpoint={hasSearchSession ? '/search.json' : '/public-search.json'}>
           <input

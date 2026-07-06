@@ -3931,13 +3931,46 @@ if (
   }
 
   .conference-connect-arrow {
-    width: 18px;
-    height: 18px;
     display: block;
+  }
+
+  .conference-connect-arrow--in {
+    width: 24px !important;
+    height: 24px !important;
+    color: #00ff66 !important; /* Parrot green */
+    animation: connect-beating 2.2s infinite ease-in-out !important;
+    transform-origin: center;
+  }
+  .conference-connect-arrow--in path {
+    stroke: currentColor !important;
+    stroke-width: 1.5px !important;
+    stroke-linejoin: round !important;
   }
 
   .conference-connect-arrow--out {
     display: none;
+    width: 18px !important;
+    height: 18px !important;
+    animation: none !important;
+  }
+  .conference-connect-arrow--out path {
+    stroke: none !important;
+    stroke-width: 0 !important;
+  }
+
+  @keyframes connect-beating {
+    0% {
+      transform: scale(1);
+      opacity: 0.75;
+    }
+    50% {
+      transform: scale(1.18);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 0.75;
+    }
   }
 
   .conference-connect-button[data-connected="true"]
@@ -4401,15 +4434,16 @@ if (
   }
 
   :global(.conference-roster-speaker-icon) {
-    color: rgba(245, 247, 251, 0.34);
-    opacity: 0.55;
-    transition: color 2s ease, opacity 2s ease, transform 2s ease;
+    color: rgba(245, 247, 251, 0.3);
+    opacity: 0.45;
+    transform: scale(1);
+    transition: transform 0.08s ease-out, opacity 0.08s ease-out, color 0.15s ease;
   }
 
   :global(.conference-roster-speaker-icon[data-active="true"]) {
     color: var(--roster-speaker-active-color, var(--conference-accent));
-    opacity: 1;
-    transform: scale(1.05);
+    opacity: calc(0.65 + var(--roster-speaker-volume, 0) * 0.35) !important;
+    transform: scale(calc(1 + var(--roster-speaker-volume, 0) * 0.4)) !important;
   }
 
   :global(.conference-roster-mic-icon) {

@@ -56,25 +56,67 @@ const buildUnifiedSlots = (data: AgendaData, isTeacher: boolean) => {
   boundaries.add(startTime);
   boundaries.add(endTime);
 
-  // Generate regular-grid boundaries unconditionally across the entire range
-  let cursor = startTime;
-  while (cursor + slotMin <= endTime) {
-    cursor += slotMin;
-    boundaries.add(cursor);
+  // Collect all event and block segments
+  const segments: { start: number; end: number }[] = [];
+
+  (data.events || []).forEach(e => {
+    const start = Math.max(startTime, e.startMinute);
+    const end = Math.min(endTime, e.endMinute);
+    if (start < end) {
+      segments.push({ start, end });
+      boundaries.add(start);
+      boundaries.add(end);
+    }
+  });
+
+  (data.students || []).flatMap(s => s.blocks || []).forEach(b => {
+    const start = Math.max(startTime, b.startMinute);
+    const end = Math.min(endTime, b.endMinute);
+    if (start < end) {
+      segments.push({ start, end });
+      boundaries.add(start);
+      boundaries.add(end);
+    }
+  });
+
+  // Merge overlapping segments to find active gaps
+  const sortedSegments = [...segments].sort((a, b) => a.start - b.start);
+  const mergedSegments: { start: number; end: number }[] = [];
+  if (sortedSegments.length > 0) {
+    let current = { ...sortedSegments[0] };
+    for (let i = 1; i < sortedSegments.length; i++) {
+      const next = sortedSegments[i];
+      if (next.start <= current.end) {
+        current.end = Math.max(current.end, next.end);
+      } else {
+        mergedSegments.push(current);
+        current = { ...next };
+      }
+    }
+    mergedSegments.push(current);
   }
 
-  // Add event boundaries so each event occupies its own slot(s)
-  const eventSegments = (data.events || [])
-    .map(e => ({ start: Math.max(startTime, e.startMinute), end: Math.min(endTime, e.endMinute) }))
-    .filter(e => e.start < e.end);
-  eventSegments.forEach(e => { boundaries.add(e.start); boundaries.add(e.end); });
+  // Find active windows (gaps between merged segments)
+  const activeWindows: { start: number; end: number }[] = [];
+  let lastEnd = startTime;
+  mergedSegments.forEach(seg => {
+    if (seg.start > lastEnd) {
+      activeWindows.push({ start: lastEnd, end: seg.start });
+    }
+    lastEnd = Math.max(lastEnd, seg.end);
+  });
+  if (lastEnd < endTime) {
+    activeWindows.push({ start: lastEnd, end: endTime });
+  }
 
-  // Add student block boundaries so each reservation occupies its own slot(s)
-  const studentSegments = (data.students || [])
-    .flatMap(s => (s.blocks || []))
-    .map(b => ({ start: Math.max(startTime, b.startMinute), end: Math.min(endTime, b.endMinute) }))
-    .filter(b => b.start < b.end);
-  studentSegments.forEach(b => { boundaries.add(b.start); boundaries.add(b.end); });
+  // Generate regular-grid boundaries inside each active window
+  activeWindows.forEach(win => {
+    let cursor = win.start;
+    while (cursor + slotMin <= win.end) {
+      cursor += slotMin;
+      boundaries.add(cursor);
+    }
+  });
 
   const sorted = Array.from(boundaries).sort((a, b) => a - b);
   const slots: AgendaSlot[] = [];
