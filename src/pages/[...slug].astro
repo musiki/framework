@@ -16749,5 +16749,13 @@ a[node] -->|edge| b[hub]
         document.addEventListener('astro:page-load', bootNotasSidebar);
       </script>
     )}
+    <script is:inline define:vars={{ courseTitle: courseData?.title, courseSlug: preferredCoursePathSegment || courseSlug }}>
+      if (courseTitle && courseSlug) {
+        localStorage.setItem('musiki:last-opened-course', JSON.stringify({
+          title: courseTitle,
+          slug: '/' + courseSlug
+        }));
+      }
+    </script>
   </body>
 </html>

@@ -8886,6 +8886,110 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
+  const showShareOptionsDropdown = () => {
+    const existing = document.getElementById('musiki-share-dropdown');
+    if (existing) {
+      existing.remove();
+      return;
+    }
+
+    const dropdown = document.createElement('div');
+    dropdown.id = 'musiki-share-dropdown';
+
+    Object.assign(dropdown.style, {
+      position: 'fixed',
+      zIndex: '999999',
+      background: 'rgba(15, 15, 20, 0.95)',
+      backdropFilter: 'blur(12px)',
+      webkitBackdropFilter: 'blur(12px)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '8px',
+      padding: '6px',
+      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px',
+      minWidth: '220px'
+    });
+
+    const option1 = document.createElement('button');
+    option1.innerHTML = '<span>🟢</span> Compartir Porción...';
+    Object.assign(option1.style, {
+      background: 'transparent',
+      border: 'none',
+      color: '#e4e4e7',
+      padding: '8px 12px',
+      textAlign: 'left',
+      fontSize: '0.85rem',
+      fontWeight: '600',
+      cursor: 'pointer',
+      borderRadius: '4px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      transition: 'all 0.15s ease'
+    });
+    option1.onmouseover = () => { option1.style.background = 'rgba(16, 185, 129, 0.15)'; option1.style.color = '#10b981'; };
+    option1.onmouseout = () => { option1.style.background = 'transparent'; option1.style.color = '#e4e4e7'; };
+    option1.onclick = async () => {
+      dropdown.remove();
+      await startNativeScreenshare();
+    };
+
+    const option2 = document.createElement('button');
+    option2.innerHTML = '<span>🖥️</span> Pantalla Completa / Ventana...';
+    Object.assign(option2.style, {
+      background: 'transparent',
+      border: 'none',
+      color: '#e4e4e7',
+      padding: '8px 12px',
+      textAlign: 'left',
+      fontSize: '0.85rem',
+      fontWeight: '600',
+      cursor: 'pointer',
+      borderRadius: '4px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      transition: 'all 0.15s ease'
+    });
+    option2.onmouseover = () => { option2.style.background = 'rgba(42, 135, 255, 0.15)'; option2.style.color = '#2a87ff'; };
+    option2.onmouseout = () => { option2.style.background = 'transparent'; option2.style.color = '#e4e4e7'; };
+    option2.onclick = async () => {
+      dropdown.remove();
+      try {
+        await room.localParticipant.setScreenShareEnabled(true, {
+          audio: true,
+          selfBrowserSurface: "exclude",
+          surfaceSwitching: "include",
+          systemAudio: "include"
+        });
+      } catch (error) {
+        setStatus(safeErrorMessage(error));
+      }
+    };
+
+    dropdown.appendChild(option1);
+    dropdown.appendChild(option2);
+
+    const rect = shareScreenButton.getBoundingClientRect();
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.top = `${rect.top - 84}px`;
+
+    document.body.appendChild(dropdown);
+
+    const outsideClick = (e: MouseEvent) => {
+      if (!dropdown.contains(e.target as Node) && e.target !== shareScreenButton) {
+        dropdown.remove();
+        document.removeEventListener('click', outsideClick);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', outsideClick);
+    }, 50);
+  };
+
+
   // ── Compositor stage routing (offline preview) ────────────────────────────
 
   const showCompositorInStage = (stream: MediaStream) => {
@@ -14434,11 +14538,15 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const isTauri = typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined;
     if (isTauri) {
       try {
-        const isSharing = nativeScreenshareTrack !== null;
+        const isSharing = nativeScreenshareTrack !== null || room.localParticipant.isScreenShareEnabled;
         if (isSharing) {
-          await stopNativeScreenshare();
+          if (nativeScreenshareTrack !== null) {
+            await stopNativeScreenshare();
+          } else {
+            await room.localParticipant.setScreenShareEnabled(false);
+          }
         } else {
-          await startNativeScreenshare();
+          showShareOptionsDropdown();
         }
       } catch (error) {
         setStatus(safeErrorMessage(error));
