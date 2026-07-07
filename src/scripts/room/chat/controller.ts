@@ -384,29 +384,7 @@ export const createRoomChatController = ({
     }
   };
 
-  const playMentionSound = () => {
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
-      
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.08);
-      
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-      
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.2);
-    } catch (e) {
-      console.warn("Mention sound play failed:", e);
-    }
-  };
+
 
   const handleReaction = (reaction: { messageId: string; emoji: string; name: string; identity: string }) => {
     const msg = chatMessages.find(m => m.id === reaction.messageId);
@@ -593,7 +571,17 @@ export const createRoomChatController = ({
         minute: '2-digit',
       });
 
-      header.append(sender, separator, sentAt);
+      const headerReplyBtn = document.createElement('button');
+      headerReplyBtn.type = 'button';
+      headerReplyBtn.className = 'chat-header-reply-btn';
+      headerReplyBtn.title = 'Responder a este mensaje';
+      headerReplyBtn.innerHTML = '➦';
+      headerReplyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setReplyTarget(message);
+      });
+
+      header.append(sender, separator, sentAt, headerReplyBtn);
 
       const body = document.createElement('div');
       body.className = 'conference-chat-text';
@@ -750,45 +738,6 @@ export const createRoomChatController = ({
     });
   };
 
-  const playMessageSound = () => {
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
-      
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(440, ctx.currentTime);
-      osc1.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
-      
-      gain1.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-      
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(ctx.currentTime);
-      osc1.stop(ctx.currentTime + 0.12);
-
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(554.37, ctx.currentTime + 0.08);
-      osc2.frequency.exponentialRampToValueAtTime(1108.73, ctx.currentTime + 0.18);
-      
-      gain2.gain.setValueAtTime(0, ctx.currentTime + 0.08);
-      gain2.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.09);
-      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
-      
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(ctx.currentTime + 0.08);
-      osc2.stop(ctx.currentTime + 0.22);
-    } catch (e) {
-      console.warn("Sound play failed:", e);
-    }
-  };
-
   const appendMessage = (message: ChatMessage, isSent = false) => {
     if (chatMessages.some((entry) => entry.id === message.id)) return;
     chatMessages.push(message);
@@ -805,9 +754,6 @@ export const createRoomChatController = ({
       syncUnreadDot();
       if (isMentioned) {
         (message as any).isMention = true;
-        playMentionSound();
-      } else {
-        playMessageSound();
       }
     }
     const urlMatches = (message.text || '').match(/(https?:\/\/[^\s"'<>(){}|\\^`[\]]{4,})/gi) ?? [];

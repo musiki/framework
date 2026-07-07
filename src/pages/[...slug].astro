@@ -15247,6 +15247,28 @@ a[node] -->|edge| b[hub]
           });
         }
 
+        const playForumPostSound = () => {
+          try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContextClass) return;
+            const ctx = new AudioContextClass();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+            osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1);
+            osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.35);
+          } catch (e) {
+            console.warn("Forum sound play failed:", e);
+          }
+        };
+
         newThreadForm.addEventListener('submit', async (event) => {
           event.preventDefault();
           if (!forumState.canWrite) return;
@@ -15280,6 +15302,7 @@ a[node] -->|edge| b[hub]
               invalidateForumThreadCache();
               invalidateForumPostsCache(forumState.selectedThreadId);
               setForumStatus('Respuesta publicada.', 'info');
+              playForumPostSound();
               await loadThreads({ preserveSelection: true });
             } catch (error) {
               console.error('Forum create post error:', error);
@@ -15317,6 +15340,7 @@ a[node] -->|edge| b[hub]
               }
               invalidateForumThreadCache();
               setForumStatus('Hilo publicado.', 'info');
+              playForumPostSound();
               await loadThreads({ preserveSelection: false });
             } catch (error) {
               console.error('Forum create thread error:', error);

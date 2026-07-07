@@ -175,6 +175,9 @@
     gap: 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
+  .conference-reply-preview[hidden] {
+    display: none !important;
+  }
   .conference-reply-preview-content {
     display: flex;
     flex-wrap: wrap;
@@ -210,6 +213,28 @@
   }
   .conference-reply-preview-close:hover {
     opacity: 1;
+  }
+
+  :global(.chat-header-reply-btn) {
+    background: transparent;
+    border: none;
+    color: var(--conference-accent, #2a87ff);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0 4px;
+    margin-left: 6px;
+    opacity: 0;
+    transition: opacity 120ms, transform 120ms;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+  }
+  :global(.conference-chat-item:hover .chat-header-reply-btn) {
+    opacity: 0.45;
+  }
+  :global(.chat-header-reply-btn:hover) {
+    opacity: 1 !important;
+    transform: scale(1.15);
   }
 
   /* Chat Hover Action Buttons & Tooltip styling */
