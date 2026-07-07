@@ -4508,6 +4508,20 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     activeNoiseProcessor = null;
 
+    if (filterType === 'krisp' || filterType === 'rnnoise') {
+      if (audioNoiseSuppressionInput instanceof HTMLInputElement && audioNoiseSuppressionInput.checked) {
+        audioNoiseSuppressionInput.checked = false;
+        persistSetupState();
+        await track.restart({ noiseSuppression: false }).catch(() => undefined);
+      }
+    } else if (filterType === 'off') {
+      if (audioNoiseSuppressionInput instanceof HTMLInputElement && !audioNoiseSuppressionInput.checked) {
+        audioNoiseSuppressionInput.checked = true;
+        persistSetupState();
+        await track.restart({ noiseSuppression: true }).catch(() => undefined);
+      }
+    }
+
     if (filterType === 'krisp') {
       try {
         const { KrispNoiseFilter } = await import('@livekit/krisp-noise-filter');

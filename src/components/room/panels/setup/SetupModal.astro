@@ -93,13 +93,42 @@ const isTeacher = defaultRole === 'teacher';
               </select>
             </div>
             <div class="conference-field">
-              <label for="modal-noise-filter-select">SUPRESIÓN DE RUIDO</label>
+              <label for="modal-noise-filter-select">SUPRESIÓN DE RUIDO AVANZADA</label>
               <select id="modal-noise-filter-select" data-noise-filter-select>
                 <option value="off" selected>Apagada (Default)</option>
                 <option value="krisp">Krisp AI (Filtro avanzado)</option>
                 <option value="rnnoise">RNNoise (Alternativa libre)</option>
               </select>
+              <p class="conference-field-hint" style="font-size: 0.65rem; opacity: 0.6; margin-top: 0.2rem;">Krisp AI o RNNoise filtran el ruido por software. Se recomienda apagar la supresión del navegador para evitar doble procesamiento.</p>
             </div>
+            <div class="conference-field">
+              <div class="conference-field-row">
+                <span>AEC (Cancelación de Eco)</span>
+                <label class="conference-switch">
+                  <input type="checkbox" checked data-audio-echo-cancellation-input />
+                  <span class="conference-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="conference-field">
+              <div class="conference-field-row">
+                <span>Supresión de Ruido Navegador</span>
+                <label class="conference-switch">
+                  <input type="checkbox" checked data-audio-noise-suppression-input />
+                  <span class="conference-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="conference-field">
+              <div class="conference-field-row">
+                <span>Control Automático de Ganancia (AGC)</span>
+                <label class="conference-switch">
+                  <input type="checkbox" checked data-audio-auto-gain-control-input />
+                  <span class="conference-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+            <hr style="border: 0; border-top: 1px solid var(--conference-line-soft); margin: 0.75rem 0;" />
             <div class="conference-field">
               <label for="modal-cam-select">CAM IN</label>
               <select id="modal-cam-select" data-video-input-select data-video-input-select-sidebar>
@@ -248,34 +277,6 @@ const isTeacher = defaultRole === 'teacher';
                   <span>Limit grid quality</span>
                   <label class="conference-switch">
                     <input type="checkbox" checked data-limit-grid-input />
-                    <span class="conference-switch-slider"></span>
-                  </label>
-                </div>
-              </div>
-              <hr style="border: 0; border-top: 1px solid var(--conference-line); margin: 0.5rem 0;" />
-              <div class="conference-field">
-                <div class="conference-field-row">
-                  <span>AEC (Echo Cancellation)</span>
-                  <label class="conference-switch">
-                    <input type="checkbox" checked data-audio-echo-cancellation-input />
-                    <span class="conference-switch-slider"></span>
-                  </label>
-                </div>
-              </div>
-              <div class="conference-field">
-                <div class="conference-field-row">
-                  <span>Noise Suppression</span>
-                  <label class="conference-switch">
-                    <input type="checkbox" checked data-audio-noise-suppression-input />
-                    <span class="conference-switch-slider"></span>
-                  </label>
-                </div>
-              </div>
-              <div class="conference-field">
-                <div class="conference-field-row">
-                  <span>Auto Gain Control</span>
-                  <label class="conference-switch">
-                    <input type="checkbox" checked data-audio-auto-gain-control-input />
                     <span class="conference-switch-slider"></span>
                   </label>
                 </div>
