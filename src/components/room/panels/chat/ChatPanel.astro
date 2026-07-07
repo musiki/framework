@@ -162,6 +162,11 @@
     transform: translateY(0);
   }
 
+  .conference-chat-compose-anchor {
+    position: relative;
+    width: 100%;
+  }
+
   .conference-reply-preview {
     display: flex;
     justify-content: space-between;
@@ -285,6 +290,9 @@
     box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4);
     z-index: 100;
   }
+  .conference-mention-suggestions[hidden] {
+    display: none !important;
+  }
   .mention-suggestions-list {
     list-style: none;
     margin: 0;
@@ -355,6 +363,16 @@
     color: #eab308;
     margin-right: 6px;
     background: rgba(234, 179, 8, 0.15);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  :global(.chat-group-badge) {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #10b981;
+    margin-right: 6px;
+    background: rgba(16, 185, 129, 0.15);
     padding: 1px 4px;
     border-radius: 3px;
   }

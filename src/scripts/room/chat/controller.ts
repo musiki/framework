@@ -22,6 +22,7 @@ type CreateRoomChatControllerOptions = {
   getRoomName: () => string;
   isConnected: () => boolean;
   getParticipants: () => Array<{ identity: string; name: string; role: string }>;
+  getGroups?: () => Array<{ name: string; label: string }>;
   onOrfMention?: (text: string) => Promise<void>;
   onOrfAction?: (action: any) => Promise<void>;
   publishMessage: (message: ChatMessage, destinationIdentities?: string[]) => Promise<void>;
@@ -286,6 +287,30 @@ export const createRoomChatController = ({
 
   const setReplyTarget = (message: ChatMessage) => {
     activeReplyTarget = message;
+
+    if (message.recipientId) {
+      const select = document.querySelector('[data-chat-recipient-select]') as HTMLSelectElement | null;
+      if (select) {
+        const myIdentity = getIdentity();
+        let targetRecipientId = message.recipientId;
+        let targetRecipientName = message.recipientName || 'Grupo';
+
+        if (!message.recipientId.startsWith('group:')) {
+          targetRecipientId = message.identity === myIdentity ? message.recipientId : message.identity;
+          targetRecipientName = `Privado: ${getFirstName(message.identity === myIdentity ? (message.recipientName || '') : message.name)}`;
+        }
+
+        let option = select.querySelector(`option[value="${targetRecipientId}"]`) as HTMLOptionElement | null;
+        if (!option) {
+          option = document.createElement('option');
+          option.value = targetRecipientId;
+          option.textContent = targetRecipientId.startsWith('group:') ? `Grupo: ${targetRecipientName}` : targetRecipientName;
+          select.appendChild(option);
+        }
+        select.value = targetRecipientId;
+      }
+    }
+
     const preview = document.querySelector('[data-chat-reply-preview]') as HTMLElement | null;
     const authorEl = document.querySelector('[data-chat-reply-preview-author]') as HTMLElement | null;
     const textEl = document.querySelector('[data-chat-reply-preview-text]') as HTMLElement | null;
@@ -298,6 +323,12 @@ export const createRoomChatController = ({
   };
 
   const cancelReply = () => {
+    if (activeReplyTarget && activeReplyTarget.recipientId) {
+      const select = document.querySelector('[data-chat-recipient-select]') as HTMLSelectElement | null;
+      if (select) {
+        select.value = 'all';
+      }
+    }
     activeReplyTarget = null;
     const preview = document.querySelector('[data-chat-reply-preview]') as HTMLElement | null;
     if (preview) {
@@ -369,7 +400,7 @@ export const createRoomChatController = ({
     const currentValue = select.value;
     select.innerHTML = '<option value="all">Público (Todos)</option>';
 
-    const participants = getParticipants();
+    const participants = getParticipants().filter((p) => p.identity !== getIdentity());
     participants.forEach((p) => {
       const opt = document.createElement('option');
       opt.value = p.identity;
@@ -377,7 +408,21 @@ export const createRoomChatController = ({
       select.appendChild(opt);
     });
 
-    if (participants.some((p) => p.identity === currentValue)) {
+    if (getRole() === 'teacher' && getGroups) {
+      const groups = getGroups();
+      groups.forEach((g) => {
+        const opt = document.createElement('option');
+        opt.value = `group:${g.name}`;
+        opt.textContent = `Grupo: ${g.label}`;
+        select.appendChild(opt);
+      });
+    }
+
+    const hasCurrent =
+      participants.some((p) => p.identity === currentValue) ||
+      (getGroups && getGroups().some((g) => `group:${g.name}` === currentValue));
+
+    if (hasCurrent) {
       select.value = currentValue;
     } else {
       select.value = 'all';
@@ -535,14 +580,21 @@ export const createRoomChatController = ({
       header.className = 'conference-chat-header';
 
       if (message.recipientId) {
-        const privBadge = document.createElement('span');
-        privBadge.className = 'chat-private-badge';
-        if (message.identity === getIdentity()) {
-          privBadge.textContent = `Pry a ${getFirstName(message.recipientName || 'alguien')}`;
+        if (message.recipientId.startsWith('group:')) {
+          const groupBadge = document.createElement('span');
+          groupBadge.className = 'chat-group-badge';
+          groupBadge.textContent = message.recipientName || 'Grupo';
+          header.appendChild(groupBadge);
         } else {
-          privBadge.textContent = 'Pry para ti';
+          const privBadge = document.createElement('span');
+          privBadge.className = 'chat-private-badge';
+          if (message.identity === getIdentity()) {
+            privBadge.textContent = `Pry a ${getFirstName(message.recipientName || 'alguien')}`;
+          } else {
+            privBadge.textContent = 'Pry para ti';
+          }
+          header.appendChild(privBadge);
         }
-        header.appendChild(privBadge);
       } else if (isMentioned) {
         const mentionBadge = document.createElement('span');
         mentionBadge.className = 'chat-mention-badge';

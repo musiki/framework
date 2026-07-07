@@ -12314,6 +12314,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     isConnected: () => room.state === ConnectionState.Connected,
     getParticipants: () => {
       const list = [];
+      if (room.localParticipant) {
+        list.push({
+          identity: room.localParticipant.identity,
+          name: readParticipantName(room.localParticipant),
+          role: readParticipantRole(room, room.localParticipant, localRole),
+        });
+      }
       for (const p of room.remoteParticipants.values()) {
         list.push({
           identity: p.identity,
@@ -12323,6 +12330,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
       return list;
     },
+    getGroups: () => breakRoomsActive,
     onOrfMention: async (text) => {
       if (!orfController) {
         // Find the template if not initialized yet
@@ -12347,7 +12355,18 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
     },
     publishMessage: async (message, destinationIdentities) => {
-      await publishMessage(message, destinationIdentities);
+      let resolvedDests = destinationIdentities;
+      if (destinationIdentities && destinationIdentities.length === 1 && destinationIdentities[0].startsWith('group:')) {
+        const groupName = destinationIdentities[0].slice(6);
+        const members = [];
+        for (const p of room.remoteParticipants.values()) {
+          if (breakRoomAssignments[p.identity] === groupName) {
+            members.push(p.identity);
+          }
+        }
+        resolvedDests = members;
+      }
+      await publishMessage(message, resolvedDests);
     },
     reportStatus: (message) => {
       setStatus(message);
