@@ -269,6 +269,20 @@ export const createRoomChatController = ({
   let chatUnreadCount = 0;
   let activeReplyTarget: ChatMessage | null = null;
 
+  let currentChatDownloadButton = chatDownloadButton;
+  let currentChatFocusButton = chatFocusButton;
+  let currentChatInput = chatInput;
+  let currentChatList = chatList;
+  let currentChatScroller = chatScroller;
+  let currentChatSection = chatSection;
+  let currentChatSendButton = chatSendButton;
+  let currentChatStatus = chatStatus;
+  let currentChatUnreadDot = chatUnreadDot;
+  const boundInputs = new WeakSet<HTMLInputElement | HTMLTextAreaElement>();
+  const boundButtons = new WeakSet<HTMLButtonElement>();
+  const boundDropZones = new WeakSet<HTMLElement>();
+  let unsubscribeAppearance: (() => void) | null = null;
+
   const setReplyTarget = (message: ChatMessage) => {
     activeReplyTarget = message;
     const preview = document.querySelector('[data-chat-reply-preview]') as HTMLElement | null;
