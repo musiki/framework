@@ -51,6 +51,7 @@ export class StrudelController {
   private clearHydra: (() => void) | null = null;
   private codeBroadcastTimer = 0;
   private lastBroadcastCode = '';
+  private themeObserver: MutationObserver | null = null;
 
   constructor(options: StrudelControllerOptions) {
     this.container = options.container;
@@ -114,6 +115,27 @@ export class StrudelController {
 
       await this.waitForEditor(editor);
       this.editor = editor.editor ?? null;
+
+      const updateTheme = () => {
+        const isDark = document.documentElement.classList.contains('dark');
+        const themeName = isDark ? 'strudelTheme' : 'githubLight';
+        if (this.editor && typeof (this.editor as any).changeSetting === 'function') {
+          (this.editor as any).changeSetting('theme', themeName);
+        }
+      };
+      updateTheme();
+      this.themeObserver = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (mutation.attributeName === 'class') {
+            updateTheme();
+          }
+        }
+      });
+      this.themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+
       await this.editor?.prebaked;
       const globalScope = globalThis as typeof globalThis & Record<string, unknown>;
       globalScope.global = globalThis;
@@ -366,6 +388,8 @@ export class StrudelController {
     void this.editor?.stop();
     this.drawResizeObserver?.disconnect();
     this.drawResizeObserver = null;
+    this.themeObserver?.disconnect();
+    this.themeObserver = null;
     this.stopHydra();
     this.clearHydra = null;
     if (this.routedOutput) {
