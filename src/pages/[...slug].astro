@@ -847,7 +847,7 @@ const publicGraphRelations = (() => {
 const isLiveEnabled =
   Boolean(courseData?.live) ||
   Boolean((currentEntry?.data as Record<string, unknown>)?.live);
-const performativeRoomHref = (canonicalCourseId && (canManageLiveInteractions || presentationHref || isLiveEnabled))
+const performativeRoomHref = canonicalCourseId
   ? `/room?room=${encodeURIComponent(`${canonicalCourseId || courseSlug}-stage`)}&course=${encodeURIComponent(canonicalCourseId || courseSlug)}${presentationHref ? `&slides=${encodeURIComponent(presentationHref)}` : ''}`
   : '';
 const hasSessionUser = Boolean(session?.user?.email);
