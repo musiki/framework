@@ -40,8 +40,7 @@ export const BACKGROUND_BLUR_MODEL_ASSET =
   'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite';
 export const HAND_LANDMARKER_MODEL_ASSET =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-export const BACKGROUND_BLUR_WASM_BASE =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm';
+export const BACKGROUND_BLUR_WASM_BASE = '/wasm';
 
 export const HAND_CONTROL_KEYS: HandControlKey[] = [
   'carrier',
