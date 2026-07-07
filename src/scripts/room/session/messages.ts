@@ -87,6 +87,22 @@ export type ConferenceMessage =
       sentAt: string;
       text: string;
       type: 'chat';
+      replyTo?: {
+        id: string;
+        name: string;
+        text: string;
+      };
+      reactions?: Record<string, string[]>;
+      recipientId?: string;
+      recipientName?: string;
+    }
+  | {
+      type: 'chat-reaction';
+      id: string;
+      messageId: string;
+      emoji: string;
+      name: string;
+      identity: string;
     }
   | {
       type: 'presentation';
@@ -481,6 +497,16 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
       const id = normalizeText((parsed as { id?: string }).id);
       if (!text || !id) return null;
 
+      const replyTo = (parsed as any).replyTo ? {
+        id: normalizeText((parsed as any).replyTo.id),
+        name: normalizeText((parsed as any).replyTo.name),
+        text: normalizeText((parsed as any).replyTo.text),
+      } : undefined;
+
+      const reactions = (parsed as any).reactions && typeof (parsed as any).reactions === 'object'
+        ? ((parsed as any).reactions as Record<string, string[]>)
+        : undefined;
+
       return {
         type: 'chat',
         id,
@@ -489,6 +515,26 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         role: normalizeRole((parsed as { role?: string }).role),
         sentAt: normalizeText((parsed as { sentAt?: string }).sentAt) || new Date().toISOString(),
         text,
+        replyTo,
+        reactions,
+        recipientId: normalizeText((parsed as any).recipientId) || undefined,
+        recipientName: normalizeText((parsed as any).recipientName) || undefined,
+      };
+    }
+
+    if (parsed.type === 'chat-reaction') {
+      const id = normalizeText((parsed as any).id);
+      const messageId = normalizeText((parsed as any).messageId);
+      const emoji = normalizeText((parsed as any).emoji);
+      if (!id || !messageId || !emoji) return null;
+
+      return {
+        type: 'chat-reaction',
+        id,
+        messageId,
+        emoji,
+        name: normalizeText((parsed as any).name) || 'Participant',
+        identity: normalizeText((parsed as any).identity),
       };
     }
 

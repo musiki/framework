@@ -135,6 +135,31 @@ export const syncParticipantVideo = (
     return;
   }
 
+  // Reuse existing video element if available to prevent flicker
+  const existingVideo = card.media.querySelector('video');
+  if (
+    existingVideo &&
+    existingMount &&
+    existingMount.wrapper.isConnected &&
+    shouldRenderBackdrop === hasRenderedBackdrop
+  ) {
+    if (existingMount.track) {
+      try {
+        existingMount.track.detach(existingVideo);
+      } catch (err) {
+        console.warn("Error detaching old participant track:", err);
+      }
+    }
+    publication.track.attach(existingVideo);
+    if (existingVideo instanceof HTMLVideoElement) {
+      void existingVideo.play().catch(() => undefined);
+    }
+    existingMount.track = publication.track;
+    existingMount.trackSid = trackSid;
+    card.placeholder.hidden = true;
+    return;
+  }
+
   removeMount(existingMount);
   card.media.innerHTML = '';
 
@@ -304,6 +329,25 @@ export const syncScreenVideo = (
     existingMount.wrapper.isConnected &&
     screenCard.media.contains(existingMount.wrapper)
   ) {
+    return;
+  }
+
+  // Reuse existing video element if available to prevent flicker
+  const existingVideo = screenCard.media.querySelector('video');
+  if (existingVideo && existingMount && existingMount.wrapper.isConnected) {
+    if (existingMount.track) {
+      try {
+        existingMount.track.detach(existingVideo);
+      } catch (err) {
+        console.warn("Error detaching old screen track:", err);
+      }
+    }
+    publication.track.attach(existingVideo);
+    if (existingVideo instanceof HTMLVideoElement) {
+      void existingVideo.play().catch(() => undefined);
+    }
+    existingMount.track = publication.track;
+    existingMount.trackSid = trackSid;
     return;
   }
 

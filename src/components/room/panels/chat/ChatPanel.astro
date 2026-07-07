@@ -8,6 +8,17 @@
     </div>
 
     <div class="conference-chat-compose-anchor">
+      <div class="conference-reply-preview" data-chat-reply-preview hidden>
+        <div class="conference-reply-preview-content">
+          <span class="conference-reply-preview-label">Respondiendo a:</span>
+          <span class="conference-reply-preview-author" data-chat-reply-preview-author></span>
+          <span class="conference-reply-preview-text" data-chat-reply-preview-text></span>
+        </div>
+        <button type="button" class="conference-reply-preview-close" data-action="chat-reply-cancel" title="Cancelar respuesta">✕</button>
+      </div>
+      <div class="conference-mention-suggestions" data-chat-mention-suggestions hidden>
+        <ul class="mention-suggestions-list"></ul>
+      </div>
       <div class="conference-chat-compose">
         <textarea
           rows="1"
@@ -47,6 +58,10 @@
               fill="currentColor"></path>
           </svg>
         </button>
+
+        <select class="conference-chat-recipient-select" data-chat-recipient-select title="Destinatario del mensaje">
+          <option value="all">Todos</option>
+        </select>
 
         <div style="flex: 1;"></div>
 
@@ -145,5 +160,177 @@
 
   .musiki-chat-action-btn:active {
     transform: translateY(0);
+  }
+
+  .conference-reply-preview {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    border-left: 3px solid var(--conference-accent, #2a87ff);
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .conference-reply-preview-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 85%;
+    align-items: center;
+  }
+  .conference-reply-preview-label {
+    color: #a1a1aa;
+    font-size: 0.7rem;
+  }
+  .conference-reply-preview-author {
+    font-weight: 700;
+    color: var(--conference-accent, #2a87ff);
+  }
+  .conference-reply-preview-text {
+    opacity: 0.6;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .conference-reply-preview-close {
+    background: transparent;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.75rem;
+    opacity: 0.6;
+    padding: 2px 6px;
+    transition: opacity 0.15s ease;
+  }
+  .conference-reply-preview-close:hover {
+    opacity: 1;
+  }
+
+  /* Chat Hover Action Buttons & Tooltip styling */
+  :global(.conference-chat-item .chat-item-actions) {
+    position: absolute;
+    right: 8px;
+    top: 4px;
+    display: none;
+    gap: 4px;
+    background: rgba(20, 20, 25, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 2px 4px;
+    z-index: 10;
+  }
+  :global(.conference-chat-item:hover .chat-item-actions) {
+    display: flex;
+  }
+  :global(.chat-action-btn) {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 0.7rem;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s ease;
+  }
+  :global(.chat-action-btn:hover) {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  .conference-mention-suggestions {
+    position: absolute;
+    bottom: 100%;
+    left: 8px;
+    right: 8px;
+    background: rgba(15, 15, 20, 0.98);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+  }
+  .mention-suggestions-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+  }
+  :global(.mention-suggestion-item) {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.15s ease;
+  }
+  :global(.mention-suggestion-item:hover), :global(.mention-suggestion-item[data-selected="true"]) {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+  :global(.mention-suggestion-role) {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    opacity: 0.5;
+  }
+
+  .conference-chat-recipient-select {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.7rem;
+    padding: 2px 4px;
+    border-radius: 4px;
+    max-width: 100px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    align-self: center;
+    margin-left: 0.2rem;
+  }
+  .conference-chat-recipient-select:focus {
+    outline: none;
+    border-color: var(--conference-accent, #2a87ff);
+    color: #fff;
+  }
+
+  /* Mention and Private Message highlighting in chat items */
+  :global(.conference-chat-list .conference-chat-item[data-is-mention="true"]) {
+    background: rgba(234, 179, 8, 0.08) !important;
+    border-left: 3px solid #eab308 !important;
+  }
+  :global(.conference-chat-list .conference-chat-item[data-is-private="true"]) {
+    background: rgba(168, 85, 247, 0.08) !important;
+    border-left: 3px solid #a855f7 !important;
+  }
+  :global(.chat-private-badge) {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #a855f7;
+    margin-right: 6px;
+    background: rgba(168, 85, 247, 0.15);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  :global(.chat-mention-badge) {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #eab308;
+    margin-right: 6px;
+    background: rgba(234, 179, 8, 0.15);
+    padding: 1px 4px;
+    border-radius: 3px;
   }
 </style>

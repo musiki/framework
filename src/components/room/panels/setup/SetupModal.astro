@@ -93,6 +93,14 @@ const isTeacher = defaultRole === 'teacher';
               </select>
             </div>
             <div class="conference-field">
+              <label for="modal-noise-filter-select">SUPRESIÓN DE RUIDO</label>
+              <select id="modal-noise-filter-select" data-noise-filter-select>
+                <option value="off" selected>Apagada (Default)</option>
+                <option value="krisp">Krisp AI (Filtro avanzado)</option>
+                <option value="rnnoise">RNNoise (Alternativa libre)</option>
+              </select>
+            </div>
+            <div class="conference-field">
               <label for="modal-cam-select">CAM IN</label>
               <select id="modal-cam-select" data-video-input-select data-video-input-select-sidebar>
                 <option value="">Selecciona una camara</option>

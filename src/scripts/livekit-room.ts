@@ -3705,6 +3705,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     audioEchoCancellationInput,
     audioNoiseSuppressionInput,
     audioAutoGainControlInput,
+    noiseFilterSelect,
     fmLatencySelect,
     fmSampleRateSelect,
     synthCarrierInput,
@@ -4210,6 +4211,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   if (fmSampleRateSelect instanceof HTMLSelectElement && persistedSetup.fmSampleRate) {
     fmSampleRateSelect.value = String(persistedSetup.fmSampleRate);
   }
+  if (noiseFilterSelect instanceof HTMLSelectElement && persistedSetup.noiseFilterMode) {
+    noiseFilterSelect.value = persistedSetup.noiseFilterMode;
+  }
   let instrumentsOpen = persistedSetup.instrumentsOpen === true;
   let handTrackEnabled = Boolean(persistedSetup.handTrackEnabled);
   let handRampMs = clampNumber(persistedSetup.handRampMs, 10, 4000, 500, 0);
@@ -4355,6 +4359,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let synthLimiterRelease = clampNumber(persistedSetup.limiterRelease, 0.01, 0.5, 0.05, 3);
   let publishedBallTrack: LocalAudioTrack | null = null;
   let publishedSynthTrack: LocalAudioTrack | null = null;
+  let activeNoiseProcessor: any = null;
   let compositorVideoTrack: LocalVideoTrack | null = null;
   let compositorOutputStream: MediaStream | null = null;
   let compositorInStage = false;
@@ -4482,6 +4487,45 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       applyBackgroundEffectState();
       persistSetupState();
       await localCameraTrack.stopProcessor?.().catch(() => undefined);
+    }
+  };
+
+  const syncLocalNoiseFilter = async () => {
+    if (!room.localParticipant) return;
+    if (!(noiseFilterSelect instanceof HTMLSelectElement)) return;
+    const filterType = noiseFilterSelect.value;
+
+    const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+    const track = micPub?.track as LocalAudioTrack | null;
+    if (!track) return;
+
+    if (track.processor) {
+      try {
+        await track.stopProcessor();
+      } catch (err) {
+        console.warn("Error stopping old processor:", err);
+      }
+    }
+    activeNoiseProcessor = null;
+
+    if (filterType === 'krisp') {
+      try {
+        const { KrispNoiseFilter } = await import('@livekit/krisp-noise-filter');
+        const processor = KrispNoiseFilter();
+        activeNoiseProcessor = processor;
+        await track.setProcessor(processor);
+      } catch (err) {
+        console.error("Error setting Krisp noise filter:", err);
+      }
+    } else if (filterType === 'rnnoise') {
+      try {
+        const { RnnoiseLivekitProcessor } = await import('./room/processors/audio/RnnoiseProcessor');
+        const processor = new RnnoiseLivekitProcessor();
+        activeNoiseProcessor = processor;
+        await track.setProcessor(processor);
+      } catch (err) {
+        console.error("Error setting RNNoise filter:", err);
+      }
     }
   };
 
@@ -7922,9 +7966,10 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
   function canLeadSession() {
     if (localRole !== 'teacher') return false;
+    if (room.state !== ConnectionState.Connected) return true;
     const leader = getResolvedSessionLeaderIdentity();
     if (!leader) return true;
-    return room.state === ConnectionState.Connected && room.localParticipant.identity === leader;
+    return room.localParticipant.identity === leader;
   }
 
   const applySessionLeaderState = () => {
@@ -8347,10 +8392,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       recursosAutoOpen: recursosAutoOpenInput instanceof HTMLInputElement ? recursosAutoOpenInput.checked : undefined,
       limitGridQuality: limitGridQualityInput instanceof HTMLInputElement ? limitGridQualityInput.checked : undefined,
       audioEchoCancellation: audioEchoCancellationInput instanceof HTMLInputElement ? audioEchoCancellationInput.checked : undefined,
-      audioNoiseSuppression: audioNoiseSuppressionInput instanceof HTMLInputElement ? audioNoiseSuppressionInput.checked : undefined,
+       audioNoiseSuppression: audioNoiseSuppressionInput instanceof HTMLInputElement ? audioNoiseSuppressionInput.checked : undefined,
       audioAutoGainControl: audioAutoGainControlInput instanceof HTMLInputElement ? audioAutoGainControlInput.checked : undefined,
       fmLatencyHint: fmLatencySelect instanceof HTMLSelectElement ? (fmLatencySelect.value as PersistedRoomSetup['fmLatencyHint']) : undefined,
       fmSampleRate: fmSampleRateSelect instanceof HTMLSelectElement ? (Number(fmSampleRateSelect.value) as 44100 | 48000) : undefined,
+      noiseFilterMode: noiseFilterSelect instanceof HTMLSelectElement ? noiseFilterSelect.value : undefined,
     });
   };
 
@@ -11100,13 +11146,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
   };
 
-  const publishMessage = async (message: ConferenceMessage) => {
+  const publishMessage = async (message: ConferenceMessage, destinationIdentities?: string[]) => {
     rememberMediaMessage(message);
     if (room.state !== ConnectionState.Connected || !room.localParticipant) return;
 
     await room.localParticipant.publishData(textEncoder.encode(JSON.stringify(message)), {
       reliable: true,
       topic: MESSAGE_TOPIC,
+      destinationIdentities,
     });
   };
 
@@ -12251,6 +12298,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     getRole: () => localRole,
     getRoomName: () => roomInput.value,
     isConnected: () => room.state === ConnectionState.Connected,
+    getParticipants: () => {
+      const list = [];
+      for (const p of room.remoteParticipants.values()) {
+        list.push({
+          identity: p.identity,
+          name: readParticipantName(p),
+          role: readParticipantRole(room, p, localRole),
+        });
+      }
+      return list;
+    },
     onOrfMention: async (text) => {
       if (!orfController) {
         // Find the template if not initialized yet
@@ -12274,8 +12332,8 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         await (orfController as any).executeAction(action);
       }
     },
-    publishMessage: async (message) => {
-      await publishMessage(message);
+    publishMessage: async (message, destinationIdentities) => {
+      await publishMessage(message, destinationIdentities);
     },
     reportStatus: (message) => {
       setStatus(message);
@@ -13247,6 +13305,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
             autoGainControl: audioAutoGainControlInput instanceof HTMLInputElement ? audioAutoGainControlInput.checked : true,
           }
         });
+        void syncLocalNoiseFilter().catch(() => undefined);
       } catch (error) {
         setStatus(
           `Connected, but camera or microphone permissions were not granted: ${safeErrorMessage(error)}`,
@@ -13269,6 +13328,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
 
       writeQueryState();
       syncAllParticipants();
+      chatController?.updateParticipantsList();
       setStatus(`Conectado a ${roomName}.`);
       await publishTeacherState();
       requestPresentationState();
@@ -13406,6 +13466,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     })
     .on(RoomEvent.ParticipantConnected, () => {
       syncAllParticipants();
+      chatController?.updateParticipantsList();
       try {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioContextClass) {
@@ -13458,6 +13519,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     .on(RoomEvent.ParticipantDisconnected, (participant) => {
       removeParticipant(participant.identity);
       syncAllParticipants();
+      chatController?.updateParticipantsList();
     })
     .on(RoomEvent.TrackSubscribed, (_, __, participant) => {
       syncAllParticipants();
@@ -13467,6 +13529,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     })
     .on(RoomEvent.LocalTrackPublished, () => {
       void syncLocalBackgroundBlurProcessor().catch(() => undefined);
+      void syncLocalNoiseFilter().catch(() => undefined);
       syncAllParticipants();
       void refreshDeviceOptions(true);
     })
@@ -13497,10 +13560,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       syncParticipant(participant);
       syncParticipantAppearanceAssignments();
       renderParticipantList();
+      chatController?.updateParticipantsList();
     })
     .on(RoomEvent.ParticipantNameChanged, (_, participant) => {
       syncParticipant(participant);
       renderParticipantList();
+      chatController?.updateParticipantsList();
     })
     .on(RoomEvent.TrackMuted, (_, participant) => {
       syncAllParticipants();
@@ -13635,6 +13700,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           name: readParticipantName(participant),
           role: readParticipantRole(room, participant, localRole),
         });
+        return;
+      }
+
+      if (message.type === 'chat-reaction') {
+        chatController?.handleReaction(message);
         return;
       }
 
@@ -16798,6 +16868,13 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           await publication.audioTrack.restart({ autoGainControl: audioAutoGainControlInput.checked });
         }
       }
+    });
+  }
+
+  if (noiseFilterSelect instanceof HTMLSelectElement) {
+    noiseFilterSelect.addEventListener('change', async () => {
+      persistSetupState();
+      await syncLocalNoiseFilter().catch(() => undefined);
     });
   }
 
