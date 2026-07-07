@@ -259,6 +259,7 @@ export const createRoomChatController = ({
   getRole,
   getRoomName,
   isConnected,
+  getParticipants,
   onOrfMention,
   onOrfAction,
   publishMessage,
