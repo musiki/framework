@@ -7,6 +7,12 @@ type CentauroControllerOptions = {
   container: HTMLElement;
   getAudioContext?: () => AudioContext | null | Promise<AudioContext | null>;
   getOutputNode?: () => AudioNode | null;
+  // Collaboration callbacks
+  onNoteEvent?: (note: number, velocity: number, action: 'on' | 'off') => void;
+  onTuningChange?: (expr: string) => void;
+  onEngineChange?: (engine: string) => void;
+  onMapModeChange?: (mapMode: 'chromatic' | 'isomorphic') => void;
+  onDroneToggle?: (active: boolean, midi: number) => void;
 };
 
 type Point = { x: number; y: number };
@@ -65,6 +71,13 @@ export class CentauroController {
   private container: HTMLElement;
   private getAudioContext?: CentauroControllerOptions['getAudioContext'];
   private getOutputNode?: CentauroControllerOptions['getOutputNode'];
+
+  // Collaboration callbacks
+  private onNoteEvent?: CentauroControllerOptions['onNoteEvent'];
+  private onTuningChange?: CentauroControllerOptions['onTuningChange'];
+  private onEngineChange?: CentauroControllerOptions['onEngineChange'];
+  private onMapModeChange?: CentauroControllerOptions['onMapModeChange'];
+  private onDroneToggle?: CentauroControllerOptions['onDroneToggle'];
 
   private spec!: TuningSpec;
   private midiTable!: MidiTuningRow[];
@@ -148,9 +161,17 @@ export class CentauroController {
     this.container = options.container;
     this.getAudioContext = options.getAudioContext;
     this.getOutputNode = options.getOutputNode;
+    
+    // Assign collaboration callbacks
+    this.onNoteEvent = options.onNoteEvent;
+    this.onTuningChange = options.onTuningChange;
+    this.onEngineChange = options.onEngineChange;
+    this.onMapModeChange = options.onMapModeChange;
+    this.onDroneToggle = options.onDroneToggle;
 
     this.bindDOM();
 
+    // Read tuning expression from URL query parameters
     let initialTuning = 'u31';
     try {
       const decodedSearch = decodeURIComponent(window.location.search).trim();
@@ -174,6 +195,14 @@ export class CentauroController {
     this.setupListeners();
     this.setupMidi();
     this.setupMaxBridge();
+
+    // ResizeObserver to handle dynamic height & width updates smoothly
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => {
+        this.renderKeyboard();
+      });
+      observer.observe(this.keyboardWrapper);
+    }
   }
 
   private bindDOM() {
@@ -227,17 +256,25 @@ export class CentauroController {
   private setupListeners() {
     // Input listener
     this.inputExpr.addEventListener('change', () => {
-      this.initTuning(this.inputExpr.value);
+      const val = this.inputExpr.value;
+      this.initTuning(val);
+      if (this.onTuningChange) {
+        this.onTuningChange(val);
+      }
     });
     this.inputExpr.addEventListener('keyup', (e) => {
       if (e.key === 'Enter') {
-        this.initTuning(this.inputExpr.value);
+        const val = this.inputExpr.value;
+        this.initTuning(val);
+        if (this.onTuningChange) {
+          this.onTuningChange(val);
+        }
       }
     });
 
     // Action buttons
     this.droneBtn.addEventListener('click', () => {
-      void this.toggleDrone();
+      void this.toggleDrone(false);
     });
 
     this.kbToggleBtn.addEventListener('click', () => {
@@ -250,11 +287,17 @@ export class CentauroController {
       this.mapMode = this.mapMode === 'chromatic' ? 'isomorphic' : 'chromatic';
       this.mapModeBtn.textContent = `Mapa: ${this.mapMode === 'chromatic' ? 'Cromático' : 'Isomórfico'}`;
       this.renderKeyboard(); // Re-render keyboard to update layout labels
+      if (this.onMapModeChange) {
+        this.onMapModeChange(this.mapMode);
+      }
     });
 
     this.resetBtn.addEventListener('click', () => {
       this.inputExpr.value = 'u12';
       this.initTuning('u12');
+      if (this.onTuningChange) {
+        this.onTuningChange('u12');
+      }
     });
 
     this.viewTunBtn.addEventListener('click', () => {
@@ -282,8 +325,17 @@ export class CentauroController {
     }
 
     this.engineSelect.addEventListener('change', () => {
-      if (this.engineSelect.value === 'piano') {
-        void this.ensurePianoLoaded();
+      const val = this.engineSelect.value;
+      if (val === 'piano') {
+        void this.ensurePianoLoaded().then(() => {
+          if (this.onEngineChange) {
+            this.onEngineChange(val);
+          }
+        });
+      } else {
+        if (this.onEngineChange) {
+          this.onEngineChange(val);
+        }
       }
     });
 
@@ -334,7 +386,7 @@ export class CentauroController {
         const midi = 60 + offset;
         if (midi >= 0 && midi <= 127) {
           this.activeKeyboardNotes.add(midi);
-          this.noteOn(midi);
+          this.noteOn(midi, 0.5, false);
         }
       }
     } else {
@@ -355,7 +407,7 @@ export class CentauroController {
         let midi = 60 + pitch;
         midi = ((midi % 128) + 128) % 128; // safe wrap
         this.activeKeyboardNotes.add(midi);
-        this.noteOn(midi);
+        this.noteOn(midi, 0.5, false);
       }
     }
   };
@@ -369,7 +421,7 @@ export class CentauroController {
         const midi = 60 + offset;
         if (this.activeKeyboardNotes.has(midi)) {
           this.activeKeyboardNotes.delete(midi);
-          this.noteOff(midi);
+          this.noteOff(midi, false);
         }
       }
     } else {
@@ -390,7 +442,7 @@ export class CentauroController {
         midi = ((midi % 128) + 128) % 128; // safe wrap
         if (this.activeKeyboardNotes.has(midi)) {
           this.activeKeyboardNotes.delete(midi);
-          this.noteOff(midi);
+          this.noteOff(midi, false);
         }
       }
     }
@@ -488,10 +540,10 @@ export class CentauroController {
     return bestRoot;
   }
 
-  public noteOn(midi: number, velocity = 0.5) {
+  public noteOn(midi: number, velocity = 0.5, isRemote = false) {
     void this.ensureAudio().then(() => {
       if (!this.audioCtx || !this.destination) return;
-      this.noteOff(midi); // polyphonic safety check
+      this.noteOff(midi, isRemote); // polyphonic safety check
 
       const row = this.midiTable[midi];
       if (!row) return;
@@ -543,10 +595,14 @@ export class CentauroController {
         this.activeVoices.set(midi, { osc, gain });
       }
       this.highlightKey(midi, true);
+
+      if (!isRemote && this.onNoteEvent) {
+        this.onNoteEvent(midi, velocity, 'on');
+      }
     });
   }
 
-  public noteOff(midi: number) {
+  public noteOff(midi: number, isRemote = false) {
     const voice = this.activeVoices.get(midi);
     if (voice && this.audioCtx) {
       const { osc, gain } = voice;
@@ -558,16 +614,26 @@ export class CentauroController {
       this.activeVoices.delete(midi);
     }
     this.highlightKey(midi, false);
+
+    if (!isRemote && this.onNoteEvent) {
+      this.onNoteEvent(midi, 0, 'off');
+    }
   }
 
-  private async toggleDrone() {
+  private async toggleDrone(isRemote = false) {
     await this.ensureAudio();
     if (!this.audioCtx) return;
 
     if (this.droneActive) {
       this.stopDrone();
+      if (!isRemote && this.onDroneToggle) {
+        this.onDroneToggle(false, this.currentDroneMidi);
+      }
     } else {
       this.startDrone();
+      if (!isRemote && this.onDroneToggle) {
+        this.onDroneToggle(true, this.currentDroneMidi);
+      }
     }
   }
 
@@ -644,6 +710,40 @@ export class CentauroController {
     this.droneBtn.classList.remove('centauro-btn--primary');
   }
 
+  // --- COLLABORATION REMOTE HANDLERS ---
+  public setTuningRemote(expr: string) {
+    if (this.inputExpr) {
+      this.inputExpr.value = expr;
+    }
+    this.initTuning(expr);
+  }
+
+  public setEngineRemote(engine: string) {
+    if (this.engineSelect) {
+      this.engineSelect.value = engine;
+    }
+    if (engine === 'piano') {
+      void this.ensurePianoLoaded();
+    }
+  }
+
+  public setMapModeRemote(mapMode: 'chromatic' | 'isomorphic') {
+    this.mapMode = mapMode;
+    if (this.mapModeBtn) {
+      this.mapModeBtn.textContent = `Mapa: ${this.mapMode === 'chromatic' ? 'Cromático' : 'Isomórfico'}`;
+    }
+    this.renderKeyboard();
+  }
+
+  public setDroneRemote(active: boolean, midi: number) {
+    this.currentDroneMidi = midi;
+    if (active) {
+      void this.ensureAudio().then(() => this.startDrone());
+    } else {
+      this.stopDrone();
+    }
+  }
+
   // --- MIDI BINDING ---
   private setupMidi() {
     const handleMidiMessage = (event: WebMidi.MIDIMessageEvent) => {
@@ -651,9 +751,9 @@ export class CentauroController {
       const type = cmd & 0xf0;
       
       if (type === 144 && vel > 0) { // Note on
-        this.noteOn(note, vel / 127);
+        this.noteOn(note, vel / 127, false);
       } else if (type === 128 || (type === 144 && vel === 0)) { // Note off
-        this.noteOff(note);
+        this.noteOff(note, false);
       }
     };
 
@@ -682,14 +782,14 @@ export class CentauroController {
           const parsedNote = parseInt(note, 10);
           const parsedVel = vel !== undefined ? parseInt(vel, 10) : 100;
           if (!isNaN(parsedNote)) {
-            this.noteOn(parsedNote, parsedVel / 127);
+            this.noteOn(parsedNote, parsedVel / 127, false);
           }
         });
 
         max.bindInlet('noteoff', (note: any) => {
           const parsedNote = parseInt(note, 10);
           if (!isNaN(parsedNote)) {
-            this.noteOff(parsedNote);
+            this.noteOff(parsedNote, false);
           }
         });
 
@@ -702,9 +802,9 @@ export class CentauroController {
 
           const type = stat & 0xf0;
           if (type === 144 && vel > 0) {
-            this.noteOn(note, vel / 127);
+            this.noteOn(note, vel / 127, false);
           } else if (type === 128 || (type === 144 && vel === 0)) {
-            this.noteOff(note);
+            this.noteOff(note, false);
           }
         });
 
@@ -713,6 +813,9 @@ export class CentauroController {
           if (typeof expr === 'string' && expr) {
             this.inputExpr.value = expr;
             this.initTuning(expr);
+            if (this.onTuningChange) {
+              this.onTuningChange(expr);
+            }
           }
         });
 
@@ -745,9 +848,9 @@ export class CentauroController {
               // Dispatch note events
               const type = currentStatus & 0xf0;
               if (type === 144 && data2 > 0) {
-                this.noteOn(data1, data2 / 127);
+                this.noteOn(data1, data2 / 127, false);
               } else if (type === 128 || (type === 144 && data2 === 0)) {
-                this.noteOff(data1);
+                this.noteOff(data1, false);
               }
             }
           }
@@ -826,8 +929,20 @@ export class CentauroController {
     const centerCol = Math.floor(cols / 2);
     const centerRow = Math.floor(rows / 2);
 
+    // Dynamic sizing based on the keyboard panel container dimensions
+    let width = this.keyboardWrapper.clientWidth || 1000;
+    let height = this.keyboardWrapper.clientHeight || 500;
+    if (height === 0) {
+      const rect = this.keyboardWrapper.getBoundingClientRect();
+      width = rect.width || 1000;
+      height = rect.height || 500;
+    }
+    if (height === 0) {
+      height = 500;
+    }
+
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 1000 500');
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
     svg.setAttribute('width', '100%');
     svg.setAttribute('height', '100%');
     svg.style.background = 'rgba(0,0,0,0.3)';
@@ -839,8 +954,8 @@ export class CentauroController {
     if (shape === 'voronoi') {
       const allPoints: Array<{ x: number; y: number; dx: number; dy: number; midi: number; degreeObj: any; fillColor: string; borderColor: string }> = [];
       
-      const spacingX = 1000 / cols;
-      const spacingY = 500 / rows;
+      const spacingX = width / cols;
+      const spacingY = height / rows;
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -870,13 +985,13 @@ export class CentauroController {
         }
       }
 
-      // Clip cells using the viewport borders [0, 1000] and [0, 500]
+      // Clip cells using the viewport borders [0, width] and [0, height]
       for (const p0 of allPoints) {
         let cell: Point[] = [
           { x: 0, y: 0 },
-          { x: 1000, y: 0 },
-          { x: 1000, y: 500 },
-          { x: 0, y: 500 }
+          { x: width, y: 0 },
+          { x: width, y: height },
+          { x: 0, y: height }
         ];
 
         for (const pJ of allPoints) {
@@ -942,14 +1057,14 @@ export class CentauroController {
         const startPlay = (event: Event) => {
           event.preventDefault();
           this.activePointerNotes.add(p0.midi);
-          this.noteOn(p0.midi);
+          this.noteOn(p0.midi, 0.5, false);
         };
 
         const stopPlay = (event: Event) => {
           event.preventDefault();
           if (this.activePointerNotes.has(p0.midi)) {
             this.activePointerNotes.delete(p0.midi);
-            this.noteOff(p0.midi);
+            this.noteOff(p0.midi, false);
           }
         };
 
@@ -964,8 +1079,8 @@ export class CentauroController {
       }
     } else {
       // Classic regular layouts stretched to perfectly cover the container
-      const spacingX = 1000 / cols;
-      const spacingY = 500 / rows;
+      const spacingX = width / cols;
+      const spacingY = height / rows;
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -993,8 +1108,8 @@ export class CentauroController {
           g.setAttribute('data-midi', midi.toString());
 
           if (shape === 'hex') {
-            const hSpacingX = 1000 / (cols - 0.5);
-            const hSpacingY = 500 / (rows - 0.25);
+            const hSpacingX = width / (cols - 0.5);
+            const hSpacingY = height / (rows - 0.25);
             const hx = (c + 0.5 * (r % 2)) * hSpacingX + hSpacingX / 2;
             const hy = r * hSpacingY + hSpacingY / 2;
             
@@ -1070,14 +1185,14 @@ export class CentauroController {
           const startPlay = (event: Event) => {
             event.preventDefault();
             this.activePointerNotes.add(midi);
-            this.noteOn(midi);
+            this.noteOn(midi, 0.5, false);
           };
 
           const stopPlay = (event: Event) => {
             event.preventDefault();
             if (this.activePointerNotes.has(midi)) {
               this.activePointerNotes.delete(midi);
-              this.noteOff(midi);
+              this.noteOff(midi, false);
             }
           };
 
@@ -1130,7 +1245,7 @@ export class CentauroController {
   public dispose() {
     this.stopDrone();
     for (const midi of this.activeVoices.keys()) {
-      this.noteOff(midi);
+      this.noteOff(midi, true);
     }
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);

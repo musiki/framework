@@ -11617,6 +11617,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       container,
       getAudioContext: ensureIncomingAudioContext,
       getOutputNode: () => centauroAudioGroupGainNode,
+      onNoteEvent: (note, velocity, action) => {
+        if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
+          void publishMessage({ type: 'centauro-note', note, velocity, action });
+        }
+      },
+      onTuningChange: (expr) => {
+        if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
+          void publishMessage({ type: 'centauro-tuning', expr });
+        }
+      },
+      onEngineChange: (engine) => {
+        if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
+          void publishMessage({ type: 'centauro-engine', engine });
+        }
+      },
+      onMapModeChange: (mapMode) => {
+        if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
+          void publishMessage({ type: 'centauro-map', mapMode });
+        }
+      },
+      onDroneToggle: (active, midi) => {
+        if (canLeadSession() || (sessionAllowsInstruments && localRole === 'student')) {
+          void publishMessage({ type: 'centauro-drone', active, midi });
+        }
+      }
     });
 
     const onLilypondInit = (container: HTMLElement) => {
@@ -13702,6 +13727,60 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         else ctrl.removeNote(message.note);
       });
       
+      return;
+    }
+
+    if (message.type === 'centauro-note') {
+      const pods = workspaceManager.getActivePods();
+      pods.forEach(pod => {
+        if (pod.controller instanceof CentauroController) {
+          if (message.action === 'on') {
+            pod.controller.noteOn(message.note, message.velocity, true);
+          } else {
+            pod.controller.noteOff(message.note, true);
+          }
+        }
+      });
+      return;
+    }
+
+    if (message.type === 'centauro-tuning') {
+      const pods = workspaceManager.getActivePods();
+      pods.forEach(pod => {
+        if (pod.controller instanceof CentauroController) {
+          pod.controller.setTuningRemote(message.expr);
+        }
+      });
+      return;
+    }
+
+    if (message.type === 'centauro-engine') {
+      const pods = workspaceManager.getActivePods();
+      pods.forEach(pod => {
+        if (pod.controller instanceof CentauroController) {
+          pod.controller.setEngineRemote(message.engine);
+        }
+      });
+      return;
+    }
+
+    if (message.type === 'centauro-map') {
+      const pods = workspaceManager.getActivePods();
+      pods.forEach(pod => {
+        if (pod.controller instanceof CentauroController) {
+          pod.controller.setMapModeRemote(message.mapMode);
+        }
+      });
+      return;
+    }
+
+    if (message.type === 'centauro-drone') {
+      const pods = workspaceManager.getActivePods();
+      pods.forEach(pod => {
+        if (pod.controller instanceof CentauroController) {
+          pod.controller.setDroneRemote(message.active, message.midi);
+        }
+      });
       return;
     }
 
