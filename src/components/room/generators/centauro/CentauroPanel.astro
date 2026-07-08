@@ -73,6 +73,12 @@
               <option value="piano">Piano (Muestras)</option>
             </select>
           </div>
+          <div class="centauro-field centauro-field--monitor">
+            <label>Monitor Helmholtz-Ellis</label>
+            <div class="centauro-pitch-monitor" data-centauro-pitch-monitor>
+              <div class="centauro-monitor-empty">Monitor listo</div>
+            </div>
+          </div>
         </div>
 
         <div class="centauro-action-row">
@@ -136,9 +142,6 @@
           <div class="centauro-keyboard-wrapper" data-centauro-keyboard-wrapper style="position: relative;">
             <!-- SVG keyboard will be rendered here dynamically -->
             <div class="centauro-touch-strip" data-centauro-touch-strip title="Arrastra/Toca en el borde derecho: Arriba (Sube octava), Abajo (Baja octava), Centro (Reset)"></div>
-            <div class="centauro-pitch-monitor" data-centauro-pitch-monitor>
-              <div class="centauro-monitor-empty">Monitor listo</div>
-            </div>
           </div>
         </div>
 
@@ -617,32 +620,30 @@
     font-style: normal;
   }
 
+  .centauro-field--monitor {
+    flex: 2;
+    min-width: 240px;
+  }
+
   :global(.centauro-pitch-monitor) {
-    position: absolute;
-    top: 12px;
-    right: 36px;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    background: rgba(10, 10, 10, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
-    padding: 6px 10px;
-    min-width: 220px;
-    max-height: 160px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 4px 8px;
+    height: 50px;
     overflow-y: auto;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     font-family: var(--font-sans, sans-serif);
-    z-index: 10;
-    pointer-events: none; /* Allow mouse events to pass through to the keyboard cells below */
-    transition: opacity 0.2s ease;
   }
 
   :global(.centauro-monitor-empty) {
     color: rgba(255, 255, 255, 0.4);
     font-size: 11px;
-    text-align: right;
+    text-align: left;
     font-style: italic;
+    line-height: 40px; /* Vertically centered */
   }
 
   :global(.centauro-monitor-row) {
@@ -703,5 +704,16 @@
 
   :global(.centauro-monitor-deviation.zero) {
     color: rgba(255, 255, 255, 0.5);
+  }
+
+  @media (max-width: 500px) {
+    .centauro-keyboard-panel {
+      overflow: auto !important;
+    }
+    .centauro-keyboard-wrapper {
+      min-width: 480px !important;
+      min-height: 300px !important;
+      flex: none !important;
+    }
   }
 </style>

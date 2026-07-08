@@ -346,6 +346,16 @@ export class CentauroController {
 
   private setupListeners() {
     // Input listener
+    const showDatalist = () => {
+      try {
+        this.inputExpr.showPicker();
+      } catch (e) {
+        console.log("showPicker not supported", e);
+      }
+    };
+    this.inputExpr.addEventListener('click', showDatalist);
+    this.inputExpr.addEventListener('focus', showDatalist);
+
     this.inputExpr.addEventListener('change', () => {
       const val = this.inputExpr.value;
       this.initTuning(val);
