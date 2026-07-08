@@ -9491,11 +9491,17 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const href = URL.createObjectURL(blob);
     const normalizedType = normalizeText(blob.type).toLowerCase();
-    const extension = normalizedType.includes('mp4')
+    const isWindows = /windows|win32/i.test(navigator.userAgent);
+    let extension = normalizedType.includes('mp4')
       ? 'mp4'
       : normalizedType.includes('webm')
         ? 'webm'
         : 'bin';
+
+    if (isWindows && extension === 'mp4') {
+      extension = 'mpeg';
+    }
+
     const anchor = document.createElement('a');
     anchor.href = href;
     anchor.download = `${roomName}-${stamp}.${extension}`;
@@ -10302,13 +10308,14 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
         }
       }, 1000);
       setRecordState(true);
+      const isWindows = /windows|win32/i.test(navigator.userAgent);
       setStatus(
         usingDisplayCapture
           ? mimeType.includes('mp4')
-            ? 'Grabacion MP4 iniciada con captura de la pestaña.'
+            ? `Grabacion ${isWindows ? 'MPEG' : 'MP4'} iniciada con captura de la pestaña.`
             : 'Grabacion iniciada con captura de la pestaña en WebM.'
           : mimeType.includes('mp4')
-            ? 'Grabacion MP4 iniciada.'
+            ? `Grabacion ${isWindows ? 'MPEG' : 'MP4'} iniciada.`
             : 'Grabacion iniciada en WebM. MP4 no esta disponible en este navegador.',
       );
     } catch (error) {
