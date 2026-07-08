@@ -24,20 +24,35 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
         padding: 6px !important;
         height: 100vh !important;
         box-sizing: border-box;
+        overflow: hidden;
       }
 
       .centauro-shell {
+        position: relative;
+        display: flex;
         flex-direction: row !important;
         height: 100% !important;
-        gap: 8px !important;
+        width: 100% !important;
+        gap: 0 !important;
+        overflow: hidden;
       }
 
       .centauro-header-controls {
         flex: 0 0 240px !important;
+        width: 240px !important;
         padding: 8px !important;
         background: #2b2b2b !important;
-        border: 1px solid #3a3a3a !important;
+        border-right: 1px solid #3a3a3a !important;
         gap: 6px !important;
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        z-index: 10;
+        box-sizing: border-box;
+      }
+
+      /* Collapsed sidebar state */
+      .sidebar-collapsed .centauro-header-controls {
+        transform: translateX(-100%);
+        margin-left: -240px !important;
       }
 
       .centauro-control-row {
@@ -68,10 +83,12 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
         flex: 1 !important;
         min-width: 0;
         gap: 0 !important;
+        height: 100% !important;
       }
 
       .centauro-keyboard-panel {
         flex: 1 !important;
+        height: 100% !important;
         background: transparent !important;
         border: none !important;
         padding: 0 !important;
@@ -81,9 +98,82 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
       .centauro-info-panel {
         display: none !important;
       }
+
+      /* Floating Pill Buttons */
+      #centauro-sidebar-toggle {
+        position: fixed;
+        left: 246px;
+        top: 8px;
+        z-index: 20;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #2b2b2b;
+        border: 1px solid #3a3a3a;
+        color: #dcdcdc;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        outline: none;
+      }
+
+      #centauro-sidebar-toggle:hover {
+        background: #3a3a3a;
+        color: #fff;
+      }
+
+      .sidebar-collapsed #centauro-sidebar-toggle {
+        left: 8px;
+      }
+
+      .sidebar-collapsed #centauro-sidebar-toggle svg {
+        transform: rotate(180deg);
+      }
+
+      #centauro-fullscreen-btn {
+        position: fixed;
+        right: 8px;
+        top: 8px;
+        z-index: 20;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #2b2b2b;
+        border: 1px solid #3a3a3a;
+        color: #dcdcdc;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        transition: background 0.15s ease, color 0.15s ease;
+        outline: none;
+      }
+
+      #centauro-fullscreen-btn:hover {
+        background: #3a3a3a;
+        color: #fff;
+      }
     </style>
   </head>
   <body>
+    <!-- Retractable Sidebar Toggle Arrow Button -->
+    <button type="button" id="centauro-sidebar-toggle" title="Contraer/Expandir Controles">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6" />
+      </svg>
+    </button>
+
+    <!-- Fullscreen Toggle Button -->
+    <button type="button" id="centauro-fullscreen-btn" title="Pantalla Completa (o Doble toque en el teclado)">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+      </svg>
+    </button>
+
     <CentauroPanel />
 
     <script>
@@ -93,6 +183,48 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
         const podContainer = document.querySelector('.musiki-pod[data-pod="centauro"]') as HTMLElement;
         if (podContainer) {
           new CentauroController({ container: podContainer });
+        }
+
+        // Sidebar Toggle handler
+        const sidebarToggle = document.getElementById('centauro-sidebar-toggle');
+        if (sidebarToggle) {
+          sidebarToggle.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-collapsed');
+          });
+        }
+
+        // Fullscreen Toggle handler
+        const fullscreenBtn = document.getElementById('centauro-fullscreen-btn');
+        const toggleFullscreen = () => {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          } else {
+            document.exitFullscreen().catch(() => {});
+          }
+        };
+
+        if (fullscreenBtn) {
+          fullscreenBtn.addEventListener('click', toggleFullscreen);
+        }
+
+        // Double click / Double tap on keyboard to trigger fullscreen
+        const keyboardWrapper = document.querySelector('[data-centauro-keyboard-wrapper]');
+        if (keyboardWrapper) {
+          let lastTap = 0;
+          keyboardWrapper.addEventListener('touchend', (e) => {
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            if (tapLength < 300 && tapLength > 0) {
+              e.preventDefault();
+              toggleFullscreen();
+            }
+            lastTap = currentTime;
+          });
+
+          keyboardWrapper.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            toggleFullscreen();
+          });
         }
       }
 

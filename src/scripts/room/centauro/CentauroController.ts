@@ -309,11 +309,10 @@ export class CentauroController {
           stepY = Math.max(2, Math.round(degreeCount / 3));
         }
         const pitch = coord.dx * stepX + coord.dy * stepY;
-        const midi = 60 + pitch;
-        if (midi >= 0 && midi <= 127) {
-          this.activeKeyboardNotes.add(midi);
-          this.noteOn(midi);
-        }
+        let midi = 60 + pitch;
+        midi = ((midi % 128) + 128) % 128; // safe wrap
+        this.activeKeyboardNotes.add(midi);
+        this.noteOn(midi);
       }
     }
   };
@@ -344,7 +343,8 @@ export class CentauroController {
           stepY = Math.max(2, Math.round(degreeCount / 3));
         }
         const pitch = coord.dx * stepX + coord.dy * stepY;
-        const midi = 60 + pitch;
+        let midi = 60 + pitch;
+        midi = ((midi % 128) + 128) % 128; // safe wrap
         if (this.activeKeyboardNotes.has(midi)) {
           this.activeKeyboardNotes.delete(midi);
           this.noteOff(midi);
@@ -795,25 +795,28 @@ export class CentauroController {
 
     if (shape === 'voronoi') {
       const allPoints: Array<{ x: number; y: number; dx: number; dy: number; midi: number; degreeObj: any; fillColor: string; borderColor: string }> = [];
-      const cellRadius = 40;
+      
+      const spacingX = 1000 / cols;
+      const spacingY = 500 / rows;
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const dx = c - centerCol;
           const dy = r - centerRow;
           const pitch = dx * stepX + dy * stepY;
-          const midi = 60 + pitch;
-          if (midi < 0 || midi > 127) continue;
+          
+          let midi = 60 + pitch;
+          midi = ((midi % 128) + 128) % 128; // safe wrap
 
           const rowData = this.midiTable[midi];
           const degreeObj = this.spec.degrees[rowData.degree];
 
-          // Deterministic organic perturbation based on MIDI note index
-          const perturbX = Math.sin(midi * 73.1) * 16;
-          const perturbY = Math.cos(midi * 37.7) * 12;
+          // Deterministic organic perturbation within the cell box boundaries
+          const perturbX = Math.sin(midi * 73.1) * (spacingX * 0.18);
+          const perturbY = Math.cos(midi * 37.7) * (spacingY * 0.18);
 
-          const x = 500 + dx * 72 + perturbX;
-          const y = 250 + dy * 68 + perturbY;
+          const x = c * spacingX + spacingX / 2 + perturbX;
+          const y = r * spacingY + spacingY / 2 + perturbY;
 
           const centsNormalized = degreeObj.cents % 1200;
           const hue = (centsNormalized / 1200) * 360;
@@ -824,18 +827,19 @@ export class CentauroController {
         }
       }
 
+      // Clip cells using the viewport borders [0, 1000] and [0, 500]
       for (const p0 of allPoints) {
         let cell: Point[] = [
-          { x: p0.x - cellRadius * 1.5, y: p0.y - cellRadius * 1.5 },
-          { x: p0.x + cellRadius * 1.5, y: p0.y - cellRadius * 1.5 },
-          { x: p0.x + cellRadius * 1.5, y: p0.y + cellRadius * 1.5 },
-          { x: p0.x - cellRadius * 1.5, y: p0.y + cellRadius * 1.5 }
+          { x: 0, y: 0 },
+          { x: 1000, y: 0 },
+          { x: 1000, y: 500 },
+          { x: 0, y: 500 }
         ];
 
         for (const pJ of allPoints) {
           if (pJ === p0) continue;
-          const dist = Math.hypot(pJ.x - p0.x, p2yDist(pJ.y, p0.y));
-          if (dist > cellRadius * 2.8) continue;
+          const dist = Math.hypot(pJ.x - p0.x, pJ.y - p0.y);
+          if (dist > Math.max(spacingX, spacingY) * 2.5) continue;
 
           const xm = (p0.x + pJ.x) / 2;
           const ym = (p0.y + pJ.y) / 2;
@@ -916,15 +920,18 @@ export class CentauroController {
         keysGroup.appendChild(g);
       }
     } else {
-      // Classic regular layouts
+      // Classic regular layouts stretched to perfectly cover the container
+      const spacingX = 1000 / cols;
+      const spacingY = 500 / rows;
+
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const dx = c - centerCol;
           const dy = r - centerRow;
           const pitch = dx * stepX + dy * stepY;
           
-          const midi = 60 + pitch;
-          if (midi < 0 || midi > 127) continue;
+          let midi = 60 + pitch;
+          midi = ((midi % 128) + 128) % 128; // safe wrap
 
           const rowData = this.midiTable[midi];
           const degree = rowData.degree;
@@ -935,27 +942,27 @@ export class CentauroController {
           const fillColor = `hsla(${hue}, 60%, 42%, 0.8)`;
           const borderColor = `hsla(${hue}, 70%, 55%, 0.5)`;
 
-          let x = 0;
-          let y = 0;
+          const x = c * spacingX + spacingX / 2;
+          const y = r * spacingY + spacingY / 2;
 
           const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           g.setAttribute('class', 'centauro-key-group');
           g.setAttribute('data-midi', midi.toString());
 
           if (shape === 'hex') {
-            const R = 40;
-            const spacingX = R * Math.sqrt(3);
-            const spacingY = R * 1.5;
-            const offsetX = spacingX / 2;
+            const hSpacingX = 1000 / (cols - 0.5);
+            const hSpacingY = 500 / (rows - 0.25);
+            const hx = (c + 0.5 * (r % 2)) * hSpacingX + hSpacingX / 2;
+            const hy = r * hSpacingY + hSpacingY / 2;
             
-            x = 500 + dx * spacingX + (dy % 2) * offsetX;
-            y = 250 + dy * spacingY;
+            // Hexagon radius to fit without overlap (with a slight 1.05 boost to cover gap lines)
+            const R = Math.min(hSpacingX / Math.sqrt(3), hSpacingY / 1.5) * 1.05;
 
             const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
             const hexPoints = [];
             for (let i = 0; i < 6; i++) {
               const angle = (i * Math.PI) / 3 - Math.PI / 6;
-              hexPoints.push((x + R * Math.cos(angle)).toFixed(1) + ',' + (y + R * Math.sin(angle)).toFixed(1));
+              hexPoints.push((hx + R * Math.cos(angle)).toFixed(1) + ',' + (hy + R * Math.sin(angle)).toFixed(1));
             }
             poly.setAttribute('points', hexPoints.join(' '));
             poly.setAttribute('class', 'centauro-key');
@@ -965,16 +972,15 @@ export class CentauroController {
             poly.setAttribute('data-midi', midi.toString());
             g.appendChild(poly);
 
-          } else if (shape === 'square') {
-            const S = 60;
-            x = 500 + dx * (S + 6);
-            y = 250 + dy * (S + 6);
+            // Relocate label texts to hexagon center
+            drawLabels(hx, hy, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
 
+          } else if (shape === 'square') {
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            rect.setAttribute('x', (x - S / 2).toString());
-            rect.setAttribute('y', (y - S / 2).toString());
-            rect.setAttribute('width', S.toString());
-            rect.setAttribute('height', S.toString());
+            rect.setAttribute('x', (x - (spacingX - 4) / 2).toString());
+            rect.setAttribute('y', (y - (spacingY - 4) / 2).toString());
+            rect.setAttribute('width', (spacingX - 4).toString());
+            rect.setAttribute('height', (spacingY - 4).toString());
             rect.setAttribute('rx', '4');
             rect.setAttribute('class', 'centauro-key');
             rect.setAttribute('fill', fillColor);
@@ -983,30 +989,24 @@ export class CentauroController {
             rect.setAttribute('data-midi', midi.toString());
             g.appendChild(rect);
 
-          } else if (shape === 'triangle') {
-            const B = 80;
-            const H = 60;
-            const spacingX = B / 2;
-            const spacingY = H;
-            
-            x = 500 + dx * spacingX;
-            y = 250 + dy * spacingY;
+            drawLabels(x, y, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
 
+          } else if (shape === 'triangle') {
             const pointingUp = (c + r) % 2 === 0;
             const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
             let triPoints = [];
             
             if (pointingUp) {
               triPoints = [
-                `${x},${(y - H / 2).toFixed(1)}`,
-                `${(x + B / 2).toFixed(1)},${(y + H / 2).toFixed(1)}`,
-                `${(x - B / 2).toFixed(1)},${(y + H / 2).toFixed(1)}`
+                `${x},${(y - spacingY / 2).toFixed(1)}`,
+                `${(x + spacingX / 2).toFixed(1)},${(y + spacingY / 2).toFixed(1)}`,
+                `${(x - spacingX / 2).toFixed(1)},${(y + spacingY / 2).toFixed(1)}`
               ];
             } else {
               triPoints = [
-                `${x},${(y + H / 2).toFixed(1)}`,
-                `${(x + B / 2).toFixed(1)},${(y - H / 2).toFixed(1)}`,
-                `${(x - B / 2).toFixed(1)},${(y - H / 2).toFixed(1)}`
+                `${x},${(y + spacingY / 2).toFixed(1)}`,
+                `${(x + spacingX / 2).toFixed(1)},${(y - spacingY / 2).toFixed(1)}`,
+                `${(x - spacingX / 2).toFixed(1)},${(y - spacingY / 2).toFixed(1)}`
               ];
             }
 
@@ -1017,37 +1017,11 @@ export class CentauroController {
             poly.setAttribute('stroke-width', '1.5');
             poly.setAttribute('data-midi', midi.toString());
             g.appendChild(poly);
+
+            // For triangles, center the text slightly adjusted vertically
+            const textYOffset = pointingUp ? 6 : -4;
+            drawLabels(x, y + textYOffset, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
           }
-
-          // Find QWERTY key mapped to this dx, dy in isomorphic mode
-          let qwertyLabel = '';
-          if (this.mapMode === 'isomorphic') {
-            const keys = Object.keys(this.qwertyToGrid);
-            const keyFound = keys.find(k => {
-              const coord = this.qwertyToGrid[k];
-              return coord.dx === dx && coord.dy === dy;
-            });
-            if (keyFound) {
-              qwertyLabel = ` [${keyFound.toUpperCase()}]`;
-            }
-          }
-
-          // Key labels
-          const textDeg = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          textDeg.setAttribute('x', x.toString());
-          textDeg.setAttribute('y', (y - 5).toString());
-          textDeg.setAttribute('class', 'centauro-key-text');
-          textDeg.style.fontSize = '10px';
-          textDeg.textContent = degreeObj.label;
-          g.appendChild(textDeg);
-
-          const textCents = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          textCents.setAttribute('x', x.toString());
-          textCents.setAttribute('y', (y + 8).toString());
-          textCents.setAttribute('class', 'centauro-key-subtext');
-          textCents.style.fontSize = '8px';
-          textCents.textContent = `${Math.round(degreeObj.cents)}c${qwertyLabel}`;
-          g.appendChild(textCents);
 
           // Bind interactive events
           const startPlay = (event: Event) => {
@@ -1122,4 +1096,44 @@ export class CentauroController {
 
 function p2yDist(y1: number, y2: number): number {
   return y1 - y2;
+}
+
+function drawLabels(
+  x: number,
+  y: number,
+  degreeObj: any,
+  mapMode: string,
+  dx: number,
+  dy: number,
+  qwertyToGrid: Record<string, { dx: number; dy: number }>,
+  g: SVGElement
+) {
+  // Find QWERTY key mapped to this dx, dy in isomorphic mode
+  let qwertyLabel = '';
+  if (mapMode === 'isomorphic') {
+    const keys = Object.keys(qwertyToGrid);
+    const keyFound = keys.find(k => {
+      const coord = qwertyToGrid[k];
+      return coord.dx === dx && coord.dy === dy;
+    });
+    if (keyFound) {
+      qwertyLabel = ` [${keyFound.toUpperCase()}]`;
+    }
+  }
+
+  const textDeg = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  textDeg.setAttribute('x', x.toString());
+  textDeg.setAttribute('y', (y - 5).toString());
+  textDeg.setAttribute('class', 'centauro-key-text');
+  textDeg.style.fontSize = '10px';
+  textDeg.textContent = degreeObj.label;
+  g.appendChild(textDeg);
+
+  const textCents = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  textCents.setAttribute('x', x.toString());
+  textCents.setAttribute('y', (y + 8).toString());
+  textCents.setAttribute('class', 'centauro-key-subtext');
+  textCents.style.fontSize = '8px';
+  textCents.textContent = `${Math.round(degreeObj.cents)}c${qwertyLabel}`;
+  g.appendChild(textCents);
 }
