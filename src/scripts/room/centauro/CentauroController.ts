@@ -67,6 +67,89 @@ function createPlateReverbBuffer(ctx: AudioContext, duration: number, decay: num
   return buffer;
 }
 
+interface SpellingOption {
+  name: string;
+  baseChar: string; // 'n', 'e', 'v', 'E', 'V'
+  pythDev: number;
+}
+
+const SPELLING_OPTIONS: SpellingOption[][] = [
+  // 0: C
+  [{ name: 'C', baseChar: 'n', pythDev: -5.865 }],
+  // 1: C# / Db
+  [
+    { name: 'C#', baseChar: 'v', pythDev: 7.82 },
+    { name: 'Db', baseChar: 'e', pythDev: -9.775 }
+  ],
+  // 2: D
+  [{ name: 'D', baseChar: 'n', pythDev: -1.955 }],
+  // 3: D# / Eb
+  [
+    { name: 'D#', baseChar: 'v', pythDev: 11.73 },
+    { name: 'Eb', baseChar: 'e', pythDev: -11.73 }
+  ],
+  // 4: E
+  [{ name: 'E', baseChar: 'n', pythDev: 1.955 }],
+  // 5: F
+  [{ name: 'F', baseChar: 'n', pythDev: -7.82 }],
+  // 6: F# / Gb
+  [
+    { name: 'F#', baseChar: 'v', pythDev: 5.865 },
+    { name: 'Gb', baseChar: 'e', pythDev: -13.68 }
+  ],
+  // 7: G
+  [{ name: 'G', baseChar: 'n', pythDev: -3.910 }],
+  // 8: G# / Ab
+  [
+    { name: 'G#', baseChar: 'v', pythDev: 9.775 },
+    { name: 'Ab', baseChar: 'e', pythDev: -13.68 }
+  ],
+  // 9: A
+  [{ name: 'A', baseChar: 'n', pythDev: 0.0 }],
+  // 10: A# / Bb
+  [
+    { name: 'A#', baseChar: 'v', pythDev: 13.68 },
+    { name: 'Bb', baseChar: 'e', pythDev: -9.775 }
+  ],
+  // 11: B
+  [{ name: 'B', baseChar: 'n', pythDev: 3.910 }]
+];
+
+function getSyntonicBaseChar(baseChar: string, S: number): string {
+  if (baseChar === 'n') {
+    if (S === -2) return 'l';
+    if (S === -1) return 'm';
+    if (S === 0) return 'n';
+    if (S === 1) return 'o';
+    if (S === 2) return 'p';
+  } else if (baseChar === 'e') {
+    if (S === -2) return 'c';
+    if (S === -1) return 'd';
+    if (S === 0) return 'e';
+    if (S === 1) return 'f';
+    if (S === 2) return 'g';
+  } else if (baseChar === 'v') {
+    if (S === -2) return 't';
+    if (S === -1) return 'u';
+    if (S === 0) return 'v';
+    if (S === 1) return 'w';
+    if (S === 2) return 'x';
+  } else if (baseChar === 'E') {
+    if (S === -2) return 'C';
+    if (S === -1) return 'D';
+    if (S === 0) return 'E';
+    if (S === 1) return 'F';
+    if (S === 2) return 'G';
+  } else if (baseChar === 'V') {
+    if (S === -2) return 'T';
+    if (S === -1) return 'U';
+    if (S === 0) return 'V';
+    if (S === 1) return 'W';
+    if (S === 2) return 'X';
+  }
+  return baseChar;
+}
+
 export class CentauroController {
   private container: HTMLElement;
   private getAudioContext?: CentauroControllerOptions['getAudioContext'];
@@ -244,6 +327,7 @@ export class CentauroController {
     try {
       this.spec = parseTuningInput(expr);
       this.midiTable = buildMidiTuningTable(this.spec);
+      this.precalculateHejiAccidentals();
       this.statusNote.textContent = `Afinación cargada: ${this.spec.name}`;
       this.statusNote.className = 'centauro-status centauro-status--info';
       this.renderTable();
@@ -1343,36 +1427,54 @@ export class CentauroController {
   }
 
   // --- HELMHOLTZ-ELLIS PITCH MONITOR ---
+  private precalculateHejiAccidentals() {
+    if (!this.midiTable) return;
+    for (let midi = 0; midi < this.midiTable.length; midi++) {
+      const row = this.midiTable[midi];
+      if (!row) continue;
+
+      const pc = midi % 12;
+      const dev = row.centsFrom12TET;
+      const options = SPELLING_OPTIONS[pc] || [{ name: 'C', baseChar: 'n', pythDev: 0.0 }];
+
+      let bestOption = options[0];
+      let bestS = 0;
+      let minError = Infinity;
+
+      // Tempered pitch check (bypass microtonal arrow commas if close to 12-TET step)
+      const isTempered = Math.abs(dev) < 3.0;
+
+      for (const option of options) {
+        // We only test syntonic commas (S from -2 to 2) to get exactly ONE accidental character
+        const S_list = isTempered ? [0] : [-2, -1, 0, 1, 2];
+        for (const S of S_list) {
+          const approx = option.pythDev + S * 21.506;
+          const err = Math.abs(dev - approx);
+          if (err < minError) {
+            minError = err;
+            bestOption = option;
+            bestS = S;
+          }
+        }
+      }
+
+      // 1. Accidental base character (exactly one HEJI character)
+      row.hejiAccidental = getSyntonicBaseChar(bestOption.baseChar, bestS);
+
+      // 2. Cents residual offset as discrete numeric superscript (+ or - cents)
+      const remaining = dev - (bestOption.pythDev + bestS * 21.506);
+      const offset = Math.round(remaining);
+      if (!isTempered && Math.abs(offset) >= 1) {
+        row.hejiOffset = offset;
+      } else {
+        row.hejiOffset = undefined;
+      }
+    }
+  }
+
   private getHejiAccidental(midi: number): string {
-    const pc = midi % 12;
     const row = this.midiTable[midi];
-    if (!row) return '\uE261'; // default natural
-
-    const dev = row.centsFrom12TET;
-    // Syntonic comma is 21.506 cents
-    const commas = Math.round(dev / 21.506);
-
-    // Decide base accidental (flat for 3, 8, 10; sharp for 1, 6; natural for others)
-    let base: 'natural' | 'flat' | 'sharp' = 'natural';
-    if (pc === 3 || pc === 8 || pc === 10) {
-      base = 'flat';
-    } else if (pc === 1 || pc === 6) {
-      base = 'sharp';
-    }
-
-    if (base === 'flat') {
-      if (commas >= 1) return '\uE2C6'; // U+E2C6: flatOneArrowUp
-      if (commas <= -1) return '\uE2C1'; // U+E2C1: flatOneArrowDown
-      return '\uE260'; // U+E260: flat
-    } else if (base === 'sharp') {
-      if (commas >= 1) return '\uE2C8'; // U+E2C8: sharpOneArrowUp
-      if (commas <= -1) return '\uE2C3'; // U+E2C3: sharpOneArrowDown
-      return '\uE262'; // U+E262: sharp
-    } else {
-      if (commas >= 1) return '\uE2C7'; // U+E2C7: naturalOneArrowUp
-      if (commas <= -1) return '\uE2C2'; // U+E2C2: naturalOneArrowDown
-      return '\uE261'; // U+E261: natural
-    }
+    return row?.hejiAccidental || 'n';
   }
 
   private updatePitchMonitor() {
@@ -1405,7 +1507,9 @@ export class CentauroController {
 
       html += `
         <div class="centauro-monitor-row">
-          <div class="centauro-monitor-accidental">${accidental}</div>
+          <div class="centauro-monitor-accidental">
+            ${accidental}${row.hejiOffset !== undefined ? `<sup style="font-size: 11px; vertical-align: super; font-family: monospace; color: #ffd966; margin-left: 2px;">${row.hejiOffset > 0 ? '+' : ''}${row.hejiOffset}</sup>` : ''}
+          </div>
           <div class="centauro-monitor-freq">${freqStr}</div>
           <div class="centauro-monitor-deviation ${devClass}">${devStr}</div>
         </div>

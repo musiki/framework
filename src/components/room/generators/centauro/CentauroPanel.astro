@@ -24,6 +24,16 @@
               list="centauro-scales-list"
             />
             <datalist id="centauro-scales-list">
+              <option value="u12">Temperamento Igual (12 EDO)</option>
+              <option value="u{81/80}">Syntonic Comma (81:80)</option>
+              <option value="u{6561/6400}">Two Syntonic Commas (81:80 x2)</option>
+              <option value="u{64/63}">Septimal Comma (64:63)</option>
+              <option value="u{4096/3969}">Two Septimal Commas (64:63 x2)</option>
+              <option value="u{33/32}">11-Limit Undecimal Quarter-Tone (33:32)</option>
+              <option value="u{27/26}">13-Limit Tridecimal Third-Tone (27:26)</option>
+              <option value="u{256/255}">17-Limit Schisma (256:255)</option>
+              <option value="u{513/512}">19-Limit Schisma (513:512)</option>
+              <option value="u{736/729}">23-Limit Comma (736:729)</option>
               <option value="u{1/1 9/8 81/64 4/3 3/2 27/16 243/128 2/1}">Pitagórica Diatónica (7 ratios)</option>
               <option value="u{1/1 9/8 5/4 4/3 3/2 5/3 15/8 2/1}">Justa Mayor (Sintonía Diatónica, 7 ratios)</option>
               <option value="u{1/1 9/8 6/5 4/3 3/2 8/5 9/5 2/1}">Justa Menor (7 ratios)</option>
@@ -601,13 +611,13 @@
 
   /* Helmholtz-Ellis Font Face & Pitch Monitor Overlay */
   @font-face {
-    font-family: 'HEJI';
-    src: url('/HEJI.otf') format('opentype');
+    font-family: 'HEJI2';
+    src: url('/HEJI2.otf') format('opentype');
     font-weight: normal;
     font-style: normal;
   }
 
-  .centauro-pitch-monitor {
+  :global(.centauro-pitch-monitor) {
     position: absolute;
     top: 12px;
     right: 36px;
@@ -628,59 +638,70 @@
     transition: opacity 0.2s ease;
   }
 
-  .centauro-monitor-empty {
+  :global(.centauro-monitor-empty) {
     color: rgba(255, 255, 255, 0.4);
     font-size: 11px;
     text-align: right;
     font-style: italic;
   }
 
-  .centauro-monitor-row {
+  :global(.centauro-monitor-row) {
     display: grid;
-    grid-template-columns: 50px 75px 80px;
+    grid-template-columns: 75px 75px 80px;
     align-items: center;
     gap: 8px;
     color: #fff;
     font-size: 11px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding: 3px 0;
+    white-space: nowrap;
   }
 
-  .centauro-monitor-row:last-child {
+  :global(.centauro-monitor-row:last-child) {
     border-bottom: none;
     padding-bottom: 0;
   }
 
-  .centauro-monitor-accidental {
-    font-family: 'HEJI', sans-serif;
-    font-size: 26px; /* Large to easily read the fine Helmholtz-Ellis accidentals! */
+  :global(.centauro-monitor-accidental) {
+    font-family: 'HEJI2', sans-serif;
+    font-size: 33px; /* 10% larger than 30px to easily read the fine Helmholtz-Ellis accidentals! */
     line-height: 1;
     color: #ffd966;
     text-align: center;
+    white-space: nowrap;
   }
 
-  .centauro-monitor-freq {
+  :global(.centauro-monitor-freq) {
     font-family: monospace;
     color: #76d3ff;
     text-align: right;
     font-weight: 600;
+    white-space: nowrap;
   }
 
-  .centauro-monitor-deviation {
+  :global(.centauro-monitor-accidental),
+  :global(.centauro-monitor-freq),
+  :global(.centauro-monitor-deviation) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  :global(.centauro-monitor-deviation) {
     font-family: monospace;
     text-align: right;
     font-weight: 500;
   }
 
-  .centauro-monitor-deviation.pos {
+  :global(.centauro-monitor-deviation.pos) {
     color: #f87171;
   }
 
-  .centauro-monitor-deviation.neg {
+  :global(.centauro-monitor-deviation.neg) {
     color: #4ade80;
   }
 
-  .centauro-monitor-deviation.zero {
+  :global(.centauro-monitor-deviation.zero) {
     color: rgba(255, 255, 255, 0.5);
   }
 </style>

@@ -25,4 +25,6 @@ export type MidiTuningRow = {
   cents: number;
   frequency: number;
   centsFrom12TET: number;
+  hejiAccidental?: string;
+  hejiOffset?: number;
 };
