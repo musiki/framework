@@ -10382,6 +10382,9 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     }
     screenshareLayoutHoldUntil = Date.now() + 8000;
     layoutInput.value = setLayout(stage, 'screenshare');
+    if (workspaceManager) {
+      workspaceManager.forceApplyLayoutByKey('screenshare');
+    }
     autoSwitchedToScreenshare = true;
     screenshareWasActive = true;
     writeQueryState();

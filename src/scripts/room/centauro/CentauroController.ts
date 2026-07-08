@@ -126,6 +126,8 @@ export class CentauroController {
   };
 
   private activeKeyboardNotes = new Set<number>();
+  private isMouseDown = false;
+  private activeTouchMidi: number | null = null;
 
   // DOM bindings
   private inputExpr!: HTMLInputElement;
@@ -373,6 +375,15 @@ export class CentauroController {
     // Global QWERTY events
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
+
+    // Global mouse state listeners for glissando
+    window.addEventListener('mousedown', () => {
+      this.isMouseDown = true;
+    });
+    window.addEventListener('mouseup', () => {
+      this.isMouseDown = false;
+      this.activePointerNotes.clear();
+    });
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
@@ -897,13 +908,10 @@ export class CentauroController {
   }
 
   private getCellShape(): 'triangle' | 'square' | 'hex' | 'voronoi' {
-    const edo = this.spec.degrees.length;
-    if (this.spec.source !== 'edo') {
-      return 'voronoi';
-    }
-    if (edo === 3) return 'triangle';
-    if (edo === 4) return 'square';
-    if (edo === 6) return 'hex';
+    const degs = this.spec.degrees.length;
+    if (degs === 3) return 'triangle';
+    if (degs === 4) return 'square'; // rhombus
+    if (degs === 6) return 'hex';
     return 'voronoi';
   }
 
@@ -928,6 +936,7 @@ export class CentauroController {
     const rows = 6;
     const centerCol = Math.floor(cols / 2);
     const centerRow = Math.floor(rows / 2);
+    const loopCols = shape === 'triangle' ? cols * 2 : cols;
 
     // Dynamic sizing based on the keyboard panel container dimensions
     let width = this.keyboardWrapper.clientWidth || 1000;
@@ -1053,40 +1062,48 @@ export class CentauroController {
         textCents.textContent = `${Math.round(p0.degreeObj.cents)}c${qwertyLabel}`;
         g.appendChild(textCents);
 
-        // Bind interactive events
-        const startPlay = (event: Event) => {
+        // Mouse hover glissando events
+        g.addEventListener('mousedown', (event) => {
           event.preventDefault();
           this.activePointerNotes.add(p0.midi);
           this.noteOn(p0.midi, 0.5, false);
-        };
-
-        const stopPlay = (event: Event) => {
-          event.preventDefault();
+        });
+        g.addEventListener('mouseenter', () => {
+          if (this.isMouseDown) {
+            this.activePointerNotes.add(p0.midi);
+            this.noteOn(p0.midi, 0.5, false);
+          }
+        });
+        g.addEventListener('mouseleave', () => {
           if (this.activePointerNotes.has(p0.midi)) {
             this.activePointerNotes.delete(p0.midi);
             this.noteOff(p0.midi, false);
           }
-        };
-
-        g.addEventListener('mousedown', startPlay);
-        g.addEventListener('mouseup', stopPlay);
-        g.addEventListener('mouseleave', stopPlay);
-        g.addEventListener('touchstart', startPlay, { passive: false });
-        g.addEventListener('touchend', stopPlay, { passive: false });
-        g.addEventListener('touchcancel', stopPlay, { passive: false });
+        });
+        g.addEventListener('mouseup', () => {
+          if (this.activePointerNotes.has(p0.midi)) {
+            this.activePointerNotes.delete(p0.midi);
+            this.noteOff(p0.midi, false);
+          }
+        });
 
         keysGroup.appendChild(g);
       }
     } else {
       // Classic regular layouts stretched to perfectly cover the container
-      const spacingX = width / cols;
-      const spacingY = height / rows;
-
       for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const dx = c - centerCol;
-          const dy = r - centerRow;
-          const pitch = dx * stepX + dy * stepY;
+        for (let c = 0; c < loopCols; c++) {
+          let dx = 0;
+          let dy = r - centerRow;
+          let pitch = 0;
+
+          if (shape === 'triangle') {
+            dx = Math.floor(c / 2) - centerCol;
+            pitch = (c - cols) * stepX + dy * stepY;
+          } else {
+            dx = c - centerCol;
+            pitch = dx * stepX + dy * stepY;
+          }
           
           let midi = 60 + pitch;
           midi = ((midi % 128) + 128) % 128; // safe wrap
@@ -1099,9 +1116,6 @@ export class CentauroController {
           const hue = (centsNormalized / 1200) * 360;
           const fillColor = `hsla(${hue}, 60%, 42%, 0.8)`;
           const borderColor = `hsla(${hue}, 70%, 55%, 0.5)`;
-
-          const x = c * spacingX + spacingX / 2;
-          const y = r * spacingY + spacingY / 2;
 
           const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           g.setAttribute('class', 'centauro-key-group');
@@ -1134,37 +1148,53 @@ export class CentauroController {
             drawLabels(hx, hy, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
 
           } else if (shape === 'square') {
-            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            rect.setAttribute('x', (x - (spacingX - 4) / 2).toString());
-            rect.setAttribute('y', (y - (spacingY - 4) / 2).toString());
-            rect.setAttribute('width', (spacingX - 4).toString());
-            rect.setAttribute('height', (spacingY - 4).toString());
-            rect.setAttribute('rx', '4');
-            rect.setAttribute('class', 'centauro-key');
-            rect.setAttribute('fill', fillColor);
-            rect.setAttribute('stroke', borderColor);
-            rect.setAttribute('stroke-width', '1.5');
-            rect.setAttribute('data-midi', midi.toString());
-            g.appendChild(rect);
+            // Rhombus (rombo) tiling layout covering 100% of available space
+            const hSpacingX = width / (cols - 0.5);
+            const hSpacingY = height / (rows - 0.5);
+            
+            const rx = (c + 0.5 * (r % 2)) * hSpacingX;
+            const ry = r * hSpacingY;
 
-            drawLabels(x, y, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
+            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            const romboPoints = [
+              `${rx.toFixed(1)},${(ry - hSpacingY).toFixed(1)}`,
+              `${(rx + hSpacingX / 2).toFixed(1)},${ry.toFixed(1)}`,
+              `${rx.toFixed(1)},${(ry + hSpacingY).toFixed(1)}`,
+              `${(rx - hSpacingX / 2).toFixed(1)},${ry.toFixed(1)}`
+            ];
+            poly.setAttribute('points', romboPoints.join(' '));
+            poly.setAttribute('class', 'centauro-key');
+            poly.setAttribute('fill', fillColor);
+            poly.setAttribute('stroke', borderColor);
+            poly.setAttribute('stroke-width', '1.5');
+            poly.setAttribute('data-midi', midi.toString());
+            g.appendChild(poly);
+
+            drawLabels(rx, ry, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
 
           } else if (shape === 'triangle') {
+            // Double-column triangle tiling layout covering 100% of available space
+            const tSpacingX = width / (loopCols - 1);
+            const tSpacingY = height / rows;
+
+            const tx = c * tSpacingX;
+            const ty = r * tSpacingY + tSpacingY / 2;
+
             const pointingUp = (c + r) % 2 === 0;
             const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
             let triPoints = [];
             
             if (pointingUp) {
               triPoints = [
-                `${x},${(y - spacingY / 2).toFixed(1)}`,
-                `${(x + spacingX / 2).toFixed(1)},${(y + spacingY / 2).toFixed(1)}`,
-                `${(x - spacingX / 2).toFixed(1)},${(y + spacingY / 2).toFixed(1)}`
+                `${tx.toFixed(1)},${(ty - tSpacingY / 2).toFixed(1)}`,
+                `${(tx + tSpacingX).toFixed(1)},${(ty + tSpacingY / 2).toFixed(1)}`,
+                `${(tx - tSpacingX).toFixed(1)},${(ty + tSpacingY / 2).toFixed(1)}`
               ];
             } else {
               triPoints = [
-                `${x},${(y + spacingY / 2).toFixed(1)}`,
-                `${(x + spacingX / 2).toFixed(1)},${(y - spacingY / 2).toFixed(1)}`,
-                `${(x - spacingX / 2).toFixed(1)},${(y - spacingY / 2).toFixed(1)}`
+                `${tx.toFixed(1)},${(ty + tSpacingY / 2).toFixed(1)}`,
+                `${(tx + tSpacingX).toFixed(1)},${(ty - tSpacingY / 2).toFixed(1)}`,
+                `${(tx - tSpacingX).toFixed(1)},${(ty - tSpacingY / 2).toFixed(1)}`
               ];
             }
 
@@ -1176,37 +1206,81 @@ export class CentauroController {
             poly.setAttribute('data-midi', midi.toString());
             g.appendChild(poly);
 
-            // For triangles, center the text slightly adjusted vertically
+            // Relocate label texts to triangle center
             const textYOffset = pointingUp ? 6 : -4;
-            drawLabels(x, y + textYOffset, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
+            drawLabels(tx, ty + textYOffset, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
           }
 
-          // Bind interactive events
-          const startPlay = (event: Event) => {
+          // Mouse hover glissando events
+          g.addEventListener('mousedown', (event) => {
             event.preventDefault();
             this.activePointerNotes.add(midi);
             this.noteOn(midi, 0.5, false);
-          };
-
-          const stopPlay = (event: Event) => {
-            event.preventDefault();
+          });
+          g.addEventListener('mouseenter', () => {
+            if (this.isMouseDown) {
+              this.activePointerNotes.add(midi);
+              this.noteOn(midi, 0.5, false);
+            }
+          });
+          g.addEventListener('mouseleave', () => {
             if (this.activePointerNotes.has(midi)) {
               this.activePointerNotes.delete(midi);
               this.noteOff(midi, false);
             }
-          };
-
-          g.addEventListener('mousedown', startPlay);
-          g.addEventListener('mouseup', stopPlay);
-          g.addEventListener('mouseleave', stopPlay);
-          g.addEventListener('touchstart', startPlay, { passive: false });
-          g.addEventListener('touchend', stopPlay, { passive: false });
-          g.addEventListener('touchcancel', stopPlay, { passive: false });
+          });
+          g.addEventListener('mouseup', () => {
+            if (this.activePointerNotes.has(midi)) {
+              this.activePointerNotes.delete(midi);
+              this.noteOff(midi, false);
+            }
+          });
 
           keysGroup.appendChild(g);
         }
       }
     }
+
+    // Touch Glissando Listener on the main SVG container
+    const handleTouch = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 0) return;
+      const touch = e.touches[0];
+      const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!elem) return;
+
+      const keyEl = elem.closest('.centauro-key') as HTMLElement;
+      if (keyEl) {
+        const midi = parseInt(keyEl.dataset.midi || '', 10);
+        if (!isNaN(midi)) {
+          if (this.activeTouchMidi !== midi) {
+            if (this.activeTouchMidi !== null) {
+              this.noteOff(this.activeTouchMidi, false);
+            }
+            this.activeTouchMidi = midi;
+            this.noteOn(midi, 0.5, false);
+          }
+        }
+      } else {
+        if (this.activeTouchMidi !== null) {
+          this.noteOff(this.activeTouchMidi, false);
+          this.activeTouchMidi = null;
+        }
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      if (this.activeTouchMidi !== null) {
+        this.noteOff(this.activeTouchMidi, false);
+        this.activeTouchMidi = null;
+      }
+    };
+
+    svg.addEventListener('touchstart', handleTouch, { passive: false });
+    svg.addEventListener('touchmove', handleTouch, { passive: false });
+    svg.addEventListener('touchend', handleTouchEnd, { passive: false });
+    svg.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
     this.keyboardWrapper.appendChild(svg);
   }

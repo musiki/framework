@@ -194,6 +194,29 @@ export type ConferenceMessage =
       action: 'on' | 'off';
     }
   | {
+      type: 'centauro-note';
+      note: number;
+      velocity: number;
+      action: 'on' | 'off';
+    }
+  | {
+      type: 'centauro-tuning';
+      expr: string;
+    }
+  | {
+      type: 'centauro-engine';
+      engine: string;
+    }
+  | {
+      type: 'centauro-map';
+      mapMode: 'chromatic' | 'isomorphic';
+    }
+  | {
+      type: 'centauro-drone';
+      active: boolean;
+      midi: number;
+    }
+  | {
       type: 'strudel-transport';
       playing: boolean;
       code?: string;
@@ -792,6 +815,46 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         note: Number((parsed as { note: number }).note) || 0,
         velocity: Number((parsed as { velocity: number }).velocity) || 0,
         action: action === 'on' ? 'on' : 'off',
+      };
+    }
+
+    if (parsed.type === 'centauro-note') {
+      const action = (parsed as { action: string }).action;
+      return {
+        type: 'centauro-note',
+        note: Number((parsed as { note: number }).note) || 0,
+        velocity: Number((parsed as { velocity: number }).velocity) || 0,
+        action: action === 'on' ? 'on' : 'off',
+      };
+    }
+
+    if (parsed.type === 'centauro-tuning') {
+      return {
+        type: 'centauro-tuning',
+        expr: String((parsed as { expr: string }).expr || ''),
+      };
+    }
+
+    if (parsed.type === 'centauro-engine') {
+      return {
+        type: 'centauro-engine',
+        engine: String((parsed as { engine: string }).engine || ''),
+      };
+    }
+
+    if (parsed.type === 'centauro-map') {
+      const mapMode = (parsed as { mapMode: string }).mapMode;
+      return {
+        type: 'centauro-map',
+        mapMode: mapMode === 'isomorphic' ? 'isomorphic' : 'chromatic',
+      };
+    }
+
+    if (parsed.type === 'centauro-drone') {
+      return {
+        type: 'centauro-drone',
+        active: Boolean((parsed as { active: boolean }).active),
+        midi: Number((parsed as { midi: number }).midi) || 60,
       };
     }
 
