@@ -117,6 +117,32 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
         background: #3a3a3a;
         color: #fff;
       }
+
+      /* Virtual Fullscreen fallback styling optimized for mobile Safari & iOS iPad landscape */
+      html.virtual-fullscreen, html.virtual-fullscreen body {
+        overflow: hidden !important;
+        position: fixed !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        top: 0 !important;
+        left: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        z-index: 999999 !important;
+        touch-action: none;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      html.virtual-fullscreen .conference-stage-panel--centauro {
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        z-index: 999999 !important;
+      }
     </style>
   </head>
   <body class="centauro-standalone">
@@ -131,6 +157,7 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
 
     <script>
       import { CentauroController } from '../scripts/room/centauro/CentauroController';
+      import screenfull from 'screenfull';
 
       function init() {
         const podContainer = document.querySelector('.musiki-pod[data-pod="centauro"]') as HTMLElement;
@@ -154,18 +181,37 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
           });
         }
 
-        // Fullscreen Toggle handler
+        // Fullscreen Toggle using screenfull library + virtual-fullscreen fallback
         const fullscreenBtn = document.getElementById('centauro-fullscreen-btn');
+        const docEl = document.documentElement;
+
         const toggleFullscreen = () => {
-          if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(() => {});
+          if (screenfull && screenfull.isEnabled) {
+            if (screenfull.isFullscreen) {
+              screenfull.exit().catch(() => {});
+              docEl.classList.remove('virtual-fullscreen');
+            } else {
+              screenfull.request().catch((err: any) => {
+                console.warn('screenfull request failed, falling back to pseudo-fullscreen', err);
+                docEl.classList.toggle('virtual-fullscreen');
+              });
+            }
           } else {
-            document.exitFullscreen().catch(() => {});
+            docEl.classList.toggle('virtual-fullscreen');
           }
         };
 
         if (fullscreenBtn) {
           fullscreenBtn.addEventListener('click', toggleFullscreen);
+        }
+
+        // Listen for fullscreen change to sync virtual-fullscreen class
+        if (screenfull && screenfull.isEnabled) {
+          screenfull.on('change', () => {
+            if (!screenfull.isFullscreen) {
+              docEl.classList.remove('virtual-fullscreen');
+            }
+          });
         }
 
         // Double click / Double tap on keyboard to trigger fullscreen
