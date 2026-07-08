@@ -104,6 +104,7 @@ export class CentauroController {
   // Keyboard active & map modes (Chromatic vs Isomorphic QWERTY)
   private kbActive = true; // default ON as requested
   private mapMode: 'chromatic' | 'isomorphic' = 'chromatic';
+  private octaveOffset = 0; // Transposition in semitones (in units of 12)
 
   private keyToMidiOffset: Record<string, number> = {
     // Row 1 Chromatic (zsxdcvgbhnjm) -> offsets 0 to 11
@@ -134,6 +135,8 @@ export class CentauroController {
   private statusNote!: HTMLElement;
   private tableBody!: HTMLElement;
   private keyboardWrapper!: HTMLElement;
+  private touchStrip!: HTMLElement;
+  private pitchMonitor!: HTMLElement;
   private droneBtn!: HTMLButtonElement;
   private kbToggleBtn!: HTMLButtonElement;
   private mapModeBtn!: HTMLButtonElement;
@@ -212,6 +215,8 @@ export class CentauroController {
     this.statusNote = this.container.querySelector('[data-centauro-status]') as HTMLElement;
     this.tableBody = this.container.querySelector('[data-centauro-table-body]') as HTMLElement;
     this.keyboardWrapper = this.container.querySelector('[data-centauro-keyboard-wrapper]') as HTMLElement;
+    this.touchStrip = this.container.querySelector('[data-centauro-touch-strip]') as HTMLElement;
+    this.pitchMonitor = this.container.querySelector('[data-centauro-pitch-monitor]') as HTMLElement;
     this.droneBtn = this.container.querySelector('[data-centauro-drone]') as HTMLButtonElement;
     this.kbToggleBtn = this.container.querySelector('[data-centauro-kb-toggle]') as HTMLButtonElement;
     this.mapModeBtn = this.container.querySelector('[data-centauro-map-mode]') as HTMLButtonElement;
@@ -229,7 +234,7 @@ export class CentauroController {
     this.modalCopyBtn = this.container.querySelector('[data-centauro-modal-copy]') as HTMLButtonElement;
     this.modalDownloadBtn = this.container.querySelector('[data-centauro-modal-download]') as HTMLButtonElement;
     this.modalRegenBtn = this.container.querySelector('[data-centauro-modal-regen]') as HTMLButtonElement;
-    this.modalCloseBtn = this.container.querySelector('[data-centauro-modal-close]') as HTMLButtonElement;
+    this.modalCloseBtn = this.container.querySelector('[data-centauro-modal-close]') as HTMLDialogElement;
 
     this.helpModal = this.container.querySelector('[data-centauro-help-modal]') as HTMLDialogElement;
     this.helpCloseBtn = this.container.querySelector('[data-centauro-help-close]') as HTMLButtonElement;
@@ -271,6 +276,7 @@ export class CentauroController {
         if (this.onTuningChange) {
           this.onTuningChange(val);
         }
+        this.inputExpr.blur();
       }
     });
 
@@ -384,6 +390,57 @@ export class CentauroController {
       this.isMouseDown = false;
       this.activePointerNotes.clear();
     });
+
+    // Touch/click strip listeners for mobile octave transposition
+    if (this.touchStrip) {
+      const handleTouchStrip = (clientY: number) => {
+        const rect = this.touchStrip.getBoundingClientRect();
+        const relativeY = (clientY - rect.top) / rect.height;
+        if (relativeY < 0.35) {
+          this.shiftOctave(12);
+        } else if (relativeY > 0.65) {
+          this.shiftOctave(-12);
+        } else {
+          this.resetOctave();
+        }
+      };
+
+      this.touchStrip.addEventListener('click', (e) => {
+        handleTouchStrip(e.clientY);
+      });
+
+      this.touchStrip.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (e.touches.length > 0) {
+          handleTouchStrip(e.touches[0].clientY);
+        }
+      }, { passive: false });
+    }
+  }
+
+  public shiftOctave(semitones: number) {
+    // Release active notes
+    for (const midi of this.activeVoices.keys()) {
+      this.noteOff(midi, false);
+    }
+    this.octaveOffset += semitones;
+    // Cap octave offset to a reasonable range (-48 to +48 MIDI notes)
+    this.octaveOffset = Math.max(-48, Math.min(48, this.octaveOffset));
+    this.renderKeyboard();
+    
+    // Show a user-friendly status toast or text update
+    this.statusNote.textContent = `Octava transpuesta: ${this.octaveOffset > 0 ? '+' : ''}${this.octaveOffset / 12}`;
+    this.statusNote.className = 'centauro-status centauro-status--info';
+  }
+
+  public resetOctave() {
+    for (const midi of this.activeVoices.keys()) {
+      this.noteOff(midi, false);
+    }
+    this.octaveOffset = 0;
+    this.renderKeyboard();
+    this.statusNote.textContent = `Octava restablecida`;
+    this.statusNote.className = 'centauro-status centauro-status--info';
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
@@ -391,10 +448,21 @@ export class CentauroController {
     if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
     if (e.repeat) return;
 
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.shiftOctave(12);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.shiftOctave(-12);
+      return;
+    }
+
     if (this.mapMode === 'chromatic') {
       const offset = this.keyToMidiOffset[e.key.toLowerCase()];
       if (offset !== undefined) {
-        const midi = 60 + offset;
+        const midi = 60 + offset + this.octaveOffset;
         if (midi >= 0 && midi <= 127) {
           this.activeKeyboardNotes.add(midi);
           this.noteOn(midi, 0.5, false);
@@ -415,7 +483,7 @@ export class CentauroController {
           stepY = Math.max(2, Math.round(degreeCount / 3));
         }
         const pitch = coord.dx * stepX + coord.dy * stepY;
-        let midi = 60 + pitch;
+        let midi = 60 + pitch + this.octaveOffset;
         midi = ((midi % 128) + 128) % 128; // safe wrap
         this.activeKeyboardNotes.add(midi);
         this.noteOn(midi, 0.5, false);
@@ -429,7 +497,7 @@ export class CentauroController {
     if (this.mapMode === 'chromatic') {
       const offset = this.keyToMidiOffset[e.key.toLowerCase()];
       if (offset !== undefined) {
-        const midi = 60 + offset;
+        const midi = 60 + offset + this.octaveOffset;
         if (this.activeKeyboardNotes.has(midi)) {
           this.activeKeyboardNotes.delete(midi);
           this.noteOff(midi, false);
@@ -449,7 +517,7 @@ export class CentauroController {
           stepY = Math.max(2, Math.round(degreeCount / 3));
         }
         const pitch = coord.dx * stepX + coord.dy * stepY;
-        let midi = 60 + pitch;
+        let midi = 60 + pitch + this.octaveOffset;
         midi = ((midi % 128) + 128) % 128; // safe wrap
         if (this.activeKeyboardNotes.has(midi)) {
           this.activeKeyboardNotes.delete(midi);
@@ -606,6 +674,7 @@ export class CentauroController {
         this.activeVoices.set(midi, { osc, gain });
       }
       this.highlightKey(midi, true);
+      this.updatePitchMonitor();
 
       if (!isRemote && this.onNoteEvent) {
         this.onNoteEvent(midi, velocity, 'on');
@@ -625,6 +694,7 @@ export class CentauroController {
       this.activeVoices.delete(midi);
     }
     this.highlightKey(midi, false);
+    this.updatePitchMonitor();
 
     if (!isRemote && this.onNoteEvent) {
       this.onNoteEvent(midi, 0, 'off');
@@ -917,6 +987,14 @@ export class CentauroController {
 
   private renderKeyboard() {
     this.keyboardWrapper.innerHTML = '';
+    // Retain the touch strip and pitch monitor divs during redraws
+    if (this.touchStrip) {
+      this.keyboardWrapper.appendChild(this.touchStrip);
+    }
+    if (this.pitchMonitor) {
+      this.keyboardWrapper.appendChild(this.pitchMonitor);
+    }
+
     const shape = this.getCellShape();
     const degreeCount = this.spec.degrees.length;
 
@@ -932,8 +1010,8 @@ export class CentauroController {
       stepY = Math.max(2, Math.round(degreeCount / 3));
     }
 
-    const cols = 12;
-    const rows = 6;
+    const cols = degreeCount > 14 ? 20 : 12;
+    const rows = degreeCount > 14 ? 8 : 6;
     const centerCol = Math.floor(cols / 2);
     const centerRow = Math.floor(rows / 2);
     const loopCols = shape === 'triangle' ? cols * 2 : cols;
@@ -960,11 +1038,15 @@ export class CentauroController {
     const keysGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     svg.appendChild(keysGroup);
 
-    if (shape === 'voronoi') {
+    if (shape === 'voronoi' || shape === 'hex') {
       const allPoints: Array<{ x: number; y: number; dx: number; dy: number; midi: number; degreeObj: any; fillColor: string; borderColor: string }> = [];
       
       const spacingX = width / cols;
       const spacingY = height / rows;
+
+      // Hexagons use hex-lattice grid coordinates with tighter spacing
+      const hSpacingX = shape === 'hex' ? width / (cols - 0.5) : spacingX;
+      const hSpacingY = shape === 'hex' ? height / (rows - 0.25) : spacingY;
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -972,18 +1054,25 @@ export class CentauroController {
           const dy = r - centerRow;
           const pitch = dx * stepX + dy * stepY;
           
-          let midi = 60 + pitch;
-          midi = ((midi % 128) + 128) % 128; // safe wrap
+          let midi = 60 + pitch + this.octaveOffset;
+          midi = ((midi % 128) + 128) % 128; // safe wrap with octave transpose
 
           const rowData = this.midiTable[midi];
           const degreeObj = this.spec.degrees[rowData.degree];
 
           // Deterministic organic perturbation within the cell box boundaries
-          const perturbX = Math.sin(midi * 73.1) * (spacingX * 0.18);
-          const perturbY = Math.cos(midi * 37.7) * (spacingY * 0.18);
+          // 10% warp factor for hex, slightly larger 18% for organic voronoi
+          const warpFactor = shape === 'hex' ? 0.10 : 0.18;
+          const perturbX = Math.sin(midi * 73.1) * (hSpacingX * warpFactor);
+          const perturbY = Math.cos(midi * 37.7) * (hSpacingY * warpFactor);
 
-          const x = c * spacingX + spacingX / 2 + perturbX;
-          const y = r * spacingY + spacingY / 2 + perturbY;
+          const x = shape === 'hex'
+            ? (c + 0.5 * (r % 2)) * hSpacingX + hSpacingX / 2 + perturbX
+            : c * spacingX + spacingX / 2 + perturbX;
+
+          const y = shape === 'hex'
+            ? r * hSpacingY + hSpacingY / 2 + perturbY
+            : r * spacingY + spacingY / 2 + perturbY;
 
           const centsNormalized = degreeObj.cents % 1200;
           const hue = (centsNormalized / 1200) * 360;
@@ -994,7 +1083,7 @@ export class CentauroController {
         }
       }
 
-      // Clip cells using the viewport borders [0, width] and [0, height]
+      // Clip cells using the viewport borders [0, width] and [0, height] to tessellate perfectly
       for (const p0 of allPoints) {
         let cell: Point[] = [
           { x: 0, y: 0 },
@@ -1006,7 +1095,7 @@ export class CentauroController {
         for (const pJ of allPoints) {
           if (pJ === p0) continue;
           const dist = Math.hypot(pJ.x - p0.x, pJ.y - p0.y);
-          if (dist > Math.max(spacingX, spacingY) * 2.5) continue;
+          if (dist > Math.max(hSpacingX, hSpacingY) * 2.5) continue;
 
           const xm = (p0.x + pJ.x) / 2;
           const ym = (p0.y + pJ.y) / 2;
@@ -1032,35 +1121,7 @@ export class CentauroController {
         poly.setAttribute('data-midi', p0.midi.toString());
         g.appendChild(poly);
 
-        // Find QWERTY key mapped to this dx, dy in isomorphic mode
-        let qwertyLabel = '';
-        if (this.mapMode === 'isomorphic') {
-          const keys = Object.keys(this.qwertyToGrid);
-          const keyFound = keys.find(k => {
-            const coord = this.qwertyToGrid[k];
-            return coord.dx === p0.dx && coord.dy === p0.dy;
-          });
-          if (keyFound) {
-            qwertyLabel = ` [${keyFound.toUpperCase()}]`;
-          }
-        }
-
-        // Key labels centered on generator point
-        const textDeg = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textDeg.setAttribute('x', p0.x.toString());
-        textDeg.setAttribute('y', (p0.y - 5).toString());
-        textDeg.setAttribute('class', 'centauro-key-text');
-        textDeg.style.fontSize = '10px';
-        textDeg.textContent = p0.degreeObj.label;
-        g.appendChild(textDeg);
-
-        const textCents = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        textCents.setAttribute('x', p0.x.toString());
-        textCents.setAttribute('y', (p0.y + 8).toString());
-        textCents.setAttribute('class', 'centauro-key-subtext');
-        textCents.style.fontSize = '8px';
-        textCents.textContent = `${Math.round(p0.degreeObj.cents)}c${qwertyLabel}`;
-        g.appendChild(textCents);
+        drawLabels(p0.x, p0.y, p0.degreeObj, this.mapMode, p0.dx, p0.dy, this.qwertyToGrid, g);
 
         // Mouse hover glissando events
         g.addEventListener('mousedown', (event) => {
@@ -1105,8 +1166,8 @@ export class CentauroController {
             pitch = dx * stepX + dy * stepY;
           }
           
-          let midi = 60 + pitch;
-          midi = ((midi % 128) + 128) % 128; // safe wrap
+          let midi = 60 + pitch + this.octaveOffset;
+          midi = ((midi % 128) + 128) % 128; // safe wrap with octave transpose
 
           const rowData = this.midiTable[midi];
           const degree = rowData.degree;
@@ -1121,48 +1182,29 @@ export class CentauroController {
           g.setAttribute('class', 'centauro-key-group');
           g.setAttribute('data-midi', midi.toString());
 
-          if (shape === 'hex') {
-            const hSpacingX = width / (cols - 0.5);
-            const hSpacingY = height / (rows - 0.25);
-            const hx = (c + 0.5 * (r % 2)) * hSpacingX + hSpacingX / 2;
-            const hy = r * hSpacingY + hSpacingY / 2;
-            
-            // Hexagon radius to fit without overlap (with a slight 1.05 boost to cover gap lines)
-            const R = Math.min(hSpacingX / Math.sqrt(3), hSpacingY / 1.5) * 1.05;
-
-            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            const hexPoints = [];
-            for (let i = 0; i < 6; i++) {
-              const angle = (i * Math.PI) / 3 - Math.PI / 6;
-              hexPoints.push((hx + R * Math.cos(angle)).toFixed(1) + ',' + (hy + R * Math.sin(angle)).toFixed(1));
-            }
-            poly.setAttribute('points', hexPoints.join(' '));
-            poly.setAttribute('class', 'centauro-key');
-            poly.setAttribute('fill', fillColor);
-            poly.setAttribute('stroke', borderColor);
-            poly.setAttribute('stroke-width', '1.5');
-            poly.setAttribute('data-midi', midi.toString());
-            g.appendChild(poly);
-
-            // Relocate label texts to hexagon center
-            drawLabels(hx, hy, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
-
-          } else if (shape === 'square') {
+          if (shape === 'square') {
             // Rhombus (rombo) tiling layout covering 100% of available space
             const hSpacingX = width / (cols - 0.5);
             const hSpacingY = height / (rows - 0.5);
-            
-            const rx = (c + 0.5 * (r % 2)) * hSpacingX;
-            const ry = r * hSpacingY;
+
+            // Warp grid vertices by 10% to make them organic but still gapless
+            const getRomboVertex = (k: number, m: number) => {
+              const baseX = k * (hSpacingX / 2);
+              const baseY = m * hSpacingY;
+              const isEdge = k <= 0 || k >= cols * 2 || m <= 0 || m >= rows;
+              const perturbX = isEdge ? 0 : Math.sin(k * 13.7 + m * 31.3) * (hSpacingX * 0.10);
+              const perturbY = isEdge ? 0 : Math.cos(k * 23.3 + m * 17.9) * (hSpacingY * 0.10);
+              return { x: baseX + perturbX, y: baseY + perturbY };
+            };
+
+            const kCenter = 2 * c + (r % 2);
+            const p0 = getRomboVertex(kCenter, r - 1);
+            const p1 = getRomboVertex(kCenter + 1, r);
+            const p2 = getRomboVertex(kCenter, r + 1);
+            const p3 = getRomboVertex(kCenter - 1, r);
 
             const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            const romboPoints = [
-              `${rx.toFixed(1)},${(ry - hSpacingY).toFixed(1)}`,
-              `${(rx + hSpacingX / 2).toFixed(1)},${ry.toFixed(1)}`,
-              `${rx.toFixed(1)},${(ry + hSpacingY).toFixed(1)}`,
-              `${(rx - hSpacingX / 2).toFixed(1)},${ry.toFixed(1)}`
-            ];
-            poly.setAttribute('points', romboPoints.join(' '));
+            poly.setAttribute('points', `${p0.x.toFixed(1)},${p0.y.toFixed(1)} ${p1.x.toFixed(1)},${p1.y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} ${p3.x.toFixed(1)},${p3.y.toFixed(1)}`);
             poly.setAttribute('class', 'centauro-key');
             poly.setAttribute('fill', fillColor);
             poly.setAttribute('stroke', borderColor);
@@ -1170,35 +1212,41 @@ export class CentauroController {
             poly.setAttribute('data-midi', midi.toString());
             g.appendChild(poly);
 
-            drawLabels(rx, ry, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
+            // Compute center of warped polygon for text label placement
+            const cx = (p0.x + p1.x + p2.x + p3.x) / 4;
+            const cy = (p0.y + p1.y + p2.y + p3.y) / 4;
+            drawLabels(cx, cy, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
 
           } else if (shape === 'triangle') {
             // Double-column triangle tiling layout covering 100% of available space
             const tSpacingX = width / (loopCols - 1);
             const tSpacingY = height / rows;
 
-            const tx = c * tSpacingX;
-            const ty = r * tSpacingY + tSpacingY / 2;
+            // Warp grid vertices by 10% to make them organic but still gapless
+            const getTriVertex = (k: number, m: number) => {
+              const baseX = k * tSpacingX;
+              const baseY = m * tSpacingY;
+              const isEdge = k <= 0 || k >= loopCols - 1 || m <= 0 || m >= rows;
+              const perturbX = isEdge ? 0 : Math.sin(k * 17.3 + m * 29.1) * (tSpacingX * 0.10);
+              const perturbY = isEdge ? 0 : Math.cos(k * 21.7 + m * 13.9) * (tSpacingY * 0.10);
+              return { x: baseX + perturbX, y: baseY + perturbY };
+            };
 
             const pointingUp = (c + r) % 2 === 0;
-            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            let triPoints = [];
-            
+            let p0: Point, p1: Point, p2: Point;
+
             if (pointingUp) {
-              triPoints = [
-                `${tx.toFixed(1)},${(ty - tSpacingY / 2).toFixed(1)}`,
-                `${(tx + tSpacingX).toFixed(1)},${(ty + tSpacingY / 2).toFixed(1)}`,
-                `${(tx - tSpacingX).toFixed(1)},${(ty + tSpacingY / 2).toFixed(1)}`
-              ];
+              p0 = getTriVertex(c, r);
+              p1 = getTriVertex(c + 1, r + 1);
+              p2 = getTriVertex(c - 1, r + 1);
             } else {
-              triPoints = [
-                `${tx.toFixed(1)},${(ty + tSpacingY / 2).toFixed(1)}`,
-                `${(tx + tSpacingX).toFixed(1)},${(ty - tSpacingY / 2).toFixed(1)}`,
-                `${(tx - tSpacingX).toFixed(1)},${(ty - tSpacingY / 2).toFixed(1)}`
-              ];
+              p0 = getTriVertex(c, r + 1);
+              p1 = getTriVertex(c + 1, r);
+              p2 = getTriVertex(c - 1, r);
             }
 
-            poly.setAttribute('points', triPoints.join(' '));
+            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            poly.setAttribute('points', `${p0.x.toFixed(1)},${p0.y.toFixed(1)} ${p1.x.toFixed(1)},${p1.y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`);
             poly.setAttribute('class', 'centauro-key');
             poly.setAttribute('fill', fillColor);
             poly.setAttribute('stroke', borderColor);
@@ -1206,9 +1254,11 @@ export class CentauroController {
             poly.setAttribute('data-midi', midi.toString());
             g.appendChild(poly);
 
-            // Relocate label texts to triangle center
-            const textYOffset = pointingUp ? 6 : -4;
-            drawLabels(tx, ty + textYOffset, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
+            // Compute center of warped triangle
+            const cx = (p0.x + p1.x + p2.x) / 3;
+            const cy = (p0.y + p1.y + p2.y) / 3;
+            const textYOffset = pointingUp ? 3 : -1;
+            drawLabels(cx, cy + textYOffset, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
           }
 
           // Mouse hover glissando events
@@ -1290,6 +1340,78 @@ export class CentauroController {
     keys.forEach(key => {
       key.setAttribute('data-active', active ? 'true' : 'false');
     });
+  }
+
+  // --- HELMHOLTZ-ELLIS PITCH MONITOR ---
+  private getHejiAccidental(midi: number): string {
+    const pc = midi % 12;
+    const row = this.midiTable[midi];
+    if (!row) return '\uE261'; // default natural
+
+    const dev = row.centsFrom12TET;
+    // Syntonic comma is 21.506 cents
+    const commas = Math.round(dev / 21.506);
+
+    // Decide base accidental (flat for 3, 8, 10; sharp for 1, 6; natural for others)
+    let base: 'natural' | 'flat' | 'sharp' = 'natural';
+    if (pc === 3 || pc === 8 || pc === 10) {
+      base = 'flat';
+    } else if (pc === 1 || pc === 6) {
+      base = 'sharp';
+    }
+
+    if (base === 'flat') {
+      if (commas >= 1) return '\uE2C6'; // U+E2C6: flatOneArrowUp
+      if (commas <= -1) return '\uE2C1'; // U+E2C1: flatOneArrowDown
+      return '\uE260'; // U+E260: flat
+    } else if (base === 'sharp') {
+      if (commas >= 1) return '\uE2C8'; // U+E2C8: sharpOneArrowUp
+      if (commas <= -1) return '\uE2C3'; // U+E2C3: sharpOneArrowDown
+      return '\uE262'; // U+E262: sharp
+    } else {
+      if (commas >= 1) return '\uE2C7'; // U+E2C7: naturalOneArrowUp
+      if (commas <= -1) return '\uE2C2'; // U+E2C2: naturalOneArrowDown
+      return '\uE261'; // U+E261: natural
+    }
+  }
+
+  private updatePitchMonitor() {
+    if (!this.pitchMonitor) return;
+
+    // Retrieve sorted MIDI keys in descending order (highest pitches/frequencies at the top)
+    const activeMidis = Array.from(this.activeVoices.keys()).sort((a, b) => b - a);
+
+    if (activeMidis.length === 0) {
+      this.pitchMonitor.innerHTML = '<div class="centauro-monitor-empty">Monitor listo</div>';
+      return;
+    }
+
+    let html = '';
+    for (const midi of activeMidis) {
+      const row = this.midiTable[midi];
+      if (!row) continue;
+
+      const accidental = this.getHejiAccidental(midi);
+      const freqStr = `${row.frequency.toFixed(2)} Hz`;
+      
+      const dev = row.centsFrom12TET;
+      const devStr = dev === 0 
+        ? '0.00c' 
+        : `${dev > 0 ? '+' : ''}${dev.toFixed(2)}c`;
+      
+      const devClass = dev > 0.05 
+        ? 'pos' 
+        : (dev < -0.05 ? 'neg' : 'zero');
+
+      html += `
+        <div class="centauro-monitor-row">
+          <div class="centauro-monitor-accidental">${accidental}</div>
+          <div class="centauro-monitor-freq">${freqStr}</div>
+          <div class="centauro-monitor-deviation ${devClass}">${devStr}</div>
+        </div>
+      `;
+    }
+    this.pitchMonitor.innerHTML = html;
   }
 
   // --- MODALS & EXPORTS ---
