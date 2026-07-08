@@ -1,7 +1,17 @@
 <div class="musiki-pod" data-pod="centauro" data-pod-title="CENTAURO">
   <section class="conference-stage-panel conference-stage-panel--centauro" data-panel="centauro">
     <div class="centauro-shell">
-      <div class="centauro-header-controls">
+      <button type="button" class="centauro-sidebar-open-btn" data-centauro-sidebar-open title="Expandir Controles">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+      <div class="centauro-header-controls" style="position: relative;">
+        <button type="button" class="centauro-sidebar-close-btn" data-centauro-sidebar-close title="Contraer Controles">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
         <div class="centauro-control-row">
           <div class="centauro-field centauro-field--input">
             <label for="centauro-input-expr">Expresión de Afinación</label>
@@ -208,11 +218,11 @@
 
   .centauro-field input,
   .centauro-field select {
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: color-mix(in srgb, var(--c-fg) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-fg) 15%, transparent);
     border-radius: 4px;
     padding: 6px 10px;
-    color: #fff;
+    color: var(--c-fg);
     font-size: 0.85rem;
     outline: none;
     transition: border-color 0.15s ease;
@@ -230,11 +240,11 @@
   }
 
   .centauro-btn {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: color-mix(in srgb, var(--c-fg) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-fg) 12%, transparent);
     border-radius: 4px;
     padding: 6px 12px;
-    color: #fff;
+    color: var(--c-fg);
     font-size: 0.8rem;
     cursor: pointer;
     font-weight: 500;
@@ -242,28 +252,28 @@
   }
 
   .centauro-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, var(--c-fg) 12%, transparent);
+    border-color: color-mix(in srgb, var(--c-fg) 20%, transparent);
   }
 
   .centauro-btn--primary {
-    background: rgba(16, 185, 129, 0.2);
-    border-color: rgba(16, 185, 129, 0.4);
-    color: #34d399;
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #10b981;
   }
   .centauro-btn--primary:hover {
-    background: rgba(16, 185, 129, 0.3);
-    border-color: rgba(16, 185, 129, 0.5);
+    background: rgba(16, 185, 129, 0.25);
+    border-color: rgba(16, 185, 129, 0.45);
   }
 
   .centauro-btn--accent {
-    background: rgba(59, 130, 246, 0.2);
-    border-color: rgba(59, 130, 246, 0.4);
-    color: #60a5fa;
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.35);
+    color: #3b82f6;
   }
   .centauro-btn--accent:hover {
-    background: rgba(59, 130, 246, 0.3);
-    border-color: rgba(59, 130, 246, 0.5);
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.45);
   }
 
   .centauro-status {
@@ -467,5 +477,52 @@
   }
   .centauro-btn--close:hover {
     background: #ef4444;
+  }
+
+  .centauro-sidebar-close-btn {
+    display: none;
+  }
+  .centauro-sidebar-open-btn {
+    display: none;
+  }
+
+  :global(.centauro-standalone) .centauro-sidebar-close-btn {
+    display: inline-flex;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: var(--c-fg-dim, #888);
+    cursor: pointer;
+    z-index: 20;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: color 0.15s ease;
+  }
+  :global(.centauro-standalone) .centauro-sidebar-close-btn:hover {
+    color: var(--c-fg, #fff);
+  }
+
+  :global(.centauro-standalone) .centauro-sidebar-open-btn {
+    display: none;
+    position: fixed;
+    left: 8px;
+    top: 8px;
+    background: transparent;
+    border: none;
+    color: var(--c-fg, #fff);
+    cursor: pointer;
+    z-index: 20;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: color 0.15s ease;
+  }
+  :global(.centauro-standalone.sidebar-collapsed) .centauro-sidebar-open-btn {
+    display: inline-flex;
   }
 </style>

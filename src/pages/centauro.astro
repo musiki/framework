@@ -71,12 +71,6 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
       .centauro-btn {
         padding: 4px 8px !important;
         font-size: 0.75rem !important;
-        background: #383838 !important;
-        border-color: #4a4a4a !important;
-      }
-
-      .centauro-btn:hover {
-        background: #444 !important;
       }
 
       .centauro-workspace {
@@ -97,40 +91,6 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
       /* Hide table in compact Ableton rack view */
       .centauro-info-panel {
         display: none !important;
-      }
-
-      /* Floating Pill Buttons */
-      #centauro-sidebar-toggle {
-        position: fixed;
-        left: 246px;
-        top: 8px;
-        z-index: 20;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        background: #2b2b2b;
-        border: 1px solid #3a3a3a;
-        color: #dcdcdc;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s ease;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-        outline: none;
-      }
-
-      #centauro-sidebar-toggle:hover {
-        background: #3a3a3a;
-        color: #fff;
-      }
-
-      .sidebar-collapsed #centauro-sidebar-toggle {
-        left: 8px;
-      }
-
-      .sidebar-collapsed #centauro-sidebar-toggle svg {
-        transform: rotate(180deg);
       }
 
       #centauro-fullscreen-btn {
@@ -159,14 +119,7 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
       }
     </style>
   </head>
-  <body>
-    <!-- Retractable Sidebar Toggle Arrow Button -->
-    <button type="button" id="centauro-sidebar-toggle" title="Contraer/Expandir Controles">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15 18 9 12 15 6" />
-      </svg>
-    </button>
-
+  <body class="centauro-standalone">
     <!-- Fullscreen Toggle Button -->
     <button type="button" id="centauro-fullscreen-btn" title="Pantalla Completa (o Doble toque en el teclado)">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -185,11 +138,19 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
           new CentauroController({ container: podContainer });
         }
 
-        // Sidebar Toggle handler
-        const sidebarToggle = document.getElementById('centauro-sidebar-toggle');
-        if (sidebarToggle) {
-          sidebarToggle.addEventListener('click', () => {
-            document.body.classList.toggle('sidebar-collapsed');
+        // Close sidebar handler
+        const closeBtn = document.querySelector('[data-centauro-sidebar-close]');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', () => {
+            document.body.classList.add('sidebar-collapsed');
+          });
+        }
+
+        // Open sidebar handler
+        const openBtn = document.querySelector('[data-centauro-sidebar-open]');
+        if (openBtn) {
+          openBtn.addEventListener('click', () => {
+            document.body.classList.remove('sidebar-collapsed');
           });
         }
 
