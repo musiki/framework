@@ -9,6 +9,7 @@ import GraphModal from '../components/GraphModal.astro';
 import Search from '../components/Search.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
 import CoursePodWorkspace from '../components/course/CoursePodWorkspace.astro';
+import CourseTuningWorkspace from '../components/course/CourseTuningWorkspace.astro';
 import CourseProgressPod from '../components/course/CourseProgressPod.astro';
 import WikiLayout from '../layouts/WikiLayout.astro';
 import {
@@ -6052,6 +6053,7 @@ function renderLessonsTreeHTML(
       </aside>
 
       {!isPublicReaderMode && <CoursePodWorkspace />}
+      {!isPublicReaderMode && <CourseTuningWorkspace />}
       {!isPublicReaderMode && <CourseProgressPod />}
     </main>
     <script>

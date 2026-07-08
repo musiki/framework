@@ -31,6 +31,7 @@ import { VisualizerController } from './room/visualizer';
 import { RecursosController } from './room/recursos';
 import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
 import { StrudelController } from './room/strudel/StrudelController';
+import { CentauroController } from './room/centauro/CentauroController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
 import { buildRoomQueryUrl } from './room/layout';
@@ -4278,6 +4279,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
   let strudelAudioGroupMeterData: Uint8Array | null = null;
   let strudelAudioReverbSendNode: GainNode | null = null;
   let strudelAudioDelaySendNode: GainNode | null = null;
+  let centauroAudioGroupGainNode: GainNode | null = null;
   let fmSynthMonitorSource: MediaStreamAudioSourceNode | null = null;
   let incomingAudioReverbConvolverNode: ConvolverNode | null = null;
   let incomingAudioReverbReturnGainNode: GainNode | null = null;
@@ -7710,6 +7712,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       strudelAudioGroupAnalyser = incomingAudioContext.createAnalyser();
       strudelAudioGroupAnalyser.fftSize = 256;
       strudelAudioGroupMeterData = new Uint8Array(strudelAudioGroupAnalyser.frequencyBinCount);
+      centauroAudioGroupGainNode = incomingAudioContext.createGain();
 
       incomingAudioReverbConvolverNode = incomingAudioContext.createConvolver();
       incomingAudioReverbConvolverNode.buffer = createImpulseResponseBuffer(
@@ -7753,6 +7756,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       strudelAudioGroupPannerNode.connect(strudelAudioGroupAnalyser);
       strudelAudioGroupGainNode.connect(strudelAudioReverbSendNode);
       strudelAudioGroupGainNode.connect(strudelAudioDelaySendNode);
+      centauroAudioGroupGainNode.connect(incomingAudioMasterGainNode);
 
       incomingAudioGroupGainNode.connect(incomingAudioGroupPannerNode);
       incomingAudioGroupPannerNode.connect(incomingAudioDryGainNode);
@@ -11609,6 +11613,12 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       },
     });
 
+    const onCentauroInit = (container: HTMLElement) => new CentauroController({
+      container,
+      getAudioContext: ensureIncomingAudioContext,
+      getOutputNode: () => centauroAudioGroupGainNode,
+    });
+
     const onLilypondInit = (container: HTMLElement) => {
       lilypondLive.init(container, localRole === 'teacher', setStatus);
       if (localRole === 'teacher') reinforceLilypondSession([180, 900]);
@@ -12092,6 +12102,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onRecursosInit,
     onNotesInit,
     onStrudelInit,
+    onCentauroInit,
   );
 
 

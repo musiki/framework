@@ -1,0 +1,103 @@
+---
+import BaseHead from '../components/BaseHead.astro';
+import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.astro';
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <BaseHead title="Centauro" description="Version portable de Centauro para Ableton Live" />
+    <style is:global>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #1e1e1e;
+        color: #dcdcdc;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+
+      /* Compact Ableton Layout styling */
+      .conference-stage-panel--centauro {
+        background: #252525 !important;
+        padding: 6px !important;
+        height: 100vh !important;
+        box-sizing: border-box;
+      }
+
+      .centauro-shell {
+        flex-direction: row !important;
+        height: 100% !important;
+        gap: 8px !important;
+      }
+
+      .centauro-header-controls {
+        flex: 0 0 240px !important;
+        padding: 8px !important;
+        background: #2b2b2b !important;
+        border: 1px solid #3a3a3a !important;
+        gap: 6px !important;
+      }
+
+      .centauro-control-row {
+        flex-direction: column !important;
+        gap: 6px !important;
+      }
+
+      .centauro-field {
+        min-width: 0 !important;
+      }
+
+      .centauro-action-row {
+        gap: 6px !important;
+      }
+
+      .centauro-btn {
+        padding: 4px 8px !important;
+        font-size: 0.75rem !important;
+        background: #383838 !important;
+        border-color: #4a4a4a !important;
+      }
+
+      .centauro-btn:hover {
+        background: #444 !important;
+      }
+
+      .centauro-workspace {
+        flex: 1 !important;
+        min-width: 0;
+        gap: 0 !important;
+      }
+
+      .centauro-keyboard-panel {
+        flex: 1 !important;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+      }
+
+      /* Hide table in compact Ableton rack view */
+      .centauro-info-panel {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <CentauroPanel />
+
+    <script>
+      import { CentauroController } from '../scripts/room/centauro/CentauroController';
+
+      function init() {
+        const podContainer = document.querySelector('.musiki-pod[data-pod="centauro"]') as HTMLElement;
+        if (podContainer) {
+          new CentauroController({ container: podContainer });
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', init);
+      init(); // fallback
+    </script>
+  </body>
+</html>

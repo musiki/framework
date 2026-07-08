@@ -1,0 +1,168 @@
+---
+import CentauroPanel from '../room/generators/centauro/CentauroPanel.astro';
+---
+
+<div class="course-tuning-workspace" id="course-tuning-workspace" aria-hidden="true">
+  <section class="course-tuning-shell">
+    <header class="course-tuning-header">
+      <span class="course-tuning-title">CENTAURO</span>
+      <div class="course-tuning-actions">
+        <button
+          type="button"
+          class="course-tuning-header-btn course-tuning-close"
+          data-course-tuning-close
+          aria-label="Cerrar Centauro (Esc)"
+          title="Cerrar (Esc)"
+        >×</button>
+      </div>
+    </header>
+    <div class="course-tuning-body">
+      <CentauroPanel />
+    </div>
+  </section>
+</div>
+
+<style>
+  .course-tuning-workspace {
+    position: fixed;
+    inset: 0 0 0 var(--ribbon-width, 44px);
+    z-index: 30;
+    display: flex;
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+
+  .course-tuning-workspace.is-open {
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .course-tuning-shell {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--c-bg);
+  }
+
+  .course-tuning-header {
+    display: flex;
+    height: 22px;
+    flex: 0 0 22px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    background: transparent;
+  }
+
+  .course-tuning-title {
+    flex: 1;
+    overflow: hidden;
+    color: #10b981;
+    font-size: 0.5rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    line-height: 1;
+    opacity: 0.75;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .course-tuning-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .course-tuning-header-btn {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    font-size: 10px;
+    opacity: 0.8;
+  }
+
+  .course-tuning-header-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    opacity: 1;
+  }
+
+  .course-tuning-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .course-tuning-body :global(.musiki-pod),
+  .course-tuning-body :global(.conference-stage-panel--centauro) {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+</style>
+
+<script>
+  import { CentauroController } from '../../scripts/room/centauro/CentauroController';
+
+  function boot() {
+    const overlay = document.getElementById('course-tuning-workspace');
+    if (!overlay) return;
+
+    const closeButton = overlay.querySelector('[data-course-tuning-close]');
+    if (!closeButton) return;
+
+    let controller: CentauroController | null = null;
+
+    const ensureController = () => {
+      if (!controller) {
+        const podContainer = overlay.querySelector('.musiki-pod[data-pod="centauro"]') as HTMLElement;
+        if (podContainer) {
+          controller = new CentauroController({ container: podContainer });
+        }
+      }
+      return controller;
+    };
+
+    const open = () => {
+      overlay.classList.add('is-open');
+      overlay.setAttribute('aria-hidden', 'false');
+      ensureController();
+    };
+
+    const close = () => {
+      overlay.classList.remove('is-open');
+      overlay.setAttribute('aria-hidden', 'true');
+      if (controller) {
+        controller.dispose();
+        controller = null;
+      }
+    };
+
+    closeButton.addEventListener('click', close);
+    window.addEventListener('musiki:open-centauro', open);
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && overlay.classList.contains('is-open')) close();
+    });
+  }
+
+  boot();
+  document.addEventListener('astro:page-load', boot);
+</script>

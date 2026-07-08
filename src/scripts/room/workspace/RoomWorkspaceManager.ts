@@ -23,6 +23,7 @@ export class RoomWorkspaceManager {
   private onRecursosInit?: (element: HTMLElement) => PodDisposable;
   private onNotesInit?: (element: HTMLElement) => PodDisposable;
   private onStrudelInit?: (element: HTMLElement) => PodDisposable;
+  private onCentauroInit?: (element: HTMLElement) => PodDisposable;
   private isApplyingRemoteLayout = false;
   private isBatchLayoutUpdate = false;
   private panelCache = new Map<
@@ -227,6 +228,14 @@ export class RoomWorkspaceManager {
       color: "#F6B26B",
       cat: "tools",
     },
+    {
+      id: "centauro",
+      title: "CENTAURO",
+      icon: "CE",
+      atomic: 24,
+      color: "#10b981",
+      cat: "tools",
+    },
   ];
 
   constructor(
@@ -248,6 +257,7 @@ export class RoomWorkspaceManager {
     onRecursosInit?: (element: HTMLElement) => PodDisposable,
     onNotesInit?: (element: HTMLElement) => PodDisposable,
     onStrudelInit?: (element: HTMLElement) => PodDisposable,
+    onCentauroInit?: (element: HTMLElement) => PodDisposable,
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -267,6 +277,7 @@ export class RoomWorkspaceManager {
     this.onRecursosInit = onRecursosInit;
     this.onNotesInit = onNotesInit;
     this.onStrudelInit = onStrudelInit;
+    this.onCentauroInit = onCentauroInit;
   }
 
   private rememberPodController(panelId: string, controller: PodDisposable) {
@@ -444,6 +455,10 @@ export class RoomWorkspaceManager {
                   event.stopPropagation();
                   if (typeof controller?.toggle === "function") void controller.toggle();
                 });
+              }
+              if (id === "centauro" && this.onCentauroInit) {
+                controller = this.onCentauroInit(element);
+                this.rememberPodController(options.id, controller);
               }
               if (id === "graph") {
                 delete element.dataset.graphPodReady;

@@ -9,6 +9,7 @@ import SonicVisualizerPanel from '../panels/sonic-visualizer/SonicVisualizerPane
 import VisualizerPanel from '../panels/visualizer/VisualizerPanel.astro';
 import RecursosPanel from '../panels/recursos/RecursosPanel.astro';
 import StrudelPanel from '../generators/strudel/StrudelPanel.astro';
+import CentauroPanel from '../generators/centauro/CentauroPanel.astro';
 
 type Props = {
   presentationOptions?: any[];
@@ -169,6 +170,9 @@ const { presentationOptions = [] } = Astro.props;
 
   <!-- ST: STRUDEL -->
   <StrudelPanel />
+
+  <!-- CE: CENTAURO -->
+  <CentauroPanel />
 
   <!-- Fo: FORO -->
   <div class="musiki-pod" data-pod="forum" data-pod-title="FORO">

@@ -1,0 +1,469 @@
+<div class="musiki-pod" data-pod="centauro" data-pod-title="CENTAURO">
+  <section class="conference-stage-panel conference-stage-panel--centauro" data-panel="centauro">
+    <div class="centauro-shell">
+      <div class="centauro-header-controls">
+        <div class="centauro-control-row">
+          <div class="centauro-field centauro-field--input">
+            <label for="centauro-input-expr">Expresión de Afinación</label>
+            <input
+              type="text"
+              id="centauro-input-expr"
+              value="u31"
+              placeholder="Ej: u31 o u{0 100 200 386.3 701.9}"
+              data-centauro-input
+            />
+          </div>
+          <div class="centauro-field centauro-field--select">
+            <label for="centauro-audio-engine">Generador de Audio</label>
+            <select id="centauro-audio-engine" data-centauro-engine>
+              <option value="sine">Oscilador Senoidal</option>
+              <option value="piano">Piano (Muestras)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="centauro-action-row">
+          <button type="button" class="centauro-btn centauro-btn--primary" data-centauro-drone>
+            Play Drone
+          </button>
+          <button type="button" class="centauro-btn" data-centauro-map-mode title="Cambiar modo de mapa (Cromático / Isomórfico)">
+            Mapa: Cromático
+          </button>
+          <button type="button" class="centauro-btn centauro-btn--icon centauro-btn--primary" data-centauro-kb-toggle aria-pressed="true" title="Activar Teclado PC" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; padding: 0;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+              <line x1="6" y1="8" x2="6" y2="8" />
+              <line x1="10" y1="8" x2="10" y2="8" />
+              <line x1="14" y1="8" x2="14" y2="8" />
+              <line x1="18" y1="8" x2="18" y2="8" />
+              <line x1="6" y1="12" x2="6" y2="12" />
+              <line x1="10" y1="12" x2="10" y2="12" />
+              <line x1="14" y1="12" x2="14" y2="12" />
+              <line x1="18" y1="12" x2="18" y2="12" />
+              <line x1="7" y1="16" x2="17" y2="16" />
+            </svg>
+          </button>
+          <button type="button" class="centauro-btn" data-centauro-reset>
+            Reset (12-EDO)
+          </button>
+          <button type="button" class="centauro-btn" data-centauro-view-tun>
+            Ver .tun
+          </button>
+          <button type="button" class="centauro-btn centauro-btn--accent" data-centauro-download-tun>
+            Descargar .tun
+          </button>
+          <button type="button" class="centauro-btn centauro-btn--icon" data-centauro-help-btn title="Ayuda y Conceptos Teóricos" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; padding: 0;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="centauro-status centauro-status--info" data-centauro-status>Afinación lista</div>
+      </div>
+
+      <div class="centauro-workspace">
+        <div class="centauro-keyboard-panel">
+          <div class="centauro-keyboard-wrapper" data-centauro-keyboard-wrapper>
+            <!-- SVG keyboard will be rendered here dynamically -->
+          </div>
+        </div>
+
+        <div class="centauro-info-panel">
+          <div class="centauro-table-header">Grados Mapeados</div>
+          <div class="centauro-table-scroll">
+            <table class="centauro-table">
+              <thead>
+                <tr>
+                  <th>Índice</th>
+                  <th>Etiqueta</th>
+                  <th>Cents</th>
+                  <th>Frecuencia</th>
+                </tr>
+              </thead>
+              <tbody data-centauro-table-body>
+                <!-- Dynamic rows filled by controller -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- View/Edit .tun modal -->
+    <dialog class="centauro-modal" data-centauro-modal>
+      <div class="centauro-modal-content">
+        <h3>Editor de Archivo .tun</h3>
+        <p class="centauro-modal-warning">¡Las ediciones manuales pueden no coincidir con el teclado visual!</p>
+        <textarea class="centauro-modal-textarea" data-centauro-modal-text></textarea>
+        <div class="centauro-modal-actions">
+          <button type="button" class="centauro-btn" data-centauro-modal-copy>Copiar</button>
+          <button type="button" class="centauro-btn centauro-btn--accent" data-centauro-modal-download>Descargar</button>
+          <button type="button" class="centauro-btn" data-centauro-modal-regen>Regenerar</button>
+          <button type="button" class="centauro-btn centauro-btn--close" data-centauro-modal-close>Cerrar</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Help / Theory Modal -->
+    <dialog class="centauro-modal centauro-modal--help" data-centauro-help-modal style="max-width: 650px; max-height: 80vh; overflow-y: auto;">
+      <div class="centauro-modal-content" style="gap: 16px;">
+        <h3 style="color: #f6b26b; font-size: 1.15rem; margin: 0;">Centauro: Guía y Conceptos Teóricos</h3>
+        
+        <div class="centauro-help-section" style="display: flex; flex-direction: column; gap: 6px;">
+          <h4 style="color: #60a5fa; font-size: 0.9rem; margin: 0;">1. Guía de Comandos y Mensajes (Didáctico)</h4>
+          <p style="font-size: 0.8rem; margin: 0; line-height: 1.4;">El módulo recibe instrucciones a través del primer inlet en Max/MSP (objeto <code>[jweb~]</code>) mediante los siguientes selectores:</p>
+          <ul style="font-size: 0.8rem; margin: 0; padding-left: 20px; line-height: 1.4;">
+            <li><strong><code>midiin [status] [data1] [data2]</code></strong>: Procesa mensajes MIDI. También detecta streams directos de bytes enteros individuales del objeto <code>[midiin]</code> de Max.</li>
+            <li><strong><code>noteon [pitch] [velocity]</code></strong>: Ejecuta una nota microtonal (ej. <code>noteon 60 100</code>).</li>
+            <li><strong><code>noteoff [pitch]</code></strong>: Apaga una nota activa (ej. <code>noteoff 60</code>).</li>
+            <li><strong><code>tuning [expression]</code></strong>: Define la escala en tiempo real (ej. <code>tuning u31</code>, <code>tuning u19</code> o <code>tuning u&#123;0 100 200 386.3 701.9&#125;</code>).</li>
+          </ul>
+        </div>
+
+        <div class="centauro-help-section" style="display: flex; flex-direction: column; gap: 6px;">
+          <h4 style="color: #60a5fa; font-size: 0.9rem; margin: 0;">2. Teoría del Teclado Isomórfico</h4>
+          <p style="font-size: 0.8rem; margin: 0; line-height: 1.4;">Un teclado isomórfico organiza la afinación en una grilla bidimensional donde cualquier intervalo acústico mantiene la misma orientación geométrica y distancia espacial, unificando la digitación armónica.</p>
+          <p style="font-size: 0.8rem; margin: 0; line-height: 1.4;">Conceptos clave y enlaces de estudio:</p>
+          <ul style="font-size: 0.8rem; margin: 0; padding-left: 20px; line-height: 1.4;">
+            <li><a href="/conceptos/isomorfismo" target="_blank" style="color: #34d399; text-decoration: underline;">Isomorfismo Musical</a>: Coherencia visual-espacial y acústica.</li>
+            <li><a href="/conceptos/tonnetz" target="_blank" style="color: #34d399; text-decoration: underline;">Euler-Tonnetz</a>: Grilla armónica en terceras y quintas justas.</li>
+            <li><strong>Ecuación de Grilla</strong>: La nota MIDI asociada a la celda <code>(dx, dy)</code> es: <code>MIDI = 60 + dx * pasoX + dy * pasoY</code>, donde el paso armónico se calcula automáticamente según la cardinalidad de la escala.</li>
+          </ul>
+        </div>
+
+        <div class="centauro-help-section" style="display: flex; flex-direction: column; gap: 6px;">
+          <h4 style="color: #60a5fa; font-size: 0.9rem; margin: 0;">3. Construcción Técnica</h4>
+          <ul style="font-size: 0.8rem; margin: 0; padding-left: 20px; line-height: 1.4;">
+            <li><strong>Voronoi Mosaic</strong>: Para escalas no regulares (u7, u9 o escalas libres), se calculan celdas Voronoi mediante el algoritmo de Sutherland-Hodgman con perturbaciones determinísticas, evitando distorsiones espaciales.</li>
+            <li><strong>Reverb Plate</strong>: Envío de señal paralela hacia un convolver sintético (ruido blanco atenuado exponencialmente a ~500ms) para emular espacialidad física.</li>
+            <li><strong>Sampler de Muestras</strong>: Carga archivos MP3 (C1 a C8) e interpola la reproducción en tiempo real mediante tasas de reproducción proporcionales <code>(targetFreq / rootFreq)</code>.</li>
+          </ul>
+        </div>
+
+        <div class="centauro-modal-actions" style="margin-top: 8px;">
+          <button type="button" class="centauro-btn centauro-btn--close" data-centauro-help-close>Cerrar</button>
+        </div>
+      </div>
+    </dialog>
+  </section>
+</div>
+
+<style>
+  .conference-stage-panel--centauro {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+    background: var(--c-bg, #111);
+    color: var(--c-fg, #fff);
+  }
+
+  .centauro-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 16px;
+  }
+
+  .centauro-header-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .centauro-control-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .centauro-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .centauro-field label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--c-fg-dim, #ccc);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .centauro-field input,
+  .centauro-field select {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: #fff;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .centauro-field input:focus,
+  .centauro-field select:focus {
+    border-color: #10b981;
+  }
+
+  .centauro-action-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .centauro-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    padding: 6px 12px;
+    color: #fff;
+    font-size: 0.8rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+
+  .centauro-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .centauro-btn--primary {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #34d399;
+  }
+  .centauro-btn--primary:hover {
+    background: rgba(16, 185, 129, 0.3);
+    border-color: rgba(16, 185, 129, 0.5);
+  }
+
+  .centauro-btn--accent {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #60a5fa;
+  }
+  .centauro-btn--accent:hover {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+
+  .centauro-status {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 4px;
+    word-break: break-all;
+  }
+  .centauro-status--info {
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.08);
+  }
+  .centauro-status--error {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.08);
+  }
+
+  .centauro-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: 16px;
+  }
+
+  @media (max-width: 768px) {
+    .centauro-workspace {
+      flex-direction: column;
+    }
+  }
+
+  .centauro-keyboard-panel {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 8px;
+  }
+
+  .centauro-keyboard-wrapper {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+  }
+
+  .centauro-info-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+  }
+
+  .centauro-table-header {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--c-fg-dim, #ccc);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .centauro-table-scroll {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .centauro-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    text-align: left;
+  }
+
+  .centauro-table th,
+  .centauro-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .centauro-table th {
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.2);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  /* SVG Keyboard styling */
+  :global(.centauro-key) {
+    cursor: pointer;
+    transition: filter 0.15s ease, fill 0.15s ease;
+  }
+
+  :global(.centauro-key:hover) {
+    filter: brightness(1.2);
+  }
+
+  :global(.centauro-key[data-active="true"]) {
+    fill: #ffffff !important;
+    filter: drop-shadow(0 0 4px #fff) brightness(1.3);
+  }
+
+  :global(.centauro-key-text) {
+    fill: #fff;
+    font-weight: bold;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+
+  :global(.centauro-key-subtext) {
+    fill: rgba(255, 255, 255, 0.7);
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+
+  /* Modal Dialog styles */
+  .centauro-modal {
+    border: none;
+    border-radius: 8px;
+    background: #181825;
+    color: #cdd6f4;
+    padding: 20px;
+    max-width: 600px;
+    width: 90%;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    box-sizing: border-box;
+  }
+
+  .centauro-modal::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+  }
+
+  .centauro-modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+  }
+
+  .centauro-modal h3 {
+    margin: 0;
+    color: #f6b26b;
+  }
+
+  .centauro-modal-warning {
+    font-size: 0.75rem;
+    color: #f87171;
+    margin: 0;
+    font-weight: 500;
+  }
+
+  .centauro-modal-textarea {
+    width: 100%;
+    height: 300px;
+    background: #11111b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #cdd6f4;
+    font-family: monospace;
+    font-size: 0.8rem;
+    padding: 8px;
+    box-sizing: border-box;
+    resize: none;
+    outline: none;
+  }
+
+  .centauro-modal-textarea:focus {
+    border-color: #3b82f6;
+  }
+
+  .centauro-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .centauro-btn--close {
+    background: #f87171;
+    border-color: rgba(0, 0, 0, 0.15);
+  }
+  .centauro-btn--close:hover {
+    background: #ef4444;
+  }
+</style>
