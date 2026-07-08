@@ -127,6 +127,8 @@ export class CentauroController {
   private downloadTunBtn!: HTMLButtonElement;
   private engineSelect!: HTMLSelectElement;
   private helpBtn!: HTMLButtonElement;
+  private shareCopyBtn!: HTMLButtonElement;
+  private shareOpenLink!: HTMLAnchorElement;
 
   // Modal bindings
   private modal!: HTMLDialogElement;
@@ -148,7 +150,27 @@ export class CentauroController {
     this.getOutputNode = options.getOutputNode;
 
     this.bindDOM();
-    this.initTuning('u31');
+
+    let initialTuning = 'u31';
+    try {
+      const decodedSearch = decodeURIComponent(window.location.search).trim();
+      const params = new URLSearchParams(window.location.search);
+      const scaleParam = params.get('scale') || params.get('tuning');
+      
+      if (scaleParam) {
+        initialTuning = scaleParam;
+      } else if (decodedSearch.startsWith('?u')) {
+        initialTuning = decodedSearch.slice(1);
+      }
+    } catch (e) {
+      console.warn('[Centauro] Failed to parse URL parameters:', e);
+    }
+
+    if (this.inputExpr) {
+      this.inputExpr.value = initialTuning;
+    }
+
+    this.initTuning(initialTuning);
     this.setupListeners();
     this.setupMidi();
     this.setupMaxBridge();
@@ -167,6 +189,8 @@ export class CentauroController {
     this.downloadTunBtn = this.container.querySelector('[data-centauro-download-tun]') as HTMLButtonElement;
     this.engineSelect = this.container.querySelector('[data-centauro-engine]') as HTMLSelectElement;
     this.helpBtn = this.container.querySelector('[data-centauro-help-btn]') as HTMLButtonElement;
+    this.shareCopyBtn = this.container.querySelector('[data-centauro-share-copy]') as HTMLButtonElement;
+    this.shareOpenLink = this.container.querySelector('[data-centauro-share-open]') as HTMLAnchorElement;
 
     // Modals
     this.modal = this.container.querySelector('[data-centauro-modal]') as HTMLDialogElement;
@@ -188,6 +212,9 @@ export class CentauroController {
       this.statusNote.className = 'centauro-status centauro-status--info';
       this.renderTable();
       this.renderKeyboard();
+      if (this.shareOpenLink) {
+        this.shareOpenLink.href = this.getShareUrl(expr);
+      }
       if (this.droneActive) {
         this.startDrone();
       }
@@ -237,6 +264,22 @@ export class CentauroController {
     this.downloadTunBtn.addEventListener('click', () => {
       this.downloadTunFile();
     });
+
+    if (this.shareCopyBtn) {
+      this.shareCopyBtn.addEventListener('click', () => {
+        const shareUrl = this.getShareUrl();
+        void navigator.clipboard.writeText(shareUrl);
+        
+        // Temporarily change SVG/title to show copy success
+        const originalTitle = this.shareCopyBtn.getAttribute('title') || '';
+        this.shareCopyBtn.setAttribute('title', '¡Enlace Copiado!');
+        this.shareCopyBtn.style.color = '#34d399'; // green success color
+        setTimeout(() => {
+          this.shareCopyBtn.setAttribute('title', originalTitle);
+          this.shareCopyBtn.style.color = '';
+        }, 1500);
+      });
+    }
 
     this.engineSelect.addEventListener('change', () => {
       if (this.engineSelect.value === 'piano') {
@@ -1091,6 +1134,12 @@ export class CentauroController {
     }
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
+  }
+
+  private getShareUrl(expr?: string): string {
+    const activeExpr = expr || this.inputExpr.value.trim();
+    const origin = window.location.origin;
+    return `${origin}/centauro?${encodeURIComponent(activeExpr)}`;
   }
 }
 
