@@ -367,26 +367,40 @@ export class CentauroController {
     const dropdownBtn = this.container.querySelector('[data-centauro-dropdown-btn]');
     let previousValue = '';
 
+    const triggerPicker = () => {
+      try {
+        this.inputExpr.showPicker();
+      } catch (err) {
+        console.log("showPicker not supported", err);
+      }
+    };
+
+    // Clicking or focusing the input directly should still open the datalist suggestions
+    this.inputExpr.addEventListener('click', triggerPicker);
+    this.inputExpr.addEventListener('focus', () => {
+      previousValue = this.inputExpr.value;
+      triggerPicker();
+    });
+
     if (dropdownBtn) {
-      dropdownBtn.addEventListener('click', (e) => {
+      // Use mousedown to capture the gesture before any focus transfer occurs
+      dropdownBtn.addEventListener('mousedown', (e) => {
         e.stopPropagation();
         e.preventDefault();
         
         previousValue = this.inputExpr.value;
         this.inputExpr.value = ''; // Temporarily clear so all options show
         
-        try {
-          this.inputExpr.showPicker();
-        } catch (err) {
-          console.log("showPicker not supported", err);
-        }
         this.inputExpr.focus();
+        triggerPicker();
+      });
+
+      // Keep click handler as fallback
+      dropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
       });
     }
-
-    this.inputExpr.addEventListener('focus', () => {
-      previousValue = this.inputExpr.value;
-    });
 
     this.inputExpr.addEventListener('blur', () => {
       setTimeout(() => {

@@ -486,18 +486,19 @@
     z-index: 1;
   }
 
-  .centauro-table tr.row-active {
-    background: rgba(96, 165, 250, 0.15); /* subtle blue active glow */
+  :global(.centauro-table tr.row-active) {
+    background: rgba(16, 185, 129, 0.2) !important; /* bright active emerald green glow */
   }
 
-  .centauro-table tr.row-active td {
-    border-bottom-color: rgba(96, 165, 250, 0.3);
-    color: #93c5fd;
+  :global(.centauro-table tr.row-active td) {
+    border-bottom-color: rgba(16, 185, 129, 0.4) !important;
+    color: #34d399 !important; /* emerald text */
+    font-weight: bold;
   }
 
   .centauro-table-accidental {
     font-family: 'HEJI2', sans-serif;
-    font-size: 1.5rem;
+    font-size: 1.73rem; /* enlarged 15% from 1.5rem */
     line-height: 1;
     color: #ffd966;
     text-align: center;
@@ -715,7 +716,7 @@
 
   :global(.centauro-monitor-accidental) {
     font-family: 'HEJI2', sans-serif;
-    font-size: 24px;
+    font-size: 28px; /* enlarged 15% from 24px */
     line-height: 1;
     color: #ffd966;
     text-align: center;
