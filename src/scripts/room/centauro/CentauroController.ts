@@ -363,16 +363,38 @@ export class CentauroController {
       });
     }
 
-    // Input listener
-    const showDatalist = () => {
-      try {
-        this.inputExpr.showPicker();
-      } catch (e) {
-        console.log("showPicker not supported", e);
-      }
-    };
-    this.inputExpr.addEventListener('click', showDatalist);
-    this.inputExpr.addEventListener('focus', showDatalist);
+    // Input listener and dropdown button support
+    const dropdownBtn = this.container.querySelector('[data-centauro-dropdown-btn]');
+    let previousValue = '';
+
+    if (dropdownBtn) {
+      dropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        
+        previousValue = this.inputExpr.value;
+        this.inputExpr.value = ''; // Temporarily clear so all options show
+        
+        try {
+          this.inputExpr.showPicker();
+        } catch (err) {
+          console.log("showPicker not supported", err);
+        }
+        this.inputExpr.focus();
+      });
+    }
+
+    this.inputExpr.addEventListener('focus', () => {
+      previousValue = this.inputExpr.value;
+    });
+
+    this.inputExpr.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (this.inputExpr.value === '') {
+          this.inputExpr.value = previousValue || 'u31';
+        }
+      }, 150);
+    });
 
     this.inputExpr.addEventListener('change', () => {
       const val = this.inputExpr.value;
@@ -1079,9 +1101,20 @@ export class CentauroController {
 
       const degreeObj = this.spec.degrees[row.degree];
       const tr = document.createElement('tr');
+      tr.setAttribute('data-midi', midi.toString());
+      
+      const isActive = this.activeVoices.has(midi);
+      if (isActive) {
+        tr.classList.add('row-active');
+      }
+
+      const accidental = this.getHejiAccidental(midi);
+      const accidentalHtml = `${accidental}${row.hejiOffset !== undefined ? `<sup style="font-size: 9px; vertical-align: super; font-family: monospace; color: #ffd966; margin-left: 2px;">${row.hejiOffset > 0 ? '+' : ''}${row.hejiOffset}</sup>` : ''}`;
+
       tr.innerHTML = `
         <td>MIDI ${midi}</td>
         <td><strong>${degreeObj.label}</strong> (C${row.cycle})</td>
+        <td class="centauro-table-accidental">${accidentalHtml}</td>
         <td>${row.cents.toFixed(2)}c</td>
         <td>${row.frequency.toFixed(3)} Hz</td>
       `;
@@ -1099,12 +1132,9 @@ export class CentauroController {
 
   private renderKeyboard() {
     this.keyboardWrapper.innerHTML = '';
-    // Retain the touch strip and pitch monitor divs during redraws
+    // Retain the touch strip div during redraws
     if (this.touchStrip) {
       this.keyboardWrapper.appendChild(this.touchStrip);
-    }
-    if (this.pitchMonitor) {
-      this.keyboardWrapper.appendChild(this.pitchMonitor);
     }
 
     const shape = this.getCellShape();
@@ -1460,6 +1490,15 @@ export class CentauroController {
     keys.forEach(key => {
       key.setAttribute('data-active', active ? 'true' : 'false');
     });
+
+    const rows = this.tableBody.querySelectorAll(`tr[data-midi="${midi}"]`);
+    rows.forEach(row => {
+      if (active) {
+        row.classList.add('row-active');
+      } else {
+        row.classList.remove('row-active');
+      }
+    });
   }
 
   // --- HELMHOLTZ-ELLIS PITCH MONITOR ---
@@ -1469,7 +1508,7 @@ export class CentauroController {
       const row = this.midiTable[midi];
       if (!row) continue;
 
-      const pc = midi % 12;
+      const pc = ((row.closestMidi % 12) + 12) % 12;
       const dev = row.centsFrom12TET;
       const options = SPELLING_OPTIONS[pc] || [{ name: 'C', baseChar: 'n', pythDev: 0.0 }];
 

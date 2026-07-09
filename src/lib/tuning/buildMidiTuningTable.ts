@@ -13,11 +13,12 @@ export const buildMidiTuningTable = (spec: TuningSpec): MidiTuningRow[] => {
     const cents = spec.degrees[degree].cents + cycle * spec.periodCents;
     const frequency = centsToFreq(spec.baseFreq, cents);
 
-    // Standard 12-TET frequency for this MIDI note number
-    const tet12Freq = 440 * Math.pow(2, (midi - 69) / 12);
+    // Closest standard 12-TET semitone relative to baseMidi
+    const closestRelSemitone = Math.round(cents / 100);
+    const closestMidi = spec.baseMidi + closestRelSemitone;
     
-    // Difference in cents from standard 12-TET for this MIDI note
-    const centsFrom12TET = 1200 * Math.log2(frequency / tet12Freq);
+    // Deviation in cents from that closest standard semitone
+    const centsFrom12TET = cents - closestRelSemitone * 100;
 
     table.push({
       midi,
@@ -25,7 +26,8 @@ export const buildMidiTuningTable = (spec: TuningSpec): MidiTuningRow[] => {
       cycle,
       cents,
       frequency,
-      centsFrom12TET
+      centsFrom12TET,
+      closestMidi
     });
   }
 

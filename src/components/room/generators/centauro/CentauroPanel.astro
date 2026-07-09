@@ -15,14 +15,22 @@
         <div class="centauro-control-row">
           <div class="centauro-field centauro-field--input">
             <label for="centauro-input-expr">Expresión de Afinación</label>
-            <input
-              type="text"
-              id="centauro-input-expr"
-              value="u31"
-              placeholder="Ej: u31 o u{0 100 200 386.3 701.9}"
-              data-centauro-input
-              list="centauro-scales-list"
-            />
+            <div style="position: relative; display: flex; align-items: center; width: 100%;">
+              <input
+                type="text"
+                id="centauro-input-expr"
+                value="u31"
+                placeholder="Ej: u31 o u{0 100 200 386.3 701.9}"
+                data-centauro-input
+                list="centauro-scales-list"
+                style="flex: 1; padding-right: 28px;"
+              />
+              <button type="button" class="centauro-input-dropdown-btn" data-centauro-dropdown-btn style="position: absolute; right: 6px; background: none; border: none; color: rgba(255,255,255,0.4); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; outline: none; z-index: 5;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </div>
             <datalist id="centauro-scales-list">
               <option value="u12">Temperamento Igual (12 EDO)</option>
               <option value="u{81/80}">Syntonic Comma (81:80)</option>
@@ -72,12 +80,6 @@
               <option value="sine">Oscilador Senoidal</option>
               <option value="piano">Piano (Muestras)</option>
             </select>
-          </div>
-          <div class="centauro-field centauro-field--monitor">
-            <label>Monitor Helmholtz-Ellis</label>
-            <div class="centauro-pitch-monitor" data-centauro-pitch-monitor>
-              <div class="centauro-monitor-empty">Monitor listo</div>
-            </div>
           </div>
         </div>
 
@@ -135,6 +137,13 @@
         </div>
 
         <div class="centauro-status centauro-status--info" data-centauro-status>Afinación lista</div>
+
+        <div class="centauro-field centauro-field--monitor">
+          <label>Monitor Helmholtz-Ellis</label>
+          <div class="centauro-pitch-monitor" data-centauro-pitch-monitor>
+            <div class="centauro-monitor-empty">Monitor listo</div>
+          </div>
+        </div>
       </div>
 
       <div class="centauro-workspace">
@@ -153,6 +162,7 @@
                 <tr>
                   <th>Índice</th>
                   <th>Etiqueta</th>
+                  <th>Alt. (HE)</th>
                   <th>Cents</th>
                   <th>Frecuencia</th>
                 </tr>
@@ -312,6 +322,15 @@
     border-color: #10b981;
   }
 
+  .centauro-input-dropdown-btn:hover {
+    color: rgba(255, 255, 255, 0.8) !important;
+  }
+
+  /* Hide native browser datalist drop-down arrows */
+  #centauro-input-expr::-webkit-calendar-picker-indicator {
+    display: none !important;
+  }
+
   .centauro-action-row {
     display: flex;
     gap: 8px;
@@ -465,6 +484,23 @@
     position: sticky;
     top: 0;
     z-index: 1;
+  }
+
+  .centauro-table tr.row-active {
+    background: rgba(96, 165, 250, 0.15); /* subtle blue active glow */
+  }
+
+  .centauro-table tr.row-active td {
+    border-bottom-color: rgba(96, 165, 250, 0.3);
+    color: #93c5fd;
+  }
+
+  .centauro-table-accidental {
+    font-family: 'HEJI2', sans-serif;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: #ffd966;
+    text-align: center;
   }
 
   /* SVG Keyboard styling */
@@ -632,8 +668,11 @@
   }
 
   .centauro-field--monitor {
-    flex: 2;
-    min-width: 240px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 120px;
+    margin-top: auto;
   }
 
   :global(.centauro-pitch-monitor) {
@@ -644,7 +683,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     padding: 4px 8px;
-    height: 50px;
+    flex: 1;
     overflow-y: auto;
     font-family: var(--font-sans, sans-serif);
   }
@@ -654,14 +693,14 @@
     font-size: 11px;
     text-align: left;
     font-style: italic;
-    line-height: 40px; /* Vertically centered */
+    line-height: 80px; /* Vertically centered in larger monitor */
   }
 
   :global(.centauro-monitor-row) {
     display: grid;
-    grid-template-columns: 75px 75px 80px;
+    grid-template-columns: 45px 70px 1fr;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     color: #fff;
     font-size: 11px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -676,7 +715,7 @@
 
   :global(.centauro-monitor-accidental) {
     font-family: 'HEJI2', sans-serif;
-    font-size: 33px; /* 10% larger than 30px to easily read the fine Helmholtz-Ellis accidentals! */
+    font-size: 24px;
     line-height: 1;
     color: #ffd966;
     text-align: center;
