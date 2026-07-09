@@ -280,6 +280,9 @@ export class CentauroController {
     }
 
     this.initTuning(initialTuning);
+    if (typeof window !== 'undefined' && window.innerWidth < 500) {
+      this.container.classList.add('sidebar-collapsed');
+    }
     this.setupListeners();
     this.setupMidi();
     this.setupMaxBridge();
@@ -345,6 +348,21 @@ export class CentauroController {
   }
 
   private setupListeners() {
+    // Sidebar toggle handlers
+    const closeBtn = this.container.querySelector('[data-centauro-sidebar-close]');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.container.classList.add('sidebar-collapsed');
+      });
+    }
+
+    const openBtn = this.container.querySelector('[data-centauro-sidebar-open]');
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        this.container.classList.remove('sidebar-collapsed');
+      });
+    }
+
     // Input listener
     const showDatalist = () => {
       try {
@@ -1111,15 +1129,23 @@ export class CentauroController {
     const loopCols = shape === 'triangle' ? cols * 2 : cols;
 
     // Dynamic sizing based on the keyboard panel container dimensions
-    let width = this.keyboardWrapper.clientWidth || 1000;
-    let height = this.keyboardWrapper.clientHeight || 500;
+    const minCellWidth = 40;
+    const minCellHeight = 35;
+    const minWidth = cols * minCellWidth;
+    const minHeight = rows * minCellHeight;
+
+    this.keyboardWrapper.style.minWidth = `${minWidth}px`;
+    this.keyboardWrapper.style.minHeight = `${minHeight}px`;
+
+    let width = this.keyboardWrapper.clientWidth || minWidth;
+    let height = this.keyboardWrapper.clientHeight || minHeight;
     if (height === 0) {
       const rect = this.keyboardWrapper.getBoundingClientRect();
-      width = rect.width || 1000;
-      height = rect.height || 500;
+      width = rect.width || minWidth;
+      height = rect.height || minHeight;
     }
     if (height === 0) {
-      height = 500;
+      height = minHeight;
     }
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1215,7 +1241,7 @@ export class CentauroController {
         poly.setAttribute('data-midi', p0.midi.toString());
         g.appendChild(poly);
 
-        drawLabels(p0.x, p0.y, p0.degreeObj, this.mapMode, p0.dx, p0.dy, this.qwertyToGrid, g);
+        drawLabels(p0.x, p0.y, p0.degreeObj, this.mapMode, p0.dx, p0.dy, this.qwertyToGrid, g, hSpacingX, hSpacingY);
 
         // Mouse hover glissando events
         g.addEventListener('mousedown', (event) => {
@@ -1309,7 +1335,7 @@ export class CentauroController {
             // Compute center of warped polygon for text label placement
             const cx = (p0.x + p1.x + p2.x + p3.x) / 4;
             const cy = (p0.y + p1.y + p2.y + p3.y) / 4;
-            drawLabels(cx, cy, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
+            drawLabels(cx, cy, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g, hSpacingX, hSpacingY);
 
           } else if (shape === 'triangle') {
             // Double-column triangle tiling layout covering 100% of available space
@@ -1352,7 +1378,7 @@ export class CentauroController {
             const cx = (p0.x + p1.x + p2.x) / 3;
             const cy = (p0.y + p1.y + p2.y) / 3;
             const textYOffset = pointingUp ? 3 : -1;
-            drawLabels(cx, cy + textYOffset, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g);
+            drawLabels(cx, cy + textYOffset, degreeObj, this.mapMode, dx, dy, this.qwertyToGrid, g, tSpacingX, tSpacingY);
           }
 
           // Mouse hover glissando events
@@ -1580,11 +1606,14 @@ function drawLabels(
   dx: number,
   dy: number,
   qwertyToGrid: Record<string, { dx: number; dy: number }>,
-  g: SVGElement
+  g: SVGElement,
+  cellWidth: number,
+  cellHeight: number
 ) {
   // Find QWERTY key mapped to this dx, dy in isomorphic mode
   let qwertyLabel = '';
-  if (mapMode === 'isomorphic') {
+  // Only show qwerty label if key is wide enough (>= 45px)
+  if (mapMode === 'isomorphic' && cellWidth >= 45) {
     const keys = Object.keys(qwertyToGrid);
     const keyFound = keys.find(k => {
       const coord = qwertyToGrid[k];
@@ -1595,19 +1624,40 @@ function drawLabels(
     }
   }
 
-  const textDeg = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  textDeg.setAttribute('x', x.toString());
-  textDeg.setAttribute('y', (y - 5).toString());
-  textDeg.setAttribute('class', 'centauro-key-text');
-  textDeg.style.fontSize = '10px';
-  textDeg.textContent = degreeObj.label;
-  g.appendChild(textDeg);
+  // Adjust font sizes based on cell width/height
+  let mainFontSize = '10px';
+  let subFontSize = '8px';
+  
+  if (cellWidth < 45) {
+    mainFontSize = '9px';
+    subFontSize = '7.5px';
+  }
+  if (cellWidth < 35) {
+    mainFontSize = '8px';
+    subFontSize = '7px';
+  }
 
-  const textCents = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-  textCents.setAttribute('x', x.toString());
-  textCents.setAttribute('y', (y + 8).toString());
-  textCents.setAttribute('class', 'centauro-key-subtext');
-  textCents.style.fontSize = '8px';
-  textCents.textContent = `${Math.round(degreeObj.cents)}c${qwertyLabel}`;
-  g.appendChild(textCents);
+  // Draw main label (degree) if cell is not extremely small
+  if (cellWidth >= 20 && cellHeight >= 20) {
+    const textDeg = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    textDeg.setAttribute('x', x.toString());
+    // If we hide cents, center the main text vertically
+    const yDeg = cellWidth < 30 ? y : (y - 5);
+    textDeg.setAttribute('y', yDeg.toString());
+    textDeg.setAttribute('class', 'centauro-key-text');
+    textDeg.style.fontSize = mainFontSize;
+    textDeg.textContent = degreeObj.label;
+    g.appendChild(textDeg);
+
+    // Draw cents/subtext only if cell is wide and tall enough (>= 30px)
+    if (cellWidth >= 30 && cellHeight >= 30) {
+      const textCents = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      textCents.setAttribute('x', x.toString());
+      textCents.setAttribute('y', (y + 8).toString());
+      textCents.setAttribute('class', 'centauro-key-subtext');
+      textCents.style.fontSize = subFontSize;
+      textCents.textContent = `${Math.round(degreeObj.cents)}c${qwertyLabel}`;
+      g.appendChild(textCents);
+    }
+  }
 }

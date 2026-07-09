@@ -21,68 +21,10 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
       /* Compact Ableton Layout styling */
       .conference-stage-panel--centauro {
         background: #252525 !important;
-        padding: 6px !important;
         height: 100vh !important;
-        box-sizing: border-box;
-        overflow: hidden;
-      }
-
-      .centauro-shell {
-        position: relative;
-        display: flex;
-        flex-direction: row !important;
-        height: 100% !important;
-        width: 100% !important;
-        gap: 0 !important;
-        overflow: hidden;
-      }
-
-      .centauro-header-controls {
-        flex: 0 0 240px !important;
-        width: 240px !important;
-        padding: 8px !important;
-        background: #2b2b2b !important;
-        border-right: 1px solid #3a3a3a !important;
-        gap: 6px !important;
-        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        z-index: 10;
-        box-sizing: border-box;
-      }
-
-      /* Collapsed sidebar state */
-      .sidebar-collapsed .centauro-header-controls {
-        transform: translateX(-100%);
-        margin-left: -240px !important;
-      }
-
-      .centauro-control-row {
-        flex-direction: column !important;
-        gap: 6px !important;
-      }
-
-      .centauro-field {
-        min-width: 0 !important;
-      }
-
-      .centauro-action-row {
-        gap: 6px !important;
-      }
-
-      .centauro-btn {
-        padding: 4px 8px !important;
-        font-size: 0.75rem !important;
-      }
-
-      .centauro-workspace {
-        flex: 1 !important;
-        min-width: 0;
-        gap: 0 !important;
-        height: 100% !important;
       }
 
       .centauro-keyboard-panel {
-        flex: 1 !important;
-        height: 100% !important;
         background: transparent !important;
         border: none !important;
         padding: 0 !important;
@@ -165,21 +107,8 @@ import CentauroPanel from '../components/room/generators/centauro/CentauroPanel.
           new CentauroController({ container: podContainer });
         }
 
-        // Close sidebar handler
-        const closeBtn = document.querySelector('[data-centauro-sidebar-close]');
-        if (closeBtn) {
-          closeBtn.addEventListener('click', () => {
-            document.body.classList.add('sidebar-collapsed');
-          });
-        }
+        // Close and open sidebar handlers are now handled internally by CentauroController.
 
-        // Open sidebar handler
-        const openBtn = document.querySelector('[data-centauro-sidebar-open]');
-        if (openBtn) {
-          openBtn.addEventListener('click', () => {
-            document.body.classList.remove('sidebar-collapsed');
-          });
-        }
 
         // Fullscreen Toggle using screenfull library + virtual-fullscreen fallback
         const fullscreenBtn = document.getElementById('centauro-fullscreen-btn');
