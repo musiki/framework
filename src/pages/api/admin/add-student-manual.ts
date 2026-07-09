@@ -2,6 +2,8 @@ import type { APIRoute } from 'astro';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../../../lib/roles';
 import { query } from '../../../lib/db/pool';
+import { registerEmailForUser } from '../../../lib/user-email';
+
 
 const clean = (v: unknown) => String(v || '').trim();
 const cleanLower = (v: unknown) => clean(v).toLowerCase();
@@ -129,6 +131,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       );
       if (insertErr) return new Response(JSON.stringify({ error: insertErr.message }), { status: 500 });
       userId = newId;
+      await registerEmailForUser(userId, email, true).catch(() => undefined);
     }
   }
 

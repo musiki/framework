@@ -138,56 +138,9 @@ export async function ensureDbUserFromSession(
     return normalizeDbUser(existing);
   }
 
-  // Create new user if not found
-  console.log('[DB] Creating new user for', normalizedEmail);
-  const now = new Date().toISOString();
-  const newUserId = crypto.randomUUID();
-  const insertPayload = {
-    id: newUserId,
-    email: normalizedEmail,
-    name: cleanString(session?.user?.name ?? normalizedEmail, 160) || normalizedEmail,
-    emailVerified: true,
-    image: session?.user?.image ?? null,
-    role: 'student',
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  const { data: insertedRows, error: insertError } = await query(
-    `INSERT INTO "User" ("id", "email", "name", "emailVerified", "image", "role", "createdAt", "updatedAt") 
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, email, name, role`,
-    [
-      insertPayload.id,
-      insertPayload.email,
-      insertPayload.name,
-      insertPayload.emailVerified,
-      insertPayload.image,
-      insertPayload.role,
-      insertPayload.createdAt,
-      insertPayload.updatedAt
-    ]
-  );
-
-  if (insertError) {
-    if (insertError.code === '23505') {
-       // Collision race: refetch
-       const { data: refetchedRows } = await query(
-        `SELECT id, email, name, role FROM "User" WHERE "email" ILIKE $1 LIMIT 1`,
-        [normalizedEmail]
-      );
-      if (refetchedRows?.[0]) return normalizeDbUser(refetchedRows[0]);
-    }
-    throw new Error(insertError.message || 'Database insert error');
-  }
-
-  const inserted = insertedRows?.[0];
-  if (inserted) {
-    try {
-      const { registerEmailForUser } = await import('./user-email');
-      await registerEmailForUser(inserted.id, normalizedEmail, true).catch(() => undefined);
-    } catch {}
-    return normalizeDbUser(inserted);
-  }
+  // Do not auto-create new users anymore to prevent backdoor entry
+  console.warn('[DB] User not found in database and auto-creation is disabled for email:', normalizedEmail);
+  return null;
 
   return null;
 }

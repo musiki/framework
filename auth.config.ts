@@ -1,6 +1,7 @@
 import Google from "@auth/core/providers/google";
 import { defineConfig } from "auth-astro";
 import { resolveAuthRedirectUrl } from "./src/lib/auth-origin";
+import { query } from "./src/lib/db/pool";
 
 // Astro/Vite will inject these, but we fallback to process.env for Node contexts
 const getEnv = (key: string) => {
@@ -81,6 +82,47 @@ export default defineConfig({
   ],
   secret: getEnv('AUTH_SECRET') || "fallback-musiki26-secret-must-change",
   callbacks: {
+    async signIn({ user }) {
+      const email = String(user?.email || '').trim().toLowerCase();
+      if (!email) {
+        console.warn("[AUTH-SIGNIN] Rejecting sign-in attempt: no email provided.");
+        return false;
+      }
+      
+      try {
+        const { data: ueRows, error: ueError } = await query(
+          `SELECT "userId" FROM "UserEmail" WHERE "email" = $1 LIMIT 1`,
+          [email]
+        );
+        if (ueError) {
+          console.error("[AUTH-SIGNIN] Database error checking UserEmail:", ueError);
+          return false;
+        }
+        if (ueRows && ueRows.length > 0) {
+          console.log(`[AUTH-SIGNIN] Allowed sign-in for registered user (UserEmail): ${email}`);
+          return true;
+        }
+
+        const { data: uRows, error: uError } = await query(
+          `SELECT "id" FROM "User" WHERE "email" ILIKE $1 LIMIT 1`,
+          [email]
+        );
+        if (uError) {
+          console.error("[AUTH-SIGNIN] Database error checking User:", uError);
+          return false;
+        }
+        if (uRows && uRows.length > 0) {
+          console.log(`[AUTH-SIGNIN] Allowed sign-in for registered user (User): ${email}`);
+          return true;
+        }
+
+        console.warn(`[AUTH-SIGNIN] Rejecting sign-in attempt from unregistered email: ${email}`);
+        return false;
+      } catch (err) {
+        console.error("[AUTH-SIGNIN] Error checking user registration:", err);
+        return false;
+      }
+    },
     async jwt({ token, user, profile }) {
       if (user || profile) {
         console.log(`[AUTH-JWT] Provider: ${token.sub ? 'Existing' : 'New'}, Email: ${user?.email || profile?.email || token.email}`);

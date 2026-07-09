@@ -1509,6 +1509,35 @@ const buildAdminMergeContextMenuItems = (sheet: DashboardSheet, meta: DashboardM
   }];
 };
 
+const buildAdminDeleteUserContextMenuItem = (sheet: DashboardSheet, meta: DashboardMeta) => {
+  const rowData = getAdminContextRow(sheet);
+  if (!rowData) return null;
+  const userId = normalizeText(rowData.userId || rowData.id);
+  const userName = normalizeText(rowData.name || rowData.email || 'este usuario');
+
+  return {
+    key: 'admin_delete_user',
+    name: `Borrar usuario: ${escapeHtml(userName)}`,
+    callback: async () => {
+      if (!userId || !window.confirm(`¿Borrar a ${userName}?`)) return;
+      try {
+        const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}?courseId=${encodeURIComponent(meta.courseId || '')}`, { method: 'DELETE' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          showToast(payload?.error || 'No se pudo borrar el usuario', 'error', 4000);
+          return;
+        }
+        showToast(`Usuario ${userName} borrado con éxito.`, 'success', 3000);
+        const rows = sheet.allRows.filter((row) => normalizeText(row.userId || row.id) !== userId);
+        sheet.allRows.splice(0, sheet.allRows.length, ...rows);
+        setSheetRows(sheet, rows);
+      } catch (err: any) {
+        showToast(err?.message || 'Error al borrar el usuario', 'error', 4000);
+      }
+    }
+  };
+};
+
 const buildTeacherMainUnenrollContextMenuItem = (
   sheet: DashboardSheet,
 ) => {
@@ -1956,6 +1985,12 @@ const createSheet = (
     afterChange: (changes, source) => {
       if (!changes?.length || ['loadData', 'updateData', 'filter', 'HiddenColumns.hide', 'HiddenColumns.show'].includes(String(source))) return;
       const sheet = sheetRef || { hot, kind, element, projectionColumns, allRows, activeRows, leafColumns, hiddenFields, compactWidths, userWidths, annotationState, modalRef };
+      
+      if (sheet.kind === 'admin') {
+        const shell = element.closest<HTMLElement>('.dashboard-shell') || document.body;
+        updateDeleteSelectedButtonState(sheet, shell);
+      }
+
       void Promise.all(changes.map(([visualRow, prop, oldValue, newValue]) =>
         persistCellChange(sheet, meta, Number(visualRow), String(prop), oldValue, newValue)
       )).catch((error) => console.error('Dashboard sheet save failed:', error));
@@ -2023,13 +2058,24 @@ const createSheet = (
       if (sheetRef.kind !== 'admin') return;
       const enrollmentMenuItems = buildAdminEnrollmentContextMenuItems(sheetRef, allRows, meta);
       const mergeMenuItems = buildAdminMergeContextMenuItems(sheetRef, meta);
-      if (enrollmentMenuItems && mergeMenuItems) {
-        menuItems.splice(0, menuItems.length, ...enrollmentMenuItems, Handsontable.plugins.ContextMenu.SEPARATOR, ...mergeMenuItems);
-      } else if (enrollmentMenuItems) {
-        menuItems.splice(0, menuItems.length, ...enrollmentMenuItems);
-      } else if (mergeMenuItems) {
-        menuItems.splice(0, menuItems.length, ...mergeMenuItems);
+      const deleteUserMenuItem = buildAdminDeleteUserContextMenuItem(sheetRef, meta);
+      
+      const items = [];
+      if (enrollmentMenuItems) {
+        items.push(...enrollmentMenuItems);
+        items.push(Handsontable.plugins.ContextMenu.SEPARATOR);
       }
+      if (mergeMenuItems) {
+        items.push(...mergeMenuItems);
+        items.push(Handsontable.plugins.ContextMenu.SEPARATOR);
+      }
+      if (deleteUserMenuItem) {
+        items.push(deleteUserMenuItem);
+      }
+      if (items.length && items[items.length - 1] === Handsontable.plugins.ContextMenu.SEPARATOR) {
+        items.pop();
+      }
+      menuItems.splice(0, menuItems.length, ...items);
     },
     beforeOnCellContextMenu: (_event, coords) => {
       if (!sheetRef) return;
@@ -2295,7 +2341,61 @@ const unfoldSheet = (sheet: DashboardSheet) => {
 const isTeacherMainSheetFolded = (sheet: DashboardSheet | null | undefined) =>
   Boolean(sheet && sheet.kind === 'teacher-main' && sheet.element.dataset.foldPreset === 'teacher-main');
 
+const updateDeleteSelectedButtonState = (sheet: DashboardSheet, root: HTMLElement) => {
+  const deleteBtn = root.querySelector<HTMLButtonElement>('[data-dashboard-admin-delete-selected]');
+  if (!deleteBtn) return;
+  const hasSelected = sheet.allRows.some((row) => row.__rowSelect === true);
+  deleteBtn.disabled = !hasSelected;
+};
+
 const bindToolbarButtons = (root: HTMLElement, registry: Map<string, DashboardSheet>, meta: DashboardMeta) => {
+  root.querySelectorAll<HTMLButtonElement>('[data-dashboard-admin-delete-selected]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const sheet = registry.get('admin');
+      if (!sheet) return;
+
+      const selectedRows = sheet.allRows.filter((row) => row.__rowSelect === true);
+      if (!selectedRows.length) return;
+
+      const confirmed = window.confirm(`¿Borrar los ${selectedRows.length} usuarios seleccionados?`);
+      if (!confirmed) return;
+
+      button.disabled = true;
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const row of selectedRows) {
+        const userId = normalizeText(row.userId || row.id);
+        if (!userId) continue;
+
+        try {
+          const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}?courseId=${encodeURIComponent(meta.courseId || '')}`, {
+            method: 'DELETE',
+          });
+          if (response.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        showToast(`${successCount} usuarios borrados con éxito.`, 'success', 4000);
+        const remainingRows = sheet.allRows.filter((row) => row.__rowSelect !== true);
+        sheet.allRows.splice(0, sheet.allRows.length, ...remainingRows);
+        setSheetRows(sheet, remainingRows);
+      }
+      if (failCount > 0) {
+        showToast(`No se pudieron borrar ${failCount} usuarios.`, 'error', 4500);
+      }
+
+      button.disabled = true;
+    });
+  });
+
   root.querySelectorAll<HTMLButtonElement>('[data-dashboard-download]').forEach((button) => {
     button.addEventListener('click', () => {
       const key = normalizeText(button.dataset.dashboardDownload);

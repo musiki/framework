@@ -123,7 +123,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }
         userId = newId;
         // Register email in UserEmail for multi-email identity
-        await registerEmailForUser(undefined, userId, email, true).catch(() => undefined);
+        await registerEmailForUser(userId, email, true).catch(() => undefined);
       } else {
         userId = resolvedId;
       }
