@@ -1512,38 +1512,54 @@ export class CentauroController {
       const dev = row.centsFrom12TET;
       const options = SPELLING_OPTIONS[pc] || [{ name: 'C', baseChar: 'n', pythDev: 0.0 }];
 
-      let bestOption = options[0];
-      let bestS = 0;
-      let minError = Infinity;
+      let accidental = 'n';
+      let offset: number | undefined = undefined;
 
-      // Tempered pitch check (bypass microtonal arrow commas if close to 12-TET step)
-      const isTempered = Math.abs(dev) < 3.0;
+      if (dev >= 40.0) {
+        accidental = '4';
+        const remaining = dev - 53.27;
+        const off = Math.round(remaining);
+        if (Math.abs(off) >= 1) {
+          offset = off;
+        }
+      } else if (dev <= -40.0) {
+        accidental = '5';
+        const remaining = dev + 53.27;
+        const off = Math.round(remaining);
+        if (Math.abs(off) >= 1) {
+          offset = off;
+        }
+      } else {
+        // Tempered pitch check (bypass microtonal arrow commas if close to 12-TET step)
+        const isTempered = Math.abs(dev) < 3.0;
+        let bestOption = options[0];
+        let bestS = 0;
+        let minError = Infinity;
 
-      for (const option of options) {
-        // We only test syntonic commas (S from -2 to 2) to get exactly ONE accidental character
-        const S_list = isTempered ? [0] : [-2, -1, 0, 1, 2];
-        for (const S of S_list) {
-          const approx = option.pythDev + S * 21.506;
-          const err = Math.abs(dev - approx);
-          if (err < minError) {
-            minError = err;
-            bestOption = option;
-            bestS = S;
+        for (const option of options) {
+          // We only test syntonic commas (S from -2 to 2) to get exactly ONE accidental character
+          const S_list = isTempered ? [0] : [-2, -1, 0, 1, 2];
+          for (const S of S_list) {
+            const approx = option.pythDev + S * 21.506;
+            const err = Math.abs(dev - approx);
+            if (err < minError) {
+              minError = err;
+              bestOption = option;
+              bestS = S;
+            }
           }
+        }
+
+        accidental = getSyntonicBaseChar(bestOption.baseChar, bestS);
+        const remaining = dev - (bestOption.pythDev + bestS * 21.506);
+        const off = Math.round(remaining);
+        if (!isTempered && Math.abs(off) >= 1) {
+          offset = off;
         }
       }
 
-      // 1. Accidental base character (exactly one HEJI character)
-      row.hejiAccidental = getSyntonicBaseChar(bestOption.baseChar, bestS);
-
-      // 2. Cents residual offset as discrete numeric superscript (+ or - cents)
-      const remaining = dev - (bestOption.pythDev + bestS * 21.506);
-      const offset = Math.round(remaining);
-      if (!isTempered && Math.abs(offset) >= 1) {
-        row.hejiOffset = offset;
-      } else {
-        row.hejiOffset = undefined;
-      }
+      row.hejiAccidental = accidental;
+      row.hejiOffset = offset;
     }
   }
 

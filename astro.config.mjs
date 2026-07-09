@@ -77,7 +77,7 @@ export default defineConfig({
   vite: {
     server: viteServerConfig,
     ssr: {
-      noExternal: ['mermaid', 'cytoscape-cose-bilkent', 'cose-base']
+      noExternal: ['mermaid', 'cytoscape-cose-bilkent', 'cose-base', /^@lezer\//]
     },
     optimizeDeps: {
       exclude: ['force-graph', 'three'],
