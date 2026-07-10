@@ -36,6 +36,10 @@ const callbackUrl = `${authOrigin}${callbackPath}`;
 if (session?.user?.email) {
     return Astro.redirect(callbackPath);
 }
+
+// When Logto is configured it replaces authentik as the primary login;
+// Google stays below as fallback in both cases.
+const logtoEnabled = Boolean(process.env.LOGTO_ISSUER_URL || import.meta.env.LOGTO_ISSUER_URL);
 ---
 <html lang="es">
 <head>
@@ -88,9 +92,15 @@ if (session?.user?.email) {
     <main class="wrap">
         <h1>Iniciar Sesión</h1>
         <div class="provider-login">
-            <SignIn provider="authentik" options={{ callbackUrl }}>
-                <span class="btn-authentik">Entrar a Musiki</span>
-            </SignIn>
+            {logtoEnabled ? (
+                <SignIn provider="logto" options={{ callbackUrl }}>
+                    <span class="btn-authentik">Iniciar sesión</span>
+                </SignIn>
+            ) : (
+                <SignIn provider="authentik" options={{ callbackUrl }}>
+                    <span class="btn-authentik">Entrar a Musiki</span>
+                </SignIn>
+            )}
 
             <div class="divider"></div>
 

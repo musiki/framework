@@ -25,6 +25,32 @@ if (typeof process !== 'undefined') {
 
 console.log(`[AUTH-CONFIG] Mode: ${isDev ? 'DEV' : 'PROD'}, Origin: ${AUTH_ORIGIN}`);
 
+// Logto is enabled only when its env vars are present, so this config stays
+// compatible with deployments that still use authentik alone.
+const LOGTO_ISSUER = getEnv('LOGTO_ISSUER_URL');
+const logtoProvider = LOGTO_ISSUER
+  ? [{
+      id: "logto",
+      name: "Logto",
+      type: "oidc" as const,
+      issuer: LOGTO_ISSUER,
+      clientId: getEnv('LOGTO_CLIENT_ID'),
+      clientSecret: getEnv('LOGTO_CLIENT_SECRET'),
+      allowDangerousEmailAccountLinking: true,
+      authorization: { params: { scope: "openid profile email" } },
+      checks: ["pkce", "state"] as ("pkce" | "state")[],
+      onProfile(profile: Record<string, unknown>) {
+        console.log(`[AUTH-LOGTO] Profile received for: ${profile.email}`);
+        return {
+          id: profile.sub,
+          name: (profile.name as string) ?? (profile.username as string),
+          email: profile.email,
+          image: profile.picture,
+        };
+      },
+    }]
+  : [];
+
 export default defineConfig({
   debug: isDev,
   trustHost: true,
@@ -50,6 +76,7 @@ export default defineConfig({
     },
   },
   providers: [
+    ...logtoProvider,
     Google({
       clientId: getEnv('GOOGLE_CLIENT_ID'),
       clientSecret: getEnv('GOOGLE_CLIENT_SECRET'),
