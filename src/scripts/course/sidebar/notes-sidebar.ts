@@ -361,6 +361,9 @@ export function renderNotesSidebar(
         a.href = noteUrl;
         a.className = 'lesson-link' + (isActive ? ' active' : '');
         a.dataset.astroPrefetch = 'false';
+        a.dataset.courseId = courseId;
+        a.dataset.lessonPageSlug = note.slug;
+        if (isActive) a.setAttribute('aria-current', 'page');
         a.draggable = !note.slug.startsWith('public/');
 
         const titleText = note.title || child.name.replace(/\.md$/, '');
@@ -878,6 +881,9 @@ export function renderNotesSidebar(
         a.href = noteUrl;
         a.className = 'lesson-link' + (isActive ? ' active' : '');
         a.dataset.astroPrefetch = 'false';
+        a.dataset.courseId = courseId;
+        a.dataset.lessonPageSlug = note.slug;
+        if (isActive) a.setAttribute('aria-current', 'page');
         a.draggable = !note.slug.startsWith('public/');
 
         const titleText = note.title || note.slug.split('/').pop()?.replace('.md', '') || note.slug;
@@ -1251,6 +1257,42 @@ export function initNotesSidebar(
   window.addEventListener('note-open', (e: Event) => {
     const detail = (e as CustomEvent<{ slug?: string }>).detail;
     if (detail?.slug) currentActive = detail.slug;
+  }, { signal });
+
+  window.addEventListener('musiki:active-note', (e: Event) => {
+    const detail = (e as CustomEvent<{ slug?: string; courseId?: string }>).detail;
+    const nextSlug = String(detail?.slug || '').trim();
+    const eventCourseId = String(detail?.courseId || '').trim();
+    if (!nextSlug || (eventCourseId && eventCourseId !== courseId)) return;
+
+    currentActive = nextSlug;
+    container.dataset.activeSlug = nextSlug;
+    const normalize = (value: string) => value
+      .split(/[?#]/, 1)[0]
+      .replace(/^\/+|\.(?:md|mdx)$/gi, '')
+      .toLowerCase();
+    const normalizedActive = normalize(nextSlug);
+    const normalizedCourse = normalize(courseId);
+    let activeLink: HTMLAnchorElement | null = null;
+
+    container.querySelectorAll<HTMLAnchorElement>('a.lesson-link[data-lesson-page-slug]').forEach((link) => {
+      const linkSlug = normalize(link.dataset.lessonPageSlug || '');
+      const isActive = linkSlug === normalizedActive
+        || linkSlug === `${normalizedCourse}/${normalizedActive}`
+        || normalizedActive === `${normalizedCourse}/${linkSlug}`;
+      link.classList.toggle('active', isActive);
+      if (isActive) {
+        link.setAttribute('aria-current', 'page');
+        activeLink = link;
+      } else {
+        link.removeAttribute('aria-current');
+      }
+    });
+
+    if (activeLink) {
+      activeLink.closest('details')?.setAttribute('open', '');
+      window.requestAnimationFrame(() => activeLink?.scrollIntoView({ block: 'nearest' }));
+    }
   }, { signal });
 
   void refresh();

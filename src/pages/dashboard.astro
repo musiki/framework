@@ -2,6 +2,7 @@
 // src/pages/dashboard.astro
 import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
+import SiteThemeSwitch from '../components/SiteThemeSwitch.astro';
 import {
   getResultIcon,
   getSubmissionAnswerText,
@@ -3549,6 +3550,21 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
         flex: 1 1 auto;
         min-width: 0;
       }
+      .dashboard-theme-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex: 0 0 auto;
+        min-width: max-content;
+      }
+      .dashboard-theme-label {
+        color: var(--c-fg-dim);
+        font-size: 0.65rem;
+        font-weight: 650;
+        letter-spacing: 0.07em;
+        line-height: 1;
+        text-transform: uppercase;
+      }
       .dashboard-topbar-context {
         display: inline-flex;
         align-items: flex-end;
@@ -6644,6 +6660,12 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
               </button>
             </div>
           </div>
+          {viewerHasTeacherRole && (
+            <div class="dashboard-theme-control" aria-label="Tema editorial global">
+              <span class="dashboard-theme-label">Tema global</span>
+              <SiteThemeSwitch variant="dashboard" />
+            </div>
+          )}
         </nav>
         <div class="teacher-dashboard-panels">
           <div

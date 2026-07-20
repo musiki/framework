@@ -2337,13 +2337,13 @@ function renderLessonsTreeHTML(
 
       /* ── Starlight-aligned reading column ────────────────────────────────── */
       .content-area > .class-content {
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-family: var(--font-reading, Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
       }
       .content-area > .class-content :is(p, li, blockquote) {
-        line-height: 1.75;
+        line-height: var(--reading-line-height, 1.75);
       }
       .content-area > .class-content :is(h1, h2, h3, h4) {
-        line-height: 1.25;
+        line-height: var(--reading-heading-line-height, 1.25);
         letter-spacing: -0.01em;
       }
       .content-area > .class-content :is(h2, h3) {
@@ -2865,7 +2865,7 @@ function renderLessonsTreeHTML(
         height: 100%;
         overflow-y: auto;
         scrollbar-gutter: stable;
-        font-size: 1.15rem;
+        font-size: var(--reading-font-size, 1.15rem);
       }
 
       .content-area > :not(.course-nav) {
@@ -2875,14 +2875,14 @@ function renderLessonsTreeHTML(
       .content-area > .class-content:not([data-entry-type='recursos-editor']) {
         box-sizing: border-box;
         width: 100%;
-        max-width: min(100%, 86ch);
+        max-width: min(100%, var(--reading-measure, 86ch));
         margin-inline: auto;
       }
 
       .public-note-relations {
         box-sizing: border-box;
         width: 100%;
-        max-width: min(100%, 86ch);
+        max-width: min(100%, var(--reading-measure, 86ch));
         margin: clamp(2.5rem, 5vw, 4rem) auto 0;
         padding-top: 1.35rem;
         border-top: 1px solid color-mix(in srgb, var(--c-border) 78%, transparent);
@@ -4436,8 +4436,8 @@ function renderLessonsTreeHTML(
       }
 
       .course-container[data-public-reader='true'] .content-area > .class-content:not([data-entry-type='recursos-editor']) {
-        width: min(100%, 86ch);
-        max-width: 86ch;
+        width: min(100%, var(--reading-measure, 86ch));
+        max-width: var(--reading-measure, 86ch);
       }
 
       @media (max-width: 1024px) {
@@ -12151,6 +12151,53 @@ function renderLessonsTreeHTML(
       if (!window.__musikiPageInfoBound) {
         window.__musikiPageInfoBound = true;
         window.addEventListener('musiki:active-note', (e) => { refreshPageInfo(e && e.detail ? e.detail : {}); });
+      }
+
+      function syncActiveNoteInSidebar(detail) {
+        const rawSlug = String(detail && detail.slug ? detail.slug : '').trim();
+        if (!rawSlug) return;
+        const rawCourseId = String(detail && detail.courseId ? detail.courseId : '').trim();
+        const normalize = (value) => String(value || '')
+          .split(/[?#]/, 1)[0]
+          .replace(/^\/+|\.(?:md|mdx)$/gi, '')
+          .toLowerCase();
+        const activeSlug = normalize(rawSlug);
+        const activeCourseId = normalize(rawCourseId);
+        let activeLink = null;
+
+        document.querySelectorAll('.sidebar--left .lesson-link[data-lesson-page-slug]').forEach((link) => {
+          const linkSlug = normalize(link.dataset.lessonPageSlug);
+          const linkCourseId = normalize(link.dataset.courseId);
+          const sameCourse = !activeCourseId || !linkCourseId || activeCourseId === linkCourseId;
+          const isActive = sameCourse && (
+            linkSlug === activeSlug
+            || linkSlug === `${activeCourseId}/${activeSlug}`
+            || activeSlug === `${activeCourseId}/${linkSlug}`
+          );
+          link.classList.toggle('active', isActive);
+          if (isActive) {
+            link.setAttribute('aria-current', 'page');
+            activeLink = link;
+          } else {
+            link.removeAttribute('aria-current');
+          }
+        });
+
+        if (activeLink) {
+          let parent = activeLink.parentElement;
+          while (parent && parent.closest('.sidebar--left')) {
+            if (parent instanceof HTMLDetailsElement) parent.open = true;
+            parent = parent.parentElement;
+          }
+          window.requestAnimationFrame(() => activeLink.scrollIntoView({ block: 'nearest' }));
+        }
+      }
+      const activeNoteSidebarWindow = window as any;
+      if (!activeNoteSidebarWindow.__musikiActiveNoteSidebarBound) {
+        activeNoteSidebarWindow.__musikiActiveNoteSidebarBound = true;
+        window.addEventListener('musiki:active-note', (e) => {
+          syncActiveNoteInSidebar(e && e.detail ? e.detail : {});
+        });
       }
 
       function setupReadTracking() {

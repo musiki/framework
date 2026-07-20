@@ -176,7 +176,7 @@ const courseItems = rawCursos
 const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.getTime() - a.date.getTime());
 ---
 
-<html lang="es">
+<html lang="es" class="musiki-continuous-canvas">
   <head>
     <BaseHead
       title="musiki"
@@ -650,7 +650,7 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
       }
     </style>
   </head>
-  <body>
+  <body class="musiki-continuous-canvas">
     <Header />
     <main class="wrap home-main">
       <section class="panel">

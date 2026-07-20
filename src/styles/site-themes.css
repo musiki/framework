@@ -1,0 +1,539 @@
+@import '@fontsource-variable/literata/wght.css';
+@import '@fontsource-variable/literata/wght-italic.css';
+@import '@fontsource-variable/atkinson-hyperlegible-next/wght.css';
+@import '@fontsource-variable/atkinson-hyperlegible-next/wght-italic.css';
+
+/*
+ * Editorial layout is shared by Default and Invulne. Themes only choose color
+ * tokens and font families; measure, rhythm, hierarchy and geometry stay fixed.
+ */
+:root {
+  --font-reading: var(--font-family-primary);
+  --font-interface: var(--font-family-primary);
+  --reading-measure: 68ch;
+  --reading-font-size: clamp(1.08rem, 1.02rem + 0.24vw, 1.2rem);
+  --reading-line-height: 1.72;
+  --reading-heading-line-height: 1.18;
+  --invulne-surface-raised: var(--c-bg);
+  --invulne-surface-contained: var(--c-bg-mute);
+  --invulne-border-emphasis: var(--c-border);
+  --invulne-shadow-contained: 0 1px 2px rgba(15, 18, 25, 0.04), 0 10px 30px rgba(15, 18, 25, 0.045);
+  --invulne-nav-active: var(--c-link);
+  --invulne-nav-rail: var(--c-link);
+  --invulne-nav-signal: var(--bullet-3);
+}
+
+/* Landing surfaces intentionally share one canvas with the fixed Header. */
+html.musiki-continuous-canvas {
+  --musiki-continuous-canvas-bg: #fff;
+  background: var(--musiki-continuous-canvas-bg);
+}
+
+html.dark.musiki-continuous-canvas {
+  --musiki-continuous-canvas-bg: var(--c-bg);
+}
+
+body.musiki-continuous-canvas,
+body.musiki-continuous-canvas > main,
+body.musiki-continuous-canvas > header,
+body.musiki-continuous-canvas > header nav {
+  background: var(--musiki-continuous-canvas-bg) !important;
+}
+
+body.musiki-continuous-canvas > header {
+  border-bottom-color: transparent !important;
+}
+
+html[data-musiki-theme='invulne'] {
+  --font-reading: 'Literata Variable', Charter, 'Bitstream Charter', Georgia, serif;
+  --font-interface: 'Atkinson Hyperlegible Next Variable', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-family-primary: var(--font-interface);
+  --invulne-surface-raised: #fffdf8;
+  --invulne-surface-contained: #f0ece3;
+  --invulne-border-emphasis: #b8ad9d;
+  --invulne-shadow-contained: 0 1px 2px rgba(54, 48, 38, 0.04), 0 10px 30px rgba(54, 48, 38, 0.045);
+  --invulne-nav-active: #244f62;
+  --invulne-nav-rail: #248aa5;
+  --invulne-nav-signal: #a44270;
+  --c-bg: #f8f5ee;
+  --c-bg-surface: #fffdf8;
+  --c-bg-alt: #e9e4da;
+  --c-bg-mute: #f0ece3;
+  --c-fg: #292722;
+  --c-subtle: #575249;
+  --c-fg-dim: #6a645a;
+  --c-fg-subtle: #81796d;
+  --c-link: #315f73;
+  --c-border: #d5cec1;
+  --accent: #315f73;
+  --accent-dark: #234858;
+  color-scheme: light;
+}
+
+html.dark[data-musiki-theme='invulne'] {
+  --invulne-surface-raised: #242521;
+  --invulne-surface-contained: #20211e;
+  --invulne-border-emphasis: #5a584f;
+  --invulne-shadow-contained: 0 1px 2px rgba(0, 0, 0, 0.18), 0 12px 36px rgba(0, 0, 0, 0.14);
+  --invulne-nav-active: #ddf8f6;
+  --invulne-nav-rail: #62d9e9;
+  --invulne-nav-signal: #ff6cae;
+  --c-bg: #1a1b18;
+  --c-bg-surface: #242521;
+  --c-bg-alt: #30312c;
+  --c-bg-mute: #262722;
+  /* Neutral-warm reading ink: high contrast without pure-white glare or blue cast. */
+  --c-fg: #d9d9d4;
+  --c-subtle: #b9b8b1;
+  --c-fg-dim: #9f9e97;
+  --c-fg-subtle: #85847e;
+  --c-link: #9bc8d8;
+  --c-border: #45463f;
+  --accent: #8bbdcc;
+  --accent-dark: #b6dce7;
+  color-scheme: dark;
+}
+
+html[data-musiki-theme] body {
+  background: var(--c-bg);
+  color: var(--c-fg);
+}
+
+html[data-musiki-theme] :where(header, .ribbon, .sidebar, #infobox-sidebar, .course-nav) {
+  font-family: var(--font-interface);
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor'])) {
+  font-family: var(--font-reading);
+  color: var(--c-fg);
+  font-optical-sizing: auto;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  text-rendering: optimizeLegibility;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  :where(p, li, blockquote, dd) {
+  line-height: var(--reading-line-height);
+  text-wrap: pretty;
+  hanging-punctuation: first last;
+  hyphens: auto;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  :where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-interface);
+  line-height: var(--reading-heading-line-height);
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  :where(h2, h3) {
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 58%, transparent);
+  padding-bottom: 0.22em;
+}
+
+html[data-musiki-theme] :where(.prose, .cnw-md, .content-area > .class-content) a {
+  color: var(--c-link);
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 42%, transparent);
+  text-decoration-thickness: 0.07em;
+  text-underline-offset: 0.16em;
+}
+
+html[data-musiki-theme] :where(.prose, .cnw-md, .content-area > .class-content) a:hover {
+  text-decoration-color: currentColor;
+}
+
+html[data-musiki-theme] :where(.prose, .cnw-md, .content-area > .class-content) > .callout {
+  margin-block: 1.65rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-link);
+  border-radius: 6px;
+  background: var(--invulne-surface-contained);
+  box-shadow: none;
+}
+
+html[data-musiki-theme] :where(.prose, .cnw-md, .content-area > .class-content) > .callout-def:first-child {
+  margin-top: 0;
+  padding: 1.1rem 1.2rem;
+  border-left-width: 1px;
+  border-color: var(--invulne-border-emphasis);
+  background: var(--invulne-surface-raised);
+  box-shadow: var(--invulne-shadow-contained);
+  font-size: 1.04em;
+}
+
+html[data-musiki-theme] :where(.prose, .cnw-md, .content-area > .class-content) .callout-body > :last-child {
+  margin-bottom: 0;
+}
+
+html[data-musiki-theme] :where(.prose, .cnw-md, .content-area > .class-content) blockquote {
+  margin-inline: 0;
+  padding: 0.15rem 0 0.15rem 1.15rem;
+  border-left: 2px solid var(--invulne-border-emphasis);
+  background: transparent;
+  color: var(--c-subtle);
+}
+
+html[data-musiki-theme] :where(.prose, .cnw-md, .content-area > .class-content) :where(pre, table) {
+  border: 1px solid var(--c-border);
+  background: var(--invulne-surface-raised);
+}
+
+html[data-musiki-theme] :where(.prose, .cnw-md, .content-area > .class-content) :where(img, figure, .mermaid) {
+  margin-block: 1.8rem;
+}
+
+html[data-musiki-theme] main.wiki-layout {
+  grid-template-columns: minmax(0, var(--reading-measure)) 220px;
+  justify-content: center;
+  gap: clamp(1.5rem, 4vw, 4rem);
+}
+
+html[data-musiki-theme] main.wiki-layout .article-header {
+  font-family: var(--font-interface);
+}
+
+html[data-musiki-theme] main.wiki-layout .prose {
+  width: 100%;
+  max-width: var(--reading-measure);
+}
+
+html[data-musiki-theme] .content-area {
+  background: var(--c-bg);
+}
+
+html[data-musiki-theme] .public-note-relations {
+  max-width: min(100%, var(--reading-measure));
+  font-family: var(--font-interface);
+}
+
+/* Starlight-scale course navigation, with a restrained cyberpunk locator. */
+html[data-musiki-theme] .course-container {
+  --left-sidebar-width: clamp(288px, 20vw, 330px);
+}
+
+html[data-musiki-theme] .sidebar--left {
+  --course-sidebar-pad-x: 1rem;
+  font-family: var(--font-interface);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--c-fg) 2.5%, transparent), transparent 9rem),
+    color-mix(in srgb, var(--c-fg) 3%, var(--c-bg));
+}
+
+html[data-musiki-theme] .sidebar--left .chapter {
+  margin-bottom: 0.5rem;
+}
+
+html[data-musiki-theme] .sidebar--left .chapter-title {
+  padding: 0.28rem 0.5rem !important;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.055em;
+}
+
+html[data-musiki-theme] .sidebar--left .lesson-list {
+  gap: 0.08rem;
+  margin: 0.12rem 0 0.48rem 0.5rem;
+  padding-left: 0.5rem;
+}
+
+html[data-musiki-theme] .sidebar--left .lesson-link {
+  position: relative;
+  padding: 0.34rem 0.5rem !important;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  font-size: 0.95rem !important;
+  line-height: 1.4;
+  color: var(--c-subtle);
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+html[data-musiki-theme] .sidebar--left .lesson-link:hover {
+  color: var(--c-fg);
+  background: color-mix(in srgb, var(--c-fg) 5%, transparent);
+}
+
+html[data-musiki-theme] .sidebar--left .lesson-link.active {
+  color: var(--invulne-nav-active);
+  font-weight: 680;
+  border-color: color-mix(in srgb, var(--invulne-nav-rail) 24%, transparent);
+  border-left-color: transparent;
+  border-radius: 0 0.25rem 0.25rem 0;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--invulne-nav-rail) 17%, transparent), color-mix(in srgb, var(--invulne-nav-signal) 5%, transparent) 78%, transparent),
+    color-mix(in srgb, var(--c-bg-surface, var(--c-bg)) 78%, transparent);
+  box-shadow:
+    inset 3px 0 0 var(--invulne-nav-rail),
+    0 0 14px color-mix(in srgb, var(--invulne-nav-rail) 9%, transparent);
+}
+
+html[data-musiki-theme] .sidebar--left .lesson-link.active::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-top: 1px solid var(--invulne-nav-signal);
+  border-right: 1px solid var(--invulne-nav-signal);
+  opacity: 0.86;
+}
+
+html[data-musiki-theme] .sidebar--left .class-toc--inline {
+  margin: 0.2rem 0 0.6rem 0.5rem;
+  padding-left: 0.6rem;
+}
+
+html[data-musiki-theme] .sidebar--left .class-toc--inline > details > summary.chapter-title {
+  padding: 0.24rem 0.4rem !important;
+  font-size: 0.78rem;
+  letter-spacing: 0.07em;
+}
+
+html[data-musiki-theme] .sidebar--left .class-toc-link {
+  padding: 0.22rem 0.42rem !important;
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+  color: var(--c-subtle) !important;
+}
+
+html[data-musiki-theme] .sidebar--left .class-toc-link:hover,
+html[data-musiki-theme] .sidebar--left .class-toc-link.level-1 {
+  color: var(--c-fg) !important;
+}
+
+/* Bring Conceptos, Recursos and Notas subtrees into the same Starlight rhythm. */
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-tree {
+  gap: 0.18rem;
+  margin: 0.12rem 0 0.5rem 0.25rem;
+  padding: 0;
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-session {
+  gap: 0.12rem;
+  padding-left: 0.5rem;
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-session-name,
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-folder-name,
+html[data-musiki-theme] .sidebar--left .notas-sb-folder {
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 0.25rem;
+  color: var(--c-subtle);
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-session-name:hover,
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-folder-name:hover,
+html[data-musiki-theme] .sidebar--left .notas-sb-folder:hover {
+  color: var(--c-fg);
+  background: color-mix(in srgb, var(--c-fg) 5%, transparent);
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-session-caret,
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-folder-caret,
+html[data-musiki-theme] .sidebar--left .notas-sb-folder-caret {
+  width: 0.8rem !important;
+  font-size: 0.9rem !important;
+  line-height: 1;
+  text-align: center;
+  color: var(--c-fg-dim) !important;
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-folder-name > span:not(.recursos-sidebar-folder-caret),
+html[data-musiki-theme] .sidebar--left .notas-sb-folder-icon {
+  color: var(--c-fg-dim) !important;
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-resource-list,
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-folder-items {
+  gap: 0.08rem;
+  margin-block: 0.08rem 0.2rem;
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-folder {
+  gap: 0.08rem;
+  padding-left: 0.5rem;
+  border-left-color: color-mix(in srgb, var(--c-border) 70%, transparent);
+}
+
+html[data-musiki-theme]
+  .sidebar--left
+  :is(.lesson-list, .recursos-sidebar-resource-list)
+  > .recursos-sidebar-resource-item
+  > .recursos-sidebar-folder {
+  padding-left: 0;
+  border-left-color: transparent;
+}
+
+html[data-musiki-theme]
+  .sidebar--left
+  .recursos-sidebar-folder
+  .recursos-sidebar-folder {
+  padding-left: 0.5rem;
+  border-left-color: color-mix(in srgb, var(--c-border) 70%, transparent);
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-resource-link,
+html[data-musiki-theme] .sidebar--left .notas-sb-item,
+html[data-musiki-theme] .sidebar--left .notas-sb-placeholder {
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.32rem 0.48rem;
+  border-radius: 0.25rem;
+  color: var(--c-subtle);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-resource-link:hover,
+html[data-musiki-theme] .sidebar--left .notas-sb-item:hover,
+html[data-musiki-theme] .sidebar--left .notas-sb-placeholder:hover {
+  color: var(--c-fg);
+  background: color-mix(in srgb, var(--c-fg) 5%, transparent);
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-resource-icon,
+html[data-musiki-theme] .sidebar--left .notas-sb-item .lesson-icon {
+  width: 0.95rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+html[data-musiki-theme] .sidebar--left .recursos-sidebar-resource-folder {
+  font-size: 0.78rem;
+}
+
+html[data-musiki-theme] .sidebar--left .notas-sb-level {
+  gap: 0.08rem;
+  margin: 0.1rem 0 0.42rem 0.25rem;
+  padding-left: 0.5rem;
+  border-left-color: color-mix(in srgb, var(--c-border) 70%, transparent);
+}
+
+html[data-musiki-theme] .sidebar--left .notas-sb-level .notas-sb-level {
+  margin-left: 0.5rem !important;
+  padding-left: 0.5rem !important;
+  border-left-color: color-mix(in srgb, var(--c-border) 70%, transparent) !important;
+}
+
+/* Geometric reading-list markers aligned to the first line at every depth. */
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  ul {
+  margin-block: 0.85em 1.05em;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  li > ul {
+  margin-block: 0.38em 0.52em;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  ul > li {
+  position: relative;
+  padding-left: 1.18em;
+  margin-block: 0.42em;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  ul > li::before {
+  content: '';
+  position: absolute;
+  left: 0.1em;
+  top: 0.59em;
+  top: calc(0.5lh - 0.28em);
+  width: 0.72em;
+  height: 0.72em;
+  background: #d4d700;
+  clip-path: polygon(12% 5%, 94% 50%, 12% 95%);
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  ul ul > li {
+  padding-left: 1.38em;
+  margin-block: 0.32em;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  ul ul > li::before {
+  left: 0.16em;
+  top: 0.63em;
+  top: calc(0.5lh - 0.22em);
+  width: 0.44em;
+  height: 0.44em;
+  border: 1.5px solid var(--bullet-2);
+  border-radius: 50%;
+  background: transparent;
+  clip-path: none;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  ul ul ul > li {
+  padding-left: 1.42em;
+  margin-block: 0.3em;
+}
+
+html[data-musiki-theme]
+  :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+  ul ul ul > li::before {
+  left: 0.14em;
+  top: 0.61em;
+  top: calc(0.5lh - 0.24em);
+  width: 0.48em;
+  height: 0.48em;
+  border: 0;
+  border-radius: 0.05em;
+  background: var(--bullet-3);
+  clip-path: none;
+}
+
+@media (max-width: 900px) {
+  html[data-musiki-theme] main.wiki-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}
+
+@media (max-width: 500px) {
+  html[data-musiki-theme] {
+    --reading-font-size: 1.05rem;
+    --reading-line-height: 1.68;
+  }
+
+  html[data-musiki-theme]
+    :where(.prose, .cnw-md, .content-area > .class-content:not([data-entry-type='recursos-editor']))
+    :where(p, li, blockquote, dd) {
+    hyphens: manual;
+  }
+}
+
+@media print {
+  html[data-musiki-theme] {
+    --reading-measure: 72ch;
+  }
+
+  html[data-musiki-theme='invulne'] {
+    --c-bg: #fff;
+    --c-fg: #111;
+  }
+}

@@ -1,5 +1,19 @@
 # MEMORY.md — Project Activity Log
 
+<2026-07-20 global-site-themes-invulne> <br>
+Sistema experimental de temas editoriales globales, implementado desde HEAD `abee52a`:
+- `Default` conserva su paleta y familia tipográfica; `Invulne` añade una identidad independiente de claro/oscuro centrada en lectura, con Literata para texto y Atkinson Hyperlegible Next para interfaz.
+- Desde el refinamiento de layout, `Default` e `Invulne` comparten exactamente medida de lectura, tamaños, line-height, espaciados, cajas, jerarquía de sidebar, highlight y geometría de listas; sólo difieren sus tokens de color y `font-family`.
+- La preferencia vive en PostgreSQL (`SiteSetting.globalTheme`) mediante `postgres-patches/migrations/20260720193000_site_theme_setting.sql`; toda visita la lee desde `GET /api/site/theme`, aplica primero el último valor conocido para evitar flash y luego sincroniza el valor autoritativo.
+- El único switch aparece en la barra superior del dashboard docente, sólo para roles globales `teacher`/`admin`; se retiró de Header y Ribbon. `PUT /api/site/theme` revalida sesión, usuario y rol en servidor antes de cambiar el tema para todas las personas; estudiantes y llamadas anónimas no pueden modificarlo.
+- Home y `/cursos` usan un único fondo continuo para `html`, `body`, Header, nav y contenido, sin borde ni corte de color: blanco en claro y, en oscuro, el más claro de los dos fondos previos (`var(--c-bg)`) aplicado también al encabezado.
+- Fuentes servidas localmente con `@fontsource-variable`; tokens y reglas en `src/styles/site-themes.css`, sin mezclar el tema editorial con el toggle claro/oscuro existente.
+- Paleta Invulne: tinta dark neutral-cálida `#d9d9d4` (sin dominante azul) y activo-localizador con riel cian + esquina magenta de brillo contenido. La estructura compartida usa escala Astro Starlight algo mayor (0.95rem para notas, 0.875rem para TOC, grupos 0.9rem) y ancho base 288–330px.
+- Los subárboles heterogéneos de `70 CONCEPTOS`, `80 RECURSOS` y `90 NOTAS` se integraron al mismo contrato: carpetas/sesiones 0.9rem, ítems 0.95rem, line-height 1.4, sangría Starlight de 0.5rem por nivel y una única guía vertical. El primer subdirectorio ya no agrega una sangría redundante; los niveles profundos no reducen tipografía.
+- El highlight del sidebar ahora sigue el evento `musiki:active-note` del workspace Dockview: desactiva la nota anterior, activa la nueva con `aria-current`, abre sus carpetas ancestras y la mantiene visible en el scroll; el sidebar docente dinámico conserva el mismo estado tras refrescarse.
+- Listas de lectura: marcadores geométricos CSS centrados contra la primera línea mediante `lh`; triángulo amarillo de nivel 1 aumentado y acercado, círculo azul de nivel 2 reducido/con más aire y cuadrado naranja de nivel 3 reposicionado/separado. Se limita a superficies editoriales para no alterar menús ni controles.
+- Validado: 76/76 tests y `npx astro build` exitoso. `astro check` sigue fallando por 1865 errores TypeScript preexistentes, pero el filtro sobre los archivos nuevos/modificados del tema no encontró diagnósticos.
+
 <2026-06-28 page-info-active-note-sync> <br>
 Info sidebar ahora sigue a la nota activa dentro del SPA Dockview (antes quedaba congelado en _index porque las notas abren en paneles sin re-render del shell):
 - Lib compartido `src/lib/page-properties.ts` (`buildPageProperties`) extraído del IIFE inline de `[...slug].astro` (que ahora lo importa).

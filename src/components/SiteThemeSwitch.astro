@@ -1,0 +1,216 @@
+---
+interface Props {
+  variant?: 'header' | 'ribbon' | 'dashboard';
+}
+
+const { variant = 'header' } = Astro.props;
+---
+
+<button
+  type="button"
+  class:list={['site-theme-switch', `site-theme-switch--${variant}`]}
+  data-site-theme-switch
+  data-active-theme="default"
+  data-variant={variant}
+  aria-label="Tema global: Default. Cambiar a Invulne"
+  title="Tema global: Default. Cambiar a Invulne"
+>
+  {variant !== 'ribbon' ? (
+    <>
+      <span class="site-theme-switch-option" data-theme-option="default">Default</span>
+      <span class="site-theme-switch-option" data-theme-option="invulne">Invulne</span>
+    </>
+  ) : (
+    <>
+      <span class="site-theme-switch-aa" aria-hidden="true">Aa</span>
+      <span class="site-theme-switch-mark" data-site-theme-mark aria-hidden="true">D</span>
+    </>
+  )}
+</button>
+
+<style>
+  .site-theme-switch {
+    appearance: none;
+    border: 1px solid var(--c-border);
+    background: color-mix(in srgb, var(--c-bg) 88%, var(--c-bg-mute) 12%);
+    color: var(--c-fg);
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: border-color 150ms ease, background 150ms ease, opacity 150ms ease;
+  }
+
+  .site-theme-switch:hover {
+    border-color: color-mix(in srgb, var(--c-fg) 35%, var(--c-border));
+  }
+
+  .site-theme-switch:focus-visible {
+    outline: 2px solid var(--c-link);
+    outline-offset: 2px;
+  }
+
+  .site-theme-switch:disabled {
+    cursor: wait;
+    opacity: 0.58;
+  }
+
+  .site-theme-switch[data-state='error'] {
+    border-color: #b84c4c;
+  }
+
+  .site-theme-switch--header,
+  .site-theme-switch--dashboard {
+    display: inline-grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 2px;
+    padding: 2px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 650;
+    line-height: 1;
+  }
+
+  .site-theme-switch-option {
+    padding: 0.4rem 0.55rem;
+    border-radius: 999px;
+    color: var(--c-fg-dim);
+    transition: color 150ms ease, background 150ms ease;
+  }
+
+  .site-theme-switch--header[data-active-theme='default'] [data-theme-option='default'],
+  .site-theme-switch--header[data-active-theme='invulne'] [data-theme-option='invulne'],
+  .site-theme-switch--dashboard[data-active-theme='default'] [data-theme-option='default'],
+  .site-theme-switch--dashboard[data-active-theme='invulne'] [data-theme-option='invulne'] {
+    background: var(--c-fg);
+    color: var(--c-bg);
+  }
+
+  .site-theme-switch--ribbon {
+    position: relative;
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    border-color: transparent;
+    border-radius: 7px;
+    background: transparent;
+  }
+
+  .site-theme-switch--ribbon:hover {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--c-fg) 8%, transparent);
+  }
+
+  .site-theme-switch-aa {
+    font-family: var(--font-reading, Georgia, serif);
+    font-size: 0.77rem;
+    font-weight: 650;
+    letter-spacing: -0.04em;
+  }
+
+  .site-theme-switch-mark {
+    position: absolute;
+    right: 1px;
+    bottom: 0;
+    min-width: 11px;
+    padding: 1px 2px;
+    border-radius: 999px;
+    background: var(--c-fg);
+    color: var(--c-bg);
+    font-size: 7px;
+    font-weight: 800;
+    line-height: 1.15;
+    text-align: center;
+  }
+
+  @media (max-width: 500px) {
+    .site-theme-switch--ribbon {
+      width: 28px;
+      height: 28px;
+    }
+  }
+</style>
+
+<script>
+  type SiteTheme = 'default' | 'invulne';
+
+  const normalizeTheme = (value: unknown): SiteTheme =>
+    value === 'invulne' ? 'invulne' : 'default';
+
+  const applyTheme = (value: unknown) => {
+    const theme = normalizeTheme(value);
+    document.documentElement.dataset.musikiTheme = theme;
+    try {
+      localStorage.setItem('musiki.globalTheme', theme);
+    } catch {
+      // Storage may be unavailable in private or embedded contexts.
+    }
+    window.dispatchEvent(new CustomEvent('musiki:site-theme-change', { detail: { theme } }));
+    return theme;
+  };
+
+  const syncSwitch = (button: HTMLButtonElement, value: unknown) => {
+    const theme = normalizeTheme(value);
+    const nextTheme: SiteTheme = theme === 'default' ? 'invulne' : 'default';
+    button.dataset.activeTheme = theme;
+    button.setAttribute('aria-label', `Tema global: ${theme === 'invulne' ? 'Invulne' : 'Default'}. Cambiar a ${nextTheme === 'invulne' ? 'Invulne' : 'Default'}`);
+    button.title = button.getAttribute('aria-label') || '';
+    const mark = button.querySelector('[data-site-theme-mark]');
+    if (mark) mark.textContent = theme === 'invulne' ? 'I' : 'D';
+  };
+
+  const setupSiteThemeSwitches = () => {
+    const switches = document.querySelectorAll<HTMLButtonElement>('[data-site-theme-switch]');
+    switches.forEach((button) => {
+      syncSwitch(button, document.documentElement.dataset.musikiTheme);
+      if (button.dataset.bound === 'true') return;
+      button.dataset.bound = 'true';
+
+      button.addEventListener('click', async () => {
+        const previousTheme = normalizeTheme(document.documentElement.dataset.musikiTheme);
+        const requestedTheme: SiteTheme = previousTheme === 'default' ? 'invulne' : 'default';
+        button.disabled = true;
+        button.dataset.state = 'saving';
+
+        try {
+          const response = await fetch('/api/site/theme', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: requestedTheme }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(String(payload?.error || 'No se pudo cambiar el tema global'));
+          const theme = applyTheme(payload?.theme);
+          switches.forEach((item) => syncSwitch(item, theme));
+          button.dataset.state = 'saved';
+        } catch (error) {
+          console.error('Global theme update failed:', error);
+          syncSwitch(button, previousTheme);
+          button.dataset.state = 'error';
+          button.title = error instanceof Error ? error.message : 'No se pudo cambiar el tema global';
+        } finally {
+          button.disabled = false;
+          window.setTimeout(() => {
+            delete button.dataset.state;
+            syncSwitch(button, document.documentElement.dataset.musikiTheme);
+          }, 1800);
+        }
+      });
+    });
+  };
+
+  window.addEventListener('musiki:site-theme-change', (event) => {
+    const theme = event instanceof CustomEvent ? event.detail?.theme : undefined;
+    document.querySelectorAll<HTMLButtonElement>('[data-site-theme-switch]')
+      .forEach((button) => syncSwitch(button, theme));
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupSiteThemeSwitches, { once: true });
+  } else {
+    setupSiteThemeSwitches();
+  }
+  document.addEventListener('astro:page-load', setupSiteThemeSwitches);
+</script>

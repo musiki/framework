@@ -3,6 +3,7 @@
 // all pages through the use of the <BaseHead /> component.
 import '../styles/theme.css';
 import '../styles/global.css';
+import '../styles/site-themes.css';
 import { SITE_TITLE } from '../consts';
 
 interface Props {
@@ -52,6 +53,28 @@ const gaMeasurementId = String(import.meta.env.PUBLIC_GA_MEASUREMENT_ID || 'G-0N
 		const root = document.documentElement;
 		root.classList.toggle('dark', theme === 'dark');
 		root.dataset.theme = theme;
+	})();
+</script>
+<!-- Apply the last known global site theme immediately, then refresh it from the server. -->
+<script is:inline>
+	(function() {
+			const normalizeSiteTheme = (value) => value === 'invulne' ? 'invulne' : 'default';
+			const applySiteTheme = (value) => {
+				const theme = normalizeSiteTheme(value);
+				document.documentElement.dataset.musikiTheme = theme;
+				try { localStorage.setItem('musiki.globalTheme', theme); } catch {}
+				window.dispatchEvent(new CustomEvent('musiki:site-theme-change', { detail: { theme } }));
+				return theme;
+			};
+
+			let cachedTheme = 'default';
+			try { cachedTheme = localStorage.getItem('musiki.globalTheme') || 'default'; } catch {}
+			applySiteTheme(cachedTheme);
+
+		fetch('/api/site/theme', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+			.then((response) => response.ok ? response.json() : null)
+			.then((payload) => { if (payload && !payload.fallback) applySiteTheme(payload.theme); })
+			.catch(() => { /* Default or cached theme remains usable while offline. */ });
 	})();
 </script>
 <link rel="sitemap" href="/sitemap-index.xml" />
