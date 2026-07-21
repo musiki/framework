@@ -1,3 +1,10 @@
+---
+cssclasses:
+  - wide-page
+---
+
+
+
 # Conexiones SSH
 
 - **Usuario General (Owner / Despliegues):** `ssh zz@46.225.154.68`
@@ -21,6 +28,7 @@ function createProgressBar(used, total, isPercentage = false, formatLabel = "") 
     container.style.display = "flex";
     container.style.alignItems = "center";
     container.style.gap = "8px";
+    container.style.width = "100%";
 
     const barBg = document.createElement("div");
     barBg.style.width = "80px";
@@ -151,3 +159,5 @@ dv.table(
     rows
 );
 ```
+
+

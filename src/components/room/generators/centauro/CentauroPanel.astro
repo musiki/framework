@@ -1,6 +1,6 @@
 <div class="musiki-pod" data-pod="centauro" data-pod-title="CENTAURO">
   <section class="conference-stage-panel conference-stage-panel--centauro" data-panel="centauro">
-    <div class="centauro-shell">
+    <div class="centauro-shell" style="--centauro-sidebar-width: 240px;">
       <button type="button" class="centauro-sidebar-open-btn" data-centauro-sidebar-open title="Expandir Controles">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 18 15 12 9 6" />
@@ -145,6 +145,7 @@
           </div>
         </div>
       </div>
+      <div class="centauro-resizer" data-centauro-resizer></div>
 
       <div class="centauro-workspace">
         <div class="centauro-keyboard-panel">
@@ -155,7 +156,14 @@
         </div>
 
         <div class="centauro-info-panel">
-          <div class="centauro-table-header">Grados Mapeados</div>
+          <div class="centauro-table-header" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Grados Mapeados</span>
+            <button type="button" class="centauro-right-sidebar-toggle-btn" data-centauro-right-sidebar-toggle title="Contraer/Expandir Tabla" style="background: none; border: none; color: var(--c-fg-dim, #ccc); cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; outline: none; transition: color 0.15s ease;">
+              <svg class="toggle-arrow-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.25s ease;">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
           <div class="centauro-table-scroll">
             <table class="centauro-table">
               <thead>
@@ -270,8 +278,8 @@
   }
 
   .centauro-header-controls {
-    flex: 0 0 240px;
-    width: 240px;
+    flex: 0 0 var(--centauro-sidebar-width, 240px);
+    width: var(--centauro-sidebar-width, 240px);
     padding: 12px;
     background: #2b2b2b;
     border-right: 1px solid rgba(255, 255, 255, 0.08);
@@ -438,14 +446,17 @@
   }
 
   .centauro-info-panel {
-    flex: 1;
+    flex: 1 1 30%;
+    max-width: 450px;
+    min-width: 250px;
     display: flex;
     flex-direction: column;
-    min-width: 0;
     min-height: 0;
     background: rgba(0, 0, 0, 0.15);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 8px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
   }
 
   .centauro-table-header {
@@ -657,7 +668,7 @@
 
   :global(.sidebar-collapsed) .centauro-header-controls {
     transform: translateX(-100%);
-    margin-left: -240px;
+    margin-left: calc(-1 * var(--centauro-sidebar-width, 240px));
   }
 
   /* Helmholtz-Ellis Font Face & Pitch Monitor Overlay */
@@ -761,5 +772,80 @@
   .centauro-keyboard-wrapper {
     width: 100%;
     height: 100%;
+  }
+
+  /* Left sidebar resizer handle */
+  .centauro-resizer {
+    width: 6px;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 11;
+    margin-left: -3px;
+    margin-right: -3px;
+    align-self: stretch;
+    transition: background 0.15s ease;
+  }
+  .centauro-resizer:hover,
+  .centauro-resizer.dragging {
+    background: rgba(16, 185, 129, 0.5);
+  }
+  :global(.sidebar-collapsed) .centauro-resizer {
+    display: none;
+  }
+
+  /* Right sidebar collapsed styles */
+  :global(.right-sidebar-collapsed) .centauro-info-panel {
+    flex: 0 0 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+  }
+  :global(.right-sidebar-collapsed) .centauro-table-header span {
+    display: none;
+  }
+  :global(.right-sidebar-collapsed) .centauro-table-scroll {
+    display: none;
+  }
+  :global(.right-sidebar-collapsed) .toggle-arrow-icon {
+    transform: rotate(180deg);
+  }
+  .centauro-right-sidebar-toggle-btn:hover {
+    color: var(--c-fg, #fff) !important;
+  }
+
+  /* Preponderancia de Expresión de Afinación */
+  #centauro-input-expr {
+    font-size: calc(0.78rem * 1.1) !important;
+    font-weight: 600;
+    border: 2px solid #7c3aed !important;
+    background: #f5f3ff !important;
+    color: #4c1d95 !important;
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.15);
+    transition: all 0.2s ease;
+  }
+  
+  #centauro-input-expr:focus {
+    border-color: #6d28d9 !important;
+    box-shadow: 0 0 10px rgba(124, 58, 237, 0.3);
+  }
+
+  :root.dark #centauro-input-expr {
+    border: 1px solid #a5b4fc !important;
+    background: rgba(165, 180, 252, 0.05) !important;
+    color: #a5b4fc !important;
+    box-shadow: 0 0 8px rgba(165, 180, 252, 0.1);
+  }
+
+  :root.dark #centauro-input-expr:focus {
+    border-color: #c084fc !important;
+    box-shadow: 0 0 10px rgba(192, 132, 252, 0.25);
+  }
+
+  .centauro-input-dropdown-btn {
+    color: currentColor !important;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+  }
+  .centauro-input-dropdown-btn:hover {
+    opacity: 1;
   }
 </style>

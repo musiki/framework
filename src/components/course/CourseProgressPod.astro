@@ -1,26 +1,398 @@
 ---
-// Motor de render del pod de progreso (cátedra-recorrido).
-// El markup vive inline en el panel #progress-sidebar del sidebar derecho.
-// Expone window.__musikiProgressLoad(), llamado al activar la pestaña Progreso.
+// POD del recorrido académico: plantilla, visualización y motor de hidratación.
+// La API aporta evidencia real; el componente no fabrica puntos ni rachas.
 ---
+
+<section
+  class="progress-sidebar-panel"
+  id="progress-sidebar"
+  aria-label="Progreso del recorrido"
+  aria-hidden="true"
+>
+  <div class="cpp-shell">
+    <header class="cpp-header">
+      <div class="cpp-heading">
+        <span class="cpp-eyebrow">Recorrido académico</span>
+        <h2 class="cpp-title" id="cpp-course">Progreso</h2>
+        <p class="cpp-sub" id="cpp-active-unit">Tu mapa de aprendizaje</p>
+      </div>
+      <div class="cpp-header-actions">
+        <span class="cpp-pct" id="cpp-pct" aria-label="Progreso completado">—</span>
+        <button
+          type="button"
+          class="cpp-close"
+          data-progress-close
+          aria-label="Cerrar progreso"
+          title="Cerrar"
+        >×</button>
+      </div>
+    </header>
+
+    <section class="cpp-daily" id="cpp-daily" aria-labelledby="cpp-daily-title">
+      <div class="cpp-daily-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="cpp-daily-copy">
+        <span class="cpp-section-label">Hoy · repetición espaciada</span>
+        <div class="cpp-daily-line">
+          <strong class="cpp-daily-count" id="cpp-daily-count">—</strong>
+          <div>
+            <h3 id="cpp-daily-title">Preparando tu sesión</h3>
+            <p id="cpp-daily-message">Buscando ideas que conviene volver a encontrar.</p>
+          </div>
+        </div>
+      </div>
+      <a class="cpp-daily-start" id="cpp-daily-start" href="#" hidden>
+        Empezar sesión <span aria-hidden="true">↗</span>
+      </a>
+    </section>
+
+    <section class="cpp-block" aria-labelledby="cpp-rubric-title">
+      <div class="cpp-block-head">
+        <h3 class="cpp-section-label" id="cpp-rubric-title">Rúbrica-recorrido</h3>
+        <span class="cpp-block-note">evidencias mínimas</span>
+      </div>
+      <div class="cpp-rubric" id="cpp-rubric"></div>
+    </section>
+
+    <section class="cpp-block cpp-route" aria-labelledby="cpp-route-title">
+      <div class="cpp-block-head">
+        <h3 class="cpp-section-label" id="cpp-route-title">Camino conceptual</h3>
+        <span class="cpp-block-note">elegí tu próximo nodo</span>
+      </div>
+      <div class="cpp-path" id="cpp-path"></div>
+    </section>
+
+    <section class="cpp-connect" aria-labelledby="cpp-connect-title">
+      <div class="cpp-block-head">
+        <h3 class="cpp-section-label" id="cpp-connect-title">Connectoma</h3>
+        <span class="cpp-density" id="cpp-dens">densidad —</span>
+      </div>
+      <canvas id="cpp-brain" aria-label="Red de conceptos conectados"></canvas>
+    </section>
+
+    <div class="cpp-legend" aria-label="Leyenda del recorrido">
+      <span><i class="cpp-key cpp-key-ring"></i>no leído</span>
+      <span><i class="cpp-key cpp-key-half"></i>leído</span>
+      <span><i class="cpp-key cpp-key-solid"></i>completado</span>
+      <span><i class="cpp-key cpp-key-eval"></i>evaluado</span>
+      <span><i class="cpp-key cpp-key-ray">ϟ</i>conexión</span>
+      <span><i class="cpp-key cpp-key-play"></i>coloquio</span>
+      <span><i class="cpp-key cpp-key-peer"></i>pares</span>
+      <span><i class="cpp-key cpp-key-star">★</i>aporte</span>
+    </div>
+
+    <p class="cpp-note" id="cpp-note" aria-live="polite"></p>
+  </div>
+</section>
+
+<style is:global>
+  .progress-sidebar-panel {
+    position: absolute;
+    inset: 2.55rem 0 0;
+    z-index: 18;
+    display: block;
+    padding: 0;
+    background: var(--c-bg);
+    border-radius: inherit;
+    color: var(--c-fg);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(0.7rem);
+    transition: opacity 180ms ease, transform 180ms ease;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .course-container[data-progress-open='true'] .progress-sidebar-panel {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+  .cpp-shell {
+    --cpp-accent: var(--accent, #c0562b);
+    --cpp-gold: #b8892b;
+    --cpp-line: color-mix(in srgb, var(--c-border) 78%, transparent);
+    min-height: 100%;
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--cpp-accent) 5%, transparent), transparent 34%),
+      var(--c-bg);
+  }
+  html[data-theme='dark'] .cpp-shell { --cpp-gold: #d0a53f; }
+  .cpp-header {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem var(--course-sidebar-pad-x) 0.9rem;
+    border-bottom: 1px solid var(--cpp-line);
+    background: color-mix(in srgb, var(--c-bg) 94%, transparent);
+    backdrop-filter: blur(14px);
+  }
+  .cpp-heading { min-width: 0; }
+  .cpp-eyebrow,
+  .cpp-section-label {
+    display: block;
+    margin: 0;
+    color: var(--c-fg-dim);
+    font-size: 0.64rem;
+    font-weight: 650;
+    letter-spacing: 0.14em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+  .cpp-title {
+    margin: 0.22rem 0 0;
+    font-family: var(--font-serif, Georgia, serif);
+    font-size: 1.02rem;
+    font-weight: 620;
+    line-height: 1.2;
+  }
+  .cpp-sub {
+    margin: 0.22rem 0 0;
+    color: var(--c-fg-dim);
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+  .cpp-header-actions { display: flex; align-items: center; gap: 0.52rem; }
+  .cpp-pct {
+    color: var(--cpp-accent);
+    font-family: var(--font-serif, Georgia, serif);
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .cpp-close {
+    width: 1.85rem;
+    height: 1.85rem;
+    border: 1px solid var(--cpp-line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--c-fg-dim);
+    cursor: pointer;
+    font: inherit;
+    line-height: 1;
+  }
+  .cpp-close:hover { border-color: var(--cpp-accent); color: var(--cpp-accent); }
+  .cpp-daily {
+    position: relative;
+    display: grid;
+    gap: 0.8rem;
+    margin: 0.95rem var(--course-sidebar-pad-x) 0.75rem;
+    padding: 1rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--cpp-accent) 32%, var(--cpp-line));
+    border-radius: 12px;
+    background:
+      linear-gradient(115deg, color-mix(in srgb, var(--cpp-accent) 12%, var(--c-bg)), var(--c-bg) 68%);
+  }
+  .cpp-daily::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-top: 2px solid var(--cpp-accent);
+    border-right: 2px solid var(--cpp-accent);
+    opacity: 0.8;
+  }
+  .cpp-daily-copy { position: relative; z-index: 1; }
+  .cpp-daily-line {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.7rem;
+  }
+  .cpp-daily-count {
+    min-width: 2.15rem;
+    color: var(--cpp-accent);
+    font-family: var(--font-serif, Georgia, serif);
+    font-size: 2.25rem;
+    font-weight: 500;
+    line-height: 0.9;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .cpp-daily h3 { margin: 0; font-size: 0.86rem; font-weight: 650; }
+  .cpp-daily p {
+    max-width: 28ch;
+    margin: 0.2rem 0 0;
+    color: var(--c-fg-dim);
+    font-size: 0.7rem;
+    line-height: 1.45;
+  }
+  .cpp-daily-start {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.58rem 0.72rem;
+    border: 1px solid color-mix(in srgb, var(--cpp-accent) 56%, var(--cpp-line));
+    border-radius: 7px;
+    color: var(--c-fg);
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-decoration: none;
+  }
+  .cpp-daily-start:hover { background: var(--cpp-accent); color: var(--c-bg); }
+  .cpp-daily-start[hidden] { display: none; }
+  .cpp-daily-orbit {
+    position: absolute;
+    right: -1.7rem;
+    bottom: -2.2rem;
+    width: 7rem;
+    height: 7rem;
+    opacity: 0.18;
+  }
+  .cpp-daily-orbit i {
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--cpp-accent);
+    border-radius: 50%;
+  }
+  .cpp-daily-orbit i:nth-child(2) { inset: 1.2rem; }
+  .cpp-daily-orbit i:nth-child(3) { inset: 2.4rem; background: var(--cpp-accent); }
+  .cpp-block,
+  .cpp-connect {
+    padding: 0.85rem var(--course-sidebar-pad-x);
+    border-top: 1px solid var(--cpp-line);
+  }
+  .cpp-block-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.7rem;
+    margin-bottom: 0.65rem;
+  }
+  .cpp-block-note,
+  .cpp-density {
+    color: var(--c-fg-dim);
+    font-size: 0.64rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .cpp-rubric { display: flex; flex-direction: column; gap: 0.18rem; }
+  .cpp-req {
+    display: grid;
+    grid-template-columns: 1.2rem minmax(0, 1fr) 52px 2.7rem;
+    align-items: center;
+    gap: 0.48rem;
+    min-height: 1.7rem;
+    font-size: 0.71rem;
+  }
+  .cpp-req .ic { display: grid; width: 1.2rem; place-items: center; color: var(--cpp-accent); }
+  .cpp-req .ic svg { display: block; width: 16px; height: 16px; }
+  .cpp-req .lab { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cpp-req .bar {
+    height: 3px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--cpp-line);
+  }
+  .cpp-req .bar > i { display: block; width: 0; height: 100%; background: var(--cpp-accent); }
+  .cpp-req .cnt {
+    color: var(--c-fg-dim);
+    text-align: right;
+    font-size: 0.67rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .cpp-req.done .cnt { color: var(--cpp-accent); }
+  .cpp-unit { margin-top: 0.7rem; }
+  .cpp-unit:first-child { margin-top: 0; }
+  .cpp-unit-label {
+    margin: 0 0 0.15rem;
+    padding-left: 0.1rem;
+    color: var(--c-fg-dim);
+    font-size: 0.62rem;
+    font-weight: 650;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+  .cpp-path svg { display: block; width: 100%; overflow: visible; }
+  .cpp-path-link { color: inherit; outline: none; }
+  .cpp-path-link:focus-visible .cpp-ring,
+  .cpp-path-link:hover .cpp-ring { stroke: var(--cpp-accent); opacity: 1; }
+  .cpp-path-link:focus-visible .cpp-lab,
+  .cpp-path-link:hover .cpp-lab { fill: var(--cpp-accent); opacity: 1; }
+  .cpp-connect { padding-bottom: 0.3rem; }
+  #cpp-brain { display: block; width: 100%; height: 180px; }
+  .cpp-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.48rem 0.8rem;
+    padding: 0.65rem var(--course-sidebar-pad-x) 0.85rem;
+    border-bottom: 1px solid var(--cpp-line);
+    color: var(--c-fg-dim);
+    font-size: 0.61rem;
+  }
+  .cpp-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+  .cpp-key { position: relative; display: inline-block; width: 0.72rem; height: 0.72rem; flex: none; }
+  .cpp-key-ring { border: 1.3px solid currentColor; border-radius: 50%; }
+  .cpp-key-half { border: 1.3px solid currentColor; border-radius: 50%; background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
+  .cpp-key-solid { border-radius: 50%; background: currentColor; }
+  .cpp-key-eval { width: 0.58rem; height: 0.58rem; background: var(--cpp-accent); transform: rotate(45deg); }
+  .cpp-key-ray { width: auto; height: auto; color: var(--cpp-accent); font-style: normal; font-size: 0.85rem; }
+  .cpp-key-play { clip-path: polygon(10% 0, 100% 50%, 10% 100%); background: var(--cpp-accent); }
+  .cpp-key-peer { width: 0.8rem; height: 0.45rem; border: 1px solid var(--cpp-gold); border-bottom: 0; border-radius: 50% 50% 0 0; }
+  .cpp-key-star { width: auto; height: auto; color: var(--cpp-gold); font-style: normal; }
+  .cpp-note {
+    margin: 0;
+    padding: 0.65rem var(--course-sidebar-pad-x) 1rem;
+    color: var(--c-fg-dim);
+    font-size: 0.68rem;
+    line-height: 1.45;
+  }
+  .cpp-note:empty { display: none; }
+  .cpp-ray { fill: none; stroke: var(--cpp-accent); stroke-width: 1.4; stroke-linejoin: round; }
+  .cpp-badge { fill: var(--cpp-accent); }
+  .cpp-badge-peer { fill: none; stroke: var(--cpp-gold); stroke-width: 1.25; }
+  .cpp-halo { fill: none; stroke: var(--cpp-accent); }
+  .cpp-ring { fill: none; stroke: currentColor; stroke-width: 1.4; opacity: 0.48; }
+  .cpp-half { fill: currentColor; opacity: 0.48; }
+  .cpp-solid { fill: currentColor; opacity: 0.86; }
+  .cpp-eval { fill: var(--cpp-accent); }
+  .cpp-conn { fill: none; stroke: var(--cpp-line); stroke-width: 2; }
+  .cpp-conn.done { stroke: currentColor; opacity: 0.48; }
+  .cpp-lab { fill: currentColor; font-size: 8.5px; opacity: 0.62; }
+  .cpp-next { animation: cpp-pulse 1.8s ease-in-out infinite; }
+  @keyframes cpp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.34; } }
+  @media (prefers-reduced-motion: reduce) {
+    .cpp-next { animation: none; stroke: var(--cpp-accent); }
+  }
+</style>
 
 <script>
   import * as THREE from 'three';
 
   const SVGNS = 'http://www.w3.org/2000/svg';
-  const R = 8, COLS = 3, DX = 122, DY = 74, X0 = 40, Y0 = 30;
+  const R = 8;
+  const COLS = 3;
+  const DX = 122;
+  const DY = 72;
+  const X0 = 42;
+  const Y0 = 32;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const REQ_LABEL: Record<string, string> = {
     proyecto: 'proyecto (obra)',
-    conexiones: 'conexiones',
+    conexiones: 'conexiones autoradas',
     coloquios: 'coloquios',
-    estigmergia: 'estigmergia',
+    estigmergia: 'estigmergia entre pares',
     aporte: 'aporte público',
+  };
+  const REQ_ICON: Record<string, string> = {
+    proyecto: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" class="cpp-eval"/><circle cx="8" cy="8" r="6" class="cpp-halo"/></svg>',
+    conexiones: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 2 5 7h3l-2 5 6-7H9Z" class="cpp-ray"/></svg>',
+    coloquios: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 3 8 5-8 5Z" class="cpp-badge"/></svg>',
+    estigmergia: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 11a4 4 0 0 1 8 0M6 7a4 4 0 0 1 8 0" class="cpp-badge-peer"/></svg>',
+    aporte: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m8 2 1.4 3.6H13l-2.9 2.3 1.1 3.7L8 9.4l-3.2 2.2 1.1-3.7L3 5.6h3.6Z" class="cpp-badge"/></svg>',
   };
 
   let three: any = null;
   let lastCourse = '';
+  let lastData: any = null;
+  let activeSlug = '';
 
   const el = (id: string) => document.getElementById(id);
   const container = () => document.querySelector('.course-container');
@@ -28,152 +400,314 @@
     const fromAttr = (container()?.getAttribute('data-live-course-id') || '').trim();
     if (fromAttr) return fromAttr;
     const parts = window.location.pathname.split('/').filter(Boolean);
-    return parts[0] === 'cursos' ? (parts[1] || '') : (parts[1] || '');
+    return parts[0] === 'cursos' ? (parts[1] || '') : (parts[0] || '');
   };
   const isOpen = () => container()?.getAttribute('data-progress-open') === 'true';
-  const stateOf = (c: any) => (c && c.evaluated ? 3 : (c && c.completed ? 2 : 0));
+  const stateOf = (c: any) => c?.evaluated ? 3 : (c?.completed ? 2 : (c?.read ? 1 : 0));
 
   function svgEl(name: string, attrs: Record<string, string>) {
-    const n = document.createElementNS(SVGNS, name);
-    for (const k in attrs) n.setAttribute(k, attrs[k]);
-    return n;
+    const node = document.createElementNS(SVGNS, name);
+    Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+    return node;
+  }
+
+  function renderDaily(daily: any) {
+    const count = Number(daily?.total) || 0;
+    const countEl = el('cpp-daily-count');
+    const titleEl = el('cpp-daily-title');
+    const messageEl = el('cpp-daily-message');
+    const startEl = el('cpp-daily-start') as HTMLAnchorElement | null;
+    if (countEl) countEl.textContent = String(count);
+    if (!titleEl || !messageEl || !startEl) return;
+    if (count > 0) {
+      titleEl.textContent = count === 1 ? 'Una idea pide volver' : `${count} ideas piden volver`;
+      messageEl.textContent = 'Una sesión breve para fortalecer memoria y conexiones, sin sumar puntos vacíos.';
+      startEl.href = String(daily?.items?.[0]?.href || '#');
+      startEl.hidden = false;
+    } else {
+      titleEl.textContent = 'Sesión al día';
+      messageEl.textContent = 'No hay repasos vencidos en este curso. El mapa sigue disponible para explorar.';
+      startEl.hidden = true;
+      startEl.removeAttribute('href');
+    }
   }
 
   function renderRubric(rubric: any, required: any, project: any) {
     const host = el('cpp-rubric');
     if (!host) return;
-    host.innerHTML = '';
-    const order = ['proyecto', 'conexiones', 'coloquios', 'estigmergia', 'aporte'];
-    order.forEach((k) => {
-      const have = k === 'proyecto' ? (project?.c4Level > 0 ? 1 : (rubric?.proyecto || 0)) : (rubric?.[k] || 0);
-      const need = required?.[k] || 1;
+    host.replaceChildren();
+    ['proyecto', 'conexiones', 'coloquios', 'estigmergia', 'aporte'].forEach((key) => {
+      const have = key === 'proyecto'
+        ? (project?.c4Level > 0 ? 1 : (Number(rubric?.proyecto) || 0))
+        : (Number(rubric?.[key]) || 0);
+      const need = Number(required?.[key]) || 1;
       const done = have >= need;
       const row = document.createElement('div');
-      row.className = 'cpp-req' + (done ? ' done' : '');
-      const c4 = k === 'proyecto' && project?.c4Level > 0 ? ` · ${['—', 'mini-c', 'little-c', 'pro-c', 'big-c'][project.c4Level]}` : '';
-      row.innerHTML = `<span class="lab">${REQ_LABEL[k]}${c4}</span>` +
-        `<span class="bar"><i style="width:${Math.min(100, Math.round(100 * have / need))}%"></i></span>` +
-        `<span class="cnt">${have}/${need}${done ? ' ✓' : ''}</span>`;
+      row.className = `cpp-req${done ? ' done' : ''}`;
+      const icon = document.createElement('span');
+      icon.className = 'ic';
+      icon.innerHTML = REQ_ICON[key];
+      const label = document.createElement('span');
+      label.className = 'lab';
+      const c4 = key === 'proyecto' && project?.c4Level > 0
+        ? ` · ${['—', 'mini-c', 'little-c', 'pro-c', 'big-c'][project.c4Level] || '4C'}`
+        : '';
+      label.textContent = `${REQ_LABEL[key]}${c4}`;
+      const bar = document.createElement('span');
+      bar.className = 'bar';
+      const fill = document.createElement('i');
+      fill.style.width = `${Math.min(100, Math.round(100 * have / need))}%`;
+      bar.appendChild(fill);
+      const count = document.createElement('span');
+      count.className = 'cnt';
+      count.textContent = `${have}/${need}${done ? ' ✓' : ''}`;
+      row.append(icon, label, bar, count);
       host.appendChild(row);
     });
   }
 
-  function renderPath(concepts: any[]) {
+  function appendBadges(svg: SVGElement, concept: any, x: number, y: number) {
+    let bx = x - 14;
+    if (concept.coloquio) {
+      svg.appendChild(svgEl('path', { d: `M ${bx} ${y + R + 3} l 7 4 -7 4 Z`, class: 'cpp-badge' }));
+      bx += 11;
+    }
+    if (concept.peer) {
+      svg.appendChild(svgEl('path', { d: `M ${bx} ${y + R + 10} a 4 4 0 0 1 8 0 M ${bx + 4} ${y + R + 6} a 4 4 0 0 1 8 0`, class: 'cpp-badge-peer' }));
+      bx += 12;
+    }
+    if (concept.aporte) {
+      svg.appendChild(svgEl('path', { d: `M ${bx + 4} ${y + R + 2} l 1 2.6 h 2.6 l -2.1 1.8 .8 2.6 -2.3 -1.6 -2.3 1.6 .8 -2.6 -2.1 -1.8 h 2.6 Z`, class: 'cpp-badge' }));
+    }
+  }
+
+  function appendStateGlyph(parent: SVGElement, concept: any, x: number, y: number, markNext: boolean) {
+    const state = stateOf(concept);
+    if (state === 3) {
+      parent.appendChild(svgEl('rect', { x: String(x - R), y: String(y - R), width: String(R * 2), height: String(R * 2), transform: `rotate(45 ${x} ${y})`, class: 'cpp-eval' }));
+    } else if (state === 2) {
+      parent.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(R), class: 'cpp-solid' }));
+    } else if (state === 1) {
+      parent.appendChild(svgEl('path', { d: `M ${x} ${y - R} a ${R} ${R} 0 0 1 0 ${R * 2} Z`, class: 'cpp-half' }));
+      parent.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(R), class: 'cpp-ring' }));
+    } else {
+      parent.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(R), class: `cpp-ring${markNext ? ' cpp-next' : ''}` }));
+    }
+  }
+
+  function renderUnit(host: HTMLElement, label: string, concepts: any[], nextState: { marked: boolean }) {
+    const section = document.createElement('section');
+    section.className = 'cpp-unit';
+    const heading = document.createElement('h4');
+    heading.className = 'cpp-unit-label';
+    heading.textContent = label;
+    section.appendChild(heading);
+    const rows = Math.max(1, Math.ceil(concepts.length / COLS));
+    const height = Math.max(58, Y0 + rows * DY - (DY - 48));
+    const svg = svgEl('svg', { viewBox: `0 0 ${X0 * 2 + (COLS - 1) * DX} ${height}` });
+    const positions = concepts.map((concept, index) => {
+      const row = Math.floor(index / COLS);
+      let col = index % COLS;
+      if (row % 2 === 1) col = COLS - 1 - col;
+      return { x: X0 + col * DX, y: Y0 + row * DY, concept };
+    });
+    positions.slice(0, -1).forEach((point, index) => {
+      const next = positions[index + 1];
+      const mid = (point.x + next.x) / 2;
+      svg.appendChild(svgEl('path', {
+        d: `M ${point.x} ${point.y} C ${mid} ${point.y}, ${mid} ${next.y}, ${next.x} ${next.y}`,
+        class: `cpp-conn${stateOf(point.concept) >= 2 && stateOf(next.concept) >= 1 ? ' done' : ''}`,
+      }));
+    });
+    positions.forEach(({ x, y, concept }) => {
+      if (concept.conns > 0) {
+        svg.appendChild(svgEl('path', { d: `M ${x + R + 5} ${y - R - 2} l -4 5 h 3 l -2 5 6 -7 h -3 Z`, class: 'cpp-ray' }));
+      }
+      const link = svgEl('a', {
+        href: String(concept.href || '#'),
+        class: 'cpp-path-link',
+        'aria-label': String(concept.name || concept.slug || 'Concepto'),
+        'data-course-id': courseId(),
+        'data-lesson-page-slug': String(concept.pageSlug || concept.slug || ''),
+      });
+      const isNext = stateOf(concept) === 0 && !nextState.marked;
+      appendStateGlyph(link, concept, x, y, isNext);
+      if (isNext) nextState.marked = true;
+      const text = svgEl('text', { x: String(x), y: String(y + R + 22), 'text-anchor': 'middle', class: 'cpp-lab' });
+      text.textContent = String(concept.name || concept.slug || '').slice(0, 18);
+      link.appendChild(text);
+      svg.appendChild(link);
+      appendBadges(svg, concept, x, y);
+    });
+    section.appendChild(svg);
+    host.appendChild(section);
+  }
+
+  function appendProject(host: HTMLElement, project: any) {
+    const level = Math.max(0, Math.min(4, Number(project?.c4Level) || 0));
+    const section = document.createElement('section');
+    section.className = 'cpp-unit';
+    const heading = document.createElement('h4');
+    heading.className = 'cpp-unit-label';
+    heading.textContent = 'Obra · 4C';
+    const svg = svgEl('svg', { viewBox: `0 0 ${X0 * 2 + (COLS - 1) * DX} 70` });
+    const cx = X0 + ((COLS - 1) * DX) / 2;
+    const cy = 31;
+    for (let ring = level; ring >= 1; ring--) {
+      svg.appendChild(svgEl('circle', { cx: String(cx), cy: String(cy), r: String(6 + ring * 7), class: 'cpp-halo', style: `opacity:${0.14 + ring * 0.13}` }));
+    }
+    svg.appendChild(svgEl('circle', { cx: String(cx), cy: String(cy), r: '6', class: level ? 'cpp-eval' : 'cpp-ring' }));
+    const text = svgEl('text', { x: String(cx), y: String(cy + 25), 'text-anchor': 'middle', class: 'cpp-lab' });
+    text.textContent = `obra · ${['—', 'mini-c', 'little-c', 'pro-c', 'big-c'][level]}`;
+    svg.appendChild(text);
+    section.append(heading, svg);
+    host.appendChild(section);
+  }
+
+  function renderPath(concepts: any[], project: any) {
     const host = el('cpp-path');
     if (!host) return;
-    host.innerHTML = '';
-    const rows = Math.max(1, Math.ceil(concepts.length / COLS));
-    const svg = svgEl('svg', { viewBox: `0 0 ${X0 * 2 + (COLS - 1) * DX} ${Y0 + rows * DY}` });
-    const pos = concepts.map((c, i) => {
-      const row = Math.floor(i / COLS); let col = i % COLS;
-      if (row % 2 === 1) col = COLS - 1 - col;
-      return { x: X0 + col * DX, y: Y0 + row * DY, c };
+    host.replaceChildren();
+    const units = new Map<string, { label: string; concepts: any[] }>();
+    concepts.forEach((concept) => {
+      const key = String(concept.unitId || 'recorrido');
+      const unit = units.get(key) || { label: String(concept.unitLabel || 'Recorrido'), concepts: [] };
+      unit.concepts.push(concept);
+      units.set(key, unit);
     });
-    for (let i = 0; i < pos.length - 1; i++) {
-      const a = pos[i], b = pos[i + 1], mx = (a.x + b.x) / 2;
-      svg.appendChild(svgEl('path', {
-        d: `M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`,
-        class: 'cpp-conn' + (stateOf(a.c) >= 2 && stateOf(b.c) >= 1 ? ' done' : ''),
-      }));
-    }
-    let nextMarked = false;
-    pos.forEach((p) => {
-      const st = stateOf(p.c);
-      // rayo de conexión
-      if (p.c.conns > 0) {
-        const rx = p.x + R + 1, ry = p.y - R - 2;
-        svg.appendChild(svgEl('path', { d: `M ${rx + 4} ${ry} L ${rx} ${ry + 5} L ${rx + 3} ${ry + 5} L ${rx + 1} ${ry + 10} L ${rx + 7} ${ry + 3} L ${rx + 4} ${ry + 3} Z`, class: 'cpp-ray' }));
-      }
-      let g: any;
-      if (st === 3) {
-        g = svgEl('rect', { x: String(p.x - R), y: String(p.y - R), width: String(R * 2), height: String(R * 2), transform: `rotate(45 ${p.x} ${p.y})`, class: 'cpp-eval' });
-      } else if (st === 2) {
-        g = svgEl('circle', { cx: String(p.x), cy: String(p.y), r: String(R), class: 'cpp-solid' });
-      } else {
-        g = svgEl('circle', { cx: String(p.x), cy: String(p.y), r: String(R), class: 'cpp-ring' });
-        if (!nextMarked) { g.classList.add('cpp-next'); nextMarked = true; }
-      }
-      svg.appendChild(g);
-      // badges de logro
-      let bx = p.x - 13;
-      if (p.c.coloquio) { svg.appendChild(svgEl('path', { d: `M ${bx} ${p.y + R + 3} L ${bx + 7} ${p.y + R + 7} L ${bx} ${p.y + R + 11} Z`, class: 'cpp-badge' })); bx += 11; }
-      if (p.c.peer) { svg.appendChild(svgEl('path', { d: `M ${bx} ${p.y + R + 10} a 4 4 0 0 1 8 0`, class: 'cpp-badge-peer' })); bx += 11; }
-      if (p.c.aporte) { svg.appendChild(svgEl('path', { d: `M ${bx + 4} ${p.y + R + 3} l 1 2.6 l 2.6 0 l -2.1 1.8 l 0.8 2.6 l -2.3 -1.6 l -2.3 1.6 l 0.8 -2.6 l -2.1 -1.8 l 2.6 0 Z`, class: 'cpp-badge' })); }
-      svg.appendChild(Object.assign(svgEl('text', { x: String(p.x), y: String(p.y + R + 22), 'text-anchor': 'middle', class: 'cpp-lab' }), { textContent: String(p.c.name || p.c.slug || '').slice(0, 16) }));
-    });
-    host.appendChild(svg);
+    const nextState = { marked: false };
+    units.forEach((unit) => renderUnit(host, unit.label, unit.concepts, nextState));
+    appendProject(host, project);
   }
 
   function renderBrain(concepts: any[], edges: any[]) {
     const canvas = el('cpp-brain') as HTMLCanvasElement | null;
     if (!canvas) return;
     try {
-      const w = canvas.clientWidth || 380, h = 180;
+      const width = canvas.clientWidth || 380;
+      const height = 180;
       if (!three) {
         const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-        renderer.setSize(w, h, false);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(width, height, false);
         const scene = new THREE.Scene();
-        const cam = new THREE.PerspectiveCamera(45, w / h, 0.1, 100); cam.position.z = 7.5;
-        three = { renderer, scene, cam, nodes: {}, lineGroup: new THREE.Group() };
-        scene.add(three.lineGroup);
-        const loop = () => { if (!reduce) { scene.rotation.y += 0.0038; scene.rotation.x = 0.18; } renderer.render(scene, cam); three.raf = requestAnimationFrame(loop); };
+        const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+        camera.position.z = 7.5;
+        three = { renderer, scene, camera, nodes: {}, lines: new THREE.Group(), raf: 0 };
+        scene.add(three.lines);
+        const loop = () => {
+          if (!reduce && isOpen()) {
+            scene.rotation.y += 0.0038;
+            scene.rotation.x = 0.18;
+          }
+          renderer.render(scene, camera);
+          three.raf = requestAnimationFrame(loop);
+        };
         loop();
+      } else if (three.renderer.domElement === canvas) {
+        three.renderer.setSize(width, height, false);
+        three.camera.aspect = width / height;
+        three.camera.updateProjectionMatrix();
       }
-      Object.values(three.nodes).forEach((o: any) => three.scene.remove(o.mesh));
+      Object.values(three.nodes).forEach((node: any) => three.scene.remove(node.mesh));
       three.nodes = {};
-      const cs = getComputedStyle(document.documentElement);
-      const ink = new THREE.Color((cs.getPropertyValue('--c-fg') || '#e9e5dc').trim());
-      const acc = new THREE.Color((cs.getPropertyValue('--accent') || '#e2703f').trim());
-      const lineInk = new THREE.Color((cs.getPropertyValue('--c-border') || '#7d786e').trim());
-      const N = Math.max(1, concepts.length);
-      concepts.forEach((c, i) => {
-        const y = 1 - (i / Math.max(1, N - 1)) * 2, r = Math.sqrt(Math.max(0, 1 - y * y)), th = i * 2.399963;
-        const v = new THREE.Vector3(Math.cos(th) * r, y, Math.sin(th) * r).multiplyScalar(2.6);
-        const st = stateOf(c);
-        const m = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16), new THREE.MeshBasicMaterial({ color: st >= 3 ? acc : ink }));
-        m.position.copy(v); m.scale.setScalar(st >= 2 ? 1.25 : 1);
-        three.scene.add(m); three.nodes[c.id] = { mesh: m, pos: v };
+      while (three.lines.children.length) three.lines.remove(three.lines.children[0]);
+      const styles = getComputedStyle(document.documentElement);
+      const ink = new THREE.Color((styles.getPropertyValue('--c-fg') || '#e9e5dc').trim());
+      const accent = new THREE.Color((styles.getPropertyValue('--accent') || '#e2703f').trim());
+      const lineColor = new THREE.Color((styles.getPropertyValue('--c-border') || '#7d786e').trim());
+      const total = Math.max(1, concepts.length);
+      concepts.forEach((concept, index) => {
+        const y = 1 - (index / Math.max(1, total - 1)) * 2;
+        const radius = Math.sqrt(Math.max(0, 1 - y * y));
+        const theta = index * 2.399963;
+        const position = new THREE.Vector3(Math.cos(theta) * radius, y, Math.sin(theta) * radius).multiplyScalar(2.6);
+        const state = stateOf(concept);
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.13, 16, 16),
+          new THREE.MeshBasicMaterial({ color: state >= 3 ? accent : ink }),
+        );
+        mesh.position.copy(position);
+        mesh.scale.setScalar(state >= 2 ? 1.25 : 1);
+        three.scene.add(mesh);
+        three.nodes[concept.id] = { mesh, position };
       });
-      while (three.lineGroup.children.length) three.lineGroup.remove(three.lineGroup.children[0]);
-      const stMap: Record<string, number> = {}; concepts.forEach((c) => { stMap[c.id] = stateOf(c); });
-      let active = 0;
-      edges.forEach((e) => {
-        const a = three.nodes[e.source], b = three.nodes[e.target];
-        if (a && b && (stMap[e.source] || 0) >= 2 && (stMap[e.target] || 0) >= 2) {
-          const geo = new THREE.BufferGeometry().setFromPoints([a.pos, b.pos]);
-          three.lineGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: lineInk, transparent: true, opacity: 0.55 })));
-          active++;
-        }
+      const states: Record<string, number> = {};
+      concepts.forEach((concept) => { states[concept.id] = stateOf(concept); });
+      let activeEdges = 0;
+      edges.forEach((edge) => {
+        const source = three.nodes[edge.source];
+        const target = three.nodes[edge.target];
+        if (!source || !target || (states[edge.source] || 0) < 2 || (states[edge.target] || 0) < 2) return;
+        const geometry = new THREE.BufferGeometry().setFromPoints([source.position, target.position]);
+        three.lines.add(new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: lineColor, transparent: true, opacity: 0.55 })));
+        activeEdges += 1;
       });
-      const densEl = el('cpp-dens');
-      if (densEl) densEl.textContent = `densidad ${(active / Math.max(1, edges.length)).toFixed(2)} · ${active} aristas`;
-    } catch (err) { console.warn('[progress-pod] brain render failed', err); }
+      const density = el('cpp-dens');
+      if (density) density.textContent = `densidad ${(activeEdges / Math.max(1, edges.length)).toFixed(2)} · ${activeEdges} aristas`;
+    } catch (error) {
+      console.warn('[progress-pod] connectome render failed', error);
+    }
+  }
+
+  function updateActiveUnit() {
+    const subtitle = el('cpp-active-unit');
+    if (!subtitle || !lastData) return;
+    const normalized = activeSlug.split('/').filter(Boolean).pop()?.toLowerCase() || '';
+    const concept = (lastData.concepts || []).find((item: any) =>
+      String(item.slug || '').toLowerCase() === normalized
+      || String(item.id || '').toLowerCase().endsWith(`/${normalized}`));
+    subtitle.textContent = concept?.unitLabel
+      ? `Unidad activa · ${concept.unitLabel}`
+      : 'Tu mapa de aprendizaje';
   }
 
   async function load() {
     const cid = courseId();
-    const noteEl = el('cpp-note'), pctEl = el('cpp-pct'), courseEl = el('cpp-course');
-    if (!cid) { if (noteEl) noteEl.textContent = 'Abrí un curso para ver el progreso.'; return; }
+    const note = el('cpp-note');
+    if (!cid) {
+      if (note) note.textContent = 'Abrí un curso para ver el recorrido.';
+      return;
+    }
     lastCourse = cid;
-    if (courseEl) courseEl.textContent = `Progreso · ${cid}`;
+    const courseTitle = document.querySelector('.course-title-link-text')?.textContent?.trim() || cid;
+    const title = el('cpp-course');
+    if (title) title.textContent = courseTitle;
+    if (note) note.textContent = 'Cargando evidencias…';
     try {
-      const r = await fetch(`/api/progress/pod?courseId=${encodeURIComponent(cid)}`, { headers: { Accept: 'application/json' } });
-      if (!r.ok) { if (noteEl) noteEl.textContent = r.status === 401 ? 'Iniciá sesión para ver tu progreso.' : 'No se pudo cargar el progreso.'; return; }
-      const data = await r.json();
+      const response = await fetch(`/api/progress/pod?courseId=${encodeURIComponent(cid)}`, { headers: { Accept: 'application/json' } });
+      if (!response.ok) {
+        if (note) note.textContent = response.status === 401 ? 'Iniciá sesión para ver tu progreso.' : 'No se pudo cargar el progreso.';
+        return;
+      }
+      const data = await response.json();
+      lastData = data;
       const concepts = Array.isArray(data.concepts) ? data.concepts : [];
       const edges = Array.isArray(data.edges) ? data.edges : [];
-      const done = concepts.filter((c: any) => stateOf(c) >= 2).length;
-      if (pctEl) pctEl.textContent = concepts.length ? Math.round(100 * done / concepts.length) + '%' : '0%';
+      const completed = concepts.filter((concept: any) => stateOf(concept) >= 2).length;
+      const percent = el('cpp-pct');
+      if (percent) percent.textContent = concepts.length ? `${Math.round(100 * completed / concepts.length)}%` : '0%';
+      renderDaily(data.daily || {});
       renderRubric(data.rubric || {}, data.required || {}, data.project || {});
-      renderPath(concepts);
+      renderPath(concepts, data.project || {});
       renderBrain(concepts, edges);
-      if (noteEl) noteEl.textContent = concepts.length ? '' : 'Aún no hay conceptos con actividad en este curso.';
-    } catch (err) {
-      if (noteEl) noteEl.textContent = 'Error de red al cargar el progreso.';
+      updateActiveUnit();
+      if (note) note.textContent = concepts.length ? '' : 'Todavía no hay conceptos disponibles para este curso.';
+    } catch (error) {
+      if (note) note.textContent = 'Error de red al cargar el progreso.';
     }
   }
 
   (window as any).__musikiProgressLoad = load;
-  document.addEventListener('musiki:active-note', () => { if (isOpen() && courseId() !== lastCourse) load(); });
-  window.addEventListener('musiki:progress-changed', () => { if (isOpen()) load(); });
+  window.addEventListener('musiki:active-note', ((event: CustomEvent<{ slug?: string }>) => {
+    activeSlug = String(event.detail?.slug || '');
+    updateActiveUnit();
+    if (isOpen() && courseId() !== lastCourse) void load();
+  }) as EventListener);
+  window.addEventListener('musiki:progress-changed', () => { if (isOpen()) void load(); });
+  document.addEventListener('astro:before-swap', () => {
+    if (three?.raf) cancelAnimationFrame(three.raf);
+    try { three?.renderer?.dispose(); } catch {}
+    three = null;
+  }, { once: true });
 </script>

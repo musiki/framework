@@ -1456,62 +1456,6 @@ function renderLessonsTreeHTML(
         transform: translateX(0);
       }
 
-      /* Progreso: mismo patrón de overlay que Info. */
-      .progress-sidebar-panel {
-        position: absolute;
-        inset: 2.55rem 0 0 0;
-        z-index: 18;
-        display: flex;
-        flex-direction: column;
-        gap: 0.6rem;
-        padding: var(--course-sidebar-pad-top) var(--course-sidebar-pad-x) var(--course-sidebar-pad-bottom);
-        background: var(--c-bg);
-        border-radius: inherit;
-        opacity: 0;
-        pointer-events: none;
-        transform: translateX(0.7rem);
-        transition: opacity 180ms ease, transform 180ms ease;
-        overflow-y: auto;
-        overflow-x: hidden;
-      }
-      .course-container[data-progress-open='true'] .progress-sidebar-panel {
-        opacity: 1;
-        pointer-events: auto;
-        transform: translateX(0);
-      }
-      .cpp-inline { display: flex; flex-direction: column; gap: 0.6rem; color: var(--c-fg); }
-      .cpp-headrow { display: flex; align-items: baseline; justify-content: space-between; }
-      .cpp-title { font-weight: 600; font-size: 0.9rem; }
-      .cpp-sub { display: block; font-size: 0.7rem; opacity: 0.6; }
-      .cpp-pct { font-size: 0.85rem; color: var(--accent); font-variant-numeric: tabular-nums; }
-      .cpp-path svg { display: block; width: 100%; overflow: visible; }
-      .cpp-connect { border-top: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent); padding-top: 0.5rem; }
-      .cpp-connect-head { display: flex; justify-content: space-between; padding: 0 0.2rem 0.3rem; }
-      .cpp-t { font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; }
-      .cpp-d { font-size: 0.7rem; opacity: 0.55; font-variant-numeric: tabular-nums; }
-      #cpp-brain { display: block; width: 100%; height: 180px; }
-      .cpp-note { font-size: 0.7rem; opacity: 0.6; }
-      .cpp-rubric { display: flex; flex-direction: column; gap: 0.28rem; padding: 0.2rem 0.1rem 0.1rem; }
-      .cpp-req { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; }
-      .cpp-req .lab { flex: 1; opacity: 0.85; }
-      .cpp-req .bar { flex: 0 0 46px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--c-border) 80%, transparent); overflow: hidden; }
-      .cpp-req .bar > i { display: block; height: 100%; background: var(--accent); width: 0; }
-      .cpp-req .cnt { font-variant-numeric: tabular-nums; opacity: 0.6; min-width: 2.4rem; text-align: right; }
-      .cpp-req.done .cnt { color: var(--accent); opacity: 1; }
-      .cpp-ray { stroke: var(--accent); stroke-width: 1.4; fill: none; }
-      .cpp-badge { fill: var(--accent); }
-      .cpp-badge-peer { fill: none; stroke: var(--accent); stroke-width: 1.2; }
-      .cpp-halo { fill: none; stroke: var(--accent); }
-      .cpp-ring { fill: none; stroke: currentColor; stroke-width: 1.4; opacity: 0.5; }
-      .cpp-solid { fill: currentColor; opacity: 0.85; }
-      .cpp-eval { fill: var(--accent); }
-      .cpp-conn { stroke: color-mix(in srgb, var(--c-border) 80%, transparent); stroke-width: 2; fill: none; }
-      .cpp-conn.done { stroke: currentColor; opacity: 0.5; }
-      .cpp-lab { font-size: 8.5px; fill: currentColor; opacity: 0.6; }
-      .cpp-next { animation: cpp-pulse 1.8s ease-in-out infinite; }
-      @keyframes cpp-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
-      @media (prefers-reduced-motion: reduce) { .cpp-next { animation: none; stroke: var(--accent); } }
-
       .page-info-sidebar-header {
         position: sticky;
         top: calc(-1 * var(--course-sidebar-pad-top));
@@ -5805,41 +5749,7 @@ function renderLessonsTreeHTML(
           </div>
         </div>
 
-        <section
-            class="progress-sidebar-panel"
-            id="progress-sidebar"
-            aria-label="Progreso del recorrido"
-            aria-hidden="true"
-          >
-            <div class="page-info-sidebar-header page-info-sidebar-header--bare">
-              <button
-                type="button"
-                class="page-info-sidebar-close"
-                data-progress-close
-                aria-label="Cerrar progreso"
-                title="Cerrar"
-              >×</button>
-            </div>
-            <div class="cpp-inline">
-              <div class="cpp-headrow">
-                <div>
-                  <span class="cpp-title" id="cpp-course">Progreso</span>
-                  <span class="cpp-sub">recorrido del alumno</span>
-                </div>
-                <span class="cpp-pct" id="cpp-pct">—</span>
-              </div>
-              <div class="cpp-rubric" id="cpp-rubric"></div>
-              <div class="cpp-path" id="cpp-path"></div>
-              <div class="cpp-connect">
-                <div class="cpp-connect-head">
-                  <span class="cpp-t">Connectoma</span>
-                  <span class="cpp-d" id="cpp-dens">densidad —</span>
-                </div>
-                <canvas id="cpp-brain"></canvas>
-              </div>
-              <p class="cpp-note" id="cpp-note"></p>
-            </div>
-          </section>
+        {!isPublicReaderMode && <CourseProgressPod />}
 
         <section
             class="page-info-sidebar-panel"
@@ -6054,7 +5964,6 @@ function renderLessonsTreeHTML(
 
       {!isPublicReaderMode && <CoursePodWorkspace />}
       {!isPublicReaderMode && <CourseTuningWorkspace />}
-      {!isPublicReaderMode && <CourseProgressPod />}
     </main>
     <script>
       import { hydrateLazyYouTubeEmbeds } from '../scripts/course/lazy-youtube.ts';
@@ -6146,7 +6055,7 @@ function renderLessonsTreeHTML(
         win.__musikiCourseLessonClickHandler = (e: MouseEvent) => {
           if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
           const target = e.target instanceof Element ? e.target : null;
-          const link = target?.closest<HTMLAnchorElement>('.lesson-link');
+          const link = target?.closest<HTMLAnchorElement>('.lesson-link, .cpp-path-link');
           if (!link) return;
           const ws = win.__cnwWorkspace;
           if (!ws) return;

@@ -363,6 +363,44 @@ export class CentauroController {
       });
     }
 
+    // Right sidebar toggle handler
+    const rightToggleBtn = this.container.querySelector('[data-centauro-right-sidebar-toggle]');
+    if (rightToggleBtn) {
+      rightToggleBtn.addEventListener('click', () => {
+        this.container.classList.toggle('right-sidebar-collapsed');
+      });
+    }
+
+    // Left sidebar resizer drag handlers
+    const resizer = this.container.querySelector('[data-centauro-resizer]') as HTMLElement;
+    const sidebar = this.container.querySelector('.centauro-header-controls') as HTMLElement;
+    const shell = this.container.querySelector('.centauro-shell') as HTMLElement;
+    if (resizer && sidebar && shell) {
+      let startX = 0;
+      let startWidth = 0;
+
+      const onMouseMove = (e: MouseEvent) => {
+        const dx = e.clientX - startX;
+        const newWidth = Math.max(180, Math.min(500, startWidth + dx));
+        shell.style.setProperty('--centauro-sidebar-width', `${newWidth}px`);
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        resizer.classList.remove('dragging');
+      };
+
+      resizer.addEventListener('mousedown', (e) => {
+        startX = e.clientX;
+        startWidth = sidebar.getBoundingClientRect().width;
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        resizer.classList.add('dragging');
+        e.preventDefault();
+      });
+    }
+
     // Input listener and dropdown button support
     const dropdownBtn = this.container.querySelector('[data-centauro-dropdown-btn]');
     let previousValue = '';

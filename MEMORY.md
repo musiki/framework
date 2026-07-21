@@ -1,5 +1,14 @@
 # MEMORY.md — Project Activity Log
 
+<2026-07-20 progress-pod-academic-daily> <br>
+Primera plantilla funcional del POD de progreso como “Duolingo académico”, basada en `docs/evaluation/pod-progreso-prototipo.html`, `catedra-recorrido.md`, `Evaluation MOC.md` y `paradigmas-evaluacion.md`:
+- `CourseProgressPod.astro` volvió a ser dueño de markup, CSS y motor cliente. Conserva la estética austera del prototipo: cabecera académica, rúbrica con iconos/barras, camino serpentino agrupado por unidades, estados no leído/leído/completado/evaluado, logros (conexión/coloquio/pares/aporte), obra con halo 4C, leyenda y connectoma Three.js.
+- Nuevo splash compacto “Hoy · repetición espaciada”: muestra únicamente ítems realmente vencidos del scheduler SM-2 y enlaza al primer eval; no fabrica puntos, rachas ni recompensas sin evidencia.
+- `/api/progress/pod` ahora enriquece conceptos con unidad, ruta y estado leído derivado de actividad; consulta `SrsState` como side-channel tolerante a fallos y devuelve la cola diaria filtrada al curso.
+- Aplicada la migración idempotente `20260628140227_srs_state.sql` sobre `127.0.0.1:5433/musiki26`; la tabla quedó disponible y vacía (los ítems aparecerán cuando evals con `spaced.enabled` generen estado).
+- Los nodos del camino abren la nota en el Dockview existente mediante el mismo handler que `.lesson-link`.
+- Validado: 76/76 tests, build Astro completo y smoke visual en navegador (panel 400px, cabecera sticky, splash y estados vacíos); la sesión de navegador era anónima, por lo que la carga real respondió 401 como corresponde.
+
 <2026-07-20 global-site-themes-invulne> <br>
 Sistema experimental de temas editoriales globales, implementado desde HEAD `abee52a`:
 - `Default` conserva su paleta y familia tipográfica; `Invulne` añade una identidad independiente de claro/oscuro centrada en lectura, con Literata para texto y Atkinson Hyperlegible Next para interfaz.
