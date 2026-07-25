@@ -10,7 +10,7 @@ import { query } from '../../../lib/db/pool';
 import { getNoteAccess } from './notes/annotations';
 
 const TITLE_MAX = 160;
-const BODY_MAX  = 8_000;
+const BODY_MAX  = 10_000_000;
 
 async function validateOwnedFolderScope(
   folderId: string | null,

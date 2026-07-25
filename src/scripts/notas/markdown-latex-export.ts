@@ -1,5 +1,5 @@
 type LatexListState = 'itemize' | 'enumerate';
-type LatexCalloutKind = 'tip' | 'info' | 'summary';
+type LatexCalloutKind = 'tip' | 'info' | 'summary' | 'quote';
 
 export type LatexTemplateId = 'direct' | 'asignacion-seminario' | 'tesina-seminario';
 
@@ -66,21 +66,54 @@ function sanitizeUrl(url: string): string {
   return String(url || '').replace(/[{}\\]/g, '');
 }
 
-function remoteAssetFileName(index: number, url: string): string {
-  const extension = sanitizeUrl(url).split(/[?#]/)[0].match(/\.(png|jpe?g|pdf)$/i)?.[1]?.toLowerCase();
-  return `remote-image-${index}.${extension === 'jpg' ? 'jpg' : extension || 'png'}`;
+function imageFileName(index: number, url: string): string {
+  const clean = sanitizeUrl(url).replace(/[<>]/g, '');
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    const extension = clean.split(/[?#]/)[0].match(/\.(png|jpe?g|pdf)$/i)?.[1]?.toLowerCase();
+    const ext = extension === 'jpeg' ? 'jpeg' : (extension === 'jpg' ? 'jpg' : (extension || 'png'));
+    return `remote-image-${index}.${ext}`;
+  }
+  return clean;
 }
 
 function remoteImageLatex(alt: string, url: string, index: number): string {
-  const cleanUrl = sanitizeUrl(url);
-  const caption = escapeLatex(alt || 'Imagen remota');
-  const filename = remoteAssetFileName(index, cleanUrl);
+  const cleanUrl = sanitizeUrl(url).replace(/[<>]/g, '');
+  let caption = 'Imagen remota';
+  let width = '.92\\linewidth';
+
+  if (alt.includes('|')) {
+    const parts = alt.split('|').map(p => p.trim()).filter(Boolean);
+    parts.forEach(part => {
+      const capMatch = part.match(/^caption:\s*["']?(.*?)["']?$/i);
+      if (capMatch) {
+        caption = capMatch[1];
+      } else if (/^\d+(?:\.\d+)?%$/.test(part)) {
+        const pct = parseFloat(part);
+        width = `${(pct / 100).toFixed(2)}\\linewidth`;
+      } else if (/^(?:width=)?(\d+(?:\.\d+)?(?:px|cm|mm|in|pt|em|ex|\\linewidth|\\textwidth)?)$/i.test(part)) {
+        const match = part.match(/^(?:width=)?(.*)$/i);
+        width = match ? match[1] : part;
+      } else {
+        caption = part;
+      }
+    });
+  } else if (alt.trim()) {
+    caption = alt.trim();
+  }
+
+  const escapedCaption = escapeLatex(caption);
+  const filename = imageFileName(index, cleanUrl);
+  const escapedFilename = escapeLatex(filename);
   return [
-    '\\begin{figure}[ht]',
+    '\\begin{figure}[H]',
     '\\centering',
     `% Remote image asset: ${cleanUrl}`,
-    `\\IfFileExists{${filename}}{\\includegraphics[width=.92\\linewidth]{${filename}}}{\\fbox{\\href{${cleanUrl}}{${caption}}}}`,
-    `\\caption{${caption}}`,
+    `\\IfFileExists{${filename}}{%`,
+    `  \\includegraphics[width=${width}]{${filename}}%`,
+    `}{%`,
+    `  \\fbox{LOCAL IMAGE HERE: ${escapedFilename}}%`,
+    `}`,
+    `\\caption{${escapedCaption}}`,
     '\\end{figure}',
   ].join('\n');
 }
@@ -90,29 +123,42 @@ function calloutTitle(kind: LatexCalloutKind, title: string): string {
   if (explicit) return explicit;
   if (kind === 'tip') return 'Tip';
   if (kind === 'info') return 'Info';
+  if (kind === 'quote') return 'Quote';
   return 'Resumen';
 }
 
 function calloutOptions(kind: LatexCalloutKind): string {
   if (kind === 'tip') return 'colback=green!5,colframe=green!45!black';
   if (kind === 'info') return 'colback=blue!5,colframe=blue!45!black';
+  if (kind === 'quote') return 'colback=gray!5,colframe=gray!45!black';
   return 'colback=gray!10,colframe=black';
 }
 
 function closeCallout(
   lines: string[],
   callout: { kind: LatexCalloutKind; title: string; content: string[] } | null,
+  footnotes?: Map<string, string>
 ): null {
   if (!callout) return null;
-  const body = markdownToLatexBody(callout.content.join('\n'));
-  lines.push(`\\begin{musikinotebox}[${calloutOptions(callout.kind)}]{${escapeLatex(calloutTitle(callout.kind, callout.title))}}`);
-  if (body) lines.push(body);
-  lines.push('\\end{musikinotebox}');
-  lines.push('');
+  const body = markdownToLatexBody(callout.content.join('\n'), footnotes);
+  if (callout.kind === 'quote') {
+    lines.push('\\begin{quote}');
+    if (callout.title && callout.title.trim()) {
+      lines.push(`\\textbf{${escapeLatex(callout.title.trim())}}\\\\`);
+    }
+    if (body) lines.push(body);
+    lines.push('\\end{quote}');
+    lines.push('');
+  } else {
+    lines.push(`\\begin{musikinotebox}[${calloutOptions(callout.kind)}]{${escapeLatex(calloutTitle(callout.kind, callout.title))}}`);
+    if (body) lines.push(body);
+    lines.push('\\end{musikinotebox}');
+    lines.push('');
+  }
   return null;
 }
 
-function inlineMarkdownToLatex(markdown: string): string {
+function inlineMarkdownToLatex(markdown: string, footnotes?: Map<string, string>): string {
   const placeholders: string[] = [];
   const hold = (value: string) => {
     const token = `LATEXPLACEHOLDER${placeholders.length}TOKEN`;
@@ -125,11 +171,22 @@ function inlineMarkdownToLatex(markdown: string): string {
   text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, url) =>
     hold(remoteImageLatex(alt, url, placeholders.length)));
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, url) =>
-    hold(`\\href{${sanitizeUrl(url)}}{${inlineMarkdownToLatex(label)}}`));
-  text = text.replace(/\*\*([^*]+)\*\*/g, (_match, inner) => hold(`\\textbf{${inlineMarkdownToLatex(inner)}}`));
-  text = text.replace(/__([^_]+)__/g, (_match, inner) => hold(`\\textbf{${inlineMarkdownToLatex(inner)}}`));
-  text = text.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, (_match, inner) => hold(`\\emph{${inlineMarkdownToLatex(inner)}}`));
-  text = text.replace(/(?<!_)_([^_\n]+)_(?!_)/g, (_match, inner) => hold(`\\emph{${inlineMarkdownToLatex(inner)}}`));
+    hold(`\\href{${sanitizeUrl(url)}}{${inlineMarkdownToLatex(label, footnotes)}}`));
+  
+  // Convert footnotes: [^1]
+  text = text.replace(/\[\^([^\]]+)\]/g, (_match, id) => {
+    const fnId = id.trim();
+    const fnContent = footnotes?.get(fnId) || '';
+    if (fnContent) {
+      return hold(`\\footnote{${inlineMarkdownToLatex(fnContent, footnotes)}}`);
+    }
+    return hold(`\\footnote{${escapeLatex(fnId)}}`);
+  });
+
+  text = text.replace(/\*\*([^*]+)\*\*/g, (_match, inner) => hold(`\\textbf{${inlineMarkdownToLatex(inner, footnotes)}}`));
+  text = text.replace(/__([^_]+)__/g, (_match, inner) => hold(`\\textbf{${inlineMarkdownToLatex(inner, footnotes)}}`));
+  text = text.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, (_match, inner) => hold(`\\emph{${inlineMarkdownToLatex(inner, footnotes)}}`));
+  text = text.replace(/(?<!_)_([^_\n]+)_(?!_)/g, (_match, inner) => hold(`\\emph{${inlineMarkdownToLatex(inner, footnotes)}}`));
   text = escapeLatex(text);
 
   placeholders.forEach((value, index) => {
@@ -146,7 +203,33 @@ function closeList(lines: string[], activeList: LatexListState | null): null {
   return null;
 }
 
-export function markdownToLatexBody(markdown: string): string {
+export function extractFootnotes(markdown: string): { cleanMarkdown: string; footnotes: Map<string, string> } {
+  const footnotes = new Map<string, string>();
+  const lines = markdown.split('\n');
+  const cleanLines: string[] = [];
+
+  for (const line of lines) {
+    const match = line.match(/^([\s>]*?)\[\^([^\]]+)\]:\s*(.*)$/);
+    if (match) {
+      footnotes.set(match[2].trim(), match[3].trim());
+      const prefix = match[1];
+      if (prefix.includes('>')) {
+        cleanLines.push(prefix.trimEnd());
+      } else {
+        cleanLines.push('');
+      }
+    } else {
+      cleanLines.push(line);
+    }
+  }
+
+  return {
+    cleanMarkdown: cleanLines.join('\n'),
+    footnotes,
+  };
+}
+
+export function markdownToLatexBody(markdown: string, footnotes?: Map<string, string>): string {
   const source = stripFrontmatter(markdown).replace(/\r\n?/g, '\n');
   const output: string[] = [];
 
@@ -168,24 +251,45 @@ export function markdownToLatexBody(markdown: string): string {
         inCodeFence = false;
       } else {
         activeList = closeList(output, activeList);
+        if (activeCallout) activeCallout = closeCallout(output, activeCallout, footnotes);
         inCodeFence = true;
         codeBuffer = [];
       }
       continue;
     }
 
-    if (activeCallout) {
-      const quoted = line.match(/^>\s?(.*)$/);
-      if (quoted) {
-        activeCallout.content.push(quoted[1]);
-        continue;
-      }
-      activeCallout = closeCallout(output, activeCallout);
-    }
-
     if (inCodeFence) {
       codeBuffer.push(rawLine);
       continue;
+    }
+
+    const quoteMatch = line.match(/^>\s?(.*)$/);
+    if (quoteMatch) {
+      const quoteContent = quoteMatch[1];
+      if (activeCallout) {
+        activeCallout.content.push(quoteContent);
+      } else {
+        activeList = closeList(output, activeList);
+        const calloutMatch = quoteContent.match(/^\[!(tip|info|summary|quote)\]\s*(.*)$/i);
+        if (calloutMatch) {
+          activeCallout = {
+            kind: calloutMatch[1].toLowerCase() as LatexCalloutKind,
+            title: calloutMatch[2] || '',
+            content: [],
+          };
+        } else {
+          activeCallout = {
+            kind: 'quote',
+            title: '',
+            content: [quoteContent],
+          };
+        }
+      }
+      continue;
+    }
+
+    if (activeCallout) {
+      activeCallout = closeCallout(output, activeCallout, footnotes);
     }
 
     if (!line.trim()) {
@@ -197,7 +301,7 @@ export function markdownToLatexBody(markdown: string): string {
     const heading = line.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
       activeList = closeList(output, activeList);
-      output.push(`\\${latexCommandForHeading(heading[1].length)}{${inlineMarkdownToLatex(heading[2])}}`);
+      output.push(`\\${latexCommandForHeading(heading[1].length)}{${inlineMarkdownToLatex(heading[2], footnotes)}}`);
       output.push('');
       continue;
     }
@@ -216,7 +320,7 @@ export function markdownToLatexBody(markdown: string): string {
         output.push('\\begin{itemize}[leftmargin=*]');
         activeList = 'itemize';
       }
-      output.push(`\\item ${inlineMarkdownToLatex(unordered[1])}`);
+      output.push(`\\item ${inlineMarkdownToLatex(unordered[1], footnotes)}`);
       continue;
     }
 
@@ -227,31 +331,12 @@ export function markdownToLatexBody(markdown: string): string {
         output.push('\\begin{enumerate}[leftmargin=*]');
         activeList = 'enumerate';
       }
-      output.push(`\\item ${inlineMarkdownToLatex(ordered[1])}`);
-      continue;
-    }
-
-    const quote = line.match(/^>\s?(.+)$/);
-    if (quote) {
-      activeList = closeList(output, activeList);
-      const callout = quote[1].match(/^\[!(tip|info|summary)\]\s*(.*)$/i);
-      if (callout) {
-        activeCallout = {
-          kind: callout[1].toLowerCase() as LatexCalloutKind,
-          title: callout[2] || '',
-          content: [],
-        };
-        continue;
-      }
-      output.push('\\begin{quote}');
-      output.push(inlineMarkdownToLatex(quote[1]));
-      output.push('\\end{quote}');
-      output.push('');
+      output.push(`\\item ${inlineMarkdownToLatex(ordered[1], footnotes)}`);
       continue;
     }
 
     activeList = closeList(output, activeList);
-    output.push(inlineMarkdownToLatex(line));
+    output.push(inlineMarkdownToLatex(line, footnotes));
     output.push('');
   }
 
@@ -263,7 +348,7 @@ export function markdownToLatexBody(markdown: string): string {
   }
 
   closeList(output, activeList);
-  closeCallout(output, activeCallout);
+  if (activeCallout) closeCallout(output, activeCallout, footnotes);
   return output.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
@@ -284,7 +369,9 @@ function untrefLogoCommands(): string[] {
   return [
     `\\newcommand{\\untreflogourl}{${UNTREF_LOGO_URL}}`,
     '% Remote logo asset: https://i.imgur.com/3dKJzNX.png',
-    '% Future PDF compiler can download it as untref-logo.png before running LaTeX.',
+    '\\IfFileExists{untref-logo.png}{}{%',
+    `  \\immediate\\write18{curl -L -o untref-logo.png "${UNTREF_LOGO_URL}" || wget -O untref-logo.png "${UNTREF_LOGO_URL}"}%`,
+    '}',
     '\\newcommand{\\untreflogo}{\\IfFileExists{untref-logo.png}{\\includegraphics[height=0.42cm]{untref-logo.png}}{\\href{\\untreflogourl}{UNTREF}}}',
   ];
 }
@@ -296,6 +383,7 @@ function directLatexDocument(body: string, title: string): string {
     '\\usepackage[T1]{fontenc}',
     '\\usepackage{hyperref}',
     '\\usepackage{graphicx}',
+    '\\usepackage{float}',
     '\\usepackage{enumitem}',
     '\\usepackage{geometry}',
     ...tcolorboxCommands(),
@@ -323,6 +411,7 @@ function asignacionSeminarioDocument(body: string, title: string): string {
     '\\usepackage[T1]{fontenc}',
     '\\usepackage{hyperref}',
     '\\usepackage{graphicx}',
+    '\\usepackage{float}',
     '\\usepackage{enumitem}',
     '\\usepackage{fancyhdr}',
     ...tcolorboxCommands(),
@@ -356,6 +445,7 @@ function tesinaSeminarioDocument(body: string, title: string): string {
     '\\usepackage[spanish]{babel}',
     '\\usepackage{hyperref}',
     '\\usepackage{graphicx}',
+    '\\usepackage{float}',
     '\\usepackage{enumitem}',
     '\\usepackage{geometry}',
     '\\usepackage{setspace}',
@@ -388,7 +478,13 @@ function tesinaSeminarioDocument(body: string, title: string): string {
 }
 
 export function markdownToLatex(markdown: string, title = 'Nota', options: MarkdownToLatexOptions = {}): string {
-  const body = markdownToLatexBody(markdown);
+  const { cleanMarkdown, footnotes } = extractFootnotes(markdown);
+  let body = markdownToLatexBody(cleanMarkdown, footnotes);
+
+  // Replace indexofigures tags
+  body = body.replace(/&lt;\/?indexofigures&gt;/gi, '\\listoffigures');
+  body = body.replace(/<\/?indexofigures>/gi, '\\listoffigures');
+
   if (options.templateId === 'asignacion-seminario') return asignacionSeminarioDocument(body, title);
   if (options.templateId === 'tesina-seminario') return tesinaSeminarioDocument(body, title);
   return directLatexDocument(body, title);

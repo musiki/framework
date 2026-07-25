@@ -30,8 +30,22 @@ test('markdownToLatex keeps remote markdown images as LaTeX asset placeholders',
   const tex = markdownToLatex('![Logo UNTREF](https://i.imgur.com/3dKJzNX.png)', 'Imagenes');
   assert.match(tex, /% Remote image asset: https:\/\/i\.imgur\.com\/3dKJzNX\.png/);
   assert.match(tex, /\\IfFileExists\{remote-image-0\.png\}/);
-  assert.match(tex, /\\href\{https:\/\/i\.imgur\.com\/3dKJzNX\.png\}\{Logo UNTREF\}/);
+  assert.match(tex, /\\fbox\{LOCAL IMAGE HERE: remote-image-0\.png\}/);
   assert.match(tex, /\\caption\{Logo UNTREF\}/);
+});
+
+test('markdownToLatex parses image options: width, positional and explicit captions', () => {
+  const tex = markdownToLatex([
+    '![|500px](https://i.imgur.com/3dKJzNX.png)',
+    '![|Whole Earth Catalog (1968) Fuente: MoMA](https://i.imgur.com/3dKJzNX.png)',
+    '![|caption:"Whole Earth Catalog (1968) Fuente: MoMA"](https://i.imgur.com/3dKJzNX.png)',
+    '![|500px|caption:"Whole Earth Catalog (1968) Fuente: MoMA"](https://i.imgur.com/3dKJzNX.png)',
+    '![|80%](https://i.imgur.com/3dKJzNX.png)'
+  ].join('\n\n'), 'ImagesWithOptions');
+
+  assert.match(tex, /\\includegraphics\[width=500px\]/);
+  assert.match(tex, /\\caption\{Whole Earth Catalog \(1968\) Fuente: MoMA\}/);
+  assert.match(tex, /\\includegraphics\[width=0\.80\\linewidth\]/);
 });
 
 test('markdownToLatex converts markdown callouts to tcolorbox blocks', () => {
@@ -51,6 +65,47 @@ test('markdownToLatex converts markdown callouts to tcolorbox blocks', () => {
   assert.match(tex, /Texto con \\textbf\{énfasis\}\./);
   assert.match(tex, /\\begin\{musikinotebox\}\[colback=blue!5,colframe=blue!45!black\]\{Info\}/);
   assert.match(tex, /\\begin\{musikinotebox\}\[colback=gray!10,colframe=black\]\{Resumen\}/);
+});
+
+test('markdownToLatex converts blockquotes and quote callouts following APA7 format', () => {
+  const tex = markdownToLatex([
+    '> [!quote] Stewart Brand (1968)',
+    '> Stay hungry, stay foolish.',
+    '> A guide for the next generation.',
+    '',
+    '> This is an ordinary blockquote.',
+    '> Line two.',
+  ].join('\n'), 'APA7 Quotes');
+
+  // Verify quote callout with title
+  assert.match(tex, /\\begin\{quote\}\n\\textbf\{Stewart Brand \(1968\)\}\\\\\nStay hungry, stay foolish\.\n+A guide for the next generation\.\n\\end\{quote\}/);
+  // Verify standard blockquote grouping
+  assert.match(tex, /\\begin\{quote\}\nThis is an ordinary blockquote\.\n+Line two\.\n\\end\{quote\}/);
+});
+
+test('markdownToLatex translates footnotes and extracts definitions', () => {
+  const tex = markdownToLatex([
+    'Esto es un texto[^1] con nota.',
+    'Y otra nota[^2] más.',
+    '',
+    '[^1]: esta es la nota footnote 1 con **formato**',
+    '[^2]: otra nota.',
+  ].join('\n'), 'Footnotes');
+
+  assert.doesNotMatch(tex, /\[\^1\]:/);
+  assert.match(tex, /Esto es un texto\\footnote\{esta es la nota footnote 1 con \\textbf\{formato\}\} con nota\./);
+  assert.match(tex, /Y otra nota\\footnote\{otra nota\.\} más\./);
+});
+
+test('markdownToLatex supports list of figures indexofigures tag', () => {
+  const tex = markdownToLatex([
+    'Texto previo.',
+    '</indexofigures>',
+    'Texto posterior.',
+  ].join('\n'), 'IndexOfFigures');
+
+  assert.match(tex, /\\listoffigures/);
+  assert.doesNotMatch(tex, /indexofigures/);
 });
 
 test('markdownToLatex exports asignacion-seminario as an acmart paper template', () => {
@@ -74,3 +129,19 @@ test('LATEX_TEMPLATES lists the seminar exports', () => {
   assert.equal(LATEX_TEMPLATES.some(template => template.id === 'asignacion-seminario'), true);
   assert.equal(LATEX_TEMPLATES.some(template => template.id === 'tesina-seminario'), true);
 });
+
+test('markdownToLatex processes footnotes inside callouts and write18 remote image downloaders', () => {
+  const tex = markdownToLatex([
+    '> [!quote] Cita',
+    '> Esto es una cita[^3] con footnote.',
+    '>',
+    '> [^3]: esta es la nota 3 dentro de la cita.',
+    '',
+    '![Imagen Web](https://example.com/figure.png)'
+  ].join('\n'), 'FootnotesInQuotesAndWrite18');
+
+  assert.match(tex, /Esto es una cita\\footnote\{esta es la nota 3 dentro de la cita\.\} con footnote\./);
+  assert.match(tex, /\\fbox\{LOCAL IMAGE HERE: remote-image-0\.png\}/);
+});
+
+

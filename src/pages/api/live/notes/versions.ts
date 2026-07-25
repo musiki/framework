@@ -4,11 +4,26 @@ import { query } from '../../../../lib/db/pool';
 import { getNoteAccess } from './annotations';
 import { renderForumMarkdown } from '../../../../lib/forum-markdown';
 
-// GET /api/live/notes/versions?noteId=... — retrieve version history
+// GET /api/live/notes/versions?noteId=... — retrieve version history or specific version body
 export const GET: APIRoute = async ({ url, locals }) => {
   const session = (locals as any).session;
   const user = await ensureDbUserFromSession(session);
   if (!user) return json({ error: 'Not authenticated' }, 401);
+
+  const versionId = cleanString(url.searchParams.get('versionId') ?? '', 36);
+  if (versionId) {
+    const { data: rows, error } = await query(
+      `SELECT id, "noteId", title, body, "versionName", "createdAt" 
+       FROM "LiveClassNoteVersion" WHERE id = $1::uuid LIMIT 1`,
+      [versionId]
+    );
+    if (error) return json({ error: error.message }, 500);
+    if (!rows?.length) return json({ error: 'Version not found' }, 404);
+
+    const access = await getNoteAccess(rows[0].noteId, user.id);
+    if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
+    return json({ version: rows[0] });
+  }
 
   const noteId = cleanString(url.searchParams.get('noteId') ?? '', 36);
   if (!noteId) return json({ error: 'noteId required' }, 400);
@@ -101,4 +116,82 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   if (saveError) return json({ error: saveError.message }, 500);
   return json({ version: savedVersion?.[0] });
+};
+
+// PATCH /api/live/notes/versions — rename version or resave current content into it
+export const PATCH: APIRoute = async ({ request, locals }) => {
+  const session = (locals as any).session;
+  const user = await ensureDbUserFromSession(session);
+  if (!user) return json({ error: 'Not authenticated' }, 401);
+
+  const body = await request.json().catch(() => ({}));
+  const versionId = cleanString(body?.versionId ?? '', 36);
+  if (!versionId) return json({ error: 'versionId required' }, 400);
+
+  const { data: rows } = await query(
+    `SELECT "noteId" FROM "LiveClassNoteVersion" WHERE id = $1::uuid LIMIT 1`,
+    [versionId]
+  );
+  if (!rows?.length) return json({ error: 'Version not found' }, 404);
+
+  const noteId = rows[0].noteId;
+  const access = await getNoteAccess(noteId, user.id);
+  if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
+
+  if (body.resave) {
+    const { data: noteRows } = await query(
+      `SELECT title, body FROM "LiveClassNote" WHERE id = $1::uuid LIMIT 1`,
+      [noteId]
+    );
+    if (!noteRows?.length) return json({ error: 'Note not found' }, 404);
+
+    const { title, body: nBody } = noteRows[0];
+
+    const { error } = await query(
+      `UPDATE "LiveClassNoteVersion" SET title = $1, body = $2, "createdAt" = now() WHERE id = $3::uuid`,
+      [title, nBody, versionId]
+    );
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, message: 'Version overwritten successfully' });
+  }
+
+  if ('versionName' in body) {
+    const versionName = cleanString(body.versionName ?? '', 200);
+    if (!versionName) return json({ error: 'versionName required' }, 400);
+
+    const { error } = await query(
+      `UPDATE "LiveClassNoteVersion" SET "versionName" = $1 WHERE id = $2::uuid`,
+      [versionName, versionId]
+    );
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, versionName });
+  }
+
+  return json({ error: 'No update action specified' }, 400);
+};
+
+// DELETE /api/live/notes/versions — delete a version snapshot
+export const DELETE: APIRoute = async ({ url, locals }) => {
+  const session = (locals as any).session;
+  const user = await ensureDbUserFromSession(session);
+  if (!user) return json({ error: 'Not authenticated' }, 401);
+
+  const versionId = cleanString(url.searchParams.get('versionId') ?? '', 36);
+  if (!versionId) return json({ error: 'versionId required' }, 400);
+
+  const { data: rows } = await query(
+    `SELECT "noteId" FROM "LiveClassNoteVersion" WHERE id = $1::uuid LIMIT 1`,
+    [versionId]
+  );
+  if (!rows?.length) return json({ error: 'Version not found' }, 404);
+
+  const access = await getNoteAccess(rows[0].noteId, user.id);
+  if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
+
+  const { error } = await query(
+    `DELETE FROM "LiveClassNoteVersion" WHERE id = $1::uuid`,
+    [versionId]
+  );
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true });
 };

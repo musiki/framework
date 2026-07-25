@@ -237,6 +237,60 @@ export function createLiveMdEditor(
             }
           }
           return false;
+        },
+        paste(event, view) {
+          const items = (event as ClipboardEvent).clipboardData?.items;
+          if (!items) return false;
+          const imageItem = Array.from(items).find(i => i.type.startsWith('image/'));
+          if (!imageItem) return false;
+          const file = imageItem.getAsFile();
+          if (!file) return false;
+          event.preventDefault();
+
+          const selection = view.state.selection.main;
+          const placeholder = `![Subiendo imagen...](${file.name || 'image.png'})`;
+
+          view.dispatch({
+            changes: { from: selection.from, to: selection.to, insert: placeholder },
+            selection: { anchor: selection.from + placeholder.length }
+          });
+
+          const formData = new FormData();
+          formData.append('file', file, file.name || 'image.png');
+
+          fetch('/api/forum/upload-image', { method: 'POST', body: formData })
+            .then(res => {
+              if (!res.ok) throw new Error('Upload failed');
+              return res.json();
+            })
+            .then(data => {
+              const url = data.url || '';
+              if (!url) throw new Error('No URL in response');
+
+              const currentDoc = view.state.doc.toString();
+              const idx = currentDoc.indexOf(placeholder);
+              if (idx !== -1) {
+                view.dispatch({
+                  changes: { from: idx, to: idx + placeholder.length, insert: `![](${url})` }
+                });
+              } else {
+                const sel = view.state.selection.main;
+                view.dispatch({
+                  changes: { from: sel.from, to: sel.to, insert: `![](${url})` }
+                });
+              }
+            })
+            .catch(err => {
+              console.error('Image paste upload failed:', err);
+              const currentDoc = view.state.doc.toString();
+              const idx = currentDoc.indexOf(placeholder);
+              if (idx !== -1) {
+                view.dispatch({
+                  changes: { from: idx, to: idx + placeholder.length, insert: `![Error al subir imagen](${file.name || 'image.png'})` }
+                });
+              }
+            });
+          return true;
         }
       }),
       EditorView.updateListener.of(u => {

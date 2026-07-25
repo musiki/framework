@@ -63,21 +63,22 @@ export function injectWorkspaceCss(containerId: string) {
       background: color-mix(in srgb, var(--c-link, #3b82f6) 7%, var(--c-bg));
     }
 
-    /* Transparent header — the drag zone */
+    /* DIY Shell Header — stable header bar */
     .cnw-header {
       position: relative;
       width: 100%;
-      height: 22px;
+      height: 38px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: flex-end;
-      background: transparent;
+      background: var(--c-bg-surface, var(--c-bg-mute, #1a1a24));
+      border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.18));
       cursor: grab;
       user-select: none;
-      padding: 0 6px;
+      padding: 0 10px;
       box-sizing: border-box;
-      gap: 6px;
+      gap: 8px;
     }
     .cnw-header:active { cursor: grabbing; }
     .cnw-header.is-dragging { opacity: .4; }
@@ -87,10 +88,11 @@ export function injectWorkspaceCss(containerId: string) {
       display: inline-grid;
       grid-template-columns: repeat(2, 3px);
       grid-template-rows: repeat(3, 3px);
-      gap: 2px;
+      gap: 2.5px;
       opacity: 0.7;
       flex-shrink: 0;
       pointer-events: none;
+      margin-right: 2px;
     }
     .cnw-handle span {
       width: 3px;
@@ -100,11 +102,12 @@ export function injectWorkspaceCss(containerId: string) {
       display: block;
     }
 
-    /* Note title — subtle but always visible */
+    /* Note title — stable and recognizable */
     .cnw-title {
-      font-size: 12.65px;
+      font-size: 13.5px;
+      font-weight: 500;
       color: var(--c-fg);
-      opacity: 0.8;
+      opacity: 0.95;
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -115,12 +118,13 @@ export function injectWorkspaceCss(containerId: string) {
 
     /* Status dot */
     .cnw-status {
-      width: 7px;
-      height: 7px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
       opacity: 0;
       transition: opacity 300ms, background 200ms;
+      margin-right: 4px;
     }
     .cnw-status.pending { background: var(--c-fg-dim); opacity: 1; }
     .cnw-status.saving  { background: var(--c-link, #3b82f6); opacity: 1; animation: cnw-pulse 800ms infinite; }
@@ -136,39 +140,59 @@ export function injectWorkspaceCss(containerId: string) {
       color: var(--c-fg-dim);
       opacity: 0;
       line-height: 1;
-      font-size: 13.8px;
-      transition: opacity 160ms, color 160ms;
+      font-size: 18px;
+      transition: opacity 160ms, color 160ms, background 160ms;
       display: flex;
       align-items: center;
+      justify-content: center;
       flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      box-sizing: border-box;
     }
-    .cnw-shell:hover .cnw-mode-btn { opacity: 0.6; }
-    .cnw-mode-btn:hover { opacity: 1 !important; color: var(--c-fg); }
+    .cnw-mode-btn:hover { background: rgba(120, 120, 140, 0.15); color: var(--c-fg); }
     .cnw-close-btn:hover { color: #c87e7e !important; }
     .cnw-mode-btn.is-active { opacity: 1 !important; color: var(--c-link, #3b82f6) !important; }
 
-    /* HUD icon buttons — cohesive with ribbon flat style */
+    /* Keep mode toggler (pencil/eye) always visible */
+    .cnw-pencil-btn {
+      opacity: 0.85 !important;
+      color: var(--c-fg);
+    }
+    .cnw-pencil-btn:hover { opacity: 1 !important; }
+    .cnw-pencil-btn.is-active { color: var(--c-link, #3b82f6) !important; }
+
+    .cnw-shell:hover .cnw-mode-btn:not(.cnw-pencil-btn) { opacity: 0.65; }
+    .cnw-mode-btn:not(.cnw-pencil-btn):hover { opacity: 1 !important; }
+
+    /* HUD icon buttons — consolidated in header */
     .cnw-hud-icon-btn {
       border: none;
       background: none;
       cursor: pointer;
-      padding: 0 3px;
-      color: inherit;
+      padding: 0;
+      color: var(--c-fg-dim);
       display: flex;
       align-items: center;
       justify-content: center;
-      opacity: 1;
+      opacity: 0.85;
       flex-shrink: 0;
       position: relative;
-      transition: color 120ms;
+      transition: color 120ms, opacity 120ms, background 120ms;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      box-sizing: border-box;
     }
-    .cnw-hud-icon-btn:hover { color: var(--c-fg); }
-    .cnw-hud-icon-btn.is-active { color: var(--c-link, #3b82f6) !important; }
-    /* CSS tooltip — floats above the button, inside panel bounds */
+    .cnw-hud-icon-btn:hover { color: var(--c-fg); opacity: 1; background: rgba(120, 120, 140, 0.15); }
+    .cnw-hud-icon-btn.is-active { color: var(--c-link, #3b82f6) !important; opacity: 1 !important; }
+
+    /* CSS tooltip — floats below the button, inside panel bounds */
     .cnw-hud-icon-btn::after {
       content: attr(data-tooltip);
       position: absolute;
-      bottom: calc(100% + 6px);
+      top: calc(100% + 6px);
       right: 0;
       background: color-mix(in srgb, var(--c-bg, #111) 93%, var(--c-fg) 7%);
       border: 1px solid var(--c-border, rgba(120,120,140,.3));
@@ -184,6 +208,7 @@ export function injectWorkspaceCss(containerId: string) {
       font-family: var(--font-ui, system-ui, sans-serif);
     }
     .cnw-hud-icon-btn:hover::after { opacity: 1; }
+
     .cnw-hud-download {
       position: relative;
       display: flex;
@@ -192,7 +217,7 @@ export function injectWorkspaceCss(containerId: string) {
     .cnw-hud-download-menu {
       position: absolute;
       right: 0;
-      bottom: calc(100% + 6px);
+      top: calc(100% + 6px);
       min-width: 148px;
       padding: 4px;
       border: 1px solid var(--c-border, rgba(120,120,140,.3));
@@ -685,28 +710,25 @@ export function buildShell(
   header.appendChild(statusDot);
 
   const pencilBtn = document.createElement('button');
-  pencilBtn.className = 'cnw-mode-btn';
+  pencilBtn.className = 'cnw-mode-btn cnw-pencil-btn';
   pencilBtn.title = 'Alternar modo edición / vista previa';
-  pencilBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
-  header.appendChild(pencilBtn);
+  pencilBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 
   const splitRightBtn = document.createElement('button');
   splitRightBtn.className = 'cnw-mode-btn';
   splitRightBtn.title = 'Dividir a la derecha';
-  splitRightBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="12" y1="3" x2="12" y2="21"/></svg>`;
-  header.appendChild(splitRightBtn);
+  splitRightBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="12" y1="3" x2="12" y2="21"/></svg>`;
 
   const splitBelowBtn = document.createElement('button');
   splitBelowBtn.className = 'cnw-mode-btn';
   splitBelowBtn.title = 'Dividir abajo';
-  splitBelowBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="12" x2="21" y2="12"/></svg>`;
-  header.appendChild(splitBelowBtn);
+  splitBelowBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><line x1="3" y1="12" x2="21" y2="12"/></svg>`;
 
   const traceBtn = document.createElement('button');
   traceBtn.className = 'cnw-hud-icon-btn cnw-hud-trace-btn';
   traceBtn.title = 'Monitor de análisis';
   traceBtn.dataset.tooltip = 'Monitor — Trace, Léxico, Zipf y QA';
-  traceBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.3" fill="currentColor" stroke="none"/></svg>`;
+  traceBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1.3" fill="currentColor" stroke="none"/></svg>`;
 
   const downloadWrap = document.createElement('span');
   downloadWrap.className = 'cnw-hud-download';
@@ -715,7 +737,7 @@ export function buildShell(
   downloadBtn.type = 'button';
   downloadBtn.title = 'Descargar nota';
   downloadBtn.dataset.tooltip = 'Descargar';
-  downloadBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>`;
+  downloadBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>`;
   const downloadMenu = document.createElement('div');
   downloadMenu.className = 'cnw-hud-download-menu';
   downloadMenu.innerHTML = `
@@ -730,13 +752,12 @@ export function buildShell(
   const closeBtn = document.createElement('button');
   closeBtn.className = 'cnw-mode-btn cnw-close-btn';
   closeBtn.title = 'Cerrar panel';
-  closeBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+  closeBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     const panel = dockview.getGroupPanel(panelId);
     if (panel) dockview.removePanel(panel);
   });
-  header.appendChild(closeBtn);
 
   // Drag behaviour on header
   header.draggable = true;
@@ -791,11 +812,11 @@ export function buildShell(
   if (showHud) {
     const hud = document.createElement('div');
     hud.className = 'cnw-hud';
-    hud.style.cssText = 'display:flex;align-items:center;padding:0 .6rem;height:20px;flex-shrink:0;gap:8px;';
+    hud.style.cssText = 'display:flex;align-items:center;gap:8px;flex-shrink:0;margin-right:8px;';
 
     const stats = document.createElement('span');
     stats.className = 'cnw-hud-stats';
-    stats.style.cssText = 'font-size:.784rem;opacity:.7;font-family:var(--font-mono,monospace);flex:1';
+    stats.style.cssText = 'font-size:.784rem;opacity:.7;font-family:var(--font-mono,monospace);display:flex;align-items:center;gap:6px;';
     hud.appendChild(stats);
     hud.appendChild(downloadWrap);
     hud.appendChild(traceBtn);
@@ -803,7 +824,8 @@ export function buildShell(
     const infoBtn = document.createElement('button');
     infoBtn.className = 'cnw-hud-icon-btn cnw-hud-info-btn';
     infoBtn.title = 'Ayuda e Información Teórica de TraceCode';
-    infoBtn.style.cssText = 'background:none;border:none;color:var(--c-fg);opacity:.6;cursor:pointer;padding:0 4px;font-family:var(--font-mono,monospace);font-weight:bold;font-size:14px;line-height:16px;display:flex;align-items:center;justify-content:center;';
+    infoBtn.dataset.tooltip = 'Ayuda';
+    infoBtn.style.cssText = 'background:none;border:none;color:var(--c-fg);opacity:.6;cursor:pointer;padding:0;font-family:var(--font-mono,monospace);font-weight:bold;font-size:18px;line-height:22px;display:flex;align-items:center;justify-content:center;';
     infoBtn.innerHTML = '?';
     infoBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -813,8 +835,13 @@ export function buildShell(
     });
     hud.appendChild(infoBtn);
 
-    shell.appendChild(hud);
+    header.appendChild(hud);
   }
+
+  header.appendChild(pencilBtn);
+  header.appendChild(splitRightBtn);
+  header.appendChild(splitBelowBtn);
+  header.appendChild(closeBtn);
 
   return { shell, bodyEl: body, statusDot, pencilBtn, splitRightBtn, splitBelowBtn, traceBtn, downloadBtn, downloadMenu };
 }

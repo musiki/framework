@@ -24,15 +24,20 @@ function escapeHtml(s) {
 function stripHeaderFromParagraph(p) {
   // Texto plano del párrafo
   const plain = nodeText(p).trimStart();
-  const m = plain.match(/^\[\!([a-zA-Z]+)\]\s*(.*)?$/);
+  const firstLine = plain.split('\n')[0];
+  const m = firstLine.match(/^\[\!([a-zA-Z]+)\]\s*(.*)?$/);
   if (!m) return null;
 
   const type = (m[1] || 'note').toLowerCase();
   const title = (m[2] || '').trim();
 
   // Vamos a “consumir” m[0] caracteres desde el INICIO del párrafo
-  let toSkip = plain.indexOf('[') === 0 ? m[0].length : 0;
+  let toSkip = plain.indexOf('[') === 0 ? firstLine.length : 0;
   if (!toSkip) return null;
+
+  if (plain.length > firstLine.length) {
+    toSkip += 1; // saltar el salto de línea
+  }
 
   // Volvemos a caminar los hijos del párrafo y recortamos text nodes al frente
   const newChildren = [];

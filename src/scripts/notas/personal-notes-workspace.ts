@@ -438,6 +438,49 @@ function injectWorkspaceExtraCss() {
     .version-card:hover {
       background: rgba(255, 255, 255, 0.03);
     }
+    .version-action-btn {
+      padding: 3px 6px;
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--c-bg-mute, rgba(120, 120, 140, 0.1));
+      border: 1px solid var(--c-border, rgba(120, 120, 140, 0.2));
+      border-radius: 4px;
+      color: var(--c-fg);
+      cursor: pointer;
+      transition: background 150ms, border-color 150ms, color 150ms;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+    }
+    .version-action-btn:hover {
+      background: var(--c-bg-alt, rgba(120, 120, 140, 0.2));
+    }
+    .version-action-btn.v-preview:hover {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.4);
+      color: var(--c-link, #3b82f6);
+    }
+    .version-action-btn.v-rename:hover {
+      background: rgba(168, 85, 247, 0.15);
+      border-color: rgba(168, 85, 247, 0.4);
+      color: #a855f7;
+    }
+    .version-action-btn.v-resave:hover {
+      background: rgba(234, 179, 8, 0.15);
+      border-color: rgba(234, 179, 8, 0.4);
+      color: #eab308;
+    }
+    .version-action-btn.v-restore:hover {
+      background: rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.4);
+      color: #22c55e;
+    }
+    .version-action-btn.v-delete:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #ef4444;
+    }
     .annotation-highlight {
       background-color: rgba(220, 160, 40, 0.22) !important;
       border-bottom: 2px solid rgba(220, 160, 40, 0.6) !important;
@@ -608,6 +651,19 @@ export async function mountDbNoteEditor(
       const data = await res.json();
       editorWrap.innerHTML = `<div class="pnw-render-preview"><div class="cnw-md">${data.html || ''}</div></div>`;
       enhanceCourseNotesContent(editorWrap);
+      editorWrap.querySelector('.pnw-render-preview')?.addEventListener('click', (event) => {
+        const link = (event.target as HTMLElement).closest('a');
+        if (!link) return;
+        const href = link.getAttribute('href');
+        if (href && href.startsWith('#')) {
+          event.preventDefault();
+          const targetId = href.slice(1);
+          const targetEl = editorWrap.querySelector(`[id="${targetId}"]`);
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      });
     } catch {
       editorWrap.innerHTML = '<div class="pnw-render-preview"><p style="color:#c87e7e;font-size:.85rem;">No se pudo renderizar la vista Markdown.</p></div>';
     }
@@ -959,15 +1015,13 @@ export async function mountDbNoteEditor(
   commentBtn.className = 'cnw-hud-icon-btn cnw-hud-comment-btn';
   commentBtn.title = 'Comentarios y Anotaciones';
   commentBtn.dataset.tooltip = 'Comentarios y Anotaciones';
-  commentBtn.style.cssText = 'display: flex; align-items: center; justify-content: center;';
-  commentBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  commentBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
 
   const historyBtn = document.createElement('button');
   historyBtn.className = 'cnw-hud-icon-btn cnw-hud-history-btn';
   historyBtn.title = 'Historial de versiones';
   historyBtn.dataset.tooltip = 'Historial de versiones';
-  historyBtn.style.cssText = 'display: flex; align-items: center; justify-content: center;';
-  historyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>`;
+  historyBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>`;
 
   if (hud) {
     const infoBtn = hud.querySelector<HTMLElement>(':scope > .cnw-hud-info-btn');
@@ -1323,6 +1377,57 @@ export async function mountDbNoteEditor(
     } catch {}
   };
 
+  const showPreviewModal = (versionName: string, bodyText: string) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      box-sizing: border-box;
+      font-family: var(--font-sans, sans-serif);
+      animation: fadeIn 0.15s ease-out;
+    `;
+
+    overlay.innerHTML = `
+      <style>
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .version-preview-content {
+          flex: 1;
+          background: var(--c-bg);
+          border: 1px solid var(--c-border);
+          border-radius: 8px;
+          padding: 1rem;
+          overflow-y: auto;
+          font-family: var(--font-mono, monospace);
+          font-size: 12px;
+          line-height: 1.6;
+          color: var(--c-fg);
+          white-space: pre-wrap;
+          margin-top: 10px;
+        }
+      </style>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--c-border); padding-bottom: 8px;">
+        <span style="font-weight: 600; font-size: 12px; color: var(--c-fg);">Vista previa: ${escHtml(versionName)}</span>
+        <button class="preview-close-btn" style="background: none; border: none; color: var(--c-fg-dim); cursor: pointer; font-size: 16px; display: flex; align-items: center;">✖</button>
+      </div>
+      <div class="version-preview-content"></div>
+    `;
+
+    overlay.querySelector('.version-preview-content')!.textContent = bodyText;
+    overlay.querySelector('.preview-close-btn')?.addEventListener('click', () => {
+      overlay.remove();
+    });
+
+    bodyEl.style.position = 'relative';
+    bodyEl.appendChild(overlay);
+  };
+
   const renderVersionsList = () => {
     const listContainer = versionsSidebar.querySelector('.versions-list-container')!;
     listContainer.innerHTML = '';
@@ -1340,12 +1445,75 @@ export async function mountDbNoteEditor(
         <div style="font-size: 9.5px; color: var(--c-fg-dim); opacity: 0.8; margin-top: 2px;">
           Por ${escHtml(v.createdByUserName || 'Usuario')} · ${formatRelativeTime(v.createdAt)}
         </div>
-        <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
-          <button class="restore-version-btn" style="padding: 3px 8px; font-size: 10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 4px; color: var(--c-link, #3b82f6); cursor: pointer;">Restaurar</button>
+        <div style="display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px;">
+          <button class="version-action-btn v-preview" title="Previsualizar esta versión">P</button>
+          <button class="version-action-btn v-rename" title="Cambiar nombre de la versión">N</button>
+          <button class="version-action-btn v-resave" title="Sobrescribir esta versión con el contenido actual del editor">S</button>
+          <button class="version-action-btn v-restore" title="Restaurar esta versión">R</button>
+          <button class="version-action-btn v-delete" title="Eliminar esta versión">D</button>
         </div>
       `;
       
-      card.querySelector('.restore-version-btn')?.addEventListener('click', async () => {
+      // Preview
+      card.querySelector('.v-preview')?.addEventListener('click', async () => {
+        try {
+          const res = await fetch(`/api/live/notes/versions?versionId=${v.id}`);
+          if (!res.ok) throw new Error();
+          const data = await res.json();
+          if (data.version) {
+            showPreviewModal(v.versionName, data.version.body);
+          }
+        } catch {
+          alert('No se pudo cargar la vista previa de la versión.');
+        }
+      });
+
+      // Rename
+      card.querySelector('.v-rename')?.addEventListener('click', async () => {
+        const newName = prompt('Cambiar nombre de la versión:', v.versionName);
+        if (newName === null) return;
+        const nameVal = newName.trim();
+        if (!nameVal || nameVal === v.versionName) return;
+
+        try {
+          const res = await fetch('/api/live/notes/versions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ versionId: v.id, versionName: nameVal })
+          });
+          if (res.ok) {
+            void loadVersions();
+          } else {
+            throw new Error();
+          }
+        } catch {
+          alert('No se pudo cambiar el nombre de la versión.');
+        }
+      });
+
+      // Resave / Overwrite
+      card.querySelector('.v-resave')?.addEventListener('click', async () => {
+        if (!confirm(`¿Sobrescribir la versión "${v.versionName}" con el contenido actual del editor?`)) return;
+
+        try {
+          const res = await fetch('/api/live/notes/versions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ versionId: v.id, resave: true })
+          });
+          if (res.ok) {
+            void loadVersions();
+            alert('Versión sobrescrita con éxito.');
+          } else {
+            throw new Error();
+          }
+        } catch {
+          alert('No se pudo sobrescribir la versión.');
+        }
+      });
+
+      // Restore
+      card.querySelector('.v-restore')?.addEventListener('click', async () => {
         if (!confirm(`¿Restaurar la versión "${v.versionName}"? Se reemplazará el contenido actual del editor.`)) return;
         
         const res = await fetch('/api/live/notes/versions', {
@@ -1374,6 +1542,25 @@ export async function mountDbNoteEditor(
           alert('No se pudo restaurar la versión.');
         }
       });
+
+      // Delete
+      card.querySelector('.v-delete')?.addEventListener('click', async () => {
+        if (!confirm(`¿Eliminar la versión "${v.versionName}"? Esta acción no se puede deshacer.`)) return;
+
+        try {
+          const res = await fetch(`/api/live/notes/versions?versionId=${v.id}`, {
+            method: 'DELETE'
+          });
+          if (res.ok) {
+            void loadVersions();
+          } else {
+            throw new Error();
+          }
+        } catch {
+          alert('No se pudo eliminar la versión.');
+        }
+      });
+
       listContainer.appendChild(card);
     }
   };
