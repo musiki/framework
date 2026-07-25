@@ -572,6 +572,48 @@ function tesinaSeminarioDocument(
   ].join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
+export function parseCustomBlocks(markdown: string): {
+  cleanMarkdown: string;
+  blocks: Map<string, string>;
+} {
+  const blocks = new Map<string, string>();
+  let result = '';
+  let i = 0;
+
+  while (i < markdown.length) {
+    if (markdown[i] === '{' && markdown[i + 1] === '#') {
+      let j = i + 2;
+      while (j < markdown.length && /[a-zA-Z0-9_-]/.test(markdown[j])) {
+        j++;
+      }
+      const name = markdown.substring(i + 2, j).toLowerCase();
+      let depth = 1;
+      let k = j;
+      while (k < markdown.length && depth > 0) {
+        if (markdown[k] === '{') {
+          depth++;
+        } else if (markdown[k] === '}') {
+          depth--;
+        }
+        k++;
+      }
+      if (depth === 0) {
+        const content = markdown.substring(j, k - 1).trim();
+        blocks.set(name, content);
+        i = k;
+        continue;
+      }
+    }
+    result += markdown[i];
+    i++;
+  }
+
+  return {
+    cleanMarkdown: result,
+    blocks
+  };
+}
+
 export function markdownToLatex(markdown: string, title = 'Nota', options: MarkdownToLatexOptions = {}): string {
   const { cleanMarkdown, footnotes } = extractFootnotes(markdown);
 
@@ -584,24 +626,17 @@ export function markdownToLatex(markdown: string, title = 'Nota', options: Markd
   let processedMarkdown = cleanMarkdown;
 
   if (options.templateId === 'tesina-seminario') {
-    const blockRegex = /\{#([a-zA-Z0-9_-]+)\s*\n([\s\S]*?)\n\s*\}/g;
-    let match;
-    while ((match = blockRegex.exec(cleanMarkdown)) !== null) {
-      const name = match[1].toLowerCase();
-      const content = match[2];
-      if (name === 'cover') {
-        tesinaCoverData = parseCover(content);
-      } else if (name === 'abstract-sp') {
-        tesinaAbstractSP = content;
-      } else if (name === 'abstract-en') {
-        tesinaAbstractEN = content;
-      } else if (name === 'keywords-sp') {
-        tesinaKeywordsSP = content;
-      } else if (name === 'keywords-en') {
-        tesinaKeywordsEN = content;
-      }
+    const { cleanMarkdown: stripped, blocks } = parseCustomBlocks(cleanMarkdown);
+    processedMarkdown = stripped.trim();
+
+    const coverContent = blocks.get('cover');
+    if (coverContent) {
+      tesinaCoverData = parseCover(coverContent);
     }
-    processedMarkdown = cleanMarkdown.replace(blockRegex, '').trim();
+    tesinaAbstractSP = blocks.get('abstract-sp') || null;
+    tesinaAbstractEN = blocks.get('abstract-en') || null;
+    tesinaKeywordsSP = blocks.get('keywords-sp') || null;
+    tesinaKeywordsEN = blocks.get('keywords-en') || null;
   }
 
   let body = markdownToLatexBody(processedMarkdown, footnotes);

@@ -130,9 +130,11 @@ test('markdownToLatex exports tesina-seminario as a modern thesis template with 
     'Este es el resumen en español.',
     '}',
     '',
-    '{#keywords-SP',
-    'timbre, música, maquínico',
-    '}',
+    '{#keywords-SP timbre, música, maquínico}',
+    '',
+    '{#abstract-EN English abstract}',
+    '',
+    '{#keywords-EN timbre fluctuation}',
     '',
     '# Capítulo 1',
     'Cuerpo principal.'
@@ -150,6 +152,9 @@ test('markdownToLatex exports tesina-seminario as a modern thesis template with 
   assert.match(tex, /\\chapter\*\{Resumen\}/);
   assert.match(tex, /Este es el resumen en español\./);
   assert.match(tex, /\\noindent \\textbf\{Palabras Claves:\} timbre, música, maquínico/);
+  assert.match(tex, /\\chapter\*\{Abstract\}/);
+  assert.match(tex, /English abstract/);
+  assert.match(tex, /\\noindent \\textbf\{Keywords:\} timbre fluctuation/);
   assert.match(tex, /\\section\{Capítulo 1\}/);
   assert.doesNotMatch(tex, /\{#cover\}/);
 });
