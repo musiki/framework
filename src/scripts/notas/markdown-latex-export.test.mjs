@@ -117,12 +117,41 @@ test('markdownToLatex exports asignacion-seminario as an acmart paper template',
   assert.match(tex, /\\section\{Resumen\}/);
 });
 
-test('markdownToLatex exports tesina-seminario as a modern thesis template', () => {
-  const tex = markdownToLatex('# Capítulo\n\nContenido.', 'Tesina', { templateId: 'tesina-seminario' });
+test('markdownToLatex exports tesina-seminario as a modern thesis template with custom cover, abstracts and keywords', () => {
+  const markdown = [
+    '{#cover',
+    'title: Mi super tesina',
+    'author: Carolina Di Paola',
+    'year: 2026',
+    'tutor: Luciano',
+    '}',
+    '',
+    '{#abstract-SP',
+    'Este es el resumen en español.',
+    '}',
+    '',
+    '{#keywords-SP',
+    'timbre, música, maquínico',
+    '}',
+    '',
+    '# Capítulo 1',
+    'Cuerpo principal.'
+  ].join('\n');
+
+  const tex = markdownToLatex(markdown, 'Tesina', { templateId: 'tesina-seminario' });
+
   assert.match(tex, /\\documentclass\[12pt,a4paper\]\{report\}/);
   assert.match(tex, /\\usepackage\[spanish\]\{babel\}/);
   assert.match(tex, /\\tableofcontents/);
-  assert.match(tex, /\\section\{Capítulo\}/);
+  assert.match(tex, /\\begin\{titlepage\}/);
+  assert.match(tex, /Mi super tesina/);
+  assert.match(tex, /Carolina Di Paola/);
+  assert.match(tex, /Tutor: Luciano/);
+  assert.match(tex, /\\chapter\*\{Resumen\}/);
+  assert.match(tex, /Este es el resumen en español\./);
+  assert.match(tex, /\\noindent \\textbf\{Palabras Claves:\} timbre, música, maquínico/);
+  assert.match(tex, /\\section\{Capítulo 1\}/);
+  assert.doesNotMatch(tex, /\{#cover\}/);
 });
 
 test('LATEX_TEMPLATES lists the seminar exports', () => {

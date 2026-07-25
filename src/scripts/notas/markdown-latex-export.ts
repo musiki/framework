@@ -437,7 +437,101 @@ function asignacionSeminarioDocument(body: string, title: string): string {
   ].join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
-function tesinaSeminarioDocument(body: string, title: string): string {
+function parseCover(content: string) {
+  const lines = content.split('\n');
+  const props: Record<string, string> = {
+    title: '',
+    subtitle: '',
+    author: '',
+    attribution: 'Tesina para la Licenciatura en Música de la Universidad Nacional de Tres de Febrero',
+    year: '',
+    tutor: ''
+  };
+  for (const line of lines) {
+    const parts = line.match(/^([a-zA-Z0-9_-]+)\s*:\s*(.*)$/);
+    if (parts) {
+      let key = parts[1].trim().toLowerCase();
+      if (key === 'attribuition') key = 'attribution';
+      let val = parts[2].trim();
+      if (val.startsWith('{') && val.endsWith('}')) {
+        val = val.slice(1, -1).trim();
+      }
+      if (key in props) {
+        props[key] = val;
+      }
+    }
+  }
+  return props;
+}
+
+function tesinaSeminarioDocument(
+  body: string,
+  title: string,
+  extra?: {
+    coverData?: any;
+    abstractSP?: string | null;
+    abstractEN?: string | null;
+    keywordsSP?: string | null;
+    keywordsEN?: string | null;
+    footnotes?: Map<string, string>;
+  }
+): string {
+  let coverPage = '';
+  let makeTitleCmd = '\\maketitle';
+
+  if (extra?.coverData) {
+    const cd = extra.coverData;
+    makeTitleCmd = '';
+    coverPage = [
+      '\\begin{titlepage}',
+      '\\centering',
+      '\\vspace*{2cm}',
+      `{\\Large \\bfseries ${escapeLatex(cd.title || title)} \\par}`,
+      cd.subtitle ? `\\vspace{0.5cm}\n{\\large ${escapeLatex(cd.subtitle)} \\par}` : '',
+      '\\vspace{2.5cm}',
+      `{\\large \\bfseries ${escapeLatex(cd.author)} \\par}`,
+      '\\vspace{2.5cm}',
+      cd.year
+        ? `{\\large ${escapeLatex(cd.attribution)} [${escapeLatex(cd.year)}] \\par}`
+        : `{\\large ${escapeLatex(cd.attribution)} \\par}`,
+      '\\vspace{2cm}',
+      cd.tutor ? `{\\large Tutor: ${escapeLatex(cd.tutor)} \\par}` : '',
+      '\\vfill',
+      '\\end{titlepage}',
+      '\\clearpage'
+    ].filter(Boolean).join('\n');
+  }
+
+  let abstractPages = '';
+  const fns = extra?.footnotes;
+  if (extra?.abstractSP) {
+    const abstractSPBody = markdownToLatexBody(extra.abstractSP, fns);
+    const keywordsSPStr = extra.keywordsSP
+      ? `\\vspace{1.5cm}\n\\noindent \\textbf{Palabras Claves:} ${inlineMarkdownToLatex(extra.keywordsSP, fns)}`
+      : '';
+    abstractPages += [
+      '\\chapter*{Resumen}',
+      '\\addcontentsline{toc}{chapter}{Resumen}',
+      abstractSPBody,
+      keywordsSPStr,
+      '\\clearpage'
+    ].join('\n') + '\n\n';
+  }
+
+  if (extra?.abstractEN) {
+    const abstractENBody = markdownToLatexBody(extra.abstractEN, fns);
+    const keywordsENStr = extra.keywordsEN
+      ? `\\vspace{1.5cm}\n\\noindent \\textbf{Keywords:} ${inlineMarkdownToLatex(extra.keywordsEN, fns)}`
+      : '';
+    abstractPages += [
+      '\\chapter*{Abstract}',
+      '\\addcontentsline{toc}{chapter}{Abstract}',
+      abstractENBody,
+      keywordsENStr,
+      '\\clearpage'
+    ].join('\n') + '\n\n';
+  }
+
   return [
     '\\documentclass[12pt,a4paper]{report}',
     '\\usepackage[utf8]{inputenc}',
@@ -466,7 +560,8 @@ function tesinaSeminarioDocument(body: string, title: string): string {
     '\\date{\\today}',
     '',
     '\\begin{document}',
-    '\\maketitle',
+    extra?.coverData ? coverPage : makeTitleCmd,
+    abstractPages,
     '\\tableofcontents',
     '\\clearpage',
     '',
@@ -479,13 +574,52 @@ function tesinaSeminarioDocument(body: string, title: string): string {
 
 export function markdownToLatex(markdown: string, title = 'Nota', options: MarkdownToLatexOptions = {}): string {
   const { cleanMarkdown, footnotes } = extractFootnotes(markdown);
-  let body = markdownToLatexBody(cleanMarkdown, footnotes);
+
+  let tesinaCoverData: any = null;
+  let tesinaAbstractSP: string | null = null;
+  let tesinaAbstractEN: string | null = null;
+  let tesinaKeywordsSP: string | null = null;
+  let tesinaKeywordsEN: string | null = null;
+
+  let processedMarkdown = cleanMarkdown;
+
+  if (options.templateId === 'tesina-seminario') {
+    const blockRegex = /\{#([a-zA-Z0-9_-]+)\s*\n([\s\S]*?)\n\s*\}/g;
+    let match;
+    while ((match = blockRegex.exec(cleanMarkdown)) !== null) {
+      const name = match[1].toLowerCase();
+      const content = match[2];
+      if (name === 'cover') {
+        tesinaCoverData = parseCover(content);
+      } else if (name === 'abstract-sp') {
+        tesinaAbstractSP = content;
+      } else if (name === 'abstract-en') {
+        tesinaAbstractEN = content;
+      } else if (name === 'keywords-sp') {
+        tesinaKeywordsSP = content;
+      } else if (name === 'keywords-en') {
+        tesinaKeywordsEN = content;
+      }
+    }
+    processedMarkdown = cleanMarkdown.replace(blockRegex, '').trim();
+  }
+
+  let body = markdownToLatexBody(processedMarkdown, footnotes);
 
   // Replace indexofigures tags
   body = body.replace(/&lt;\/?indexofigures&gt;/gi, '\\listoffigures');
   body = body.replace(/<\/?indexofigures>/gi, '\\listoffigures');
 
   if (options.templateId === 'asignacion-seminario') return asignacionSeminarioDocument(body, title);
-  if (options.templateId === 'tesina-seminario') return tesinaSeminarioDocument(body, title);
+  if (options.templateId === 'tesina-seminario') {
+    return tesinaSeminarioDocument(body, title, {
+      coverData: tesinaCoverData,
+      abstractSP: tesinaAbstractSP,
+      abstractEN: tesinaAbstractEN,
+      keywordsSP: tesinaKeywordsSP,
+      keywordsEN: tesinaKeywordsEN,
+      footnotes
+    });
+  }
   return directLatexDocument(body, title);
 }
