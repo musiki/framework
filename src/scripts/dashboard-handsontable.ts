@@ -2602,7 +2602,306 @@ const bindImportAndAddStudent = (root: HTMLElement, meta: DashboardMeta) => {
     }
     dialog.close();
     showToast('Estudiante agregado. Recargando...', 'success', 1500);
-    window.setTimeout(() => window.location.reload(), 900);
+  });
+};
+
+const normalizeStringForSimilarity = (str: string): string => {
+  return String(str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim();
+};
+
+const getWordsForSimilarity = (str: string): string[] => {
+  return normalizeStringForSimilarity(str).split(/\s+/).filter(Boolean);
+};
+
+const getLevenshteinDistance = (s1: string, s2: string): number => {
+  const len1 = s1.length;
+  const len2 = s2.length;
+  const matrix = Array.from({ length: len1 + 1 }, () => new Uint16Array(len2 + 1));
+  for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+  for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1, // deletion
+        matrix[i][j - 1] + 1, // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  return matrix[len1][len2];
+};
+
+const areUsersSimilar = (u1: any, u2: any): boolean => {
+  if (u1.userId === u2.userId || u1.id === u2.id) return false;
+
+  // 1. Same email (case-insensitive)
+  const e1 = normalizeText(u1.email).toLowerCase();
+  const e2 = normalizeText(u2.email).toLowerCase();
+  if (e1 && e2 && e1 === e2 && e1 !== '—') return true;
+
+  // 2. Similar name
+  const n1 = normalizeStringForSimilarity(`${u1.lastName || ''} ${u1.firstName || ''}`);
+  const n2 = normalizeStringForSimilarity(`${u2.lastName || ''} ${u2.firstName || ''}`);
+  if (!n1 || !n2 || n1 === '—' || n2 === '—') return false;
+
+  // Exact match after word sort (ignores order)
+  const w1 = getWordsForSimilarity(n1).sort();
+  const w2 = getWordsForSimilarity(n2).sort();
+  if (w1.join(' ') === w2.join(' ')) return true;
+
+  // Exact match after removing spaces
+  if (w1.join('') === w2.join('')) return true;
+
+  // Levenshtein distance of full names
+  const distance = getLevenshteinDistance(n1, n2);
+  const minLength = Math.min(n1.length, n2.length);
+  if (distance <= 2 && minLength >= 4) return true;
+
+  // Sub-phrase overlap (e.g. one contains all words of the other, and the other is at least 2 words)
+  if (w1.length >= 2 && w2.length >= 2) {
+    const isSubset = w1.every((word) => w2.includes(word)) || w2.every((word) => w1.includes(word));
+    if (isSubset) return true;
+  }
+
+  return false;
+};
+
+const detectDuplicates = (users: any[]): any[][] => {
+  const visited = new Set<string>();
+  const groups: any[][] = [];
+  for (const u of users) {
+    const uId = String(u.userId || u.id);
+    if (!uId || visited.has(uId)) continue;
+    const group: any[] = [];
+    const queue = [u];
+    visited.add(uId);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      group.push(current);
+      for (const other of users) {
+        const otherId = String(other.userId || other.id);
+        if (!otherId || visited.has(otherId)) continue;
+        if (areUsersSimilar(current, other)) {
+          visited.add(otherId);
+          queue.push(other);
+        }
+      }
+    }
+    if (group.length > 1) {
+      groups.push(group);
+    }
+  }
+  return groups;
+};
+
+const getCompletenessScore = (u: any): number => {
+  let score = 0;
+  const email = normalizeText(u.email);
+  if (email && email !== '—' && email.includes('@')) {
+    score += 20;
+  }
+  const nameLen = normalizeText(`${u.lastName || ''} ${u.firstName || ''}`).length;
+  score += nameLen;
+  if (Array.isArray(u.enrollmentCourses)) {
+    score += u.enrollmentCourses.length * 5;
+  }
+  return score;
+};
+
+const bindDuplicateChecker = (root: HTMLElement, registry: Map<string, DashboardSheet>, meta: DashboardMeta) => {
+  const checkBtn = root.querySelector<HTMLButtonElement>('[data-dashboard-admin-check-duplicates]');
+  const dialog = root.ownerDocument.querySelector<HTMLDialogElement>('[data-duplicates-dialog]');
+  const closeBtn = dialog?.querySelector('[data-duplicates-close]');
+  const body = dialog?.querySelector('[data-duplicates-body]');
+  if (!checkBtn || !dialog || !closeBtn || !body) return;
+
+  closeBtn.addEventListener('click', () => dialog.close());
+
+  checkBtn.addEventListener('click', () => {
+    const sheet = registry.get('admin');
+    if (!sheet) {
+      showToast('No se encontró la planilla de administración.', 'error', 3500);
+      return;
+    }
+    const users = sheet.allRows;
+    const groups = detectDuplicates(users);
+
+    body.innerHTML = '';
+    if (groups.length === 0) {
+      body.innerHTML = `<p style="margin: 0; color: #888; font-size: 0.95rem; text-align: center; padding: 2rem 0;">No se encontraron usuarios duplicados o similares con los criterios actuales.</p>`;
+      dialog.showModal();
+      return;
+    }
+
+    groups.forEach((group, groupIdx) => {
+      // Find the most complete candidate
+      let bestCandidate = group[0];
+      let maxScore = -1;
+      group.forEach((u) => {
+        const score = getCompletenessScore(u);
+        if (score > maxScore) {
+          maxScore = score;
+          bestCandidate = u;
+        }
+      });
+
+      const groupCard = document.createElement('div');
+      groupCard.className = 'duplicate-group-card';
+      groupCard.style.border = '1px solid #333';
+      groupCard.style.borderRadius = '8px';
+      groupCard.style.background = '#222';
+      groupCard.style.marginBottom = '1.2rem';
+      groupCard.style.overflow = 'hidden';
+
+      const groupHeader = document.createElement('div');
+      groupHeader.style.padding = '0.8rem 1rem';
+      groupHeader.style.background = '#2d2d2d';
+      groupHeader.style.borderBottom = '1px solid #333';
+      groupHeader.style.fontWeight = '500';
+      groupHeader.style.fontSize = '0.9rem';
+      groupHeader.style.color = '#fff';
+      groupHeader.innerText = `Caso #${groupIdx + 1} (${group.length} usuarios similares)`;
+      groupCard.appendChild(groupHeader);
+
+      const listContainer = document.createElement('div');
+      listContainer.style.padding = '0.5rem 0';
+      group.forEach((u) => {
+        const isBest = u.userId === bestCandidate.userId;
+        const row = document.createElement('label');
+        row.style.display = 'flex';
+        row.style.alignItems = 'flex-start';
+        row.style.gap = '0.8rem';
+        row.style.padding = '0.6rem 1rem';
+        row.style.cursor = 'pointer';
+        row.style.borderBottom = '1px solid #2a2a2a';
+        if (row.style.borderBottom && group.indexOf(u) === group.length - 1) {
+          row.style.borderBottom = 'none';
+        }
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = `keep-candidate-${groupIdx}`;
+        radio.value = u.userId;
+        radio.checked = isBest;
+        radio.style.marginTop = '3px';
+
+        const info = document.createElement('div');
+        info.style.fontSize = '0.85rem';
+        info.innerHTML = `
+          <div style="font-weight: 600; color: #fff;">${normalizeText(u.lastName)}, ${normalizeText(u.firstName)} ${isBest ? '<span style="color: #4CAF50; font-size: 0.75rem; font-weight: normal; margin-left: 6px;">[Candidato sugerido]</span>' : ''}</div>
+          <div style="color: #aaa; margin-top: 2px;">Email: <span style="color: #ccc;">${normalizeText(u.email)}</span> | ID: <span style="font-family: monospace; color: #888;">${u.userId}</span></div>
+          <div style="color: #999; margin-top: 2px; font-size: 0.8rem;">Cursos: ${normalizeText(u.enrollmentSummary || 'Ninguno')}</div>
+        `;
+
+        row.appendChild(radio);
+        row.appendChild(info);
+        listContainer.appendChild(row);
+      });
+      groupCard.appendChild(listContainer);
+
+      const footer = document.createElement('div');
+      footer.style.padding = '0.8rem 1rem';
+      footer.style.background = '#252525';
+      footer.style.borderTop = '1px solid #333';
+      footer.style.display = 'flex';
+      footer.style.justifyContent = 'flex-end';
+
+      const mergeBtn = document.createElement('button');
+      mergeBtn.type = 'button';
+      mergeBtn.style.padding = '5px 12px';
+      mergeBtn.style.fontSize = '0.8rem';
+      mergeBtn.style.fontWeight = '500';
+      mergeBtn.style.background = '#0673d4';
+      mergeBtn.style.color = '#fff';
+      mergeBtn.style.border = 'none';
+      mergeBtn.style.borderRadius = '4px';
+      mergeBtn.style.cursor = 'pointer';
+      mergeBtn.innerText = 'Fusionar grupo';
+
+      mergeBtn.addEventListener('click', async () => {
+        const checkedRadio = listContainer.querySelector<HTMLInputElement>(`input[name="keep-candidate-${groupIdx}"]:checked`);
+        if (!checkedRadio) return;
+        const keepId = checkedRadio.value;
+        const toMerge = group.filter((u) => u.userId !== keepId);
+
+        if (!window.confirm(`¿Seguro que deseas fusionar a los otros ${toMerge.length} usuarios en el candidato seleccionado? Esta operación es irreversible.`)) {
+          return;
+        }
+
+        mergeBtn.disabled = true;
+        mergeBtn.innerText = 'Fusionando...';
+
+        let successCount = 0;
+        let failCount = 0;
+
+        // Keep track of the kept row data to update its courses
+        const keptUser = group.find((u) => u.userId === keepId);
+
+        for (const u of toMerge) {
+          try {
+            const response = await fetch('/api/admin/users/merge', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ keepId, mergeId: u.userId }),
+            });
+            const resData = await response.json().catch(() => ({}));
+            if (response.ok) {
+              successCount++;
+              // Combine enrollments locally
+              if (keptUser && Array.isArray(keptUser.enrollmentCourses) && Array.isArray(u.enrollmentCourses)) {
+                const combined = [...keptUser.enrollmentCourses];
+                u.enrollmentCourses.forEach((e: any) => {
+                  if (!combined.some((item) => item.courseId === e.courseId)) {
+                    combined.push(e);
+                  }
+                });
+                keptUser.enrollmentCourses = combined;
+                keptUser.enrollmentSummary = combined.map((e: any) => e.label || e.courseId).join(' · ');
+              }
+            } else {
+              failCount++;
+              console.error(`Merge failed for ${u.userId}:`, resData.error);
+            }
+          } catch (err) {
+            failCount++;
+            console.error(err);
+          }
+        }
+
+        if (successCount > 0) {
+          // Remove merged users from the sheet data
+          const mergedIds = toMerge.map((u) => u.userId);
+          sheet.allRows = sheet.allRows.filter((row) => !mergedIds.includes(row.userId || row.id));
+          setSheetRows(sheet, sheet.allRows);
+
+          showToast(`${successCount} usuarios fusionados con éxito.`, 'success', 2500);
+          groupCard.remove();
+
+          // If no cards left, display empty message
+          if (body.children.length === 0) {
+            body.innerHTML = `<p style="margin: 0; color: #888; font-size: 0.95rem; text-align: center; padding: 2rem 0;">Todos los duplicados han sido procesados.</p>`;
+          }
+        }
+
+        if (failCount > 0) {
+          showToast(`Error al fusionar ${failCount} usuarios. Ver la consola para más detalles.`, 'error', 4000);
+          mergeBtn.disabled = false;
+          mergeBtn.innerText = 'Fusionar grupo';
+        }
+      });
+
+      footer.appendChild(mergeBtn);
+      groupCard.appendChild(footer);
+      body.appendChild(groupCard);
+    });
+
+    dialog.showModal();
   });
 };
 
@@ -2671,6 +2970,7 @@ export const mountDashboardSheets = (root: HTMLElement) => {
   bindToolbarButtons(root, registry, meta);
   bindAdminActions(root, registry, meta);
   bindImportAndAddStudent(root, meta);
+  bindDuplicateChecker(root, registry, meta);
   root.dataset.dashboardSheetsMounted = 'true';
 
   return () => {

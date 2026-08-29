@@ -6640,6 +6640,15 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
               </button>
               <button
                 type="button"
+                class="dashboard-grid-btn dashboard-grid-btn--square"
+                data-dashboard-admin-check-duplicates
+                title="Chequear y fusionar usuarios duplicados o similares."
+                aria-label="Chequear duplicados"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+              <button
+                type="button"
                 class="dashboard-grid-btn dashboard-grid-btn--square dashboard-grid-btn--danger"
                 data-dashboard-admin-delete-selected
                 title="Seleccioná usuarios con los checkboxes para borrarlos."
@@ -7080,6 +7089,18 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
           <button type="button" class="dashboard-turno-btn" data-turno-pick="N">🌙 Noche</button>
         </div>
         <button type="button" class="dashboard-turno-cancel" data-turno-cancel>Cancelar</button>
+      </dialog>
+
+      <dialog class="dashboard-duplicates-dialog" data-duplicates-dialog style="border: none; border-radius: 12px; padding: 0; width: 680px; max-width: 90vw; background: #1E1E1E; color: #D1D1D1; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+        <div class="dashboard-duplicates-header" style="display: flex; justify-content: space-between; align-items: center; padding: 1.2rem 1.5rem; border-bottom: 1px solid #333; background: #252525;">
+          <span style="font-weight: 600; font-size: 1.1rem; color: #fff;">Chequear duplicados y similares</span>
+          <button type="button" class="dashboard-duplicates-close" data-duplicates-close aria-label="Cerrar" style="background: none; border: none; color: #888; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="dashboard-duplicates-body" data-duplicates-body style="padding: 1.5rem; max-height: 60vh; overflow-y: auto;">
+          <p style="margin: 0; color: #888;">Cargando duplicados...</p>
+        </div>
       </dialog>
 
       <dialog class="dashboard-add-student-dialog" data-add-student-dialog>

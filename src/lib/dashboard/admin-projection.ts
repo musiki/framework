@@ -1,6 +1,6 @@
 import { getRoleBadgeLabel } from '../dashboard-role';
 import { normalizeGlobalRole } from '../roles';
-import { buildSearchBlob, type DashboardGridProjection } from './shared';
+import { buildSearchBlob, splitDashboardName, type DashboardGridProjection } from './shared';
 
 interface AdminProjectionInput {
   activeCourseId: string;
@@ -120,11 +120,16 @@ export function buildAdminProjection({
           || '',
       ) || '—';
 
+      const displayName = String(user?.name || user?.email || userId || '—');
+      const { firstName, lastName } = splitDashboardName(displayName);
+
       return {
         id: userId,
         userId,
         enrollmentId: String(enrollment?.id || ''),
-        name: String(user?.name || user?.email || userId || '—'),
+        firstName,
+        lastName,
+        name: displayName,
         email: String(user?.email || '—'),
         grupo,
         globalRoleLabel: getRoleBadgeLabel(globalRole || 'student'),
@@ -136,7 +141,8 @@ export function buildAdminProjection({
         enrollmentCourseCatalog,
         lastActivityAt: latestActivityAt,
         __search: buildSearchBlob([
-          user?.name,
+          firstName,
+          lastName,
           user?.email,
           grupo,
           globalRole,
@@ -147,7 +153,11 @@ export function buildAdminProjection({
         ]),
       };
     })
-    .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), 'es'));
+    .sort((left, right) => {
+      const cmp = String(left.lastName || '').localeCompare(String(right.lastName || ''), 'es');
+      if (cmp !== 0) return cmp;
+      return String(left.firstName || '').localeCompare(String(right.firstName || ''), 'es');
+    });
 
   return {
     columns: [
@@ -162,7 +172,8 @@ export function buildAdminProjection({
         resizable: false,
         kind: 'row-select',
       },
-      { title: 'Nombre', field: 'name', frozen: true, minWidth: 180, kind: 'editable-text' },
+      { title: 'Apellido', field: 'lastName', frozen: true, minWidth: 132, kind: 'editable-text' },
+      { title: 'Nombre', field: 'firstName', frozen: true, minWidth: 124, kind: 'editable-text' },
       { title: 'Email', field: 'email', minWidth: 220, kind: 'editable-text' },
       { title: 'Grupo', field: 'grupo', width: 58, minWidth: 58, maxWidth: 58, hozAlign: 'center', headerHozAlign: 'center', kind: 'grupo' },
       { title: 'Rol global', field: 'globalRole', width: 200, minWidth: 200, maxWidth: 200, hozAlign: 'center', headerHozAlign: 'center', kind: 'role' },
