@@ -8,6 +8,15 @@ const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 600000);
 const maxPromptChars = Number(import.meta.env.CORRECTION_API_MAX_PROMPT_CHARS || 50000);
 const EMBED_MODEL = 'nomic-embed-text';
 
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
+const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+
+const DEFAULT_OPENROUTER_MODEL = 'google/gemini-2.5-flash';
+const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+
 const ensureText = (value: unknown): string => {
   if (typeof value === 'string') return value.trim();
   if (value === undefined || value === null) return '';
@@ -418,6 +427,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const courseId = ensureText(body.scope?.courseId);
   const sessionId = ensureText(body.scope?.sessionId);
   const correctionApiToken = import.meta.env.CORRECTION_API_TOKEN || 'local-dev-token';
+  const provider = ensureText(body.provider || body.options?.provider).toLowerCase() || 'ollama';
+  const model = ensureText(body.options?.model) || undefined;
 
   const contextBlocks = await performHybridRetrieval(message, { courseId, sessionId }, correctionApiToken);
   const webBlocks = shouldUseWebSearch(message, body.context?.webSearch)
@@ -450,6 +461,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   if (prompt.length > maxPromptChars) {
     return json({ ok: false, error: `prompt too long (max ${maxPromptChars} chars)` }, 413);
+  }
+
+  if (provider === 'deepseek') {
+    return handleDeepSeekRun({ prompt, model, task, body });
+  }
+  if (provider === 'openrouter') {
+    return handleOpenRouterRun({ prompt, model, task, body });
+  }
+  if (provider === 'gemini' || provider === 'google') {
+    return handleGeminiRun({ prompt, model, task, body });
   }
 
   try {
@@ -547,3 +568,308 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ ok: false, error: 'Failed to reach AI backend', detail: error?.message }, 502);
   }
 };
+
+function parseAndNormalizeOrfResponse(rawOutput: string) {
+  let reasoning = '';
+  const thinkMatch = rawOutput.match(/<think>([\s\S]*?)<\/think>/);
+  if (thinkMatch) {
+    reasoning = thinkMatch[1].trim();
+  }
+
+  const parsed = parseJsonLoosely(rawOutput);
+  const nested = unwrapNestedModelJson(parsed?.message);
+  const legacyOutput = nested
+    ? nested
+    : parsed && typeof parsed === 'object'
+      ? {
+          message: ensureText(parsed.message),
+          summary: ensureText(parsed.summary) || ensureText(parsed.message) || rawOutput.replace(/<think>[\s\S]*?<\/think>/, '').trim(),
+          actions: parsed.actions,
+          citations: parsed.citations,
+          warnings: parsed.warnings,
+        }
+      : {
+          summary: rawOutput.replace(/<think>[\s\S]*?<\/think>/, '').trim(),
+          actions: [],
+        };
+  const normalized = normalizeOrfResponse(legacyOutput);
+  return {
+    output: {
+      ...normalized,
+      message: stringifyOrfForHumans(normalized),
+      structured: normalized,
+    },
+    reasoning,
+  };
+}
+
+type RunParams = {
+  prompt: string;
+  model?: string;
+  task: string;
+  body: Record<string, any>;
+};
+
+async function handleDeepSeekRun({ prompt, model, task, body }: RunParams): Promise<Response> {
+  const deepSeekApiKey = import.meta.env.DEEPSEEK_API_KEY;
+  const deepSeekBaseUrl = ensureText(import.meta.env.DEEPSEEK_BASE_URL) || DEFAULT_DEEPSEEK_BASE_URL;
+  const deepSeekModel = model || ensureText(import.meta.env.DEEPSEEK_MODEL) || DEFAULT_DEEPSEEK_MODEL;
+
+  if (!deepSeekApiKey) {
+    return json({ ok: false, error: 'DeepSeek API is not configured' }, 500);
+  }
+
+  const temperature = typeof body.options?.temperature === 'number' ? body.options.temperature : 0.2;
+  const maxTokens = typeof body.options?.maxTokens === 'number' ? body.options.maxTokens : 800;
+
+  try {
+    const response = await fetch(`${deepSeekBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${deepSeekApiKey}`,
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+      body: JSON.stringify({
+        model: deepSeekModel,
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres Orf, el asistente transversal de Musiki. Devuelve SOLO JSON válido con los campos obligatorios: summary, actions, citations, warnings.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature,
+        max_tokens: maxTokens,
+        stream: false,
+      }),
+    });
+
+    const responseText = await response.text();
+    let parsed: any = responseText;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {}
+
+    if (!response.ok) {
+      return json({ ok: false, error: 'DeepSeek API request failed', upstreamStatus: response.status, upstream: parsed }, 502);
+    }
+
+    const rawOutput = ensureText(parsed?.choices?.[0]?.message?.content) || ensureText(parsed);
+    const { output, reasoning } = parseAndNormalizeOrfResponse(rawOutput);
+
+    const usage = parsed?.usage || {};
+    return json({
+      ok: true,
+      task,
+      provider: 'deepseek',
+      model: ensureText(parsed?.model) || deepSeekModel,
+      output,
+      reasoning,
+      timingMs: null,
+      usage: {
+        prompt_eval_count: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : null,
+        eval_count: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : null,
+        total_tokens: typeof usage.total_tokens === 'number' ? usage.total_tokens : null,
+      },
+    });
+  } catch (error: any) {
+    return json({ ok: false, error: 'Failed to reach DeepSeek API', detail: error?.message }, 502);
+  }
+}
+
+async function handleOpenRouterRun({ prompt, model, task, body }: RunParams): Promise<Response> {
+  const openRouterApiKey = import.meta.env.OPENROUTER_API_KEY;
+  const openRouterBaseUrl = ensureText(import.meta.env.OPENROUTER_BASE_URL) || DEFAULT_OPENROUTER_BASE_URL;
+  const openRouterModel = model || ensureText(import.meta.env.OPENROUTER_MODEL) || DEFAULT_OPENROUTER_MODEL;
+
+  if (!openRouterApiKey) {
+    return json({ ok: false, error: 'OpenRouter API is not configured' }, 500);
+  }
+
+  const temperature = typeof body.options?.temperature === 'number' ? body.options.temperature : 0.2;
+  const maxTokens = typeof body.options?.maxTokens === 'number' ? body.options.maxTokens : 800;
+
+  try {
+    const response = await fetch(`${openRouterBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openRouterApiKey}`,
+        'HTTP-Referer': 'https://musiki.org.ar',
+        'X-Title': 'Musiki',
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+      body: JSON.stringify({
+        model: openRouterModel,
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres Orf, el asistente transversal de Musiki. Devuelve SOLO JSON válido con los campos obligatorios: summary, actions, citations, warnings.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature,
+        max_tokens: maxTokens,
+        stream: false,
+      }),
+    });
+
+    const responseText = await response.text();
+    let parsed: any = responseText;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {}
+
+    if (!response.ok) {
+      return json({ ok: false, error: 'OpenRouter API request failed', upstreamStatus: response.status, upstream: parsed }, 502);
+    }
+
+    const rawOutput = ensureText(parsed?.choices?.[0]?.message?.content) || ensureText(parsed);
+    const { output, reasoning } = parseAndNormalizeOrfResponse(rawOutput);
+
+    const usage = parsed?.usage || {};
+    return json({
+      ok: true,
+      task,
+      provider: 'openrouter',
+      model: ensureText(parsed?.model) || openRouterModel,
+      output,
+      reasoning,
+      timingMs: null,
+      usage: {
+        prompt_eval_count: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : null,
+        eval_count: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : null,
+        total_tokens: typeof usage.total_tokens === 'number' ? usage.total_tokens : null,
+      },
+    });
+  } catch (error: any) {
+    return json({ ok: false, error: 'Failed to reach OpenRouter API', detail: error?.message }, 502);
+  }
+}
+
+async function handleGeminiRun({ prompt, model, task, body }: RunParams): Promise<Response> {
+  const geminiApiKey = import.meta.env.GEMINI_API_KEY;
+  const geminiBaseUrl = ensureText(import.meta.env.GEMINI_BASE_URL) || DEFAULT_GEMINI_BASE_URL;
+  const geminiModel = model || ensureText(import.meta.env.GEMINI_MODEL) || DEFAULT_GEMINI_MODEL;
+
+  if (!geminiApiKey) {
+    return json({ ok: false, error: 'Gemini API is not configured' }, 500);
+  }
+
+  const temperature = typeof body.options?.temperature === 'number' ? body.options.temperature : 0.2;
+  const maxTokens = typeof body.options?.maxTokens === 'number' ? body.options.maxTokens : 800;
+
+  const cleanBase = geminiBaseUrl.replace(/\/+$/, '');
+  const isOpenAiCompatible = cleanBase.includes('/openai');
+
+  try {
+    let response: Response;
+    if (isOpenAiCompatible) {
+      response = await fetch(`${cleanBase}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${geminiApiKey}`,
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({
+          model: geminiModel,
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres Orf, el asistente transversal de Musiki. Devuelve SOLO JSON válido con los campos obligatorios: summary, actions, citations, warnings.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          response_format: { type: 'json_object' },
+          temperature,
+          max_tokens: maxTokens,
+          stream: false,
+        }),
+      });
+    } else {
+      const url = `${cleanBase}/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }]
+            }
+          ],
+          systemInstruction: {
+            parts: [{ text: 'Eres Orf, el asistente transversal de Musiki. Devuelve SOLO JSON válido con los campos obligatorios: summary, actions, citations, warnings.' }]
+          },
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature,
+            maxOutputTokens: maxTokens,
+          }
+        }),
+      });
+    }
+
+    const responseText = await response.text();
+    let parsed: any = responseText;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {}
+
+    if (!response.ok) {
+      return json({ ok: false, error: 'Gemini API request failed', upstreamStatus: response.status, upstream: parsed }, 502);
+    }
+
+    const parsedObj = parsed && typeof parsed === 'object' ? (parsed as Record<string, any>) : {};
+    let rawOutput = '';
+    let usage: Record<string, any> = {};
+
+    if (isOpenAiCompatible) {
+      rawOutput = ensureText(parsedObj?.choices?.[0]?.message?.content) || ensureText(parsed);
+      usage = parsedObj?.usage || {};
+    } else {
+      rawOutput = ensureText(parsedObj?.candidates?.[0]?.content?.parts?.[0]?.text) || ensureText(parsed);
+      const usageMetadata = parsedObj?.usageMetadata || {};
+      usage = {
+        prompt_tokens: usageMetadata.promptTokenCount,
+        completion_tokens: usageMetadata.candidatesTokenCount,
+        total_tokens: usageMetadata.totalTokenCount,
+      };
+    }
+
+    const { output, reasoning } = parseAndNormalizeOrfResponse(rawOutput);
+
+    return json({
+      ok: true,
+      task,
+      provider: 'gemini',
+      model: ensureText(parsedObj?.model) || geminiModel,
+      output,
+      reasoning,
+      timingMs: null,
+      usage: {
+        prompt_eval_count: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : null,
+        eval_count: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : null,
+        total_tokens: typeof usage.total_tokens === 'number' ? usage.total_tokens : null,
+      },
+    });
+  } catch (error: any) {
+    return json({ ok: false, error: 'Failed to reach Gemini API', detail: error?.message }, 502);
+  }
+}

@@ -213,6 +213,7 @@ export function buildOverviewProjection({
       return {
         id: studentId,
         studentId,
+        enrollmentId: normalizeDashboardText(attendanceRow?.enrollmentId || ''),
         firstName: fallbackFirstName || '—',
         lastName,
         email,

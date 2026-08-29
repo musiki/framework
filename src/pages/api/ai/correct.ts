@@ -8,6 +8,11 @@ const maxPromptChars = Number(import.meta.env.CORRECTION_API_MAX_PROMPT_CHARS ||
 const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
 const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 
+const DEFAULT_OPENROUTER_MODEL = 'google/gemini-2.5-flash';
+const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+
 const DEFAULT_RUBRIC = [
   'Interpretación del texto y comprensión de ideas',
   'Claridad de tesis y coherencia argumental',
@@ -516,6 +521,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (provider === 'deepseek') {
     return handleDeepSeek(requestPayload);
   }
+  if (provider === 'openrouter') {
+    return handleOpenRouter(requestPayload);
+  }
+  if (provider === 'gemini' || provider === 'google') {
+    return handleGemini(requestPayload);
+  }
 
   return handleOllama(requestPayload);
 };
@@ -697,6 +708,259 @@ async function handleDeepSeek({ texto, rubrica, model, promptOverride }: Correct
     return json(
       {
         error: 'Failed to reach DeepSeek API',
+        detail: error?.message || 'Unknown error',
+      },
+      502,
+    );
+  }
+}
+
+async function handleOpenRouter({ texto, rubrica, model, promptOverride }: CorrectionRequest): Promise<Response> {
+  const openRouterApiKey = import.meta.env.OPENROUTER_API_KEY;
+  const openRouterBaseUrl = ensureText(import.meta.env.OPENROUTER_BASE_URL) || DEFAULT_OPENROUTER_BASE_URL;
+  const openRouterModel = model || ensureText(import.meta.env.OPENROUTER_MODEL) || DEFAULT_OPENROUTER_MODEL;
+
+  if (!openRouterApiKey) {
+    return json(
+      {
+        error: 'OpenRouter API is not configured',
+        missing: {
+          OPENROUTER_API_KEY: true,
+        },
+      },
+      500,
+    );
+  }
+
+  const prompt = ensureText(promptOverride) || createDeepSeekPrompt({ studentText: ensureText(texto), rubricText: rubrica });
+
+  try {
+    const response = await fetch(`${openRouterBaseUrl.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openRouterApiKey}`,
+        'HTTP-Referer': 'https://musiki.org.ar',
+        'X-Title': 'Musiki',
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+      body: JSON.stringify({
+        model: openRouterModel,
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres un asistente de corrección académica. Devuelve SOLO JSON válido.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        stream: false,
+      }),
+    });
+
+    const responseText = await response.text();
+    let parsed: unknown = responseText;
+
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      // Keep text fallback.
+    }
+
+    if (!response.ok) {
+      return json(
+        {
+          error: 'OpenRouter API request failed',
+          upstreamStatus: response.status,
+          upstreamBody: parsed,
+        },
+        502,
+      );
+    }
+
+    const parsedObj = parsed && typeof parsed === 'object' ? (parsed as Record<string, any>) : {};
+    const rawOutput = ensureText(parsedObj?.choices?.[0]?.message?.content) || ensureText(parsed);
+    const evaluation = normalizeEvaluation(rawOutput);
+
+    const usage = parsedObj?.usage || {};
+    const created = typeof parsedObj?.created === 'number'
+      ? new Date(parsedObj.created * 1000).toISOString()
+      : new Date().toISOString();
+
+    return json(
+      {
+        ok: true,
+        provider: 'openrouter',
+        model: ensureText(parsedObj?.model) || openRouterModel,
+        created_at: created,
+        evaluation,
+        timing_ms: {
+          total: null,
+          load: null,
+          prompt_eval: null,
+          eval: null,
+        },
+        token_usage: {
+          prompt_eval_count: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : null,
+          eval_count: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : null,
+          total_tokens: typeof usage.total_tokens === 'number' ? usage.total_tokens : null,
+        },
+      },
+      200,
+    );
+  } catch (error: any) {
+    return json(
+      {
+        error: 'Failed to reach OpenRouter API',
+        detail: error?.message || 'Unknown error',
+      },
+      502,
+    );
+  }
+}
+
+async function handleGemini({ texto, rubrica, model, promptOverride }: CorrectionRequest): Promise<Response> {
+  const geminiApiKey = import.meta.env.GEMINI_API_KEY;
+  const geminiBaseUrl = ensureText(import.meta.env.GEMINI_BASE_URL) || DEFAULT_GEMINI_BASE_URL;
+  const geminiModel = model || ensureText(import.meta.env.GEMINI_MODEL) || DEFAULT_GEMINI_MODEL;
+
+  if (!geminiApiKey) {
+    return json(
+      {
+        error: 'Gemini API is not configured',
+        missing: {
+          GEMINI_API_KEY: true,
+        },
+      },
+      500,
+    );
+  }
+
+  const prompt = ensureText(promptOverride) || createDeepSeekPrompt({ studentText: ensureText(texto), rubricText: rubrica });
+  const cleanBase = geminiBaseUrl.replace(/\/+$/, '');
+  const isOpenAiCompatible = cleanBase.includes('/openai');
+
+  try {
+    let response: Response;
+    if (isOpenAiCompatible) {
+      response = await fetch(`${cleanBase}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${geminiApiKey}`,
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({
+          model: geminiModel,
+          messages: [
+            {
+              role: 'system',
+              content: 'Eres un asistente de corrección académica. Devuelve SOLO JSON válido.',
+            },
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+          response_format: { type: 'json_object' },
+          stream: false,
+        }),
+      });
+    } else {
+      const url = `${cleanBase}/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }]
+            }
+          ],
+          systemInstruction: {
+            parts: [{ text: 'Eres un asistente de corrección académica. Devuelve SOLO JSON válido.' }]
+          },
+          generationConfig: {
+            responseMimeType: 'application/json',
+          }
+        }),
+      });
+    }
+
+    const responseText = await response.text();
+    let parsed: unknown = responseText;
+
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      // Keep text fallback.
+    }
+
+    if (!response.ok) {
+      return json(
+        {
+          error: 'Gemini API request failed',
+          upstreamStatus: response.status,
+          upstreamBody: parsed,
+        },
+        502,
+      );
+    }
+
+    const parsedObj = parsed && typeof parsed === 'object' ? (parsed as Record<string, any>) : {};
+    let rawOutput = '';
+    let usage: Record<string, any> = {};
+
+    if (isOpenAiCompatible) {
+      rawOutput = ensureText(parsedObj?.choices?.[0]?.message?.content) || ensureText(parsed);
+      usage = parsedObj?.usage || {};
+    } else {
+      rawOutput = ensureText(parsedObj?.candidates?.[0]?.content?.parts?.[0]?.text) || ensureText(parsed);
+      const usageMetadata = parsedObj?.usageMetadata || {};
+      usage = {
+        prompt_tokens: usageMetadata.promptTokenCount,
+        completion_tokens: usageMetadata.candidatesTokenCount,
+        total_tokens: usageMetadata.totalTokenCount,
+      };
+    }
+
+    const evaluation = normalizeEvaluation(rawOutput);
+    const created = typeof parsedObj?.created === 'number'
+      ? new Date(parsedObj.created * 1000).toISOString()
+      : new Date().toISOString();
+
+    return json(
+      {
+        ok: true,
+        provider: 'gemini',
+        model: ensureText(parsedObj?.model) || geminiModel,
+        created_at: created,
+        evaluation,
+        timing_ms: {
+          total: null,
+          load: null,
+          prompt_eval: null,
+          eval: null,
+        },
+        token_usage: {
+          prompt_eval_count: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : null,
+          eval_count: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : null,
+          total_tokens: typeof usage.total_tokens === 'number' ? usage.total_tokens : null,
+        },
+      },
+      200,
+    );
+  } catch (error: any) {
+    return json(
+      {
+        error: 'Failed to reach Gemini API',
         detail: error?.message || 'Unknown error',
       },
       502,

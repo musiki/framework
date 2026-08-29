@@ -1190,6 +1190,33 @@ const getComparableUserEmail = (rowData: any) => {
   return email && email !== '—' && email.includes('@') ? email : '';
 };
 
+const getSelectedSheetRows = (sheet: DashboardSheet) => {
+  const rowsById = new Map<string, Record<string, any>>();
+  const addRow = (rowData: any) => {
+    if (!rowData) return;
+    const id = rowData.studentId || rowData.userId || rowData.id;
+    if (id) rowsById.set(id, rowData);
+  };
+
+  sheet.activeRows.forEach((rowData) => {
+    if (rowData?.__rowSelect === true) addRow(rowData);
+  });
+  if (rowsById.size > 0) return Array.from(rowsById.values());
+
+  (sheet.hot.getSelectedRange?.() || []).forEach((range: any) => {
+    const from = range.getTopStartCorner?.();
+    const to = range.getBottomEndCorner?.();
+    const startRow = Math.max(0, Math.min(Number(from?.row ?? 0), Number(to?.row ?? 0)));
+    const endRow = Math.max(0, Math.max(Number(from?.row ?? 0), Number(to?.row ?? 0)));
+    for (let visualRow = startRow; visualRow <= endRow; visualRow += 1) {
+      const physicalRow = sheet.hot.toPhysicalRow(visualRow);
+      addRow(sheet.activeRows[physicalRow]);
+    }
+  });
+
+  return Array.from(rowsById.values());
+};
+
 const getSelectedAdminRows = (sheet: DashboardSheet) => {
   const rowsById = new Map<string, Record<string, any>>();
   const addRow = (rowData: any) => {
@@ -1541,44 +1568,83 @@ const buildAdminDeleteUserContextMenuItem = (sheet: DashboardSheet, meta: Dashbo
 const buildTeacherMainUnenrollContextMenuItem = (
   sheet: DashboardSheet,
 ) => {
-  const coords = sheet.contextMenuCoords || null;
-  const selected = coords ? null : sheet.hot.getSelectedLast?.();
-  const visualRow = Number(coords?.row ?? selected?.[0]);
-  if (!Number.isInteger(visualRow) || visualRow < 0) return null;
+  const selectedRows = getSelectedSheetRows(sheet);
+  if (selectedRows.length === 0) return null;
 
-  const rowData = sheet.activeRows[sheet.hot.toPhysicalRow(visualRow)];
-  if (!rowData) return null;
-  const enrollmentId = normalizeText(rowData.enrollmentId);
-  const studentName = normalizeText(
-    [rowData.lastName, rowData.firstName].filter(Boolean).join(' ')
-      || rowData.name
-      || rowData.email
-      || 'este alumno',
-  ) || 'este alumno';
+  if (selectedRows.length === 1) {
+    const rowData = selectedRows[0];
+    const enrollmentId = normalizeText(rowData.enrollmentId);
+    const studentName = normalizeText(
+      [rowData.lastName, rowData.firstName].filter(Boolean).join(' ')
+        || rowData.name
+        || rowData.email
+        || 'este alumno',
+    ) || 'este alumno';
 
-  return {
-    key: 'teacher_main_unenroll',
-    name: 'Desuscribir del curso',
-    disabled: !enrollmentId,
-    callback: () => {
-      if (!enrollmentId || !window.confirm(`¿Desuscribir a ${studentName} de este curso?`)) return;
-      void fetch('/api/enroll', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enrollmentId }),
-      })
-        .then(async (response) => {
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(payload?.error || 'No se pudo desuscribir al alumno');
-          showToast(`${studentName} fue desuscripto del curso.`, 'success', 2200);
-          window.setTimeout(() => window.location.reload(), 450);
+    return {
+      key: 'teacher_main_unenroll',
+      name: 'Desuscribir del curso',
+      disabled: !enrollmentId,
+      callback: () => {
+        if (!enrollmentId || !window.confirm(`¿Desuscribir a ${studentName} de este curso?`)) return;
+        void fetch('/api/enroll', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enrollmentId }),
         })
-        .catch((error) => {
-          console.warn(error?.message || 'No se pudo desuscribir al alumno');
-          showToast(error?.message || 'No se pudo desuscribir al alumno', 'error', 4000);
-        });
-    },
-  };
+          .then(async (response) => {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload?.error || 'No se pudo desuscribir al alumno');
+            showToast(`${studentName} fue desuscripto del curso.`, 'success', 2200);
+            window.setTimeout(() => window.location.reload(), 450);
+          })
+          .catch((error) => {
+            console.warn(error?.message || 'No se pudo desuscribir al alumno');
+            showToast(error?.message || 'No se pudo desuscribir al alumno', 'error', 4000);
+          });
+      },
+    };
+  } else {
+    const validRows = selectedRows.filter((row) => normalizeText(row.enrollmentId));
+    return {
+      key: 'teacher_main_unenroll_multiple',
+      name: `Desuscribir ${selectedRows.length} alumnos seleccionados`,
+      disabled: validRows.length === 0,
+      callback: async () => {
+        if (!window.confirm(`¿Desuscribir a los ${validRows.length} alumnos seleccionados de este curso?`)) return;
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const row of validRows) {
+          const enrollmentId = normalizeText(row.enrollmentId);
+          if (!enrollmentId) continue;
+          try {
+            const response = await fetch('/api/enroll', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enrollmentId }),
+            });
+            if (response.ok) {
+              successCount++;
+            } else {
+              failCount++;
+            }
+          } catch (err) {
+            failCount++;
+          }
+        }
+
+        if (successCount > 0) {
+          showToast(`${successCount} alumnos desuscriptos del curso.`, 'success', 2500);
+          window.setTimeout(() => window.location.reload(), 500);
+        }
+        if (failCount > 0) {
+          showToast(`No se pudieron desuscribir ${failCount} alumnos.`, 'error', 4000);
+        }
+      },
+    };
+  }
 };
 
 const createDashboardContextMenu = (
@@ -2084,7 +2150,7 @@ const createSheet = (
         return;
       }
       sheetRef.contextMenuCoords = { row: coords.row, col: coords.col };
-      if (sheetRef.kind === 'admin' && !isVisualCellInSelection(sheetRef, coords.row, coords.col)) {
+      if (['admin', 'teacher-main'].includes(sheetRef.kind) && !isVisualCellInSelection(sheetRef, coords.row, coords.col)) {
         sheetRef.hot.selectCell(coords.row, coords.col, coords.row, coords.col, false, false);
       }
     },
