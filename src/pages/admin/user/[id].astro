@@ -633,13 +633,31 @@ const attendanceDayGroups = (() => {
               </tr>
             </thead>
             <tbody>
-              {enrollments.map((e: any) => (
-                <tr>
-                  <td><strong>{e.courseId}</strong></td>
-                  <td>{e.roleInCourse}</td>
-                  <td><span style="color: green;">Active</span></td>
-                </tr>
-              ))}
+              {enrollments.map((e: any) => {
+                const currentRole = String(e.roleInCourse || 'student').toLowerCase().trim();
+                return (
+                  <tr data-enrollment-row={e.id}>
+                    <td><strong>{e.courseId}</strong></td>
+                    <td>
+                      <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                        <select
+                          class="course-role-select"
+                          data-enrollment-role-select
+                          data-enrollment-id={e.id}
+                          data-course-id={e.courseId}
+                          data-initial-role={currentRole}
+                          style="padding: 0.3rem 0.5rem; border: 1px solid var(--c-border); border-radius: 4px; background: var(--c-bg); color: var(--c-fg); font-size: 0.85rem;"
+                        >
+                          <option value="student" selected={currentRole === 'student'}>student (Estudiante)</option>
+                          <option value="teacher" selected={currentRole === 'teacher'}>teacher (Docente)</option>
+                        </select>
+                        <span class="course-role-status" data-enrollment-status={e.id} style="font-size: 0.78rem; min-width: 1rem;"></span>
+                      </div>
+                    </td>
+                    <td><span style="color: green;">Active</span></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         ) : (
@@ -1224,9 +1242,70 @@ const attendanceDayGroups = (() => {
         });
       }
 
+      function initializeCourseRoleEditors() {
+        document.querySelectorAll('[data-enrollment-role-select]').forEach((select) => {
+          if (select.dataset.roleBound === 'true') return;
+          select.dataset.roleBound = 'true';
+
+          select.addEventListener('change', async () => {
+            const enrollmentId = select.dataset.enrollmentId;
+            const nextRole = select.value;
+            const initialRole = select.dataset.initialRole;
+            const statusEl = document.querySelector(`[data-enrollment-status="${enrollmentId}"]`);
+
+            if (!enrollmentId || !nextRole) return;
+            if (nextRole === initialRole) {
+              if (statusEl) statusEl.textContent = '';
+              return;
+            }
+
+            select.disabled = true;
+            if (statusEl) {
+              statusEl.textContent = '⏳ Guardando...';
+              statusEl.style.color = '#f59e0b';
+            }
+
+            try {
+              const res = await fetch('/api/enroll', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enrollmentId, roleInCourse: nextRole }),
+              });
+              const payload = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                throw new Error(payload?.error || 'Error al actualizar el rol');
+              }
+
+              select.dataset.initialRole = nextRole;
+              if (statusEl) {
+                statusEl.textContent = '✓ Guardado';
+                statusEl.style.color = '#1f8f45';
+                setTimeout(() => {
+                  if (statusEl.textContent === '✓ Guardado') statusEl.textContent = '';
+                }, 3000);
+              }
+
+              const badge = document.querySelector('[data-user-role-badge]');
+              if (badge && nextRole === 'teacher') {
+                badge.setAttribute('data-course-teacher', 'true');
+              }
+            } catch (err) {
+              select.value = initialRole;
+              if (statusEl) {
+                statusEl.textContent = `❌ ${err?.message || 'Error'}`;
+                statusEl.style.color = '#c62828';
+              }
+            } finally {
+              select.disabled = false;
+            }
+          });
+        });
+      }
+
       document.addEventListener('DOMContentLoaded', () => {
         initializeSubmissionQuickEditors();
         initializeRoleEditor();
+        initializeCourseRoleEditors();
         initializeCorrectionsFolding();
         initializeMergeButtons();
         document.addEventListener('keydown', handleFoldShortcuts);

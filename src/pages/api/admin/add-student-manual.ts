@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../../../lib/roles';
+import { hasTeacherEnrollment, promoteUserToTeacherIfNeeded } from '../../../lib/user-role-sync';
 import { query } from '../../../lib/db/pool';
 import { registerEmailForUser } from '../../../lib/user-email';
 
@@ -47,6 +48,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const email = cleanLower(body?.email);
   const turno = normalizeTurno(body?.turno);
   const grupo = normalizeGrupo(body?.grupo);
+  const requestedRole = cleanLower(body?.roleInCourse);
 
   if (!courseId) {
     return new Response(JSON.stringify({ error: 'courseId is required' }), { status: 400 });
@@ -147,14 +149,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (existingEnrollment) {
     status = 'already_enrolled';
   } else {
+    const { data: targetUserRows } = await query(`SELECT "id", "role" FROM "User" WHERE "id" = $1`, [userId]);
+    const targetUser = targetUserRows?.[0];
+    const targetIsTeacher = isElevatedGlobalRole(targetUser?.role) || await hasTeacherEnrollment(userId);
+    const finalRoleInCourse = ['teacher', 'student'].includes(requestedRole)
+      ? requestedRole
+      : (targetIsTeacher ? 'teacher' : 'student');
+
     const { data: insertedEnrollmentRows, error: enrollErr } = await query(
       `INSERT INTO "Enrollment" ("userId", "courseId", "roleInCourse") VALUES ($1, $2, $3) RETURNING "id", "userId", "courseId", "roleInCourse"`,
-      [userId, canonicalCourse, 'student']
+      [userId, canonicalCourse, finalRoleInCourse]
     );
     const insertedEnrollment = insertedEnrollmentRows?.[0];
     if (enrollErr) return new Response(JSON.stringify({ error: enrollErr.message }), { status: 500 });
     enrollmentRecord = insertedEnrollment || null;
     status = 'enrolled';
+
+    if (finalRoleInCourse === 'teacher') {
+      await promoteUserToTeacherIfNeeded(userId);
+    }
   }
 
   // Save turno/grupo to student profile submission

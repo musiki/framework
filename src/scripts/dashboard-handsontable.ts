@@ -1358,6 +1358,35 @@ const removeAdminEnrollmentFromSheetRow = async (
   );
 };
 
+const updateAdminEnrollmentRoleInSheetRow = async (
+  sheet: DashboardSheet,
+  rowData: Record<string, any>,
+  meta: DashboardMeta,
+  enrollmentIdInput: string,
+  nextRole: 'teacher' | 'student',
+) => {
+  const enrollmentId = normalizeText(enrollmentIdInput);
+  if (!enrollmentId) throw new Error('No se encontró la inscripción.');
+
+  const response = await fetch('/api/enroll', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enrollmentId, roleInCourse: nextRole }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'No se pudo actualizar el rol');
+
+  const nextCourses = sortAdminEnrollmentCourses(
+    getAdminEnrollmentCourses(rowData).map((course) => {
+      if (normalizeText(course.enrollmentId) === enrollmentId) {
+        return { ...course, roleInCourse: nextRole };
+      }
+      return course;
+    }),
+  );
+  updateAdminEnrollmentRowData(sheet, rowData, meta, nextCourses);
+};
+
 const mergeAdminEnrollmentCourseLists = (keepRow: any, mergeRow: any) => {
   const byCourseId = new Map<string, AdminEnrollmentCourse>();
   getAdminEnrollmentCourses(keepRow).forEach((course) => byCourseId.set(course.courseId, course));
@@ -1475,10 +1504,31 @@ const buildAdminEnrollmentContextMenuItems = (
     menuItems.push({ key: 'admin_enroll_empty', name: 'Sin cursos disponibles', disabled: true });
   }
 
-  menuItems.push(Handsontable.plugins.ContextMenu.SEPARATOR);
-  menuItems.push({ key: 'admin_unenroll_header', name: 'Borrar inscripción activa', disabled: true });
-
   if (enrolledCourses.length) {
+    menuItems.push(Handsontable.plugins.ContextMenu.SEPARATOR);
+    menuItems.push({ key: 'admin_role_header', name: 'Cambiar rol en curso', disabled: true });
+    enrolledCourses.forEach((course, index) => {
+      const label = getAdminEnrollmentCourseLabel(context.rowData, course.courseId);
+      const isTeacher = normalizeTextLower(course.roleInCourse) === 'teacher';
+      const targetRole = isTeacher ? 'student' : 'teacher';
+      const targetRoleLabel = isTeacher ? 'Estudiante' : 'Docente';
+      menuItems.push({
+        key: `admin_role_${index}`,
+        name: `Cambiar en ${escapeHtml(label)} a ${targetRoleLabel}`,
+        disabled: !normalizeText(course.enrollmentId),
+        callback: () => {
+          void updateAdminEnrollmentRoleInSheetRow(sheet, context.rowData, meta, course.enrollmentId, targetRole)
+            .then(() => showToast(`Rol de ${userName} en ${label} cambiado a ${targetRoleLabel}.`, 'success', 2800))
+            .catch((error) => {
+              console.warn(error?.message || 'No se pudo cambiar el rol');
+              showToast(error?.message || 'No se pudo cambiar el rol', 'error', 4000);
+            });
+        },
+      });
+    });
+
+    menuItems.push(Handsontable.plugins.ContextMenu.SEPARATOR);
+    menuItems.push({ key: 'admin_unenroll_header', name: 'Borrar inscripción activa', disabled: true });
     enrolledCourses.forEach((course, index) => {
       const label = getAdminEnrollmentCourseLabel(context.rowData, course.courseId);
       menuItems.push({
@@ -1500,6 +1550,7 @@ const buildAdminEnrollmentContextMenuItems = (
       });
     });
   } else {
+    menuItems.push(Handsontable.plugins.ContextMenu.SEPARATOR);
     menuItems.push({ key: 'admin_unenroll_empty', name: 'Sin inscripciones activas', disabled: true });
   }
 

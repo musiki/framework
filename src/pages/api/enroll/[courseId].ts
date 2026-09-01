@@ -2,10 +2,12 @@ import type { APIRoute } from 'astro';
 import { canonicalizeCourseId } from '../../../lib/course-alias';
 import { ensureDbUserFromSession } from '../../../lib/forum-server';
 import { isElevatedGlobalRole } from '../../../lib/roles';
-import { promoteUserToTeacherIfNeeded } from '../../../lib/user-role-sync';
+import { hasTeacherEnrollment, promoteUserToTeacherIfNeeded } from '../../../lib/user-role-sync';
 import { query } from '../../../lib/db/pool';
 
-export const POST: APIRoute = async ({ params, locals }) => {
+const normalizeRole = (value: unknown) => String(value || '').trim().toLowerCase();
+
+export const POST: APIRoute = async ({ params, request, locals }) => {
   const session = (locals as any).session;
   const currentUser = session?.user;
 
@@ -25,6 +27,8 @@ export const POST: APIRoute = async ({ params, locals }) => {
   }
 
   try {
+    const body = await request.json().catch(() => ({}));
+    const requestedRole = normalizeRole(body?.roleInCourse || '');
     const normalizedCourseId = await canonicalizeCourseId(courseId) || String(courseId);
     const user = await ensureDbUserFromSession(session);
     if (!user) {
@@ -34,8 +38,10 @@ export const POST: APIRoute = async ({ params, locals }) => {
       });
     }
 
+    const isTeacher = isElevatedGlobalRole(user.role) || await hasTeacherEnrollment(user.id);
+
     // Teachers can always enroll themselves; students need a CourseInvite
-    if (!isElevatedGlobalRole(user.role)) {
+    if (!isTeacher) {
       const email = String(currentUser.email || '').trim().toLowerCase();
       const { data: inviteRows } = await query(
         `SELECT "id" FROM "CourseInvite" WHERE "courseId" = $1 AND "email" ILIKE $2`,
@@ -67,18 +73,22 @@ export const POST: APIRoute = async ({ params, locals }) => {
       });
     }
 
+    const roleInCourse = isTeacher
+      ? (['student', 'teacher'].includes(requestedRole) ? requestedRole : 'teacher')
+      : 'student';
+
     // Create enrollment
     const { error: insertError } = await query(
       `INSERT INTO "Enrollment" ("userId", "courseId", "roleInCourse") VALUES ($1, $2, $3)`,
-      [user.id, normalizedCourseId, isElevatedGlobalRole(user.role) ? 'teacher' : 'student']
+      [user.id, normalizedCourseId, roleInCourse]
     );
     if (insertError) throw insertError;
 
-    if (isElevatedGlobalRole(user.role)) {
+    if (isTeacher || roleInCourse === 'teacher') {
       await promoteUserToTeacherIfNeeded(user.id);
     }
 
-    return new Response(JSON.stringify({ success: true, message: 'Enrolled successfully' }), {
+    return new Response(JSON.stringify({ success: true, message: 'Enrolled successfully', roleInCourse }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
