@@ -34,6 +34,35 @@ export const en = {
       domainWarning: 'Domain rules grant access to everyone at that domain. Prefer the guest role.',
       invalid: 'Invalid rule.',
     },
+    nav: {
+      overview: 'Overview',
+      structure: 'Structure',
+      editor: 'Editor',
+      access: 'Access & invites',
+      dissertation: 'Dissertation',
+      menu: 'Toggle sidebar',
+      theme: 'Toggle dark mode',
+    },
+    structure: {
+      title: 'Structure',
+      lead: "The dissertation's table of contents and notes will appear here.",
+    },
+    editor: {
+      title: 'Editor',
+      lead: 'The writing editor with textual tracing will open here.',
+    },
+  },
+  site: {
+    nav: {
+      label: 'Site',
+      home: 'Home',
+      research: 'Research',
+      blog: 'Blog',
+      tools: 'Tools',
+      cv: 'CV',
+      about: 'About',
+      tags: 'Tags',
+    },
   },
   roles: {
     author: 'Author',

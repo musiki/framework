@@ -1,35 +1,268 @@
 ---
+import { SignOut } from 'auth-astro/components';
 import type { Locale } from '../lib/tenant/tenants';
-interface Props { title: string; locale: Locale }
-const { title, locale } = Astro.props;
+import type { Membership } from '../lib/tenant/studio-db';
+import { t, type MessageKey } from '../lib/i18n';
+
+export type StudioSection = 'overview' | 'structure' | 'editor' | 'access';
+interface Props {
+  title: string;
+  locale: Locale;
+  sidebar?: { email: string; spaces: Membership[]; current?: StudioSection };
+}
+const { title, locale, sidebar } = Astro.props;
 const brand = Astro.locals.tenant.brand.name;
+
+const siteLinks: { href: string; key: MessageKey }[] = [
+  { href: '/', key: 'site.nav.home' },
+  { href: '/research', key: 'site.nav.research' },
+  { href: '/blog', key: 'site.nav.blog' },
+  { href: '/tools', key: 'site.nav.tools' },
+  { href: '/cv', key: 'site.nav.cv' },
+  { href: '/about', key: 'site.nav.about' },
+  { href: '/tags', key: 'site.nav.tags' },
+];
+
+const authored = sidebar?.spaces.find((s) => s.role === 'author');
+const studioLinks: { id: StudioSection; href: string; key: MessageKey; icon: string }[] = sidebar
+  ? [
+      { id: 'overview', href: '/studio', key: 'studio.nav.overview', icon: 'M3 12l9-8 9 8M5 10v10h14V10' },
+      { id: 'structure', href: '/studio/structure', key: 'studio.nav.structure', icon: 'M4 6h16M8 12h12M8 18h12M4 12h.01M4 18h.01' },
+      { id: 'editor', href: '/studio/editor', key: 'studio.nav.editor', icon: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4' },
+      ...(authored
+        ? [{ id: 'access' as const, href: `/studio/settings/access?space=${encodeURIComponent(authored.spaceId)}`, key: 'studio.nav.access' as const, icon: 'M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z' }]
+        : []),
+    ]
+  : [];
 ---
 <!doctype html>
-<html lang={locale}>
+<html lang={locale} class="light" data-sidebar={sidebar ? 'open' : undefined}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light dark" />
     <title>{title} · {brand}</title>
+    <script is:inline>
+      (function () {
+        var root = document.documentElement;
+        try {
+          var m = document.cookie.match(/(?:^|;\s*)theme=([^;]*)/);
+          var local = null;
+          try { local = localStorage.getItem('theme'); } catch (e) {}
+          var theme = (m && m[1]) || local || 'light';
+          root.classList.remove('light', 'dark');
+          root.classList.add(theme === 'dark' ? 'dark' : 'light');
+        } catch (e) {}
+        try {
+          if (root.hasAttribute('data-sidebar')) {
+            var saved = null;
+            try { saved = localStorage.getItem('so-studio-sidebar'); } catch (e) {}
+            // Remembered on desktop only; the mobile overlay always starts closed.
+            var open = window.matchMedia('(min-width: 1024px)').matches && saved !== 'closed';
+            root.setAttribute('data-sidebar', open ? 'open' : 'closed');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Victor+Mono:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
     <style is:global>
-      :root { --so-bg: #fff; --so-fg: #111; --so-muted: #666; --so-border: #e5e5e5; --so-accent: #111; }
-      @media (prefers-color-scheme: dark) {
-        :root { --so-bg: #111; --so-fg: #eee; --so-muted: #999; --so-border: #2a2a2a; --so-accent: #eee; }
+      :root {
+        --font-main: 'Victor Mono', ui-monospace, monospace;
+        --font-code: 'IBM Plex Mono', ui-monospace, monospace;
+        --so-bg: #ffffff;
+        --so-fg: #18181b;
+        --so-muted: #71717a;
+        --so-border: #e4e4e7;
+        --so-surface: #f4f4f5;
+        --so-surface-hover: #e4e4e7;
+        --so-link-hover: #2563eb;
+        --so-sidebar-w: 16rem;
       }
-      body { margin: 0; background: var(--so-bg); color: var(--so-fg);
-        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-      .so-wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1rem; }
-      .so-top { display: flex; justify-content: space-between; align-items: baseline;
-        border-bottom: 1px solid var(--so-border); padding-bottom: .75rem; margin-bottom: 2rem; }
-      .so-top a { color: var(--so-fg); text-decoration: none; font-weight: 600; }
+      html.dark {
+        --so-bg: #18181b;
+        --so-fg: #f4f4f5;
+        --so-muted: #a1a1aa;
+        --so-border: #3f3f46;
+        --so-surface: #27272a;
+        --so-surface-hover: #3f3f46;
+        --so-link-hover: #60a5fa;
+      }
+      html { color-scheme: light; }
+      html.dark { color-scheme: dark; }
+      body {
+        margin: 0; background: var(--so-bg); color: var(--so-fg);
+        font-family: var(--font-main); font-size: 16px; line-height: 1.6;
+      }
+      code, pre, kbd { font-family: var(--font-code); }
+      a { color: inherit; }
+      a:hover { color: var(--so-link-hover); }
+      button, input, select, textarea { font: inherit; color: inherit; }
+      input, select, textarea {
+        background: var(--so-bg); border: 1px solid var(--so-border); border-radius: .375rem; padding: .35rem .5rem;
+      }
+      button {
+        background: var(--so-surface); border: 1px solid var(--so-border); border-radius: .375rem;
+        padding: .35rem .75rem; cursor: pointer;
+      }
+      button:hover { background: var(--so-surface-hover); }
+      table { border-collapse: collapse; }
+      td, th { padding: .35rem .75rem .35rem 0; border-bottom: 1px solid var(--so-border); }
       .so-muted { color: var(--so-muted); }
-      button, input, select { font: inherit; }
+
+      .so-container { max-width: 120ch; margin: 0 auto; padding: 1rem; box-sizing: border-box; }
+      @media (min-width: 768px) { .so-container { padding: 1rem 2rem; } }
+
+      .so-top { border-bottom: 1px solid var(--so-border); }
+      .so-top .so-container { display: flex; align-items: center; gap: 1rem; padding-top: .75rem; padding-bottom: .75rem; }
+      .so-sitenav { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; flex: 1; }
+      .so-sitenav a { text-decoration: none; }
+      .so-icon-btn {
+        min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+        padding: .5rem; border: 0; border-radius: .5rem; background: var(--so-surface); touch-action: manipulation;
+      }
+      .so-icon-btn:hover { background: var(--so-surface-hover); }
+      .so-icon-btn svg { width: 1.5rem; height: 1.5rem; user-select: none; }
+      .so-theme .so-sun { display: none; }
+      html.dark .so-theme .so-sun { display: block; }
+      html.dark .so-theme .so-moon { display: none; }
+      .so-main { padding-top: 2rem; padding-bottom: 3rem; }
+
+      /* Sidebar */
+      .so-sidebar {
+        position: fixed; inset: 0 auto 0 0; width: var(--so-sidebar-w); z-index: 40;
+        display: flex; flex-direction: column; gap: 1.5rem; box-sizing: border-box; padding: 1.25rem 1rem;
+        background: var(--so-bg); border-right: 1px solid var(--so-border); overflow-y: auto;
+        transition: transform .2s ease, visibility .2s;
+      }
+      html[data-sidebar='closed'] .so-sidebar { transform: translateX(-100%); visibility: hidden; }
+      .so-sidebar h2 {
+        font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--so-muted); margin: 0 0 .5rem;
+      }
+      .so-sidebar ul { list-style: none; margin: 0; padding: 0; }
+      .so-space { padding: .35rem .5rem; }
+      .so-space strong { display: block; font-weight: 600; }
+      .so-space span { font-size: .85rem; }
+      .so-sidelinks a {
+        display: flex; align-items: center; gap: .6rem; padding: .45rem .5rem; border-radius: .375rem; text-decoration: none;
+      }
+      .so-sidelinks a:hover { background: var(--so-surface); }
+      .so-sidelinks a[aria-current='page'] { background: var(--so-surface); font-weight: 700; }
+      .so-sidelinks svg { width: 1.1rem; height: 1.1rem; flex: none; }
+      .so-sidefoot { margin-top: auto; border-top: 1px solid var(--so-border); padding-top: 1rem; font-size: .85rem; }
+      .so-sidefoot p { margin: 0 0 .6rem; overflow-wrap: anywhere; }
+      .so-backdrop { display: none; }
+      @media (max-width: 1023.98px) {
+        html[data-sidebar='open'] .so-backdrop {
+          display: block; position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / .4);
+        }
+      }
+      @media (min-width: 1024px) {
+        .so-page { transition: margin-left .2s ease; }
+        html[data-sidebar='open'] .so-page { margin-left: var(--so-sidebar-w); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .so-sidebar, .so-page { transition: none; }
+      }
     </style>
   </head>
   <body>
-    <div class="so-wrap">
-      <header class="so-top"><a href="/studio">{brand} / studio</a><slot name="nav" /></header>
-      <main><slot /></main>
+    {sidebar && (
+      <>
+        <aside id="so-sidebar" class="so-sidebar" aria-label={t(locale, 'studio.title')}>
+          <section>
+            <h2>{t(locale, 'studio.nav.dissertation')}</h2>
+            {sidebar.spaces.length === 0 ? (
+              <p class="so-muted">{t(locale, 'studio.noSpaces')}</p>
+            ) : (
+              <ul>
+                {sidebar.spaces.map((s) => (
+                  <li class="so-space">
+                    <strong>{s.title}</strong>
+                    <span class="so-muted">{t(locale, `roles.${s.role}` as MessageKey)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <nav class="so-sidelinks" aria-label={t(locale, 'studio.title')}>
+            <ul>
+              {studioLinks.map((l) => (
+                <li>
+                  <a href={l.href} aria-current={sidebar.current === l.id ? 'page' : undefined}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={l.icon} /></svg>
+                    <span>{t(locale, l.key)}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          <div class="so-sidefoot">
+            <p class="so-muted">{sidebar.email}</p>
+            <SignOut><span>{t(locale, 'studio.signOut')}</span></SignOut>
+          </div>
+        </aside>
+        <div class="so-backdrop" data-sidebar-close></div>
+      </>
+    )}
+    <div class="so-page">
+      <header class="so-top">
+        <div class="so-container">
+          {sidebar && (
+            <>
+              <button type="button" class="so-icon-btn" id="so-sidebar-toggle" aria-controls="so-sidebar"
+                aria-expanded="true" aria-label={t(locale, 'studio.nav.menu')}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+              </button>
+              <script is:inline>
+                try { document.getElementById('so-sidebar-toggle')?.setAttribute('aria-expanded', String(document.documentElement.getAttribute('data-sidebar') === 'open')); } catch (e) {}
+              </script>
+            </>
+          )}
+          <nav class="so-sitenav" aria-label={t(locale, 'site.nav.label')}>
+            {siteLinks.map((l) => <a href={l.href}>{t(locale, l.key)}</a>)}
+          </nav>
+          <slot name="nav" />
+          <button type="button" class="so-icon-btn so-theme" id="so-theme-toggle" aria-label={t(locale, 'studio.nav.theme')}>
+            <svg class="so-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" /></svg>
+            <svg class="so-moon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg>
+          </button>
+        </div>
+      </header>
+      <main class="so-container so-main"><slot /></main>
     </div>
+    <script is:inline>
+      (function () {
+        var root = document.documentElement;
+        function store(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+        document.getElementById('so-theme-toggle')?.addEventListener('click', function () {
+          var theme = root.classList.contains('dark') ? 'light' : 'dark';
+          root.classList.remove('light', 'dark');
+          root.classList.add(theme);
+          store('theme', theme);
+          document.cookie = 'theme=' + theme + '; max-age=' + 60 * 60 * 24 * 365 + '; path=/; SameSite=Lax';
+        });
+        var toggle = document.getElementById('so-sidebar-toggle');
+        if (!toggle) return;
+        var desktop = window.matchMedia('(min-width: 1024px)');
+        function sync() { toggle.setAttribute('aria-expanded', String(root.getAttribute('data-sidebar') === 'open')); }
+        function set(open, remember) {
+          root.setAttribute('data-sidebar', open ? 'open' : 'closed');
+          if (remember && desktop.matches) store('so-studio-sidebar', open ? 'open' : 'closed');
+          sync();
+        }
+        sync();
+        toggle.addEventListener('click', function () { set(root.getAttribute('data-sidebar') !== 'open', true); });
+        document.querySelector('[data-sidebar-close]')?.addEventListener('click', function () { set(false, true); });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && !desktop.matches && root.getAttribute('data-sidebar') === 'open') { set(false, true); toggle.focus(); }
+        });
+      })();
+    </script>
   </body>
 </html>

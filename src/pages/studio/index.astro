@@ -1,6 +1,5 @@
 ---
 import StudioLayout from '../../layouts/StudioLayout.astro';
-import { SignOut } from 'auth-astro/components';
 import { t, type MessageKey } from '../../lib/i18n';
 import { getStudioUserId, listMemberships, studioEnabled } from '../../lib/tenant/studio-db';
 export const prerender = false;
@@ -11,9 +10,9 @@ const locale = tenant.locale;
 const userId = await getStudioUserId(Astro.locals);
 if (!userId) return Astro.redirect('/studio/login');
 const spaces = await listMemberships(tenant.id, userId);
+const email = Astro.locals.session?.user?.email ?? '';
 ---
-<StudioLayout title={t(locale, 'studio.title')} locale={locale}>
-  <SignOut slot="nav"><span>{t(locale, 'studio.signOut')}</span></SignOut>
+<StudioLayout title={t(locale, 'studio.title')} locale={locale} sidebar={{ email, spaces, current: 'overview' }}>
   <h1>{t(locale, 'studio.mySpaces')}</h1>
   {spaces.length === 0 && <p class="so-muted">{t(locale, 'studio.noSpaces')}</p>}
   <ul>

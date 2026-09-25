@@ -36,6 +36,35 @@ export const es: Dict = {
       domainWarning: 'Las reglas de dominio dan acceso a todas las personas de ese dominio. Preferí el rol invitado.',
       invalid: 'Regla inválida.',
     },
+    nav: {
+      overview: 'Resumen',
+      structure: 'Estructura',
+      editor: 'Editor',
+      access: 'Acceso e invitaciones',
+      dissertation: 'Tesis',
+      menu: 'Mostrar u ocultar la barra lateral',
+      theme: 'Cambiar modo oscuro',
+    },
+    structure: {
+      title: 'Estructura',
+      lead: 'Acá van a aparecer el índice y las notas de la tesis.',
+    },
+    editor: {
+      title: 'Editor',
+      lead: 'Acá se va a abrir el editor de escritura con trazado textual.',
+    },
+  },
+  site: {
+    nav: {
+      label: 'Sitio',
+      home: 'Inicio',
+      research: 'Investigación',
+      blog: 'Blog',
+      tools: 'Herramientas',
+      cv: 'CV',
+      about: 'Acerca de',
+      tags: 'Etiquetas',
+    },
   },
   roles: {
     author: 'Autor/a',
