@@ -15,7 +15,7 @@ Edit so.zztt.org's public pages (Home, Research, Blog, Tools, CV, About, Tags, �
 | Topic | Decision |
 |---|---|
 | Storage | Pages are notes in a root **`Site`** folder of the author's space (created by `ensureOkaFolders` alongside GTX/Output), visibility `public`. |
-| Menu | Menu = `buildTree(Site)` in manual order; child pages/folders = submenus. First page of the tree = Home (`/`). |
+| Menu | Menu = `buildTree(Site)` in manual order. A folder = menu group whose landing page is its `slug: index` note (else first page); its other notes = submenu. First item of the tree = Home (`/`). |
 | URLs | Path from the tree: `/<parent-slug>/<slug>`; `slug` from frontmatter or slugified title. |
 | Page frontmatter | `slug?`, `menu?: boolean` (default true), `layout?: 'page' \| 'home' \| 'blog' \| 'tags'` (default `page`), `draft?: boolean` (default false), `description?`. |
 | Plugins (UX) | Studio section **Plugins** lists installed plugins (manifest: name, description, options, examples, targets). |
@@ -42,7 +42,8 @@ so-rebuild watcher (pm2): debounce 30s → git pull → npm run build (out: dist
 - **Site folder**: `ensureOkaFolders` also ensures root folder `Site` (visibility `public`, position after Output).
 - **Public endpoint** `GET /api/public/site` (route family `api:public` = prefix `/api/public`, added to the so tenant allowlist; musiki unaffected):
   - Resolves the so tenant's dissertation space (single space for now: the one with `slug = 'dissertation'`; configurable later).
-  - Returns `{ generatedAt, pages: [{ id, parentId, title, slug, path, menu, layout, description, position, markdown }], menu: <nested tree of pages with menu !== false> }`, including only notes/folders under `Site` whose **effective visibility is `public`** and `draft !== true`. Folders under Site act as menu groups (their own page if a note with the same title/slug exists? — no: a folder is a pure group; a page with children is a note whose children are notes inside a same-named folder is NOT used; nesting = folders). Rule: **a folder = menu group (label only, first child page is its landing)**; **a note = page**.
+  - Returns `{ generatedAt, pages: [{ id, title, slug, path, menu, layout, description, markdown }], menu: [...] }`, including only notes/folders under `Site` whose **effective visibility is `public`** and whose frontmatter is not `draft: true`.
+  - **Nesting rule:** a **folder** under Site is a menu group labelled with the folder name; its **landing page** is the note inside it with `slug: index` (else its first page in tree order) and gets the folder's path (`/research`). Other notes in the folder are its submenu entries (`/research/<slug>`). A **note** at Site root is a top-level page. The first item of the Site tree is Home (`/`).
   - Cache-Control: `public, max-age=60`. No session, no user data (no author ids/emails).
 - **Rebuild trigger**: on create/update/delete/reorder/visibility change of any item under Site, the space-notes service calls `requestSiteRebuild()` which touches `SO_REBUILD_TRIGGER` (env, default `/opt/so/.rebuild-requested`); errors are logged, never fail the save.
 - **Publish status**: `GET /api/studio/site/status` (author) reads `/opt/so/.last-build.json` written by the watcher (`{ ok, finishedAt, commit, error? }`).
