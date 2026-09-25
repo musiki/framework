@@ -1,5 +1,5 @@
-import { query } from '../db/pool';
-import { resolveUserIdByEmail, registerEmailForUser } from '../user-email';
+import { getClient, query } from '../db/pool';
+import { resolveUserIdByEmail } from '../user-email';
 import { decideSpaceAccess, type AccessRuleRow, type InviteRow } from './access';
 import { emailDomain, normalizeEmail } from './space-roles';
 import type { TenantId } from './tenants';
@@ -48,25 +48,45 @@ export async function authorizeTenantSignIn(
   }
 
   if (decision.grants.length > 0) {
-    if (!userId) {
-      // New person: provision a minimal User. User.role grants nothing outside musiki.
-      const created = must<{ id: string }>(await query(
-        `INSERT INTO "User" ("id", "email", "name", "role", "emailVerified", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, 'student', true, now(), now()) RETURNING "id"`,
-        [email, input.name ?? null],
-      ));
-      userId = created[0].id;
-      await registerEmailForUser(userId, email, true);
-    }
-    for (const grant of decision.grants) {
-      must(await query(
-        `INSERT INTO "SpaceMember" ("spaceId", "userId", "role") VALUES ($1, $2, $3)
-         ON CONFLICT ("spaceId", "userId") DO NOTHING`,
-        [grant.spaceId, userId, grant.role],
-      ));
-      if (grant.inviteId) {
-        must(await query(`UPDATE "SpaceInvite" SET "acceptedAt" = now() WHERE "id" = $1`, [grant.inviteId]));
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+
+      if (!userId) {
+        // New person: provision a minimal User. User.role grants nothing outside musiki.
+        const created = await client.query(
+          `INSERT INTO "User" ("id", "email", "name", "role", "emailVerified", "createdAt", "updatedAt")
+           VALUES (gen_random_uuid(), $1, $2, 'student', true, now(), now()) RETURNING "id"`,
+          [email, input.name ?? null],
+        );
+        userId = created.rows[0].id;
+        await client.query(
+          `INSERT INTO "UserEmail" ("userId", "email", "isPrimary") VALUES ($1, $2, true)`,
+          [userId, email],
+        );
       }
+
+      for (const grant of decision.grants) {
+        await client.query(
+          `INSERT INTO "SpaceMember" ("spaceId", "userId", "role") VALUES ($1, $2, $3)
+           ON CONFLICT ("spaceId", "userId") DO NOTHING`,
+          [grant.spaceId, userId, grant.role],
+        );
+        if (grant.inviteId) {
+          await client.query(
+            `UPDATE "SpaceInvite" SET "acceptedAt" = now() WHERE "id" = $1 AND "acceptedAt" IS NULL`,
+            [grant.inviteId],
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      console.error(`[TENANT-SIGNIN] ${tenantId} provisioning error for ${email}:`, err);
+      return false;
+    } finally {
+      client.release();
     }
   }
   console.log(`[TENANT-SIGNIN] ${tenantId} allowed ${email} (${decision.grants.length} new grants)`);
