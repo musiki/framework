@@ -1,0 +1,18 @@
+---
+import StudioLayout from '../../layouts/StudioLayout.astro';
+import { t } from '../../lib/i18n';
+import { getStudioUserId, listMemberships, studioEnabled } from '../../lib/tenant/studio-db';
+export const prerender = false;
+
+const tenant = Astro.locals.tenant;
+if (!studioEnabled(tenant)) return Astro.rewrite('/studio/not-found');
+const locale = tenant.locale;
+const userId = await getStudioUserId(Astro.locals);
+if (!userId) return Astro.redirect('/studio/login');
+const spaces = await listMemberships(tenant.id, userId);
+const email = Astro.locals.session?.user?.email ?? '';
+---
+<StudioLayout title={t(locale, 'studio.editor.title')} locale={locale} sidebar={{ email, spaces, current: 'editor' }}>
+  <h1>{t(locale, 'studio.editor.title')}</h1>
+  <p class="so-muted">{t(locale, 'studio.editor.lead')}</p>
+</StudioLayout>

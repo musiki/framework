@@ -2,7 +2,7 @@
 import StudioLayout from '../../../layouts/StudioLayout.astro';
 import { t, type MessageKey } from '../../../lib/i18n';
 import { GRANTABLE_ROLES } from '../../../lib/tenant/space-roles';
-import { getMembership, getStudioUserId, listRules, studioEnabled } from '../../../lib/tenant/studio-db';
+import { getMembership, getStudioUserId, listMemberships, listRules, studioEnabled } from '../../../lib/tenant/studio-db';
 export const prerender = false;
 
 const tenant = Astro.locals.tenant;
@@ -16,6 +16,8 @@ if (membership?.role !== 'author') {
   Astro.response.status = 403;
 }
 const rules = membership?.role === 'author' ? await listRules(spaceId) : [];
+const spaces = await listMemberships(tenant.id, userId);
+const email = Astro.locals.session?.user?.email ?? '';
 const labels = {
   domainWarning: t(locale, 'studio.access.domainWarning'),
   invalid: t(locale, 'studio.access.invalid'),
@@ -24,7 +26,7 @@ const labels = {
   expires: t(locale, 'studio.invite.expires'),
 };
 ---
-<StudioLayout title={t(locale, 'studio.access.title')} locale={locale}>
+<StudioLayout title={t(locale, 'studio.access.title')} locale={locale} sidebar={{ email, spaces, current: 'access' }}>
   {membership?.role !== 'author' ? (
     <p>{t(locale, 'errors.forbidden')}</p>
   ) : (
