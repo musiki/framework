@@ -29,7 +29,6 @@ const email = Astro.locals.session?.user?.email ?? '';
           <button id="studio-download" type="button">{t(locale, 'studio.tree.download')}</button>
           <div id="studio-download-menu" class="cnw-hud-download-menu">
             <button type="button" data-download-format="markdown">Markdown</button>
-            <button type="button" data-download-format="html">HTML</button>
             <button type="button" data-download-format="latex">LaTeX</button>
             <button type="button" data-download-format="pdf">PDF</button>
           </div>
