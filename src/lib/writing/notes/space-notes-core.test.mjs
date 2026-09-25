@@ -578,3 +578,13 @@ test('ensureOkaFolders: inserts GTX and Output once, then does nothing once they
   await ensureOkaFolders(q, { spaceId: SPACE, authorId: 'author1' });
   assert.deepEqual(inserts, []);
 });
+
+test('a failed database write cannot report a successful note save', async () => {
+  const q = async (sql) => {
+    if (sql.includes('"SpaceMember"')) return { data: [{ role: 'author' }], error: null };
+    if (sql.includes('MAX(')) return { data: [{ maxPosition: null }], error: null };
+    if (sql.includes('INSERT INTO "LiveClassNote"')) return { data: null, error: new Error('write failed') };
+    return { data: [], error: null };
+  };
+  await assert.rejects(createSpaceNote(q, { spaceId: 's1', userId: 'u1', folderId: null, title: 'Test', body: '' }), /write failed/);
+});

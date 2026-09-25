@@ -2,6 +2,7 @@
 import { SignOut } from 'auth-astro/components';
 import type { Locale } from '../lib/tenant/tenants';
 import type { Membership } from '../lib/tenant/studio-db';
+import '../lib/writing/tree/tree.css';
 import { t, type MessageKey } from '../lib/i18n';
 
 export type StudioSection = 'overview' | 'structure' | 'editor' | 'access';
@@ -11,6 +12,8 @@ interface Props {
   sidebar?: { email: string; spaces: Membership[]; current?: StudioSection };
 }
 const { title, locale, sidebar } = Astro.props;
+const treeKeys = ['newNote','newFolder','rename','delete','visibility','inherit','private','supervision','committee','public','confirmDelete','empty','loading','error','up','down','actions'] as const;
+const treeLabels = Object.fromEntries(treeKeys.map(key => [key, t(locale, `studio.tree.${key}`)]));
 const brand = Astro.locals.tenant.brand.name;
 
 const siteLinks: { href: string; key: MessageKey }[] = [
@@ -185,6 +188,7 @@ const studioLinks: { id: StudioSection; href: string; key: MessageKey; icon: str
                   <li class="so-space">
                     <strong>{s.title}</strong>
                     <span class="so-muted">{t(locale, `roles.${s.role}` as MessageKey)}</span>
+                    <div data-studio-tree data-space={s.spaceId} data-role={s.role} data-locale={locale} data-labels={JSON.stringify(treeLabels)} />
                   </li>
                 ))}
               </ul>
@@ -264,5 +268,6 @@ const studioLinks: { id: StudioSection; href: string; key: MessageKey; icon: str
         });
       })();
     </script>
+    <script>import "../scripts/studio/workspace";</script>
   </body>
 </html>

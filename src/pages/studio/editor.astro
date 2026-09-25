@@ -2,6 +2,7 @@
 import StudioLayout from '../../layouts/StudioLayout.astro';
 import { t } from '../../lib/i18n';
 import { getStudioUserId, listMemberships, studioEnabled } from '../../lib/tenant/studio-db';
+import { buildEditorLabels, buildTraceLabels } from '../../lib/writing/editor/labels';
 export const prerender = false;
 
 const tenant = Astro.locals.tenant;
@@ -10,9 +11,45 @@ const locale = tenant.locale;
 const userId = await getStudioUserId(Astro.locals);
 if (!userId) return Astro.redirect('/studio/login');
 const spaces = await listMemberships(tenant.id, userId);
+const selectedSpace = spaces.find(s => s.spaceId === Astro.url.searchParams.get('space'));
+const noteId = Astro.url.searchParams.get('note');
 const email = Astro.locals.session?.user?.email ?? '';
 ---
 <StudioLayout title={t(locale, 'studio.editor.title')} locale={locale} sidebar={{ email, spaces, current: 'editor' }}>
   <h1>{t(locale, 'studio.editor.title')}</h1>
-  <p class="so-muted">{t(locale, 'studio.editor.lead')}</p>
+  {selectedSpace && noteId ? (
+    <section id="studio-editor" class="cnw-shell" data-note={noteId} data-space={selectedSpace.spaceId}
+      data-lang={selectedSpace.lang} data-labels={JSON.stringify(buildEditorLabels(locale))}
+      data-trace-labels={JSON.stringify(buildTraceLabels(locale))}>
+      <div class="studio-toolbar cnw-hud">
+        <span id="studio-status" class="cnw-status" role="status" aria-live="polite" />
+        <button id="studio-edit" type="button">{t(locale, 'studio.tree.edit')}</button>
+        <button id="studio-trace" type="button">{t(locale, 'studio.tree.trace')}</button>
+        <div class="cnw-hud-download">
+          <button id="studio-download" type="button">{t(locale, 'studio.tree.download')}</button>
+          <div id="studio-download-menu" class="cnw-hud-download-menu">
+            <button type="button" data-download-format="markdown">Markdown</button>
+            <button type="button" data-download-format="html">HTML</button>
+            <button type="button" data-download-format="latex">LaTeX</button>
+            <button type="button" data-download-format="pdf">PDF</button>
+          </div>
+        </div>
+      </div>
+      <div id="studio-editor-body" />
+    </section>
+  ) : <p class="so-muted">{t(locale, 'studio.tree.select')}</p>}
+  <script>import '../../scripts/studio/editor-page';</script>
+  <style is:global>
+    #studio-editor { --c-bg: var(--so-bg); --c-text: var(--so-fg); --c-fg: var(--so-fg); --c-fg-dim: var(--so-muted); --c-link: var(--so-link-hover); --c-border: var(--so-border); --c-panel: var(--so-surface); }
+    .studio-toolbar { display: flex; align-items: center; gap: .5rem; position: relative; flex-wrap: wrap; margin-bottom: .75rem; }
+    #studio-status { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; }
+    #studio-editor-body { height: calc(100dvh - 15rem); min-height: 25rem; border: 1px solid var(--so-border); overflow: auto; }
+    #studio-download-menu { position: absolute; right: 0; top: 100%; z-index: 30; background: var(--so-bg); border: 1px solid var(--so-border); }
+    .cnw-hud-download-menu { display: none; padding: .5rem; }
+    .cnw-hud-download.is-open .cnw-hud-download-menu { display: flex; flex-direction: column; gap: .25rem; }
+    .cnw-status.saved { background: #22c55e; } .cnw-status.saving { background: #eab308; } .cnw-status.error { background: #ef4444; }
+    @media (max-width: 800px) { #studio-editor-body { overflow-x: auto !important; } #studio-editor-body > :first-child { min-width: 70vw !important; } }
+    #studio-editor-body .cm-editor { height: 100%; }
+    #studio-editor-body .cm-scroller { overflow: auto; }
+  </style>
 </StudioLayout>

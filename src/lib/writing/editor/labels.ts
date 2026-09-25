@@ -135,3 +135,235 @@ export function buildEditorLabels(locale: Locale): EditorLabels {
 export function formatLabel(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (match, name: string) => (name in vars ? vars[name] : match));
 }
+
+// ── Trace margin labels (src/scripts/course/notes/trace-margin.ts) ─────────
+// Same pattern as EditorLabels above: DEFAULT_ES_TRACE_LABELS is today's exact
+// literal Spanish UI strings from trace-margin.ts, verbatim, used as the
+// runtime default so musiki keeps working unchanged. `role` covers every
+// RhetoricalRole key trace-margin.ts defines (keys never change — only the
+// display string does); most of those keys don't have an i18n `trace.role.*`
+// entry (the creative-mode roles), so buildTraceLabels() falls back to the
+// Spanish default for any role a locale doesn't translate.
+export interface TraceLabels {
+  sectionTrace: string;
+  sectionStructure: string;
+  sectionFreqZipf: string;
+  sectionQa: string;
+  liveBadge: string;
+  liveBadgeAt: string;
+  autoBtn: string;
+  autoBtnTitle: string;
+  autoBtnNoSuggestions: string;
+  modeLabel: string;
+  modeSelectTitle: string;
+  modeAcademic: string;
+  modeThesis: string;
+  modeLitArt: string;
+  modeArtisticResearch: string;
+  modeSeminar: string;
+  modeSubmission: string;
+  emptyParagraphsLitArt: string;
+  emptyParagraphs: string;
+  jumpToParagraph: string;
+  jumpToParagraphAria: string;
+  roleSelectTitle: string;
+  roleSelectTitleReadOnly: string;
+  roleSelectAriaPrefix: string;
+  roleEmptyOption: string;
+  roleExternalSuffix: string;
+  addCode: string;
+  addCodePlaceholder: string;
+  conceptsLabelLitArt: string;
+  conceptsLabelArtisticResearch: string;
+  conceptsLabelDefault: string;
+  deleteCode: string;
+  emergentCodeTitle: string;
+  conceptTooltip: string;
+  diagnosticsPrefixCreative: string;
+  diagnosticsPrefixDefault: string;
+  orphanConcept: string;
+  qaCodesMetric: string;
+  qaEmergentMetric: string;
+  qaRolesMetric: string;
+  qaWarningsMetric: string;
+  qaCopyLitArt: string;
+  qaCopyDefault: string;
+  kwicEmptyQuery: string;
+  kwicNoMatches: string;
+  kwicHeading: string;
+  lexicalPlaceholder: string;
+  freqHeading: string;
+  freqEmpty: string;
+  freqRowTitle: string;
+  zipfIdealTitle: string;
+  zipfInsufficient: string;
+  zipfStats: string;
+  graphNodeAria: string;
+  graphLinkAria: string;
+  rhythmSummary: string;
+  rhythmClassSingleLongSentence: string;
+  rhythmClassShortSentences: string;
+  rhythmClassMixedRhythm: string;
+  rhythmClassAccumulative: string;
+  rhythmClassFragmentary: string;
+  rhythmClassQuestioning: string;
+  rhythmClassEmphaticClosure: string;
+  diagUnreturnedMotif: string;
+  diagMotifReturn: string;
+  diagVoiceShift: string;
+  diagDenseParagraph: string;
+  diagUndocumentedDecision: string;
+  diagMissingMaterialEvidence: string;
+  diagVariantWithoutComparison: string;
+  diagReflectionWithoutProcess: string;
+  diagProcessWithoutReflection: string;
+  role: Record<string, string>;
+}
+
+export const DEFAULT_ES_TRACE_LABELS: TraceLabels = {
+  sectionTrace: 'Trace',
+  sectionStructure: 'Estructura',
+  sectionFreqZipf: 'Freq · Zipf',
+  sectionQa: 'QA',
+  liveBadge: 'LIVE',
+  liveBadgeAt: 'LIVE · P{index}',
+  autoBtn: '⚡ Auto',
+  autoBtnTitle: 'Generar codificación automática (NLP)',
+  autoBtnNoSuggestions: 'Sin sugerencias',
+  modeLabel: 'Modo',
+  modeSelectTitle: 'Modo del análisis estructural',
+  modeAcademic: 'Académico',
+  modeThesis: 'Tesis',
+  modeLitArt: 'Lit Art (Literatura y Arte)',
+  modeArtisticResearch: 'Investigación Artística',
+  modeSeminar: 'Seminario',
+  modeSubmission: 'Entrega',
+  emptyParagraphsLitArt: '[sin párrafos extensos para analizar]',
+  emptyParagraphs: '[sin párrafos]',
+  jumpToParagraph: 'Ir al párrafo',
+  jumpToParagraphAria: 'Ir al párrafo {index}',
+  roleSelectTitle: 'Rol retórico del párrafo',
+  roleSelectTitleReadOnly: 'Rol retórico del párrafo (solo lectura)',
+  roleSelectAriaPrefix: 'Rol retórico de ',
+  roleEmptyOption: '— rol',
+  roleExternalSuffix: ' (externo)',
+  addCode: 'Añadir código',
+  addCodePlaceholder: 'nombre del código…',
+  conceptsLabelLitArt: 'motivos: ',
+  conceptsLabelArtisticResearch: 'trazas: ',
+  conceptsLabelDefault: 'conceptos: ',
+  deleteCode: 'Eliminar',
+  emergentCodeTitle: 'Código emergente detectado localmente',
+  conceptTooltip: '{estado} · confianza local {pct}%',
+  diagnosticsPrefixCreative: 'observación: ',
+  diagnosticsPrefixDefault: 'diagnostics: ⚠ ',
+  orphanConcept: 'concepto huérfano "{label}"',
+  qaCodesMetric: '{count} códigos',
+  qaEmergentMetric: '{count} emergentes',
+  qaRolesMetric: '{count} roles',
+  qaWarningsMetric: '{count} indicios',
+  qaCopyLitArt: 'Lit Art: se omiten párrafos breves de una o dos líneas.',
+  qaCopyDefault: 'Indicios locales de cohesión: no califican la calidad del argumento.',
+  kwicEmptyQuery: 'Selecciona una palabra',
+  kwicNoMatches: 'Sin concordancias',
+  kwicHeading: 'KWIC',
+  lexicalPlaceholder: 'concordancia...',
+  freqHeading: 'Rango · frecuencia observada',
+  freqEmpty: 'Sin términos suficientes',
+  freqRowTitle: 'Ver concordancias',
+  zipfIdealTitle: 'Ideal Zipf aproximado: {value}',
+  zipfInsufficient: 'Distribución insuficiente para estimar una pendiente.',
+  zipfStats: '{tokens} tokens · {vocab} términos · pendiente log-log {slope}',
+  graphNodeAria: 'Ir al párrafo {index}',
+  graphLinkAria: 'P{to} retoma P{from}: {evidence}',
+  rhythmSummary: 'frases: {count} · {summary}',
+  rhythmClassSingleLongSentence: 'frase única larga',
+  rhythmClassShortSentences: 'frases breves',
+  rhythmClassMixedRhythm: 'ritmo mixto',
+  rhythmClassAccumulative: 'acumulativo',
+  rhythmClassFragmentary: 'fragmentario',
+  rhythmClassQuestioning: 'interrogativo',
+  rhythmClassEmphaticClosure: 'cierre enfático',
+  diagUnreturnedMotif: 'Motivo no retomado: "{keyword}"',
+  diagMotifReturn: 'Retorno del motivo "{keyword}"',
+  diagVoiceShift: 'Cambio de voz detectado en P{index}',
+  diagDenseParagraph: 'Párrafo denso con frases largas',
+  diagUndocumentedDecision: 'Decisión sin documentación en el proceso',
+  diagMissingMaterialEvidence: 'Observación material sin evidencia de documentación',
+  diagVariantWithoutComparison: 'Variante sin comparación de alternativas',
+  diagReflectionWithoutProcess: 'Reflexión sin registro previo de proceso',
+  diagProcessWithoutReflection: 'Nota de proceso sin reflexión crítica asociada',
+  role: {
+    excluir: 'Excluir',
+    afirmacion: 'afirmación',
+    definicion: 'definición',
+    contexto: 'contexto',
+    literatura: 'literatura',
+    ejemplo: 'ejemplo',
+    analisis: 'análisis',
+    contraste: 'contraste',
+    transicion: 'transición',
+    sintesis: 'síntesis',
+    metodo: 'método',
+    reflexion: 'reflexión',
+    conclusion: 'conclusión',
+    reflection: 'Reflexión',
+    method: 'Método',
+    example: 'Ejemplo',
+    analysis: 'Análisis',
+    synthesis: 'Síntesis',
+    closure: 'Cierre',
+    scene_opening: 'Apertura de escena',
+    image: 'Imagen',
+    motif_introduction: 'Introducción de motivo',
+    motif_return: 'Retorno de motivo',
+    variation: 'Variación',
+    voice_shift: 'Cambio de voz',
+    interruption: 'Interrupción',
+    description: 'Descripción',
+    action: 'Acción',
+    memory: 'Memoria',
+    dialogue: 'Diálogo',
+    tension: 'Tensión',
+    turn: 'Giro',
+    ellipsis: 'Elipsis',
+    montage: 'Montaje',
+    resonance: 'Resonancia',
+    process_note: 'Nota de proceso',
+    artistic_question: 'Pregunta artística',
+    material_observation: 'Observación material',
+    technical_constraint: 'Restricción técnica',
+    decision: 'Decisión',
+    discard: 'Descarte',
+    variant: 'Variante',
+    documentation: 'Documentación',
+    peer_feedback: 'Feedback de pares',
+    ai_feedback: 'Feedback IA',
+    revision: 'Revisión',
+    public_artifact: 'Artefacto público',
+  },
+};
+
+const TRACE_KEYS = Object.keys(DEFAULT_ES_TRACE_LABELS) as Array<keyof TraceLabels>;
+// Rhetorical role keys that have a real i18n `trace.role.*` entry (see
+// src/lib/i18n/{en,es}.ts). Every other RhetoricalRole key falls back to the
+// Spanish default above, for every locale — there is no translation for the
+// creative-mode roles (lit_art / artistic_research) yet.
+const TRANSLATED_ROLE_KEYS = [
+  'afirmacion', 'definicion', 'contexto', 'literatura', 'ejemplo', 'analisis',
+  'contraste', 'transicion', 'sintesis', 'metodo', 'reflexion', 'conclusion', 'excluir',
+];
+
+export function buildTraceLabels(locale: Locale): TraceLabels {
+  const out = {} as TraceLabels;
+  for (const key of TRACE_KEYS) {
+    if (key === 'role') continue;
+    (out as unknown as Record<string, string>)[key] = t(locale, `trace.ui.${key}` as Parameters<typeof t>[1]);
+  }
+  const role: Record<string, string> = Object.fromEntries(Object.entries(DEFAULT_ES_TRACE_LABELS.role).map(([key, value]) => [key, locale === 'en' && !TRANSLATED_ROLE_KEYS.includes(key) ? key.replaceAll('_', ' ') : value]));
+  for (const key of TRANSLATED_ROLE_KEYS) {
+    role[key] = t(locale, `trace.role.${key}` as Parameters<typeof t>[1]);
+  }
+  out.role = role;
+  return out;
+}

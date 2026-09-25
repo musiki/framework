@@ -25,3 +25,14 @@ test('formatLabel fills {vars} placeholders', () => {
   assert.equal(formatLabel('no vars here', { unused: 'x' }), 'no vars here');
   assert.equal(formatLabel('missing {var}', {}), 'missing {var}');
 });
+
+import { buildTraceLabels, DEFAULT_ES_TRACE_LABELS } from './labels.ts';
+test('trace labels preserve Spanish defaults and provide every English label', () => {
+  assert.deepEqual(buildTraceLabels('es'), DEFAULT_ES_TRACE_LABELS);
+  const en = buildTraceLabels('en');
+  assert.deepEqual(Object.keys(en).sort(), Object.keys(DEFAULT_ES_TRACE_LABELS).sort());
+  for (const [key, value] of Object.entries(en)) {
+    if (key === 'role') { for (const label of Object.values(value)) assert.ok(label.length > 0); }
+    else assert.ok(typeof value === 'string' && value.length > 0);
+  }
+});

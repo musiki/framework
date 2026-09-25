@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { ensureDbUserFromSession, json, cleanString } from '../../../../lib/forum-server';
 import { query } from '../../../../lib/db/pool';
-import { getNoteAccess } from './annotations';
+import { getNoteAccess, getNoteAccessDetail } from '../../../../lib/writing/notes/access';
+import { canReadVersions } from '../../../../lib/writing/notes/read-policy';
 import { renderForumMarkdown } from '../../../../lib/forum-markdown';
 
 // GET /api/live/notes/versions?noteId=... — retrieve version history or specific version body
@@ -20,16 +21,16 @@ export const GET: APIRoute = async ({ url, locals }) => {
     if (error) return json({ error: error.message }, 500);
     if (!rows?.length) return json({ error: 'Version not found' }, 404);
 
-    const access = await getNoteAccess(rows[0].noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
-    if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
+    const access = await getNoteAccessDetail(rows[0].noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
+    if (!canReadVersions(access)) return json({ error: 'Forbidden' }, 403);
     return json({ version: rows[0] });
   }
 
   const noteId = cleanString(url.searchParams.get('noteId') ?? '', 36);
   if (!noteId) return json({ error: 'noteId required' }, 400);
 
-  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
-  if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
+  const access = await getNoteAccessDetail(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
+  if (!canReadVersions(access)) return json({ error: 'Forbidden' }, 403);
 
   const { data: versions, error } = await query(
     `SELECT v.id, v."noteId", v.title, v."versionName", v."createdById", v."createdAt",

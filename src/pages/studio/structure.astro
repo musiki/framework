@@ -2,6 +2,8 @@
 import StudioLayout from '../../layouts/StudioLayout.astro';
 import { t } from '../../lib/i18n';
 import { getStudioUserId, listMemberships, studioEnabled } from '../../lib/tenant/studio-db';
+import { listSpaceTree } from '../../lib/writing/notes/space-notes';
+import { VISIBILITIES } from '../../lib/writing/notes/visibility';
 export const prerender = false;
 
 const tenant = Astro.locals.tenant;
@@ -10,9 +12,11 @@ const locale = tenant.locale;
 const userId = await getStudioUserId(Astro.locals);
 if (!userId) return Astro.redirect('/studio/login');
 const spaces = await listMemberships(tenant.id, userId);
+const summaries = await Promise.all(spaces.map(async space => ({ space, tree: await listSpaceTree({spaceId: space.spaceId, userId}) })));
 const email = Astro.locals.session?.user?.email ?? '';
 ---
 <StudioLayout title={t(locale, 'studio.structure.title')} locale={locale} sidebar={{ email, spaces, current: 'structure' }}>
   <h1>{t(locale, 'studio.structure.title')}</h1>
-  <p class="so-muted">{t(locale, 'studio.structure.lead')}</p>
+  <p class="so-muted">{t(locale, 'studio.tree.structure')}</p>
+  {summaries.map(({space, tree}) => <section><h2>{space.title}</h2><table><thead><tr><th>{t(locale, 'studio.tree.visibility')}</th><th>{t(locale, 'studio.structure.notes')}</th></tr></thead><tbody>{VISIBILITIES.map(visibility => <tr><td>{t(locale, `studio.tree.${visibility}`)}</td><td>{tree.notes.filter(note => note.effectiveVisibility === visibility).length}</td></tr>)}</tbody></table></section>)}
 </StudioLayout>

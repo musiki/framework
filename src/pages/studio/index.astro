@@ -2,6 +2,7 @@
 import StudioLayout from '../../layouts/StudioLayout.astro';
 import { t, type MessageKey } from '../../lib/i18n';
 import { getStudioUserId, listMemberships, studioEnabled } from '../../lib/tenant/studio-db';
+import { ensureOkaFolders } from '../../lib/writing/notes/space-notes';
 export const prerender = false;
 
 const tenant = Astro.locals.tenant;
@@ -10,6 +11,7 @@ const locale = tenant.locale;
 const userId = await getStudioUserId(Astro.locals);
 if (!userId) return Astro.redirect('/studio/login');
 const spaces = await listMemberships(tenant.id, userId);
+for (const space of spaces.filter(s => s.role === 'author')) await ensureOkaFolders({ spaceId: space.spaceId, authorId: userId });
 const email = Astro.locals.session?.user?.email ?? '';
 ---
 <StudioLayout title={t(locale, 'studio.title')} locale={locale} sidebar={{ email, spaces, current: 'overview' }}>

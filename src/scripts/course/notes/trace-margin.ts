@@ -7,6 +7,7 @@ import {
 } from '@codemirror/view';
 import { computeKwic, computeZipfProfile } from '../../notas/qa-analyzer-logic';
 import { getLangPack, traceStopwords, type ContentLang } from '../../../lib/writing/lang/index.ts';
+import { DEFAULT_ES_TRACE_LABELS, formatLabel, type TraceLabels } from '../../../lib/writing/editor/labels.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,7 @@ type RhetoricalRole =
   | 'montage' | 'resonance' | 'closure' | 'process_note' | 'artistic_question'
   | 'material_observation' | 'technical_constraint' | 'decision' | 'discard'
   | 'variant' | 'documentation' | 'peer_feedback' | 'ai_feedback' | 'revision'
-  | 'public_artifact' | 'analysis' | 'method' | 'synthesis' | 'reflection';
+  | 'example' | 'public_artifact' | 'analysis' | 'method' | 'synthesis' | 'reflection';
 
 const ROLE_PRESENTATION: Record<RhetoricalRole, { label: string; short: string; hue: number; definition?: string }> = {
   excluir: { label: 'Excluir', short: 'EXC', hue: 0, definition: 'Excluir este párrafo del análisis TRACE, estructura, códigos y métricas derivadas.' },
@@ -147,15 +148,6 @@ const roleSets: Record<TraceMode, RhetoricalRole[]> = {
 
 const RHETORICAL_ROLES = Object.keys(ROLE_PRESENTATION) as RhetoricalRole[];
 const EXCLUDED_ROLE: RhetoricalRole = 'excluir';
-
-const MODE_LABELS: Record<TraceMode, string> = {
-  academic: 'Académico',
-  thesis: 'Tesis',
-  lit_art: 'Lit Art (Literatura y Arte)',
-  artistic_research: 'Investigación Artística',
-  seminar: 'Seminario',
-  submission: 'Entrega',
-};
 
 const LEGACY_ROLES: Record<string, RhetoricalRole> = {
   claim: 'afirmacion', definition: 'definicion', context: 'contexto', literature: 'literatura',
@@ -243,6 +235,7 @@ type ParagraphTrace = {
   modo: TraceMode;
   updatedAt?: string;
   paragraphId?: string;
+  rhythmClass?: ParagraphRhythmClass;
   rhythm?: ParagraphRhythm;
   sentences?: SentenceTrace[];
 };
@@ -253,6 +246,12 @@ export interface TraceMarginHandle {
 
 export interface TraceMarginOptions {
   canWrite?: boolean;
+  /** Base for the trace API; the mount fetches `${apiBase}/trace`. Default reproduces musiki: '/api/live/notes'. */
+  apiBase?: string;
+  /** Language of the note's content (drives stopwords/connectors for local NLP). Default 'es' reproduces musiki. */
+  contentLang?: ContentLang;
+  /** UI label overrides; merged onto DEFAULT_ES_TRACE_LABELS so musiki keeps its exact literals by default. */
+  labels?: Partial<TraceLabels>;
 }
 
 type MonitorSectionKey = 'trace' | 'estructura' | 'zipf' | 'qa';
@@ -291,6 +290,13 @@ function analyticalCodes(codes: TraceCode[]): TraceCode[] {
 
 function roleValue(code: TraceCode | undefined): RhetoricalRole | '' {
   return roleCodeValue(code);
+}
+
+// Display label for a rhetorical role: `labels.role[key]` when the active
+// TraceLabels set overrides it (i18n `trace.role.*`, or DEFAULT_ES_TRACE_LABELS
+// verbatim), falling back to the role's own ROLE_PRESENTATION definition.
+function roleLabel(labels: TraceLabels, role: RhetoricalRole): string {
+  return labels.role[role] ?? ROLE_PRESENTATION[role]?.label ?? role;
 }
 
 // ── Pure functions (mirrored in trace-utils.mjs for testing) ───────────────
@@ -370,13 +376,13 @@ export function startsWithConnector(text: string, lang: ContentLang = 'es'): boo
   return getLangPack(lang).connectors.some(c => lower.startsWith(c));
 }
 
-export function computeSentences(paraText: string, paragraphId: string): SentenceTrace[] {
+export function computeSentences(paraText: string, paragraphId: string, lang: ContentLang = 'es'): SentenceTrace[] {
   const rawSentences = paraText.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
   return rawSentences.map((text, idx) => {
     const words = text.split(/\s+/).filter(w => w.length > 0);
     const length = words.length;
     const endsWithQuestion = text.endsWith('?');
-    const hasConnector = startsWithConnector(text);
+    const hasConnector = startsWithConnector(text, lang);
     return {
       id: `${paragraphId}-s-${idx}`,
       paragraphId,
@@ -386,7 +392,7 @@ export function computeSentences(paraText: string, paragraphId: string): Sentenc
       length,
       startsWithConnector: hasConnector,
       endsWithQuestion,
-      motifs: extractKeywords(text),
+      motifs: extractKeywords(text, lang),
     };
   });
 }
@@ -476,15 +482,16 @@ export type TraceSuggestion = { label: string; paraIndex: number };
 const MIN_KEYWORD_LEN = 4;
 const TOP_KEYWORDS_PER_PARA = 5;
 
-const STOPWORDS = traceStopwords('es');
-
-function extractKeywords(text: string): string[] {
+// No module-level stopword set: it's derived per call from `lang` so multiple
+// margins (different contentLang) can coexist without shared mutable state.
+function extractKeywords(text: string, lang: ContentLang = 'es'): string[] {
+  const stopwords = traceStopwords(lang);
   const tokens = text
     .toLowerCase()
     .replace(/[^\p{L}]/gu, ' ')
     .split(/\s+/)
     .map(lemmatizeToken)
-    .filter(t => t.length >= MIN_KEYWORD_LEN && !STOPWORDS.has(t));
+    .filter(t => t.length >= MIN_KEYWORD_LEN && !stopwords.has(t));
   const freq = new Map<string, number>();
   for (const t of tokens) freq.set(t, (freq.get(t) ?? 0) + 1);
   return [...freq.entries()]
@@ -511,8 +518,8 @@ function detectChains(paragraphsWithKeywords: { index: number; keywords: string[
   return new Map([...labelToParas.entries()].filter(([, indices]) => indices.length >= 2));
 }
 
-export function computeSuggestions(paras: Paragraph[], codes: TraceCode[]): TraceSuggestion[] {
-  const withKeywords = paras.map(p => ({ index: p.index, keywords: extractKeywords(p.text) }));
+export function computeSuggestions(paras: Paragraph[], codes: TraceCode[], lang: ContentLang = 'es'): TraceSuggestion[] {
+  const withKeywords = paras.map(p => ({ index: p.index, keywords: extractKeywords(p.text, lang) }));
   const chains = detectChains(withKeywords);
   const existingSet = new Set(codes.map(c => `${c.paraIndex}:${c.label}`));
   const suggestions: TraceSuggestion[] = [];
@@ -601,9 +608,11 @@ function computeDiagnostics(
   occurrences: Map<string, number[]>,
   analyzedParas: Paragraph[],
   roleByParagraph: Map<number, RhetoricalRole | null>,
+  labels: TraceLabels,
+  lang: ContentLang,
 ): Diagnostic[] {
   const normMode = normalizeMode(mode);
-  const keywords = extractKeywords(para.text);
+  const keywords = extractKeywords(para.text, lang);
   const diagnostics: Diagnostic[] = [];
   
   if (normMode === 'academic' || normMode === 'thesis' || normMode === 'seminar' || normMode === 'submission') {
@@ -629,7 +638,7 @@ function computeDiagnostics(
             severidad: 'media',
             tipo: 'unreturned_motif',
             etiqueta: keyword,
-            mensaje: `Motivo no retomado: "${keyword}"`
+            mensaje: formatLabel(labels.diagUnreturnedMotif, { keyword })
           });
         }
       }
@@ -643,7 +652,7 @@ function computeDiagnostics(
             severidad: 'baja',
             tipo: 'motif_return',
             etiqueta: keyword,
-            mensaje: `Retorno del motivo "${keyword}"`
+            mensaje: formatLabel(labels.diagMotifReturn, { keyword })
           });
         }
       }
@@ -653,17 +662,17 @@ function computeDiagnostics(
       diagnostics.push({
         severidad: 'baja',
         tipo: 'voice_shift',
-        mensaje: `Cambio de voz detectado en P${para.index}`
+        mensaje: formatLabel(labels.diagVoiceShift, { index: String(para.index) })
       });
     }
 
-    const sentences = computeSentences(para.text, para.id);
+    const sentences = computeSentences(para.text, para.id, lang);
     const rhythm = computeRhythm(sentences);
     if (rhythm.avgSentenceLength > 25 && rhythm.sentenceCount > 3) {
       diagnostics.push({
         severidad: 'baja',
         tipo: 'dense_paragraph',
-        mensaje: 'Párrafo denso con frases largas'
+        mensaje: labels.diagDenseParagraph
       });
     }
   } else if (normMode === 'artistic_research') {
@@ -679,15 +688,15 @@ function computeDiagnostics(
       diagnostics.push({
         severidad: 'media',
         tipo: 'undocumented_decision',
-        mensaje: 'Decisión sin documentación en el proceso'
+        mensaje: labels.diagUndocumentedDecision
       });
     }
-    
+
     if (currentRole === 'material_observation' && !hasDocumentation) {
       diagnostics.push({
         severidad: 'media',
         tipo: 'missing_material_evidence',
-        mensaje: 'Observación material sin evidencia de documentación'
+        mensaje: labels.diagMissingMaterialEvidence
       });
     }
 
@@ -698,24 +707,24 @@ function computeDiagnostics(
         diagnostics.push({
           severidad: 'baja',
           tipo: 'variant_without_comparison',
-          mensaje: 'Variante sin comparación de alternativas'
+          mensaje: labels.diagVariantWithoutComparison
         });
       }
     }
-    
+
     if (currentRole === 'reflection' && !hasProcess) {
       diagnostics.push({
         severidad: 'baja',
         tipo: 'reflection_without_process',
-        mensaje: 'Reflexión sin registro previo de proceso'
+        mensaje: labels.diagReflectionWithoutProcess
       });
     }
-    
+
     if (currentRole === 'process_note' && !hasReflection) {
       diagnostics.push({
         severidad: 'baja',
         tipo: 'process_without_reflection',
-        mensaje: 'Nota de proceso sin reflexión crítica asociada'
+        mensaje: labels.diagProcessWithoutReflection
       });
     }
   }
@@ -727,12 +736,14 @@ async function computeLocalTraces(
   paras: Paragraph[],
   codes: TraceCode[],
   mode: TraceMode,
+  labels: TraceLabels,
+  lang: ContentLang,
 ): Promise<ParagraphTrace[]> {
   const normMode = normalizeMode(mode);
   const analyzedParas = paragraphsForAnalysis(paras, normMode, codes);
   const keywordsByParagraph = analyzedParas.map(para => ({
     index: para.index,
-    keywords: extractKeywords(para.text),
+    keywords: extractKeywords(para.text, lang),
   }));
   const occurrences = new Map<string, number[]>();
   for (const para of keywordsByParagraph) {
@@ -769,15 +780,15 @@ async function computeLocalTraces(
       if (previous === undefined) continue;
       relationTargets.set(previous, [...(relationTargets.get(previous) ?? []), keyword]);
     }
-    const relaciones: ParagraphRelation[] = [...relationTargets.entries()].map(([indiceObjetivo, labels]) => ({
+    const relaciones: ParagraphRelation[] = [...relationTargets.entries()].map(([indiceObjetivo, keywordLabels]) => ({
       indiceObjetivo,
       tipo: 'retoma',
-      evidencia: labels.join(', '),
+      evidencia: keywordLabels.join(', '),
       confianza: 0.68,
     }));
-    
-    const diagnosticos = computeDiagnostics(normMode, para, occurrences, analyzedParas, roleByParagraph);
-    const sentences = computeSentences(para.text, para.id);
+
+    const diagnosticos = computeDiagnostics(normMode, para, occurrences, analyzedParas, roleByParagraph, labels, lang);
+    const sentences = computeSentences(para.text, para.id, lang);
     const rhythm = computeRhythm(sentences);
     const rhythmClass = classifyRhythm(rhythm, sentences);
     
@@ -798,10 +809,10 @@ async function computeLocalTraces(
   });
 }
 
-async function persistLocalTraces(noteId: string, traces: ParagraphTrace[]): Promise<ParagraphTrace[]> {
+async function persistLocalTraces(apiBase: string, noteId: string, traces: ParagraphTrace[]): Promise<ParagraphTrace[]> {
   if (!traces.length) return [];
   try {
-    const res = await fetch('/api/live/notes/trace', {
+    const res = await fetch(`${apiBase}/trace`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ noteId, traces }),
@@ -1251,6 +1262,7 @@ function renderTraceGraph(
   traces: ParagraphTrace[],
   onJumpToParagraph: (para: Paragraph) => void,
   onHoverParagraph: (paraIndex: number | null) => void,
+  labels: TraceLabels,
 ): SVGSVGElement {
   const SPACING = 38;
   const R = 9;
@@ -1288,7 +1300,11 @@ function renderTraceGraph(
         path.setAttribute('stroke', 'var(--c-link, #3b82f6)');
         path.setAttribute('stroke-width', '1.2');
         path.setAttribute('opacity', '0.3');
-        path.setAttribute('aria-label', `P${displayNumber(trace.paraIndex)} retoma P${displayNumber(relation.indiceObjetivo)}: ${relation.evidencia}`);
+        path.setAttribute('aria-label', formatLabel(labels.graphLinkAria, {
+          to: String(displayNumber(trace.paraIndex)),
+          from: String(displayNumber(relation.indiceObjetivo)),
+          evidence: relation.evidencia,
+        }));
         path.classList.add('tc-graph-link');
         path.dataset.from = String(relation.indiceObjetivo);
         path.dataset.to = String(trace.paraIndex);
@@ -1313,7 +1329,7 @@ function renderTraceGraph(
     circle.setAttribute('stroke-width', '1');
     circle.setAttribute('role', 'button');
     circle.setAttribute('tabindex', '0');
-    circle.setAttribute('aria-label', `Ir al párrafo ${position + 1}`);
+    circle.setAttribute('aria-label', formatLabel(labels.graphNodeAria, { index: String(position + 1) }));
     circle.classList.add('tc-graph-node');
     circle.dataset.paraIndex = String(para.index);
     circle.addEventListener('mouseenter', () => onHoverParagraph(para.index));
@@ -1349,6 +1365,7 @@ function createMonitorSection(
   key: MonitorSectionKey,
   label: string,
   state: MonitorState,
+  labels: TraceLabels,
 ): HTMLElement {
   const isTrace = key === 'trace';
   const section = document.createElement(isTrace ? 'div' : 'details');
@@ -1368,7 +1385,7 @@ function createMonitorSection(
     dot.className = 'tc-live-dot';
     const context = document.createElement('span');
     context.className = 'tc-live-context';
-    context.textContent = 'LIVE';
+    context.textContent = labels.liveBadge;
     live.append(dot, context);
     summary.appendChild(live);
   }
@@ -1404,7 +1421,7 @@ function restartAnimation(element: Element, className: string) {
   element.classList.add(className);
 }
 
-function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animate: boolean) {
+function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animate: boolean, labels: TraceLabels) {
   traceCol.querySelectorAll<HTMLElement>('.tc-row').forEach(row => {
     const index = Number(row.dataset.paraIndex);
     const isActive = index === state.activeParagraph;
@@ -1428,7 +1445,11 @@ function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animat
       && (Number(link.dataset.from) === state.activeParagraph || Number(link.dataset.to) === state.activeParagraph));
   });
   const context = traceCol.querySelector<HTMLElement>('.tc-live-context');
-  if (context) context.textContent = state.activeParagraph === null ? 'LIVE' : `LIVE · P${state.activeParagraph}`;
+  if (context) {
+    context.textContent = state.activeParagraph === null
+      ? labels.liveBadge
+      : formatLabel(labels.liveBadgeAt, { index: String(state.activeParagraph) });
+  }
 }
 
 type TraceRowMeasurement = {
@@ -1483,13 +1504,13 @@ function requestTraceRowsSync(traceCol: HTMLElement, paras: Paragraph[], editorV
   });
 }
 
-function renderKwicLines(target: HTMLElement, text: string, query: string) {
+function renderKwicLines(target: HTMLElement, text: string, query: string, labels: TraceLabels) {
   target.innerHTML = '';
   const lines = computeKwic(text, query, 30).slice(0, 8);
   if (!query.trim() || lines.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'tc-empty';
-    empty.textContent = query.trim() ? 'Sin concordancias' : 'Selecciona una palabra';
+    empty.textContent = query.trim() ? labels.kwicNoMatches : labels.kwicEmptyQuery;
     target.appendChild(empty);
     return;
   }
@@ -1507,8 +1528,8 @@ function renderKwicLines(target: HTMLElement, text: string, query: string) {
   }
 }
 
-function appendFreqZipfSection(monitor: HTMLElement, text: string, state: MonitorState) {
-  const body = createMonitorSection(monitor, 'zipf', 'Freq · Zipf', state);
+function appendFreqZipfSection(monitor: HTMLElement, text: string, state: MonitorState, labels: TraceLabels) {
+  const body = createMonitorSection(monitor, 'zipf', labels.sectionFreqZipf, state, labels);
   const tools = document.createElement('div');
   tools.className = 'tc-lexical-tools';
   body.appendChild(tools);
@@ -1517,32 +1538,36 @@ function appendFreqZipfSection(monitor: HTMLElement, text: string, state: Monito
   const stats = document.createElement('div');
   stats.className = 'tc-zipf-stats';
   stats.textContent = profile.slope === null
-    ? 'Distribución insuficiente para estimar una pendiente.'
-    : `${profile.tokenCount} tokens · ${profile.vocabularySize} términos · pendiente log-log ${profile.slope.toFixed(2)}`;
+    ? labels.zipfInsufficient
+    : formatLabel(labels.zipfStats, {
+      tokens: String(profile.tokenCount),
+      vocab: String(profile.vocabularySize),
+      slope: profile.slope.toFixed(2),
+    });
   tools.appendChild(stats);
 
   const input = document.createElement('input');
   input.className = 'tc-lexical-input';
-  input.placeholder = 'concordancia...';
+  input.placeholder = labels.lexicalPlaceholder;
   if (!state.lexicalQuery && profile.points[0]) state.lexicalQuery = profile.points[0].word;
   input.value = state.lexicalQuery;
   tools.appendChild(input);
 
   const freqHead = document.createElement('div');
   freqHead.className = 'tc-subhead';
-  freqHead.textContent = 'Rango · frecuencia observada';
+  freqHead.textContent = labels.freqHeading;
   tools.appendChild(freqHead);
 
   if (profile.points.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'tc-empty';
-    empty.textContent = 'Sin términos suficientes';
+    empty.textContent = labels.freqEmpty;
     tools.appendChild(empty);
   }
   for (const point of profile.points) {
     const row = document.createElement('div');
     row.className = 'tc-frequency-row';
-    row.title = 'Ver concordancias';
+    row.title = labels.freqRowTitle;
     const rank = document.createElement('span');
     rank.className = 'tc-zipf-rank';
     rank.textContent = `#${point.rank}`;
@@ -1557,28 +1582,28 @@ function appendFreqZipfSection(monitor: HTMLElement, text: string, state: Monito
     bars.append(bar, label);
     const count = document.createElement('span');
     count.className = 'tc-frequency-label';
-    count.title = `Ideal Zipf aproximado: ${point.expected.toFixed(1)}`;
+    count.title = formatLabel(labels.zipfIdealTitle, { value: point.expected.toFixed(1) });
     count.textContent = String(point.count);
     row.append(rank, bars, count);
     row.addEventListener('click', () => {
       state.lexicalQuery = point.word;
       input.value = point.word;
-      renderKwicLines(kwic, text, point.word);
+      renderKwicLines(kwic, text, point.word, labels);
     });
     tools.appendChild(row);
   }
 
   const kwicHead = document.createElement('div');
   kwicHead.className = 'tc-subhead';
-  kwicHead.textContent = 'KWIC';
+  kwicHead.textContent = labels.kwicHeading;
   const kwic = document.createElement('div');
   kwic.className = 'tc-kwic';
   tools.append(kwicHead, kwic);
   input.addEventListener('input', () => {
     state.lexicalQuery = input.value.trim();
-    renderKwicLines(kwic, text, state.lexicalQuery);
+    renderKwicLines(kwic, text, state.lexicalQuery, labels);
   });
-  renderKwicLines(kwic, text, state.lexicalQuery);
+  renderKwicLines(kwic, text, state.lexicalQuery, labels);
 }
 
 function appendQaSection(
@@ -1587,8 +1612,9 @@ function appendQaSection(
   traces: ParagraphTrace[],
   state: MonitorState,
   analyzedParas: Paragraph[],
+  labels: TraceLabels,
 ) {
-  const body = createMonitorSection(monitor, 'qa', 'QA', state);
+  const body = createMonitorSection(monitor, 'qa', labels.sectionQa, state, labels);
   const analyzedIndices = new Set(analyzedParas.map(para => para.index));
   const traceCodes = analyticalCodes(codes).filter(code => analyzedIndices.has(code.paraIndex));
   const activeTraces = traces.filter(trace => analyzedIndices.has(trace.paraIndex));
@@ -1601,10 +1627,10 @@ function appendQaSection(
   const roles = activeTraces.filter(trace => trace.rolRetorico && trace.rolRetorico !== EXCLUDED_ROLE).length;
   const warnings = activeTraces.reduce((total, trace) => total + trace.diagnosticos.length, 0);
   const values = [
-    `${traceCodes.length} códigos`,
-    `${emergent} emergentes`,
-    `${roles} roles`,
-    `${warnings} indicios`,
+    formatLabel(labels.qaCodesMetric, { count: String(traceCodes.length) }),
+    formatLabel(labels.qaEmergentMetric, { count: String(emergent) }),
+    formatLabel(labels.qaRolesMetric, { count: String(roles) }),
+    formatLabel(labels.qaWarningsMetric, { count: String(warnings) }),
   ];
   for (const value of values) {
     const metric = document.createElement('span');
@@ -1614,32 +1640,33 @@ function appendQaSection(
   }
   const copy = document.createElement('div');
   copy.className = 'tc-qa-copy';
-  copy.textContent = state.mode === 'artistico'
-    ? 'Lit Art: se omiten párrafos breves de una o dos líneas.'
-    : 'Indicios locales de cohesión: no califican la calidad del argumento.';
+  copy.textContent = state.mode === 'lit_art'
+    ? labels.qaCopyLitArt
+    : labels.qaCopyDefault;
   body.append(metrics, copy);
 }
 
 function formatRhythmSummary(
   rhythmClass: ParagraphRhythmClass,
   rhythm: ParagraphRhythm,
-  sentences: SentenceTrace[]
+  sentences: SentenceTrace[],
+  labels: TraceLabels,
 ): string {
   const classLabels: Record<ParagraphRhythmClass, string> = {
-    single_long_sentence: 'frase única larga',
-    short_sentences: 'frases breves',
-    mixed_rhythm: 'ritmo mixto',
-    accumulative: 'acumulativo',
-    fragmentary: 'fragmentario',
-    questioning: 'interrogativo',
-    emphatic_closure: 'cierre enfático',
+    single_long_sentence: labels.rhythmClassSingleLongSentence,
+    short_sentences: labels.rhythmClassShortSentences,
+    mixed_rhythm: labels.rhythmClassMixedRhythm,
+    accumulative: labels.rhythmClassAccumulative,
+    fragmentary: labels.rhythmClassFragmentary,
+    questioning: labels.rhythmClassQuestioning,
+    emphatic_closure: labels.rhythmClassEmphaticClosure,
   };
-  const parts = [classLabels[rhythmClass] || 'ritmo mixto'];
-  
+  const parts = [classLabels[rhythmClass] || labels.rhythmClassMixedRhythm];
+
   if (rhythmClass !== 'emphatic_closure' && rhythm.sentenceCount > 1) {
     const lastLen = sentences[sentences.length - 1].length;
     if (lastLen < rhythm.avgSentenceLength * 0.55) {
-      parts.push('cierre enfático');
+      parts.push(labels.rhythmClassEmphaticClosure);
     }
   }
   return parts.join(' · ');
@@ -1657,6 +1684,9 @@ function renderMargin(
   onModeChange: (mode: TraceMode) => void,
   state: MonitorState,
   canWriteTrace = true,
+  apiBase: string,
+  labels: TraceLabels,
+  lang: ContentLang,
 ) {
   traceCol.innerHTML = '';
   analysisCol.innerHTML = '';
@@ -1672,14 +1702,14 @@ function renderMargin(
   const analysisMonitor = document.createElement('div');
   analysisMonitor.className = 'tc-monitor';
   analysisCol.appendChild(analysisMonitor);
-  const traceBody = createMonitorSection(traceMonitor, 'trace', 'Trace', state);
+  const traceBody = createMonitorSection(traceMonitor, 'trace', labels.sectionTrace, state, labels);
   const summary = traceBody.parentElement?.querySelector('.tc-section-summary');
   if (summary) {
     const autoBtn = document.createElement('button');
     autoBtn.type = 'button';
     autoBtn.className = 'tc-autocode-btn';
-    autoBtn.textContent = '⚡ Auto';
-    autoBtn.title = 'Generar codificación automática (NLP)';
+    autoBtn.textContent = labels.autoBtn;
+    autoBtn.title = labels.autoBtnTitle;
     autoBtn.disabled = !canWriteTrace;
     const liveBadge = summary.querySelector('.tc-live-badge');
     if (liveBadge) {
@@ -1689,10 +1719,10 @@ function renderMargin(
     }
     autoBtn.addEventListener('click', async () => {
       if (!canWriteTrace) return;
-      const suggestions = computeSuggestions(analyzedParas, codes);
+      const suggestions = computeSuggestions(analyzedParas, codes, lang);
       if (suggestions.length === 0) {
         const originalText = autoBtn.textContent;
-        autoBtn.textContent = 'Sin sugerencias';
+        autoBtn.textContent = labels.autoBtnNoSuggestions;
         autoBtn.disabled = true;
         setTimeout(() => {
           autoBtn.textContent = originalText;
@@ -1706,7 +1736,7 @@ function renderMargin(
         const newCodes = [...codes];
         await Promise.all(suggestions.map(async (sugg) => {
           try {
-            const res = await fetch('/api/live/notes/trace', {
+            const res = await fetch(`${apiBase}/trace`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1729,18 +1759,26 @@ function renderMargin(
       } catch (e) {
         console.error(e);
       } finally {
-        autoBtn.textContent = '⚡ Auto';
+        autoBtn.textContent = labels.autoBtn;
         autoBtn.disabled = false;
       }
     });
   }
   const modeRow = document.createElement('label');
   modeRow.className = 'tc-mode-row';
-  modeRow.textContent = 'Modo';
+  modeRow.textContent = labels.modeLabel;
   const modeSelect = document.createElement('select');
   modeSelect.className = 'tc-mode-select';
-  modeSelect.title = 'Modo del análisis estructural';
-  for (const [value, label] of Object.entries(MODE_LABELS) as [TraceMode, string][]) {
+  modeSelect.title = labels.modeSelectTitle;
+  const modeLabels: Record<TraceMode, string> = {
+    academic: labels.modeAcademic,
+    thesis: labels.modeThesis,
+    lit_art: labels.modeLitArt,
+    artistic_research: labels.modeArtisticResearch,
+    seminar: labels.modeSeminar,
+    submission: labels.modeSubmission,
+  };
+  for (const [value, label] of Object.entries(modeLabels) as [TraceMode, string][]) {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = label;
@@ -1767,9 +1805,9 @@ function renderMargin(
   if (analyzedParas.length === 0) {
     const msg = document.createElement('p');
     msg.style.cssText = 'padding:8px;opacity:.4;font-size:10px;margin:0';
-    msg.textContent = state.mode === 'artistico'
-      ? '[sin párrafos extensos para analizar]'
-      : '[sin párrafos]';
+    msg.textContent = state.mode === 'lit_art'
+      ? labels.emptyParagraphsLitArt
+      : labels.emptyParagraphs;
     list.appendChild(msg);
   }
 
@@ -1793,7 +1831,7 @@ function renderMargin(
       const roleStyle = ROLE_PRESENTATION[currentRole];
       roleRail.textContent = roleStyle.short;
       roleRail.style.setProperty('--tc-role-color', `hsl(${roleStyle.hue}, 55%, 55%)`);
-      roleRail.title = roleStyle.label;
+      roleRail.title = roleLabel(labels, currentRole);
     }
     row.appendChild(roleRail);
 
@@ -1803,25 +1841,25 @@ function renderMargin(
     const paraLabel = document.createElement('button');
     paraLabel.type = 'button';
     paraLabel.className = 'tc-para-label';
-    paraLabel.title = 'Ir al párrafo';
+    paraLabel.title = labels.jumpToParagraph;
     paraLabel.textContent = `P${displayNumberByPara.get(para.index) ?? para.index + 1}`;
     paraLabel.addEventListener('click', () => jumpToParagraph(para));
     head.appendChild(paraLabel);
 
     const roleSelect = document.createElement('select');
     roleSelect.className = 'tc-role-select';
-    roleSelect.title = 'Rol retórico del párrafo';
-    roleSelect.setAttribute('aria-label', `Rol retórico de P${displayNumberByPara.get(para.index) ?? para.index + 1}`);
+    roleSelect.title = labels.roleSelectTitle;
+    roleSelect.setAttribute('aria-label', `${labels.roleSelectAriaPrefix}P${displayNumberByPara.get(para.index) ?? para.index + 1}`);
     const emptyRole = document.createElement('option');
     emptyRole.value = '';
-    emptyRole.textContent = '— rol';
+    emptyRole.textContent = labels.roleEmptyOption;
     roleSelect.appendChild(emptyRole);
-    
+
     const activeRoles = [EXCLUDED_ROLE, ...(roleSets[state.mode] || roleSets.academic)];
     for (const role of activeRoles) {
       const option = document.createElement('option');
       option.value = role;
-      option.textContent = ROLE_PRESENTATION[role]?.label || role;
+      option.textContent = roleLabel(labels, role);
       if (ROLE_PRESENTATION[role]?.definition) {
         option.title = ROLE_PRESENTATION[role].definition!;
       }
@@ -1830,24 +1868,24 @@ function renderMargin(
     if (currentRole && !activeRoles.includes(currentRole as RhetoricalRole)) {
       const option = document.createElement('option');
       option.value = currentRole;
-      option.textContent = (ROLE_PRESENTATION[currentRole]?.label || currentRole) + ' (externo)';
+      option.textContent = roleLabel(labels, currentRole) + labels.roleExternalSuffix;
       if (ROLE_PRESENTATION[currentRole]?.definition) {
         option.title = ROLE_PRESENTATION[currentRole].definition!;
       }
       roleSelect.appendChild(option);
     }
-    
+
     roleSelect.value = currentRole ?? '';
     roleSelect.disabled = !canWriteTrace;
     const updateRoleTooltip = () => {
       const selected = roleSelect.value as RhetoricalRole;
       const meta = selected ? ROLE_PRESENTATION[selected] : null;
       roleSelect.title = !canWriteTrace
-        ? 'Rol retórico del párrafo (solo lectura)'
-        : meta?.definition || 'Rol retórico del párrafo';
+        ? labels.roleSelectTitleReadOnly
+        : meta?.definition || labels.roleSelectTitle;
     };
     updateRoleTooltip();
-    
+
     roleSelect.addEventListener('change', async () => {
       if (!canWriteTrace) return;
       updateRoleTooltip();
@@ -1857,12 +1895,12 @@ function renderMargin(
       try {
         if (!nextValue) {
           if (!rhetoricalCode) return;
-          const res = await fetch(`/api/live/notes/trace?id=${rhetoricalCode.id}`, { method: 'DELETE' });
+          const res = await fetch(`${apiBase}/trace?id=${rhetoricalCode.id}`, { method: 'DELETE' });
           if (!res.ok) throw new Error('delete failed');
           onCodesChange(codes.filter(code => code.id !== rhetoricalCode.id));
           return;
         }
-        const res = await fetch('/api/live/notes/trace', {
+        const res = await fetch(`${apiBase}/trace`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1894,7 +1932,7 @@ function renderMargin(
 
     const addBtn = document.createElement('button');
     addBtn.className = 'tc-add-btn';
-    addBtn.title = 'Añadir código';
+    addBtn.title = labels.addCode;
     addBtn.textContent = '⊕';
     addBtn.disabled = !canWriteTrace;
     head.appendChild(addBtn);
@@ -1903,15 +1941,15 @@ function renderMargin(
 
     const conceptsEl = document.createElement('div');
     conceptsEl.className = 'tc-concepts';
-    
+
     const conceptsLabel = document.createElement('span');
     conceptsLabel.className = 'tc-concepts-label';
     conceptsLabel.style.cssText = 'font-size: 10px; opacity: 0.5; margin-right: 4px;';
     conceptsLabel.textContent = state.mode === 'lit_art'
-      ? 'motivos: '
+      ? labels.conceptsLabelLitArt
       : state.mode === 'artistic_research'
-        ? 'trazas: '
-        : 'conceptos: ';
+        ? labels.conceptsLabelArtisticResearch
+        : labels.conceptsLabelDefault;
     conceptsEl.appendChild(conceptsLabel);
     
     for (const concept of localTrace?.conceptos ?? []) {
@@ -1922,7 +1960,7 @@ function renderMargin(
         chip.classList.add('is-orphan');
       }
       chip.textContent = concept.etiqueta;
-      chip.title = `${concept.estado} · confianza local ${Math.round(concept.confianza * 100)}%`;
+      chip.title = formatLabel(labels.conceptTooltip, { estado: concept.estado, pct: String(Math.round(concept.confianza * 100)) });
       conceptsEl.appendChild(chip);
     }
     row.appendChild(conceptsEl);
@@ -1932,12 +1970,15 @@ function renderMargin(
       const rhythmEl = document.createElement('div');
       rhythmEl.className = 'tc-rhythm-info';
       rhythmEl.style.cssText = 'font-size: 10px; opacity: 0.6; margin-top: 3px; display: flex; flex-direction: column; cursor: pointer; user-select: none;';
-      
+
       const rhythmSummary = document.createElement('span');
       rhythmSummary.className = 'tc-rhythm-summary';
-      
+
       const rhythmClass = localTrace.rhythmClass || (localTrace.rhythm && localTrace.sentences ? classifyRhythm(localTrace.rhythm, localTrace.sentences) : 'mixed_rhythm');
-      rhythmSummary.textContent = `frases: ${localTrace.rhythm.sentenceCount} · ${formatRhythmSummary(rhythmClass as ParagraphRhythmClass, localTrace.rhythm, localTrace.sentences)}`;
+      rhythmSummary.textContent = formatLabel(labels.rhythmSummary, {
+        count: String(localTrace.rhythm.sentenceCount),
+        summary: formatRhythmSummary(rhythmClass as ParagraphRhythmClass, localTrace.rhythm, localTrace.sentences, labels),
+      });
       rhythmEl.appendChild(rhythmSummary);
       
       const rhythmDetails = document.createElement('div');
@@ -1968,10 +2009,10 @@ function renderMargin(
       diagEl.style.cssText = 'font-size: 10px; margin-top: 3px;';
       
       const isCreative = state.mode === 'lit_art' || state.mode === 'artistic_research';
-      const prefix = isCreative ? 'observación: ' : 'diagnostics: ⚠ ';
-      
+      const prefix = isCreative ? labels.diagnosticsPrefixCreative : labels.diagnosticsPrefixDefault;
+
       diagEl.textContent = prefix + localTrace.diagnosticos.map(d => {
-        if (d.tipo === 'concepto_huerfano') return `concepto huérfano "${d.etiqueta}"`;
+        if (d.tipo === 'concepto_huerfano') return formatLabel(labels.orphanConcept, { label: d.etiqueta ?? '' });
         return d.mensaje || d.tipo;
       }).join(', ');
       
@@ -1993,7 +2034,7 @@ function renderMargin(
       if (orphans.has(code.label)) chip.classList.add('is-orphan');
       if (code.source === 'local_nlp') {
         chip.classList.add('is-emergent');
-        chip.title = 'Código emergente detectado localmente';
+        chip.title = labels.emergentCodeTitle;
       }
       chip.dataset.label = code.label;
       chip.dataset.codeId = code.id;
@@ -2006,7 +2047,7 @@ function renderMargin(
 
       const delBtn = document.createElement('button');
       delBtn.className = 'tc-chip-del';
-      delBtn.title = 'Eliminar';
+      delBtn.title = labels.deleteCode;
       delBtn.textContent = '×';
       delBtn.disabled = !canWriteTrace;
       chip.appendChild(delBtn);
@@ -2028,7 +2069,7 @@ function renderMargin(
         if (!canWriteTrace) return;
         const origBg = chip.style.background;
         try {
-          const res = await fetch(`/api/live/notes/trace?id=${code.id}`, { method: 'DELETE' });
+          const res = await fetch(`${apiBase}/trace?id=${code.id}`, { method: 'DELETE' });
           if (!res.ok) throw new Error('delete failed');
           onCodesChange(codes.filter(c => c.id !== code.id));
         } catch {
@@ -2045,7 +2086,7 @@ function renderMargin(
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'tc-add-input';
-    input.placeholder = 'nombre del código…';
+    input.placeholder = labels.addCodePlaceholder;
     input.style.display = 'none';
     row.appendChild(input);
 
@@ -2063,7 +2104,7 @@ function renderMargin(
         input.value = '';
         if (!label) return;
         try {
-          const res = await fetch('/api/live/notes/trace', {
+          const res = await fetch(`${apiBase}/trace`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ noteId, paraIndex: para.index, label }),
@@ -2086,18 +2127,18 @@ function renderMargin(
 
   traceBody.appendChild(list);
 
-  const structureBody = createMonitorSection(analysisMonitor, 'estructura', 'Estructura', state);
+  const structureBody = createMonitorSection(analysisMonitor, 'estructura', labels.sectionStructure, state, labels);
   structureBody.appendChild(modeRow);
   const graph = document.createElement('div');
   graph.className = 'tc-graph';
   if (analyzedParas.length > 0) {
-    graph.appendChild(renderTraceGraph(analyzedParas, activeTraces, jumpToParagraph, hoverParagraph));
+    graph.appendChild(renderTraceGraph(analyzedParas, activeTraces, jumpToParagraph, hoverParagraph, labels));
   }
   structureBody.appendChild(graph);
 
   const text = analyzedParas.map(para => para.text).join('\n\n');
-  appendFreqZipfSection(analysisMonitor, text, state);
-  appendQaSection(analysisMonitor, codes, activeTraces, state, analyzedParas);
+  appendFreqZipfSection(analysisMonitor, text, state, labels);
+  appendQaSection(analysisMonitor, codes, activeTraces, state, analyzedParas, labels);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -2112,6 +2153,9 @@ export async function mountTraceMargin(
 
   const paras = segmentParagraphs(editorView.state.doc.toString());
   const canWriteTrace = options.canWrite !== false;
+  const apiBase = options.apiBase ?? '/api/live/notes';
+  const contentLang: ContentLang = options.contentLang ?? 'es';
+  const labels: TraceLabels = { ...DEFAULT_ES_TRACE_LABELS, ...options.labels };
   let currentCodes: TraceCode[] = [];
   let currentTraces: ParagraphTrace[] = [];
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2124,7 +2168,7 @@ export async function mountTraceMargin(
     lexicalQuery: '',
     activeParagraph: null,
     visibleParagraphs: new Set<number>(),
-    mode: 'borrador',
+    mode: 'academic',
   };
 
   const refreshFromDocument = () => {
@@ -2159,8 +2203,8 @@ export async function mountTraceMargin(
     const enteredParagraph = nextActive !== monitorState.activeParagraph;
     monitorState.activeParagraph = nextActive;
     monitorState.visibleParagraphs = collectParagraphIndicesInRange(paras, view.viewport.from, view.viewport.to);
-    applyMonitorActivity(traceCol, monitorState, animate && enteredParagraph);
-    applyMonitorActivity(analysisCol, monitorState, animate && enteredParagraph);
+    applyMonitorActivity(traceCol, monitorState, animate && enteredParagraph, labels);
+    applyMonitorActivity(analysisCol, monitorState, animate && enteredParagraph, labels);
     requestTraceRowsSync(traceCol, paras, view);
     if (animate && enteredParagraph) {
       const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
@@ -2193,6 +2237,9 @@ export async function mountTraceMargin(
       },
       monitorState,
       canWriteTrace,
+      apiBase,
+      labels,
+      contentLang,
     );
     syncEditorActivity(editorView, false);
     const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
@@ -2204,10 +2251,10 @@ export async function mountTraceMargin(
   };
 
   const analyzeAndRender = async (nextCodes: TraceCode[]) => {
-    const locallyAnalyzed = await computeLocalTraces(paras, nextCodes, monitorState.mode);
+    const locallyAnalyzed = await computeLocalTraces(paras, nextCodes, monitorState.mode, labels, contentLang);
     if (!active) return;
     const storedTraces = canWriteTrace
-      ? await persistLocalTraces(noteId, locallyAnalyzed)
+      ? await persistLocalTraces(apiBase, noteId, locallyAnalyzed)
       : locallyAnalyzed;
     if (!active) return;
     rerender(nextCodes, storedTraces);
@@ -2215,12 +2262,12 @@ export async function mountTraceMargin(
 
   const loadStoredTraceData = async () => {
     try {
-      const res = await fetch(`/api/live/notes/trace?noteId=${encodeURIComponent(noteId)}`);
+      const res = await fetch(`${apiBase}/trace?noteId=${encodeURIComponent(noteId)}`);
       if (res.ok) {
         const data = await res.json() as { codes?: TraceCode[]; traces?: ParagraphTrace[] };
         currentCodes = data.codes ?? [];
         currentTraces = data.traces ?? [];
-        monitorState.mode = currentTraces[0]?.modo ?? monitorState.mode;
+        monitorState.mode = normalizeMode(currentTraces[0]?.modo ?? monitorState.mode);
         if (!active) return;
         rerender(currentCodes, currentTraces);
       }

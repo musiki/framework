@@ -6,7 +6,7 @@ import { createLiveMdEditor } from '../course/notes/live-md-editor';
 import { enhanceCourseNotesContent } from '../course/notes/content';
 import { markdownToLatex } from './markdown-latex-export.ts';
 import type { TraceMarginHandle } from '../course/notes/trace-margin';
-import { DEFAULT_ES_LABELS, formatLabel, type EditorLabels } from '../../lib/writing/editor/labels.ts';
+import { DEFAULT_ES_LABELS, formatLabel, type EditorLabels, type TraceLabels } from '../../lib/writing/editor/labels.ts';
 import type { ContentLang } from '../../lib/writing/lang/index.ts';
 
 export interface PersonalNotesWorkspace {
@@ -299,14 +299,14 @@ function openPrintablePdf(html: string, title: string): void {
   printWindow.document.close();
 }
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, lang: ContentLang = 'es'): string {
   const d = new Date(dateStr);
   const diffMs = Date.now() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'ahora';
-  if (diffMins < 60) return `hace ${diffMins} min`;
+  if (diffMins < 1) return lang === 'en' ? 'now' : 'ahora';
+  if (diffMins < 60) return lang === 'en' ? `${diffMins} min ago` : `hace ${diffMins} min`;
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `hace ${diffHours} h`;
+  if (diffHours < 24) return lang === 'en' ? `${diffHours} h ago` : `hace ${diffHours} h`;
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   return `${day}/${month}`;
@@ -595,6 +595,8 @@ export interface EditorOptions {
   previewUrl?: string;
   uploadUrl?: string;
   labels?: Partial<EditorLabels>;
+  /** UI label overrides for the trace margin (src/scripts/course/notes/trace-margin.ts). */
+  traceLabels?: Partial<TraceLabels>;
   contentLang?: ContentLang;
   spaceId?: string;
 }
@@ -606,6 +608,7 @@ async function mountVersionsOnlyView(
   noteId: string,
   versionsUrl: string,
   labels: EditorLabels,
+  contentLang: ContentLang = 'es',
 ): Promise<void> {
   injectWorkspaceExtraCss();
 
@@ -636,7 +639,7 @@ async function mountVersionsOnlyView(
     card.innerHTML = `
       <div style="font-weight: 600; color: var(--c-fg); word-break: break-word;">${escHtml(v.versionName)}</div>
       <div style="font-size: 9.5px; color: var(--c-fg-dim); opacity: 0.8; margin-top: 2px;">
-        ${escHtml(formatLabel(labels.byPrefix, { name: escHtml(v.createdByUserName || labels.defaultUserName), time: formatRelativeTime(v.createdAt) }))}
+        ${escHtml(formatLabel(labels.byPrefix, { name: escHtml(v.createdByUserName || labels.defaultUserName), time: formatRelativeTime(v.createdAt, contentLang) }))}
       </div>
       <div style="display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px;">
         <button class="version-action-btn v-preview" title="${escHtml(labels.previewVersionTitle)}">P</button>
@@ -677,7 +680,10 @@ export async function mountDbNoteEditor(
   const previewUrl = options?.previewUrl ?? '/api/live/preview-markdown';
   const uploadUrl = options?.uploadUrl ?? '/api/forum/upload-image';
   const labels: EditorLabels = { ...DEFAULT_ES_LABELS, ...options?.labels };
+  const highlightLabels: Record<string, string> = options?.contentLang === 'en' ? { green: 'Main idea', blue: 'Concept / ideas', red: 'Antithesis or critique', yellow: 'Data', orange: 'Method / action', violet: 'Inspiration / abduction / generative' } : {};
+  const highlightColors = Object.fromEntries(Object.entries(HIGHLIGHT_COLORS).map(([key, value]) => [key, { ...value, label: highlightLabels[key] ?? value.label }]));
   const contentLang: ContentLang = options?.contentLang ?? 'es';
+  const traceLabels = options?.traceLabels;
   const spaceId = options?.spaceId;
   const noteQueryUrl = `${apiBase}?id=${noteId}${spaceId ? `&spaceId=${encodeURIComponent(spaceId)}` : ''}`;
   const annotationsUrl = `${apiBase}/annotations`;
@@ -700,7 +706,7 @@ export async function mountDbNoteEditor(
     traceBtn.style.display = 'none';
     if (downloadBtn) downloadBtn.style.display = 'none';
     if (downloadMenu) downloadMenu.style.display = 'none';
-    void mountVersionsOnlyView(bodyEl, noteId, versionsUrl, labels);
+    void mountVersionsOnlyView(bodyEl, noteId, versionsUrl, labels, contentLang);
     return;
   }
   let currentMode: DbNoteViewMode = 'live-edit';
@@ -895,7 +901,7 @@ export async function mountDbNoteEditor(
   const filterSelect = commentsSidebar.querySelector('.category-filter-select');
   if (filterSelect) {
     const emojis: Record<string, string> = { green: '🟢', blue: '🔵', red: '🔴', yellow: '🟡', orange: '🟠', violet: '🟣' };
-    for (const [colorName, colorObj] of Object.entries(HIGHLIGHT_COLORS)) {
+    for (const [colorName, colorObj] of Object.entries(highlightColors)) {
       const opt = document.createElement('option');
       opt.value = colorName;
       opt.textContent = `${emojis[colorName] || '⚪'} ${colorObj.label}`;
@@ -913,6 +919,8 @@ export async function mountDbNoteEditor(
     </div>
     <div class="versions-list-container" style="flex: 1; overflow-y: auto; padding: 10px;"></div>
   `;
+
+  if (isReadOnly) versionsSidebar.querySelector<HTMLElement>('.save-version-btn')?.remove();
 
   let editor: any;
   let currentSelectionColor: string | null = null;
@@ -982,7 +990,7 @@ export async function mountDbNoteEditor(
   selectionToolbar.className = 'pnw-selection-toolbar';
   editorWrap.appendChild(selectionToolbar);
 
-  for (const [colorName, colorObj] of Object.entries(HIGHLIGHT_COLORS)) {
+  for (const [colorName, colorObj] of Object.entries(highlightColors)) {
     const btn = document.createElement('button');
     btn.className = `pnw-color-btn pnw-color-btn--${colorName}`;
     btn.title = colorObj.label;
@@ -1211,7 +1219,7 @@ export async function mountDbNoteEditor(
 
   const updateNewCommentSection = () => {
     const newCommentSec = commentsSidebar.querySelector<HTMLElement>('.new-comment-section')!;
-    if (isReadOnly) {
+    if (!canComment) {
       newCommentSec.style.display = 'none';
       return;
     }
@@ -1242,7 +1250,7 @@ export async function mountDbNoteEditor(
     if (!currentSelectionColor) {
       currentSelectionColor = 'yellow';
     }
-    const colorObj = HIGHLIGHT_COLORS[currentSelectionColor] || HIGHLIGHT_COLORS['yellow'];
+    const colorObj = highlightColors[currentSelectionColor] || highlightColors['yellow'];
 
     newCommentSec.style.display = 'flex';
     newCommentSec.innerHTML = `
@@ -1313,7 +1321,7 @@ export async function mountDbNoteEditor(
       card.className = 'comment-card';
       
       const annColor = ann.anchorJson?.color || 'yellow';
-      const colorObj = HIGHLIGHT_COLORS[annColor] || HIGHLIGHT_COLORS['yellow'];
+      const colorObj = highlightColors[annColor] || highlightColors['yellow'];
       card.style.borderLeft = `3px solid ${colorObj.color}`;
       
       const quoteBlock = ann.quote ? `<blockquote class="comment-quote" style="margin-top: 4px;">"${escHtml(ann.quote)}"</blockquote>` : '';
@@ -1336,7 +1344,7 @@ export async function mountDbNoteEditor(
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
           <div>
             <span class="comment-author">${escHtml(ann.authorName || labels.defaultUserName)}</span>
-            <span class="comment-time">${formatRelativeTime(ann.createdAt)}</span>
+            <span class="comment-time">${formatRelativeTime(ann.createdAt, contentLang)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 4px;">
             ${resolveBtn}
@@ -1374,7 +1382,7 @@ export async function mountDbNoteEditor(
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
             <div>
               <span class="comment-author" style="font-size: 10px;">${escHtml(rep.authorName || labels.defaultUserName)}</span>
-              <span class="comment-time" style="font-size: 9px;">${formatRelativeTime(rep.createdAt)}</span>
+              <span class="comment-time" style="font-size: 9px;">${formatRelativeTime(rep.createdAt, contentLang)}</span>
             </div>
             ${repDeleteBtn}
           </div>
@@ -1538,7 +1546,7 @@ export async function mountDbNoteEditor(
       card.innerHTML = `
         <div style="font-weight: 600; color: var(--c-fg); word-break: break-word;">${escHtml(v.versionName)}</div>
         <div style="font-size: 9.5px; color: var(--c-fg-dim); opacity: 0.8; margin-top: 2px;">
-          ${escHtml(formatLabel(labels.byPrefix, { name: v.createdByUserName || labels.defaultUserName, time: formatRelativeTime(v.createdAt) }))}
+          ${escHtml(formatLabel(labels.byPrefix, { name: v.createdByUserName || labels.defaultUserName, time: formatRelativeTime(v.createdAt, contentLang) }))}
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px;">
           <button class="version-action-btn v-preview" title="${escHtml(labels.previewVersionTitle)}">P</button>
@@ -1550,6 +1558,7 @@ export async function mountDbNoteEditor(
       `;
 
       // Preview
+      if (isReadOnly) card.querySelectorAll('.v-rename, .v-resave, .v-restore, .v-delete').forEach(button => button.remove());
       card.querySelector('.v-preview')?.addEventListener('click', async () => {
         try {
           const res = await fetch(`${versionsUrl}?versionId=${v.id}`);
@@ -1784,7 +1793,7 @@ export async function mountDbNoteEditor(
       return;
     }
     const { mountTraceMargin } = await import('../course/notes/trace-margin');
-    traceHandle = await mountTraceMargin(editor.getView(), noteId, bodyEl, { canWrite: canComment });
+    traceHandle = await mountTraceMargin(editor.getView(), noteId, bodyEl, { canWrite: canComment, apiBase, contentLang, labels: traceLabels });
     traceBtn.classList.add('is-active');
   };
   traceBtn.addEventListener('click', () => { void toggleTrace(); });

@@ -1,3 +1,5 @@
+import { getNoteAccessDetail } from '../../../../lib/writing/notes/access';
+import { canReadLiveDetails } from '../../../../lib/writing/notes/read-policy';
 import type { APIRoute } from 'astro';
 import { cleanString, ensureDbUserFromSession, json } from '../../../../lib/forum-server';
 import { query } from '../../../../lib/db/pool';
@@ -47,8 +49,8 @@ export const GET: APIRoute = async ({ locals, url }) => {
   const noteId = cleanString(url.searchParams.get('noteId') ?? '', 36);
   if (!noteId) return json({ error: 'noteId required' }, 400);
 
-  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
-  if (!access) return json({ error: 'Forbidden' }, 403);
+  const access = await getNoteAccessDetail(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
+  if (!canReadLiveDetails(access)) return json({ error: 'Forbidden' }, 403);
 
   const { data: codes, error: codesError } = await query(
     `SELECT id, note_id AS "noteId", para_index AS "paraIndex", label,
@@ -90,7 +92,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: 'Local derived concepts belong in hash-keyed paragraph traces' }, 409);
   }
   const source = 'manual';
-  const dimension = VALID_DIMENSIONS.has(body?.dimension) ? String(body.dimension) : 'manual';
+  const dimension = typeof body.dimension === 'string' && VALID_DIMENSIONS.has(body.dimension) ? String(body.dimension) : 'manual';
   const confidence = 1;
   const mode = typeof body?.mode === 'string' && VALID_TRACE_MODES.has(body.mode)
     ? body.mode

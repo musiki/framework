@@ -41,9 +41,16 @@ function toThrowable(error: unknown): Error {
  * position/folder move never actually happened.
  */
 async function runOrThrow(q: QueryFn, text: string, params: unknown[] = []): Promise<any[]> {
-  const { data, error } = await q(text, params);
+  const { data, error } = await checkedQuery(q, text, params);
   if (error) throw toThrowable(error);
   return data ?? [];
+}
+
+// Never acknowledge a save when the database returned an error.
+async function checkedQuery(q: QueryFn, text: string, params: unknown[] = []) {
+  const result = await q(text, params);
+  if (result.error) throw new Error(result.error instanceof Error ? result.error.message : String(result.error.message || 'Database error'));
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +58,7 @@ async function runOrThrow(q: QueryFn, text: string, params: unknown[] = []): Pro
 // ---------------------------------------------------------------------------
 
 export async function getMemberRole(q: QueryFn, spaceId: string, userId: string): Promise<SpaceRole | null> {
-  const { data } = await q(
+  const { data } = await checkedQuery(q,
     `SELECT "role" FROM "SpaceMember" WHERE "spaceId" = $1 AND "userId" = $2::uuid LIMIT 1`,
     [spaceId, userId],
   );
@@ -86,7 +93,7 @@ async function lastPosition(
   parentColumn: '"folderId"' | '"parentId"',
   parentId: string | null,
 ): Promise<number | null> {
-  const { data } = await q(
+  const { data } = await checkedQuery(q,
     `SELECT MAX("position") AS "maxPosition" FROM ${table} WHERE "spaceId" = $1 AND ${parentColumn} IS NOT DISTINCT FROM $2`,
     [spaceId, parentId],
   );
@@ -120,11 +127,11 @@ export async function listSpaceTree(
 ): Promise<{ role: SpaceRole; folders: SpaceTreeFolder[]; notes: SpaceTreeNote[] }> {
   const role = await requireRole(q, spaceId, userId);
 
-  const { data: folderRows } = await q(
+  const { data: folderRows } = await checkedQuery(q,
     `SELECT id, "parentId", name, visibility, position FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`,
     [spaceId],
   );
-  const { data: noteRows } = await q(
+  const { data: noteRows } = await checkedQuery(q,
     `SELECT id, "folderId", title, "userId", visibility, position FROM "LiveClassNote" WHERE "spaceId" = $1`,
     [spaceId],
   );
@@ -194,7 +201,7 @@ export async function getSpaceNote(
   q: QueryFn,
   { spaceId, userId, noteId }: { spaceId: string; userId: string; noteId: string },
 ): Promise<{ note: Record<string, any>; accessLevel: NoteAccess; versionsOnly: boolean } | null> {
-  const { data: noteRows } = await q(
+  const { data: noteRows } = await checkedQuery(q,
     `SELECT id, "userId", "spaceId", "folderId", title, body, lang, visibility, position, "createdAt", "updatedAt"
        FROM "LiveClassNote" WHERE id = $1 AND "spaceId" = $2 LIMIT 1`,
     [noteId, spaceId],
@@ -205,7 +212,7 @@ export async function getSpaceNote(
   const role = await getMemberRole(q, spaceId, userId);
   if (!role) return null;
 
-  const { data: folderRows } = await q(
+  const { data: folderRows } = await checkedQuery(q,
     `SELECT id, "parentId", visibility FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`,
     [spaceId],
   );
@@ -241,7 +248,7 @@ export async function createSpaceNote(
   const last = await lastPosition(q, '"LiveClassNote"', spaceId, '"folderId"', folderId ?? null);
   const position = positionBetween(last, null);
 
-  const { data } = await q(
+  const { data } = await checkedQuery(q,
     `INSERT INTO "LiveClassNote" ("userId", "spaceId", "folderId", "courseId", title, body, lang, visibility, position)
      VALUES ($1, $2, $3, NULL, $4, $5, $6, NULL, $7)
      RETURNING *`,
@@ -273,7 +280,7 @@ export async function updateSpaceNote(
   // "note doesn't exist" (404), turning `noteId` into an enumeration oracle.
   const role = await requireRole(q, spaceId, userId);
 
-  const { data: noteRows } = await q(
+  const { data: noteRows } = await checkedQuery(q,
     `SELECT id, "folderId", visibility FROM "LiveClassNote" WHERE id = $1 AND "spaceId" = $2 LIMIT 1`,
     [noteId, spaceId],
   );
@@ -284,7 +291,7 @@ export async function updateSpaceNote(
   const wantsStructural = patch.folderId !== undefined || patch.visibility !== undefined;
 
   if (wantsContent) {
-    const { data: folderRows } = await q(
+    const { data: folderRows } = await checkedQuery(q,
       `SELECT id, "parentId", visibility FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`,
       [spaceId],
     );
@@ -334,8 +341,10 @@ export async function updateSpaceNote(
 
   if (!sets.length) throw new SpaceNotesError(400, 'nothing to update');
 
+  sets.push(`"updatedAt" = now()`);
+  if (wantsContent) sets.push(`"renderedHtml" = NULL`);
   params.push(noteId, spaceId);
-  const { data } = await q(
+  const { data } = await checkedQuery(q,
     `UPDATE "LiveClassNote" SET ${sets.join(', ')} WHERE id = $${params.length - 1} AND "spaceId" = $${params.length} RETURNING *`,
     params,
   );
@@ -347,7 +356,7 @@ export async function deleteSpaceNote(
   { spaceId, userId, noteId }: { spaceId: string; userId: string; noteId: string },
 ): Promise<true> {
   await requireAuthor(q, spaceId, userId);
-  const { data } = await q(`DELETE FROM "LiveClassNote" WHERE id = $1 AND "spaceId" = $2 RETURNING id`, [noteId, spaceId]);
+  const { data } = await checkedQuery(q, `DELETE FROM "LiveClassNote" WHERE id = $1 AND "spaceId" = $2 RETURNING id`, [noteId, spaceId]);
   if (!data?.length) throw new SpaceNotesError(404, 'note not found');
   return true;
 }
@@ -373,7 +382,7 @@ export async function createSpaceFolder(
   const last = await lastPosition(q, '"LiveClassNoteFolder"', spaceId, '"parentId"', parentId ?? null);
   const position = positionBetween(last, null);
 
-  const { data } = await q(
+  const { data } = await checkedQuery(q,
     `INSERT INTO "LiveClassNoteFolder" (name, "parentId", "userId", "spaceId", "courseId", visibility, position)
      VALUES ($1, $2, $3, $4, NULL, $5, $6)
      RETURNING *`,
@@ -387,7 +396,7 @@ export async function renameSpaceFolder(
   { spaceId, userId, folderId, name }: { spaceId: string; userId: string; folderId: string; name: string },
 ): Promise<Record<string, any>> {
   await requireAuthor(q, spaceId, userId);
-  const { data } = await q(
+  const { data } = await checkedQuery(q,
     `UPDATE "LiveClassNoteFolder" SET name = $1 WHERE id = $2 AND "spaceId" = $3 RETURNING *`,
     [name, folderId, spaceId],
   );
@@ -434,7 +443,7 @@ export async function moveSpaceFolder(
   }
   params.push(folderId, spaceId);
 
-  const { data, error } = await q(
+  const { data, error } = await checkedQuery(q,
     `UPDATE "LiveClassNoteFolder" SET ${sets.join(', ')} WHERE id = $${params.length - 1} AND "spaceId" = $${params.length} RETURNING *`,
     params,
   );
@@ -452,7 +461,7 @@ export async function deleteSpaceFolder(
   // every direct note of the folder (and of each cascaded subfolder) detaches
   // to root automatically — the musiki note-folders.ts DELETE route predates
   // those FK actions and re-implements them by hand; this table already has them.
-  const { data } = await q(`DELETE FROM "LiveClassNoteFolder" WHERE id = $1 AND "spaceId" = $2 RETURNING id`, [folderId, spaceId]);
+  const { data } = await checkedQuery(q, `DELETE FROM "LiveClassNoteFolder" WHERE id = $1 AND "spaceId" = $2 RETURNING id`, [folderId, spaceId]);
   if (!data?.length) throw new SpaceNotesError(404, 'folder not found');
   return true;
 }
@@ -464,7 +473,7 @@ export async function setFolderVisibility(
   await requireAuthor(q, spaceId, userId);
   if (visibility !== null && !isVisibility(visibility)) throw new SpaceNotesError(400, 'invalid visibility');
 
-  const { data } = await q(
+  const { data } = await checkedQuery(q,
     `UPDATE "LiveClassNoteFolder" SET visibility = $1 WHERE id = $2 AND "spaceId" = $3 RETURNING *`,
     [visibility, folderId, spaceId],
   );
@@ -514,7 +523,7 @@ export async function reorderSpaceItem(
   const existsRows = await runOrThrow(q, `SELECT id FROM ${table} WHERE id = $1 AND "spaceId" = $2 LIMIT 1`, [id, spaceId]);
   if (!existsRows.length) throw new SpaceNotesError(404, `${kind} not found`);
 
-  const beginResult = await q('BEGIN');
+  const beginResult = await checkedQuery(q, 'BEGIN');
   if (beginResult.error) throw toThrowable(beginResult.error);
 
   try {
@@ -573,11 +582,11 @@ export async function reorderSpaceItem(
       await runOrThrow(q, `UPDATE "LiveClassNoteFolder" SET "parentId" = $1 WHERE id = $2 AND "spaceId" = $3`, [parentId, id, spaceId]);
     }
 
-    const commitResult = await q('COMMIT');
+    const commitResult = await checkedQuery(q, 'COMMIT');
     if (commitResult.error) throw toThrowable(commitResult.error);
     return assignments;
   } catch (err) {
-    await q('ROLLBACK');
+    await checkedQuery(q, 'ROLLBACK');
     throw err;
   }
 }
@@ -595,7 +604,7 @@ export async function ensureOkaFolders(
   q: QueryFn,
   { spaceId, authorId }: { spaceId: string; authorId: string },
 ): Promise<void> {
-  const { data } = await q(
+  const { data } = await checkedQuery(q,
     `SELECT name FROM "LiveClassNoteFolder" WHERE "spaceId" = $1 AND "parentId" IS NULL AND name = ANY($2)`,
     [spaceId, OKA_FOLDERS.map((f) => f.name)],
   );
@@ -603,7 +612,7 @@ export async function ensureOkaFolders(
 
   for (const folder of OKA_FOLDERS) {
     if (existing.has(folder.name)) continue;
-    await q(
+    await checkedQuery(q,
       `INSERT INTO "LiveClassNoteFolder" (name, "parentId", "userId", "spaceId", "courseId", visibility, position)
        VALUES ($1, NULL, $2, $3, NULL, $4, $5)`,
       [folder.name, authorId, spaceId, folder.visibility, folder.position],

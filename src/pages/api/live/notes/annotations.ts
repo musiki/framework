@@ -1,3 +1,5 @@
+import { getNoteAccessDetail } from '../../../../lib/writing/notes/access';
+import { canReadLiveDetails } from '../../../../lib/writing/notes/read-policy';
 import type { APIRoute } from 'astro';
 import { ensureDbUserFromSession, json, cleanString } from '../../../../lib/forum-server';
 import { query } from '../../../../lib/db/pool';
@@ -14,8 +16,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const noteId = cleanString(url.searchParams.get('noteId') ?? '', 36);
   if (!noteId) return json({ error: 'noteId required' }, 400);
 
-  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
-  if (!access) return json({ error: 'Forbidden' }, 403);
+  const access = await getNoteAccessDetail(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
+  if (!canReadLiveDetails(access)) return json({ error: 'Forbidden' }, 403);
 
   // 1. Get annotations
   const { data: annotations, error: aError } = await query(
@@ -90,8 +92,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (id) {
       // Update existing reply
       const { data: existing } = await query(
-        `SELECT "authorId" FROM "LiveClassNoteComment" WHERE id = $1::uuid LIMIT 1`,
-        [id]
+        `SELECT "authorId" FROM "LiveClassNoteComment" WHERE id = $1::uuid AND "annotationId" = $2::uuid LIMIT 1`,
+        [id, annotationId]
       );
       if (!existing?.length) return json({ error: 'Reply not found' }, 404);
       if (existing[0].authorId !== user.id) return json({ error: 'Forbidden' }, 403);
@@ -130,6 +132,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       [id]
     );
     if (!existing?.length) return json({ error: 'Annotation not found' }, 404);
+    if (existing[0].noteId !== noteId) return json({ error: 'Forbidden' }, 403);
 
     // Verify ownership OR if resolver is note owner (note owner can resolve any comment)
     const { data: noteOwner } = await query(
@@ -181,6 +184,8 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
       [commentId]
     );
     if (!commentRows?.length) return json({ error: 'Reply not found' }, 404);
+    const access = await getNoteAccess(commentRows[0].noteId, user.id, { tenantId: locals.tenant.id });
+    if (access !== 'edit' && access !== 'comment') return json({ error: 'Forbidden' }, 403);
     if (commentRows[0].authorId !== user.id && commentRows[0].noteOwnerId !== user.id) {
       return json({ error: 'Forbidden' }, 403);
     }
@@ -200,6 +205,8 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
       [id]
     );
     if (!annotationRows?.length) return json({ error: 'Annotation not found' }, 404);
+    const access = await getNoteAccess(annotationRows[0].noteId, user.id, { tenantId: locals.tenant.id });
+    if (access !== 'edit' && access !== 'comment') return json({ error: 'Forbidden' }, 403);
     if (annotationRows[0].authorId !== user.id && annotationRows[0].noteOwnerId !== user.id) {
       return json({ error: 'Forbidden' }, 403);
     }
