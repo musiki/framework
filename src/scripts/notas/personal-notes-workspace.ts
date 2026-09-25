@@ -696,6 +696,10 @@ export async function mountDbNoteEditor(
   bodyEl.innerHTML = '';
 
   if (note.versionsOnly) {
+    if (pencilBtn) pencilBtn.style.display = 'none';
+    traceBtn.style.display = 'none';
+    if (downloadBtn) downloadBtn.style.display = 'none';
+    if (downloadMenu) downloadMenu.style.display = 'none';
     void mountVersionsOnlyView(bodyEl, noteId, versionsUrl, labels);
     return;
   }
