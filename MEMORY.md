@@ -1,5 +1,9 @@
 # MEMORY.md — Project Activity Log
 
+<2026-09-25 so-studio-workspace-release> <br>
+Commit `2de5157`: completed the SO Studio tree/editor integration and English tracer options. Reused the Musiki editor and note handlers; fixed reviewer version reads, blocked live draft detail access for versions-only reviewers, validated annotation target identities, and made failed DB writes fail visibly. 239 tests pass, Astro production build succeeds, staging role/persistence tests and browser editor checks pass. Additive migration applied after production backup. Public homepage/content/logos deployed separately from so-web. See `docs/plans/2026-09-25-studio-deployment-status.md` for evidence and remaining Task 11 (Musiki sidebar migration).
+
+
 <2026-09-25 tenant-layer-so-studio> <br>
 Rama `feat/tenant-layer` (commits `486ffa4`..HEAD sobre `7895735`): capa de tenants en el engine para servir la cara inglesa aislada `so` en so.zztt.org/studio (spec `docs/superpowers/specs/2026-09-25-tenant-layer-design.md`, plan `docs/superpowers/plans/2026-09-25-tenant-layer.md`).
 - `src/lib/tenant/*`: config `TENANTS` (musiki/hem/so), resolución por host, allowlist de rutas (so sólo `/studio`, `/api/studio`, `/api/auth`), `decideAuthRoute` (providers ajenos 404; en so las páginas por defecto de Auth.js redirigen a `/studio/login`).

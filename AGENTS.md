@@ -89,3 +89,7 @@ Recent: **SV/SA/RE pod redesign** — Sonic Visualizer + Analyzer overhaul, RS s
 1. **Context First:** Always check `docs/plans/2026-02-22-p0-execution.md` before starting new features.
 2. **Persistence:** Never break the submission/persistence flow for `mcq` and `mcc` blocks and other ```eval``` blocks
 3. **Validation:** Run existing tests or perform empirical manual verification before marking a task as complete.
+
+## SO Studio release (2026-09-25)
+
+The SO-first writing workspace is implemented in commit `2de5157`. Read [release status](docs/plans/2026-09-25-studio-deployment-status.md) before continuing normalization. The shared renderer is active in Studio; replacing Musiki's DB-notes sidebar is still pending. Preserve reviewer versions-only isolation and the unchanged course version policy.
