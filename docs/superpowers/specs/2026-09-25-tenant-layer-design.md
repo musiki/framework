@@ -233,6 +233,7 @@ Walk the studio as `guest` and as `supervisor`; grep rendered HTML, emails, and 
 
 ## 7. Rollout order
 
+0. **Isolated staging DB.** Today `musiki-framework` and `musiki-framework-dev` share `/opt/musiki/framework/.env`, so dev runs against the production database. Create `musiki_staging` in the same Postgres (schema copy; data empty or anonymized dump as needed) and give `musiki-framework-dev` its own `DATABASE_URL` in `ecosystem.config.cjs` `env` (which overrides `.env`, as `AUTH_URL` already does). Migrations and integration tests run on staging first; production receives a migration only after it has passed on `so-dev`. Side effect (accepted): `dev.musiki.org.ar` also serves staging data.
 1. Tenant config + middleware resolution + allowlist (musiki unchanged; verify with existing tests).
 2. Migrations (`Space`, `SpaceMember`, `SpaceInvite`, `SpaceAccessRule`, `Course.tenantId`, `LiveClassNote.spaceId/lang`).
 3. i18n dictionary + language packs (dedupe tracer lists; musiki output identical).
