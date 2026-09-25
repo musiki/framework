@@ -75,3 +75,14 @@ test('isUuid accepts canonical v4-shaped uuids, rejects malformed/missing input'
     assert.equal(isUuid(bad), false, bad);
   }
 });
+
+test('musiki sign-in rejects only users provisioned solely by a foreign tenant', async () => {
+  const { shouldRejectMusikiSignIn } = await import('./access.ts');
+  const base = { hasEnrollment: false, globalRole: 'student', hasForeignMembership: true };
+  assert.equal(shouldRejectMusikiSignIn(base), true);
+  assert.equal(shouldRejectMusikiSignIn({ ...base, hasEnrollment: true }), false);
+  assert.equal(shouldRejectMusikiSignIn({ ...base, globalRole: 'teacher' }), false);
+  assert.equal(shouldRejectMusikiSignIn({ ...base, globalRole: 'ADMIN' }), false);
+  assert.equal(shouldRejectMusikiSignIn({ ...base, hasForeignMembership: false }), false);
+  assert.equal(shouldRejectMusikiSignIn({ ...base, globalRole: null }), true);
+});

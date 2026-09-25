@@ -4,7 +4,7 @@ import { resolveAuthRedirectUrl } from "./src/lib/auth-origin";
 import { query } from "./src/lib/db/pool";
 import { tenantForAuthProvider, findTenantByHost } from "./src/lib/tenant/resolve";
 import { DEFAULT_TENANT_ID } from "./src/lib/tenant/tenants";
-import { authorizeTenantSignIn } from "./src/lib/tenant/access-db";
+import { authorizeTenantSignIn, isForeignTenantOnlyUser } from "./src/lib/tenant/access-db";
 
 // Astro/Vite will inject these, but we fallback to process.env for Node contexts
 const getEnv = (key: string) => {
@@ -75,6 +75,20 @@ const logtoSoProvider = LOGTO_ISSUER && LOGTO_SO_CLIENT_ID
       },
     }]
   : [];
+
+// so-provisioned users (no enrollment, no elevated role, only foreign-tenant
+// spaces) must not reach musiki. Any failure here allows the sign-in.
+const rejectForeignTenantOnlyUser = async (userId: string, email: string): Promise<boolean> => {
+  try {
+    if (await isForeignTenantOnlyUser(userId)) {
+      console.warn(`[AUTH-SIGNIN] Rejecting musiki sign-in for foreign-tenant-only user: ${email}`);
+      return true;
+    }
+  } catch (err) {
+    console.error("[AUTH-SIGNIN] Foreign-tenant check error (allowing):", err);
+  }
+  return false;
+};
 
 export default defineConfig({
   debug: isDev,
@@ -166,6 +180,7 @@ export default defineConfig({
           return false;
         }
         if (ueRows && ueRows.length > 0) {
+          if (await rejectForeignTenantOnlyUser(String(ueRows[0].userId), email)) return false;
           console.log(`[AUTH-SIGNIN] Allowed sign-in for registered user (UserEmail): ${email}`);
           return true;
         }
@@ -179,6 +194,7 @@ export default defineConfig({
           return false;
         }
         if (uRows && uRows.length > 0) {
+          if (await rejectForeignTenantOnlyUser(String(uRows[0].id), email)) return false;
           console.log(`[AUTH-SIGNIN] Allowed sign-in for registered user (User): ${email}`);
           return true;
         }

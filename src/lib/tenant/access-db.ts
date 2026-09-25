@@ -1,8 +1,8 @@
 import { getClient, query } from '../db/pool';
 import { resolveUserIdByEmail } from '../user-email';
-import { decideSpaceAccess, type AccessRuleRow, type InviteRow } from './access';
+import { decideSpaceAccess, shouldRejectMusikiSignIn, type AccessRuleRow, type InviteRow } from './access';
 import { emailDomain, normalizeEmail } from './space-roles';
-import type { TenantId } from './tenants';
+import { DEFAULT_TENANT_ID, type TenantId } from './tenants';
 
 const must = <T>(res: { data: T[] | null; error: any }): T[] => {
   if (res.error) throw new Error(res.error.message || 'Database error');
@@ -91,4 +91,33 @@ export async function authorizeTenantSignIn(
   }
   console.log(`[TENANT-SIGNIN] ${tenantId} allowed ${email} (${decision.grants.length} new grants)`);
   return true;
+}
+
+/**
+ * True when the user exists only because another tenant provisioned them
+ * (see shouldRejectMusikiSignIn). Fails open: on any DB error (e.g. the Space
+ * tables are not migrated yet) it logs and returns false so musiki sign-in
+ * never depends on the tenant tables.
+ */
+export async function isForeignTenantOnlyUser(userId: string): Promise<boolean> {
+  try {
+    const rows = must<{ role: string | null; hasEnrollment: boolean; hasForeignMembership: boolean }>(await query(
+      `SELECT u."role",
+              EXISTS (SELECT 1 FROM "Enrollment" e WHERE e."userId" = u."id") AS "hasEnrollment",
+              EXISTS (SELECT 1 FROM "SpaceMember" m JOIN "Space" s ON s."id" = m."spaceId"
+                       WHERE m."userId" = u."id" AND s."tenantId" <> $2) AS "hasForeignMembership"
+         FROM "User" u WHERE u."id" = $1`,
+      [userId, DEFAULT_TENANT_ID],
+    ));
+    const row = rows[0];
+    if (!row) return false;
+    return shouldRejectMusikiSignIn({
+      hasEnrollment: Boolean(row.hasEnrollment),
+      globalRole: row.role,
+      hasForeignMembership: Boolean(row.hasForeignMembership),
+    });
+  } catch (err) {
+    console.error('[AUTH-SIGNIN] foreign-tenant check failed, allowing musiki sign-in:', err);
+    return false;
+  }
 }

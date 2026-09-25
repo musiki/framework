@@ -45,3 +45,19 @@ export function decideSpaceAccess(input: {
   if (grants.length > 0 || input.isMember) return { allowed: true, grants };
   return { allowed: false, reason: 'no-grant' };
 }
+
+const MUSIKI_PRIVILEGED_ROLES = new Set(['teacher', 'admin']);
+
+/**
+ * A user created by another tenant's sign-in (e.g. so) has a musiki User row
+ * but must not be able to use it on musiki. Reject only when there is no sign
+ * of a real musiki account: no enrollment, no privileged role, and at least
+ * one membership in a non-musiki space.
+ */
+export function shouldRejectMusikiSignIn(input: {
+  hasEnrollment: boolean; globalRole: string | null | undefined; hasForeignMembership: boolean;
+}): boolean {
+  if (input.hasEnrollment) return false;
+  if (MUSIKI_PRIVILEGED_ROLES.has(String(input.globalRole ?? '').toLowerCase())) return false;
+  return input.hasForeignMembership;
+}
