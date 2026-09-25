@@ -256,12 +256,34 @@ test('updateSpaceNote: author editing body succeeds and issues an UPDATE', async
   assert.ok(calls.some((c) => c.text.includes('UPDATE "LiveClassNote"')));
 });
 
-test('updateSpaceNote: missing note gets 404', async () => {
-  const { q } = fakeQuery([['SELECT id, "folderId", visibility FROM "LiveClassNote"', () => []]]);
+test('updateSpaceNote: missing note gets 404 (for an actual member)', async () => {
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id, "folderId", visibility FROM "LiveClassNote"', () => []],
+  ]);
   await assert.rejects(
     () => updateSpaceNote(q, { spaceId: SPACE, userId: 'u1', noteId: 'missing', patch: { title: 'x' } }),
     (err) => err instanceof SpaceNotesError && err.status === 404,
   );
+});
+
+test('updateSpaceNote: non-member gets a uniform 403 without ever probing note existence (fix round 1, finding 5)', async () => {
+  const noteLookupCalls = [];
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => []], // not a member
+    ['SELECT id, "folderId", visibility FROM "LiveClassNote"', (params, text) => {
+      noteLookupCalls.push(text);
+      return [{ id: 'n1', folderId: null, visibility: 'public' }];
+    }],
+  ]);
+  await assert.rejects(
+    () => updateSpaceNote(q, { spaceId: SPACE, userId: 'stranger', noteId: 'n1', patch: { title: 'x' } }),
+    (err) => err instanceof SpaceNotesError && err.status === 403,
+  );
+  // Role is checked before the note is ever looked up, so a non-member gets
+  // the same 403 whether `noteId` exists or not -- the note lookup query
+  // must never even run.
+  assert.equal(noteLookupCalls.length, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -348,6 +370,34 @@ test('moveSpaceFolder: a normal move updates parentId', async () => {
   assert.equal(moved.parentId, 'b');
 });
 
+test('moveSpaceFolder: moving to a genuinely different parent appends at the end via positionBetween (fix round 1, finding 7)', async () => {
+  const folders = [{ id: 'a', parentId: null }, { id: 'b', parentId: null }];
+  let updateParams;
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => folders],
+    ['SELECT MAX', () => [{ maxPosition: 2048 }]], // existing last sibling under the new parent
+    ['UPDATE "LiveClassNoteFolder"', (params) => { updateParams = params; return [{ id: 'a', parentId: params[0], position: params[1] }]; }],
+  ]);
+  const moved = await moveSpaceFolder(q, { spaceId: SPACE, userId: 'u1', folderId: 'a', parentId: 'b' });
+  assert.equal(moved.parentId, 'b');
+  assert.equal(moved.position, 2048 + 1024); // positionBetween(2048, null)
+  assert.equal(updateParams.length, 4); // parentId, position, folderId, spaceId
+});
+
+test('moveSpaceFolder: moving within the same parent (a no-op parent) does not touch position', async () => {
+  const folders = [{ id: 'a', parentId: 'root' }, { id: 'root', parentId: null }];
+  let sawMaxQuery = false;
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => folders],
+    ['SELECT MAX', () => { sawMaxQuery = true; return []; }],
+    ['UPDATE "LiveClassNoteFolder"', (params) => [{ id: 'a', parentId: params[0] }]],
+  ]);
+  await moveSpaceFolder(q, { spaceId: SPACE, userId: 'u1', folderId: 'a', parentId: 'root' });
+  assert.equal(sawMaxQuery, false);
+});
+
 test('deleteSpaceFolder: single DELETE, relies on FK cascade/SET NULL; 404 when absent', async () => {
   const { q, calls } = fakeQuery([
     ['"SpaceMember"', () => [{ role: 'author' }]],
@@ -387,6 +437,7 @@ test('reorderSpaceItem: note move sets folderId and reassigns positions inside o
   const updates = [];
   const { q, calls } = fakeQuery([
     ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNote" WHERE', () => [{ id: 'n3' }]], // dragged note exists in this space
     ['SELECT id FROM "LiveClassNoteFolder"', () => [{ id: 'f-target' }]],
     [/^SELECT id, position, title AS label FROM "LiveClassNote"/, () => siblings],
     [/^UPDATE "LiveClassNote" SET position/, (params) => { updates.push(params); return []; }],
@@ -408,7 +459,8 @@ test('reorderSpaceItem: note move sets folderId and reassigns positions inside o
 test('reorderSpaceItem: rolls back and rethrows when the target folder is from another space', async () => {
   const { q, calls } = fakeQuery([
     ['"SpaceMember"', () => [{ role: 'author' }]],
-    ['SELECT id FROM "LiveClassNoteFolder"', () => []], // not in this space
+    ['SELECT id FROM "LiveClassNote" WHERE', () => [{ id: 'n1' }]], // dragged note exists in this space
+    ['SELECT id FROM "LiveClassNoteFolder"', () => []], // target folder not in this space
   ]);
   await assert.rejects(
     () => reorderSpaceItem(q, { spaceId: SPACE, userId: 'u1', kind: 'note', id: 'n1', parentId: 'foreign', targetIndex: 0 }),
@@ -434,6 +486,76 @@ test('reorderSpaceItem: folder move into its own descendant is rejected (400) an
     (err) => err instanceof SpaceNotesError && err.status === 400,
   );
   assert.ok(calls.some((c) => c.text === 'ROLLBACK'));
+});
+
+test('reorderSpaceItem: 404 when the dragged id is not an item of that kind in this space (fix round 1, finding 6)', async () => {
+  const { q, calls } = fakeQuery([['"SpaceMember"', () => [{ role: 'author' }]]]);
+  await assert.rejects(
+    () => reorderSpaceItem(q, { spaceId: SPACE, userId: 'u1', kind: 'note', id: 'missing-note', parentId: null, targetIndex: 0 }),
+    (err) => err instanceof SpaceNotesError && err.status === 404,
+  );
+  // Never opened a transaction for an item that doesn't even exist.
+  assert.ok(!calls.some((c) => c.text === 'BEGIN'));
+});
+
+test('reorderSpaceItem: a failed UPDATE inside the transaction rolls back and rejects, never commits (fix round 1, finding 2)', async () => {
+  // Deliberately not using the shared fakeQuery helper here: it always
+  // reports `error: null`, so it cannot simulate a failed statement. This
+  // hand-rolled q mirrors its shape but lets one specific UPDATE report an
+  // error, the way the real pooled-client wrapper's q would on a genuine
+  // constraint violation or dropped connection.
+  const calls = [];
+  const siblings = [{ id: 'n1', position: 1024, title: 'A' }];
+  const q = async (text, params = []) => {
+    calls.push({ text, params });
+    if (text.includes('"SpaceMember"')) return { data: [{ role: 'author' }], error: null };
+    if (text.includes('SELECT id FROM "LiveClassNote" WHERE')) return { data: [{ id: 'n2' }], error: null };
+    if (/^SELECT id, position, title AS label FROM "LiveClassNote"/.test(text)) return { data: siblings, error: null };
+    if (/^UPDATE "LiveClassNote" SET position/.test(text)) {
+      return { data: null, error: new Error('constraint violation') };
+    }
+    return { data: [], error: null };
+  };
+
+  await assert.rejects(
+    () => reorderSpaceItem(q, { spaceId: SPACE, userId: 'u1', kind: 'note', id: 'n2', parentId: null, targetIndex: 0 }),
+    /constraint violation/,
+  );
+  assert.ok(calls.some((c) => c.text === 'BEGIN'));
+  assert.ok(calls.some((c) => c.text === 'ROLLBACK'));
+  assert.ok(!calls.some((c) => c.text === 'COMMIT'));
+});
+
+test('reorderSpaceItem: uses buildTree\'s exact display order (fix round 1, finding 1) — "nota"/"Nota" tie resolves deterministically', async () => {
+  // Three notes with null positions where two titles tie under base
+  // sensitivity ("nota" / "Nota"). The server must land the dragged note
+  // at the same slot buildTree would have rendered for `targetIndex`.
+  const siblingRows = [
+    { id: 'n-nota-lower', position: null, label: 'nota' },
+    { id: 'n-nota-upper', position: null, label: 'Nota' },
+    { id: 'n-cancion', position: null, label: 'Canción' },
+  ];
+  const { q, calls } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNote" WHERE', () => [{ id: 'n-dragged' }]],
+    [/^SELECT id, position, title AS label FROM "LiveClassNote"/, () => siblingRows],
+    [/^UPDATE "LiveClassNote" SET position/, () => []],
+    [/^UPDATE "LiveClassNote" SET "folderId"/, () => []],
+  ]);
+
+  // Expected order per displayOrderNotes/buildTree: "Canción" < "nota" <
+  // "Nota" (base-sensitivity title compare, "nota"/"Nota" tie broken by id
+  // ascending: 'n-nota-lower' < 'n-nota-upper').
+  const result = await reorderSpaceItem(q, {
+    spaceId: SPACE, userId: 'u1', kind: 'note', id: 'n-dragged', parentId: null, targetIndex: 0, locale: 'es',
+  });
+  // Dropped at index 0 among 3 existing siblings with null positions -> full renormalization.
+  assert.equal(result.length, 4);
+  assert.deepEqual(
+    result.map((r) => r.id),
+    ['n-dragged', 'n-cancion', 'n-nota-lower', 'n-nota-upper'],
+  );
+  assert.ok(calls.some((c) => c.text === 'COMMIT'));
 });
 
 // ---------------------------------------------------------------------------

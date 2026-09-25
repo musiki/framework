@@ -54,18 +54,50 @@ export function sortSiblings<T>(
 }
 
 /**
- * Sort siblings using musiki's exact note tie-break comparator:
- * `(a.title || '').localeCompare(b.title || '')` — plain `localeCompare`,
- * no locale argument, no options. This is deliberately NOT the same
- * comparator as `sortSiblings`'s label tie-break (which takes a locale and
- * `sensitivity: 'base'`), because musiki's note sort in
- * `src/scripts/course/notes-sidebar.ts` never passed those either. Keeping
- * this as a separate function (rather than threading a "notes mode" flag
- * through `sortSiblings`) is what lets `buildTree` reproduce musiki's
- * behavior byte-for-byte for notes while still honoring the shared
- * `position`-first rule.
+ * The exact display order `buildTree` uses for a group of sibling folders,
+ * exposed so any caller that needs to reproduce that order outside of a
+ * full tree build (e.g. `reorderSpaceItem` mapping a drop `targetIndex` to
+ * a sibling slot) gets the same order the UI rendered, deterministically.
+ *
+ * Same rule as `sortSiblings` (position first, then
+ * `name.localeCompare(name, locale, { sensitivity: 'base' })`), plus a
+ * final `id.localeCompare(id)` tie-break so two folders with the same
+ * `position` (or both null, same name under base sensitivity) always land
+ * in the same order on every call — `sortSiblings` alone leaves exact ties
+ * in whatever order the underlying (not-guaranteed-stable-across-engines)
+ * `Array#sort` happened to produce, which is what let two independent
+ * requests (e.g. the display the user dragged from vs. the request
+ * `reorderSpaceItem` re-reads) disagree on tie order.
  */
-function sortNoteSiblings(notes: TreeNote[]): TreeNote[] {
+export function displayOrderFolders<T extends { id: string; position?: number | null; name: string }>(
+  folders: T[],
+  locale: string,
+): T[] {
+  return [...folders].sort((a, b) => {
+    const pa = a.position ?? null;
+    const pb = b.position ?? null;
+
+    if (pa !== null && pb !== null) return pa - pb;
+    if (pa !== null && pb === null) return -1;
+    if (pa === null && pb !== null) return 1;
+    const cmp = a.name.localeCompare(b.name, locale, { sensitivity: 'base' });
+    return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+  });
+}
+
+/**
+ * The exact display order `buildTree` uses for a group of sibling notes —
+ * see `displayOrderFolders` above for why this exists and why the final
+ * `id` tie-break matters. `locale` is accepted so this has the same call
+ * shape as `displayOrderFolders`, but it is intentionally NOT passed to
+ * `localeCompare` for the title comparison: musiki's note sort never took
+ * a locale/options argument, and changing that would break the
+ * musiki-unchanged guarantee (`buildTree`'s all-null-positions test).
+ */
+export function displayOrderNotes<T extends { id: string; position?: number | null; title: string }>(
+  notes: T[],
+  _locale: string,
+): T[] {
   return [...notes].sort((a, b) => {
     const pa = a.position ?? null;
     const pb = b.position ?? null;
@@ -73,7 +105,8 @@ function sortNoteSiblings(notes: TreeNote[]): TreeNote[] {
     if (pa !== null && pb !== null) return pa - pb;
     if (pa !== null && pb === null) return -1;
     if (pa === null && pb !== null) return 1;
-    return (a.title || '').localeCompare(b.title || '');
+    const cmp = (a.title || '').localeCompare(b.title || '');
+    return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
   });
 }
 
@@ -81,11 +114,13 @@ function sortNoteSiblings(notes: TreeNote[]): TreeNote[] {
  * Build the folder/note tree.
  *
  * - Root level and each folder's children: folders are listed before notes.
- * - Folders within a group are ordered via `sortSiblings` (position, then
- *   `name` with the given `locale` and `sensitivity: 'base'`), matching
- *   musiki's current folder sort exactly when all positions are null.
- * - Notes within a group are ordered via musiki's exact note comparator
- *   (position, then plain `title.localeCompare(title)`).
+ * - Folders within a group are ordered via `displayOrderFolders` (position,
+ *   then `name` with the given `locale` and `sensitivity: 'base'`, then
+ *   `id`), matching musiki's current folder sort exactly when all
+ *   positions are null (the `id` tie-break only fires on exact ties).
+ * - Notes within a group are ordered via `displayOrderNotes` — musiki's
+ *   exact note comparator (position, then plain
+ *   `title.localeCompare(title)`, then `id`).
  * - A folder whose `parentId` doesn't resolve to another folder in the
  *   input (including self-parenting) is treated as a root folder.
  * - A note whose `folderId` doesn't resolve to a folder in the input is
@@ -150,12 +185,8 @@ export function buildTree(folders: TreeFolder[], notes: TreeNote[], locale = 'en
   }
 
   const buildLevel = (parentId: string | null): TreeNode[] => {
-    const childFolders = sortSiblings(
-      childFoldersByParent.get(parentId) ?? [],
-      (f) => ({ position: f.position, label: f.name }),
-      locale,
-    );
-    const childNotes = sortNoteSiblings(notesByFolder.get(parentId) ?? []);
+    const childFolders = displayOrderFolders(childFoldersByParent.get(parentId) ?? [], locale);
+    const childNotes = displayOrderNotes(notesByFolder.get(parentId) ?? [], locale);
 
     const folderNodes: TreeNode[] = childFolders.map((folder) => ({
       kind: 'folder',

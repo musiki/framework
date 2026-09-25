@@ -48,8 +48,15 @@ export async function reorderSpaceItem(
     }
   };
   try {
-    return await core.reorderSpaceItem(q, args);
-  } finally {
+    const result = await core.reorderSpaceItem(q, args);
     client.release();
+    return result;
+  } catch (err) {
+    // The transaction failed (core already issued ROLLBACK on its own `q`
+    // before rethrowing) — release with the error so pg discards this
+    // connection instead of returning a possibly still-mid-rollback or
+    // otherwise suspect connection to the pool for reuse.
+    client.release(err instanceof Error ? err : new Error(String(err)));
+    throw err;
   }
 }

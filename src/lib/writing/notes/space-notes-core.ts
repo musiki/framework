@@ -12,7 +12,7 @@ import { effectiveVisibility, isVisibility, type Visibility } from './visibility
 import { resolveSpaceAccess, canManageSpace, type NoteAccess } from './space-access.ts';
 import type { QueryFn } from './access-core.ts';
 import type { TreeFolder, TreeNote } from '../tree/model.ts';
-import { sortSiblings, positionBetween, planReorder } from '../tree/model.ts';
+import { displayOrderFolders, displayOrderNotes, positionBetween, planReorder } from '../tree/model.ts';
 
 export class SpaceNotesError extends Error {
   status: number;
@@ -21,6 +21,29 @@ export class SpaceNotesError extends Error {
     this.name = 'SpaceNotesError';
     this.status = status;
   }
+}
+
+/** Normalizes whatever a `QueryFn` puts in `error` into a throwable `Error`. */
+function toThrowable(error: unknown): Error {
+  if (error instanceof Error) return error;
+  const message =
+    typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message: unknown }).message)
+      : String(error);
+  return new SpaceNotesError(500, message || 'database error');
+}
+
+/**
+ * Runs a statement and throws when `q` reports an error, instead of letting
+ * the caller silently treat a failed statement as "zero rows". Used inside
+ * `reorderSpaceItem`'s transaction, where a swallowed error on one of the
+ * UPDATEs would otherwise still reach `COMMIT` and report success while the
+ * position/folder move never actually happened.
+ */
+async function runOrThrow(q: QueryFn, text: string, params: unknown[] = []): Promise<any[]> {
+  const { data, error } = await q(text, params);
+  if (error) throw toThrowable(error);
+  return data ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -48,11 +71,12 @@ async function requireAuthor(q: QueryFn, spaceId: string, userId: string): Promi
 }
 
 async function assertFolderInSpace(q: QueryFn, spaceId: string, folderId: string): Promise<void> {
-  const { data } = await q(
+  const rows = await runOrThrow(
+    q,
     `SELECT id FROM "LiveClassNoteFolder" WHERE id = $1 AND "spaceId" = $2 LIMIT 1`,
     [folderId, spaceId],
   );
-  if (!data?.length) throw new SpaceNotesError(400, 'folder does not belong to this space');
+  if (!rows.length) throw new SpaceNotesError(400, 'folder does not belong to this space');
 }
 
 async function lastPosition(
@@ -242,14 +266,19 @@ export async function updateSpaceNote(
     patch,
   }: { spaceId: string; userId: string; noteId: string; patch: UpdateSpaceNotePatch },
 ): Promise<Record<string, any> | null> {
+  // Membership is checked before the note lookup so a non-member always
+  // gets a uniform 403, whether or not `noteId` exists in this space —
+  // otherwise the existence check alone would let a non-member distinguish
+  // "note exists" (403 from the role check that used to run after it) from
+  // "note doesn't exist" (404), turning `noteId` into an enumeration oracle.
+  const role = await requireRole(q, spaceId, userId);
+
   const { data: noteRows } = await q(
     `SELECT id, "folderId", visibility FROM "LiveClassNote" WHERE id = $1 AND "spaceId" = $2 LIMIT 1`,
     [noteId, spaceId],
   );
   if (!noteRows?.length) throw new SpaceNotesError(404, 'note not found');
   const current = noteRows[0];
-
-  const role = await requireRole(q, spaceId, userId);
 
   const wantsContent = patch.title !== undefined || patch.body !== undefined;
   const wantsStructural = patch.folderId !== undefined || patch.visibility !== undefined;
@@ -372,9 +401,10 @@ export async function moveSpaceFolder(
 ): Promise<Record<string, any> | null> {
   await requireAuthor(q, spaceId, userId);
 
-  const { data: allFolders } = await q(`SELECT id, "parentId" FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`, [spaceId]);
-  const rows: { id: string; parentId: string | null }[] = allFolders ?? [];
-  if (!rows.some((f) => f.id === folderId)) throw new SpaceNotesError(404, 'folder not found');
+  const allFolders = await runOrThrow(q, `SELECT id, "parentId" FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`, [spaceId]);
+  const rows: { id: string; parentId: string | null }[] = allFolders;
+  const current = rows.find((f) => f.id === folderId);
+  if (!current) throw new SpaceNotesError(404, 'folder not found');
 
   if (parentId !== null) {
     if (parentId === folderId) throw new SpaceNotesError(400, 'cannot move folder into itself');
@@ -391,10 +421,24 @@ export async function moveSpaceFolder(
     }
   }
 
-  const { data } = await q(
-    `UPDATE "LiveClassNoteFolder" SET "parentId" = $1 WHERE id = $2 AND "spaceId" = $3 RETURNING *`,
-    [parentId, folderId, spaceId],
+  const sets = ['"parentId" = $1'];
+  const params: any[] = [parentId];
+  if (parentId !== current.parentId) {
+    // Moved to a genuinely different parent: append at the end of the new
+    // sibling group (same rationale as updateSpaceNote's folderId move),
+    // so the folder doesn't collide with — or silently jump ahead of —
+    // whatever positions its new siblings already have.
+    const last = await lastPosition(q, '"LiveClassNoteFolder"', spaceId, '"parentId"', parentId);
+    params.push(positionBetween(last, null));
+    sets.push(`position = $${params.length}`);
+  }
+  params.push(folderId, spaceId);
+
+  const { data, error } = await q(
+    `UPDATE "LiveClassNoteFolder" SET ${sets.join(', ')} WHERE id = $${params.length - 1} AND "spaceId" = $${params.length} RETURNING *`,
+    params,
   );
+  if (error) throw toThrowable(error);
   return data?.[0] ?? null;
 }
 
@@ -441,7 +485,17 @@ export async function reorderSpaceItem(
     id,
     parentId,
     targetIndex,
-  }: { spaceId: string; userId: string; kind: 'note' | 'folder'; id: string; parentId: string | null; targetIndex: number },
+    locale = 'en',
+  }: {
+    spaceId: string;
+    userId: string;
+    kind: 'note' | 'folder';
+    id: string;
+    parentId: string | null;
+    targetIndex: number;
+    /** UI locale driving the display-order tie-break — so passes 'en', musiki 'es'. */
+    locale?: string;
+  },
 ): Promise<{ id: string; position: number }[]> {
   await requireAuthor(q, spaceId, userId);
 
@@ -449,15 +503,28 @@ export async function reorderSpaceItem(
     throw new SpaceNotesError(400, 'cannot move folder into itself');
   }
 
-  await q('BEGIN');
+  const table = kind === 'note' ? '"LiveClassNote"' : '"LiveClassNoteFolder"';
+  const parentColumn = kind === 'note' ? '"folderId"' : '"parentId"';
+  const labelColumn = kind === 'note' ? 'title' : 'name';
+
+  // The dragged id must actually be a `kind` item of this space, or the
+  // rest of this function would silently no-op every UPDATE (WHERE id=...
+  // AND "spaceId"=... simply matches zero rows) while still reporting a
+  // planned reorder as if it had happened.
+  const existsRows = await runOrThrow(q, `SELECT id FROM ${table} WHERE id = $1 AND "spaceId" = $2 LIMIT 1`, [id, spaceId]);
+  if (!existsRows.length) throw new SpaceNotesError(404, `${kind} not found`);
+
+  const beginResult = await q('BEGIN');
+  if (beginResult.error) throw toThrowable(beginResult.error);
+
   try {
     if (parentId !== null) {
       await assertFolderInSpace(q, spaceId, parentId);
     }
 
     if (kind === 'folder' && parentId !== null) {
-      const { data: allFolders } = await q(`SELECT id, "parentId" FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`, [spaceId]);
-      const byId = new Map<string, { id: string; parentId: string | null }>((allFolders ?? []).map((f: any) => [f.id, f]));
+      const allFolders = await runOrThrow(q, `SELECT id, "parentId" FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`, [spaceId]);
+      const byId = new Map<string, { id: string; parentId: string | null }>(allFolders.map((f: any) => [f.id, f]));
       let cur = byId.get(parentId);
       const seen = new Set<string>();
       while (cur) {
@@ -468,37 +535,46 @@ export async function reorderSpaceItem(
       }
     }
 
-    const table = kind === 'note' ? '"LiveClassNote"' : '"LiveClassNoteFolder"';
-    const parentColumn = kind === 'note' ? '"folderId"' : '"parentId"';
-    const labelColumn = kind === 'note' ? 'title' : 'name';
-
-    const { data: siblingRows } = await q(
+    const siblingRows = await runOrThrow(
+      q,
       `SELECT id, position, ${labelColumn} AS label FROM ${table} WHERE "spaceId" = $1 AND ${parentColumn} IS NOT DISTINCT FROM $2`,
       [spaceId, parentId],
     );
-    const siblings = sortSiblings(
-      siblingRows ?? [],
-      (r: any) => ({ position: r.position, label: r.label ?? '' }),
-      'en',
-    );
+    // Same display order buildTree would render for this sibling group
+    // (position first, then the kind-appropriate label comparator, then a
+    // final `id` tie-break) — so the UI's `targetIndex` always maps to the
+    // slot the user actually saw, instead of `sortSiblings`'s looser,
+    // non-deterministic-on-ties order that could disagree between the
+    // request that rendered the list and this one re-reading it.
+    const siblings =
+      kind === 'note'
+        ? displayOrderNotes(
+            siblingRows.map((r: any) => ({ id: r.id, position: r.position, title: r.label ?? '' })),
+            locale,
+          )
+        : displayOrderFolders(
+            siblingRows.map((r: any) => ({ id: r.id, position: r.position, name: r.label ?? '' })),
+            locale,
+          );
 
     const assignments = planReorder(
-      siblings.map((s: any) => ({ id: s.id, position: s.position ?? null })),
+      siblings.map((s) => ({ id: s.id, position: s.position ?? null })),
       id,
       targetIndex,
     );
 
     for (const a of assignments) {
-      await q(`UPDATE ${table} SET position = $1 WHERE id = $2 AND "spaceId" = $3`, [a.position, a.id, spaceId]);
+      await runOrThrow(q, `UPDATE ${table} SET position = $1 WHERE id = $2 AND "spaceId" = $3`, [a.position, a.id, spaceId]);
     }
 
     if (kind === 'note') {
-      await q(`UPDATE "LiveClassNote" SET "folderId" = $1 WHERE id = $2 AND "spaceId" = $3`, [parentId, id, spaceId]);
+      await runOrThrow(q, `UPDATE "LiveClassNote" SET "folderId" = $1 WHERE id = $2 AND "spaceId" = $3`, [parentId, id, spaceId]);
     } else {
-      await q(`UPDATE "LiveClassNoteFolder" SET "parentId" = $1 WHERE id = $2 AND "spaceId" = $3`, [parentId, id, spaceId]);
+      await runOrThrow(q, `UPDATE "LiveClassNoteFolder" SET "parentId" = $1 WHERE id = $2 AND "spaceId" = $3`, [parentId, id, spaceId]);
     }
 
-    await q('COMMIT');
+    const commitResult = await q('COMMIT');
+    if (commitResult.error) throw toThrowable(commitResult.error);
     return assignments;
   } catch (err) {
     await q('ROLLBACK');

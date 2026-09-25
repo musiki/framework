@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   buildTree,
   sortSiblings,
+  displayOrderFolders,
+  displayOrderNotes,
   positionBetween,
   needsRenormalize,
   renormalizedPositions,
@@ -185,6 +187,78 @@ test('buildTree: all-null positions reproduce musiki\'s current sort exactly (fo
 
   assert.deepEqual(folderNodes.map((n) => n.folder.id), expectedFolderOrder);
   assert.deepEqual(noteNodes.map((n) => n.note.id), expectedNoteOrder);
+});
+
+// ---------------------------------------------------------------------------
+// displayOrderFolders / displayOrderNotes
+// ---------------------------------------------------------------------------
+
+test('displayOrderFolders: matches buildTree order exactly, plus a deterministic id tie-break on exact ties', () => {
+  const folders = [
+    { id: 'f-zebra', parentId: null, name: 'Zebra', position: null },
+    { id: 'f-arbol', parentId: null, name: 'Árbol', position: null },
+    { id: 'f-arbusto', parentId: null, name: 'arbusto', position: null },
+    // Two folders that tie under `sensitivity: 'base'` (same base letters,
+    // different case) -> must be ordered deterministically by id.
+    { id: 'f-tie-b', parentId: null, name: 'Nota', position: null },
+    { id: 'f-tie-a', parentId: null, name: 'nota', position: null },
+  ];
+  const ordered = displayOrderFolders(folders, 'es');
+  const tree = buildTree(folders, [], 'es');
+
+  assert.deepEqual(ordered.map((f) => f.id), tree.map((n) => n.folder.id));
+  // The tied pair lands in a stable, id-ordered position relative to each other.
+  const tieIndexA = ordered.findIndex((f) => f.id === 'f-tie-a');
+  const tieIndexB = ordered.findIndex((f) => f.id === 'f-tie-b');
+  assert.ok(tieIndexA < tieIndexB); // 'f-tie-a' < 'f-tie-b' lexicographically
+});
+
+test('displayOrderNotes: matches buildTree order exactly, plus a deterministic id tie-break on exact ties', () => {
+  const notes = [
+    { id: 'n-zeta', folderId: null, title: 'Zeta', position: null },
+    { id: 'n-alpha', folderId: null, title: 'alpha', position: null },
+    { id: 'n-alpha2', folderId: null, title: 'Alpha', position: null },
+  ];
+  const ordered = displayOrderNotes(notes, 'es');
+  const tree = buildTree([], notes, 'es');
+
+  assert.deepEqual(ordered.map((n) => n.id), tree.map((n) => n.note.id));
+});
+
+test('displayOrderNotes/Folders: "nota"/"Nota" and "Canción"/"Cancion" with null positions match buildTree order, and the resulting index feeds planReorder correctly', () => {
+  const notes = [
+    { id: 'n-nota-lower', folderId: null, title: 'nota', position: null },
+    { id: 'n-nota-upper', folderId: null, title: 'Nota', position: null },
+    { id: 'n-cancion-accent', folderId: null, title: 'Canción', position: null },
+    { id: 'n-cancion-plain', folderId: null, title: 'Cancion', position: null },
+  ];
+
+  const serverOrder = displayOrderNotes(notes, 'es');
+  const tree = buildTree([], notes, 'es');
+  const treeOrder = tree.map((n) => n.note.id);
+
+  // Server (reorderSpaceItem's) display order must equal buildTree's order
+  // exactly, including how the "nota"/"Nota" tie and the
+  // "Canción"/"Cancion" pair resolve — not just "some" order.
+  assert.deepEqual(serverOrder.map((n) => n.id), treeOrder);
+
+  // Reorder lands at the intended index: drag the last item in server
+  // display order to the front, and confirm it's the same item the UI
+  // would have shown last (buildTree's last item), not some other item
+  // that a differently-tied sort might have placed there instead.
+  const draggedId = serverOrder[serverOrder.length - 1].id;
+  assert.equal(draggedId, treeOrder[treeOrder.length - 1]);
+
+  const plan = planReorder(
+    serverOrder.map((n) => ({ id: n.id, position: n.position ?? null })),
+    draggedId,
+    0,
+  );
+  const resorted = displayOrderNotes(
+    plan.map((p) => ({ id: p.id, position: p.position, title: notes.find((n) => n.id === p.id).title })),
+    'es',
+  );
+  assert.equal(resorted[0].id, draggedId);
 });
 
 // ---------------------------------------------------------------------------
