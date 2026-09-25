@@ -13,6 +13,17 @@ if (fs.existsSync(envPath)) {
   });
 }
 
+// Dev/staging must never touch production data. If the swap cannot be derived,
+// point dev at an unreachable URL (never empty: src/lib/db/pool.ts falls back to .env on '').
+const prodDatabaseUrl = dotEnv.DATABASE_URL || '';
+const derivedStagingUrl = prodDatabaseUrl.replace(/\/musiki26(\?|$)/, '/musiki_staging$1');
+const stagingDatabaseUrl = derivedStagingUrl !== prodDatabaseUrl && /\/musiki_staging(\?|$)/.test(derivedStagingUrl)
+  ? derivedStagingUrl
+  : 'postgresql://staging-url-not-derived.invalid:5432/musiki_staging';
+if (stagingDatabaseUrl.includes('.invalid')) {
+  console.warn('[ecosystem] musiki-framework-dev: could not derive staging DATABASE_URL; dev DB disabled');
+}
+
 module.exports = {
   apps: [
     {
@@ -45,8 +56,7 @@ module.exports = {
       autorestart: true,
       env: {
         ...dotEnv,
-        // Dev/staging must never touch production data (see docs/db/database-management.md#staging)
-        DATABASE_URL: (dotEnv.DATABASE_URL || '').replace(/\/musiki26(\?|$)/, '/musiki_staging$1'),
+        DATABASE_URL: stagingDatabaseUrl,
         NODE_ENV: 'development',
         AUTH_URL: 'https://dev.musiki.org.ar',
         AUTH_TRUST_HOST: 'true'
