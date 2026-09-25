@@ -20,8 +20,10 @@ Give the so.zztt.org studio a real writing workspace — the author's OKA method
 | OKA defaults | `GTX` = `supervision`, `Output` = `committee`, root = `private`. |
 | Tree placement | The note tree lives **inside the studio sidebar**; `/studio/structure` becomes an overview with visibility management. |
 | Editor | Reuse `mountDbNoteEditor`, extracted into `src/lib/writing/editor/`, configured by `apiBase`, `labels`, `contentLang`. |
+| Tree | One **shared, scope-aware tree** in `src/lib/writing/tree/` replaces both musiki tree implementations and serves so. First improvement: **manual ordering** (persisted). |
+| Dockview in so | Later, as its own sub-project. |
 
-Out of scope: longform assembly to a single `.tex`/`.pdf` (C), editing static so-web pages (D), agent UI, dashboard metrics, MOAIE dashboard (E), extracting `packages/*` physically (F).
+Out of scope: tree phase 2 (§6.1: move folders, remember state + search, keyboard + multi-select — next plan, in that order), dockview in the studio, longform assembly to a single `.tex`/`.pdf` (C), editing static so-web pages (D), agent UI, dashboard metrics, MOAIE dashboard (E), extracting `packages/*` physically (F).
 
 ## 3. Role × visibility matrix
 
@@ -84,6 +86,9 @@ ALTER TABLE "LiveClassNoteFolder" ADD COLUMN IF NOT EXISTS "visibility" text NUL
   CHECK ("visibility" IN ('private','supervision','committee','public'));
 ALTER TABLE "LiveClassNote" ADD COLUMN IF NOT EXISTS "visibility" text NULL
   CHECK ("visibility" IN ('private','supervision','committee','public'));
+-- manual ordering among siblings (fractional; NULL = legacy rows, sorted after positioned ones)
+ALTER TABLE "LiveClassNote"       ADD COLUMN IF NOT EXISTS "position" double precision NULL;
+ALTER TABLE "LiveClassNoteFolder" ADD COLUMN IF NOT EXISTS "position" double precision NULL;
 -- a note/folder belongs to a course OR a space, never both
 ALTER TABLE "LiveClassNote"       ADD CONSTRAINT "LiveClassNote_course_xor_space"       CHECK ("courseId" IS NULL OR "spaceId" IS NULL);
 ALTER TABLE "LiveClassNoteFolder" ADD CONSTRAINT "LiveClassNoteFolder_course_xor_space" CHECK ("courseId" IS NULL OR "spaceId" IS NULL);
@@ -95,24 +100,46 @@ CREATE INDEX IF NOT EXISTS "LiveClassNoteFolder_spaceId_idx" ON "LiveClassNoteFo
 - **Ownership in so:** `LiveClassNote.userId` and `LiveClassNoteFolder.userId` are the author's user id; contributions by others live in `LiveClassNoteAnnotation`/`LiveClassNoteComment` with their own `authorId` (attributable).
 - **OKA bootstrap:** `ensureOkaFolders(spaceId, authorId)` creates `GTX` (`supervision`) and `Output` (`committee`) at root if absent; called when the author opens the studio. Idempotent (lookup by `spaceId` + `parentId IS NULL` + `name`).
 
-## 6. Studio UI
+## 6. Shared tree (musiki + so)
 
-- **Sidebar tree** (in `StudioLayout` sidebar, per space): sections `GTX`, `Output`, `Private` (author only) with nested folders/notes, a visibility badge per item, `+ New note` / `+ New folder` (author only), and an author context menu: rename, move, delete, visibility. Reuse the tree logic of `src/scripts/course/notes-sidebar.ts` through the service (no second tree implementation); if its coupling to course/dockview makes direct reuse unsafe, extract its pure tree-building function into `src/lib/writing/notes/tree.ts` and use it from both.
+Today musiki has two overlapping tree implementations (`src/scripts/course/notes-sidebar.ts`, 994 lines, and `src/scripts/course/sidebar/notes-sidebar.ts`), alphabetical-only, course-coupled, with inline styles and Spanish strings. Replace both with one tree:
+
+```
+src/lib/writing/tree/
+  model.ts      pure: buildTree(folders, notes) → nested nodes; sortSiblings (position ASC NULLS LAST, then name/title,
+                locale-aware); positionBetween(prev, next) (fractional midpoint); needsRenormalize(siblings)
+  render.ts     DOM rendering + drag & drop + context menu, driven by { apiBase, scope params, labels, canEdit(node) }
+  tree.css      styles via CSS variables (works with musiki's var(--c-*) and so's theme)
+```
+
+- **Manual ordering (this plan):** dragging a note or folder between siblings sets `position = positionBetween(prev, next)` via the service (`PATCH` with `position`, and `folderId` when moving across folders). When the gap between neighbours falls below 1e-9, the service renormalizes that sibling list to 1024-spaced integers in one transaction. Rows with `position IS NULL` (all existing musiki rows) keep today's alphabetical order after positioned siblings, so musiki looks unchanged until someone reorders.
+- The same order is what the longform assembly (C) will follow.
+- Musiki's sidebar(s) and the so studio sidebar both mount `render.ts`; musiki passes Spanish labels and its course scope, so passes English labels and the space scope. Existing musiki tree tests (`src/scripts/course/sidebar/notes-sidebar.test.mjs`) keep passing or are ported to `model.ts`.
+
+### 6.1 Tree phase 2 (next plan, in this order)
+1. Move folders (drag folders into folders; cycle prevention).
+2. Remember expanded/collapsed state per scope; title filter/search.
+3. Keyboard navigation (arrows, F2 rename, Delete) and multi-select move; accessibility (tree/treeitem roles, aria-expanded).
+
+## 7. Studio UI
+
+- **Sidebar tree** (in `StudioLayout` sidebar, per space): the shared tree (§6) showing `GTX`, `Output`, `Private` (author only) with nested folders/notes, manual order, a visibility badge per item, `+ New note` / `+ New folder` (author only), and an author context menu: rename, delete, visibility.
 - **`/studio/editor?note=<id>`**: mounts `mountDbNoteEditor` with `apiBase: '/api/studio/notes'`, English labels, `contentLang`. Access comes from the server (`accessLevel`).
 - **`/studio/structure`**: overview of the tree with per-item visibility controls (author) and counts per visibility.
 - Everything user-visible via `t()`; nothing mentions musiki.
 
-## 7. Testing
+## 8. Testing
 
 - **Characterization first:** before moving any musiki route, record its current behavior (response shape; access for owner, course teacher, share target, stranger) in tests; the refactor must keep them green.
+- **Tree model:** `buildTree`, `sortSiblings` (positioned before NULL, locale-aware ties), `positionBetween` (ends, middle, tiny gaps), renormalization trigger; musiki tree behaves identically when all positions are NULL.
 - **Pure units:** `access.ts` full matrix (5 roles × 4 visibilities × read/comment/edit/versions/trace/folder-ops); `visibility.ts` inheritance (note override, nearest folder, default private, deep chains).
 - **Scope isolation:** studio routes reject foreign-tenant `spaceId`, non-member, and any `courseId`; musiki routes never return space notes.
 - **i18n:** new keys in `en` and `es`; musiki editor/tracer Spanish strings unchanged (snapshot of labels for `es`).
 - **Route sweep** still passes with `/api/studio/notes*`.
 - **Staging (musiki_staging):** migration twice (idempotent); XOR constraint rejects a row with both ids.
 
-## 8. Rollout
+## 9. Rollout
 
 1. Migration → `musiki_staging`, then prod (with backup).
-2. Merge + deploy; verify musiki NOTES: open note, comment, trace, versions.
+2. Merge + deploy; verify musiki NOTES: open note, comment, trace, versions, tree unchanged (alphabetical) until reordered; reorder works.
 3. so: author opens studio → GTX/Output created; write a GTX note; invite a test supervisor → can comment, cannot edit, does not see Private; coordinator sees only Output.
