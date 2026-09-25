@@ -63,7 +63,7 @@ Additive migration (`postgres-patches/migrations/`):
 CREATE TABLE "Space" (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenantId" text NOT NULL,
-  kind text NOT NULL,                 -- 'dissertation'
+  kind text NOT NULL CHECK (kind IN ('dissertation', 'course')),  -- 'course' reserved, see §3.1
   slug text NOT NULL,
   title text NOT NULL,
   lang text NOT NULL,                 -- content language, e.g. 'en'
@@ -79,7 +79,6 @@ CREATE TABLE "SpaceMember" (
   PRIMARY KEY ("spaceId", "userId")
 );
 
-ALTER TABLE "Course"        ADD COLUMN "tenantId" text NOT NULL DEFAULT 'musiki';
 ALTER TABLE "LiveClassNote" ADD COLUMN "spaceId" uuid NULL REFERENCES "Space"(id);
 ALTER TABLE "LiveClassNote" ADD COLUMN "lang" text NULL;   -- per-note override of Space.lang
 ```
@@ -89,7 +88,11 @@ Scoping rules:
 1. **Tenant membership is derived from space membership.** No `User.tenant` column (one person may belong to several faces).
 2. **`User.role` grants nothing outside musiki.** Studio authorization uses only `SpaceMember.role`. A musiki `admin`/`teacher` who is not a member of a so space has no access in so.
 3. **Studio APIs are tenant-scoped by construction:** they receive `locals.tenant` and query only spaces with that `tenantId` where the user is a member. Existing musiki APIs are not modified; they are unreachable from so via the allowlist.
-4. `Course` and `Space` are **not unified** now. `Course.tenantId` is enough for hem later.
+4. There is **no `Course` table**: courses come from content (Obsidian vault → GitHub → content bus) and `Enrollment.courseId` is text. Course → tenant mapping stays in content configuration for now.
+
+### 3.1 Placeholder: courses as Spaces (future)
+
+The Obsidian → GitHub → platform pipeline has reached its limit (bidirectional editing is fragile; teachers cannot be expected to sync local vaults with git). Migrating courses is **out of scope**, but the schema is shaped for it: `Space.kind` already accepts `'course'`. A future migration would create `Space(kind='course')` per course, move course notes to `LiveClassNote.spaceId`, and translate `Enrollment` rows into `SpaceMember`. so is the first DB-native space and serves as the proving ground for that model. Obsidian, if kept, becomes a one-way export (DB → .md), never a sync source.
 
 The detailed dissertation permission matrix and transparency levels belong to sub-project 2.
 
@@ -111,7 +114,7 @@ src/lib/i18n/fr.ts     // filled when hem joins
 src/lib/i18n/index.ts  // t(locale, key, vars?) ; fallback → en
 ```
 
-Only the namespaces the studio uses are translated: `studio.*`, `trace.*`, `editor.*`, `errors.*`. The rest of musiki keeps its hard-coded Spanish. Components shared with musiki (trace margin, editor toolbar) read their strings from the dictionary with `es` as their musiki locale, so musiki renders identically.
+Only the namespaces the studio uses are translated: `studio.*`, `roles.*`, `trace.*`, `errors.*` (`editor.*` is added when the editor is mounted in the studio). The rest of musiki keeps its hard-coded Spanish. Components shared with musiki (trace margin, editor toolbar) will read their strings from the dictionary with `es` as their musiki locale; that wiring happens in sub-project 2, when those components are mounted in the studio.
 
 ### Tracer language packs
 
@@ -121,13 +124,13 @@ type LangPack = { stopwords: Set<string>; connectives: Record<RelationKind, stri
 getLangPack(contentLang)
 ```
 
-Replaces the duplicated lists currently in `src/scripts/course/notes/trace-utils.mjs` (STOPWORDS, connectives at ~L123), `trace-margin.ts` (connectives at ~L368), and `src/scripts/notas/qa-analyzer-logic.ts` (STOPWORDS).
+Replaces the duplicated lists in `src/scripts/course/notes/trace-utils.mjs` (STOPWORDS L5–30, CONNECTORS ~L122) and `trace-margin.ts` (CONNECTORS ~L367, STOPWORDS ~L484), which are identical today (187 stopwords, Spanish + English mixed). For `contentLang: 'es'` the tracer keeps using the Spanish ∪ English set (musiki output identical); for `'en'` it uses English only. `src/scripts/notas/qa-analyzer-logic.ts` has a different list (short words, used by the QA pod) and stays untouched in this sub-project.
 
 Stored trace keys stay as they are (`rhetorical_role = 'sintesis'`, `analysis_mode = 'tesis'`, enforced by CHECK constraints). They are internal identifiers; display labels come from `t('trace.role.<key>')`. No data migration.
 
 ### AI
 
-`src/pages/api/ai/run.ts` receives `contentLang` and uses per-language prompt templates. Missing template → `en`, never silently Spanish. Comments addressed to a viewer may use `uiLocale`.
+*(Sub-project 2, when the assistant is mounted in the studio.)* `src/pages/api/ai/run.ts` receives `contentLang` and uses per-language prompt templates. Missing template → `en`, never silently Spanish. Comments addressed to a viewer may use `uiLocale`.
 
 ### `src/lib/writing/` as a package boundary
 
@@ -201,12 +204,12 @@ CREATE TABLE "SpaceAccessRule" (
 );
 ```
 
-- **Invitation flow:** author invites from the studio (email + role) → so-branded English email with `/studio/invite/<token>` → Logto sign-in/sign-up → on sign-in, the invite is matched by email, `User` is created if absent, `SpaceMember` is created, the invite is marked accepted.
+- **Invitation flow:** author invites from the studio (email + role) → the studio shows the invitation link `/studio/invite/<token>` for the author to share (the engine has no mailer today; sending a so-branded email is a follow-up once an SMTP/transactional provider exists) → Logto sign-in/sign-up → on sign-in, the invite is matched by email, `User` is created if absent, `SpaceMember` is created, the invite is marked accepted.
 - **Manual access rules** (`/studio/settings/access`, author only): the author adds specific emails or whole domains (e.g. `nmh.no`).
-  - `email` rules may grant any role.
+  - `email` rules may grant any role except `author`; invites likewise. `author` is assigned only by seeding the space.
   - `domain` rules are intended for `guest` (sees TOC and institution-visible material only; promotion is manual). The UI defaults domain rules to `guest` and warns when a higher role is chosen.
   - Domain match is **exact** on the part after `@` (`nmh.no` does not match `x.nmh.no` or `nmh.no.evil.com`), and **requires `email_verified: true`** from the Logto token.
-- **`signIn` rule for tenant `so`:** allow iff the (verified, lowercased) email has a valid unexpired invite, OR matches an `email` rule, OR its domain matches a `domain` rule (verified email required), OR the user is already a `SpaceMember` of a so space. On first entry via a rule, create `SpaceMember` with the rule's role. For tenant `musiki` the current rule (registered in `UserEmail`/`User`) is unchanged.
+- **`signIn` rule for tenant `so`:** the Logto token must carry `email_verified: true` (for every path, not only domain rules: invites and email rules also match by email). Then allow iff the lowercased email has a valid unexpired invite, OR matches an `email` rule, OR its domain matches a `domain` rule (verified email required), OR the user is already a `SpaceMember` of a so space. On first entry via a rule, create `SpaceMember` with the rule's role. For tenant `musiki` the current rule (registered in `UserEmail`/`User`) is unchanged.
 
 ## 6. Testing
 
@@ -235,7 +238,7 @@ Walk the studio as `guest` and as `supervisor`; grep rendered HTML, emails, and 
 
 0. **Isolated staging DB.** Today `musiki-framework` and `musiki-framework-dev` share `/opt/musiki/framework/.env`, so dev runs against the production database. Create `musiki_staging` in the same Postgres (schema copy; data empty or anonymized dump as needed) and give `musiki-framework-dev` its own `DATABASE_URL` in `ecosystem.config.cjs` `env` (which overrides `.env`, as `AUTH_URL` already does). Migrations and integration tests run on staging first; production receives a migration only after it has passed on `so-dev`. Side effect (accepted): `dev.musiki.org.ar` also serves staging data.
 1. Tenant config + middleware resolution + allowlist (musiki unchanged; verify with existing tests).
-2. Migrations (`Space`, `SpaceMember`, `SpaceInvite`, `SpaceAccessRule`, `Course.tenantId`, `LiveClassNote.spaceId/lang`).
+2. Migrations (`Space`, `SpaceMember`, `SpaceInvite`, `SpaceAccessRule`, `LiveClassNote.spaceId/lang`).
 3. i18n dictionary + language packs (dedupe tracer lists; musiki output identical).
 4. Auth: per-request origin, `logto-so` provider, tenant-aware `signIn`, invitations and access rules.
 5. Minimal `/studio` shell (English, so theme) to exercise the layer end to end. Actual studio features belong to sub-project 2.
@@ -247,4 +250,5 @@ Walk the studio as `guest` and as `supervisor`; grep rendered HTML, emails, and 
 - so-web public additions, including the graph (sub-project 3).
 - hem migration, cookie rename (sub-project 4).
 - Extracting `packages/editor` and `packages/tracer` (sub-project 5).
-- Unifying `Course` and `Space`.
+- Migrating courses into `Space(kind='course')` (see §3.1).
+- Invitation emails (needs a mailer), AI `contentLang`, trace-margin string wiring (sub-project 2).
