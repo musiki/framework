@@ -2187,7 +2187,7 @@ Expected: `Valid configuration`.
 
 Push `main`, update the VPS checkout (existing `scripts/vps-update.sh` flow), restart only `musiki-framework-dev`. Seed staging:
 ```bash
-ssh hetzner "bash -c 'docker exec -i $PGC psql -U app -d musiki_staging -v author_email=lucianoazzigotti@gmail.com -v title=\"Dissertation\" -v slug=dissertation'" < postgres-patches/seeds/so-dissertation-space.sql
+ssh hetzner "bash -c 'docker exec -i $PGC psql -U app -d musiki_staging -v ON_ERROR_STOP=1 -v author_email=lucianoazzigotti@gmail.com -v title=\"Dissertation\" -v slug=dissertation'" < postgres-patches/seeds/so-dissertation-space.sql
 ```
 (Staging has no users; first create yours by signing in once at dev.musiki.org.ar, or insert a `User` + `UserEmail` row for your email in staging, then re-run the seed.)
 
