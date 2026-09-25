@@ -26,3 +26,8 @@ test('so host: /studio/not-found itself passes (no rewrite loop)', () => {
   assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: '/studio/not-found' }).action, 'next');
   assert.equal(decideTenantRequest({ host: 'so-dev.zztt.org', pathname: '/studio/not-found' }).action, 'next');
 });
+
+test('so-dev host: prerendered routes obey allowlist', () => {
+  assert.equal(decideTenantRequest({ host: 'so-dev.zztt.org', pathname: '/slides/some-slug' }).action, 'not-found');
+  assert.equal(decideTenantRequest({ host: 'so-dev.zztt.org', pathname: '/public-search.json' }).action, 'not-found');
+});

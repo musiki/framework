@@ -26,7 +26,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Prerendered pages are built once for the default tenant; reading request
   // headers there only triggers Astro's prerender warnings.
-  const tenantDecision = context.isPrerendered
+  const tenantDecision = context.isPrerendered && !import.meta.env.DEV
     ? { tenant: TENANTS[DEFAULT_TENANT_ID], action: "next" as const }
     : decideTenantRequest({
         host: context.request.headers.get("x-forwarded-host") || context.request.headers.get("host") || url.hostname,
