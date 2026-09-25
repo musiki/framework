@@ -2,6 +2,9 @@ import Google from "@auth/core/providers/google";
 import { defineConfig } from "auth-astro";
 import { resolveAuthRedirectUrl } from "./src/lib/auth-origin";
 import { query } from "./src/lib/db/pool";
+import { tenantForAuthProvider, findTenantByHost } from "./src/lib/tenant/resolve";
+import { DEFAULT_TENANT_ID } from "./src/lib/tenant/tenants";
+import { authorizeTenantSignIn } from "./src/lib/tenant/access-db";
 
 // Astro/Vite will inject these, but we fallback to process.env for Node contexts
 const getEnv = (key: string) => {
@@ -51,6 +54,28 @@ const logtoProvider = LOGTO_ISSUER
     }]
   : [];
 
+const LOGTO_SO_CLIENT_ID = getEnv('LOGTO_SO_CLIENT_ID');
+const logtoSoProvider = LOGTO_ISSUER && LOGTO_SO_CLIENT_ID
+  ? [{
+      id: "logto-so",
+      name: "so",
+      type: "oidc" as const,
+      issuer: LOGTO_ISSUER,
+      clientId: LOGTO_SO_CLIENT_ID,
+      clientSecret: getEnv('LOGTO_SO_CLIENT_SECRET'),
+      authorization: { params: { scope: "openid profile email" } },
+      checks: ["pkce", "state"] as ("pkce" | "state")[],
+      onProfile(profile: Record<string, unknown>) {
+        return {
+          id: profile.sub,
+          name: (profile.name as string) ?? (profile.username as string),
+          email: profile.email,
+          image: profile.picture,
+        };
+      },
+    }]
+  : [];
+
 export default defineConfig({
   debug: isDev,
   trustHost: true,
@@ -77,6 +102,7 @@ export default defineConfig({
   },
   providers: [
     ...logtoProvider,
+    ...logtoSoProvider,
     Google({
       clientId: getEnv('GOOGLE_CLIENT_ID'),
       clientSecret: getEnv('GOOGLE_CLIENT_SECRET'),
@@ -109,13 +135,27 @@ export default defineConfig({
   ],
   secret: getEnv('AUTH_SECRET') || "fallback-musiki26-secret-must-change",
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account, profile }) {
       const email = String(user?.email || '').trim().toLowerCase();
       if (!email) {
         console.warn("[AUTH-SIGNIN] Rejecting sign-in attempt: no email provided.");
         return false;
       }
-      
+
+      const providerTenant = tenantForAuthProvider(account?.provider);
+      if (providerTenant && providerTenant.id !== DEFAULT_TENANT_ID) {
+        try {
+          return await authorizeTenantSignIn(providerTenant.id, {
+            email,
+            emailVerified: (profile as Record<string, unknown> | undefined)?.email_verified === true,
+            name: user?.name ?? null,
+          });
+        } catch (err) {
+          console.error("[AUTH-SIGNIN] Tenant authorization error:", err);
+          return false;
+        }
+      }
+
       try {
         const { data: ueRows, error: ueError } = await query(
           `SELECT "userId" FROM "UserEmail" WHERE "email" = $1 LIMIT 1`,
@@ -168,7 +208,12 @@ export default defineConfig({
       return session;
     },
     async redirect({ url, baseUrl }) {
-      return resolveAuthRedirectUrl({ url, baseUrl });
+      let fallbackPath = '/dashboard';
+      try {
+        const tenant = findTenantByHost(new URL(baseUrl).hostname);
+        if (tenant) fallbackPath = tenant.homePath;
+      } catch { /* keep default */ }
+      return resolveAuthRedirectUrl({ url, baseUrl, fallbackPath });
     },
   },
 });
