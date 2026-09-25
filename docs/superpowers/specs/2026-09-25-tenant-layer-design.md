@@ -159,8 +159,12 @@ so.zztt.org {
 }
 
 so-dev.zztt.org {
-	# same shape as so.zztt.org; engine → 127.0.0.1:4325 (musiki-framework-dev),
-	# static → /opt/so/dist (same so-web build)
+	encode zstd gzip
+	# Everything goes to the dev engine (musiki-framework-dev, 127.0.0.1:4325):
+	# the Vite dev server needs /@vite, /@id, /@fs, /src, /node_modules and the
+	# HMR websocket. The engine's tenant allowlist still 404s musiki routes, and
+	# so-web static pages are not served on this host.
+	reverse_proxy 127.0.0.1:4325
 }
 ```
 

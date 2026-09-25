@@ -1,5 +1,6 @@
 // astro.config.mjs
 import { defineConfig } from 'astro/config'
+import { TENANTS } from './src/lib/tenant/tenants.ts'
 import mdx from '@astrojs/mdx'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
@@ -56,7 +57,12 @@ const remoteDevHmrHost = (
   ''
 ).trim();
 const viteServerConfig = {
-  allowedHosts: ['musiki.org.ar', 'www.musiki.org.ar', 'dev.musiki.org.ar', '46.225.154.68', '.ngrok-free.app', '.ngrok.io'],
+  allowedHosts: [
+    ...new Set([
+      'musiki.org.ar', 'www.musiki.org.ar', 'dev.musiki.org.ar', '46.225.154.68', '.ngrok-free.app', '.ngrok.io',
+      ...Object.values(TENANTS).flatMap((tenant) => tenant.hosts),
+    ]),
+  ],
 };
 
 if (remoteDevHmrHost) {

@@ -2170,14 +2170,11 @@ so.zztt.org {
 
 so-dev.zztt.org {
 	encode zstd gzip
-	@engine path /studio /studio/* /api/* /_astro/*
-	handle @engine {
-		reverse_proxy 127.0.0.1:4325
-	}
-	handle {
-		root * /opt/so/dist
-		file_server
-	}
+	# Everything goes to the dev engine (musiki-framework-dev, 127.0.0.1:4325):
+	# the Vite dev server needs /@vite, /@id, /@fs, /src, /node_modules and the
+	# HMR websocket. The engine's tenant allowlist still 404s musiki routes, and
+	# so-web static pages are not served on this host.
+	reverse_proxy 127.0.0.1:4325
 }
 ```
 For the first rollout, add only `so-dev.zztt.org` and leave `so.zztt.org` unchanged until Step 5 passes.
