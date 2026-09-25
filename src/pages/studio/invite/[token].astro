@@ -1,0 +1,27 @@
+---
+import StudioLayout from '../../../layouts/StudioLayout.astro';
+import { SignIn } from 'auth-astro/components';
+import { t } from '../../../lib/i18n';
+import { resolveRequestAuthOrigin } from '../../../lib/auth-origin';
+import { findValidInvite, studioEnabled } from '../../../lib/tenant/studio-db';
+export const prerender = false;
+
+const tenant = Astro.locals.tenant;
+if (!studioEnabled(tenant)) return Astro.rewrite('/studio/not-found');
+const locale = tenant.locale;
+const invite = await findValidInvite(tenant.id, Astro.params.token ?? '');
+const callbackUrl = `${resolveRequestAuthOrigin(Astro.request)}/studio`;
+if (!invite) Astro.response.status = 404;
+---
+<StudioLayout title={t(locale, 'studio.invite.title')} locale={locale}>
+  <h1>{t(locale, 'studio.invite.title')}</h1>
+  {invite ? (
+    <>
+      <p><strong>{invite.spaceTitle}</strong></p>
+      <p class="so-muted">{t(locale, 'studio.invite.lead')} ({invite.email})</p>
+      <SignIn provider={tenant.authProviders[0]} options={{ callbackUrl }}><span>{t(locale, 'studio.invite.accept')}</span></SignIn>
+    </>
+  ) : (
+    <p class="so-muted">{t(locale, 'studio.invite.invalid')}</p>
+  )}
+</StudioLayout>

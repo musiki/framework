@@ -1,0 +1,20 @@
+---
+import StudioLayout from '../../layouts/StudioLayout.astro';
+import { SignIn } from 'auth-astro/components';
+import { t } from '../../lib/i18n';
+import { resolveRequestAuthOrigin } from '../../lib/auth-origin';
+import { studioEnabled } from '../../lib/tenant/studio-db';
+export const prerender = false;
+
+const tenant = Astro.locals.tenant;
+if (!studioEnabled(tenant)) return Astro.rewrite('/studio/not-found');
+if (Astro.locals.session?.user?.email) return Astro.redirect('/studio');
+const locale = tenant.locale;
+const callbackUrl = `${resolveRequestAuthOrigin(Astro.request)}/studio`;
+const provider = tenant.authProviders[0];
+---
+<StudioLayout title={t(locale, 'studio.signIn')} locale={locale}>
+  <h1>{t(locale, 'studio.signIn')}</h1>
+  <p class="so-muted">{t(locale, 'studio.signInLead')}</p>
+  <SignIn provider={provider} options={{ callbackUrl }}><span>{t(locale, 'studio.signIn')}</span></SignIn>
+</StudioLayout>

@@ -1,0 +1,101 @@
+---
+import StudioLayout from '../../../layouts/StudioLayout.astro';
+import { t, type MessageKey } from '../../../lib/i18n';
+import { GRANTABLE_ROLES } from '../../../lib/tenant/space-roles';
+import { getMembership, getStudioUserId, listRules, studioEnabled } from '../../../lib/tenant/studio-db';
+export const prerender = false;
+
+const tenant = Astro.locals.tenant;
+if (!studioEnabled(tenant)) return Astro.rewrite('/studio/not-found');
+const locale = tenant.locale;
+const userId = await getStudioUserId(Astro.locals);
+if (!userId) return Astro.redirect('/studio/login');
+const spaceId = Astro.url.searchParams.get('space') ?? '';
+const membership = await getMembership(tenant.id, userId, spaceId);
+if (membership?.role !== 'author') {
+  Astro.response.status = 403;
+}
+const rules = membership?.role === 'author' ? await listRules(spaceId) : [];
+const labels = {
+  domainWarning: t(locale, 'studio.access.domainWarning'),
+  invalid: t(locale, 'studio.access.invalid'),
+  created: t(locale, 'studio.invite.created'),
+};
+---
+<StudioLayout title={t(locale, 'studio.access.title')} locale={locale}>
+  {membership?.role !== 'author' ? (
+    <p>{t(locale, 'errors.forbidden')}</p>
+  ) : (
+    <>
+      <h1>{t(locale, 'studio.access.title')} · {membership.title}</h1>
+      <p class="so-muted">{t(locale, 'studio.access.lead')}</p>
+
+      <table>
+        <tbody>
+          {rules.length === 0 && <tr><td class="so-muted">{t(locale, 'studio.access.empty')}</td></tr>}
+          {rules.map((r) => (
+            <tr>
+              <td>{r.kind === 'email' ? t(locale, 'studio.access.kindEmail') : t(locale, 'studio.access.kindDomain')}</td>
+              <td>{r.value}</td>
+              <td>{t(locale, `roles.${r.role}` as MessageKey)}</td>
+              <td><button type="button" data-remove={r.id}>{t(locale, 'studio.access.remove')}</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <form id="rule-form">
+        <select name="kind">
+          <option value="email">{t(locale, 'studio.access.kindEmail')}</option>
+          <option value="domain">{t(locale, 'studio.access.kindDomain')}</option>
+        </select>
+        <input name="value" required placeholder={t(locale, 'studio.access.value')} />
+        <select name="role">
+          {GRANTABLE_ROLES.map((role) => <option value={role} selected={role === 'guest'}>{t(locale, `roles.${role}` as MessageKey)}</option>)}
+        </select>
+        <button type="submit">{t(locale, 'studio.access.add')}</button>
+      </form>
+      <p id="rule-warning" class="so-muted" hidden>{labels.domainWarning}</p>
+
+      <h2>{t(locale, 'studio.invite.create')}</h2>
+      <form id="invite-form">
+        <input name="email" type="email" required placeholder={t(locale, 'studio.invite.email')} />
+        <select name="role">
+          {GRANTABLE_ROLES.map((role) => <option value={role}>{t(locale, `roles.${role}` as MessageKey)}</option>)}
+        </select>
+        <button type="submit">{t(locale, 'studio.invite.create')}</button>
+      </form>
+      <p id="invite-result" hidden></p>
+    </>
+  )}
+  <script is:inline define:vars={{ spaceId, labels }}>
+    const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const ruleForm = document.getElementById('rule-form');
+    const warning = document.getElementById('rule-warning');
+    ruleForm?.addEventListener('change', () => {
+      const f = new FormData(ruleForm);
+      warning.hidden = !(f.get('kind') === 'domain' && f.get('role') !== 'guest');
+    });
+    ruleForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = new FormData(ruleForm);
+      const res = await post('/api/studio/access-rules', { spaceId, kind: f.get('kind'), value: f.get('value'), role: f.get('role') });
+      if (res.ok) location.reload(); else alert(labels.invalid);
+    });
+    document.querySelectorAll('[data-remove]').forEach((btn) => btn.addEventListener('click', async () => {
+      const q = new URLSearchParams({ spaceId, ruleId: btn.dataset.remove });
+      const res = await fetch(`/api/studio/access-rules?${q}`, { method: 'DELETE' });
+      if (res.ok) location.reload();
+    }));
+    const inviteForm = document.getElementById('invite-form');
+    inviteForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = new FormData(inviteForm);
+      const res = await post('/api/studio/invites', { spaceId, email: f.get('email'), role: f.get('role') });
+      const data = await res.json();
+      const out = document.getElementById('invite-result');
+      out.hidden = false;
+      out.textContent = res.ok ? `${labels.created} ${data.url}` : labels.invalid;
+    });
+  </script>
+</StudioLayout>
