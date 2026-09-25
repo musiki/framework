@@ -45,6 +45,8 @@ module.exports = {
       autorestart: true,
       env: {
         ...dotEnv,
+        // Dev/staging must never touch production data (see docs/db/database-management.md#staging)
+        DATABASE_URL: (dotEnv.DATABASE_URL || '').replace(/\/musiki26(\?|$)/, '/musiki_staging$1'),
         NODE_ENV: 'development',
         AUTH_URL: 'https://dev.musiki.org.ar',
         AUTH_TRUST_HOST: 'true'

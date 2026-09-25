@@ -58,6 +58,30 @@ Con el tunnel activo, el `.env` local usa `localhost:5433`.
 
 ---
 
+## Staging
+
+La base de datos de staging `musiki_staging` vive en el mismo container de Postgres que `musiki26` en el VPS. Se crea como una copia schema-only.
+
+**Container actual** (verificar con):
+```bash
+ssh hetzner "bash -c 'docker ps --format \"{{.Names}} {{.Ports}}\" | grep 5432'"
+```
+Nota: El doc dice `devmusiki-db`, pero el container actual es `authentik-postgresql`.
+
+El app `musiki-framework-dev` (dev.musiki.org.ar y so-dev.zztt.org) usa staging automáticamente mediante el override en `ecosystem.config.cjs`.
+
+**Aplicar migraciones a staging:**
+```bash
+ssh hetzner "bash -c 'docker exec -i $PGC psql -U app -d musiki_staging -v ON_ERROR_STOP=1'" < postgres-patches/migrations/<file>.sql
+```
+**Luego a producción:**
+```bash
+ssh hetzner "bash -c 'docker exec -i $PGC psql -U app -d musiki26 -v ON_ERROR_STOP=1'" < postgres-patches/migrations/<file>.sql
+```
+(El shell remoto es Fish, por eso los comandos remotos van dentro de `bash -c`.)
+
+---
+
 ## Backup / Restore
 
 ### Backup manual antes de deploy
