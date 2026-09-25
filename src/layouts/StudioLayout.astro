@@ -1,0 +1,35 @@
+---
+import type { Locale } from '../lib/tenant/tenants';
+interface Props { title: string; locale: Locale }
+const { title, locale } = Astro.props;
+const brand = Astro.locals.tenant.brand.name;
+---
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{title} · {brand}</title>
+    <style is:global>
+      :root { --so-bg: #fff; --so-fg: #111; --so-muted: #666; --so-border: #e5e5e5; --so-accent: #111; }
+      @media (prefers-color-scheme: dark) {
+        :root { --so-bg: #111; --so-fg: #eee; --so-muted: #999; --so-border: #2a2a2a; --so-accent: #eee; }
+      }
+      body { margin: 0; background: var(--so-bg); color: var(--so-fg);
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+      .so-wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1rem; }
+      .so-top { display: flex; justify-content: space-between; align-items: baseline;
+        border-bottom: 1px solid var(--so-border); padding-bottom: .75rem; margin-bottom: 2rem; }
+      .so-top a { color: var(--so-fg); text-decoration: none; font-weight: 600; }
+      .so-muted { color: var(--so-muted); }
+      button, input, select { font: inherit; }
+    </style>
+  </head>
+  <body>
+    <div class="so-wrap">
+      <header class="so-top"><a href="/studio">{brand} / studio</a><slot name="nav" /></header>
+      <main><slot /></main>
+    </div>
+  </body>
+</html>

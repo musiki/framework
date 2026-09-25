@@ -1,0 +1,71 @@
+export const en = {
+  studio: {
+    title: 'Studio',
+    signIn: 'Sign in',
+    signInLead: 'Sign in to access the writing studio.',
+    signOut: 'Sign out',
+    mySpaces: 'Your spaces',
+    noSpaces: 'You are not a member of any space yet.',
+    settings: 'Access settings',
+    invite: {
+      title: 'Invitation',
+      lead: 'You have been invited to a writing space. Sign in with the invited email address to continue.',
+      accept: 'Continue with sign-in',
+      invalid: 'This invitation is invalid or has expired.',
+      create: 'Create invitation',
+      email: 'Email',
+      created: 'Invitation link (share it with the invitee):',
+      expires: 'Expires in {days} days.',
+    },
+    errors: {
+      accessDenied: 'This account does not have access to the studio.',
+      generic: 'Sign-in failed. Please try again.',
+    },
+    access: {
+      title: 'Access rules',
+      lead: 'People whose verified email matches one of these rules can sign in with the given role.',
+      kind: 'Type',
+      kindEmail: 'Email',
+      kindDomain: 'Domain',
+      value: 'Email or domain',
+      add: 'Add rule',
+      remove: 'Remove',
+      empty: 'No rules yet.',
+      domainWarning: 'Domain rules grant access to everyone at that domain. Prefer the guest role.',
+      invalid: 'Invalid rule.',
+    },
+  },
+  roles: {
+    author: 'Author',
+    supervisor: 'Supervisor',
+    coordinator: 'Coordinator',
+    reviewer: 'Reviewer',
+    guest: 'Guest',
+  },
+  errors: {
+    notFound: 'Page not found',
+    notFoundLead: 'This page does not exist.',
+    forbidden: 'You do not have access to this page.',
+    backHome: 'Back to studio',
+  },
+  trace: {
+    role: {
+      afirmacion: 'Claim',
+      definicion: 'Definition',
+      contexto: 'Context',
+      literatura: 'Literature',
+      ejemplo: 'Example',
+      analisis: 'Analysis',
+      contraste: 'Contrast',
+      transicion: 'Transition',
+      sintesis: 'Synthesis',
+      metodo: 'Method',
+      reflexion: 'Reflection',
+      conclusion: 'Conclusion',
+      excluir: 'Excluded',
+    },
+  },
+} as const;
+
+type Shape<T> = { readonly [K in keyof T]: T[K] extends string ? string : Shape<T[K]> };
+export type Dict = Shape<typeof en>;

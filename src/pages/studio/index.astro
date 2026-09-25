@@ -1,0 +1,27 @@
+---
+import StudioLayout from '../../layouts/StudioLayout.astro';
+import { SignOut } from 'auth-astro/components';
+import { t, type MessageKey } from '../../lib/i18n';
+import { getStudioUserId, listMemberships, studioEnabled } from '../../lib/tenant/studio-db';
+export const prerender = false;
+
+const tenant = Astro.locals.tenant;
+if (!studioEnabled(tenant)) return Astro.rewrite('/studio/not-found');
+const locale = tenant.locale;
+const userId = await getStudioUserId(Astro.locals);
+if (!userId) return Astro.redirect('/studio/login');
+const spaces = await listMemberships(tenant.id, userId);
+---
+<StudioLayout title={t(locale, 'studio.title')} locale={locale}>
+  <SignOut slot="nav"><span>{t(locale, 'studio.signOut')}</span></SignOut>
+  <h1>{t(locale, 'studio.mySpaces')}</h1>
+  {spaces.length === 0 && <p class="so-muted">{t(locale, 'studio.noSpaces')}</p>}
+  <ul>
+    {spaces.map((s) => (
+      <li>
+        <strong>{s.title}</strong> · <span class="so-muted">{t(locale, `roles.${s.role}` as MessageKey)}</span>
+        {s.role === 'author' && <> · <a href={`/studio/settings/access?space=${s.spaceId}`}>{t(locale, 'studio.settings')}</a></>}
+      </li>
+    ))}
+  </ul>
+</StudioLayout>

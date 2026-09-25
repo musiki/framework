@@ -4,6 +4,7 @@ import type { APIContext } from "astro";
 import { parseString } from "set-cookie-parser";
 import authConfig from "auth:config";
 import { resolveRequestAuthOrigin } from "../../../lib/auth-origin";
+import { decideAuthRoute, filterProvidersPayload } from "../../../lib/tenant/auth-gate";
 
 const actions: AuthAction[] = [
   "providers",
@@ -60,6 +61,22 @@ const handleAuth = async (context: APIContext) => {
     return new Response("Not found", { status: 404 });
   }
 
+  const tenant = context.locals.tenant;
+  const gate = tenant
+    ? decideAuthRoute(
+        tenant,
+        action,
+        targetUrl.pathname.slice(prefix.length + 1).split("/")[1] || undefined,
+        targetUrl.searchParams.get("error"),
+      )
+    : { kind: "pass" as const };
+  if (gate.kind === "not-found") {
+    return new Response("Not found", { status: 404 });
+  }
+  if (gate.kind === "redirect") {
+    return new Response(null, { status: 302, headers: { Location: gate.location } });
+  }
+
   console.log(`[AUTH-DEBUG] Action: ${action}, External: ${externalOrigin.toString()}, Target: ${targetUrl.toString()}`);
   
   let response: Response;
@@ -71,6 +88,14 @@ const handleAuth = async (context: APIContext) => {
   }
 
   console.log(`[AUTH-DEBUG] Response Status: ${response.status}`);
+
+  if (gate.kind === "filter-providers" && tenant) {
+    const payload = response.ok ? await response.json().catch(() => ({})) : {};
+    return new Response(JSON.stringify(filterProvidersPayload(tenant, payload)), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
 
   if (["callback", "signin", "signout"].includes(action)) {
     const setCookies = response.headers.getSetCookie();

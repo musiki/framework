@@ -6,6 +6,7 @@ import {
   type DecorationSet, type ViewUpdate,
 } from '@codemirror/view';
 import { computeKwic, computeZipfProfile } from '../../notas/qa-analyzer-logic';
+import { getLangPack, traceStopwords, type ContentLang } from '../../../lib/writing/lang/index.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -364,15 +365,9 @@ export function paragraphsForAnalysis(paras: Paragraph[], mode: TraceMode, codes
   return included.filter(para => approximateParagraphLines(para.text) > 2);
 }
 
-const CONNECTORS = [
-  'sin embargo', 'pero', 'por lo tanto', 'en consecuencia', 'por ejemplo',
-  'así', 'entonces', 'además', 'no obstante', 'por ende', 'en cambio',
-  'cuando', 'al final', 'mientras', 'luego', 'después'
-];
-
-export function startsWithConnector(text: string): boolean {
+export function startsWithConnector(text: string, lang: ContentLang = 'es'): boolean {
   const lower = text.toLowerCase().trim();
-  return CONNECTORS.some(c => lower.startsWith(c));
+  return getLangPack(lang).connectors.some(c => lower.startsWith(c));
 }
 
 export function computeSentences(paraText: string, paragraphId: string): SentenceTrace[] {
@@ -481,30 +476,7 @@ export type TraceSuggestion = { label: string; paraIndex: number };
 const MIN_KEYWORD_LEN = 4;
 const TOP_KEYWORDS_PER_PARA = 5;
 
-const STOPWORDS = new Set([
-  'para', 'como', 'pero', 'más', 'con', 'que', 'una', 'uno', 'los', 'las',
-  'del', 'este', 'esta', 'esto', 'desde', 'hasta', 'sobre', 'entre', 'cuando',
-  'donde', 'puede', 'tiene', 'también', 'además', 'porque', 'aunque', 'según',
-  'todos', 'todas', 'todo', 'bien', 'hacer', 'tener', 'haber', 'siendo', 'están',
-  'estar', 'había', 'será', 'mismo', 'misma', 'mismos', 'mismas', 'ante', 'bajo',
-  'cada', 'casi', 'cierto', 'contra', 'cual', 'cuya', 'dado', 'debe', 'deben',
-  'ella', 'ellas', 'ellos', 'embargo', 'esas', 'esos', 'gran', 'hacia', 'incluso',
-  'junto', 'lado', 'largo', 'lugar', 'manera', 'mayor', 'mediante', 'mejor',
-  'menor', 'menos', 'mientras', 'modo', 'ninguna', 'ninguno', 'otras', 'otros',
-  'otra', 'otro', 'pues', 'parte', 'poco', 'primer', 'primera', 'propio', 'propia',
-  'sino', 'solo', 'sola', 'tanto', 'tipo', 'toda', 'tras', 'unos', 'unas',
-  'varios', 'veces', 'forma', 'nivel', 'dicho', 'dicha', 'aquí', 'allí', 'ahora',
-  'antes', 'después', 'siempre', 'nunca', 'algo', 'algún', 'alguna', 'algunos',
-  'algunas', 'nada', 'nadie', 'mucho', 'bastante', 'demasiado', 'través',
-  'that', 'with', 'this', 'have', 'from', 'they', 'will', 'been', 'were',
-  'said', 'each', 'which', 'their', 'there', 'when', 'what', 'make', 'like',
-  'time', 'just', 'know', 'take', 'into', 'year', 'your', 'good', 'some',
-  'could', 'them', 'then', 'than', 'more', 'only', 'come', 'over', 'also',
-  'back', 'after', 'first', 'well', 'most', 'about', 'would', 'very', 'these',
-  'those', 'such', 'other', 'being', 'both', 'here', 'many', 'does', 'where',
-  'through', 'because', 'between', 'without', 'during', 'before', 'should',
-  'might', 'while', 'since', 'until', 'whether',
-]);
+const STOPWORDS = traceStopwords('es');
 
 function extractKeywords(text: string): string[] {
   const tokens = text

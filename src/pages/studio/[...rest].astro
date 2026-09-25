@@ -1,0 +1,10 @@
+---
+// Catch-all for any unknown /studio/* path. Without this, musiki's root
+// catch-all (src/pages/[...slug].astro) would handle unknown /studio/*
+// paths and render musiki content on so.zztt.org. Explicit studio pages
+// (index, login, invite/[token], settings/access, not-found) still win
+// over this route per Astro's route-priority rules (static/specific
+// segments rank above rest-parameter routes).
+export const prerender = false;
+return Astro.rewrite('/studio/not-found');
+---

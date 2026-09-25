@@ -1,4 +1,19 @@
+import { findTenantByHost, normalizeHost } from './tenant/resolve.ts';
+import { DEFAULT_TENANT_ID } from './tenant/tenants.ts';
+
 const LOOPBACK_HOST_RE = /^(localhost|127(?:\.\d+){3}|0\.0\.0\.0)$/i;
+
+// An origin whose host is registered to a non-default tenant is authoritative:
+// it must never be replaced by AUTH_URL (which points at musiki).
+const tenantOwnedOrigin = (origin: string): string => {
+  if (!origin) return '';
+  try {
+    const tenant = findTenantByHost(new URL(origin).hostname);
+    return tenant && tenant.id !== DEFAULT_TENANT_ID ? origin : '';
+  } catch {
+    return '';
+  }
+};
 
 const ensureProtocol = (value: string) =>
   value.startsWith('http://') || value.startsWith('https://') ? value : `https://${value}`;
@@ -47,7 +62,10 @@ export const resolveAuthBaseOrigin = (baseUrl?: string): string => {
 
   const configuredOrigin = resolveConfiguredAuthOrigin();
   const detectedBaseOrigin = normalizeOriginCandidate(baseUrl);
-  
+
+  const tenantOrigin = tenantOwnedOrigin(detectedBaseOrigin);
+  if (tenantOrigin) return tenantOrigin.replace(/^http:/, 'https:');
+
   // Prioritize configured origin if it's not a loopback
   const configuredNonLoopbackOrigin =
     configuredOrigin && !isLoopbackOrigin(configuredOrigin) ? configuredOrigin : '';
@@ -70,9 +88,21 @@ export const resolveAuthBaseOrigin = (baseUrl?: string): string => {
   return 'https://musiki.org.ar';
 };
 
+// First entry of a (possibly comma-separated) forwarded host, normalized via
+// normalizeHost; an explicit port is kept so dev loopback origins stay intact.
+const forwardedHostWithPort = (raw: string): string => {
+  const first = raw.split(',')[0].trim();
+  const host = normalizeHost(first);
+  if (!host) return '';
+  const port = first.match(/:(\d+)$/)?.[1];
+  return port ? `${host}:${port}` : host;
+};
+
 export const resolveRequestAuthOrigin = (request: Request): string => {
   const requestUrlOrigin = normalizeOriginCandidate(request.url);
-  const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+  const forwardedHost = forwardedHostWithPort(
+    request.headers.get('x-forwarded-host') || request.headers.get('host') || '',
+  );
   const forwardedProto =
     request.headers.get('x-forwarded-proto') ||
     (requestUrlOrigin ? new URL(requestUrlOrigin).protocol.replace(/:$/, '') : 'https');

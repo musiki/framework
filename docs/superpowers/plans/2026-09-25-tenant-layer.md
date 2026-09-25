@@ -2170,14 +2170,11 @@ so.zztt.org {
 
 so-dev.zztt.org {
 	encode zstd gzip
-	@engine path /studio /studio/* /api/* /_astro/*
-	handle @engine {
-		reverse_proxy 127.0.0.1:4325
-	}
-	handle {
-		root * /opt/so/dist
-		file_server
-	}
+	# Everything goes to the dev engine (musiki-framework-dev, 127.0.0.1:4325):
+	# the Vite dev server needs /@vite, /@id, /@fs, /src, /node_modules and the
+	# HMR websocket. The engine's tenant allowlist still 404s musiki routes, and
+	# so-web static pages are not served on this host.
+	reverse_proxy 127.0.0.1:4325
 }
 ```
 For the first rollout, add only `so-dev.zztt.org` and leave `so.zztt.org` unchanged until Step 5 passes.
@@ -2190,7 +2187,7 @@ Expected: `Valid configuration`.
 
 Push `main`, update the VPS checkout (existing `scripts/vps-update.sh` flow), restart only `musiki-framework-dev`. Seed staging:
 ```bash
-ssh hetzner "bash -c 'docker exec -i $PGC psql -U app -d musiki_staging -v author_email=lucianoazzigotti@gmail.com -v title=\"Dissertation\" -v slug=dissertation'" < postgres-patches/seeds/so-dissertation-space.sql
+ssh hetzner "bash -c 'docker exec -i $PGC psql -U app -d musiki_staging -v ON_ERROR_STOP=1 -v author_email=lucianoazzigotti@gmail.com -v title=\"Dissertation\" -v slug=dissertation'" < postgres-patches/seeds/so-dissertation-space.sql
 ```
 (Staging has no users; first create yours by signing in once at dev.musiki.org.ar, or insert a `User` + `UserEmail` row for your email in staging, then re-run the seed.)
 
