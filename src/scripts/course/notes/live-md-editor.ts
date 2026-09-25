@@ -178,9 +178,10 @@ export function createLiveMdEditor(
   container: HTMLElement,
   initialContent: string,
   onSave: (content: string) => void | Promise<void>,
-  options?: { readOnly?: boolean }
+  options?: { readOnly?: boolean; uploadUrl?: string }
 ): LiveMdEditor {
   injectCss();
+  const uploadUrl = options?.uploadUrl ?? '/api/forum/upload-image';
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   const flushSave = (content: string) => {
@@ -258,7 +259,7 @@ export function createLiveMdEditor(
           const formData = new FormData();
           formData.append('file', file, file.name || 'image.png');
 
-          fetch('/api/forum/upload-image', { method: 'POST', body: formData })
+          fetch(uploadUrl, { method: 'POST', body: formData })
             .then(res => {
               if (!res.ok) throw new Error('Upload failed');
               return res.json();

@@ -6,6 +6,8 @@ import { createLiveMdEditor } from '../course/notes/live-md-editor';
 import { enhanceCourseNotesContent } from '../course/notes/content';
 import { markdownToLatex } from './markdown-latex-export.ts';
 import type { TraceMarginHandle } from '../course/notes/trace-margin';
+import { DEFAULT_ES_LABELS, formatLabel, type EditorLabels } from '../../lib/writing/editor/labels.ts';
+import type { ContentLang } from '../../lib/writing/lang/index.ts';
 
 export interface PersonalNotesWorkspace {
   destroy(): void;
@@ -255,8 +257,8 @@ function downloadTextFile(content: string, filename: string, type: string): void
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function renderMarkdownForExport(markdown: string): Promise<string> {
-  const res = await fetch('/api/live/preview-markdown', {
+async function renderMarkdownForExport(markdown: string, previewUrl = '/api/live/preview-markdown'): Promise<string> {
+  const res = await fetch(previewUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ markdown }),
@@ -588,6 +590,79 @@ function injectWorkspaceExtraCss() {
   document.head.appendChild(s);
 }
 
+export interface EditorOptions {
+  apiBase?: string;
+  previewUrl?: string;
+  uploadUrl?: string;
+  labels?: Partial<EditorLabels>;
+  contentLang?: ContentLang;
+  spaceId?: string;
+}
+
+// Reviewer-on-committee (`note.versionsOnly`): the live body is hidden — only a
+// read-only list of frozen versions is shown, with an inline preview per version.
+async function mountVersionsOnlyView(
+  bodyEl: HTMLElement,
+  noteId: string,
+  versionsUrl: string,
+  labels: EditorLabels,
+): Promise<void> {
+  injectWorkspaceExtraCss();
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'height:100%;overflow-y:auto;padding:1rem;box-sizing:border-box;';
+
+  const notice = document.createElement('p');
+  notice.style.cssText = 'opacity:.6;font-size:.82rem;margin:0 0 12px;';
+  notice.textContent = labels.versionsOnlyNotice;
+  wrap.appendChild(notice);
+
+  const list = document.createElement('div');
+  wrap.appendChild(list);
+  bodyEl.appendChild(wrap);
+
+  const res = await fetch(`${versionsUrl}?noteId=${noteId}`).catch(() => null);
+  const data = res && res.ok ? await res.json().catch(() => null) : null;
+  const versions: any[] = data?.versions ?? [];
+
+  if (!versions.length) {
+    list.innerHTML = `<div style="font-size: 11px; opacity: 0.4; padding: 20px; text-align: center;">${escHtml(labels.noVersions)}</div>`;
+    return;
+  }
+
+  for (const v of versions) {
+    const card = document.createElement('div');
+    card.className = 'version-card';
+    card.innerHTML = `
+      <div style="font-weight: 600; color: var(--c-fg); word-break: break-word;">${escHtml(v.versionName)}</div>
+      <div style="font-size: 9.5px; color: var(--c-fg-dim); opacity: 0.8; margin-top: 2px;">
+        ${escHtml(formatLabel(labels.byPrefix, { name: escHtml(v.createdByUserName || labels.defaultUserName), time: formatRelativeTime(v.createdAt) }))}
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px;">
+        <button class="version-action-btn v-preview" title="${escHtml(labels.previewVersionTitle)}">P</button>
+      </div>
+      <div class="version-preview-body" style="display:none; white-space:pre-wrap; font-family: var(--font-mono, monospace); font-size: 12px; line-height: 1.6; margin-top: 8px; border-top: 1px solid var(--c-border, rgba(120,120,140,0.15)); padding-top: 8px;"></div>
+    `;
+
+    card.querySelector('.v-preview')?.addEventListener('click', async () => {
+      const previewBody = card.querySelector<HTMLElement>('.version-preview-body')!;
+      if (previewBody.style.display !== 'none') { previewBody.style.display = 'none'; return; }
+      try {
+        const r = await fetch(`${versionsUrl}?versionId=${v.id}`);
+        if (!r.ok) throw new Error();
+        const d = await r.json();
+        previewBody.textContent = String(d.version?.body ?? '');
+        previewBody.style.display = 'block';
+      } catch {
+        previewBody.textContent = labels.previewLoadError;
+        previewBody.style.display = 'block';
+      }
+    });
+
+    list.appendChild(card);
+  }
+}
+
 export async function mountDbNoteEditor(
   bodyEl: HTMLElement,
   statusDot: HTMLElement,
@@ -596,18 +671,34 @@ export async function mountDbNoteEditor(
   pencilBtn?: HTMLButtonElement,
   downloadBtn?: HTMLButtonElement,
   downloadMenu?: HTMLElement,
+  options?: EditorOptions,
 ) {
+  const apiBase = options?.apiBase ?? '/api/live/notes';
+  const previewUrl = options?.previewUrl ?? '/api/live/preview-markdown';
+  const uploadUrl = options?.uploadUrl ?? '/api/forum/upload-image';
+  const labels: EditorLabels = { ...DEFAULT_ES_LABELS, ...options?.labels };
+  const contentLang: ContentLang = options?.contentLang ?? 'es';
+  const spaceId = options?.spaceId;
+  const noteQueryUrl = `${apiBase}?id=${noteId}${spaceId ? `&spaceId=${encodeURIComponent(spaceId)}` : ''}`;
+  const annotationsUrl = `${apiBase}/annotations`;
+  const versionsUrl = `${apiBase}/versions`;
+
   const localCleanups: Array<() => void> = [];
   (bodyEl as any).__editorCleanups = localCleanups;
   injectWorkspaceExtraCss();
 
-  bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4;font-size:.85rem;">Cargando…</p>';
-  const r = await fetch(`/api/live/notes?id=${noteId}`).catch(() => null);
+  bodyEl.innerHTML = `<p style="padding:1rem;opacity:.4;font-size:.85rem;">${escHtml(labels.loading)}</p>`;
+  const r = await fetch(noteQueryUrl).catch(() => null);
   const d = r ? await r.json().catch(() => null) : null;
   const note = d?.notes?.[0];
-  if (!note) { bodyEl.innerHTML = '<p style="padding:1rem;opacity:.4">Nota no encontrada</p>'; return; }
+  if (!note) { bodyEl.innerHTML = `<p style="padding:1rem;opacity:.4">${escHtml(labels.notFound)}</p>`; return; }
   if (!bodyEl.isConnected) return;
   bodyEl.innerHTML = '';
+
+  if (note.versionsOnly) {
+    void mountVersionsOnlyView(bodyEl, noteId, versionsUrl, labels);
+    return;
+  }
   let currentMode: DbNoteViewMode = 'live-edit';
   let currentContent = String(note.body ?? '');
   let traceWantsRestore = false;
@@ -619,8 +710,8 @@ export async function mountDbNoteEditor(
     if (!pencilBtn) return;
     pencilBtn.style.display = '';
     pencilBtn.title = currentMode === 'live-edit'
-      ? 'Ver render Markdown (Alt+Shift+E)'
-      : 'Volver a live edit (Alt+Shift+E)';
+      ? labels.viewRender
+      : labels.backToEdit;
     pencilBtn.innerHTML = currentMode === 'live-edit' ? EYE_ICON : PENCIL_ICON;
     pencilBtn.classList.toggle('is-active', currentMode === 'live-edit');
   };
@@ -640,9 +731,9 @@ export async function mountDbNoteEditor(
     editor?.destroy();
     editor = null;
     (bodyEl as any).__editor = null;
-    editorWrap.innerHTML = '<div class="pnw-render-preview"><p style="opacity:.4;font-size:.85rem;">Renderizando…</p></div>';
+    editorWrap.innerHTML = `<div class="pnw-render-preview"><p style="opacity:.4;font-size:.85rem;">${escHtml(labels.rendering)}</p></div>`;
     try {
-      const res = await fetch('/api/live/preview-markdown', {
+      const res = await fetch(previewUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ markdown: currentContent, interactiveBlocks: true }),
@@ -665,7 +756,7 @@ export async function mountDbNoteEditor(
         }
       });
     } catch {
-      editorWrap.innerHTML = '<div class="pnw-render-preview"><p style="color:#c87e7e;font-size:.85rem;">No se pudo renderizar la vista Markdown.</p></div>';
+      editorWrap.innerHTML = `<div class="pnw-render-preview"><p style="color:#c87e7e;font-size:.85rem;">${escHtml(labels.renderError)}</p></div>`;
     }
   };
 
@@ -674,7 +765,7 @@ export async function mountDbNoteEditor(
     updateModeButton();
     editorWrap.innerHTML = '';
     editorWrap.appendChild(selectionToolbar);
-    editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly });
+    editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly, uploadUrl });
     (bodyEl as any).__editor = editor;
     updateHud(bodyEl, currentContent, currentMode);
     editor.focus();
@@ -747,10 +838,10 @@ export async function mountDbNoteEditor(
     } catch {}
 
     statusDot.className = 'cnw-status saving';
-    const result = await fetch('/api/live/notes', {
+    const result = await fetch(apiBase, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: noteId, body: content }),
+      body: JSON.stringify({ id: noteId, body: content, ...(spaceId ? { spaceId } : {}) }),
     }).catch(() => null);
 
     if (result?.ok) {
@@ -782,13 +873,13 @@ export async function mountDbNoteEditor(
 
   commentsSidebar.innerHTML = `
     <div style="padding: 10px 12px; border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.15)); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
-      <span class="pnw-sidebar-title">Comentarios</span>
+      <span class="pnw-sidebar-title">${escHtml(labels.commentsTitle)}</span>
       <div style="display:flex; align-items:center; gap:6px;">
         <select class="category-filter-select" style="background: rgba(0,0,0,0.2); border: 1px solid var(--c-border, rgba(120,120,140,0.22)); border-radius: 3px; font-size: 9.5px; color: var(--c-fg); padding: 1px 4px; outline: none; cursor: pointer; max-width: 95px;">
-          <option value="all">Todas</option>
+          <option value="all">${escHtml(labels.filterAll)}</option>
         </select>
         <label style="font-size: 9px; color: var(--c-fg-dim); display: flex; align-items: center; gap: 2px; cursor: pointer; user-select: none; margin-left: 2px; white-space: nowrap;">
-          <input type="checkbox" class="show-resolved-checkbox" style="margin:0;" /> Resueltos
+          <input type="checkbox" class="show-resolved-checkbox" style="margin:0;" /> ${escHtml(labels.showResolvedLabel)}
         </label>
         <button class="comments-close-btn" style="background:none; border:none; color:var(--c-fg-dim); cursor:pointer; font-size:12px; display:flex; align-items:center; margin-left: 2px;">✖</button>
       </div>
@@ -810,11 +901,11 @@ export async function mountDbNoteEditor(
 
   versionsSidebar.innerHTML = `
     <div style="padding: 10px 12px; border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.15)); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
-      <span class="pnw-sidebar-title">Versiones</span>
+      <span class="pnw-sidebar-title">${escHtml(labels.versionsTitle)}</span>
       <button class="versions-close-btn" style="background:none; border:none; color:var(--c-fg-dim); cursor:pointer; font-size:12px; display:flex; align-items:center;">✖</button>
     </div>
     <div style="padding: 10px; border-bottom: 1px solid var(--c-border, rgba(120,120,140,0.15)); flex-shrink: 0;">
-      <button class="save-version-btn" style="width: 100%; padding: 6px; font-size: 11px; background: var(--c-link, #3b82f6); border: none; border-radius: 4px; color: #fff; cursor: pointer; font-weight: 500;">Guardar versión...</button>
+      <button class="save-version-btn" style="width: 100%; padding: 6px; font-size: 11px; background: var(--c-link, #3b82f6); border: none; border-radius: 4px; color: #fff; cursor: pointer; font-weight: 500;">${escHtml(labels.saveVersionBtn)}</button>
     </div>
     <div class="versions-list-container" style="flex: 1; overflow-y: auto; padding: 10px;"></div>
   `;
@@ -868,7 +959,7 @@ export async function mountDbNoteEditor(
       }
       if (target.dataset.downloadFormat === 'pdf') {
         try {
-          const html = await renderMarkdownForExport(markdown);
+          const html = await renderMarkdownForExport(markdown, previewUrl);
           openPrintablePdf(html, String(note.title || basename));
         } catch {
           openPrintablePdf(`<pre>${escHtml(markdown)}</pre>`, String(note.title || basename));
@@ -1013,14 +1104,14 @@ export async function mountDbNoteEditor(
   const hud = bodyEl.closest('.cnw-shell')?.querySelector<HTMLElement>('.cnw-hud');
   const commentBtn = document.createElement('button');
   commentBtn.className = 'cnw-hud-icon-btn cnw-hud-comment-btn';
-  commentBtn.title = 'Comentarios y Anotaciones';
-  commentBtn.dataset.tooltip = 'Comentarios y Anotaciones';
+  commentBtn.title = labels.commentBtnTitle;
+  commentBtn.dataset.tooltip = labels.commentBtnTitle;
   commentBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
 
   const historyBtn = document.createElement('button');
   historyBtn.className = 'cnw-hud-icon-btn cnw-hud-history-btn';
-  historyBtn.title = 'Historial de versiones';
-  historyBtn.dataset.tooltip = 'Historial de versiones';
+  historyBtn.title = labels.historyBtnTitle;
+  historyBtn.dataset.tooltip = labels.historyBtnTitle;
   historyBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>`;
 
   if (hud) {
@@ -1053,7 +1144,7 @@ export async function mountDbNoteEditor(
 
   const loadAnnotations = async () => {
     try {
-      const res = await fetch(`/api/live/notes/annotations?noteId=${noteId}`);
+      const res = await fetch(`${annotationsUrl}?noteId=${noteId}`);
       if (!res.ok) return;
       const data = await res.json();
       activeAnnotations = data.annotations ?? [];
@@ -1125,15 +1216,15 @@ export async function mountDbNoteEditor(
     if (!sel) {
       newCommentSec.style.display = 'flex';
       newCommentSec.innerHTML = `
-        <textarea class="new-comment-text" placeholder="Escribir un comentario general..." style="width: 100%; box-sizing: border-box; height: 50px; padding: 6px; font-size: 11px; background: rgba(0,0,0,0.15); border: 1px solid var(--c-border, rgba(120,120,140,0.22)); border-radius: 4px; color: inherit; outline: none; resize: vertical;"></textarea>
+        <textarea class="new-comment-text" placeholder="${escHtml(labels.generalCommentPlaceholder)}" style="width: 100%; box-sizing: border-box; height: 50px; padding: 6px; font-size: 11px; background: rgba(0,0,0,0.15); border: 1px solid var(--c-border, rgba(120,120,140,0.22)); border-radius: 4px; color: inherit; outline: none; resize: vertical;"></textarea>
         <div style="display: flex; justify-content: flex-end; gap: 4px; margin-top: 4px;">
-          <button class="save-general-comment-btn" style="padding: 4px 8px; font-size: 10px; background: var(--c-link, #3b82f6); border: none; border-radius: 3px; color: #fff; cursor: pointer; font-weight: 500;">Comentar</button>
+          <button class="save-general-comment-btn" style="padding: 4px 8px; font-size: 10px; background: var(--c-link, #3b82f6); border: none; border-radius: 3px; color: #fff; cursor: pointer; font-weight: 500;">${escHtml(labels.commentSubmit)}</button>
         </div>
       `;
       newCommentSec.querySelector('.save-general-comment-btn')?.addEventListener('click', async () => {
         const body = newCommentSec.querySelector<HTMLTextAreaElement>('.new-comment-text')!.value.trim();
         if (!body) return;
-        await fetch('/api/live/notes/annotations', {
+        await fetch(annotationsUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ noteId, quote: '', anchorJson: {}, body })
@@ -1152,17 +1243,17 @@ export async function mountDbNoteEditor(
     newCommentSec.style.display = 'flex';
     newCommentSec.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
-        <span style="font-size: 10px; color: var(--c-fg-dim); font-weight: 500;">Comentar selección:</span>
+        <span style="font-size: 10px; color: var(--c-fg-dim); font-weight: 500;">${escHtml(labels.commentSelectionLabel)}</span>
         <div style="display: flex; align-items: center; gap: 4px; font-size: 9.5px; background: ${colorObj.bg}; color: ${colorObj.color}; border: 1px solid ${colorObj.border}; padding: 1px 6px; border-radius: 10px; font-weight: 500;">
           <span style="width: 5px; height: 5px; border-radius: 50%; background-color: ${colorObj.color};"></span>
           <span>${colorObj.label}</span>
         </div>
       </div>
       <blockquote class="comment-quote" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; margin-bottom: 4px;">"${escHtml(sel.quote)}"</blockquote>
-      <textarea class="new-comment-text" placeholder="Añadir comentario sobre esta ${colorObj.label.toLowerCase()}..." style="width: 100%; box-sizing: border-box; height: 55px; padding: 6px; font-size: 11px; background: rgba(0,0,0,0.15); border: 1px solid var(--c-border, rgba(120,120,140,0.22)); border-radius: 4px; color: inherit; outline: none; resize: vertical;"></textarea>
+      <textarea class="new-comment-text" placeholder="${escHtml(formatLabel(labels.commentOnPlaceholder, { label: colorObj.label.toLowerCase() }))}" style="width: 100%; box-sizing: border-box; height: 55px; padding: 6px; font-size: 11px; background: rgba(0,0,0,0.15); border: 1px solid var(--c-border, rgba(120,120,140,0.22)); border-radius: 4px; color: inherit; outline: none; resize: vertical;"></textarea>
       <div style="display: flex; justify-content: flex-end; gap: 4px; margin-top: 4px;">
-        <button class="cancel-new-comment-btn" style="padding: 4px 8px; font-size: 10px; background: none; border: 1px solid var(--c-border, rgba(120,120,140,0.22)); border-radius: 3px; color: inherit; cursor: pointer;">Cancelar</button>
-        <button class="save-new-comment-btn" style="padding: 4px 8px; font-size: 10px; background: var(--c-link, #3b82f6); border: none; border-radius: 3px; color: #fff; cursor: pointer; font-weight: 500;">Comentar</button>
+        <button class="cancel-new-comment-btn" style="padding: 4px 8px; font-size: 10px; background: none; border: 1px solid var(--c-border, rgba(120,120,140,0.22)); border-radius: 3px; color: inherit; cursor: pointer;">${escHtml(labels.cancelBtn)}</button>
+        <button class="save-new-comment-btn" style="padding: 4px 8px; font-size: 10px; background: var(--c-link, #3b82f6); border: none; border-radius: 3px; color: #fff; cursor: pointer; font-weight: 500;">${escHtml(labels.commentSubmit)}</button>
       </div>
     `;
 
@@ -1176,7 +1267,7 @@ export async function mountDbNoteEditor(
     newCommentSec.querySelector('.save-new-comment-btn')?.addEventListener('click', async () => {
       const body = newCommentSec.querySelector<HTMLTextAreaElement>('.new-comment-text')!.value.trim();
       if (!body) return;
-      await fetch('/api/live/notes/annotations', {
+      await fetch(annotationsUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1208,7 +1299,7 @@ export async function mountDbNoteEditor(
     });
 
     if (filteredAnns.length === 0) {
-      listContainer.innerHTML = '<div style="font-size: 11px; opacity: 0.4; padding: 20px; text-align: center;">No hay comentarios aún</div>';
+      listContainer.innerHTML = `<div style="font-size: 11px; opacity: 0.4; padding: 20px; text-align: center;">${escHtml(labels.noComments)}</div>`;
       return;
     }
     
@@ -1227,20 +1318,20 @@ export async function mountDbNoteEditor(
       
       let resolveBtn = '';
       if (!ann.isResolved && (isOwner || isAuthor)) {
-        resolveBtn = `<button class="resolve-comment-btn" style="background: none; border: 1px solid rgba(120,120,140,0.3); border-radius: 3px; font-size: 9px; cursor: pointer; color: var(--c-fg-dim); padding: 1px 4px;">Resolver</button>`;
+        resolveBtn = `<button class="resolve-comment-btn" style="background: none; border: 1px solid rgba(120,120,140,0.3); border-radius: 3px; font-size: 9px; cursor: pointer; color: var(--c-fg-dim); padding: 1px 4px;">${escHtml(labels.resolveBtn)}</button>`;
       } else if (ann.isResolved) {
-        resolveBtn = `<span style="font-size: 9px; color: #45d384; font-weight: 500;">✓ Resuelto</span>`;
+        resolveBtn = `<span style="font-size: 9px; color: #45d384; font-weight: 500;">${escHtml(labels.resolvedBadge)}</span>`;
       }
-      
+
       let deleteBtn = '';
       if (isOwner || isAuthor) {
-        deleteBtn = `<button class="delete-comment-btn" style="background: none; border: none; cursor: pointer; color: #c87e7e; padding: 2px; display: flex; align-items: center;" title="Eliminar conversación"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+        deleteBtn = `<button class="delete-comment-btn" style="background: none; border: none; cursor: pointer; color: #c87e7e; padding: 2px; display: flex; align-items: center;" title="${escHtml(labels.deleteConversationTitle)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
       }
 
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
           <div>
-            <span class="comment-author">${escHtml(ann.authorName || 'Usuario')}</span>
+            <span class="comment-author">${escHtml(ann.authorName || labels.defaultUserName)}</span>
             <span class="comment-time">${formatRelativeTime(ann.createdAt)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 4px;">
@@ -1258,8 +1349,8 @@ export async function mountDbNoteEditor(
         <div class="replies-thread" style="margin-top: 4px; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(120,120,140,0.08); padding-top: 4px;"></div>
         ${!isReadOnly && !ann.isResolved ? `
           <div style="display: flex; gap: 4px; margin-top: 6px;">
-            <input type="text" class="reply-input" placeholder="Responder..." style="flex: 1; padding: 3px 6px; font-size: 10px; background: rgba(0,0,0,0.1); border: 1px solid var(--c-border, rgba(120,120,140,0.2)); border-radius: 3px; color: inherit; outline: none;" />
-            <button class="reply-send-btn" style="padding: 3px 6px; font-size: 10px; background: rgba(120,120,140,0.15); border: 1px solid var(--c-border); border-radius: 3px; color: inherit; cursor: pointer;">Enviar</button>
+            <input type="text" class="reply-input" placeholder="${escHtml(labels.replyPlaceholder)}" style="flex: 1; padding: 3px 6px; font-size: 10px; background: rgba(0,0,0,0.1); border: 1px solid var(--c-border, rgba(120,120,140,0.2)); border-radius: 3px; color: inherit; outline: none;" />
+            <button class="reply-send-btn" style="padding: 3px 6px; font-size: 10px; background: rgba(120,120,140,0.15); border: 1px solid var(--c-border); border-radius: 3px; color: inherit; cursor: pointer;">${escHtml(labels.sendBtn)}</button>
           </div>
         ` : ''}
       `;
@@ -1270,7 +1361,7 @@ export async function mountDbNoteEditor(
         repRow.className = 'comment-reply';
         const repIsAuthor = rep.authorId === d.currentUserId;
         const repDeleteBtn = (isOwner || repIsAuthor) ? `
-          <button class="delete-reply-btn" data-reply-id="${rep.id}" style="background: none; border: none; cursor: pointer; color: #c87e7e; padding: 2px; display: flex; align-items: center;" title="Eliminar respuesta">
+          <button class="delete-reply-btn" data-reply-id="${rep.id}" style="background: none; border: none; cursor: pointer; color: #c87e7e; padding: 2px; display: flex; align-items: center;" title="${escHtml(labels.deleteReplyTitle)}">
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         ` : '';
@@ -1278,7 +1369,7 @@ export async function mountDbNoteEditor(
         repRow.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
             <div>
-              <span class="comment-author" style="font-size: 10px;">${escHtml(rep.authorName || 'Usuario')}</span>
+              <span class="comment-author" style="font-size: 10px;">${escHtml(rep.authorName || labels.defaultUserName)}</span>
               <span class="comment-time" style="font-size: 9px;">${formatRelativeTime(rep.createdAt)}</span>
             </div>
             ${repDeleteBtn}
@@ -1288,8 +1379,8 @@ export async function mountDbNoteEditor(
         
         repRow.querySelector('.delete-reply-btn')?.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('¿Eliminar esta respuesta?')) return;
-          await fetch(`/api/live/notes/annotations?commentId=${rep.id}`, { method: 'DELETE' });
+          if (!confirm(labels.confirmDeleteReply)) return;
+          await fetch(`${annotationsUrl}?commentId=${rep.id}`, { method: 'DELETE' });
           void loadAnnotations();
         });
 
@@ -1298,7 +1389,7 @@ export async function mountDbNoteEditor(
       
       card.querySelector('.resolve-comment-btn')?.addEventListener('click', async (e) => {
         e.stopPropagation();
-        await fetch('/api/live/notes/annotations', {
+        await fetch(annotationsUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: ann.id, noteId, body: ann.body, isResolved: true })
@@ -1308,8 +1399,8 @@ export async function mountDbNoteEditor(
       
       card.querySelector('.delete-comment-btn')?.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!confirm('¿Eliminar esta conversación por completo?')) return;
-        await fetch(`/api/live/notes/annotations?id=${ann.id}`, { method: 'DELETE' });
+        if (!confirm(labels.confirmDeleteConversation)) return;
+        await fetch(`${annotationsUrl}?id=${ann.id}`, { method: 'DELETE' });
         void loadAnnotations();
       });
       
@@ -1320,7 +1411,7 @@ export async function mountDbNoteEditor(
         if (!rInput) return;
         const text = rInput.value.trim();
         if (!text) return;
-        await fetch('/api/live/notes/annotations', {
+        await fetch(annotationsUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ annotationId: ann.id, body: text })
@@ -1369,7 +1460,7 @@ export async function mountDbNoteEditor(
   let activeVersions: any[] = [];
   const loadVersions = async () => {
     try {
-      const res = await fetch(`/api/live/notes/versions?noteId=${noteId}`);
+      const res = await fetch(`${versionsUrl}?noteId=${noteId}`);
       if (!res.ok) return;
       const data = await res.json();
       activeVersions = data.versions ?? [];
@@ -1413,7 +1504,7 @@ export async function mountDbNoteEditor(
         }
       </style>
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--c-border); padding-bottom: 8px;">
-        <span style="font-weight: 600; font-size: 12px; color: var(--c-fg);">Vista previa: ${escHtml(versionName)}</span>
+        <span style="font-weight: 600; font-size: 12px; color: var(--c-fg);">${escHtml(formatLabel(labels.previewPrefix, { name: versionName }))}</span>
         <button class="preview-close-btn" style="background: none; border: none; color: var(--c-fg-dim); cursor: pointer; font-size: 16px; display: flex; align-items: center;">✖</button>
       </div>
       <div class="version-preview-content"></div>
@@ -1433,50 +1524,50 @@ export async function mountDbNoteEditor(
     listContainer.innerHTML = '';
     
     if (activeVersions.length === 0) {
-      listContainer.innerHTML = '<div style="font-size: 11px; opacity: 0.4; padding: 20px; text-align: center;">No hay versiones guardadas</div>';
+      listContainer.innerHTML = `<div style="font-size: 11px; opacity: 0.4; padding: 20px; text-align: center;">${escHtml(labels.noVersions)}</div>`;
       return;
     }
-    
+
     for (const v of activeVersions) {
       const card = document.createElement('div');
       card.className = 'version-card';
       card.innerHTML = `
         <div style="font-weight: 600; color: var(--c-fg); word-break: break-word;">${escHtml(v.versionName)}</div>
         <div style="font-size: 9.5px; color: var(--c-fg-dim); opacity: 0.8; margin-top: 2px;">
-          Por ${escHtml(v.createdByUserName || 'Usuario')} · ${formatRelativeTime(v.createdAt)}
+          ${escHtml(formatLabel(labels.byPrefix, { name: v.createdByUserName || labels.defaultUserName, time: formatRelativeTime(v.createdAt) }))}
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px;">
-          <button class="version-action-btn v-preview" title="Previsualizar esta versión">P</button>
-          <button class="version-action-btn v-rename" title="Cambiar nombre de la versión">N</button>
-          <button class="version-action-btn v-resave" title="Sobrescribir esta versión con el contenido actual del editor">S</button>
-          <button class="version-action-btn v-restore" title="Restaurar esta versión">R</button>
-          <button class="version-action-btn v-delete" title="Eliminar esta versión">D</button>
+          <button class="version-action-btn v-preview" title="${escHtml(labels.previewVersionTitle)}">P</button>
+          <button class="version-action-btn v-rename" title="${escHtml(labels.renameVersionTitle)}">N</button>
+          <button class="version-action-btn v-resave" title="${escHtml(labels.resaveVersionTitle)}">S</button>
+          <button class="version-action-btn v-restore" title="${escHtml(labels.restoreVersionTitle)}">R</button>
+          <button class="version-action-btn v-delete" title="${escHtml(labels.deleteVersionTitle)}">D</button>
         </div>
       `;
-      
+
       // Preview
       card.querySelector('.v-preview')?.addEventListener('click', async () => {
         try {
-          const res = await fetch(`/api/live/notes/versions?versionId=${v.id}`);
+          const res = await fetch(`${versionsUrl}?versionId=${v.id}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           if (data.version) {
             showPreviewModal(v.versionName, data.version.body);
           }
         } catch {
-          alert('No se pudo cargar la vista previa de la versión.');
+          alert(labels.previewLoadError);
         }
       });
 
       // Rename
       card.querySelector('.v-rename')?.addEventListener('click', async () => {
-        const newName = prompt('Cambiar nombre de la versión:', v.versionName);
+        const newName = prompt(labels.renameVersionPrompt, v.versionName);
         if (newName === null) return;
         const nameVal = newName.trim();
         if (!nameVal || nameVal === v.versionName) return;
 
         try {
-          const res = await fetch('/api/live/notes/versions', {
+          const res = await fetch(versionsUrl, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ versionId: v.id, versionName: nameVal })
@@ -1487,41 +1578,41 @@ export async function mountDbNoteEditor(
             throw new Error();
           }
         } catch {
-          alert('No se pudo cambiar el nombre de la versión.');
+          alert(labels.renameVersionError);
         }
       });
 
       // Resave / Overwrite
       card.querySelector('.v-resave')?.addEventListener('click', async () => {
-        if (!confirm(`¿Sobrescribir la versión "${v.versionName}" con el contenido actual del editor?`)) return;
+        if (!confirm(formatLabel(labels.confirmResaveVersion, { name: v.versionName }))) return;
 
         try {
-          const res = await fetch('/api/live/notes/versions', {
+          const res = await fetch(versionsUrl, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ versionId: v.id, resave: true })
           });
           if (res.ok) {
             void loadVersions();
-            alert('Versión sobrescrita con éxito.');
+            alert(labels.resaveVersionSuccess);
           } else {
             throw new Error();
           }
         } catch {
-          alert('No se pudo sobrescribir la versión.');
+          alert(labels.resaveVersionError);
         }
       });
 
       // Restore
       card.querySelector('.v-restore')?.addEventListener('click', async () => {
-        if (!confirm(`¿Restaurar la versión "${v.versionName}"? Se reemplazará el contenido actual del editor.`)) return;
-        
-        const res = await fetch('/api/live/notes/versions', {
+        if (!confirm(formatLabel(labels.confirmRestoreVersion, { name: v.versionName }))) return;
+
+        const res = await fetch(versionsUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ noteId, versionId: v.id })
         });
-        
+
         if (res.ok) {
           const resData = await res.json();
           const restoredBody = String(resData.body ?? '');
@@ -1539,16 +1630,16 @@ export async function mountDbNoteEditor(
           void loadAnnotations();
           statusDot.className = 'cnw-status saved';
         } else {
-          alert('No se pudo restaurar la versión.');
+          alert(labels.restoreVersionError);
         }
       });
 
       // Delete
       card.querySelector('.v-delete')?.addEventListener('click', async () => {
-        if (!confirm(`¿Eliminar la versión "${v.versionName}"? Esta acción no se puede deshacer.`)) return;
+        if (!confirm(formatLabel(labels.confirmDeleteVersion, { name: v.versionName }))) return;
 
         try {
-          const res = await fetch(`/api/live/notes/versions?versionId=${v.id}`, {
+          const res = await fetch(`${versionsUrl}?versionId=${v.id}`, {
             method: 'DELETE'
           });
           if (res.ok) {
@@ -1557,7 +1648,7 @@ export async function mountDbNoteEditor(
             throw new Error();
           }
         } catch {
-          alert('No se pudo eliminar la versión.');
+          alert(labels.deleteVersionError);
         }
       });
 
@@ -1566,19 +1657,19 @@ export async function mountDbNoteEditor(
   };
 
   versionsSidebar.querySelector('.save-version-btn')?.addEventListener('click', async () => {
-    const name = prompt('Nombre de la versión (ej: Primer borrador, Notas de clase):');
+    const name = prompt(labels.saveVersionPrompt);
     if (!name || !name.trim()) return;
-    
-    const res = await fetch('/api/live/notes/versions', {
+
+    const res = await fetch(versionsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ noteId, versionName: name.trim() })
     });
-    
+
     if (res.ok) {
       void loadVersions();
     } else {
-      alert('Error al guardar la versión.');
+      alert(labels.saveVersionError);
     }
   });
 
@@ -1609,9 +1700,9 @@ export async function mountDbNoteEditor(
     banner.className = 'cnw-recovery';
     banner.style.cssText = 'padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; background: rgba(220,180,50,0.15); border-bottom: 1px solid rgba(220,180,50,0.3); color: var(--c-fg); flex-shrink: 0;';
     banner.innerHTML = `
-      <span style="flex:1">Borrador no guardado (${new Date(draft.ts).toLocaleTimeString()})</span>
-      <button id="cnw-recover-accept" style="background:#2a4a2a; border:1px solid #7ec87e; color:#7ec87e; font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer">Usar borrador</button>
-      <button id="cnw-recover-discard" style="background:none; border:1px solid var(--c-border); color:var(--c-fg-dim); font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer; margin-left: 4px;">Descartar</button>
+      <span style="flex:1">${escHtml(formatLabel(labels.unsavedDraft, { time: new Date(draft.ts).toLocaleTimeString() }))}</span>
+      <button id="cnw-recover-accept" style="background:#2a4a2a; border:1px solid #7ec87e; color:#7ec87e; font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer">${escHtml(labels.useDraftBtn)}</button>
+      <button id="cnw-recover-discard" style="background:none; border:1px solid var(--c-border); color:var(--c-fg-dim); font-size:10px; padding:2px 6px; border-radius:3px; cursor:pointer; margin-left: 4px;">${escHtml(labels.discardDraftBtn)}</button>
     `;
     mount.appendChild(banner);
     mount.appendChild(workspaceRow);
@@ -1623,7 +1714,7 @@ export async function mountDbNoteEditor(
       try { localStorage.removeItem(`db-note-draft::${noteId}`); } catch {}
       banner.remove();
       currentContent = String(note.body ?? '');
-      editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly });
+      editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly, uploadUrl });
       (bodyEl as any).__editor = editor;
       updateModeButton();
       updateHud(bodyEl, currentContent, currentMode);
@@ -1633,7 +1724,7 @@ export async function mountDbNoteEditor(
     banner.querySelector('#cnw-recover-accept')?.addEventListener('click', () => {
       banner.remove();
       currentContent = draft.body;
-      editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly });
+      editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly, uploadUrl });
       (bodyEl as any).__editor = editor;
       updateModeButton();
       updateHud(bodyEl, currentContent, currentMode);
@@ -1643,7 +1734,7 @@ export async function mountDbNoteEditor(
     });
   } else {
     mount.appendChild(workspaceRow);
-    editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly });
+    editor = createLiveMdEditor(editorWrap, currentContent, save, { readOnly: isReadOnly, uploadUrl });
     (bodyEl as any).__editor = editor;
     updateModeButton();
     updateHud(bodyEl, currentContent, currentMode);
