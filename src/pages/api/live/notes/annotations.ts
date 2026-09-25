@@ -1,102 +1,9 @@
 import type { APIRoute } from 'astro';
 import { ensureDbUserFromSession, json, cleanString } from '../../../../lib/forum-server';
 import { query } from '../../../../lib/db/pool';
+import { getNoteAccess } from '../../../../lib/writing/notes/access';
 
-// Helper to determine user access level to a note
-export async function getNoteAccess(noteId: string, userId: string): Promise<'view' | 'comment' | 'edit' | null> {
-  // 1. Check ownership
-  const { data: noteRows } = await query(
-    `SELECT "userId", "courseId" FROM "LiveClassNote" WHERE id = $1::uuid LIMIT 1`,
-    [noteId]
-  );
-  if (!noteRows?.length) return null;
-  const note = noteRows[0];
-  if (note.userId === userId) return 'edit';
-
-  // 2. Check if user is a teacher of the course
-  if (note.courseId) {
-    const { data: enroll } = await query(
-      `SELECT "roleInCourse" FROM "Enrollment" WHERE "userId" = $1::uuid AND "courseId" = $2 LIMIT 1`,
-      [userId, note.courseId]
-    );
-    if (enroll?.length && enroll[0].roleInCourse === 'teacher') {
-      return 'edit'; // Teachers have edit access to student notes
-    }
-  }
-
-  // 3. Check sharing configurations
-  const { data: shares } = await query(
-    `SELECT "targetType", "targetId", "accessLevel" FROM "LiveClassNoteShare" WHERE "noteId" = $1::uuid`,
-    [noteId]
-  );
-
-  if (!shares || shares.length === 0) return null;
-
-  // Determine user's active commissions/classrooms inside this course
-  let userClassIds: string[] = [];
-  if (note.courseId) {
-    const { data: userClasses } = await query(
-      `SELECT DISTINCT "claseId" FROM "ResourceSession"
-       WHERE "courseId" = $1 AND "claseId" IS NOT NULL AND "claseId" != ''`,
-      [note.courseId]
-    );
-    userClassIds = (userClasses ?? []).map((row: any) => String(row.claseId));
-
-    const { data: profileSub } = await query(
-      `SELECT payload->>'grupo' as grupo
-       FROM "Submission"
-       WHERE "userId" = $1::uuid 
-         AND "assignmentId" LIKE $2
-       LIMIT 1`,
-      [userId, `__meta__:course-student-profile:${encodeURIComponent(note.courseId)}:%`]
-    );
-    if (profileSub?.length && profileSub[0].grupo) {
-      const g = String(profileSub[0].grupo).trim();
-      if (g) {
-        userClassIds.push(g);
-        userClassIds.push(`${note.courseId}/${g}`);
-      }
-    }
-  }
-
-  let bestAccess: 'view' | 'comment' | 'edit' | null = null;
-  const accessRank = { 'view': 1, 'comment': 2, 'edit': 3 };
-
-  for (const share of shares) {
-    let matched = false;
-    if (share.targetType === 'user' && share.targetId === userId) {
-      matched = true;
-    } else if (share.targetType === 'teachers') {
-      if (note.courseId) {
-        const { data: enroll } = await query(
-          `SELECT "roleInCourse" FROM "Enrollment" WHERE "userId" = $1::uuid AND "courseId" = $2 LIMIT 1`,
-          [userId, note.courseId]
-        );
-        if (enroll?.length && enroll[0].roleInCourse === 'teacher') matched = true;
-      }
-    } else if (share.targetType === 'students') {
-      if (note.courseId) {
-        const { data: enroll } = await query(
-          `SELECT "roleInCourse" FROM "Enrollment" WHERE "userId" = $1::uuid AND "courseId" = $2 LIMIT 1`,
-          [userId, note.courseId]
-        );
-        if (enroll?.length && enroll[0].roleInCourse === 'student') matched = true;
-      }
-    } else if (share.targetType === 'class' && userClassIds.includes(share.targetId)) {
-      matched = true;
-    }
-
-    if (matched) {
-      const currentRank = accessRank[share.accessLevel as 'view' | 'comment' | 'edit'] ?? 0;
-      const bestRank = bestAccess ? (accessRank[bestAccess] ?? 0) : 0;
-      if (currentRank > bestRank) {
-        bestAccess = share.accessLevel as 'view' | 'comment' | 'edit';
-      }
-    }
-  }
-
-  return bestAccess;
-}
+export { getNoteAccess };
 
 // GET /api/live/notes/annotations?noteId=... — retrieve inline highlights and replies
 export const GET: APIRoute = async ({ url, locals }) => {
@@ -107,7 +14,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const noteId = cleanString(url.searchParams.get('noteId') ?? '', 36);
   if (!noteId) return json({ error: 'noteId required' }, 400);
 
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (!access) return json({ error: 'Forbidden' }, 403);
 
   // 1. Get annotations
@@ -176,7 +83,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
     if (!parent?.length) return json({ error: 'Parent annotation not found' }, 404);
 
-    const access = await getNoteAccess(parent[0].noteId, user.id);
+    const access = await getNoteAccess(parent[0].noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
     if (access !== 'comment' && access !== 'edit') return json({ error: 'Forbidden' }, 403);
 
     let result;
@@ -208,7 +115,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   // Case B: Saving a root annotation
   if (!noteId) return json({ error: 'noteId required' }, 400);
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (access !== 'comment' && access !== 'edit') return json({ error: 'Forbidden' }, 403);
 
   const quote = cleanString(body?.quote ?? '', 1000);

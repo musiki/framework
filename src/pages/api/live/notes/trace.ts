@@ -47,7 +47,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
   const noteId = cleanString(url.searchParams.get('noteId') ?? '', 36);
   if (!noteId) return json({ error: 'noteId required' }, 400);
 
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (!access) return json({ error: 'Forbidden' }, 403);
 
   const { data: codes, error: codesError } = await query(
@@ -101,7 +101,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: 'Invalid rhetorical role' }, 400);
   }
 
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (!canWriteTrace(access)) return json({ error: 'Forbidden' }, 403);
 
   const upsertSql = dimension === 'rhetorical'
@@ -134,7 +134,7 @@ export const PUT: APIRoute = async ({ request, locals }) => {
   const noteId = cleanString(body.noteId ?? '', 36);
   const rawTraces = Array.isArray(body.traces) ? body.traces.slice(0, 250) : [];
   if (!noteId || rawTraces.length === 0) return json({ error: 'noteId and traces required' }, 400);
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (!canWriteTrace(access)) return json({ error: 'Forbidden' }, 403);
 
   const saved = [];
@@ -218,7 +218,7 @@ export const DELETE: APIRoute = async ({ locals, url }) => {
   const noteId = codeRows?.[0]?.noteId;
   if (!noteId) return json({ error: 'Not found' }, 404);
 
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (!canWriteTrace(access)) return json({ error: 'Forbidden' }, 403);
 
   const { error } = await query(

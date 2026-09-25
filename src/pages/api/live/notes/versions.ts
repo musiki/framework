@@ -20,7 +20,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
     if (error) return json({ error: error.message }, 500);
     if (!rows?.length) return json({ error: 'Version not found' }, 404);
 
-    const access = await getNoteAccess(rows[0].noteId, user.id);
+    const access = await getNoteAccess(rows[0].noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
     if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
     return json({ version: rows[0] });
   }
@@ -28,7 +28,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
   const noteId = cleanString(url.searchParams.get('noteId') ?? '', 36);
   if (!noteId) return json({ error: 'noteId required' }, 400);
 
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
 
   const { data: versions, error } = await query(
@@ -58,7 +58,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   if (!noteId) return json({ error: 'noteId required' }, 400);
 
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
 
   // Case A: Restore a version
@@ -135,7 +135,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   if (!rows?.length) return json({ error: 'Version not found' }, 404);
 
   const noteId = rows[0].noteId;
-  const access = await getNoteAccess(noteId, user.id);
+  const access = await getNoteAccess(noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
 
   if (body.resave) {
@@ -185,7 +185,7 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
   );
   if (!rows?.length) return json({ error: 'Version not found' }, 404);
 
-  const access = await getNoteAccess(rows[0].noteId, user.id);
+  const access = await getNoteAccess(rows[0].noteId, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
 
   const { error } = await query(

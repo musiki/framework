@@ -130,7 +130,7 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
 
   const notesWithAccess = [];
   for (const note of data ?? []) {
-    const access = await getNoteAccess(note.id, user.id);
+    const access = await getNoteAccess(note.id, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
     notesWithAccess.push({ ...note, accessLevel: access });
   }
 
@@ -178,7 +178,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // Insert/update first (fast) - omitted fields on updates must remain untouched.
   let result;
   if (id) {
-    const access = await getNoteAccess(id, user.id);
+    const access = await getNoteAccess(id, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
     if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
 
     const updateRow: Record<string, unknown> = { updatedAt: row.updatedAt };
@@ -274,7 +274,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
 
   if (sets.length === 0) return json({ error: 'nothing to update' }, 400);
 
-  const access = await getNoteAccess(id, user.id);
+  const access = await getNoteAccess(id, user.id, { tenantId: (locals as any).tenant?.id ?? 'musiki' });
   if (access !== 'edit') return json({ error: 'Forbidden' }, 403);
 
   params.push(id);
