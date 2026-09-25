@@ -21,3 +21,8 @@ test('so host: built assets pass', () => {
 test('dev override applies', () => {
   assert.equal(decideTenantRequest({ host: 'localhost:4321', pathname: '/cursos', envTenant: 'so' }).action, 'not-found');
 });
+
+test('so host: /studio/not-found itself passes (no rewrite loop)', () => {
+  assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: '/studio/not-found' }).action, 'next');
+  assert.equal(decideTenantRequest({ host: 'so-dev.zztt.org', pathname: '/studio/not-found' }).action, 'next');
+});
